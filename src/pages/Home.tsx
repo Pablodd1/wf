@@ -20,7 +20,7 @@ import { downloadStyledReport } from '@/lib/reportGenerator';
 import type { WatchRecord } from '@/types';
 
 export default function Home() {
-  const { records, stats, loading } = useWatchData();
+  const { records, stats, loading, loadProgress } = useWatchData();
 
   // Modal state
   const [selectedRecord, setSelectedRecord] = useState<WatchRecord | null>(null);
@@ -180,22 +180,17 @@ export default function Home() {
           <div className="w-64 h-1.5 bg-bg-elevated rounded-full overflow-hidden">
             <motion.div
               className="h-full bg-gold-primary rounded-full"
-              initial={{ width: '5%' }}
-              animate={{ width: '85%' }}
-              transition={{
-                duration: 8,
-                ease: 'easeInOut',
-                repeat: Infinity,
-                repeatType: 'reverse',
-              }}
+              initial={{ width: '0%' }}
+              animate={{ width: `${loadProgress}%` }}
+              transition={{ duration: 0.3, ease: 'easeOut' }}
             />
           </div>
           <div className="h-10 w-10 rounded-full border-2 border-gold-primary/30 border-t-gold-primary animate-spin" />
           <p className="text-sm text-text-muted tracking-wide">
-            Loading {stats.totalProcessed.toLocaleString()} records…
+            Loading {stats.totalProcessed.toLocaleString()} records… {Math.round(loadProgress)}%
           </p>
           <p className="text-xs text-text-muted/50">
-            Cache warming — first load takes ~8s, subsequent navigation is instant
+            Cache warming — first load downloads ~20MB, subsequent tabs are instant
           </p>
         </div>
       </Layout>

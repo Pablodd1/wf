@@ -43,6 +43,51 @@ function normRef(s) {
   return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+// ── BUNDLE DETECTION ────────────────────────────────────────────────────────
+// Alex rule: bundles (multi-watch listings) are NOT used as data points.
+// Detect lines with multiple distinct watches separated by emoji, bullets,
+// numbered items, commas, or multiple strong refs on one line.
+function isBundle(chunk) {
+  const text = String(chunk || '');
+  if (!text.trim()) return false;
+
+  // Count strong references (brand-identifiable refs, not years/prices)
+  const STRONG_REF_RE = /\b(\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?|IW\d{4,6}|(?:116|126|114|124|226|228|279|128|336|268)\d{3}[A-Z]{0,4}|\d{4,5}[A-Z]{1,4})\b/gi;
+  const refs = [];
+  let m;
+  while ((m = STRONG_REF_RE.exec(text)) !== null) {
+    const tok = m[1];
+    if (/^(?:19|20)\d{2}[Yy]?$/.test(tok)) continue;
+    if (/^\d{3,6}(?:HKD|USD|USDT|EUR|CHF|GBP|SGD|JPY|AED)$/i.test(tok)) continue;
+    refs.push(normRef(tok));
+  }
+  const distinctRefs = [...new Set(refs)];
+
+  // 2+ distinct refs on one line = bundle
+  if (distinctRefs.length >= 2) return true;
+
+  // Emoji separators (🔥, •, ❶, ❷, 1️⃣, 2️⃣) with multiple watch-like parts
+  const EMOJI_WATCH_RE = /([\ud83d\udd25\ud83c\udfee\ud83d\udd35\u2b55\ud83d\udfe2\u26ab\ud83d\udd34\ud83d\udfe0\ud83d\udfe1\u26aa\ud83d\udd36\ud83d\udfe3\ud83d\udfe4\u2705\ud83d\udd39\ud83d\udd38\u25b6\u25ba])|([\u2022\u25aa\u25e6\u2023\u00b7\-\u2013\u2014])|(\d[\uFE0F]?[\u20E3])|([\u2776\u2777\u2778\u2779\u277a\u277b\u277c\u277d\u277e\u277f])/gu;
+  const emojiParts = text.split(EMOJI_WATCH_RE).filter(Boolean);
+  const watchLikeParts = emojiParts.filter(p => /\b\d{3,4}[\/\-]?\d?[A-Z]{1,4}\b/i.test(p));
+  if (watchLikeParts.length >= 2) return true;
+
+  // Numbered bullets like "1️⃣" or "1." or "2)" with watch content after each
+  const numberedParts = text.split(/(?:^|\s)(?:\d[\uFE0F\u20E3]|\d+\.[\s\uFE0F]|\d+[\)\]])/gu)
+    .filter(p => p.trim().length > 10);
+  const numberedWatchParts = numberedParts.filter(p => /\b\d{3,4}[\/\-]?\d?[A-Z]{1,4}\b/i.test(p));
+  if (numberedWatchParts.length >= 2) return true;
+
+  // Double-slash separators ("//") with watch content on each side
+  if (/\/{2,}/.test(text)) {
+    const slashParts = text.split(/\/{2,}/).map(p => p.trim()).filter(p => p.length > 5);
+    const slashWatchParts = slashParts.filter(p => /\b\d{3,4}[\/\-]?\d?[A-Z]{1,4}\b/i.test(p));
+    if (slashWatchParts.length >= 2) return true;
+  }
+
+  return false;
+}
+
 const URL_RE = /(https?:\/\/[^\s"'<>)\]]+)/gi;
 const IMG_EXT_RE = /\.(jpe?g|png|webp|gif|bmp|avif)(\?|#|$)/i;
 // Known image CDN domains that serve images without file extensions
@@ -791,11 +836,10 @@ function regexParse(chunk) {
 
 // confidence from a code parse alone (how completely did we identify it?)
 //
-// Re-weighted so a confirmed reference + known brand is enough to IDENTIFY a
-// watch even when the dealer omitted price/dial (common in inventory blasts).
-// ref(50) + brand(28) = 78 base; catalog agreement (see crossValidate) then
-// lifts a clean ID over the 85 gate WITHOUT paying for an LLM call.
-// Price/dial/condition/year remain useful but are no longer required for ID.
+// Alex rule: dial color is REQUIRED for data-point approval.
+// ref(50) + brand(28) + dial(8) = 86 base minimum for APPROVED.
+// Without dial color, max confidence = 78 (HUMAN review).
+// Condition/price/year are bonuses but never compensate for missing dial.
 function codeConfidence(p) {
   let c = 0;
   if (p.reference) c += 50;
@@ -1319,6 +1363,12 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   let bestVisionResult = null;
   const imageResults = [];
 
+  // ── Alex rule: dial color gate ────────────────────────────────────────────
+  // If dial color is missing from text, we MUST use optical verification.
+  // Trigger vision BEFORE the verdict gate so we can fill dial color.
+  const needsOpticalDial = !parsed.dialColor || parsed.dialColor === 'UNKNOWN';
+  const hasImages = imageUrls.length > 0;
+
   // Process ALL image URLs (up to 3 to avoid timeout), pick the best legible result
   for (let imgIdx = 0; imgIdx < Math.min(imageUrls.length, 3); imgIdx++) {
     const img = imageUrls[imgIdx];
@@ -1348,6 +1398,13 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
     if (v.dialColor && v.dialColor !== 'UNKNOWN' && (!parsed.dialColor || parsed.dialColor === 'UNKNOWN')) {
       parsed.dialColor = v.dialColor;
       confidence = Math.min(100, confidence + 8);
+      stages.push({
+        stage: 'OPTICAL_DIAL',
+        engine: v.source || 'vision',
+        confidence,
+        data: { dialColor: v.dialColor, dialConfidence: v.dialConfidence },
+        note: `Optical dial detection: ${v.dialColor} (${v.dialConfidence}% confidence)`,
+      });
     }
 
     // Fill brand from vision if parser missed it
@@ -1384,6 +1441,13 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
     stages.push({ stage: 'IMAGE', engine: 'link', confidence, data: { pageUrl: pageUrls[0] }, note: 'link present (not a direct image URL); text-vs-link compare requires page scrape' });
   }
 
+  // ── Alex rule: dial color still missing after optical ─────────────────────
+  // If we needed optical dial but still don't have one, force HUMAN review.
+  // Do NOT let it pass as APPROVED — color affects pricing.
+  // Exception: if no image was available, still route to HUMAN (not RECYCLE).
+  const dialStillMissing = !parsed.dialColor || parsed.dialColor === 'UNKNOWN';
+  const opticalFailed = needsOpticalDial && dialStillMissing;
+
   // 6) CROSS-VALIDATION — fuse catalog + image + web signals into one boost.
   // Extract vision-detected brand and reference for cross-checking
   const visionBrand = bestVisionResult?.brand || null;
@@ -1413,8 +1477,19 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
 
   // ───────── VERDICT GATE ─────────
   const identified = !!parsed.reference && parsed.brand !== 'Unknown';
+  const bundle = isBundle(chunk);
   let verdict, reason;
-  if (imageVerdict === 'MISMATCH') {
+
+  if (bundle) {
+    // Alex rule: bundles are NOT data points — skip for pricing analytics
+    verdict = 'RECYCLE';
+    reason = 'Bundle/multi-watch listing — excluded from single-listing data points.';
+  } else if (opticalFailed) {
+    // Alex rule: dial color unverified after optical → HUMAN review, NOT a data point
+    verdict = 'HUMAN';
+    reason = 'Dial color missing and optical verification failed — human review required before adding as data point.';
+    confidence = Math.min(confidence, 80);  // cap below approval threshold
+  } else if (imageVerdict === 'MISMATCH') {
     verdict = 'HUMAN';
     reason = 'Image disagrees with text (CRITICAL mismatch) — needs human review.';
   } else if (parsed.intent === 'ALERT') {
@@ -1446,6 +1521,8 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
     confidence: Math.round(confidence),
     verdict,                       // APPROVED | HUMAN | RECYCLE
     reason,
+    isBundle: bundle,             // Alex: bundle flag for filtering
+    dialVerified: !opticalFailed, // Alex: dial color verified flag
     hasImage: !!targetImage,
     hasLink: urls.length > 0,
     imageUrl: targetImage,

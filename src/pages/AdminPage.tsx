@@ -171,41 +171,67 @@ export default function AdminPage() {
   const exportData = async (format: 'excel' | 'csv') => {
     setActionLoading(`export-${format}`);
     try {
-      // Fetch parsed watches first
       const watchesRes = await fetch('/parsedWatches.json');
       const watchesData = await watchesRes.json();
       const rows = Array.isArray(watchesData) ? watchesData : [];
-      
-      // Convert rows to watches format for export-report
-      const watches = rows.map(row => ({
-        parsed: {
-          reference: row[2] || '',
-          brand: row[1] || '',
-          dialColor: row[3] || '',
-          condition: row[5] || '',
-          year: row[12] || '',
-          price: row[4] || '',
-          currency: row[6] || '',
-        },
+
+      // Client-side generation — no server POST (fixes FUNCTION_PAYLOAD_TOO_LARGE)
+      const flat = rows.map((row: any[]) => ({
+        reference: row[2] || '',
+        brand: row[1] || '',
+        dialColor: row[3] || '',
+        condition: row[7] || '',
+        year: row[12] || '',
+        price: row[4] || 0,
+        currency: row[6] || '',
         confidence: row[9] || 0,
-        verdict: row[10] || 'RECYCLE',
-        reason: row[11] || '',
-        input: row[0] || '',
+        verdict: row[10] || 'UNKNOWN',
+        flags: Array.isArray(row[11]) ? row[11].join('; ') : String(row[11] || ''),
+        rawMessage: row[8] || '',
       }));
-      
-      const res = await fetch('/api/export-report', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ watches, format }),
-      });
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `watchfacts-report-${new Date().toISOString().slice(0,10)}.${format === 'excel' ? 'xlsx' : 'csv'}`;
-      a.click();
-      URL.revokeObjectURL(url);
-      setMessage(`Exported ${format.toUpperCase()}`);
+
+      if (format === 'csv') {
+        const headers = ['Reference','Brand','Dial Color','Condition','Year','Price','Currency','Confidence','Verdict','Flags','Raw Message'];
+        const csv = [headers.join(',')].concat(
+          flat.map((r: any) => [
+            `"${r.reference}"`, `"${r.brand}"`, `"${r.dialColor}"`, `"${r.condition}"`,
+            r.year, r.price, `"${r.currency}"`, r.confidence, `"${r.verdict}"`,
+            `"${r.flags}"`, `"${(r.rawMessage || '').replace(/"/g,'""')}"`
+          ].join(','))
+        ).join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `watchfacts-report-${new Date().toISOString().slice(0,10)}.csv`;
+        a.click();
+        URL.revokeObjectURL(url);
+      } else {
+        // Client-side XLSX — lazy load to keep bundle small
+        const XLSX = await import('xlsx');
+        const wb = XLSX.utils.book_new();
+        const verdicts = { APPROVED: flat.filter((r:any) => r.verdict === 'APPROVED'), HUMAN: flat.filter((r:any) => r.verdict === 'HUMAN'), RECYCLE: flat.filter((r:any) => r.verdict === 'RECYCLE') };
+        const headers = ['Reference','Brand','Dial Color','Condition','Year','Price','Currency','Confidence','Verdict','Flags','Raw Message'];
+        for (const [name, data] of Object.entries(verdicts)) {
+          const wsData = [headers, ...data.map((r:any) => [r.reference, r.brand, r.dialColor, r.condition, r.year, r.price, r.currency, r.confidence, r.verdict, r.flags, r.rawMessage])];
+          const ws = XLSX.utils.aoa_to_sheet(wsData);
+          ws['!cols'] = headers.map(h => ({ wch: Math.min(40, Math.max(h.length, 12)) }));
+          XLSX.utils.book_append_sheet(wb, ws, name);
+        }
+        // Also add "ALL" sheet
+        const wsAll = XLSX.utils.aoa_to_sheet([headers, ...flat.map((r:any) => [r.reference, r.brand, r.dialColor, r.condition, r.year, r.price, r.currency, r.confidence, r.verdict, r.flags, r.rawMessage])]);
+        wsAll['!cols'] = headers.map(h => ({ wch: Math.min(40, Math.max(h.length, 12)) }));
+        XLSX.utils.book_append_sheet(wb, wsAll, 'ALL');
+        const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `watchfacts-report-${new Date().toISOString().slice(0,10)}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+      setMessage(`Exported ${flat.length.toLocaleString()} records (${format.toUpperCase()})`);
     } catch (e: any) {
       setMessage(`Export failed: ${e.message}`);
     } finally {

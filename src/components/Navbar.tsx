@@ -49,7 +49,7 @@ export function Navbar({
           className="text-sm font-extrabold uppercase tracking-[0.08em] text-gold-primary"
           style={{ textShadow: '0 0 20px rgba(201, 169, 110, 0.3)' }}
         >
-          PP LIVE SHOWROOM
+          WF SHOWROOM
         </span>
         <StatusPill />
       </div>

@@ -28,6 +28,23 @@ export function TabNav({ totalProcessed }: TabNavProps) {
         </NavLink>
 
         <NavLink
+          to="/search"
+          className={({ isActive }) =>
+            `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
+              isActive
+                ? 'text-gold-primary border-gold-primary'
+                : 'text-text-muted border-transparent hover:text-text-secondary'
+            }`
+          }
+        >
+          <Search size={14} />
+          Search
+          <span className="text-[9px] bg-bg-elevated text-text-muted px-1.5 py-0.5 rounded ml-1">
+            Find
+          </span>
+        </NavLink>
+
+        <NavLink
           to="/analytics"
           className={({ isActive }) =>
             `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${

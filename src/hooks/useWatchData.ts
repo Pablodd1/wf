@@ -237,17 +237,36 @@ export function useWatchData() {
   // If already cached, start non-loading with data in hand (instant tab switches).
   const [records, setRecords] = useState<WatchRecord[]>(_cache ?? []);
   const [loading, setLoading] = useState(_cache === null);
+  const [loadProgress, setLoadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (_cache) { setRecords(_cache); setLoading(false); return; }
     let alive = true;
+
+    // Progress simulation while the 20MB JSON downloads
+    const progressTimer = setInterval(() => {
+      setLoadProgress(p => Math.min(p + Math.random() * 8, 90));
+    }, 200);
+
     loadWatchData()
-      .then((data) => { if (alive) { setRecords(data); setLoading(false); } })
+      .then((data) => {
+        if (alive) {
+          clearInterval(progressTimer);
+          setLoadProgress(100);
+          setRecords(data);
+          setLoading(false);
+        }
+      })
       .catch((err) => {
-        if (alive) { console.error('Failed to load watch data:', err); setError(err.message); setLoading(false); }
+        if (alive) {
+          clearInterval(progressTimer);
+          console.error('Failed to load watch data:', err);
+          setError(err.message);
+          setLoading(false);
+        }
       });
-    return () => { alive = false; };
+    return () => { alive = false; clearInterval(progressTimer); };
   }, []);
 
   const stats = {
@@ -265,5 +284,5 @@ export function useWatchData() {
       : 0,
   };
 
-  return { records, loading, error, stats, setRecords };
+  return { records, loading, error, stats, setRecords, loadProgress };
 }

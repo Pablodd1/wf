@@ -119,12 +119,17 @@ function extractJson(text) {
 // ── Unified prompt (same for both providers) ─────────────────────────────────
 const VISION_PROMPT = `You are a luxury watch authentication expert. Look at this watch photo and report ONLY what you can see — do NOT guess to match any expectation.
 
+CRITICAL: Focus on the DIAL COLOR. The dial is the watch face (the circular area under the crystal where hour markers are). Do NOT confuse it with:
+- Case color (gold, steel, rose gold)
+- Strap/bracelet color
+- Box or papers color
+
 Return ONLY a JSON object with exactly these keys:
 {
   "brand": "string (e.g. 'Rolex', 'Patek Philippe', or 'UNKNOWN')",
   "referenceVisible": "string (any reference number printed on the watch/papers, else 'UNKNOWN')",
   "modelGuess": "string (model family if recognizable, else 'UNKNOWN')",
-  "dialColor": "string (e.g. 'Blue', 'Black', 'Green', 'White', 'Silver', 'Grey', 'Brown', 'Champagne', 'Tiffany Blue', 'Salmon', 'Purple', 'Red', 'Orange', 'Yellow', or 'UNKNOWN')",
+  "dialColor": "string (e.g. 'Blue', 'Black', 'Green', 'White', 'Silver', 'Grey', 'Brown', 'Champagne', 'Tiffany Blue', 'Salmon', 'Purple', 'Red', 'Orange', 'Yellow', 'MOP', 'Diamond', or 'UNKNOWN')",
   "dialConfidence": "number 0-100 (how clearly you can see the dial color)",
   "legible": "boolean (false if blurry, cropped, box/strap only, or not a clear watch face)",
   "confidence": "number 0-100 (overall confidence in your assessment)",
@@ -265,9 +270,34 @@ async function analyzeWithGemini(imageUrl, textReference, textBrand) {
   return buildResult(parsed, 'gemini-2.5-flash', textReference, textBrand);
 }
 
-// ── Build unified result from parsed vision output ───────────────────────────
+// ── Build unified result from parsed vision output ─────────────────────────────
 function buildResult(parsed, source, textReference, textBrand) {
-  const dialColor = parsed.dialColor || 'UNKNOWN';
+  // Normalize dial color to canonical values (matches catalog + regex parse)
+  const DIAL_COLOR_MAP = {
+    'tiffany blue': 'Tiffany', 'tiffany': 'Tiffany',
+    'mother of pearl': 'MOP', 'mop': 'MOP', 'mother-of-pearl': 'MOP',
+    'champagne': 'Champagne', 'champ': 'Champagne',
+    'salmon': 'Salmon', 'copper': 'Salmon',
+    'purple': 'Purple', 'violet': 'Purple', 'plum': 'Purple',
+    'blue': 'Blue', 'navy': 'Blue', 'royal blue': 'Blue',
+    'green': 'Green', 'olive': 'Green',
+    'black': 'Black', 'matte black': 'Black',
+    'white': 'White', 'silver': 'Silver', 'grey': 'Grey', 'gray': 'Grey',
+    'brown': 'Brown', 'chocolate': 'Brown',
+    'pink': 'Pink', 'rose': 'Pink',
+    'red': 'Red', 'orange': 'Orange', 'yellow': 'Yellow',
+    'diamond': 'Diamond',
+  };
+
+  let dialColor = (parsed.dialColor || 'UNKNOWN').trim();
+  const dialKey = dialColor.toLowerCase();
+  if (DIAL_COLOR_MAP[dialKey]) {
+    dialColor = DIAL_COLOR_MAP[dialKey];
+  } else if (dialColor !== 'UNKNOWN') {
+    // Keep original if not in map, but title-case it
+    dialColor = dialColor.charAt(0).toUpperCase() + dialColor.slice(1).toLowerCase();
+  }
+
   const dialConfidence = parsed.dialConfidence || parsed.confidence || 0;
   const brand = parsed.brand || null;
   const referenceVisible = parsed.referenceVisible || 'UNKNOWN';
