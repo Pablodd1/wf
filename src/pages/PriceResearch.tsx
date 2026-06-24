@@ -85,7 +85,7 @@ export default function PriceResearch() {
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get('ref') || '126334');
   const [data, setData] = useState<PriceData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [selectedListing, setSelectedListing] = useState<PriceListing | null>(null);

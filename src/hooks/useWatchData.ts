@@ -198,9 +198,17 @@ function loadWatchData(): Promise<WatchRecord[]> {
       const stats = await statsResp.json();
       const totalCount = stats.total || 0;
       
-      // Fetch first batch of 1000 records from Supabase
-      const dataResp = await fetch('/api/watch-data?page=1&limit=1000');
-      const dataJson = await dataResp.json();
+      // Fetch first 3 pages (3000 records) from Supabase for immediate display
+      const allData: any[] = [];
+      for (let page = 1; page <= 3; page++) {
+        const dataResp = await fetch(`/api/watch-data?page=${page}&limit=1000`);
+        const dataJson = await dataResp.json();
+        if (dataJson.data && dataJson.data.length > 0) {
+          allData.push(...dataJson.data);
+        }
+        if (!dataJson.data || dataJson.data.length < 1000) break;
+      }
+      const dataJson = { data: allData };
       
       if (dataJson.data && dataJson.data.length > 0) {
         // Transform Supabase records to WatchRecord format
