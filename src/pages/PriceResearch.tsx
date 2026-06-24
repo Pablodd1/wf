@@ -125,7 +125,7 @@ export default function PriceResearch() {
         <div className="max-w-6xl mx-auto px-4">
           <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
-            This feature is currently optimized for Rolex references only. Additional brands are planned for upcoming releases.
+            This feature is powered by live market data from 122,000+ records across all luxury watch brands.
           </p>
         </div>
       </div>
@@ -140,7 +140,7 @@ export default function PriceResearch() {
                 type="text" value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && fetchData(query)}
-                placeholder="Enter reference (e.g. 52506, 126334, 5711/1A)"
+                placeholder="Enter any reference (e.g. 126334, 5711A, RM 07-01, 26238ST)"
                 style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none' }}
               />
             </div>
