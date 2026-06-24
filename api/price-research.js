@@ -12,7 +12,7 @@
  * - 80%  = 2 AI interventions (e.g., reference updated + dial updated)
  * - <80% = 3+ interventions or garbage (manual review required)
  */
-module.exports = async function handler(req, res) { (fix: ESM/CJS mismatch — all 15 ESM API files converted to CJS)
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
