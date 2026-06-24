@@ -30,11 +30,22 @@ function toUSD(amount, currency) {
 
 function parsePrice(text) {
   const t = text.replace(/,/g, '');
-  const mMatch = t.match(/\b(\d{1,4}(?:\.\d{1,3})?)\s*(?:m|million)\b/i);
+  // HKD with decimals: HKD4.15m, HKD1.43m, etc.
+  const hkdM = t.match(/HKD\s*(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
+  if (hkdM) return Math.round(parseFloat(hkdM[1]) * 1_000_000);
+  const hkdK = t.match(/HKD\s*(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
+  if (hkdK) return Math.round(parseFloat(hkdK[1]) * 1000);
+  // General m/k patterns — but require currency context to avoid grabbing years
+  const mMatch = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
   if (mMatch) return Math.round(parseFloat(mMatch[1]) * 1_000_000);
-  const kMatch = t.match(/\b(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
+  const kMatch = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
   if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
-  const plainMatch = t.match(/\b(\d{4,8})\b/);
+  // Plain number — only if preceded by currency symbol or 5+ digits (not a year)
+  const usdMatch = t.match(/(?:USD|USDT|\$)\s*(\d{4,8})/i);
+  if (usdMatch) return parseInt(usdMatch[1], 10);
+  const hkdPlain = t.match(/HKD\s*(\d{4,8})/i);
+  if (hkdPlain) return parseInt(hkdPlain[1], 10);
+  const plainMatch = t.match(/\b(\d{5,8})\b/);
   if (plainMatch) return parseInt(plainMatch[1], 10);
   return null;
 }
@@ -48,18 +59,40 @@ function parseCurrency(text) {
   if (/\bCHF\b/.test(t)) return 'CHF';
   if (/\bSGD\b/.test(t)) return 'SGD';
   if (/\bUSD\b|\$/.test(t)) return 'USD';
+  // Default to HKD if price has HKD pattern
+  if (/HKD/i.test(text)) return 'HKD';
   return null;
 }
 
 function inferBrandFromRef(ref) {
   if (!ref) return null;
   const r = ref.toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
+  // Patek Philippe
   if (/^[345]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
   if (/^[345]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
+  if (/^[345]\d{3}-/.test(r)) return 'Patek Philippe';
+  // Audemars Piguet (5-6 digit + letters)
   if (/^\d{5}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';
-  if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
+  if (/^\d{5}[A-Z]{2,4}-\d{3}$/.test(r)) return 'Audemars Piguet';
+  // Rolex (6 digit + optional letters)
+  if (/^\d{6}[A-Z]{0,5}$/.test(r)) return 'Rolex';
+  // Richard Mille
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
+  // Vacheron Constantin
   if (/^(85|47|49)\d{3}[A-Z\/]/.test(r)) return 'Vacheron Constantin';
+  // Panerai (PAM + digits)
+  if (/^PAM\d{3,5}/.test(r)) return 'Panerai';
+  // IWC (IW + digits)
+  if (/^IW\d{6,8}/.test(r)) return 'IWC';
+  // Cartier (RDDB/WHCH/etc)
+  if (/^RDDB\w*/.test(r)) return 'Cartier';
+  if (/^WHCH\w*/.test(r)) return 'Cartier';
+  // A. Lange & Söhne (3-4 digit decimal refs like 410.038)
+  if (/^\d{3}\.\d{3}/.test(r)) return 'A. Lange & Söhne';
+  // Seiko (WSSA/SPB/etc)
+  if (/^(WSSA|SPB|SRP|SBDY)\d{3,4}/.test(r)) return 'Seiko';
+  // Tudor
+  if (/^(M\d{5}|79\d{3}|42\d{3})/.test(r)) return 'Tudor';
   return null;
 }
 
@@ -88,28 +121,74 @@ function parseFull(rawMsg) {
   else if (/vacheron|constantin/i.test(text)) brand = 'Vacheron Constantin';
   else if (/omega/i.test(text)) brand = 'Omega';
   else if (/cartier/i.test(text)) brand = 'Cartier';
+  else if (/a\.?\s?lange|lange\s?\&/i.test(text)) brand = 'A. Lange & Söhne';
+  else if (/\biwc\b|schaffhausen/i.test(text)) brand = 'IWC';
+  else if (/panerai|pam\d/i.test(text)) brand = 'Panerai';
+  else if (/seiko|grand\s?seiko/i.test(text)) brand = 'Seiko';
+  else if (/tudor/i.test(text)) brand = 'Tudor';
+  else if (/hublot/i.test(text)) brand = 'Hublot';
+  else if (/breitling/i.test(text)) brand = 'Breitling';
+  else if (/jaeger|jlc/i.test(text)) brand = 'Jaeger-LeCoultre';
 
   let ref = null;
+  // Richard Mille: RM07-01, RM 11-03
   const rmM = text.match(/\bRM\s?\d{2}[-\s]?\d{2}[A-Z]?\b/i);
+  // Patek: 5711/1A-010, 5205R, 2499
   const ppM = text.match(/\b[345]\d{3}[A-Z]?\/\d{1,4}[A-Z]{0,4}(?:-\d{3})?\b/i);
   const shortPP = text.match(/\b[345]\d{3}[A-Z]\b/i);
-  const apM = text.match(/\b\d{5}[A-Z]{2,4}\b/i);
-  const rolexM = text.match(/\b\d{6}[A-Z]{0,4}\b/i);
+  const pp4 = text.match(/\b[345]\d{3}\b/);
+  // Audemars Piguet: 26238ST, 15720CN, 15400ST.OO.1220ST.01
+  const apM = text.match(/\b\d{5}[A-Z]{2,5}(?:\.\w+)?\b/i);
+  // Rolex: 126334G, 116695TBR, 116578SACO
+  const rolexM = text.match(/\b\d{6}[A-Z]{0,5}\b/i);
+  // Vacheron: 85250, 47040
+  const vcM = text.match(/\b[48]\d{4}[A-Z]?\b/i);
+  // Panerai: PAM00221, PAM01314
+  const pamM = text.match(/\bPAM\d{3,5}\b/i);
+  // IWC: IW326801, IW501004
+  const iwcM = text.match(/\bIW\d{6,8}\b/i);
+  // Cartier: RDDBEX0816, WHCH0008
+  const cartierM = text.match(/\b(?:RDDB|WHCH|WSTA|WSCL)\w*\b/i);
+  // A. Lange: 410.038
+  const langeM = text.match(/\b\d{3}\.\d{3}\b/);
+  // Seiko: WSSA0030, SPB123
+  const seikoM = text.match(/\b(?:WSSA|SPB|SRP|SBDY|SNE)\d{3,4}\b/i);
+  // Patek 4-digit: 2499, 5971 (high value vintage)
+  const ppVintage = text.match(/\b(2499|5971|5970|3970|3979|5004|5959|5160|5168|5170|5205|5208|5216|5270|5372|5470|5520|5539|5905|5935|5940|5960|6002|6300|7040|7118|7120|7130|7140|7150|7230|7320)\b/i);
+  // 8239 (Patek)
+  const pp82 = text.match(/\b8239[-\s]?\d{4}\b/i);
+  
   if (rmM) ref = rmM[0].toUpperCase().replace(/\s/g, '');
   else if (ppM) ref = ppM[0].toUpperCase();
   else if (shortPP) ref = shortPP[0].toUpperCase();
   else if (apM) ref = apM[0].toUpperCase();
+  else if (pamM) ref = pamM[0].toUpperCase();
+  else if (iwcM) ref = iwcM[0].toUpperCase();
+  else if (cartierM) ref = cartierM[0].toUpperCase();
+  else if (langeM) ref = langeM[0];
+  else if (seikoM) ref = seikoM[0].toUpperCase();
   else if (rolexM) ref = rolexM[0].toUpperCase();
+  else if (pp82) ref = pp82[0].toUpperCase().replace(/\s/g, '');
+  else if (ppVintage) ref = ppVintage[0].toUpperCase();
 
   if (!brand && ref) brand = inferBrandFromRef(ref);
 
+  // Also detect brand from "AP" prefix without space: "AP26470or"
+  if (!brand && /\bAP\d{5}/i.test(text)) brand = 'Audemars Piguet';
+  if (!brand && /\bRm\d{2}/i.test(text)) brand = 'Richard Mille';
+
   let dial = null;
-  const dialM = text.match(/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|tiffany|panda|hulk|zebra|mop|meteorite)\b/i);
-  if (dialM) dial = dialM[1].charAt(0).toUpperCase() + dialM[1].slice(1).toLowerCase();
+  const dialM = text.match(/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|tiffany|panda|hulk|zebra|mop|meteorite|candy|crash|blk|rom|roma)\b/i);
+  if (dialM) {
+    const d = dialM[1].toLowerCase();
+    if (d === 'blk') dial = 'Black';
+    else if (d === 'rom' || d === 'roma') dial = 'Roman';
+    else dial = dialM[1].charAt(0).toUpperCase() + dialM[1].slice(1).toLowerCase();
+  }
   if (!dial && ref) dial = inferDialFromRef(ref);
 
   let condition = null;
-  if (/\bnew\b|unworn|bnib/i.test(text)) condition = 'New';
+  if (/\bnew\b|unworn|bnib|brand\s?new/i.test(text)) condition = 'New';
   else if (/\bused\b|pre-?owned|worn/i.test(text)) condition = 'Used';
   else if (/\bmint\b|excellent/i.test(text)) condition = 'Like New';
 

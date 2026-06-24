@@ -7,7 +7,7 @@ const path = require('path');
 // ── CONFIG ──
 const TARGET_GROUP_NAME = 'WatchFacts';  // Will match any group containing this
 const API_ENDPOINT = 'https://watchfacts-poc.vercel.app/api/ingest';
-const AUTH_DIR = './auth_info_baileys';
+const AUTH_DIR = path.join(__dirname, 'auth_info_baileys');
 const IMAGE_DIR = './downloaded_images';
 
 // Ensure image dir exists
@@ -169,8 +169,12 @@ async function startWhatsApp() {
 
     const sock = makeWASocket({
         version,
-        logger: { info: () => {}, debug: () => {}, error: console.error, warn: console.warn, trace: () => {}, child: () => ({}) },
-        printQRInTerminal: true,
+        logger: {
+            level: 'silent',
+            info: () => {}, debug: () => {}, error: () => {}, warn: () => {},
+            trace: () => {}, fatal: () => {}, child: () => ({ level: 'silent', info: () => {}, debug: () => {}, error: () => {}, warn: () => {}, trace: () => {}, fatal: () => {}, child: () => ({}) }),
+        },
+        printQRInTerminal: false,
         auth: state,
         browser: ['WatchFacts Bot', 'Chrome', '1.0'],
     });
