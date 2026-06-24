@@ -57,16 +57,33 @@ module.exports = async function handler(req, res) {
     };
 
     // Query watch_records for this reference
-    const supaResp = await fetch(
+    // Try exact match first, then fuzzy (ilike) for variants like "5711/1A" → "5711A", "RM07-01" → "RM 07-01"
+    let supaResp = await fetch(
       `${SUPABASE_URL}/rest/v1/watch_records?reference=eq.${encodeURIComponent(reference)}&limit=1000&order=created_at.desc`,
       { headers }
     );
+    let rows = supaResp.ok ? await supaResp.json() : [];
 
-    if (!supaResp.ok) {
-      return res.status(500).json({ error: 'Database query failed', status: supaResp.status });
+    // If no exact match, try fuzzy search
+    if (!rows || rows.length === 0) {
+      // Remove spaces, dashes, slashes for broader matching
+      const cleanRef = reference.replace(/[\s\-\/]/g, '');
+      supaResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/watch_records?reference=ilike.*${encodeURIComponent(cleanRef)}*&limit=1000&order=created_at.desc`,
+        { headers }
+      );
+      rows = supaResp.ok ? await supaResp.json() : [];
     }
 
-    const rows = await supaResp.json();
+    // Still no match? Try just the numeric portion
+    if ((!rows || rows.length === 0) && /^\d{4,6}/.test(reference)) {
+      const numPart = reference.match(/^\d{4,6}/)[0];
+      supaResp = await fetch(
+        `${SUPABASE_URL}/rest/v1/watch_records?reference=ilike.${encodeURIComponent(numPart)}*&limit=1000&order=created_at.desc`,
+        { headers }
+      );
+      rows = supaResp.ok ? await supaResp.json() : [];
+    }
 
     if (!rows || rows.length === 0) {
       return res.status(200).json({
