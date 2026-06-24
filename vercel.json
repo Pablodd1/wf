@@ -9,6 +9,9 @@
     "api/clean-analyze.js": {
       "maxDuration": 120
     },
+    "api/price-research.js": {
+      "maxDuration": 60
+    },
     "api/*.js": {
       "maxDuration": 60
     }

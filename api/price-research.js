@@ -46,8 +46,6 @@ module.exports = async function handler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const reference = url.searchParams.get('reference');
   if (!reference) return res.status(400).json({ error: 'reference required' });
-
-  // If Supabase not configured, return error
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return res.status(503).json({ error: 'Database not configured' });
   }
@@ -58,17 +56,17 @@ module.exports = async function handler(req, res) {
       'Authorization': `Bearer ${SUPABASE_KEY}`,
     };
 
-    // Query watch_records for this reference (paginated — up to 1000 rows)
-    const resp = await fetch(
+    // Query watch_records for this reference
+    const supaResp = await fetch(
       `${SUPABASE_URL}/rest/v1/watch_records?reference=eq.${encodeURIComponent(reference)}&limit=1000&order=created_at.desc`,
       { headers }
     );
 
-    if (!resp.ok) {
-      return res.status(500).json({ error: 'Database query failed' });
+    if (!supaResp.ok) {
+      return res.status(500).json({ error: 'Database query failed', status: supaResp.status });
     }
 
-    const rows = await resp.json();
+    const rows = await supaResp.json();
 
     if (!rows || rows.length === 0) {
       return res.status(200).json({
