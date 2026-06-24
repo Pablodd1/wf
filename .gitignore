@@ -1,4 +1,22 @@
-node_modules
-dist
+# WhatsApp auth session (private keys, never commit)
+whatsapp-listener/auth_info_baileys/
+whatsapp-listener/downloaded_images/
+
+# Dependencies
+node_modules/
+
+# Build
+dist/
+
+# Env
+.env
+.env.local
+.env.production
+.env.vercel
+
+# Vercel
+.vercel/
+
+# OS
 .DS_Store
-.env*.local
+Thumbs.db
