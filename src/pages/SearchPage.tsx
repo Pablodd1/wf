@@ -283,12 +283,42 @@ export default function SearchPage() {
           </div>
         )}
 
-        {/* Results count */}
-        <div className="flex items-center justify-between mb-3">
+        {/* Results count + Verdict Summary */}
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
           <span className="text-xs text-text-muted">
             {loading ? 'Loading data…' : `${filtered.length.toLocaleString()} results`}
             {filtered.length !== records.length && ` of ${records.length.toLocaleString()} total`}
           </span>
+          {!loading && filtered.length > 0 && (
+            <div className="flex gap-2">
+              {(['APPROVED', 'HUMAN', 'RECYCLE'] as const).map(v => {
+                const count = filtered.filter(r => {
+                  const verdict = String((r as any).isResidue || '');
+                  if (v === 'APPROVED') return verdict === 'APPROVED' || (r.confidence >= 90 && !r.failureFlags?.length);
+                  if (v === 'HUMAN') return verdict === 'HUMAN' || (r.confidence >= 35 && r.confidence < 90);
+                  if (v === 'RECYCLE') return verdict === 'RECYCLE' || r.confidence < 35;
+                  return false;
+                }).length;
+                const colors = { APPROVED: 'text-success border-success/30 bg-success/10', HUMAN: 'text-warning border-warning/30 bg-warning/10', RECYCLE: 'text-danger border-danger/30 bg-danger/10' };
+                return (
+                  <button
+                    key={v}
+                    onClick={() => {
+                      if (selectedVerdicts.has(v)) {
+                        const next = new Set(selectedVerdicts); next.delete(v); setSelectedVerdicts(next);
+                      } else {
+                        setSelectedVerdicts(new Set([v]));
+                      }
+                      setVisibleCount(50);
+                    }}
+                    className={`px-2 py-1 text-[10px] font-semibold uppercase rounded border transition-all ${colors[v]} ${selectedVerdicts.has(v) ? 'ring-1 ring-current' : 'opacity-60 hover:opacity-100'}`}
+                  >
+                    {v} <span className="font-mono">{count.toLocaleString()}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {!loading && filtered.length > 0 && (
             <span className="text-[10px] text-text-muted">Showing {Math.min(visibleCount, filtered.length).toLocaleString()}</span>
           )}

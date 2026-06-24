@@ -66,7 +66,7 @@ interface PriceData {
   };
 }
 
-const QUICK_REFS = ['52506', '126334', '5711/1A'];
+const QUICK_REFS = ['126334', '5711A', '116610LV', 'RM 07-01', '26238ST', '5167A'];
 
 // ── Colors (production palette) ─────────────────────────────────
 const NAVY = '#1a2744';
@@ -83,7 +83,7 @@ const BLUE = '#0d6efd';
 // ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
-  const [query, setQuery] = useState(searchParams.get('ref') || '52506');
+  const [query, setQuery] = useState(searchParams.get('ref') || '126334');
   const [data, setData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -91,16 +91,23 @@ export default function PriceResearch() {
   const [selectedListing, setSelectedListing] = useState<PriceListing | null>(null);
 
   const fetchData = useCallback(async (ref: string) => {
+    if (!ref || ref.length < 2) return;
     setLoading(true);
     setError('');
     setSelectedMonth(null);
     setSelectedListing(null);
     try {
-      const r = await fetch(`/api/price-research?reference=${encodeURIComponent(ref)}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000);
+      const r = await fetch(`/api/price-research?reference=${encodeURIComponent(ref)}`, { signal: controller.signal });
+      clearTimeout(timeoutId);
+      if (!r.ok) { setError(`Server error (${r.status})`); return; }
       const d = await r.json();
       if (d.success) setData(d);
       else setError(d.error || 'No data for this reference');
-    } catch { setError('Failed to fetch'); }
+    } catch (e: any) {
+      setError(e.name === 'AbortError' ? 'Request timed out — try again' : 'Failed to fetch data');
+    }
     finally { setLoading(false); }
   }, []);
 

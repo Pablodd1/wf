@@ -188,18 +188,83 @@ let _cachePromise: Promise<WatchRecord[]> | null = null;
 function loadWatchData(): Promise<WatchRecord[]> {
   if (_cache) return Promise.resolve(_cache);
   if (_cachePromise) return _cachePromise;
-  // Log progress so we can show meaningful loading states
   console.time('loadWatchData');
-  _cachePromise = Promise.all([
-    fetch('/parsedWatches.json').then((res) => {
-      if (!res.ok) throw new Error(`parsedWatches.json HTTP ${res.status}`);
-      return res.json();
-    }),
-    fetch('/enriched_refs.json').then((res) => {
-      if (!res.ok) throw new Error(`enriched_refs.json HTTP ${res.status}`);
-      return res.json();
-    }).catch(() => [] as EnrichedRef[]),
-  ]).then(([rawData, enrichedData]: [any, EnrichedRef[]]) => {
+  
+  // HYBRID APPROACH: Try Supabase API first (fast, paginated), fallback to JSON
+  _cachePromise = (async () => {
+    // Try Supabase API for first 1000 records (instant load)
+    try {
+      const statsResp = await fetch('/api/watch-data?stats=true');
+      const stats = await statsResp.json();
+      const totalCount = stats.total || 0;
+      
+      // Fetch first batch of 1000 records from Supabase
+      const dataResp = await fetch('/api/watch-data?page=1&limit=1000');
+      const dataJson = await dataResp.json();
+      
+      if (dataJson.data && dataJson.data.length > 0) {
+        // Transform Supabase records to WatchRecord format
+        const records: WatchRecord[] = dataJson.data.map((r: any) => ({
+          id: r.id || '',
+          source: 'whatsapp' as const,
+          rawMessage: r.raw_message || r.title || '',
+          timestamp: r.created_at || r.received_at || '',
+          brand: r.brand || 'Unknown',
+          reference: r.reference || r.normalized_reference || '',
+          family: r.model || '',
+          price: r.price_usd || r.price_raw || 0,
+          originalPrice: r.price_raw || 0,
+          originalCurrency: r.currency || 'USD',
+          dialColor: r.dial_color || 'UNKNOWN',
+          condition: r.condition || 'Unknown',
+          hasBox: r.box === 'Yes',
+          hasPapers: r.papers === 'Yes',
+          year: r.year ?? null,
+          sellerRating: 0,
+          daysOnMarket: 0,
+          confidence: r.confidence || 0,
+          mlPredictedPrice: 0,
+          priceVariance: 0,
+          demandForecast: 'STABLE',
+          outcomeClassification: 'HOLD',
+          marketComparables: 0,
+          processingTime: 0,
+          pipelineLog: [],
+          isResidue: r.verdict === 'RECYCLE' ? true : (r.verdict === 'HUMAN' ? false : false),
+          failureFlags: r.flags || [],
+          severity: r.verdict === 'RECYCLE' ? 'CRITICAL' : r.verdict === 'HUMAN' ? 'WARNING' : 'INFO',
+          imageUrl: r.front_image ? `/images/${r.front_image}` : null,
+          imageCount: r.front_image ? 1 : 0,
+          imageConfirmed: false,
+          autoResolvedFlags: [],
+          buyerCount: 0,
+          sellerCount: 0,
+          buyerSellerRatio: 0,
+          liquidityScore: 0,
+          description: r.raw_message || '',
+        }));
+        
+        _cache = records;
+        console.timeEnd('loadWatchData');
+        console.log(`Loaded ${records.length} records from Supabase (total: ${totalCount})`);
+        return records;
+      }
+    } catch (e: any) {
+      console.warn('Supabase API failed, falling back to JSON:', e);
+    }
+    
+    // FALLBACK: Original JSON approach
+    const [rawData, enrichedData] = await Promise.all([
+      fetch('/parsedWatches.json').then((res) => {
+        if (!res.ok) throw new Error(`parsedWatches.json HTTP ${res.status}`);
+        return res.json();
+      }),
+      fetch('/enriched_refs.json').then((res) => {
+        if (!res.ok) throw new Error(`enriched_refs.json HTTP ${res.status}`);
+        return res.json();
+      }).catch(() => [] as EnrichedRef[]),
+    ]);
+    
     let records: RawRecord[];
     if (Array.isArray(rawData) && rawData.length > 0 && Array.isArray(rawData[0])) {
       const rows = rawData as any[][];
@@ -219,7 +284,7 @@ function loadWatchData(): Promise<WatchRecord[]> {
       records = rawData as RawRecord[];
     }
     const enrichedMap = new Map<string, EnrichedRef>();
-    enrichedData.forEach((e) => { if (e.reference) enrichedMap.set(e.reference, e); });
+    enrichedData.forEach((e: EnrichedRef) => { if (e.reference) enrichedMap.set(e.reference, e); });
     const transformed = records
       .map((r) => {
         try { return transformRecord(r, enrichedMap); }
@@ -229,7 +294,7 @@ function loadWatchData(): Promise<WatchRecord[]> {
     _cache = transformed;
     console.timeEnd('loadWatchData');
     return transformed;
-  });
+  })();
   return _cachePromise;
 }
 
