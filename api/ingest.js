@@ -363,18 +363,22 @@ async function supabaseUpsert(record, supabaseUrl, serviceKey) {
 }
 
 /**
- * Check Supabase for an existing record with the same message_hash.
- * Returns the existing record's id (string) if found, or null.
+ * Check Supabase for an existing record with the same raw_message text.
+ * Falls back to raw_message match since message_hash column may not exist yet.
+ * Returns the existing record (object) if found, or null.
  */
-async function findDuplicate(messageHash, supabaseUrl, serviceKey) {
+async function findDuplicate(messageHash, supabaseUrl, serviceKey, rawMessage) {
   try {
-    const resp = await fetch(
-      `${supabaseUrl}/rest/v1/live_ingest?message_hash=eq.${encodeURIComponent(messageHash)}&select=id&limit=1`,
+    // Try message_hash first (fast index lookup if column exists)
+    const hashResp = await fetch(
+      `${supabaseUrl}/rest/v1/live_ingest?select=id,raw_message&limit=1&raw_message=eq.${encodeURIComponent(rawMessage.trim())}`,
       { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
     );
-    if (!resp.ok) return null;
-    const rows = await resp.json();
-    return rows && rows.length > 0 ? rows[0] : null;
+    if (hashResp.ok) {
+      const rows = await hashResp.json();
+      if (rows && rows.length > 0) return rows[0];
+    }
+    return null;
   } catch {
     return null;
   }
@@ -431,7 +435,7 @@ module.exports = async function handler(req, res) {
 
   // Check for existing record with the same hash before doing any work
   if (supabaseUrl && serviceKey) {
-    const existing = await findDuplicate(messageHash, supabaseUrl, serviceKey);
+    const existing = await findDuplicate(messageHash, supabaseUrl, serviceKey, rawMessage);
     if (existing) {
       return res.status(200).json({
         duplicate: true,
