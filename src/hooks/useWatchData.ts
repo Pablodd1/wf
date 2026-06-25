@@ -123,6 +123,13 @@ function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>):
   let originalCurrency = raw.currency || 'USD';
   let originalPrice = raw.price || 0;
   let finalPrice = effectivePrice;
+  
+  // GUARD: If price equals the reference number, it's a parser error — zero it out
+  const refStr = String(raw.reference || '');
+  if (refStr && finalPrice > 0 && (finalPrice === parseInt(refStr) || refStr === String(finalPrice))) {
+    finalPrice = 0;
+  }
+  
   // Only run expensive detectCurrency if priceUSD column is missing/zero
   if (finalPrice === 0 && raw.sourceLine) {
     const currencyInfo = detectCurrency(raw.sourceLine);
@@ -132,6 +139,9 @@ function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>):
       finalPrice = currencyInfo.usdAmount;
     }
   }
+
+  // GUARD 2: Cap price at $10M (no luxury watch sells for more)
+  if (finalPrice > 10_000_000) finalPrice = 0;
 
   // Calculate price variance
   const priceVariance = finalPrice > 0 
@@ -156,7 +166,7 @@ function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>):
     year: raw.year,
     sellerRating,
     daysOnMarket: raw.daysOnMarket || 0,
-    confidence: raw.confidence || 0,
+    confidence: Math.min(100, Math.max(0, raw.confidence || 0)),
     mlPredictedPrice: raw.mlPredictedPrice || 0,
     priceVariance: Math.round(priceVariance * 100) / 100,
     demandForecast: raw.mlDemandForecast || 'STABLE',
@@ -230,7 +240,7 @@ function loadWatchData(): Promise<WatchRecord[]> {
           year: r.year ?? null,
           sellerRating: 0,
           daysOnMarket: 0,
-          confidence: r.confidence || 0,
+          confidence: Math.min(100, Math.max(0, r.confidence || 0)),
           mlPredictedPrice: 0,
           priceVariance: 0,
           demandForecast: 'STABLE',
@@ -349,7 +359,7 @@ export function useWatchData() {
     throughputRate: Math.round(records.length / 2.4),
     avgLatency: 45,
     accuracyRate: records.length > 0
-      ? Math.round((records.filter((r) => !r.isResidue).length / records.length) * 100)
+      ? Math.round((records.filter((r) => r.confidence >= 90 && !r.isResidue).length / records.length) * 100)
       : 0,
     mlAvgTime: 45,
     residueRate: records.length > 0

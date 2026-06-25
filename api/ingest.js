@@ -66,33 +66,30 @@ function parseCurrency(text) {
 
 function inferBrandFromRef(ref) {
   if (!ref) return null;
-  const r = ref.toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
-  // Patek Philippe
+  const r = ref.toUpperCase().replace(/[^A-Z0-9\/\-\.]/g, '');
+  // Richard Mille — must start with RM
+  if (/^RM\d{2}/.test(r)) return 'Richard Mille';
+  // Patek Philippe — 4 digits starting 3-5, optionally followed by letter/slash
   if (/^[345]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
   if (/^[345]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
   if (/^[345]\d{3}-/.test(r)) return 'Patek Philippe';
-  // Audemars Piguet (5-6 digit + letters)
-  if (/^\d{5}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';
-  if (/^\d{5}[A-Z]{2,4}-\d{3}$/.test(r)) return 'Audemars Piguet';
-  // Rolex (6 digit + optional letters)
+  // Audemars Piguet — 5 digits + 2-5 letters (e.g. 26238ST, 15720CN)
+  if (/^\d{5}[A-Z]{2,5}$/.test(r)) return 'Audemars Piguet';
+  // Rolex — exactly 6 digits + optional letters (e.g. 126334G)
   if (/^\d{6}[A-Z]{0,5}$/.test(r)) return 'Rolex';
-  // Richard Mille
-  if (/^RM\d{2}/.test(r)) return 'Richard Mille';
-  // Vacheron Constantin
-  if (/^(85|47|49)\d{3}[A-Z\/]/.test(r)) return 'Vacheron Constantin';
-  // Panerai (PAM + digits)
+  // Vacheron Constantin — 4 digits + letter (e.g. 4600V, 85250)
+  if (/^[48]\d{3}[A-Z]$/.test(r)) return 'Vacheron Constantin';
+  if (/^[48]\d{4}[A-Z]$/.test(r)) return 'Vacheron Constantin';
+  // Panerai — PAM + digits
   if (/^PAM\d{3,5}/.test(r)) return 'Panerai';
-  // IWC (IW + digits)
+  // IWC — IW + digits
   if (/^IW\d{6,8}/.test(r)) return 'IWC';
-  // Cartier (RDDB/WHCH/etc)
-  if (/^RDDB\w*/.test(r)) return 'Cartier';
-  if (/^WHCH\w*/.test(r)) return 'Cartier';
-  // A. Lange & Söhne (3-4 digit decimal refs like 410.038)
+  // Cartier — RDDB/WHCH/WSTA
+  if (/^RDDB\w*/.test(r) || /^WHCH\w*/.test(r)) return 'Cartier';
+  // A. Lange & Söhne — 3 digits . 3 digits (e.g. 414.032)
   if (/^\d{3}\.\d{3}/.test(r)) return 'A. Lange & Söhne';
-  // Seiko (WSSA/SPB/etc)
-  if (/^(WSSA|SPB|SRP|SBDY)\d{3,4}/.test(r)) return 'Seiko';
-  // Tudor
-  if (/^(M\d{5}|79\d{3}|42\d{3})/.test(r)) return 'Tudor';
+  // Seiko
+  if (/^(WSSA|SPB|SRP|SBDY|SNE)\d{3,4}/.test(r)) return 'Seiko';
   return null;
 }
 
