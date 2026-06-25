@@ -15,7 +15,8 @@ MYSQL_DB = 'thecollective_inventory'
 
 # Our Supabase
 SUPABASE_URL = "https://bptrvfncppbjnchsaxtb.supabase.co"
-SUPABASE_KEY = ""  # Set via environment variable SUPABASE_SERVICE_ROLE_KEY
+import os
+SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
 BATCH_SIZE = 500
 OFFSET = 0
@@ -148,15 +149,41 @@ def main():
                     year_val = int(year_m.group(1))
             confidence = min(100, confidence)
             
-            # Price USD conversion
-            RATES = {'HKD': 0.128, 'USD': 1.0, 'USDT': 1.0, 'EUR': 1.08, 'GBP': 1.27}
+            # Production DB price column is ALREADY in USD
+            # Only extract from title if price is 0
             currency = 'USD'
-            if 'HKD' in (row.get('title') or '').upper():
-                currency = 'HKD'
-            elif 'USDT' in (row.get('title') or '').upper():
-                currency = 'USDT'
+            price_raw = price  # Already USD from production DB
             
-            price_usd = int(price * RATES.get(currency, 1.0)) if price > 0 else None
+            if price == 0 and row.get('title'):
+                import re
+                title = row.get('title', '')
+                # Try HKD first (most common in dealer groups)
+                hkd_m = re.search(r'HK[D$]?\s*([\d,.]+)', title, re.I)
+                usd_m = re.search(r'(?:USD|USDT|\$)\s*([\d,.]+)', title, re.I)
+                if hkd_m:
+                    try:
+                        hkd_price = float(hkd_m.group(1).replace(',', '').replace('.', ''))
+                        price_raw = hkd_price
+                        currency = 'HKD'
+                        price = hkd_price * 0.128  # Convert to USD
+                    except ValueError:
+                        pass
+                elif usd_m:
+                    price_str = usd_m.group(1).replace(',', '')
+                    try:
+                        price = float(price_str)
+                        price_raw = price
+                        currency = 'USD'
+                    except:
+                        pass
+            
+            # price_usd: if currency is HKD, convert. If USD, use as-is.
+            if currency == 'HKD' and price_raw and price_raw > 0:
+                price_usd = int(price_raw * 0.128)
+            elif price > 0:
+                price_usd = int(price)
+            else:
+                price_usd = None
             
             record = {
                 'id': f"prod_{row['id'][:20]}",
@@ -165,7 +192,7 @@ def main():
                 'dial_color': row.get('dial_color'),
                 'condition': condition,
                 'year': year_val,
-                'price_raw': price if price > 0 else None,
+                'price_raw': price_raw if price_raw and price_raw > 0 else None,
                 'price_usd': price_usd,
                 'currency': currency,
                 'confidence': confidence,
