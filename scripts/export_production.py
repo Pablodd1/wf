@@ -18,7 +18,7 @@ SUPABASE_URL = "https://bptrvfncppbjnchsaxtb.supabase.co"
 import os
 SUPABASE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
 
-BATCH_SIZE = 500
+BATCH_SIZE = 2000
 OFFSET = 0
 TOTAL = 1052183
 

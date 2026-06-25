@@ -188,6 +188,38 @@ function parseWatchMessage(text) {
   };
 }
 
+// ─── MULTI-WATCH SPLITTER ───
+function splitMultiWatch(text) {
+  if (!text || text.length < 10) return [text];
+  const refPattern = /\b(?:RM\s?\d{2}[-\s]?\d{2}|[345]\d{3}[A-Z]?[\/\-]?\d*|\d{5,6}[A-Z]{2,5}|PAM\d{3,5}|IW\d{6,8})\b/gi;
+  const refMatches = text.match(refPattern) || [];
+  if (refMatches.length <= 1) return [text];
+  
+  const lines = text.split(/\n/);
+  const parts = [];
+  let currentPart = '';
+  const newListingPattern = /^[\s\u2600-\u27BF\U0001F000-\U0001FAFF\ufe0f]*?(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d|Rolex|Patek|Audemars|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse)/i;
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    if (newListingPattern.test(trimmed) && currentPart) {
+      parts.push(currentPart.trim());
+      currentPart = trimmed;
+    } else {
+      currentPart += (currentPart ? '\n' : '') + trimmed;
+    }
+  }
+  if (currentPart.trim()) parts.push(currentPart.trim());
+  
+  const validParts = parts.filter(p => {
+    const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d)\b/i.test(p);
+    const hasPrice = /(?:HKD|USD|USDT|\$|k|m)\d/i.test(p) || /\d{4,}\s*(?:k|m|HKD|USD|USDT)/i.test(p);
+    return hasRef || hasPrice;
+  });
+  return validParts.length > 1 ? validParts : [text];
+}
+
 // ─── DEDUPLICATION ───
 // Simple hash: message text (cleaned) + 5-min window
 function messageHash(text, chatId) {
@@ -317,50 +349,54 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, skipped: 'duplicate' });
     }
     
-    // PARSE
-    const parsed = parseWatchMessage(text);
-    if (!parsed) {
+    // SPLIT multi-watch messages
+    const watchParts = splitMultiWatch(text);
+    const allRecords = [];
+    const parseResults = [];
+    
+    for (let i = 0; i < watchParts.length; i++) {
+      const part = watchParts[i];
+      const parsed = parseWatchMessage(part);
+      if (!parsed) continue;
+      
+      allRecords.push({
+        id: `ga_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 6)}`,
+        raw_message: part.substring(0, 2000),
+        brand: parsed.brand,
+        reference: parsed.reference,
+        dial_color: parsed.dial_color,
+        condition: parsed.condition,
+        year: parsed.year,
+        price_raw: parsed.price_raw,
+        price_usd: parsed.price_usd,
+        currency: parsed.currency,
+        confidence: parsed.confidence,
+        verdict: parsed.verdict,
+        source: 'green_api',
+        channel_id: chatId,
+        received_at: new Date().toISOString(),
+      });
+      
+      parseResults.push(`${parsed.brand} ${parsed.reference || '?'} ${parsed.verdict}`);
+    }
+    
+    if (allRecords.length === 0) {
       return res.status(200).json({ ok: true, skipped: 'not a watch listing' });
     }
     
-    // BUILD RECORD
-    const record = {
-      id: `ga_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-      raw_message: text.substring(0, 2000),
-      brand: parsed.brand,
-      reference: parsed.reference,
-      dial_color: parsed.dial_color,
-      condition: parsed.condition,
-      year: parsed.year,
-      price_raw: parsed.price_raw,
-      price_usd: parsed.price_usd,
-      currency: parsed.currency,
-      confidence: parsed.confidence,
-      verdict: parsed.verdict,
-      source: 'green_api',
-      channel_id: chatId,
-      received_at: new Date().toISOString(),
-    };
+    // BATCH INSERT ALL
+    const result = await batchInsert(allRecords);
     
-    // INSERT TO SUPABASE
-    const result = await batchInsert([record]);
-    
-    console.log(`[green-api] ${chatName} @${senderName}: "${text.substring(0, 60)}..." → ${parsed.brand} ${parsed.reference || '?'} ${parsed.verdict} (conf=${parsed.confidence}) ${result.inserted ? '✓' : '✗'}`);
+    console.log(`[green-api] ${chatName} @${senderName}: ${allRecords.length} listing(s) → ${parseResults.join(', ')} ${result.inserted ? '✓' : '✗'}`);
     
     return res.status(200).json({
       ok: true,
       handled: 'watch_message',
       group: chatName,
       sender: senderName,
-      parsed: {
-        brand: parsed.brand,
-        reference: parsed.reference,
-        dial: parsed.dial_color,
-        price: parsed.price_raw,
-        currency: parsed.currency,
-        confidence: parsed.confidence,
-        verdict: parsed.verdict,
-      },
+      split: watchParts.length > 1,
+      listingsFound: allRecords.length,
+      results: parseResults,
       persisted: result.inserted > 0,
     });
   }

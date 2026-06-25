@@ -238,6 +238,70 @@ function verdict(parsed) {
   return 'HUMAN';
 }
 
+// ─── MULTI-WATCH SPLITTER ───
+// Splits bundled messages containing multiple watch listings into individual entries.
+// Detects separators: newlines with references, emoji bullets, numbered lists, price markers
+function splitMultiWatch(text) {
+  if (!text || text.length < 10) return [text];
+  
+  // Count how many reference-like patterns exist
+  const refPattern = /\b(?:RM\s?\d{2}[-\s]?\d{2}|[345]\d{3}[A-Z]?[\/\-]?\d*|\d{5,6}[A-Z]{2,5}|PAM\d{3,5}|IW\d{6,8})\b/gi;
+  const refMatches = text.match(refPattern) || [];
+  
+  // If only 1 reference found, return as single message
+  if (refMatches.length <= 1) return [text];
+  
+  // Multiple references found — try to split
+  // Strategy: split by lines that start with a reference number or emoji bullet
+  const lines = text.split(/\n/);
+  const parts = [];
+  let currentPart = '';
+  
+  // Patterns that indicate a NEW watch listing starts
+  const newListingPattern = /^[\s\u2600-\u27BF\U0001F000-\U0001FAFF\ufe0f]*?(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d|Rolex|Patek|Audemars|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse)/i;
+  
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    
+    if (newListingPattern.test(trimmed) && currentPart) {
+      // New listing starts — save previous and start new
+      parts.push(currentPart.trim());
+      currentPart = trimmed;
+    } else {
+      // Continuation of current listing
+      currentPart += (currentPart ? '\n' : '') + trimmed;
+    }
+  }
+  if (currentPart.trim()) parts.push(currentPart.trim());
+  
+  // Validate: each part should have a reference or brand+price
+  const validParts = parts.filter(p => {
+    const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d)\b/i.test(p);
+    const hasPrice = /(?:HKD|USD|USDT|\$|k|m)\d/i.test(p) || /\d{4,}\s*(?:k|m|HKD|USD|USDT)/i.test(p);
+    return hasRef || hasPrice;
+  });
+  
+  return validParts.length > 1 ? validParts : [text];
+}
+
+async function supabaseBatchInsert(records, supabaseUrl, serviceKey) {
+  if (!records.length) return 0;
+  try {
+    const resp = await fetch(`${supabaseUrl}/rest/v1/live_ingest`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': serviceKey,
+        'Authorization': `Bearer ${serviceKey}`,
+        'Prefer': 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify(records),
+    });
+    return resp.ok ? records.length : 0;
+  } catch { return 0; }
+}
+
 async function supabaseUpsert(record, supabaseUrl, serviceKey) {
   const resp = await fetch(`${supabaseUrl}/rest/v1/live_ingest`, {
     method: 'POST',
@@ -301,69 +365,89 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'rawMessage required (min 5 chars)' });
   }
 
-  // Stage 1: regex parse
-  let parsed = parseFull(rawMessage);
+  // Stage 0: Split multi-watch messages into individual listings
+  const watchParts = splitMultiWatch(rawMessage);
+  
+  const results = [];
+  const allRecords = [];
+  
+  for (let i = 0; i < watchParts.length; i++) {
+    const part = watchParts[i];
+    
+    // Stage 1: regex parse each part
+    let parsed = parseFull(part);
 
-  // Stage 2: LLM enrichment if needed
-  let usedLLM = false;
-  if (parsed.confidence < HUMAN_THRESHOLD && parsed.ref && deepseekKey) {
-    try {
-      const llm = await llmEnrich(rawMessage, parsed, deepseekKey);
-      if (!parsed.brand && llm.brand && llm.brand !== 'Unknown') parsed.brand = llm.brand;
-      if (!parsed.ref && llm.reference) parsed.ref = llm.reference;
-      if (!parsed.dial && llm.dialColor && llm.dialColor !== 'Unknown') parsed.dial = llm.dialColor;
-      if (!parsed.condition && llm.condition) parsed.condition = llm.condition;
-      if (!parsed.year && llm.year) parsed.year = llm.year;
-      if (!parsed.price && llm.price) parsed.price = llm.price;
-      if (!parsed.currency && llm.currency && llm.currency !== 'Unknown') parsed.currency = llm.currency;
-      parsed.confidence = Math.max(parsed.confidence, parseInt(llm.confidence) || 0);
-      usedLLM = true;
-    } catch { /* keep regex result */ }
+    // Stage 2: LLM enrichment if needed
+    let usedLLM = false;
+    if (parsed.confidence < HUMAN_THRESHOLD && parsed.ref && deepseekKey) {
+      try {
+        const llm = await llmEnrich(part, parsed, deepseekKey);
+        if (!parsed.brand && llm.brand && llm.brand !== 'Unknown') parsed.brand = llm.brand;
+        if (!parsed.ref && llm.reference) parsed.ref = llm.reference;
+        if (!parsed.dial && llm.dialColor && llm.dialColor !== 'Unknown') parsed.dial = llm.dialColor;
+        if (!parsed.condition && llm.condition) parsed.condition = llm.condition;
+        if (!parsed.year && llm.year) parsed.year = llm.year;
+        if (!parsed.price && llm.price) parsed.price = llm.price;
+        if (!parsed.currency && llm.currency && llm.currency !== 'Unknown') parsed.currency = llm.currency;
+        parsed.confidence = Math.max(parsed.confidence, parseInt(llm.confidence) || 0);
+        usedLLM = true;
+      } catch { /* keep regex result */ }
+    }
+
+    const v = verdict(parsed);
+    const priceUSD = parsed.price ? toUSD(parsed.price, parsed.currency || 'USD') : null;
+
+    const record = {
+      id: `live_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 6)}`,
+      raw_message: part.substring(0, 2000),
+      brand: parsed.brand || 'Unknown',
+      reference: parsed.ref || null,
+      dial_color: parsed.dial || null,
+      condition: parsed.condition || null,
+      year: parsed.year || null,
+      price_raw: parsed.price || null,
+      price_usd: priceUSD,
+      currency: parsed.currency || null,
+      confidence: parsed.confidence,
+      verdict: v,
+      source,
+      channel_id: channelId,
+      llm_used: usedLLM,
+      received_at: new Date().toISOString(),
+    };
+    
+    allRecords.push(record);
+    results.push({
+      index: i + 1,
+      brand: record.brand,
+      reference: record.reference,
+      verdict: v,
+      confidence: parsed.confidence,
+      priceUSD,
+      currency: record.currency,
+    });
   }
 
-  const v = verdict(parsed);
-  const priceUSD = parsed.price ? toUSD(parsed.price, parsed.currency || 'USD') : null;
-
-  const record = {
-    id: `live_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-    raw_message: rawMessage,
-    brand: parsed.brand || 'Unknown',
-    reference: parsed.ref || null,
-    dial_color: parsed.dial || null,
-    condition: parsed.condition || null,
-    year: parsed.year || null,
-    price_raw: parsed.price || null,
-    price_usd: priceUSD,
-    currency: parsed.currency || null,
-    confidence: parsed.confidence,
-    verdict: v,
-    source,
-    channel_id: channelId,
-    llm_used: usedLLM,
-    received_at: new Date().toISOString(),
-  };
-
-  // Persist to Supabase if configured
-  let persisted = false;
-  if (supabaseUrl && serviceKey) {
+  // Batch insert all records to Supabase
+  let persisted = 0;
+  if (supabaseUrl && serviceKey && allRecords.length > 0) {
     try {
-      await supabaseUpsert(record, supabaseUrl, serviceKey);
-      persisted = true;
+      persisted = await supabaseBatchInsert(allRecords, supabaseUrl, serviceKey);
     } catch (e) {
       console.error('[ingest] Supabase write failed:', e.message);
+      // Fallback: insert one by one
+      for (const record of allRecords) {
+        try { await supabaseUpsert(record, supabaseUrl, serviceKey); persisted++; } catch {}
+      }
     }
   }
 
   return res.status(200).json({
     success: true,
-    id: record.id,
-    verdict: v,
-    brand: record.brand,
-    reference: record.reference,
-    confidence: record.confidence,
-    priceUSD,
-    currency: record.currency,
+    split: watchParts.length > 1,
+    listingsFound: watchParts.length,
     persisted,
-    source: usedLLM ? 'llm' : 'regex',
+    results,
+    source: results.some(r => r.source === 'llm') ? 'llm' : 'regex',
   });
 }
