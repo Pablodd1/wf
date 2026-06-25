@@ -6,13 +6,133 @@ import { verifyImageReference, type VerifyImageResult } from '@/lib/verifyImage'
 import { enrichWatch } from '@/lib/enrich';
 import type { WatchRecord } from '@/types';
 import type { EnrichmentData } from '@/lib/enrich';
-import { Eye, Wand2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, HelpCircle, Save, RotateCcw, TrendingUp, ExternalLink } from 'lucide-react';
+import { Eye, Wand2, ChevronDown, ChevronUp, AlertTriangle, CheckCircle, HelpCircle, Save, RotateCcw, TrendingUp, ExternalLink, Loader2 } from 'lucide-react';
 
 interface Suggestion {
   field: string;
   value: string;
   reason: string;
   source: 'catalog' | 'kimi' | 'claude' | 'gemini' | 'inference';
+}
+
+/* ── AI Assistance Panel ─────────────────────────────────────────────────────── */
+function AIAssistPanel({ record, enrichment, onEnrich }: { 
+  record: WatchRecord; 
+  enrichment?: EnrichmentData;
+  onEnrich: () => void;
+}) {
+  const [loading, setLoading] = useState(false);
+  const [aiInsight, setAiInsight] = useState<string | null>(null);
+  
+  async function getAIInsight() {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/ai-parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawMessage: `Review this watch listing: ${record.rawMessage}. Current parse: brand=${record.brand}, ref=${record.reference}, dial=${record.dialColor}, price=$${record.price}. Is this correct? What should the reference be?`,
+          currentGuess: {
+            reference: record.reference,
+            dialColor: record.dialColor,
+            brand: record.brand,
+            price: record.price,
+            currency: record.originalCurrency,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data.success && data.parsed) {
+        const ai = Array.isArray(data.parsed) ? data.parsed[0] : data.parsed;
+        setAiInsight(`AI suggests: ${ai.brand} ${ai.reference} ${ai.dialColor || ''} · Confidence: ${ai.confidence?.[0] || '?'}%`);
+      } else {
+        setAiInsight('AI could not provide additional insight for this record.');
+      }
+    } catch (e) {
+      setAiInsight('AI insight failed. Try again.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const marketPrice = enrichment?.market?.chrono24?.priceRange?.median || enrichment?.market?.watchcharts?.priceRange?.low;
+  const priceDiff = marketPrice && record.price > 0 ? ((record.price - marketPrice) / marketPrice * 100) : null;
+  
+  return (
+    <div className="mt-4 rounded-lg border border-gold-primary/30 bg-gold-primary/5 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Wand2 size={14} className="text-gold-primary" />
+        <span className="text-xs font-bold text-gold-primary uppercase tracking-wider">AI Review Assistant</span>
+      </div>
+      
+      {/* Market Context */}
+      {enrichment?.market?.chrono24?.priceRange && (
+        <div className="mb-3 p-2 rounded bg-bg-card border border-border-default">
+          <div className="text-[10px] text-text-muted uppercase mb-1">Market Context (Chrono24)</div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-bold text-text-primary">${enrichment.market.chrono24.priceRange.median.toLocaleString()}</span>
+            <span className="text-[10px] text-text-muted">range: ${enrichment.market.chrono24.priceRange.low.toLocaleString()} - ${enrichment.market.chrono24.priceRange.high.toLocaleString()}</span>
+            {priceDiff !== null && (
+              <span className={`text-xs font-bold ${priceDiff > 20 ? 'text-red-400' : priceDiff < -20 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                {priceDiff > 0 ? '+' : ''}{priceDiff.toFixed(0)}% vs listing
+              </span>
+            )}
+          </div>
+          {enrichment.market.chrono24.listingCount && (
+            <div className="text-[10px] text-text-muted mt-1">{enrichment.market.chrono24.listingCount} listings found</div>
+          )}
+        </div>
+      )}
+      
+      {/* Similar References */}
+      {enrichment?.catalog?.collection && (
+        <div className="mb-3 p-2 rounded bg-bg-card border border-border-default">
+          <div className="text-[10px] text-text-muted uppercase mb-1">Catalog Match</div>
+          <div className="text-sm text-text-primary">{enrichment.catalog.collection} {enrichment.catalog.model || ''}</div>
+          {enrichment.catalog.productionYears && (
+            <div className="text-[10px] text-text-muted">Production: {enrichment.catalog.productionYears}</div>
+          )}
+        </div>
+      )}
+      
+      {/* AI Insight */}
+      {aiInsight ? (
+        <div className="mb-3 p-2 rounded bg-bg-card border border-border-default">
+          <div className="text-[10px] text-text-muted uppercase mb-1">AI Insight</div>
+          <div className="text-xs text-text-primary">{aiInsight}</div>
+        </div>
+      ) : (
+        <button
+          onClick={getAIInsight}
+          disabled={loading}
+          className="mb-3 flex items-center gap-1.5 text-xs text-gold-primary hover:text-gold-bright transition-colors disabled:opacity-50"
+        >
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <Wand2 size={12} />}
+          {loading ? 'Analyzing...' : 'Get AI Insight'}
+        </button>
+      )}
+      
+      {/* Actions */}
+      <div className="flex items-center gap-2">
+        {!enrichment && (
+          <button
+            onClick={onEnrich}
+            className="flex items-center gap-1.5 px-2 py-1 rounded bg-bg-card border border-border-default text-[10px] text-text-secondary hover:text-text-primary transition-colors"
+          >
+            <TrendingUp size={10} />
+            Fetch Market Data
+          </button>
+        )}
+        {enrichment?.officialUrl && (
+          <a href={enrichment.officialUrl} target="_blank" rel="noopener noreferrer"
+            className="flex items-center gap-1 px-2 py-1 rounded bg-bg-card border border-border-default text-[10px] text-text-secondary hover:text-gold-primary transition-colors">
+            <ExternalLink size={10} />
+            Official Site
+          </a>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function ReviewPage() {
@@ -778,6 +898,13 @@ export default function ReviewPage() {
                         </div>
                       );
                     })()}
+
+                    {/* AI Assistance Panel */}
+                    <AIAssistPanel 
+                      record={record} 
+                      enrichment={enrichMap[record.id]} 
+                      onEnrich={() => handleEnrich(record)}
+                    />
 
                     {/* Image-vs-reference verdict */}
                     {verifyMap[record.id] && (() => {

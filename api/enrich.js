@@ -197,6 +197,35 @@ async function enrichWatchCharts(ref, brand) {
   }
 }
 
+/* Fallback: Search by brand + model keywords when reference is unknown */
+async function fallbackSearch(rawText, brand) {
+  try {
+    // Extract model keywords from raw text (remove prices, phone numbers, etc.)
+    const cleanText = rawText
+      .replace(/\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4}/g, '') // dates
+      .replace(/\d{10,15}/g, '') // phone numbers
+      .replace(/\$[\d,.]+[KkMm]?\s*(USD|EUR|HKD|GBP)?/g, '') // prices
+      .replace(/(?:new|used|unworn|mint|full\s*set|box|papers)/gi, '') // condition words
+      .trim();
+    
+    const query = `${brand || ''} ${cleanText}`.trim().slice(0, 100);
+    
+    // Try Chrono24 with broader search
+    const chronoFallback = await enrichChrono24('', query);
+    
+    // Try DuckDuckGo with broader query
+    const ddgFallback = await searchDuckDuckGo(`${query} watch price chrono24`);
+    
+    return {
+      chrono24: chronoFallback,
+      ddg: ddgFallback.slice(0, 3),
+      query: query,
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 /* Brand official site validation */
 function getBrandUrl(ref, brand) {
   const b = (brand || '').toLowerCase();
@@ -233,9 +262,18 @@ module.exports = async function handler(req, res) {
       lookupRef ? enrichWatchCharts(lookupRef, brand) : Promise.resolve(null),
     ]);
 
-    const ddg = ddgResults.status === 'fulfilled' ? ddgResults.value : [];
-    const chronoData = chrono.status === 'fulfilled' ? chrono.value : null;
-    const wcData = watchcharts.status === 'fulfilled' ? watchcharts.value : null;
+    let ddg = ddgResults.status === 'fulfilled' ? ddgResults.value : [];
+    let chronoData = chrono.status === 'fulfilled' ? chrono.value : null;
+    let wcData = watchcharts.status === 'fulfilled' ? watchcharts.value : null;
+
+    // FALLBACK: If no catalog match AND no market data, try broader search
+    if (!catalogMatch && !chronoData && !wcData && req.query.raw) {
+      const fallback = await fallbackSearch(req.query.raw, brand);
+      if (fallback) {
+        if (fallback.chrono24) chronoData = fallback.chrono24;
+        if (fallback.ddg?.length) ddg = fallback.ddg;
+      }
+    }
 
     // Build unified enrichment
     const enrichment = {
@@ -260,7 +298,7 @@ module.exports = async function handler(req, res) {
         } : null,
       },
       officialUrl: getBrandUrl(lookupRef, brand),
-      confidenceBoost: (catalogMatch ? 10 : 0) + (chronoData ? 8 : 0) + (wcData ? 5 : 0) + (ddg.length >= 2 ? 3 : 0),
+      confidenceBoost: (catalogMatch ? 10 : 0) + (chronoData ? 8 : 0) + (wcData ? 5 : 0) + (ddg.length >= 2 ? 3 : 0) + (!catalogMatch && chronoData ? 5 : 0), // bonus for fallback finding market data
     };
 
     return res.status(200).json({ success: true, enrichment });
