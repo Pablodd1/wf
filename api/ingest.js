@@ -35,6 +35,18 @@ function parsePrice(text) {
   if (hkdM) return Math.round(parseFloat(hkdM[1]) * 1_000_000);
   const hkdK = t.match(/HKD\s*(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
   if (hkdK) return Math.round(parseFloat(hkdK[1]) * 1000);
+  // Number BEFORE currency: 252000HKD, 850k HKD, 1.43m hkd
+  const numBeforeHkd = t.match(/(\d{4,8})\s*HKD/i);
+  if (numBeforeHkd) return parseInt(numBeforeHkd[1], 10);
+  const kBeforeHkd = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\s*HKD/i);
+  if (kBeforeHkd) return Math.round(parseFloat(kBeforeHkd[1]) * 1000);
+  const mBeforeHkd = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\s*HKD/i);
+  if (mBeforeHkd) return Math.round(parseFloat(mBeforeHkd[1]) * 1_000_000);
+  // Number BEFORE USD/USDT: 311000usdt, 35k usdt
+  const numBeforeUsd = t.match(/(\d{4,8})\s*(?:USD|USDT)/i);
+  if (numBeforeUsd) return parseInt(numBeforeUsd[1], 10);
+  const kBeforeUsd = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\s*(?:USD|USDT)/i);
+  if (kBeforeUsd) return Math.round(parseFloat(kBeforeUsd[1]) * 1000);
   // General m/k patterns — but require currency context to avoid grabbing years
   const mMatch = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
   if (mMatch) return Math.round(parseFloat(mMatch[1]) * 1_000_000);
@@ -53,14 +65,12 @@ function parsePrice(text) {
 function parseCurrency(text) {
   const t = text.toUpperCase();
   if (/\bUSDTO?\b|USDT/.test(t)) return 'USDT';
-  if (/\bHKD\b|HK\$/.test(t)) return 'HKD';
+  if (/HKD/i.test(text)) return 'HKD';
   if (/\bEUR\b|€/.test(t)) return 'EUR';
   if (/\bGBP\b|£/.test(t)) return 'GBP';
   if (/\bCHF\b/.test(t)) return 'CHF';
   if (/\bSGD\b/.test(t)) return 'SGD';
   if (/\bUSD\b|\$/.test(t)) return 'USD';
-  // Default to HKD if price has HKD pattern
-  if (/HKD/i.test(text)) return 'HKD';
   return null;
 }
 
