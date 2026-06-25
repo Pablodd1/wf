@@ -248,23 +248,27 @@ export default function PriceResearch() {
                   Explore Marketplace →
                 </button>
                 <button 
-                  onClick={() => data && generatePriceResearchReport(
-                    data.reference,
-                    data.brand,
-                    data.model,
-                    {
-                      min: data.pricing.current?.min || 0,
-                      avg: data.pricing.current?.avg || 0,
-                      max: data.pricing.current?.max || 0,
-                      count: data.pricing.current?.count || 0,
-                      drift: data.pricing.drift || 0,
-                      previousAvg: data.pricing.previousAvg || 53189,
-                      currentAvg: data.pricing.current?.avg || 41500
-                    },
-                    data.listings,
-                    data.liquidity,
-                    data.forecast
-                  )}
+                  onClick={() => {
+                    if (!data) return;
+                    const report = generatePriceResearchReport(
+                      data.reference,
+                      data.brand,
+                      data.model,
+                      {
+                        min: data.pricing.current?.min || 0,
+                        avg: data.pricing.current?.avg || 0,
+                        max: data.pricing.current?.max || 0,
+                        count: data.pricing.current?.count || 0,
+                        drift: data.pricing.drift || 0,
+                        previousAvg: data.pricing.previousAvg || 53189,
+                        currentAvg: data.pricing.current?.avg || 41500
+                      },
+                      data.listings,
+                      data.liquidity,
+                      data.forecast
+                    );
+                    console.log('Report generated:', report);
+                  }}
                   style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, backgroundColor: BG_CARD, color: GOLD, border: `2px solid ${GOLD}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileSpreadsheet size={16} /> Download Report
                 </button>
@@ -290,9 +294,7 @@ export default function PriceResearch() {
               </div>
               
               <ResponsiveContainer width="100%" height={280}>
-                <ComposedChart data={data.chart} onClick={(e: any) => {
-                  if (e?.activeTooltipIndex !== undefined) setSelectedMonth(e.activeTooltipIndex);
-                }}>
+                <ComposedChart data={data.chart}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#dee2e6" />
                   <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
                   <YAxis stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
@@ -303,7 +305,16 @@ export default function PriceResearch() {
                   <Area type="monotone" dataKey="max" stroke="none" fill={RED} fillOpacity={0.05} />
                   <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
                   <Line type="monotone" dataKey="max" stroke={RED} strokeWidth={1} dot={false} />
-                  <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: BG_CARD, strokeWidth: 2 }} />
+                  <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} 
+                    dot={(props: any) => {
+                      const { cx, cy, index } = props;
+                      return (
+                        <g onClick={() => setSelectedMonth(index)} style={{ cursor: 'pointer' }}>
+                          <circle cx={cx} cy={cy} r={6} fill={BLUE} stroke={BG_CARD} strokeWidth={2} />
+                        </g>
+                      );
+                    }}
+                  />
                   <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -352,6 +363,11 @@ export default function PriceResearch() {
                 <ListingRow key={i} listing={l} />
               ))}
             </div>
+
+            {/* ── Next Steps ──────────────────────────────────── */}
+            <NextSteps reference={data.reference} brand={data.brand} model={data.model} 
+              currentAvg={data.pricing.current?.avg || 0} 
+              liquidity={data.liquidity.fsCount} />
           </>
         )}
 
@@ -710,6 +726,73 @@ function PriceForecast({ chart, reference, brand, model, forecastData }: {
       
       <div style={{ fontSize: 11, color: MUTED, fontStyle: 'italic', textAlign: 'center' }}>
         ⚠️ {forecastData?.disclaimer || 'This forecast is based on historical trend analysis and is NOT guaranteed. Market conditions can significantly affect actual prices.'}
+      </div>
+    </div>
+  );
+}
+
+
+function NextSteps({ reference, brand, model, currentAvg, liquidity }: { 
+  reference: string; brand: string; model: string; currentAvg: number; liquidity: number;
+}) {
+  const steps = [
+    { 
+      icon: '📊', 
+      label: 'Compare Prices', 
+      desc: `See how ${reference} compares to similar models`,
+      action: () => window.open(`/search?ref=${encodeURIComponent(reference)}`, '_blank')
+    },
+    { 
+      icon: '🛍️', 
+      label: 'Find Dealers', 
+      desc: 'Connect with verified dealers selling this watch',
+      action: () => window.open('#', '_blank')
+    },
+    { 
+      icon: '🔔', 
+      label: 'Price Alert', 
+      desc: `Get notified when ${reference} drops below $${(currentAvg * 0.95).toLocaleString()}`,
+      action: () => alert('Price alert feature coming soon!')
+    },
+    { 
+      icon: '📈', 
+      label: 'Market Report', 
+      desc: 'Download full market analysis PDF',
+      action: () => window.print()
+    },
+  ];
+
+  return (
+    <div style={{ backgroundColor: BG_ELEV, borderRadius: 12, padding: 24, marginBottom: 32 }}>
+      <h3 style={{ fontSize: 16, fontWeight: 700, color: GOLD, marginBottom: 16 }}>Next Steps</h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {steps.map((step, i) => (
+          <button
+            key={i}
+            onClick={step.action}
+            style={{
+              backgroundColor: BG_CARD,
+              border: `1px solid ${BORDER}`,
+              borderRadius: 12,
+              padding: 20,
+              textAlign: 'left',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = GOLD;
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = BORDER;
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}
+          >
+            <div style={{ fontSize: 24, marginBottom: 8 }}>{step.icon}</div>
+            <div style={{ fontSize: 14, fontWeight: 600, color: TEXT, marginBottom: 4 }}>{step.label}</div>
+            <div style={{ fontSize: 12, color: MUTED, lineHeight: 1.4 }}>{step.desc}</div>
+          </button>
+        ))}
       </div>
     </div>
   );
