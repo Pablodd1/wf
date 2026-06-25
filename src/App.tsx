@@ -10,6 +10,7 @@ const AdminPage = lazy(() => import('@/pages/AdminPage'));
 const PriceResearch = lazy(() => import('@/pages/PriceResearch'));
 const DemandSignals = lazy(() => import('@/pages/DemandSignals'));
 const SearchPage = lazy(() => import('@/pages/SearchPage'));
+const DemoPage = lazy(() => import('@/pages/DemoPage'));
 
 function PageLoader() {
   return (
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/price-research" element={<PriceResearch />} />
         <Route path="/demand" element={<DemandSignals />} />
+        <Route path="/demo" element={<DemoPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>

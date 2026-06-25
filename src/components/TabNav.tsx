@@ -1,5 +1,5 @@
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, BarChart3, Eye, Sparkles, DollarSign, Users, Shield, Search } from 'lucide-react';
+import { LayoutDashboard, BarChart3, Eye, Sparkles, DollarSign, Users, Shield, Search, FlaskConical } from 'lucide-react';
 
 interface TabNavProps {
   totalProcessed?: number;
@@ -15,6 +15,7 @@ export function TabNav({ totalProcessed }: TabNavProps) {
     { to: '/price-research', label: 'Prices', icon: DollarSign },
     { to: '/demand', label: 'Demand', icon: Users },
     { to: '/admin', label: 'Admin', icon: Shield },
+    { to: '/demo',  label: 'Demo',  icon: FlaskConical },
   ];
 
   return (

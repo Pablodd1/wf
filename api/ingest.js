@@ -13,6 +13,8 @@
  *   { message: { text: string, chat: { id } } }
  */
 
+const crypto = require('crypto');
+
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 const APPROVE_THRESHOLD = 90;
 const HUMAN_THRESHOLD = 70;
@@ -28,37 +30,62 @@ function toUSD(amount, currency) {
   return Math.round(amount * rate);
 }
 
+/** Compute a SHA-256 hex digest of a string (for dedup). */
+function hashMessage(text) {
+  return crypto.createHash('sha256').update(text.trim()).digest('hex');
+}
+
+/** Return true if the number looks like a calendar year (1990–2030). */
+function isYearLike(n) {
+  return Number.isFinite(n) && n >= 1990 && n <= 2030;
+}
+
 function parsePrice(text) {
   const t = text.replace(/,/g, '');
+
+  // ── Helper: return a candidate only when it is NOT a year-like value ──
+  const safe = (n) => (isYearLike(n) ? null : n);
+
   // HKD with decimals: HKD4.15m, HKD1.43m, etc.
   const hkdM = t.match(/HKD\s*(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
-  if (hkdM) return Math.round(parseFloat(hkdM[1]) * 1_000_000);
+  if (hkdM) return safe(Math.round(parseFloat(hkdM[1]) * 1_000_000));
   const hkdK = t.match(/HKD\s*(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
-  if (hkdK) return Math.round(parseFloat(hkdK[1]) * 1000);
-  // Number BEFORE currency: 252000HKD, 850k HKD, 1.43m hkd
-  const numBeforeHkd = t.match(/(\d{4,8})\s*HKD/i);
-  if (numBeforeHkd) return parseInt(numBeforeHkd[1], 10);
+  if (hkdK) return safe(Math.round(parseFloat(hkdK[1]) * 1000));
+
+  // Number AFTER "HKD" takes highest priority — e.g. "N1/2026 hkd186000"
+  // Must be checked BEFORE the "number BEFORE HKD" pattern so that
+  // "2026 HKD186000" returns 186000, not 2026.
+  const hkdPlain = t.match(/HKD\s*(\d{4,8})/i);
+  if (hkdPlain) return safe(parseInt(hkdPlain[1], 10));
+
+  // Number BEFORE currency — only match if the digit run is 5+ chars
+  // (i.e. definitely not a 4-digit year) OR is followed immediately by HKD.
+  // e.g. "252000HKD" ✓   "2026HKD" ✗  (year guard catches it anyway)
+  const numBeforeHkd = t.match(/(\d{5,8})\s*HKD/i);
+  if (numBeforeHkd) return safe(parseInt(numBeforeHkd[1], 10));
   const kBeforeHkd = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\s*HKD/i);
-  if (kBeforeHkd) return Math.round(parseFloat(kBeforeHkd[1]) * 1000);
+  if (kBeforeHkd) return safe(Math.round(parseFloat(kBeforeHkd[1]) * 1000));
   const mBeforeHkd = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\s*HKD/i);
-  if (mBeforeHkd) return Math.round(parseFloat(mBeforeHkd[1]) * 1_000_000);
+  if (mBeforeHkd) return safe(Math.round(parseFloat(mBeforeHkd[1]) * 1_000_000));
+
   // Number BEFORE USD/USDT: 311000usdt, 35k usdt
   const numBeforeUsd = t.match(/(\d{4,8})\s*(?:USD|USDT)/i);
-  if (numBeforeUsd) return parseInt(numBeforeUsd[1], 10);
+  if (numBeforeUsd) return safe(parseInt(numBeforeUsd[1], 10));
   const kBeforeUsd = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\s*(?:USD|USDT)/i);
-  if (kBeforeUsd) return Math.round(parseFloat(kBeforeUsd[1]) * 1000);
+  if (kBeforeUsd) return safe(Math.round(parseFloat(kBeforeUsd[1]) * 1000));
+
   // General m/k patterns — but require currency context to avoid grabbing years
   const mMatch = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
-  if (mMatch) return Math.round(parseFloat(mMatch[1]) * 1_000_000);
+  if (mMatch) return safe(Math.round(parseFloat(mMatch[1]) * 1_000_000));
   const kMatch = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
-  if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
+  if (kMatch) return safe(Math.round(parseFloat(kMatch[1]) * 1000));
+
   // Plain number — only if preceded by currency symbol or 5+ digits (not a year)
   const usdMatch = t.match(/(?:USD|USDT|\$)\s*(\d{4,8})/i);
-  if (usdMatch) return parseInt(usdMatch[1], 10);
-  const hkdPlain = t.match(/HKD\s*(\d{4,8})/i);
-  if (hkdPlain) return parseInt(hkdPlain[1], 10);
+  if (usdMatch) return safe(parseInt(usdMatch[1], 10));
+
   const plainMatch = t.match(/\b(\d{5,8})\b/);
-  if (plainMatch) return parseInt(plainMatch[1], 10);
+  if (plainMatch) return safe(parseInt(plainMatch[1], 10));
   return null;
 }
 
@@ -203,7 +230,15 @@ function parseFull(rawMsg) {
   const yearM = text.match(/[Nn]\d\/(\d{4})/) || text.match(/\b(20[12]\d)\b/);
   const year = yearM ? parseInt(yearM[1], 10) : null;
 
-  const price = parsePrice(text);
+  let priceRaw = parsePrice(text);
+
+  // ── Year guard: reject prices that look like years (1990–2030) ──
+  // parsePrice() already has an isYearLike() guard internally, but the LLM
+  // enrichment path can still inject a year-as-price, so we re-validate here.
+  if (priceRaw !== null && isYearLike(priceRaw)) {
+    priceRaw = null;
+  }
+
   const currency = parseCurrency(text);
 
   let confidence = 0;
@@ -211,11 +246,11 @@ function parseFull(rawMsg) {
   if (brand) confidence += 25;
   if (dial) confidence += 10;
   if (condition) confidence += 8;
-  if (price) confidence += 10;
+  if (priceRaw) confidence += 10;
   if (year) confidence += 4;
   if (currency) confidence += 3;
 
-  return { brand, ref, dial, condition, year, price, currency, confidence };
+  return { brand, ref, dial, condition, year, price: priceRaw, currency, confidence };
 }
 
 async function llmEnrich(rawMsg, parsed, apiKey) {
@@ -327,6 +362,24 @@ async function supabaseUpsert(record, supabaseUrl, serviceKey) {
   }
 }
 
+/**
+ * Check Supabase for an existing record with the same message_hash.
+ * Returns the existing record's id (string) if found, or null.
+ */
+async function findDuplicate(messageHash, supabaseUrl, serviceKey) {
+  try {
+    const resp = await fetch(
+      `${supabaseUrl}/rest/v1/live_ingest?message_hash=eq.${encodeURIComponent(messageHash)}&select=id&limit=1`,
+      { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
+    );
+    if (!resp.ok) return null;
+    const rows = await resp.json();
+    return rows && rows.length > 0 ? rows[0] : null;
+  } catch {
+    return null;
+  }
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
@@ -373,6 +426,21 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'rawMessage required (min 5 chars)' });
   }
 
+  // ── DEDUPLICATION: compute SHA-256 of the raw message ──
+  const messageHash = hashMessage(rawMessage);
+
+  // Check for existing record with the same hash before doing any work
+  if (supabaseUrl && serviceKey) {
+    const existing = await findDuplicate(messageHash, supabaseUrl, serviceKey);
+    if (existing) {
+      return res.status(200).json({
+        duplicate: true,
+        message_hash: messageHash,
+        existing: [existing],
+      });
+    }
+  }
+
   // Stage 0: Split multi-watch messages into individual listings
   const watchParts = splitMultiWatch(rawMessage);
   
@@ -395,14 +463,24 @@ module.exports = async function handler(req, res) {
         if (!parsed.dial && llm.dialColor && llm.dialColor !== 'Unknown') parsed.dial = llm.dialColor;
         if (!parsed.condition && llm.condition) parsed.condition = llm.condition;
         if (!parsed.year && llm.year) parsed.year = llm.year;
-        if (!parsed.price && llm.price) parsed.price = llm.price;
+        // LLM price: only accept if it passes the year guard
+        if (!parsed.price && llm.price && !isYearLike(Number(llm.price))) {
+          parsed.price = llm.price;
+        }
         if (!parsed.currency && llm.currency && llm.currency !== 'Unknown') parsed.currency = llm.currency;
         parsed.confidence = Math.min(100, Math.max(parsed.confidence, parseInt(llm.confidence) || 0));
         usedLLM = true;
       } catch { /* keep regex result */ }
     }
 
-    const v = verdict(parsed);
+    // ── Missing-price confidence penalty ──
+    // A record with no price should never be auto-approved on confidence alone.
+    let adjustedConfidence = parsed.confidence;
+    if (!parsed.price || parsed.price === 0) {
+      adjustedConfidence = Math.max(0, adjustedConfidence - 10);
+    }
+
+    const v = verdict({ ...parsed, confidence: adjustedConfidence });
     const priceUSD = parsed.price ? toUSD(parsed.price, parsed.currency || 'USD') : null;
 
     const record = {
@@ -416,11 +494,14 @@ module.exports = async function handler(req, res) {
       price_raw: parsed.price || null,
       price_usd: priceUSD,
       currency: parsed.currency || null,
-      confidence: parsed.confidence,
+      confidence: adjustedConfidence,
       verdict: v,
       source,
       channel_id: channelId,
       llm_used: usedLLM,
+      // Dedup hash — only stored on the first part (the whole message hash)
+      // so that the guard above fires on any repeat of the original message.
+      message_hash: i === 0 ? messageHash : null,
       received_at: new Date().toISOString(),
     };
     
@@ -430,7 +511,7 @@ module.exports = async function handler(req, res) {
       brand: record.brand,
       reference: record.reference,
       verdict: v,
-      confidence: parsed.confidence,
+      confidence: adjustedConfidence,
       priceUSD,
       currency: record.currency,
       source: usedLLM ? 'llm' : 'regex',

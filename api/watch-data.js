@@ -39,32 +39,31 @@ export default async function handler(req, res) {
       const countRange = countRes.headers.get('content-range') || '0/0';
       const total = parseInt(countRange.split('/')[1] || '0');
 
-      // Get verdict breakdown
-      const verdictsRes = await fetch(`${supabaseUrl}/rest/v1/rpc/upsert_watch_records`, {
-        method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify([])
-      }).catch(() => null);
-
-      // Get brand breakdown via select
-      const brandRes = await fetch(`${supabaseUrl}/rest/v1/watch_records?select=brand&limit=100000`, {
-        headers
-      });
-      const brandRows = await brandRes.json();
-      const brandCounts = {};
-      for (const r of brandRows) {
-        brandCounts[r.brand] = (brandCounts[r.brand] || 0) + 1;
-      }
-
-      // Get verdict breakdown
-      const verdictRes = await fetch(`${supabaseUrl}/rest/v1/watch_records?select=verdict&limit=100000`, {
-        headers
-      });
-      const verdictRows = await verdictRes.json();
+      // Use count=exact per verdict via parallel HEAD requests (no row downloads)
+      const verdictList = ['APPROVED','REVIEW','HUMAN','RECYCLE'];
       const verdictCounts = {};
-      for (const r of verdictRows) {
-        verdictCounts[r.verdict] = (verdictCounts[r.verdict] || 0) + 1;
-      }
+      await Promise.all(verdictList.map(async (v) => {
+        const r = await fetch(`${supabaseUrl}/rest/v1/watch_records?select=count&verdict=eq.${v}`, {
+          headers: { ...headers, 'Prefer': 'count=exact' }
+        });
+        const cr = r.headers.get('content-range') || '0/0';
+        verdictCounts[v] = parseInt(cr.split('/')[1] || '0');
+      }));
+
+      // Brand breakdown via count queries for top brands (no full row download)
+      const topBrands = ['Rolex','Patek Philippe','Audemars Piguet','Richard Mille','Cartier',
+        'Vacheron Constantin','Omega','A. Lange & Sohne','Tudor','F.P. Journe',
+        'Hublot','Panerai','Jaeger-LeCoultre','Breitling','IWC'];
+      const brandCounts = {};
+      await Promise.all(topBrands.map(async (b) => {
+        const r = await fetch(
+          `${supabaseUrl}/rest/v1/watch_records?select=count&brand=eq.${encodeURIComponent(b)}`,
+          { headers: { ...headers, 'Prefer': 'count=exact' } }
+        );
+        const cr = r.headers.get('content-range') || '0/0';
+        const cnt = parseInt(cr.split('/')[1] || '0');
+        if (cnt > 0) brandCounts[b] = cnt;
+      }));
 
       return res.status(200).json({
         total,
