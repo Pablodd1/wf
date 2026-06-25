@@ -2,12 +2,12 @@
  * CATALOG LOOKUP API
  * /api/catalog-lookup
  *
- * Merged catalog: catalog.json (177 refs) + enriched_refs.json (976 refs)
+ * Merged catalog: catalog.json (3726 refs from 6 brands) + enriched_refs.json (976 refs)
  * Returns brand, collection, model, liquidity data for any reference.
  */
 
 const { readFileSync } = require('fs');
-const { resolve, join } = require('path');
+const { resolve } = require('path');
 
 const PUBLIC_DIR = resolve(process.cwd(), 'public');
 
@@ -25,13 +25,11 @@ function loadCatalogs() {
     for (const item of catalog) {
       const ref = normalizeRef(item.reference);
       catalogMap.set(ref, {
-        brand: item.brand || 'Patek Philippe',
-        collection: item.collection,
+        brand: item.brand || inferBrand(item.reference) || 'Unknown',
+        collection: item.collection || item.model,
         model: item.model,
-        caseMetal: item.case_metal,
-        productionYears: item.production_years,
-        status: item.status,
-        dialColors: item.dial_colors,
+        dialColors: item.dialColor ? [item.dialColor] : [],
+        imageUrl: item.imageUrl,
         source: 'catalog',
       });
     }
@@ -74,6 +72,8 @@ function normalizeRef(ref) {
 }
 
 function inferBrand(ref) {
+  // Check decimal format BEFORE normalization (dot gets stripped)
+  if (/^\d{3}\.\d{3}/.test(ref)) return 'A. Lange & Söhne';
   const r = ref.toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
   if (/^[45]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
   if (/^3\d{3}\//.test(r)) return 'Patek Philippe';
@@ -82,6 +82,16 @@ function inferBrand(ref) {
   if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
   if (/^(85|47|49)\d{3}[A-Z\/]/.test(r)) return 'Vacheron Constantin';
+  if (/^M\d{5,6}/.test(r)) return 'Tudor';
+  if (/^W[0-9A-Z]{4,6}/.test(r)) return 'Cartier';
+  if (/^2[01]\d{3}\.[0-9]{2,4}/.test(r)) return 'Omega';
+  if (/^SB[GAE][A-Z]{2,4}/.test(r)) return 'Grand Seiko';
+  if (/^C?[VW]\d{4,5}/.test(r) || /^WAY|^WAR|^WAS|^WBD|^WBE/.test(r)) return 'TAG Heuer';
+  if (/^PAM\d{3,5}/.test(r)) return 'Panerai';
+  if (/^1[0-3]\d{3,4}/.test(r)) return 'Bvlgari';
+  if (/^5[0-9]{3}[A-Z]|^7[0-9]{3}[A-Z]|^8[0-9]{3}[A-Z]|^9[0-9]{3}[A-Z]/.test(r)) return 'Breguet';
+  if (/^A[0-9]{4,5}/.test(r) || /^AB[0-9]{4}/.test(r) || /^EB[0-9]{4}/.test(r)) return 'Breitling';
+  if (/^IW[0-9]{4,6}/.test(r)) return 'IWC';
   return null;
 }
 

@@ -3,7 +3,7 @@ import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import { Footer } from '@/components/Footer';
 import { useWatchData } from '@/hooks/useWatchData';
-import { cleanAnalyze } from '@/lib/cleanAnalyze';
+import { cleanAnalyze, saveCleanWatchToSupabase } from '@/lib/cleanAnalyze';
 import { exportCleanExcel, exportCleanCsv } from '@/lib/cleanExport';
 import { enrichWatch } from '@/lib/enrich';
 import type { CleanResponse, CleanWatch, CleanStage, Verdict } from '@/lib/cleanAnalyze';
@@ -176,6 +176,17 @@ export default function CleanPage() {
     setLoading(false);
     if (!r.success) { setErr(r.error || 'Analysis failed'); return; }
     setRes(r);
+    // Auto-save each result to Supabase (fire-and-forget, non-blocking)
+    r.watches.forEach(async (w) => {
+      try {
+        const saveRes = await saveCleanWatchToSupabase(w);
+        if (!saveRes.success || !saveRes.persisted) {
+          console.warn('[CleanPage] Supabase save failed:', saveRes.error);
+        }
+      } catch (e) {
+        console.warn('[CleanPage] Supabase save error:', e);
+      }
+    });
   }
 
   async function handleEnrich(idx: number, ref: string, brand: string) {

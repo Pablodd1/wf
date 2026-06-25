@@ -72,3 +72,25 @@ export async function cleanAnalyze(text: string, imageUrls?: string[]): Promise<
     return { success: false, summary: { total: 0, approved: 0, human: 0, recycle: 0, threshold: 85 }, watches: [], error: e.message };
   }
 }
+
+/** Save a single CleanWatch result to Supabase via /api/ingest */
+export async function saveCleanWatchToSupabase(watch: CleanWatch): Promise<{ success: boolean; persisted?: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/ingest', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        rawMessage: watch.input,
+        source: 'clean_page',
+        channelId: 'manual',
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      return { success: false, error: data.error || `HTTP ${res.status}` };
+    }
+    return { success: true, persisted: data.persisted > 0 };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}

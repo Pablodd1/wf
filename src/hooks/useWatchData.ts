@@ -189,11 +189,32 @@ function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>):
   };
 }
 
-// Module-level cache so the 18MB dataset is fetched + transformed ONCE.
-// Without this, every tab switch re-fetches & re-parses -> multi-second loading
-// spinner on each navigation (looks like "the link doesn't work" on slow/mobile).
+// Module-level cache — backed by localStorage so it survives page refreshes
 let _cache: WatchRecord[] | null = null;
 let _cachePromise: Promise<WatchRecord[]> | null = null;
+const CACHE_KEY = 'wf_watch_data_cache';
+const CACHE_TIMESTAMP_KEY = 'wf_watch_data_timestamp';
+const CACHE_TTL = 10 * 60 * 1000; // 10 minutes — data stays fresh for 10 min
+
+// Try to restore from localStorage on startup
+try {
+  const cached = localStorage.getItem(CACHE_KEY);
+  const timestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+  if (cached && timestamp) {
+    const age = Date.now() - parseInt(timestamp);
+    if (age < CACHE_TTL) {
+      const parsed = JSON.parse(cached);
+      _cache = parsed;
+      console.log(`[cache] Restored ${parsed.length} records from localStorage (age: ${Math.round(age/1000)}s)`);
+    } else {
+      console.log(`[cache] Cache expired (age: ${Math.round(age/1000)}s), will re-fetch`);
+      localStorage.removeItem(CACHE_KEY);
+      localStorage.removeItem(CACHE_TIMESTAMP_KEY);
+    }
+  }
+} catch (e) {
+  console.warn('[cache] localStorage restore failed:', e);
+}
 
 function loadWatchData(): Promise<WatchRecord[]> {
   if (_cache) return Promise.resolve(_cache);
@@ -263,6 +284,16 @@ function loadWatchData(): Promise<WatchRecord[]> {
         }));
         
         _cache = records;
+        // Persist to localStorage for instant load on refresh/new tab
+        try {
+          // Only cache first 5000 records to stay under localStorage 5MB limit
+          const toCache = records.slice(0, 5000);
+          localStorage.setItem(CACHE_KEY, JSON.stringify(toCache));
+          localStorage.setItem(CACHE_TIMESTAMP_KEY, String(Date.now()));
+          console.log(`[cache] Saved ${toCache.length} records to localStorage`);
+        } catch (e) {
+          console.warn('[cache] localStorage save failed (too large):', e);
+        }
         console.timeEnd('loadWatchData');
         console.log(`Loaded ${records.length} records from Supabase (total: ${totalCount})`);
         return records;
@@ -322,6 +353,8 @@ export function useWatchData() {
   const [loading, setLoading] = useState(_cache === null);
   const [loadProgress, setLoadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // Live stats from pipeline-health (accurate, not derived from cached client array)
+  const [liveStats, setLiveStats] = useState<{ accuracyRate: number; totalProcessed: number; approved: number; human: number; recycle: number } | null>(null);
 
   useEffect(() => {
     if (_cache) { setRecords(_cache); setLoading(false); return; }
@@ -352,19 +385,44 @@ export function useWatchData() {
     return () => { alive = false; clearInterval(progressTimer); };
   }, []);
 
+  // Fetch live stats from pipeline-health API (accururate, not cached)
+  useEffect(() => {
+    fetch('/api/pipeline-health')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.totals?.liveRecords) {
+          const b = data.breakdowns?.byVerdict || {};
+          const approved = b.APPROVED || 0;
+          const human = b.HUMAN || 0;
+          const recycle = b.RECYCLE || 0;
+          const total = approved + human + recycle;
+          setLiveStats({
+            accuracyRate: total > 0 ? Math.round((approved / total) * 100) : 0,
+            totalProcessed: data.totals.liveRecords,
+            approved,
+            human,
+            recycle,
+          });
+        }
+      })
+      .catch(e => console.warn('[useWatchData] pipeline-health fetch failed:', e));
+  }, []);
+
   const stats = {
-    totalProcessed: records.length,
+    totalProcessed: liveStats?.totalProcessed ?? records.length,
     normalizedCount: records.filter((r) => !r.isResidue).length,
     residueCount: records.filter((r) => r.isResidue).length,
-    throughputRate: Math.round(records.length / 2.4),
+    throughputRate: Math.round((liveStats?.totalProcessed ?? records.length) / 2.4),
     avgLatency: 45,
-    accuracyRate: records.length > 0
+    accuracyRate: liveStats?.accuracyRate ?? (records.length > 0
       ? Math.round((records.filter((r) => r.confidence >= 90 && !r.isResidue).length / records.length) * 100)
-      : 0,
+      : 0),
     mlAvgTime: 45,
-    residueRate: records.length > 0
-      ? Math.round((records.filter((r) => r.isResidue).length / records.length) * 100)
-      : 0,
+    residueRate: liveStats?.totalProcessed
+      ? Math.round((liveStats.recycle / liveStats.totalProcessed) * 100)
+      : (records.length > 0
+        ? Math.round((records.filter((r) => r.isResidue).length / records.length) * 100)
+        : 0),
   };
 
   return { records, loading, error, stats, setRecords, loadProgress };

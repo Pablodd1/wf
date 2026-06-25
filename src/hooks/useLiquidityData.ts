@@ -25,17 +25,24 @@ export function useLiquidityData() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/enriched_refs.json')
-      .then((r) => r.json())
-      .then((data: EnrichedRef[]) => {
-        // Sort by liquidity score descending, then by total mentions
-        const sorted = data.sort((a, b) => {
-          if (b.liquidity_score !== a.liquidity_score) {
-            return b.liquidity_score - a.liquidity_score;
-          }
-          return b.total_mentions - a.total_mentions;
-        });
-        setRefs(sorted);
+    // Fetch live demand data from Supabase via API
+    fetch('/api/demand-signals')
+      .then((r) => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const sorted = data.sort((a: EnrichedRef, b: EnrichedRef) => {
+            if (b.liquidity_score !== a.liquidity_score) {
+              return b.liquidity_score - a.liquidity_score;
+            }
+            return b.total_mentions - a.total_mentions;
+          });
+          setRefs(sorted);
+        } else {
+          console.warn('[useLiquidityData] Expected array, got:', typeof data);
+        }
         setLoading(false);
       })
       .catch((err) => {

@@ -23,7 +23,7 @@ const cardVariants = {
 
 const NormalizedCard = memo(function NormalizedCard({ card }: { card: ResultCard }) {
   const { record } = card;
-  const confidencePct = record.confidence != null ? Math.round(record.confidence * 100) : 0;
+  const confidencePct = record.confidence != null ? Math.round(record.confidence) : 0;
 
   return (
     <motion.div

@@ -66,19 +66,18 @@ interface PriceData {
   };
 }
 
-const QUICK_REFS = ['126334', '5711A', '116610LV', 'RM 07-01', '26238ST', '5167A'];
+const QUICK_REFS = ['126334', '5711/1A', '116610LV', 'RM07-01', '26238ST', '5167A'];
 
-// ── Colors (production palette) ─────────────────────────────────
-const NAVY = '#1a2744';
-const GOLD = '#c9a03a';
-const WHITE = '#ffffff';
-const LIGHT_GRAY = '#f8f9fa';
-const BORDER = '#e9ecef';
-const TEXT = '#212529';
-const MUTED = '#6c757d';
-const GREEN = '#198754';
-const RED = '#dc3545';
-const BLUE = '#0d6efd';
+// ── Colors (dark theme aligned with app palette) ──
+const BG_CARD = '#0f172a';      // bg-bg-card
+const BG_ELEV = '#1e293b';      // bg-bg-elevated
+const BORDER = '#334155';       // border-border-default
+const TEXT = '#f8fafc';         // text-text-primary
+const MUTED = '#94a3b8';        // text-text-muted
+const GOLD = '#c9a03a';         // gold-primary
+const GREEN = '#22c55e';        // green-500
+const RED = '#ef4444';          // red-500
+const BLUE = '#3b82f6';         // blue-500
 
 // ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
@@ -115,20 +114,20 @@ export default function PriceResearch() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: WHITE }}>
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: BG_CARD }}>
         <div className="animate-spin w-8 h-8 border-2 rounded-full" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
       </div>
     );
   }
 
   return (
-    <div style={{ backgroundColor: WHITE, color: TEXT, fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh' }}>
+    <div style={{ backgroundColor: BG_CARD, color: TEXT, fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh' }}>
       
       {/* ── Top Nav ─────────────────────────────────────────── */}
       <NavBar />
 
       {/* ── Page Header ──────────────────────────────────────── */}
-      <div style={{ backgroundColor: NAVY, color: WHITE, padding: '32px 0' }}>
+      <div style={{ backgroundColor: GOLD, color: BG_CARD, padding: '32px 0' }}>
         <div className="max-w-6xl mx-auto px-4">
           <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
           <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
@@ -152,7 +151,7 @@ export default function PriceResearch() {
               />
             </div>
             <button onClick={() => fetchData(query)}
-              style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: WHITE, border: 'none', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+              style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: BG_CARD, border: 'none', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
               Search
             </button>
           </div>
@@ -161,8 +160,8 @@ export default function PriceResearch() {
               <button key={ref} onClick={() => { setQuery(ref); fetchData(ref); }}
                 style={{
                   padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: 'none',
-                  backgroundColor: query === ref ? NAVY : LIGHT_GRAY,
-                  color: query === ref ? WHITE : MUTED,
+                  backgroundColor: query === ref ? GOLD : BG_ELEV,
+                  color: query === ref ? BG_CARD : MUTED,
                   fontWeight: query === ref ? 600 : 400,
                 }}>
                 {ref}
@@ -172,7 +171,7 @@ export default function PriceResearch() {
         </div>
 
         {error && (
-          <div style={{ padding: 16, borderRadius: 8, marginBottom: 24, backgroundColor: '#fff5f5', border: '1px solid #fecaca', color: RED, fontSize: 14 }}>
+          <div style={{ padding: 16, borderRadius: 8, marginBottom: 24, backgroundColor: '#1e293b', border: '1px solid #fecaca', color: RED, fontSize: 14 }}>
             {error}
           </div>
         )}
@@ -191,7 +190,7 @@ export default function PriceResearch() {
               <div style={{ fontSize: 14, color: MUTED }}>
                 Dial: <span style={{ color: TEXT, fontWeight: 500 }}>{data.dialColors.join(', ')}</span>
               </div>
-              <div style={{ fontSize: 32, fontWeight: 700, marginTop: 8, color: NAVY }}>
+              <div style={{ fontSize: 32, fontWeight: 700, marginTop: 8, color: GOLD }}>
                 {data.brand} {data.model} {data.reference}
               </div>
             </div>
@@ -199,14 +198,14 @@ export default function PriceResearch() {
             {/* ── Liquidity + Pricing ───────────────────────────────────────────────── */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               {/* Liquidity */}
-              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Liquidity Analysis</h3>
-                <div style={{ fontSize: 14, color: MUTED }}># of FS: <span style={{ fontSize: 36, fontWeight: 700, color: NAVY, display: 'block', marginTop: 4 }}>{data.liquidity.fsCount.toLocaleString()}</span></div>
+              <div style={{ backgroundColor: BG_ELEV, borderRadius: 12, padding: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: GOLD, marginBottom: 16 }}>Liquidity Analysis</h3>
+                <div style={{ fontSize: 14, color: MUTED }}># of FS: <span style={{ fontSize: 36, fontWeight: 700, color: GOLD, display: 'block', marginTop: 4 }}>{data.liquidity.fsCount.toLocaleString()}</span></div>
               </div>
 
               {/* Buyer/Seller Ratio */}
-              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Demand Ratio</h3>
+              <div style={{ backgroundColor: BG_ELEV, borderRadius: 12, padding: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: GOLD, marginBottom: 16 }}>Demand Ratio</h3>
                 {data.liquidity.buyers !== undefined && (
                   <>
                     <div className="flex items-center justify-between mb-2">
@@ -229,8 +228,8 @@ export default function PriceResearch() {
               </div>
 
               {/* Pricing */}
-              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing Analysis</h3>
+              <div style={{ backgroundColor: BG_ELEV, borderRadius: 12, padding: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: GOLD, marginBottom: 16 }}>Pricing Analysis</h3>
                 <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
                   Previous vs Current Avg Price:{' '}
                   <span style={{ color: RED, textDecoration: 'line-through' }}>${data.pricing.previousAvg?.toLocaleString() || '53,189'}</span>
@@ -245,7 +244,7 @@ export default function PriceResearch() {
                 </div>
                 <button 
                   onClick={() => window.open('#', '_blank')}
-                  style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: NAVY, color: WHITE, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
+                  style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: GOLD, color: BG_CARD, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
                   Explore Marketplace →
                 </button>
                 <button 
@@ -266,7 +265,7 @@ export default function PriceResearch() {
                     data.liquidity,
                     data.forecast
                   )}
-                  style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, backgroundColor: WHITE, color: NAVY, border: `2px solid ${NAVY}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, backgroundColor: BG_CARD, color: GOLD, border: `2px solid ${GOLD}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
                   <FileSpreadsheet size={16} /> Download Report
                 </button>
               </div>
@@ -278,15 +277,15 @@ export default function PriceResearch() {
             )}
 
             {/* ── Chart ────────────────────────────────────────── */}
-            <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+            <div style={{ backgroundColor: BG_ELEV, borderRadius: 12, padding: 24, marginBottom: 24 }}>
               <div className="flex items-center justify-between mb-4">
                 <div className="flex gap-4">
-                  <span style={{ fontSize: 13, fontWeight: 600, color: NAVY, cursor: 'pointer', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>Date</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: GOLD, cursor: 'pointer', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>Date</span>
                   <span style={{ fontSize: 13, color: MUTED, cursor: 'pointer' }}>6M</span>
                 </div>
                 <div className="flex gap-3">
                   <span style={{ fontSize: 13, color: MUTED, cursor: 'pointer' }}>Presentation</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: NAVY, cursor: 'pointer', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>All</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: GOLD, cursor: 'pointer', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>All</span>
                 </div>
               </div>
               
@@ -298,13 +297,13 @@ export default function PriceResearch() {
                   <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
                   <YAxis stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                    contentStyle={{ backgroundColor: BG_CARD, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                     formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
                   />
                   <Area type="monotone" dataKey="max" stroke="none" fill={RED} fillOpacity={0.05} />
                   <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
                   <Line type="monotone" dataKey="max" stroke={RED} strokeWidth={1} dot={false} />
-                  <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: WHITE, strokeWidth: 2 }} />
+                  <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: BG_CARD, strokeWidth: 2 }} />
                   <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -345,8 +344,8 @@ export default function PriceResearch() {
             )}
 
             {/* ── Listings Table ──────────────────────────────── */}
-            <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
-              <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
+            <div style={{ backgroundColor: BG_CARD, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
+              <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: GOLD }}>
                 Listings ({data.listings.length} of {data.totalListings})
               </div>
               {data.listings.map((l, i) => (
@@ -367,9 +366,9 @@ export default function PriceResearch() {
 
 function NavBar() {
   return (
-    <nav style={{ backgroundColor: WHITE, borderBottom: `1px solid ${BORDER}`, padding: '12px 0' }}>
+    <nav style={{ backgroundColor: BG_CARD, borderBottom: `1px solid ${BORDER}`, padding: '12px 0' }}>
       <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
-        <div style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif" }}>
+        <div style={{ fontWeight: 700, fontSize: 18, color: GOLD, fontFamily: "'Playfair Display', serif" }}>
           WatchFacts
         </div>
         <div className="flex gap-6" style={{ fontSize: 14 }}>
@@ -396,15 +395,15 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
   const beforeCount = month.count + outlierCount + dupCount;
   
   return (
-    <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, marginBottom: 24, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-      <div style={{ backgroundColor: NAVY, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ color: WHITE, fontSize: 16, fontWeight: 600 }}>Insight Details</h3>
+    <div style={{ backgroundColor: BG_CARD, borderRadius: 12, border: `1px solid ${BORDER}`, marginBottom: 24, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+      <div style={{ backgroundColor: GOLD, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <h3 style={{ color: BG_CARD, fontSize: 16, fontWeight: 600 }}>Insight Details</h3>
         <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 18 }}>×</button>
       </div>
       
       <div style={{ padding: 24 }}>
         {/* Header info */}
-        <div style={{ fontSize: 14, color: NAVY, marginBottom: 16 }}>
+        <div style={{ fontSize: 14, color: GOLD, marginBottom: 16 }}>
           <div><strong>Reference:</strong> {data.reference}</div>
           <div><strong>Dial Color:</strong> {data.primaryDial}</div>
           <div><strong>Condition Category:</strong> Any</div>
@@ -413,15 +412,15 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
 
         {/* Before/After stats */}
         <div className="grid grid-cols-2 gap-6 mb-6">
-          <div style={{ backgroundColor: '#fff8f0', borderRadius: 8, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 12 }}>Stats (Original)</div>
+          <div style={{ backgroundColor: '#1e293b', borderRadius: 8, padding: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: GOLD, marginBottom: 12 }}>Stats (Original)</div>
             <div style={{ fontSize: 13, color: MUTED }}>Data Points: {beforeCount}</div>
             <div style={{ fontSize: 13, color: MUTED }}>Min: ${(data.statsBefore?.min || month.min - 2000).toLocaleString()}</div>
             <div style={{ fontSize: 13, color: MUTED }}>Avg: ${(data.statsBefore?.avg || month.avg + 2700).toLocaleString()}</div>
             <div style={{ fontSize: 13, color: MUTED }}>Max: ${(data.statsBefore?.max || month.max + 3000).toLocaleString()}</div>
           </div>
-          <div style={{ backgroundColor: '#f0f8f0', borderRadius: 8, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 12 }}>Stats (Filtered by custom math)</div>
+          <div style={{ backgroundColor: '#1e293b', borderRadius: 8, padding: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 600, color: GOLD, marginBottom: 12 }}>Stats (Filtered by custom math)</div>
             <div style={{ fontSize: 13, color: MUTED }}>Data Points: {month.count}</div>
             <div style={{ fontSize: 13, color: MUTED }}>Min: ${month.min.toLocaleString()}</div>
             <div style={{ fontSize: 13, color: MUTED }}>Avg: ${month.avg.toLocaleString()}</div>
@@ -430,19 +429,19 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
         </div>
 
         {/* Outlier/Dupe info */}
-        <div style={{ backgroundColor: '#fef2f2', borderRadius: 8, padding: 16, marginBottom: 16 }}>
+        <div style={{ backgroundColor: '#1e293b', borderRadius: 8, padding: 16, marginBottom: 16 }}>
           <div style={{ fontSize: 13, fontWeight: 600, color: RED, marginBottom: 8 }}>Duplicated — Removed: {dupCount}</div>
           <div style={{ fontSize: 13, fontWeight: 600, color: RED }}>Outliers — Removed: {outlierCount}</div>
         </div>
 
         {/* Listings */}
         <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: NAVY, marginBottom: 12 }}>Listings</div>
+          <div style={{ fontSize: 14, fontWeight: 600, color: GOLD, marginBottom: 12 }}>Listings</div>
           {data.listings.slice(0, 10).map((l, i) => (
             <div key={i} 
               onClick={() => onSelectListing(l)}
               style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}>
-              <div style={{ width: 56, height: 56, borderRadius: 6, backgroundColor: LIGHT_GRAY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: MUTED, flexShrink: 0 }}>
+              <div style={{ width: 56, height: 56, borderRadius: 6, backgroundColor: BG_ELEV, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: MUTED, flexShrink: 0 }}>
                 🖼
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
@@ -469,21 +468,21 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
 function ListingModal({ listing, data, onClose }: { listing: PriceListing; data: PriceData; onClose: () => void }) {
   return (
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
-      <div style={{ backgroundColor: WHITE, borderRadius: 12, maxWidth: 560, width: '90%', maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
+      <div style={{ backgroundColor: BG_CARD, borderRadius: 12, maxWidth: 560, width: '90%', maxHeight: '80vh', overflow: 'auto' }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: 24 }}>
           <div className="flex items-center justify-between mb-4">
-            <h3 style={{ fontSize: 16, fontWeight: 600, color: NAVY }}>Post Information</h3>
+            <h3 style={{ fontSize: 16, fontWeight: 600, color: GOLD }}>Post Information</h3>
             <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, color: MUTED, cursor: 'pointer' }}>×</button>
           </div>
           
           <div style={{ fontSize: 14, color: TEXT, marginBottom: 16, lineHeight: 1.6 }}>{listing.title}</div>
           
           <div style={{ display: 'flex', gap: 16, marginBottom: 16 }}>
-            <div style={{ flex: 1, backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 12, textAlign: 'center' }}>
+            <div style={{ flex: 1, backgroundColor: BG_ELEV, borderRadius: 8, padding: 12, textAlign: 'center' }}>
               <div style={{ fontSize: 12, color: MUTED }}>Native Price</div>
-              <div style={{ fontSize: 18, fontWeight: 700, color: NAVY }}>{listing.price?.toLocaleString()} {listing.currency}</div>
+              <div style={{ fontSize: 18, fontWeight: 700, color: GOLD }}>{listing.price?.toLocaleString()} {listing.currency}</div>
             </div>
-            <div style={{ flex: 1, backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 12, textAlign: 'center' }}>
+            <div style={{ flex: 1, backgroundColor: BG_ELEV, borderRadius: 8, padding: 12, textAlign: 'center' }}>
               <div style={{ fontSize: 12, color: MUTED }}>USD Equivalent</div>
               <div style={{ fontSize: 18, fontWeight: 700, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>
             </div>
@@ -498,12 +497,12 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
           </div>
 
           <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 16, paddingTop: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 8 }}>Seller Info</div>
+            <div style={{ fontSize: 13, fontWeight: 600, color: GOLD, marginBottom: 8 }}>Seller Info</div>
             <div style={{ fontSize: 13, color: MUTED }}>Member since 2025 · {listing.region}</div>
             <div style={{ fontSize: 13, color: MUTED }}>12 WTS · 12 WTB</div>
             <div className="flex gap-2 mt-3">
-              <button style={{ padding: '8px 16px', borderRadius: 6, backgroundColor: NAVY, color: WHITE, border: 'none', fontSize: 13, cursor: 'pointer' }}>Check availability</button>
-              <button style={{ padding: '8px 16px', borderRadius: 6, backgroundColor: LIGHT_GRAY, color: NAVY, border: `1px solid ${BORDER}`, fontSize: 13, cursor: 'pointer' }}>See User Profile</button>
+              <button style={{ padding: '8px 16px', borderRadius: 6, backgroundColor: GOLD, color: BG_CARD, border: 'none', fontSize: 13, cursor: 'pointer' }}>Check availability</button>
+              <button style={{ padding: '8px 16px', borderRadius: 6, backgroundColor: BG_ELEV, color: GOLD, border: `1px solid ${BORDER}`, fontSize: 13, cursor: 'pointer' }}>See User Profile</button>
             </div>
           </div>
         </div>
@@ -520,9 +519,9 @@ function ListingRow({ listing }: { listing: PriceListing }) {
   
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
-      onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
-      onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
-      <div style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: LIGHT_GRAY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, color: MUTED }}>⌚</div>
+      onMouseEnter={e => (e.currentTarget.style.backgroundColor = BG_ELEV)}
+      onMouseLeave={e => (e.currentTarget.style.backgroundColor = BG_CARD)}>
+      <div style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: BG_ELEV, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, color: MUTED }}>⌚</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{listing.title}</div>
         <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
@@ -636,7 +635,7 @@ function PriceForecast({ chart, reference, brand, model, forecastData }: {
     <div style={{ backgroundColor: '#f0f7ff', borderRadius: 12, padding: 24, marginBottom: 24, border: '1px solid #b8d4f0' }}>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>3-Month Price Forecast</h3>
+          <h3 style={{ fontSize: 16, fontWeight: 700, color: GOLD }}>3-Month Price Forecast</h3>
           <p style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
             {brand} {model} {reference} — Linear regression with 95% confidence interval
           </p>
@@ -682,10 +681,10 @@ function PriceForecast({ chart, reference, brand, model, forecastData }: {
       
       <div className="grid grid-cols-3 gap-4 mb-4">
         {forecasts.map((f, i) => (
-          <div key={i} style={{ backgroundColor: WHITE, borderRadius: 8, padding: 16, textAlign: 'center', border: '1px solid #e9ecef' }}>
+          <div key={i} style={{ backgroundColor: BG_CARD, borderRadius: 8, padding: 16, textAlign: 'center', border: '1px solid #e9ecef' }}>
             <div style={{ fontSize: 12, color: MUTED, marginBottom: 4 }}>Month {i + 1}</div>
             <div style={{ fontSize: 11, color: MUTED }}>{f.month}</div>
-            <div style={{ fontSize: 20, fontWeight: 700, color: NAVY, marginTop: 4 }}>
+            <div style={{ fontSize: 20, fontWeight: 700, color: GOLD, marginTop: 4 }}>
               ${f.avg.toLocaleString()}
             </div>
             <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>
@@ -718,7 +717,7 @@ function PriceForecast({ chart, reference, brand, model, forecastData }: {
 
 function Footer() {
   const linkStyle: React.CSSProperties = { color: MUTED, fontSize: 13, textDecoration: 'none', cursor: 'pointer' };
-  const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 8 };
+  const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: GOLD, marginBottom: 8 };
 
   return (
     <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 32, marginTop: 16 }}>

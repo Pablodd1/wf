@@ -151,7 +151,7 @@ export function DetailModal({ record, open, onClose, onApprove, onEdit, onFlag, 
 
   if (!record) return null;
 
-  const confidencePct = Math.round(record.confidence * 100);
+  const confidencePct = Math.round(record.confidence);
   const varianceGood = Math.abs(record.priceVariance) <= 10;
   const varianceBad = Math.abs(record.priceVariance) > 20;
 

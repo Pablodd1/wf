@@ -37,13 +37,215 @@ const RECYCLE_FLOOR = 35;       // below this AND unidentified => recycle bin
 const BATCH_SIZE = 15;          // watches per parallel batch
 const BATCH_CONCURRENCY = 8;    // batches in flight at once (15×8 = 120 watches/request)
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
 // ───────────────────────── helpers ─────────────────────────
 
 function normRef(s) {
   return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
-// ── BUNDLE DETECTION ────────────────────────────────────────────────────────
+/** WhatsApp dealer alias dictionary — maps nicknames to reference + dial */
+const ALIAS_MAP = {
+  // Rolex
+  'starbucks': { ref: '126610LV', dial: 'Green', brand: 'Rolex' },
+  'hulk': { ref: '116610LV', dial: 'Green', brand: 'Rolex' },
+  'kermit': { ref: '16610LV', dial: 'Green', brand: 'Rolex' },
+  'batman': { ref: '126710BLNR', dial: 'Blue Black', brand: 'Rolex' },
+  'batgirl': { ref: '126710BLNR', dial: 'Blue Black', brand: 'Rolex' },
+  'pepsi': { ref: '126710BLRO', dial: 'Red Blue', brand: 'Rolex' },
+  'root beer': { ref: '126711CHNR', dial: 'Brown', brand: 'Rolex' },
+  'panda': { ref: '116500LN', dial: 'White', brand: 'Rolex' },
+  'reverse panda': { ref: '116500LN', dial: 'Black', brand: 'Rolex' },
+  'john mayer': { ref: '116508', dial: 'Yellow', brand: 'Rolex' },
+  'desert': { ref: '126505', dial: 'Rose Gold', brand: 'Rolex' },
+  'paul newman': { ref: '6239', dial: 'White', brand: 'Rolex' },
+  'tiffany': { ref: '5711/1A-018', dial: 'Tiffany', brand: 'Patek Philippe' },
+  'blue lagoon': { ref: '79000', dial: 'Blue', brand: 'Tudor' },
+  'smurf': { ref: '116619LB', dial: 'Blue', brand: 'Rolex' },
+  'berry': { ref: '126710BLRO', dial: 'Red Blue', brand: 'Rolex' },
+  'coca cola': { ref: '126710BLRO', dial: 'Red Blue', brand: 'Rolex' },
+  'sprite': { ref: '126720VTNR', dial: 'Green Black', brand: 'Rolex' },
+  'pikachu': { ref: '126518LN', dial: 'Yellow', brand: 'Rolex' },
+  'ghost': { ref: '114060', dial: 'Black', brand: 'Rolex' },
+  'no date': { ref: '114060', dial: 'Black', brand: 'Rolex' },
+  'two tone': { ref: '126613LB', dial: 'Blue', brand: 'Rolex' },
+  'yellow gold': { ref: '126618LB', dial: 'Blue', brand: 'Rolex' },
+  'white gold': { ref: '126619LB', dial: 'Blue', brand: 'Rolex' },
+  'rose gold': { ref: '126715CHNR', dial: 'Brown', brand: 'Rolex' },
+  'everose': { ref: '126715CHNR', dial: 'Brown', brand: 'Rolex' },
+  // Patek
+  'nautilus': { ref: '5711/1A', dial: 'Blue', brand: 'Patek Philippe' },
+  'aquanut': { ref: '5167A', dial: 'Black', brand: 'Patek Philippe' },
+  'handgun': { ref: '5712/1A', dial: 'Blue', brand: 'Patek Philippe' },
+  'jumbo': { ref: '16202ST', dial: 'Blue', brand: 'Audemars Piguet' },
+  'royal oak': { ref: '15500ST', dial: 'Blue', brand: 'Audemars Piguet' },
+  'offshore': { ref: '26420SO', dial: 'Black', brand: 'Audemars Piguet' },
+  'bamblebee': { ref: '26420SO', dial: 'Yellow', brand: 'Audemars Piguet' },
+  'rainbow': { ref: '116598RBOW', dial: 'Rainbow', brand: 'Rolex' },
+  'ice': { ref: '228396TBR', dial: 'Ice Blue', brand: 'Rolex' },
+  'platona': { ref: '116506', dial: 'Ice Blue', brand: 'Rolex' },
+  'sarah': { ref: '116505', dial: 'Pink', brand: 'Rolex' },
+  'blaken': { ref: '116500LN', dial: 'Black', brand: 'Rolex' },
+  'leopard': { ref: '116598SACO', dial: 'Leopard', brand: 'Rolex' },
+  'zebra': { ref: '116598SACO', dial: 'Zebra', brand: 'Rolex' },
+  'pave': { ref: '228396TBR', dial: 'Diamond', brand: 'Rolex' },
+  'baguette': { ref: '228396TBR', dial: 'Diamond', brand: 'Rolex' },
+  'tiger': { ref: '116588TBR', dial: 'Orange', brand: 'Rolex' },
+  'eye of tiger': { ref: '116588TBR', dial: 'Orange', brand: 'Rolex' },
+  'green lantern': { ref: '116718LN', dial: 'Green', brand: 'Rolex' },
+  'serti': { ref: '116618LB', dial: 'Diamond', brand: 'Rolex' },
+  'harley quinn': { ref: '116509', dial: 'White', brand: 'Rolex' },
+  'federer': { ref: '116506', dial: 'Ice Blue', brand: 'Rolex' },
+  'daytona': { ref: '116500LN', dial: 'White', brand: 'Rolex' },
+  'gmt': { ref: '126710BLNR', dial: 'Blue Black', brand: 'Rolex' },
+  'submariner': { ref: '126610LN', dial: 'Black', brand: 'Rolex' },
+  'deepsea': { ref: '136660', dial: 'Black', brand: 'Rolex' },
+  'sea dweller': { ref: '126600', dial: 'Black', brand: 'Rolex' },
+  'yacht master': { ref: '126622', dial: 'Blue', brand: 'Rolex' },
+  'sky dweller': { ref: '336934', dial: 'Blue', brand: 'Rolex' },
+  'datejust': { ref: '126334', dial: 'Blue', brand: 'Rolex' },
+  'oyster perpetual': { ref: '124300', dial: 'Turquoise', brand: 'Rolex' },
+  'explorer': { ref: '124270', dial: 'Black', brand: 'Rolex' },
+  'milgauss': { ref: '116400GV', dial: 'Black', brand: 'Rolex' },
+  'air king': { ref: '126900', dial: 'Black', brand: 'Rolex' },
+  'cellini': { ref: '50535', dial: 'White', brand: 'Rolex' },
+  'president': { ref: '228238', dial: 'Champagne', brand: 'Rolex' },
+  'day date': { ref: '228238', dial: 'Champagne', brand: 'Rolex' },
+};
+
+/** Apply alias dictionary to text before parsing */
+function applyAliases(text) {
+  let result = text;
+  const foundAliases = [];
+  for (const [alias, data] of Object.entries(ALIAS_MAP)) {
+    const re = new RegExp('\\b' + alias.replace(/\s+/g, '\\s+') + '\\b', 'gi');
+    if (re.test(text)) {
+      foundAliases.push({ alias, ...data });
+      // Don't replace in text, just return the mapping
+    }
+  }
+  return foundAliases;
+}
+
+/** Normalize brand spelling variants to canonical names */
+function normalizeBrand(brand) {
+  if (!brand || brand === 'Unknown') return 'Unknown';
+  const b = brand.toLowerCase().replace(/[&\s]/g, '');
+  const map = {
+    'patekphilippe': 'Patek Philippe',
+    'patek': 'Patek Philippe',
+    'pp': 'Patek Philippe',
+    'audemarspiguet': 'Audemars Piguet',
+    'ap': 'Audemars Piguet',
+    'rolex': 'Rolex',
+    'richardmille': 'Richard Mille',
+    'rm': 'Richard Mille',
+    'vacheronconstantin': 'Vacheron Constantin',
+    'vc': 'Vacheron Constantin',
+    'iwc': 'IWC',
+    'tudor': 'Tudor',
+    'cartier': 'Cartier',
+    'omega': 'Omega',
+    'panerai': 'Panerai',
+    'alangesohne': 'A. Lange & Söhne',
+    'langesohne': 'A. Lange & Söhne',
+    'lange': 'A. Lange & Söhne',
+    'hublot': 'Hublot',
+    'breitling': 'Breitling',
+    'jaegerlecoultre': 'Jaeger-LeCoultre',
+    'jlc': 'Jaeger-LeCoultre',
+    'zenith': 'Zenith',
+    'franckmuller': 'Franck Muller',
+    'ulyssenardin': 'Ulysse Nardin',
+    'seiko': 'Seiko',
+    'grandseiko': 'Grand Seiko',
+    'tagheuer': 'TAG Heuer',
+    'longines': 'Longines',
+    'blancpain': 'Blancpain',
+    'breguet': 'Breguet',
+    'gp': 'Girard-Perregaux',
+    'girardperregaux': 'Girard-Perregaux',
+  };
+  return map[b] || brand;
+}
+
+/** Query Supabase price-research for historical price validation */
+async function validatePriceAgainstHistory(reference, priceUSD) {
+  if (!SUPABASE_URL || !SUPABASE_KEY || !reference || !priceUSD) return null;
+  try {
+    const headers = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
+    // Try exact match first
+    let resp = await fetch(
+      `${SUPABASE_URL}/rest/v1/watch_records?reference=eq.${encodeURIComponent(reference)}&price_usd=gt.0&limit=200`,
+      { headers }
+    );
+    let rows = resp.ok ? await resp.json() : [];
+    // Fuzzy fallback
+    if (!rows || rows.length === 0) {
+      const cleanRef = reference.replace(/[\s\-\/]/g, '');
+      resp = await fetch(
+        `${SUPABASE_URL}/rest/v1/watch_records?reference=ilike.*${encodeURIComponent(cleanRef)}*&price_usd=gt.0&limit=200`,
+        { headers }
+      );
+      rows = resp.ok ? await resp.json() : [];
+    }
+    if (!rows || rows.length < 3) return null; // need enough data
+    const prices = rows.map(r => r.price_usd || 0).filter(p => p > 0).sort((a, b) => a - b);
+    if (prices.length < 3) return null;
+    const q1 = prices[Math.floor(prices.length * 0.25)];
+    const q3 = prices[Math.floor(prices.length * 0.75)];
+    const iqr = q3 - q1;
+    const lower = Math.max(0, q1 - 1.5 * iqr);
+    const upper = q3 + 1.5 * iqr;
+    const avg = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+    const withinRange = priceUSD >= lower && priceUSD <= upper;
+    const deviation = avg > 0 ? Math.abs(priceUSD - avg) / avg : 0;
+    return {
+      historicalMin: prices[0],
+      historicalMax: prices[prices.length - 1],
+      historicalAvg: avg,
+      historicalCount: prices.length,
+      lowerBound: lower,
+      upperBound: upper,
+      withinRange,
+      deviationPct: Math.round(deviation * 100),
+      status: withinRange ? 'IN_RANGE' : (deviation > 0.5 ? 'SUSPECT' : 'OUTLIER'),
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+/** Save a confirmed reference to catalog_building for future lookups */
+async function saveToCatalogBuilding(reference, brand, model, collection, dialColors) {
+  if (!SUPABASE_URL || !SUPABASE_KEY || !reference || !brand) return;
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/catalog_building`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        reference: reference.toUpperCase().trim(),
+        brand: normalizeBrand(brand),
+        model: model || null,
+        collection: collection || null,
+        dial_colors: dialColors || null,
+        source: 'online_cascade',
+        created_at: new Date().toISOString(),
+      }),
+    });
+  } catch (e) {
+    // Non-blocking: catalog building is best-effort
+  }
+}
+
+// ───────────────────────── BUNDLE DETECTION ─────────────────────────
 // Alex rule: bundles (multi-watch listings) are NOT used as data points.
 // Detect lines with multiple distinct watches separated by emoji, bullets,
 // numbered items, commas, or multiple strong refs on one line.
@@ -373,16 +575,22 @@ function brandFromRef(ref) {
   const r = String(ref || '').toUpperCase();
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
   if (/^IW\d{4,6}$/.test(r)) return 'IWC';
-  if (/^(5[12]\d{2}[A-Z]{1,3}|7[01]\d{2}[A-Z]{1,3}|5990|6007|6300|5303|5374|5524|5968|5520|5920|5320|5370)\d{0,3}$/i.test(r)) return 'Patek Philippe';  // 5167A, 5711/1A, 7118/1200A
-  if (/^[3-7]\d{3}\//.test(r)) return 'Patek Philippe';                 // 5711/1A-014, 7118/1200A-001
-  if (/^(?:15|26|77|16|41|67)\d{3}[A-Z]{0,4}$/.test(r)) return 'Audemars Piguet';  // 15500ST, 26579CE, 15407ST, 16202ST, 26240OR
-  if (/^(?:11[4-9]|12[0-6]|22[6-8]|228|336|268)\d{3}[A-Z]{0,4}$/.test(r)) return 'Rolex';  // 6-digit Rolex refs
-  if (/^(?:79|70)\d{4}[A-Z]*$/.test(r)) return 'Tudor';
-  if (/^(33\d{4}|47\d{4}|85\d{4}|81180|85180)/.test(r)) return 'Vacheron Constantin';
-  if (/^(?:CR|WE|WL|WI|WS|WH|WP|WJ|WC|W4|W6|WG)\w*?\d{3,5}/.test(r)) return 'Cartier';  // CRWSR0004, WSSA0029, WGTA0011
-  if (/^(?:Q1[3-9]|Q2[5-9]|Q3[2-9]|Q7|Q8|Q9)\d{4}/.test(r)) return 'Jaeger-LeCoultre';
-  if (/^[A-Z]{2}\d{4}[A-Z]?\d?$/.test(r)) return 'Breitling';           // AB0121, A13380
-  if (/^(?:PAM|PAM0|PAM00)\d{3,5}$/.test(r)) return 'Panerai';
+  if (/^M\d{5,6}/.test(r)) return 'Tudor';
+  if (/^WGTA\d{4,6}/.test(r)) return 'Cartier';
+  if (/^RDDBEX\d{4,6}/.test(r)) return 'Roger Dubuis';
+  if (/^SB[GAE]\d{3,5}/.test(r)) return 'Grand Seiko';
+  if (/^SB\d{3,5}/.test(r)) return 'Grand Seiko';
+  if (/^PAM\d{3,5}/.test(r)) return 'Panerai';
+  if (/^\d{3}\.\d{3}\.\d{3}/.test(r)) return 'A. Lange & Söhne';
+  if (/^(5[12]\d{2}[A-Z]{1,3}|7[01]\d{2}[A-Z]{1,3}|5990|6007|6300|5303|5374|5524|5968|5520|5920|5320|5370)\d{0,3}$/i.test(r)) return 'Patek Philippe';
+  if (/^[3-7]\d{3}\//.test(r)) return 'Patek Philippe';
+  if (/^(?:15|26|77|16|41|67)\d{3}[A-Z]{0,4}$/.test(r)) return 'Audemars Piguet';
+  if (/^\d{3}\.\d{3}/.test(r)) return 'A. Lange & Söhne';
+  if (/^(?:128|126|124|116|114|226|228|268|336|279)\d{3}[A-Z]{0,4}$/.test(r)) return 'Rolex';
+  if (/^596[08][A-Z]?$/.test(r)) return 'Patek Philippe';
+  if (/^26240[A-Z]{2}\./.test(r)) return 'Audemars Piguet';
+  if (/^SB[GAE]\d{3}/.test(r)) return 'Grand Seiko';
+  if (/^[A-Z]{2}\d{4}[A-Z]?\d?$/.test(r)) return 'Breitling';
   return 'Unknown';
 }
 
@@ -405,6 +613,8 @@ function regexParse(chunk) {
     text = text.replace(/\b(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED)(\d)/gi, '$1 $2');
     // number glued to currency-word: "45500USD" -> "45500 USD", "152000hkd"->"152000 hkd"
     text = text.replace(/(\d)(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED)\b/gi, '$1 $2');
+    // K-suffix glued to currency: "11.4KUSD" -> "11.4K USD", "125kHKD" -> "125k HKD"
+    text = text.replace(/([\d.,]+)\s*([Kk])\s*(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED)\b/g, '$1$2 $3');
     // digits glued to a following Word starting with a capital: "2013Full"->"2013 Full"
     text = text.replace(/(\d)([A-Z][a-z]{2,})/g, '$1 $2');
   }
@@ -416,15 +626,40 @@ function regexParse(chunk) {
   }
   if (out.brand === 'Unknown') {
     const bl = text.toLowerCase();
-    if (/\bpatek|philippe|\bpp\b/.test(bl)) out.brand = 'Patek Philippe';
-    else if (/audemars|piguet|\bap\b/.test(bl)) out.brand = 'Audemars Piguet';
-    else if (/richard\s*mille|\brm\s?\d/.test(bl)) out.brand = 'Richard Mille';
-    else if (/rolex/.test(bl)) out.brand = 'Rolex';
-    else if (/vacheron|\bvc\b/.test(bl)) out.brand = 'Vacheron Constantin';
-    else if (/\biwc\b/.test(bl)) out.brand = 'IWC';
-    else if (/tudor/.test(bl)) out.brand = 'Tudor';
-    else if (/cartier/.test(bl)) out.brand = 'Cartier';
-    else if (/omega/.test(bl)) out.brand = 'Omega';
+    // Remove common condition words that precede brand names
+    const brandText = bl.replace(/\b(new|used|pre-owned|preowned|unworn|mint|excellent|good|like new|brand new)\b/gi, ' ').trim();
+    if (/\bpatek|philippe|\bpp\b/.test(brandText)) out.brand = 'Patek Philippe';
+    else if (/audemars|piguet|\bap\b/.test(brandText)) out.brand = 'Audemars Piguet';
+    else if (/richard\s*mille|\brm\s?\d/.test(brandText)) out.brand = 'Richard Mille';
+    else if (/rolex/.test(brandText)) out.brand = 'Rolex';
+    else if (/vacheron|\bvc\b/.test(brandText)) out.brand = 'Vacheron Constantin';
+    else if (/\biwc\b/.test(brandText)) out.brand = 'IWC';
+    else if (/tudor/.test(brandText)) out.brand = 'Tudor';
+    else if (/cartier/.test(brandText)) out.brand = 'Cartier';
+    else if (/omega/.test(brandText)) out.brand = 'Omega';
+    else if (/panerai|\bpam\s?\d/.test(brandText)) out.brand = 'Panerai';
+    else if (/\blange\b|lange\s*&\s*söhne/.test(brandText)) out.brand = 'A. Lange & Söhne';
+    else if (/fpj|f\.p\.\s*journe|fpjourne/.test(brandText)) out.brand = 'F.P. Journe';
+    else if (/roger\s*dubuis/.test(brandText)) out.brand = 'Roger Dubuis';
+    else if (/grand\s*seiko/.test(brandText)) out.brand = 'Grand Seiko';
+    else if (/tag\s*heuer/.test(brandText)) out.brand = 'TAG Heuer';
+    else if (/breitling/.test(brandText)) out.brand = 'Breitling';
+    else if (/breguet/.test(brandText)) out.brand = 'Breguet';
+    else if (/bvlgari|bulgari/.test(brandText)) out.brand = 'Bvlgari';
+    else if (/hublot/.test(brandText)) out.brand = 'Hublot';
+    else if (/zenith/.test(brandText)) out.brand = 'Zenith';
+    else if (/jaeger|lecoultre|jlc/.test(brandText)) out.brand = 'Jaeger-LeCoultre';
+    else if (/blancpain/.test(brandText)) out.brand = 'Blancpain';
+    else if (/girard|perregaux/.test(brandText)) out.brand = 'Girard-Perregaux';
+    else if (/ulysses?\s*nardin/.test(brandText)) out.brand = 'Ulysse Nardin';
+    else if (/franck\s*muller/.test(brandText)) out.brand = 'Franck Muller';
+    else if (/longines/.test(brandText)) out.brand = 'Longines';
+    else if (/oris/.test(brandText)) out.brand = 'Oris';
+    else if (/nomos/.test(brandText)) out.brand = 'Nomos';
+    else if (/rado/.test(brandText)) out.brand = 'Rado';
+    else if (/tissot/.test(brandText)) out.brand = 'Tissot';
+    else if (/hamilton/.test(brandText)) out.brand = 'Hamilton';
+    else if (/seiko(?!\s*5)/.test(brandText)) out.brand = 'Seiko';
   }
 
   // Reference (brand-aware patterns, ordered by specificity).
@@ -519,8 +754,8 @@ function regexParse(chunk) {
     if (inferred !== 'Unknown') out.brand = inferred;
   }
 
-  // Condition
-  if (/\bnew\b|unworn|\bbnib\b|sealed|full\s*set|\bnos\b|\bmint\b/i.test(text)) out.condition = 'New';
+  // Condition — handle "New" at start of line (dealer format)
+  if (/^\s*new\b|\bnew\b|unworn|\bbnib\b|sealed|full\s*set|\bnos\b|\bmint\b/i.test(text)) out.condition = 'New';
   else if (/\bused\b|pre[\s-]?owned|worn/i.test(text)) out.condition = 'Used';
 
   // Dial color — explicit text first (mirrors parseEngine.ts patterns)
@@ -627,16 +862,14 @@ function regexParse(chunk) {
   const priceEntries = [];
 
   // Pattern A: "CURRENCY AMOUNT" (left-side) — "HKD 447k", "$125,000", "USDT 57,650"
-  // Using regex literal to avoid template-literal escaping issues in build
-  const LEFT_CUR_RE = /(?:USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED|HK\$|\$|€|£)\s*([\d.,]+)\s*([MmKk])?(?=\s|$|[,.;])/gi;
+  // Also handles: "1.55M hkd", "935000 hkd"
+  const LEFT_CUR_RE = /(?:USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED|HK\$|\$|€|£)\s*[:]?\s*([\d.,]+)\s*([MmKk])?(?=\s|$|[,.;])/gi;
   const CUR_NAME_RE = /(USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED)/i;
   let m;
   while ((m = LEFT_CUR_RE.exec(text)) !== null) {
-    // Extract currency: m[0] contains the full match like "USDT 57,650" or "$12,500"
     const curMatch = m[0].match(CUR_NAME_RE);
     let cur = curMatch ? curMatch[0].toUpperCase() : null;
     if (!cur) {
-      // Symbol-based fallback
       if (m[0].includes('HK$')) cur = 'HKD';
       else if (m[0].includes('$')) cur = 'USD';
       else if (m[0].includes('€')) cur = 'EUR';
@@ -647,6 +880,14 @@ function regexParse(chunk) {
     const suf = (m[2] || '').toLowerCase();
     if (suf === 'm') val *= 1_000_000;
     else if (suf === 'k') val *= 1_000;
+    // YEAR GUARD
+    if (val >= 1900 && val <= 2050) continue;
+    // REFERENCE GUARD
+    const numStr = (m[1] || '').replace(/,/g, '');
+    if (/^\d{6}$/.test(numStr)) {
+      const isRolexPrefix = /^(?:11[46]|12[0-9]|22[0-9]|228|279|336|268|278|276)\d{3}$/.test(numStr);
+      if (!isRolexPrefix) continue;
+    }
     if (!isNaN(val) && val >= 100 && val < 100_000_000) {
       priceEntries.push({ value: Math.round(val), currency: cur, raw: m[0], index: m.index });
     }
@@ -831,26 +1072,65 @@ function regexParse(chunk) {
     out.intent = 'UNKNOWN';
   }
 
+  // Normalize brand spelling before returning
+  out.brand = normalizeBrand(out.brand);
+
   return out;
 }
 
-// confidence from a code parse alone (how completely did we identify it?)
+// Confidence scoring per user spec:
+// 100% = all fields found in catalog -> AUTO-APPROVED
+// 90%  = 1 field missing -> REVIEW suggested
+// 80%  = 2 fields missing -> HUMAN review required
+// <80% = 3+ fields missing or AI cannot resolve -> RECYCLE/GARBAGE
 //
-// Alex rule: dial color is REQUIRED for data-point approval.
-// ref(50) + brand(28) + dial(8) = 86 base minimum for APPROVED.
-// Without dial color, max confidence = 78 (HUMAN review).
-// Condition/price/year are bonuses but never compensate for missing dial.
+// Required fields: brand, reference, dialColor, price, condition, year
+// Missing brand/reference = critical failure (Level 1)
+// Missing dial/price/condition/year = secondary (Level 2)
+// Cascade penalty: missing brand/reference should NOT recursively penalize downstream
+function computeConfidence(parsed, catalogHit = false) {
+  const requiredFields = ['brand', 'reference', 'dialColor', 'price', 'condition', 'year'];
+  let missingCount = 0;
+  let criticalMissing = false;
+  
+  // Check each required field
+  if (!parsed.brand || parsed.brand === 'Unknown') { missingCount++; criticalMissing = true; }
+  if (!parsed.reference) { missingCount++; criticalMissing = true; }
+  if (!parsed.dialColor) missingCount++;
+  if (!parsed.price) missingCount++;
+  if (!parsed.condition || parsed.condition === 'Unknown') missingCount++;
+  if (!parsed.year) missingCount++;
+  
+  // Catalog hit overrides: if catalog has the ref, we know brand+dial+model
+  if (catalogHit) {
+    // If catalog confirms reference, brand and dial are considered found
+    if (parsed.reference) {
+      missingCount = Math.max(0, missingCount - 2); // brand + dial covered by catalog
+      criticalMissing = false; // reference is confirmed
+    }
+  }
+  
+  // Score based on missing count
+  if (missingCount === 0) return 100;
+  if (missingCount === 1) return 90;
+  if (missingCount === 2) return 80;
+  if (missingCount >= 3) return Math.max(10, 80 - (missingCount - 2) * 10); // 70, 60, 50...
+  
+  return 50; // fallback
+}
+
+// Verdict based on confidence
+function computeVerdict(confidence, hasMismatch = false) {
+  if (hasMismatch) return 'HUMAN'; // image mismatch forces human review
+  if (confidence >= 100) return 'APPROVED';
+  if (confidence >= 90) return 'REVIEW'; // suggest review
+  if (confidence >= 80) return 'HUMAN';  // must review by human
+  return 'RECYCLE'; // garbage
+}
+
+// Legacy function for backward compatibility
 function codeConfidence(p) {
-  let c = 0;
-  if (p.reference) c += 50;
-  if (p.brand && p.brand !== 'Unknown') c += 28;
-  if (p.dialColor) c += 8;
-  if (p.condition && p.condition !== 'Unknown') c += 6;
-  if (p.price) c += 6;
-  if (p.year) c += 2;
-  // Cross-rate validated dual pricing is a strong signal of listing quality
-  if (p._priceValidated && p.priceMatrix && p.priceMatrix.length >= 2) c += 4;
-  return Math.min(c, 100);
+  return computeConfidence(p);
 }
 
 // ── Cross-validation: combine independent signals (catalog / image / web) ──
@@ -950,6 +1230,12 @@ function crossValidate(parsed, signals = {}) {
         signals.webSearchBrand.toLowerCase() !== parsed.brand.toLowerCase()) {
       disagree.push('web-vs-parser-brand'); boost -= 10;
     } else { agree.push('web-search'); boost += 8; }
+  }
+  // 3b. Online agreement scoring (detailed comparison from onlineCrossRef)
+  if (signals.onlineAgreementBoost) {
+    boost += signals.onlineAgreementBoost;
+    if (signals.onlineAgree?.length) agree.push(...signals.onlineAgree);
+    if (signals.onlineDisagree?.length) disagree.push(...signals.onlineDisagree);
   }
 
   // 4. Multi-signal convergence — 3+ independent sources agree → extra bump.
@@ -1239,7 +1525,7 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
     if (catalog.found || catalog.brand) {
       // Fill brand if the parser missed it; never overwrite a confident parser brand.
       if ((!parsed.brand || parsed.brand === 'Unknown') && catalog.brand) {
-        parsed.brand = catalog.brand;
+        parsed.brand = normalizeBrand(catalog.brand);
       }
       if (!parsed.dialColor && catalog.dialColors) {
         parsed.dialColor = String(catalog.dialColors).split(/[;,]/)[0].trim();
@@ -1294,7 +1580,7 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
       
       parsed = {
         reference: aiRef || parsed.reference,
-        brand: (ai.brand && ai.brand !== 'Unknown' && ai.brand !== null) ? ai.brand : parsed.brand,
+        brand: normalizeBrand((ai.brand && ai.brand !== 'Unknown' && ai.brand !== null) ? ai.brand : parsed.brand),
         dialColor: ai.dialColor || parsed.dialColor,
         condition: (ai.condition && ai.condition !== 'Unknown' && ai.condition !== null) ? ai.condition : parsed.condition,
         year: ai.year ?? parsed.year,
@@ -1307,12 +1593,12 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
       };
       // Fix up null brand from AI if catalog already supplied it
       if ((!parsed.brand || parsed.brand === 'Unknown') && catalog.brand) {
-        parsed.brand = catalog.brand;
+        parsed.brand = normalizeBrand(catalog.brand);
       }
       // Fix up null brand from AI: re-run brandFromRef on any new reference
       if ((!parsed.brand || parsed.brand === 'Unknown') && parsed.reference) {
         const inferred = brandFromRef(parsed.reference);
-        if (inferred !== 'Unknown') parsed.brand = inferred;
+        if (inferred !== 'Unknown') parsed.brand = normalizeBrand(inferred);
       }
       confidence = Math.max(confidence, Math.min(ai.confidence ?? codeConfidence(parsed), 100));
       // If AI surfaced a reference the parser missed, re-check the catalog.
@@ -1320,7 +1606,7 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
         const recheck = lookupCatalog(parsed.reference);
         if (recheck.found) {
           catalog = recheck;
-          if ((!parsed.brand || parsed.brand === 'Unknown') && recheck.brand) parsed.brand = recheck.brand;
+          if ((!parsed.brand || parsed.brand === 'Unknown') && recheck.brand) parsed.brand = normalizeBrand(recheck.brand);
         }
       }
       stages.push({ stage: 'AI_TEXT', engine: ai._source || 'ai', confidence, data: { ...parsed }, note: `AI parsed messy text (${ai._source})` });
@@ -1346,14 +1632,25 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
     stages.push({ stage: 'AI_TEXT', engine: 'skipped', confidence, note: 'AI skipped — catalog already confirmed brand+reference (cost saved)' });
   }
 
-  // 4) ONLINE cross-reference — only when NOT already catalog-confirmed
-  //    (no point paying for a web lookup on a ref we already have curated).
+  // 4) ONLINE cross-reference — fire when catalog miss OR when confidence below threshold
+  //    (previously only fired when confidence < 85, missing overconfident wrong brands).
   let online = { checked: false, found: false };
   let webSearchConfidence = 0, webSearchBrand = null;
-  if (parsed.reference && !catalogConfirmed && confidence < APPROVE_THRESHOLD) {
+  const needsOnline = parsed.reference && (!catalogConfirmed || confidence < APPROVE_THRESHOLD);
+  if (needsOnline) {
     online = await onlineCrossRef(parsed.brand, parsed.reference);
     if (online.found) {
-      if (online.confidence) { webSearchConfidence = online.confidence; webSearchBrand = online.web_data?.brand || null; }
+      if (online.confidence) { webSearchConfidence = online.confidence; webSearchBrand = normalizeBrand(online.web_data?.brand) || null; }
+      // Save successful online lookups to catalog_building for future free lookups
+      if (online.web_data?.brand && online.web_data?.reference) {
+        saveToCatalogBuilding(
+          online.web_data.reference,
+          online.web_data.brand,
+          online.web_data.model,
+          online.web_data.collection,
+          online.web_data.dialColor ? [online.web_data.dialColor] : null
+        );
+      }
     }
     stages.push({ stage: 'ONLINE', engine: 'web', confidence, data: online, note: online.note });
   }
@@ -1409,7 +1706,7 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
 
     // Fill brand from vision if parser missed it
     if (v.brand && (!parsed.brand || parsed.brand === 'Unknown')) {
-      parsed.brand = v.brand;
+      parsed.brand = normalizeBrand(v.brand);
       confidence = Math.min(100, confidence + 5);
     }
 
@@ -1454,6 +1751,43 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
   const visionRef = bestVisionResult?.reference || null;
   const imagePresent = imageUrls.length > 0;
 
+  // ONLINE AGREEMENT SCORING: compare web search result vs parsed data
+  let onlineAgreementBoost = 0;
+  const onlineAgree = [];
+  const onlineDisagree = [];
+  if (online.found && online.web_data) {
+    const wd = online.web_data;
+    // Brand match: +15
+    if (wd.brand && parsed.brand && normalizeBrand(wd.brand) === parsed.brand) {
+      onlineAgreementBoost += 15;
+      onlineAgree.push('brand-match');
+    } else if (wd.brand && parsed.brand && normalizeBrand(wd.brand) !== parsed.brand) {
+      onlineAgreementBoost -= 10;
+      onlineDisagree.push('brand-mismatch');
+    }
+    // Reference match: +10
+    if (wd.reference && parsed.reference && normRef(wd.reference) === normRef(parsed.reference)) {
+      onlineAgreementBoost += 10;
+      onlineAgree.push('ref-match');
+    } else if (wd.reference && parsed.reference && normRef(wd.reference) !== normRef(parsed.reference)) {
+      onlineAgreementBoost -= 8;
+      onlineDisagree.push('ref-mismatch');
+    }
+    // Price within range: +10
+    if (wd.priceRange && parsed.price) {
+      const [minP, maxP] = wd.priceRange.split('-').map(s => parseInt(s.replace(/[^0-9]/g, ''), 10)).filter(Boolean);
+      if (minP && maxP && parsed.price >= minP * 0.5 && parsed.price <= maxP * 1.5) {
+        onlineAgreementBoost += 10;
+        onlineAgree.push('price-in-range');
+      }
+    }
+    // Model/collection match: +5
+    if (wd.model && parsed.reference) {
+      onlineAgreementBoost += 5;
+      onlineAgree.push('model-confirmed');
+    }
+  }
+
   const cv = crossValidate(parsed, {
     catalogHit: catalog.found,
     catalogBrand: catalog.brand,
@@ -1465,53 +1799,94 @@ async function analyzeOne(chunk, ctx, providerWhitelist = null) {
     visionRef,
     webSearchConfidence,
     webSearchBrand,
+    onlineAgreementBoost,
+    onlineAgree,
+    onlineDisagree,
   });
   confidence = Math.min(100, Math.max(0, confidence + cv.boost));
   // Image MISMATCH always forces confidence down hard (safety).
   if (imageVerdict === 'MISMATCH') confidence = Math.min(confidence, 40);
   stages.push({
     stage: 'CROSS_VAL', engine: 'multi-signal', confidence,
-    data: { boost: cv.boost, agree: cv.agree, disagree: cv.disagree },
+    data: { boost: cv.boost, agree: cv.agree, disagree: cv.disagree, onlineAgree, onlineDisagree },
     note: `${cv.agree.length} signal(s) agree${cv.agree.length ? ': ' + cv.agree.join(', ') : ''}${cv.disagree.length ? ' | disagree: ' + cv.disagree.join(', ') : ''} (boost ${cv.boost >= 0 ? '+' : ''}${cv.boost})`,
   });
 
+  // 7) PRICE VALIDATION — query historical Supabase data for price sanity check
+  let priceValidation = null;
+  if (parsed.reference && parsed.price && parsed.price > 0) {
+    const priceUSD = parsed.currency === 'HKD' ? Math.round(parsed.price * 0.128)
+                   : parsed.currency === 'EUR' ? Math.round(parsed.price * 1.08)
+                   : parsed.currency === 'GBP' ? Math.round(parsed.price * 1.27)
+                   : parsed.currency === 'CHF' ? Math.round(parsed.price * 1.13)
+                   : parsed.currency === 'SGD' ? Math.round(parsed.price * 0.74)
+                   : parsed.price;
+    priceValidation = await validatePriceAgainstHistory(parsed.reference, priceUSD);
+    if (priceValidation) {
+      const pv = priceValidation;
+      stages.push({
+        stage: 'PRICE_VAL',
+        engine: 'history',
+        confidence,
+        data: pv,
+        note: `Price $${priceUSD.toLocaleString()} vs historical avg $${pv.historicalAvg.toLocaleString()} (${pv.historicalCount} records) — ${pv.status}${pv.deviationPct > 0 ? ` (${pv.deviationPct}% dev)` : ''}`,
+      });
+      // If price is SUSPECT (deviation >50%), cap confidence below approval
+      if (pv.status === 'SUSPECT') {
+        confidence = Math.min(confidence, 80);
+        stages.push({
+          stage: 'PRICE_GUARD',
+          engine: 'guard',
+          confidence,
+          data: pv,
+          note: `⚠️ Price deviation ${pv.deviationPct}% exceeds threshold — capped confidence for human review`,
+        });
+      }
+    }
+  }
+
   // ───────── VERDICT GATE ─────────
+  // New scoring per user spec:
+  // 100% = all fields found -> AUTO-APPROVED
+  // 90%  = 1 field missing -> REVIEW (suggest)
+  // 80%  = 2 fields missing -> HUMAN (must review)
+  // <80% = 3+ fields missing -> RECYCLE (garbage)
   const identified = !!parsed.reference && parsed.brand !== 'Unknown';
   const bundle = isBundle(chunk);
+  
+  // Recompute confidence using new scoring
+  const isCatalogConfirmed = catalog.found && parsed.reference && parsed.brand && parsed.brand !== 'Unknown';
+  confidence = computeConfidence(parsed, isCatalogConfirmed);
+  
   let verdict, reason;
 
   if (bundle) {
-    // Alex rule: bundles are NOT data points — skip for pricing analytics
     verdict = 'RECYCLE';
     reason = 'Bundle/multi-watch listing — excluded from single-listing data points.';
-  } else if (opticalFailed) {
-    // Alex rule: dial color unverified after optical → HUMAN review, NOT a data point
-    verdict = 'HUMAN';
-    reason = 'Dial color missing and optical verification failed — human review required before adding as data point.';
-    confidence = Math.min(confidence, 80);  // cap below approval threshold
   } else if (imageVerdict === 'MISMATCH') {
     verdict = 'HUMAN';
     reason = 'Image disagrees with text (CRITICAL mismatch) — needs human review.';
   } else if (parsed.intent === 'ALERT') {
-    // "Sold / gone / on hold / reserved" — NOT live inventory. Keep out of the
-    // approved sellable pool so closed listings don't pollute stock.
     verdict = 'RECYCLE';
     reason = 'Listing is sold/closed (ALERT) — excluded from live inventory.';
   } else if (parsed.intent === 'BUY' || parsed.intent === 'TRADE' || parsed.intent === 'INQUIRY') {
-    // Buyer demand / trade / inquiry — real signal but NOT seller stock.
-    // Route to human lane so it lands in the demand bucket, never auto-approved
-    // as inventory.
     verdict = 'HUMAN';
     reason = `Buyer/inquiry intent (${parsed.intent}) — demand signal, not sellable inventory.`;
-  } else if (!identified && confidence < RECYCLE_FLOOR) {
-    verdict = 'RECYCLE';
-    reason = 'Not enough information to identify the watch (no clear brand/reference).';
-  } else if (confidence >= APPROVE_THRESHOLD) {
-    verdict = 'APPROVED';
-    reason = `High confidence (${Math.round(confidence)}%) — auto-approved.`;
-  } else {
+  } else if (parsed.intent === 'SELL' && (!parsed.price || parsed.price <= 0)) {
     verdict = 'HUMAN';
-    reason = `Confidence ${Math.round(confidence)}% is below ${APPROVE_THRESHOLD}% — route to human review.`;
+    reason = 'Seller listing with no price — human review required.';
+  } else {
+    // Use new confidence scoring
+    verdict = computeVerdict(confidence, imageVerdict === 'MISMATCH');
+    if (verdict === 'APPROVED') {
+      reason = `All fields found (${Math.round(confidence)}%) — auto-approved.`;
+    } else if (verdict === 'REVIEW') {
+      reason = `1 field missing (${Math.round(confidence)}%) — suggest review.`;
+    } else if (verdict === 'HUMAN') {
+      reason = `2 fields missing (${Math.round(confidence)}%) — must review by human.`;
+    } else {
+      reason = `3+ fields missing or unresolvable (${Math.round(confidence)}%) — recycle.`;
+    }
   }
 
   return {
