@@ -21,6 +21,7 @@ export default function ReviewPage() {
   const [filterMaxConfidence, setFilterMaxConfidence] = useState(100);
   const [filterDial, setFilterDial] = useState<string>('all');
   const [filterBrand, setFilterBrand] = useState<string>('all');
+  const [filterVerdict, setFilterVerdict] = useState<'all' | 'APPROVED' | 'HUMAN' | 'RECYCLE'>('all');
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingRecord, setEditingRecord] = useState<WatchRecord | null>(null);
   const [editForm, setEditForm] = useState<Partial<WatchRecord>>({});
@@ -48,9 +49,13 @@ export default function ReviewPage() {
       if (r.confidence < filterMinConfidence || r.confidence > filterMaxConfidence) return false;
       if (filterDial !== 'all' && r.dialColor !== filterDial) return false;
       if (filterBrand !== 'all' && r.brand !== filterBrand) return false;
+      if (filterVerdict !== 'all') {
+        const v = r.isResidue || r.confidence < 35 ? 'RECYCLE' : r.confidence >= 90 && !r.failureFlags?.length ? 'APPROVED' : 'HUMAN';
+        if (v !== filterVerdict) return false;
+      }
       return true;
     }).sort((a, b) => a.confidence - b.confidence);
-  }, [records, filterMinConfidence, filterMaxConfidence, filterDial, filterBrand]);
+  }, [records, filterMinConfidence, filterMaxConfidence, filterDial, filterBrand, filterVerdict]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [keyboardHelp, setKeyboardHelp] = useState(false);
@@ -438,12 +443,26 @@ export default function ReviewPage() {
               ))}
             </select>
           </div>
+          <div>
+            <label className="text-xs text-text-muted uppercase tracking-wider block mb-1">Verdict</label>
+            <select
+              value={filterVerdict}
+              onChange={e => setFilterVerdict(e.target.value as any)}
+              className="bg-bg-elevated border border-border-default rounded px-3 py-1.5 text-sm text-text-primary"
+            >
+              <option value="all">All Verdicts</option>
+              <option value="APPROVED">APPROVED</option>
+              <option value="HUMAN">HUMAN</option>
+              <option value="RECYCLE">RECYCLE</option>
+            </select>
+          </div>
           <button
             onClick={() => {
               setFilterMinConfidence(0);
               setFilterMaxConfidence(100);
               setFilterBrand('all');
               setFilterDial('all');
+              setFilterVerdict('all');
             }}
             className="flex items-center gap-1 text-xs text-text-muted hover:text-text-primary transition-colors"
           >

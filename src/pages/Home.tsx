@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { Layout } from '@/components/Layout';
 import { StatsBar } from '@/components/StatsBar';
@@ -19,8 +19,18 @@ import { exportDatasetExcel, exportDatasetCsv } from '@/lib/datasetExport';
 import { downloadStyledReport } from '@/lib/reportGenerator';
 import type { WatchRecord } from '@/types';
 
+/** Derive verdict from confidence + flags (same as backend) */
+function getVerdict(r: WatchRecord): 'APPROVED' | 'HUMAN' | 'RECYCLE' {
+  if (r.isResidue || r.confidence < 35) return 'RECYCLE';
+  if (r.confidence >= 90 && !r.failureFlags?.length) return 'APPROVED';
+  return 'HUMAN';
+}
+
 export default function Home() {
   const { records, stats, loading, loadProgress } = useWatchData();
+  
+  // Public pages only show APPROVED records (HUMAN/RECYCLE hidden)
+  const publicRecords = useMemo(() => records.filter(r => getVerdict(r) === 'APPROVED'), [records]);
 
   // Modal state
   const [selectedRecord, setSelectedRecord] = useState<WatchRecord | null>(null);
@@ -229,7 +239,7 @@ export default function Home() {
 
       {/* Processing Theater Section */}
       <ProcessingTheater
-        records={records}
+        records={publicRecords}
         normalizedCount={stats.normalizedCount}
         residueCount={stats.residueCount}
       />
@@ -239,7 +249,7 @@ export default function Home() {
 
       {/* Inventory Section */}
       <InventoryGrid
-        records={records}
+        records={publicRecords}
         onSelectRecord={handleSelectRecord}
       />
 
@@ -248,13 +258,13 @@ export default function Home() {
 
       {/* AI Intelligence Center */}
       <AIInsights
-        records={records}
+        records={publicRecords}
         onSelectRecord={handleSelectRecord}
       />
 
       {/* Enhanced Residue Bin — NEW */}
       <EnhancedResidue
-        records={records}
+        records={publicRecords}
         onApprove={handleApprove}
         onEdit={handleOpenEdit}
         onDelete={handleDelete}

@@ -84,11 +84,12 @@ export default function SearchPage() {
     }
     if (selectedVerdicts.size > 0) {
       result = result.filter(r => {
-        const v = String((r as any).isResidue || '');
-        if (v === 'APPROVED') return selectedVerdicts.has('APPROVED');
-        if (v === 'RECYCLE') return selectedVerdicts.has('RECYCLE');
-        if (v === 'HUMAN') return selectedVerdicts.has('HUMAN');
-        return false;
+        // Derive verdict from confidence + isResidue (same logic as backend)
+        let verdict: string;
+        if (r.isResidue || r.confidence < 35) verdict = 'RECYCLE';
+        else if (r.confidence >= 90 && !r.failureFlags?.length) verdict = 'APPROVED';
+        else verdict = 'HUMAN';
+        return selectedVerdicts.has(verdict);
       });
     }
 
@@ -293,11 +294,9 @@ export default function SearchPage() {
             <div className="flex gap-2">
               {(['APPROVED', 'HUMAN', 'RECYCLE'] as const).map(v => {
                 const count = filtered.filter(r => {
-                  const verdict = String((r as any).isResidue || '');
-                  if (v === 'APPROVED') return verdict === 'APPROVED' || (r.confidence >= 90 && !r.failureFlags?.length);
-                  if (v === 'HUMAN') return verdict === 'HUMAN' || (r.confidence >= 35 && r.confidence < 90);
-                  if (v === 'RECYCLE') return verdict === 'RECYCLE' || r.confidence < 35;
-                  return false;
+                  if (r.isResidue || r.confidence < 35) return v === 'RECYCLE';
+                  if (r.confidence >= 90 && !r.failureFlags?.length) return v === 'APPROVED';
+                  return v === 'HUMAN';
                 }).length;
                 const colors = { APPROVED: 'text-success border-success/30 bg-success/10', HUMAN: 'text-warning border-warning/30 bg-warning/10', RECYCLE: 'text-danger border-danger/30 bg-danger/10' };
                 return (
@@ -342,8 +341,11 @@ export default function SearchPage() {
               </thead>
               <tbody>
                 {visibleResults.map((r) => {
-                  const verdict = String((r as any).isResidue || 'UNKNOWN');
-                  const verdictColor = verdict === 'APPROVED' ? 'text-success' : verdict === 'HUMAN' ? 'text-warning' : verdict === 'RECYCLE' ? 'text-danger' : 'text-text-muted';
+                  let verdict: string;
+                  if (r.isResidue || r.confidence < 35) verdict = 'RECYCLE';
+                  else if (r.confidence >= 90 && !r.failureFlags?.length) verdict = 'APPROVED';
+                  else verdict = 'HUMAN';
+                  const verdictColor = verdict === 'APPROVED' ? 'text-success' : verdict === 'HUMAN' ? 'text-warning' : 'text-danger';
                   return (
                     <tr key={r.id} className="border-b border-border-default/50 hover:bg-bg-elevated/50 transition-colors">
                       <td className="px-3 py-2 font-mono text-xs text-gold-primary font-semibold">{r.reference}</td>

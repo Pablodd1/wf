@@ -452,11 +452,11 @@ export default function AdminPage() {
                 <span className="text-xs text-text-primary">Manual Analysis</span>
               </button>
               <button
-                onClick={() => window.open('/#/reprocess', '_blank')}
+                onClick={() => window.open('/#/prices', '_blank')}
                 className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border-default bg-bg-card hover:bg-bg-elevated/50 transition-colors text-left"
               >
-                <RefreshCw size={14} className="text-cyan-400" />
-                <span className="text-xs text-text-primary">Reprocess Page</span>
+                <DollarSign size={14} className="text-gold-primary" />
+                <span className="text-xs text-text-primary">Price Research</span>
               </button>
             </div>
           </div>
