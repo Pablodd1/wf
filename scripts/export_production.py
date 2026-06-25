@@ -115,22 +115,43 @@ def main():
             if price == 0 and row.get('title'):
                 import re
                 title = row.get('title', '')
-                # Look for patterns like HKD183000, $311,000, USDT311.000, etc.
+                # Number BEFORE currency: 252000HKD, 311000usdt
+                num_before_hkd = re.search(r'(\d{4,8})\s*HKD', title, re.I)
+                num_before_usd = re.search(r'(\d{4,8})\s*(?:USD|USDT)', title, re.I)
                 hkd_m = re.search(r'HK[D$]?\s*([\d,.]+)', title, re.I)
                 usd_m = re.search(r'(?:USD|USDT|\$)\s*([\d,.]+)', title, re.I)
-                if hkd_m:
+                k_m = re.search(r'(\d{1,4}(?:\.\d{1,2})?)\s*k\b', title, re.I)
+                m_m = re.search(r'(\d{1,4}(?:\.\d{1,3})?)\s*m\b', title, re.I)
+                
+                if num_before_hkd:
+                    try:
+                        price = float(num_before_hkd.group(1))
+                        currency = 'HKD'
+                    except: pass
+                elif num_before_usd:
+                    try:
+                        price = float(num_before_usd.group(1))
+                        currency = 'USD'
+                    except: pass
+                elif hkd_m:
                     try:
                         price = float(hkd_m.group(1).replace(',', '').replace('.', ''))
-                    except ValueError:
-                        pass
-                    currency = 'HKD'
+                        currency = 'HKD'
+                    except: pass
                 elif usd_m:
                     price_str = usd_m.group(1).replace(',', '')
                     try:
                         price = float(price_str)
-                    except:
-                        pass
-                    currency = 'USD'
+                        currency = 'USD'
+                    except: pass
+                elif k_m:
+                    try:
+                        price = float(k_m.group(1)) * 1000
+                    except: pass
+                elif m_m:
+                    try:
+                        price = float(m_m.group(1)) * 1_000_000
+                    except: pass
             
             # Compute confidence
             confidence = 0
