@@ -26,14 +26,21 @@ function toUSD(amount, currency) {
 function inferBrand(ref) {
   if (!ref) return 'Unknown';
   const r = ref.toUpperCase();
+  // Richard Mille — must be first (RM prefix)
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
-  if (/^[345]\d{3}/.test(r)) return 'Patek Philippe';
+  // Vacheron Constantin — check BEFORE Patek (4600V, 4500V, 87172)
+  if (/^[48]\d{3}[A-Z]/.test(r)) return 'Vacheron Constantin';
+  // Patek Philippe — 4 digits starting 3-5 (but not VC pattern above)
+  if (/^[345]\d{3}([A-Z]?[\/\-]|$)/.test(r)) return 'Patek Philippe';
+  // A. Lange & Söhne — decimal format (check before Rolex!)
+  if (/^\d{3}\.\d{3}/.test(r)) return 'A. Lange & Söhne';
+  // Audemars Piguet — 5 digits + 2-5 letters
   if (/^\d{5}[A-Z]{2,5}/.test(r)) return 'Audemars Piguet';
+  // Rolex — exactly 6 digits + optional letters
   if (/^\d{6}[A-Z]{0,5}/.test(r)) return 'Rolex';
   if (/^PAM\d/.test(r)) return 'Panerai';
   if (/^IW\d{6}/.test(r)) return 'IWC';
   if (/^RDDB/.test(r) || /^WHCH/.test(r)) return 'Cartier';
-  if (/^\d{3}\.\d{3}/.test(r)) return 'A. Lange & Söhne';
   return 'Unknown';
 }
 

@@ -69,6 +69,7 @@ function parseCurrency(text) {
   if (/\bEUR\b|€/.test(t)) return 'EUR';
   if (/\bGBP\b|£/.test(t)) return 'GBP';
   if (/\bCHF\b/.test(t)) return 'CHF';
+  if (/\bCNY\b|\bRMB\b/.test(t)) return 'CNY';
   if (/\bSGD\b/.test(t)) return 'SGD';
   if (/\bUSD\b|\$/.test(t)) return 'USD';
   return null;
@@ -252,7 +253,7 @@ function splitMultiWatch(text) {
   if (!text || text.length < 10) return [text];
   
   // Count how many reference-like patterns exist
-  const refPattern = /\b(?:RM\s?\d{2}[-\s]?\d{2}|[345]\d{3}[A-Z]?[\/\-]?\d*|\d{5,6}[A-Z]{2,5}|PAM\d{3,5}|IW\d{6,8})\b/gi;
+  const refPattern = /\b(?:RM\s?\d{2}[-\s]?\d{2}|[345]\d{3}[A-Z]?[\/\-]?\d*|\d{6}[A-Z]{0,5}|\d{5}[A-Z]{2,5}|PAM\d{3,5}|IW\d{6,8}|\d{3}\.\d{3})\b/gi;
   const refMatches = text.match(refPattern) || [];
   
   // If only 1 reference found, return as single message
@@ -265,7 +266,7 @@ function splitMultiWatch(text) {
   let currentPart = '';
   
   // Patterns that indicate a NEW watch listing starts
-  const newListingPattern = /^[\s\u2600-\u27BF\U0001F000-\U0001FAFF\ufe0f]*?(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d|Rolex|Patek|Audemars|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse)/i;
+  const newListingPattern = /^[\s\u2600-\u27BF\u{1F000}-\u{1FAFF}\ufe0f]*?(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d|Rolex|Patek|Audemars|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse)/iu;
   
   for (const line of lines) {
     const trimmed = line.trim();
@@ -284,8 +285,8 @@ function splitMultiWatch(text) {
   
   // Validate: each part should have a reference or brand+price
   const validParts = parts.filter(p => {
-    const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d)\b/i.test(p);
-    const hasPrice = /(?:HKD|USD|USDT|\$|k|m)\d/i.test(p) || /\d{4,}\s*(?:k|m|HKD|USD|USDT)/i.test(p);
+    const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]?|PAM\d|IW\d|\d{3}\.\d{3})\b/i.test(p);
+    const hasPrice = /(?:HKD|USD|USDT|\$)\s*\d/i.test(p) || /\d+(?:\.\d+)?\s*(?:k|m|million)/i.test(p) || /\d{4,}\s*(?:k|m|HKD|USD|USDT)/i.test(p) || /\d{4,}\s*HKD/i.test(p);
     return hasRef || hasPrice;
   });
   
@@ -396,7 +397,7 @@ module.exports = async function handler(req, res) {
         if (!parsed.year && llm.year) parsed.year = llm.year;
         if (!parsed.price && llm.price) parsed.price = llm.price;
         if (!parsed.currency && llm.currency && llm.currency !== 'Unknown') parsed.currency = llm.currency;
-        parsed.confidence = Math.max(parsed.confidence, parseInt(llm.confidence) || 0);
+        parsed.confidence = Math.min(100, Math.max(parsed.confidence, parseInt(llm.confidence) || 0));
         usedLLM = true;
       } catch { /* keep regex result */ }
     }
@@ -432,6 +433,7 @@ module.exports = async function handler(req, res) {
       confidence: parsed.confidence,
       priceUSD,
       currency: record.currency,
+      source: usedLLM ? 'llm' : 'regex',
     });
   }
 

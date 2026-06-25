@@ -79,19 +79,34 @@ function parseCurrency(text) {
   if (/\bSGD\b/.test(t)) return 'SGD';
   if (/\bUSD\b|\$/.test(t)) return 'USD';
   if (/HKD/i.test(text)) return 'HKD';
+  if (/\bEUR\b|€/.test(t)) return 'EUR';
+  if (/\bGBP\b|£/.test(t)) return 'GBP';
+  if (/\bCHF\b/.test(t)) return 'CHF';
+  if (/\bCNY\b|\bRMB\b/.test(t)) return 'CNY';
+  if (/\bSGD\b/.test(t)) return 'SGD';
+  if (/\bUSD\b|\$/.test(t)) return 'USD';
   return null;
 }
 
 // ─── BRAND DETECTION ───
 function inferBrandFromRef(ref) {
   if (!ref) return null;
-  const r = ref.toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
+  const r = ref.toUpperCase().replace(/[^A-Z0-9\/\-\.]/g, '');
+  // A. Lange & Söhne — decimal format (check FIRST, before Rolex!)
+  if (/^\d{3}\.\d{3}/.test(r)) return 'A. Lange & Söhne';
+  // Richard Mille
+  if (/^RM\d{2}/.test(r)) return 'Richard Mille';
+  // Vacheron Constantin — check BEFORE Patek
+  if (/^[48]\d{3}[A-Z]$/.test(r)) return 'Vacheron Constantin';
+  if (/^[48]\d{4}[A-Z]$/.test(r)) return 'Vacheron Constantin';
+  // Patek Philippe
   if (/^[345]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
   if (/^[345]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
   if (/^[345]\d{3}-/.test(r)) return 'Patek Philippe';
+  // Audemars Piguet
   if (/^\d{5}[A-Z]{2,5}$/.test(r)) return 'Audemars Piguet';
+  // Rolex — exactly 6 digits + optional letters (no dots!)
   if (/^\d{6}[A-Z]{0,5}$/.test(r)) return 'Rolex';
-  if (/^RM\d{2}/.test(r)) return 'Richard Mille';
   if (/^PAM\d{3,5}/.test(r)) return 'Panerai';
   if (/^IW\d{6,8}/.test(r)) return 'IWC';
   if (/^RDDB\w*/.test(r) || /^WHCH\w*/.test(r)) return 'Cartier';
@@ -207,14 +222,14 @@ function parseWatchMessage(text) {
 // ─── MULTI-WATCH SPLITTER ───
 function splitMultiWatch(text) {
   if (!text || text.length < 10) return [text];
-  const refPattern = /\b(?:RM\s?\d{2}[-\s]?\d{2}|[345]\d{3}[A-Z]?[\/\-]?\d*|\d{5,6}[A-Z]{2,5}|PAM\d{3,5}|IW\d{6,8})\b/gi;
+  const refPattern = /\b(?:RM\s?\d{2}[-\s]?\d{2}|[345]\d{3}[A-Z]?[\/\-]?\d*|\d{6}[A-Z]{0,5}|\d{5}[A-Z]{2,5}|PAM\d{3,5}|IW\d{6,8}|\d{3}\.\d{3})\b/gi;
   const refMatches = text.match(refPattern) || [];
   if (refMatches.length <= 1) return [text];
   
   const lines = text.split(/\n/);
   const parts = [];
   let currentPart = '';
-  const newListingPattern = /^[\s\u2600-\u27BF\U0001F000-\U0001FAFF\ufe0f]*?(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d|Rolex|Patek|Audemars|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse)/i;
+  const newListingPattern = /^[\s\u2600-\u27BF\u{1F000}-\u{1FAFF}\ufe0f]*?(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d|Rolex|Patek|Audemars|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse)/iu;
   
   for (const line of lines) {
     const trimmed = line.trim();
@@ -229,8 +244,8 @@ function splitMultiWatch(text) {
   if (currentPart.trim()) parts.push(currentPart.trim());
   
   const validParts = parts.filter(p => {
-    const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d)\b/i.test(p);
-    const hasPrice = /(?:HKD|USD|USDT|\$|k|m)\d/i.test(p) || /\d{4,}\s*(?:k|m|HKD|USD|USDT)/i.test(p);
+    const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]?|PAM\d|IW\d|\d{3}\.\d{3})\b/i.test(p);
+    const hasPrice = /(?:HKD|USD|USDT|\$)\s*\d/i.test(p) || /\d+(?:\.\d+)?\s*(?:k|m|million)/i.test(p) || /\d{4,}\s*(?:k|m|HKD|USD|USDT)/i.test(p) || /\d{4,}\s*HKD/i.test(p);
     return hasRef || hasPrice;
   });
   return validParts.length > 1 ? validParts : [text];
@@ -239,17 +254,14 @@ function splitMultiWatch(text) {
 // ─── DEDUPLICATION ───
 // Simple hash: message text (cleaned) + 5-min window
 function messageHash(text, chatId) {
-  // Normalize: lowercase, remove emojis, collapse whitespace, remove prices (which vary)
+  // Normalize: lowercase, remove emojis, collapse whitespace
   const cleaned = text
     .toLowerCase()
-    .replace(/[\u2600-\u27BF\u2B50\u2B55\U0001F000-\U0001FAFF\uFE0F]/g, '')
+    .replace(/[\u2600-\u27BF\u2B50\u2B55\u{1F000}-\u{1FAFF}\uFE0F]/gu, '')
     .replace(/\s+/g, ' ')
     .trim()
     .substring(0, 200);
   
-  // Hash: first 100 chars of cleaned text + chat ID
-  // Same message in different groups = different hash (we want both)
-  // Same message posted twice in same group within window = duplicate
   return `${chatId}:${cleaned.substring(0, 100)}`;
 }
 

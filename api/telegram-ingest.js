@@ -58,13 +58,26 @@ function parseCurrency(text) {
 
 function inferBrandFromRef(ref) {
   if (!ref) return null;
-  const r = ref.toUpperCase();
+  const r = ref.toUpperCase().replace(/[^A-Z0-9\/\-\.]/g, '');
+  // A. Lange & Söhne — decimal format (check FIRST)
+  if (/^\d{3}\.\d{3}/.test(r)) return 'A. Lange & Söhne';
+  // Richard Mille
+  if (/^RM\d{2}/.test(r)) return 'Richard Mille';
+  // Vacheron Constantin — check BEFORE Patek
+  if (/^[48]\d{3}[A-Z]$/.test(r)) return 'Vacheron Constantin';
+  if (/^[48]\d{4}[A-Z]$/.test(r)) return 'Vacheron Constantin';
+  // Patek Philippe
   if (/^[345]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
   if (/^[345]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
-  if (/^\d{5}[A-Z]{2,4}$/.test(r)) return 'Audemars Piguet';
-  if (/^\d{6}[A-Z]{0,4}$/.test(r)) return 'Rolex';
-  if (/^RM\d{2}/.test(r)) return 'Richard Mille';
-  if (/^(85|47|49)\d{3}[A-Z\/]/.test(r)) return 'Vacheron Constantin';
+  // Audemars Piguet
+  if (/^\d{5}[A-Z]{2,5}$/.test(r)) return 'Audemars Piguet';
+  // Rolex — exactly 6 digits + optional letters
+  if (/^\d{6}[A-Z]{0,5}$/.test(r)) return 'Rolex';
+  // Panerai, IWC, Cartier, Seiko
+  if (/^PAM\d{3,5}/.test(r)) return 'Panerai';
+  if (/^IW\d{6,8}/.test(r)) return 'IWC';
+  if (/^RDDB\w*/.test(r) || /^WHCH\w*/.test(r)) return 'Cartier';
+  if (/^(WSSA|SPB|SRP|SBDY|SNE)\d{3,4}/.test(r)) return 'Seiko';
   return null;
 }
 
