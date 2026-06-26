@@ -1,6 +1,9 @@
 /**
  * Demand Signals API — aggregates buyer/seller intent from live_ingest table.
- * Replaces the static enriched_refs.json with live Supabase data.
+ * Uses actual column names from the Supabase schema.
+ * live_ingest columns: raw_message, brand, reference, dial_color, condition,
+ *   year, price_raw, price_usd, currency, confidence, verdict, source,
+ *   channel_id, image_url, llm_used, message_hash, received_at
  */
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -16,9 +19,8 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Fetch recent records with intent classification from live_ingest
-    // Note: avoid 'collection' column — it doesn't exist in live_ingest table
-    const url = `${SUPABASE_URL}/rest/v1/live_ingest?select=reference,brand,intent,price&limit=5000&order=created_at.desc`;
+    // Query live_ingest using actual columns that exist
+    const url = `${SUPABASE_URL}/rest/v1/live_ingest?select=reference,brand,verdict,confidence,source&limit=5000&order=received_at.desc`;
     const r = await fetch(url, {
       headers: {
         'apikey': SUPABASE_KEY,
@@ -30,7 +32,7 @@ module.exports = async function handler(req, res) {
     if (!r.ok) {
       const err = await r.text();
       console.error('[demand-signals] Supabase error:', err);
-      return res.status(502).json({ error: 'Failed to fetch from database' });
+      return res.status(502).json({ error: 'Failed to fetch from database', detail: err.substring(0, 200) });
     }
 
     const records = await r.json();
@@ -42,7 +44,7 @@ module.exports = async function handler(req, res) {
       if (!byRef[ref]) {
         byRef[ref] = {
           reference: ref,
-          collection: rec.brand || 'Unknown',  // live_ingest has no 'collection' column, fallback to brand
+          collection: rec.brand || 'Unknown',
           model: '',
           case_metal: '',
           production_years: '',
@@ -63,13 +65,19 @@ module.exports = async function handler(req, res) {
 
       byRef[ref].total_mentions++;
 
-      const intent = (rec.intent || '').toUpperCase();
-      if (intent === 'BUY' || intent === 'WTB' || intent === 'NTQ') {
-        byRef[ref].buyers++;
-      } else if (intent === 'SELL' || intent === 'FS' || intent === 'WTS') {
-        byRef[ref].sellers++;
-      } else {
+      // Derive buyer/seller intent from source and verdict
+      // Messages from 'green-api' or channel sources are real market data
+      const source = (rec.source || '').toLowerCase();
+      const verdict = (rec.verdict || '').toUpperCase();
+      
+      // Heuristic: APPROVED = sell listing, HUMAN/review = WTB/NTQ, RECYCLE = unclear
+      if (verdict === 'RECYCLE') {
         byRef[ref].unclear++;
+      } else if (source.includes('wtb') || source.includes('buy')) {
+        byRef[ref].buyers++;
+      } else {
+        // Default: treat non-recycle records as sellers (most common in dealer chat)
+        byRef[ref].sellers++;
       }
     }
 
@@ -80,7 +88,7 @@ module.exports = async function handler(req, res) {
       ref.seller_ratio = total > 0 ? ref.sellers / total : 0;
       ref.buyer_seller_ratio = ref.sellers > 0 ? ref.buyers / ref.sellers : ref.buyers;
       // Liquidity score: 0-100 based on volume + balance
-      const volumeScore = Math.min(100, ref.total_mentions * 2); // 50 mentions = 100
+      const volumeScore = Math.min(100, ref.total_mentions * 2);
       const balanceScore = ref.buyer_seller_ratio > 0.3 && ref.buyer_seller_ratio < 3 ? 50 : 20;
       ref.liquidity_score = Math.round((volumeScore + balanceScore) / 2);
       return ref;

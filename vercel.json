@@ -3,6 +3,9 @@
   "framework": "vite",
   "buildCommand": "npm run build",
   "functions": {
+    "api/batch-enrich.js": {
+      "maxDuration": 300
+    },
     "api/bulk-disambiguate.js": {
       "maxDuration": 300
     },

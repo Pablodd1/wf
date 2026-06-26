@@ -105,21 +105,31 @@ export default function AdminPage() {
 
   const fetchStats = useCallback(async () => {
     try {
-      // Use Supabase stats API instead of downloading 20MB JSON
-      const res = await fetch('/api/watch-data?stats=true');
-      const statsData = await res.json();
-      const total = statsData.total || 0;
-      
-      // Get verdict breakdown from pipeline health
+      // Fetch pipeline health for verdict counts (from watch_records, not live_ingest)
       const healthRes = await fetch('/api/pipeline-health');
+      if (!healthRes.ok) throw new Error(`Health API ${healthRes.status}`);
       const health = await healthRes.json();
-      const verdicts = health.breakdowns?.byVerdict || {};
+      
+      // Use health.verdicts — these come from watch_records (real 2.4M count)
+      // NOT health.breakdowns?.byVerdict — that's from live_ingest (only ~4K records)
+      const verdicts = health.verdicts || {};
+      const totalFromVerdicts = (verdicts.APPROVED || 0) + (verdicts.HUMAN || 0) + (verdicts.RECYCLE || 0);
+      
+      // Try to get total from watch-data stats (best-effort, may timeout)
+      let total = totalFromVerdicts;
+      try {
+        const statsRes = await fetch('/api/watch-data?stats=true');
+        if (statsRes.ok) {
+          const statsData = await statsRes.json();
+          if (statsData.total > 0) total = statsData.total;
+        }
+      } catch { /* fallback to verdict sum */ }
       
       setStats({
         totalRecords: total,
-        approved: verdicts.APPROVED || Math.round(total * 0.79),
-        human: verdicts.HUMAN || Math.round(total * 0.19),
-        recycle: verdicts.RECYCLE || Math.round(total * 0.02),
+        approved: verdicts.APPROVED || 0,
+        human: verdicts.HUMAN || 0,
+        recycle: verdicts.RECYCLE || 0,
         missingRef: 0,
         missingPrice: 0,
         unknownBrand: 0,
@@ -129,13 +139,7 @@ export default function AdminPage() {
         processingRate: 0,
       });
     } catch (e: any) {
-      // Fallback to static stats
-      setStats({
-        totalRecords: 0,
-        approved: 0, human: 0, recycle: 0,
-        missingRef: 0, missingPrice: 0, unknownBrand: 0, unknownDial: 0,
-        missingYear: 0, avgConfidence: 0, processingRate: 0,
-      });
+      setStats(null);
     }
   }, []);
 

@@ -145,6 +145,7 @@ module.exports = async function handler(req, res) {
     const listings = rows.map(r => {
       const priceUSD = r.price_usd || toUSD(r.price_raw || 0, r.currency);
       return {
+        id: r.id || r.message_hash || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         title: r.raw_message || '',
         price: r.price_raw || 0,
         currency: r.currency || 'USD',
@@ -183,12 +184,12 @@ module.exports = async function handler(req, res) {
     // Dial colors
     const dialSet = [...new Set(validListings.map(l => l.dial))].filter(d => d && d !== 'Unknown');
 
-    // Build monthly chart from year field
+    // Build monthly chart from created_at date (more reliable than sparse year field)
     const monthMap = {};
     validListings.forEach(l => {
-      const y = l.year;
-      if (!y) return;
-      const monthKey = String(y);
+      const d = l.date; // "YYYY-MM-DD" from created_at
+      if (!d || d.length < 7) return;
+      const monthKey = d.substring(0, 7); // "YYYY-MM"
       if (!monthMap[monthKey]) monthMap[monthKey] = [];
       monthMap[monthKey].push(l.priceUSD);
     });

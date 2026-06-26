@@ -1,15 +1,7 @@
 /**
  * PIPELINE HEALTH MONITOR — /api/pipeline-health
  *
- * Returns real-time stats about the ingestion pipeline:
- * - Messages received today / this week / total
- * - Breakdown by source (green_api, whatsapp, telegram, api)
- * - Breakdown by group (top 20 most active)
- * - Breakdown by brand
- * - Verdict distribution
- * - Pipeline uptime / last message received
- * - Dedup stats
- *
+ * Returns real-time stats about the ingestion pipeline.
  * GET /api/pipeline-health
  */
 
@@ -21,7 +13,6 @@ module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=60');
   
   if (req.method === 'OPTIONS') return res.status(200).end();
-
   if (!SUPABASE_URL || !SUPABASE_KEY) {
     return res.status(503).json({ error: 'Supabase not configured' });
   }
@@ -31,44 +22,56 @@ module.exports = async function handler(req, res) {
     'Authorization': `Bearer ${SUPABASE_KEY}`,
   };
 
+  async function sbFetch(url, opts = {}, timeoutMs = 8000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const r = await fetch(url, { ...opts, signal: controller.signal });
+      clearTimeout(timer);
+      return r;
+    } catch (e) {
+      clearTimeout(timer);
+      if (e.name === 'AbortError') throw new Error('timeout');
+      throw e;
+    }
+  }
+
   try {
-    // Get total count from live_ingest
-    const countResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/live_ingest?select=*`,
-      { headers: { ...headers, 'Prefer': 'count=exact', 'Range': '0-0' } }
+    // ── LIVE INGEST (small table, ~4K records) ──
+    const countResp = await sbFetch(
+      `${SUPABASE_URL}/rest/v1/live_ingest?select=id&limit=0`,
+      { headers: { ...headers, 'Prefer': 'count=estimated' } }
     );
-    const countRange = countResp.headers.get('content-range') || '0/0';
+    const countRange = countResp.headers.get('content-range') || '*/0';
     const totalLive = parseInt(countRange.split('/')[1] || '0');
 
-    // Get total from watch_records (main catalog — the big number)
-    const histResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/watch_records?select=*`,
-      { headers: { ...headers, 'Prefer': 'count=exact', 'Range': '0-0' } }
+    // ── WATCH RECORDS (main catalog, ~2.4M records — estimated count only) ──
+    const histResp = await sbFetch(
+      `${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=0`,
+      { headers: { ...headers, 'Prefer': 'count=estimated' } }
     );
-    const histRange = histResp.headers.get('content-range') || '0/0';
+    const histRange = histResp.headers.get('content-range') || '*/0';
     const totalHistorical = parseInt(histRange.split('/')[1] || '0');
 
-    // Verdict breakdown from watch_records
+    // ── Verdict breakdown from watch_records (estimated) ──
     const verdictCounts = {};
-    for (const v of ['APPROVED','HUMAN','RECYCLE','REVIEW']) {
+    for (const v of ['APPROVED', 'HUMAN', 'RECYCLE', 'REVIEW']) {
       try {
-        const vr = await fetch(
-          `${SUPABASE_URL}/rest/v1/watch_records?select=count&verdict=eq.${v}`,
-          { headers: { ...headers, 'Prefer': 'count=exact' } }
+        const vr = await sbFetch(
+          `${SUPABASE_URL}/rest/v1/watch_records?select=id&verdict=eq.${v}&limit=0`,
+          { headers: { ...headers, 'Prefer': 'count=estimated' } }
         );
-        const vcr = vr.headers.get('content-range') || '0/0';
+        const vcr = vr.headers.get('content-range') || '*/0';
         verdictCounts[v] = parseInt(vcr.split('/')[1] || '0');
       } catch { verdictCounts[v] = 0; }
     }
 
-    // Get recent records (last 100) for breakdowns
-    const recentResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/live_ingest?order=received_at.desc&limit=100&select=source,channel_id,brand,verdict,confidence,received_at`,
-      { headers }
+    // ── Recent records (last 100 from live_ingest for breakdowns) ──
+    const recentResp = await sbFetch(
+      `${SUPABASE_URL}/rest/v1/live_ingest?order=received_at.desc&limit=100&select=source,channel_id,brand,verdict,confidence,received_at`
     );
     const recent = recentResp.ok ? await recentResp.json() : [];
 
-    // Breakdown by source
     const bySource = {};
     const byGroup = {};
     const byBrand = {};
@@ -85,60 +88,36 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // Top 20 groups
     const topGroups = Object.entries(byGroup)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 20)
       .map(([id, count]) => ({ group: id, messages: count }));
 
-    // Calculate time since last message
-    const timeSinceLast = lastMessageAt
-      ? Math.round((Date.now() - new Date(lastMessageAt).getTime()) / 1000)
-      : null;
-
-    // Pipeline status
-    let status = 'healthy';
-    if (!lastMessageAt) status = 'idle';
-    else if (timeSinceLast > 3600) status = 'stale'; // no messages in 1 hour
-    else if (timeSinceLast > 900) status = 'slow'; // no messages in 15 min
+    const now = Date.now();
+    const lastMsg = lastMessageAt ? new Date(lastMessageAt).getTime() : 0;
+    const secondsSinceLastMessage = lastMsg > 0 ? Math.round((now - lastMsg) / 1000) : null;
 
     return res.status(200).json({
-      status,
+      status: secondsSinceLastMessage !== null && secondsSinceLastMessage < 86400 ? 'active' : 'stale',
       timestamp: new Date().toISOString(),
-      
       totals: {
         liveRecords: totalLive,
         historicalRecords: totalHistorical,
-        combined: totalHistorical || (totalLive + totalHistorical),
+        combined: totalLive + totalHistorical,
         watchRecords: totalHistorical,
       },
-      
       recentActivity: {
-        lastMessageAt,
-        secondsSinceLastMessage: timeSinceLast,
+        lastMessageAt: lastMessageAt,
+        secondsSinceLastMessage,
         messagesInLast100: recent.length,
       },
-      
       verdicts: verdictCounts,
-      breakdowns: {
-        bySource,
-        byBrand: Object.entries(byBrand)
-          .sort((a, b) => b[1] - a[1])
-          .reduce((acc, [k, v]) => { acc[k] = v; return acc; }, {}),
-        byVerdict,
-      },
-      
+      breakdowns: { bySource, byGroup, byBrand, byVerdict },
       topGroups,
-      
-      infrastructure: {
-        supabase: 'connected',
-        green_api_webhook: '/api/green-api-webhook',
-        telegram_webhook: '/api/telegram-ingest',
-        baileys_listener: 'local',
-      },
     });
 
-  } catch (e) {
-    return res.status(500).json({ error: 'Internal error', detail: e.message });
+  } catch (err) {
+    console.error('[pipeline-health] Error:', err.message);
+    return res.status(500).json({ error: 'Internal server error', detail: err.message });
   }
 };

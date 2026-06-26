@@ -243,7 +243,7 @@ export default function PriceResearch() {
                   </span>
                 </div>
                 <button 
-                  onClick={() => window.open('#', '_blank')}
+                  onClick={() => window.open(`https://watchfacts.com/buy/all?listing_type=sale&reference=${encodeURIComponent(data.reference)}`, '_blank')}
                   style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: GOLD, color: BG_CARD, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
                   Explore Marketplace →
                 </button>
@@ -281,11 +281,17 @@ export default function PriceResearch() {
             )}
 
             {/* ── Chart + 3-Month Prediction ────────────────────── */}
-            <PricePredictionChart
-              chart={data.chart}
-              pricing={data.pricing}
-              onSelectMonth={setSelectedMonth}
-            />
+            {data.chart && data.chart.length > 0 && data.chart[0].month !== 'N/A' && data.chart[0].count > 0 ? (
+              <PricePredictionChart
+                chart={data.chart}
+                pricing={data.pricing}
+                onSelectMonth={setSelectedMonth}
+              />
+            ) : data.chart && data.chart.length > 0 && data.chart[0].month === 'N/A' ? (
+              <div style={{ backgroundColor: BG_ELEV, borderRadius: 12, padding: 24, marginBottom: 24, textAlign: 'center' }}>
+                <p style={{ color: MUTED, fontSize: 14 }}>No time-series data available yet — most records lack date information. As new listings come in with dates, the chart will populate automatically.</p>
+              </div>
+            ) : null}
 
             {/* ── Insight Detail Panel ────────────────────────── */}
             {selectedMonth !== null && data.chart[selectedMonth] && (
@@ -670,15 +676,22 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
 }
 
 function ListingRow({ listing }: { listing: PriceListing }) {
-  const confidence = listing.confidence;
-  const score = confidence?.score || 0;
+  const rawConfidence = listing.confidence;
+  // Normalize: API may return confidence as {score, aiFields, catalogFields} or just a number
+  const confidenceObj = rawConfidence && typeof rawConfidence === 'object' 
+    ? rawConfidence as { score: number; aiFields: string[]; catalogFields: string[] }
+    : null;
+  const score = confidenceObj?.score || (typeof rawConfidence === 'number' ? rawConfidence : 0);
   const scoreColor = score === 100 ? GREEN : score >= 90 ? BLUE : score >= 80 ? '#fd7e14' : RED;
   const scoreLabel = score === 100 ? '✓ VERIFIED' : score >= 90 ? '🔍 REVIEW' : score >= 80 ? '⚠ CHECK' : '🚫 FLAGGED';
   
+  const listingUrl = `/buy/all?listing_type=sale&reference=${encodeURIComponent((listing as any).id || listing.title?.split(' ')[0] || '')}`;
+  
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
+    <a href={listingUrl} target="_blank" rel="noopener noreferrer"
+      style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', textDecoration: 'none' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = BG_ELEV)}
-      onMouseLeave={e => (e.currentTarget.style.backgroundColor = BG_CARD)}>
+      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
       <div style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: BG_ELEV, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, color: MUTED }}>⌚</div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{listing.title}</div>
@@ -687,7 +700,7 @@ function ListingRow({ listing }: { listing: PriceListing }) {
           {listing.phone && <span className="mr-2">{listing.phone}</span>}
           {listing.date && <span>{listing.date}</span>}
         </div>
-        {confidence && (
+        {confidenceObj && (
           <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ 
               padding: '2px 8px', 
@@ -699,9 +712,9 @@ function ListingRow({ listing }: { listing: PriceListing }) {
             }}>
               {score}% {scoreLabel}
             </span>
-            {confidence.aiFields.length > 0 && (
+            {confidenceObj.aiFields.length > 0 && (
               <span style={{ fontSize: 11, color: MUTED }}>
-                AI: {confidence.aiFields.join(', ')}
+                AI: {confidenceObj.aiFields.join(', ')}
               </span>
             )}
           </div>
@@ -711,7 +724,7 @@ function ListingRow({ listing }: { listing: PriceListing }) {
         <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>
       </div>
       <ExternalLink className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
-    </div>
+    </a>
   );
 }
 
@@ -740,15 +753,16 @@ function PricePredictionChart({
   onSelectMonth: (i: number) => void;
 }) {
   // Use last 6 points for regression
-  const window = chart.slice(-6);
-  const { slope, intercept } = linearRegression(window);
+  const windowSize = 6;
+  const chartWindow = chart.slice(-windowSize);
+  const { slope, intercept } = linearRegression(chartWindow);
   const baseIndex = chart.length - Math.min(6, chart.length); // offset into full array
 
   // Generate 3 forecast months
   const lastEntry = chart[chart.length - 1];
   const forecastPoints: ChartPoint[] = [];
   for (let i = 1; i <= 3; i++) {
-    const localIdx = window.length - 1 + i; // position within regression window
+    const localIdx = windowSize + i; // position within regression window
     const predictedAvg = Math.max(0, Math.round(slope * localIdx + intercept));
     const [yr, mo] = lastEntry.month.split('-').map(Number);
     const totalMo = mo + i;
@@ -774,11 +788,10 @@ function PricePredictionChart({
   // Populate forecastAvg=undefined on historical so the line only renders from the bridge
   combined.slice(0, chart.length - 1).forEach(p => { (p as CombinedPoint).forecastAvg = undefined; });
 
-  // Summary card values
   const forecastAvgs = forecastPoints.map(p => p.avg);
   const forecastMin  = Math.min(...forecastPoints.map(p => p.min));
   const forecastMax  = Math.max(...forecastPoints.map(p => p.max));
-  const totalDataPts = window.reduce((s, p) => s + p.count, 0);
+  const totalDataPts = chartWindow.reduce((s, p) => s + p.count, 0);
   const trendUp      = slope >= 0;
 
   return (
