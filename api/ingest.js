@@ -166,6 +166,7 @@ function parseFull(rawMsg) {
   else if (/hublot/i.test(text)) brand = 'Hublot';
   else if (/breitling/i.test(text)) brand = 'Breitling';
   else if (/jaeger|jlc/i.test(text)) brand = 'Jaeger-LeCoultre';
+  else if (/bell\s*[&]\s*ross|bell.*ross/i.test(text)) brand = 'Bell & Ross';
 
   let ref = null;
   // Richard Mille: RM07-01, RM 11-03
@@ -188,6 +189,8 @@ function parseFull(rawMsg) {
   const cartierM = text.match(/\b(?:RDDB|WHCH|WSTA|WSCL)\w*\b/i);
   // A. Lange: 410.038
   const langeM = text.match(/\b\d{3}\.\d{3}\b/);
+  // Bell & Ross: BR0192-BL-CE, BR0394-BL-CE, BR01-SKULL-SK-ST
+  const bellRossM = text.match(/(BR[0-9A-Z]{2,10}(?:[-][A-Z0-9]+){1,4})/i);  // Bell & Ross: BR0192-BL-CE, BR0394-BL-CE
   // Seiko: WSSA0030, SPB123
   const seikoM = text.match(/\b(?:WSSA|SPB|SRP|SBDY|SNE)\d{3,4}\b/i);
   // Patek 4-digit: 2499, 5971 (high value vintage)
@@ -204,6 +207,7 @@ function parseFull(rawMsg) {
   else if (cartierM) ref = cartierM[0].toUpperCase();
   else if (langeM) ref = langeM[0];
   else if (seikoM) ref = seikoM[0].toUpperCase();
+  else if (bellRossM) ref = bellRossM[0].toUpperCase();
   else if (rolexM) ref = rolexM[0].toUpperCase();
   else if (pp82) ref = pp82[0].toUpperCase().replace(/\s/g, '');
   else if (ppVintage) ref = ppVintage[0].toUpperCase();
