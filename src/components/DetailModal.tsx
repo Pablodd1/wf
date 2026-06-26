@@ -188,7 +188,7 @@ export function DetailModal({ record, open, onClose, onApprove, onEdit, onFlag, 
                   className="lg:w-[40%] p-5 flex flex-col">
                   <div className="relative w-full aspect-square bg-bg-primary border border-border-default rounded-md flex items-center justify-center overflow-hidden">
                     <span className="absolute inset-0 flex items-center justify-center text-gold-primary/5 text-4xl font-serif tracking-[0.2em] select-none pointer-events-none">
-                      PATEK PHILIPPE
+                      {record.brand ? record.brand.toUpperCase() : 'WATCH'}
                     </span>
                     {record.imageUrl ? (
                       <img src={record.imageUrl} alt={record.reference} className="w-full h-full object-cover relative z-[1]"

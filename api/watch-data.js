@@ -8,7 +8,55 @@
  * - Stats uses lightweight sample-based counts with fallback
  * - Data queries order by id (indexed) not created_at
  * - Verdict filter handled server-side with timeout protection
+ *
+ * IMAGE ENRICHMENT: Automatically merges imageUrl from catalog.json
+ * into every returned record based on reference matching.
  */
+
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
+
+// ── Catalog image lookup (lazy-loaded singleton) ──
+let _catalogByRef = null;
+function loadCatalogImages() {
+  if (_catalogByRef) return _catalogByRef;
+  _catalogByRef = new Map();
+  try {
+    const catalogPath = resolve(process.cwd(), 'public', 'catalog.json');
+    const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'));
+    for (const entry of catalog) {
+      if (entry.imageUrl && entry.reference) {
+        const ref = entry.reference.toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
+        _catalogByRef.set(ref, entry.imageUrl);
+      }
+    }
+    console.log(`[catalog] Loaded ${_catalogByRef.size} image URLs for catalog enrichment`);
+  } catch (e) {
+    console.error('[catalog] Failed to load catalog.json:', e.message);
+  }
+  return _catalogByRef;
+}
+
+/** Normalize a reference for catalog lookup (matches catalog-lookup.js logic) */
+function normalizeRef(ref) {
+  return String(ref || '').toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
+}
+
+/** Look up an image URL from the catalog by reference. Returns null if not found. */
+function lookupImageUrl(reference) {
+  if (!reference) return null;
+  const cat = loadCatalogImages();
+  const ref = normalizeRef(reference);
+  // Exact match
+  if (cat.has(ref)) return cat.get(ref);
+  // Try partial match (e.g. "5711/1A-010" matches catalog entry for "5711/1A")
+  for (const [catalogRef, url] of cat) {
+    if (ref.startsWith(catalogRef) || catalogRef.startsWith(ref)) {
+      return url;
+    }
+  }
+  return null;
+}
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -152,8 +200,19 @@ export default async function handler(req, res) {
     const crh   = dataRes.headers.get('content-range') || `${offset}-${endRange}/${data.length}`;
     const total = parseInt(crh.split('/')[1] || '0');
 
+    // Enrich each record with imageUrl from catalog if available
+    // This ensures watch cards show real photos instead of SVG placeholders
+    const enrichedData = Array.isArray(data)
+      ? data.map(r => ({
+          ...r,
+          image_url: lookupImageUrl(r.reference),
+          // Also check front_image field if it happens to exist
+          _front_image: r.front_image || null,
+        }))
+      : data;
+
     return res.status(200).json({
-      data,
+      data: enrichedData,
       page:  pageNum,
       limit: limitNum,
       total,

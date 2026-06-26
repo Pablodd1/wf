@@ -14,10 +14,44 @@
  */
 
 const crypto = require('crypto');
+const { readFileSync, existsSync } = require('fs');
+const { resolve } = require('path');
 
 const DEEPSEEK_API_URL = 'https://api.deepseek.com/chat/completions';
 const APPROVE_THRESHOLD = 90;
 const HUMAN_THRESHOLD = 70;
+
+// ── Catalog image lookup ──
+let _catalogImages = null;
+function loadCatalogImages() {
+  if (_catalogImages) return _catalogImages;
+  _catalogImages = new Map();
+  try {
+    const catalogPath = resolve(process.cwd(), 'public', 'catalog.json');
+    if (existsSync(catalogPath)) {
+      const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'));
+      for (const entry of catalog) {
+        if (entry.imageUrl && entry.reference) {
+          const ref = entry.reference.toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
+          _catalogImages.set(ref, entry.imageUrl);
+        }
+      }
+    }
+  } catch (e) {
+    // silently fail — images are best-effort
+  }
+  return _catalogImages;
+}
+function lookupCatalogImage(ref) {
+  if (!ref) return null;
+  const cat = loadCatalogImages();
+  const normalized = String(ref).toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
+  if (cat.has(normalized)) return cat.get(normalized);
+  for (const [catRef, url] of cat) {
+    if (normalized.startsWith(catRef) || catRef.startsWith(normalized)) return url;
+  }
+  return null;
+}
 
 const RATES = {
   USD: 1.0, USDT: 1.0, HKD: 0.128, EUR: 1.08,
@@ -84,8 +118,16 @@ function parsePrice(text) {
   const usdMatch = t.match(/(?:USD|USDT|\$)\s*(\d{4,8})/i);
   if (usdMatch) return safe(parseInt(usdMatch[1], 10));
 
-  const plainMatch = t.match(/\b(\d{5,8})\b/);
-  if (plainMatch) return safe(parseInt(plainMatch[1], 10));
+  // Plain number — only match 5-8 digit bare numbers when there is NO
+  // reference-like pattern visible. Rolex refs (6 digits) and AP refs
+  // (5 digits) are NOT prices.
+  // Heuristic: if the message contains any known reference pattern, skip
+  // bare-number matching to avoid assigning a ref number as price.
+  const hasRefPattern = /\b(?:RM\s?\d{2}|[345]\d{3}[A-Z]?[\/-]|\d{6}[A-Z]{0,5}\b|\d{5}[A-Z]{2,5}\b|PAM\d{3,5}|IW\d{6,8}|BR0?\d)/i.test(t);
+  if (!hasRefPattern) {
+    const plainMatch = t.match(/\b(\d{5,8})\b/);
+    if (plainMatch) return safe(parseInt(plainMatch[1], 10));
+  }
   return null;
 }
 
@@ -546,6 +588,7 @@ module.exports = async function handler(req, res) {
       verdict: v,
       source,
       channel_id: channelId,
+      image_url: lookupCatalogImage(parsed.ref),
       llm_used: usedLLM,
       // Dedup hash — only stored on the first part (the whole message hash)
       // so that the guard above fires on any repeat of the original message.
@@ -563,6 +606,7 @@ module.exports = async function handler(req, res) {
       priceUSD,
       currency: record.currency,
       source: usedLLM ? 'llm' : 'regex',
+      imageUrl: record.image_url,
     });
   }
 

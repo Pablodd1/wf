@@ -177,9 +177,10 @@ function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>):
     isResidue: raw.isResidue ?? (raw.status === 'RESIDUE'),
     failureFlags: raw.flags || [],
     severity,
-    imageUrl: raw.imageUrl || null,
-    imageCount: raw.imageCount || 0,
-    imageConfirmed: raw.imageConfirmed || false,
+    // Try raw imageUrl first, then client-side catalog lookup by reference
+    imageUrl: raw.imageUrl || lookupCatalogImage(raw.reference) || null,
+    imageCount: (raw.imageUrl || lookupCatalogImage(raw.reference)) ? 1 : 0,
+    imageConfirmed: !!(raw.imageUrl || lookupCatalogImage(raw.reference)),
     autoResolvedFlags: raw.autoResolvedFlags || [],
     buyerCount,
     sellerCount,
@@ -195,6 +196,53 @@ let _cachePromise: Promise<WatchRecord[]> | null = null;
 const CACHE_KEY = 'wf_watch_data_cache';
 const CACHE_TIMESTAMP_KEY = 'wf_watch_data_timestamp';
 const CACHE_TTL = 10 * 60 * 1000; // 10 minutes — data stays fresh for 10 min
+
+// ── Catalog image lookup (client-side) ──
+let _catalogImages: Map<string, string> | null = null;
+
+/** Normalize a reference for catalog matching */
+function normalizeForCatalog(ref: string): string {
+return (ref || '').toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
+}
+
+/** Load catalog image URLs from public/catalog.json and build a lookup map */
+async function loadCatalogImages(): Promise<Map<string, string>> {
+if (_catalogImages) return _catalogImages;
+_catalogImages = new Map();
+try {
+  const resp = await fetch('/catalog.json');
+  if (resp.ok) {
+    const catalog = await resp.json();
+    for (const entry of catalog) {
+      if (entry.imageUrl && entry.reference) {
+        const ref = normalizeForCatalog(entry.reference);
+        _catalogImages.set(ref, entry.imageUrl);
+      }
+    }
+    if (_catalogImages.size > 0) {
+      console.log(`[catalog] Loaded ${_catalogImages.size} catalog images for enrichment`);
+    }
+  }
+} catch (e) {
+  console.warn('[catalog] Failed to load catalog images:', e);
+}
+return _catalogImages;
+}
+
+/** Look up the best matching image URL for a reference from the catalog */
+function lookupCatalogImage(reference: string): string | null {
+if (!_catalogImages || !reference) return null;
+const ref = normalizeForCatalog(reference);
+// Exact match
+if (_catalogImages.has(ref)) return _catalogImages.get(ref)!;
+// Partial match (e.g. "5711/1A-010" matches catalog "5711/1A")
+for (const [catRef, url] of _catalogImages) {
+  if (ref.startsWith(catRef) || catRef.startsWith(ref)) {
+    return url;
+  }
+}
+return null;
+}
 
 // Try to restore from localStorage on startup
 try {
@@ -223,6 +271,8 @@ function loadWatchData(): Promise<WatchRecord[]> {
   
   // HYBRID APPROACH: Try Supabase API first (fast, paginated), fallback to JSON
   _cachePromise = (async () => {
+    // Pre-load catalog images for enrichment (parallel with data fetch)
+    loadCatalogImages(); // fire-and-forget, populates _catalogImages
     // Try Supabase API for first 1000 records (instant load)
     try {
       const statsResp = await fetch('/api/watch-data?stats=true');
@@ -272,9 +322,10 @@ function loadWatchData(): Promise<WatchRecord[]> {
           isResidue: r.verdict === 'RECYCLE' ? true : (r.verdict === 'HUMAN' ? false : false),
           failureFlags: r.flags || [],
           severity: r.verdict === 'RECYCLE' ? 'CRITICAL' : r.verdict === 'HUMAN' ? 'WARNING' : 'INFO',
-          imageUrl: r.front_image ? `/images/${r.front_image}` : null,
-          imageCount: r.front_image ? 1 : 0,
-          imageConfirmed: false,
+          // Prefer server-enriched image_url, then client-side catalog lookup, then front_image fallback
+          imageUrl: r.image_url || lookupCatalogImage(r.reference) || (r.front_image ? `/images/${r.front_image}` : null),
+          imageCount: r.image_url || r.front_image || lookupCatalogImage(r.reference) ? 1 : 0,
+          imageConfirmed: !!(r.image_url || lookupCatalogImage(r.reference)),
           autoResolvedFlags: [],
           buyerCount: 0,
           sellerCount: 0,

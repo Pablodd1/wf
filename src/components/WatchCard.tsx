@@ -13,6 +13,17 @@ interface WatchCardProps {
   onSelect: (record: WatchRecord) => void;
 }
 
+const RATES: Record<string, number> = {
+  USD: 1.0, USDT: 1.0, HKD: 0.128, EUR: 1.08,
+  GBP: 1.27, CHF: 1.13, SGD: 0.74, AUD: 0.65,
+  CAD: 0.73, JPY: 0.0066, CNY: 0.138, RMB: 0.138,
+};
+
+function toUSD(amount: number, currency: string): number {
+  const rate = RATES[(currency || 'USD').toUpperCase()] || 1.0;
+  return Math.round(amount * rate);
+}
+
 export function WatchCard({ record, index, onSelect }: WatchCardProps) {
   const confidencePct = Math.round(record.confidence ?? 0);
 
@@ -23,9 +34,27 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
         ? '#F59E0B'
         : '#EF4444';
 
-  const formattedPrice = record.price
+  // Compute proper USD display:
+  // - If the originalCurrency is not USD, show the original price + currency
+  //   and the converted USD amount as a muted sub-line.
+  // - If already USD, just show the USD price.
+  const isNonUsd = record.originalCurrency &&
+    record.originalCurrency !== 'USD' &&
+    record.originalCurrency !== 'USDT' &&
+    record.originalPrice > 0;
+
+  const displayPrice = record.price > 0
     ? `$${record.price.toLocaleString()}`
     : '—';
+
+  // Compute what the USD equivalent *should* be from original price + rate
+  const usdFromOriginal = isNonUsd
+    ? toUSD(record.originalPrice, record.originalCurrency)
+    : 0;
+
+  // Show the USD conversion sub-line only when we have original non-USD data
+  // that differs from the stored price
+  const showConversion = isNonUsd && usdFromOriginal > 0;
 
   return (
     <motion.div
@@ -101,9 +130,26 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
       </div>
 
       {/* Price */}
-      <div className="text-gold-primary font-mono text-xl font-bold mb-2">
-        {formattedPrice}
+      <div className="mb-2">
+        <div className="text-gold-primary font-mono text-xl font-bold">
+          {displayPrice}
+        </div>
+        {showConversion && (
+          <div className="text-[10px] text-text-muted font-mono mt-0.5">
+            {record.originalCurrency} {record.originalPrice.toLocaleString()} ≈ ${usdFromOriginal.toLocaleString()} USD
+          </div>
+        )}
       </div>
+
+      {/* ML Predicted Price */}
+      {record.mlPredictedPrice > 0 && (
+        <div className="flex items-center justify-between text-[10px] text-text-muted mb-2 px-2 py-1 bg-bg-elevated rounded border border-border-default">
+          <span>AI Est. Market Value</span>
+          <span className="font-mono font-bold text-text-primary">
+            ${record.mlPredictedPrice.toLocaleString()}
+          </span>
+        </div>
+      )}
 
       {/* Liquidity / Taxonomy Badge */}
       <div className="mb-3 p-2 bg-bg-elevated rounded border border-border-default">
