@@ -1,0 +1,192 @@
+{
+  "startedAt": "2026-06-25T23:49:17.017Z",
+  "totalProcessed": 3600,
+  "totalApproved": 1403,
+  "totalReview": 0,
+  "totalHuman": 1854,
+  "totalRecycle": 343,
+  "lastOffset": 3600,
+  "batches": [
+    {
+      "offset": 0,
+      "count": 200,
+      "approved": 11,
+      "review": 0,
+      "human": 189,
+      "recycle": 0,
+      "errors": 0,
+      "at": "2026-06-25T23:49:28.215Z"
+    },
+    {
+      "offset": 200,
+      "count": 200,
+      "approved": 2,
+      "review": 0,
+      "human": 198,
+      "recycle": 0,
+      "errors": 0,
+      "at": "2026-06-25T23:49:35.287Z"
+    },
+    {
+      "offset": 400,
+      "count": 200,
+      "approved": 37,
+      "review": 0,
+      "human": 163,
+      "recycle": 0,
+      "errors": 0,
+      "at": "2026-06-25T23:49:39.619Z"
+    },
+    {
+      "offset": 600,
+      "count": 200,
+      "approved": 16,
+      "review": 0,
+      "human": 184,
+      "recycle": 0,
+      "errors": 0,
+      "at": "2026-06-25T23:49:48.126Z"
+    },
+    {
+      "offset": 800,
+      "count": 200,
+      "approved": 67,
+      "review": 0,
+      "human": 133,
+      "recycle": 0,
+      "errors": 0,
+      "at": "2026-06-25T23:49:52.217Z"
+    },
+    {
+      "offset": 1000,
+      "count": 200,
+      "approved": 84,
+      "review": 0,
+      "human": 80,
+      "recycle": 36,
+      "errors": 0,
+      "at": "2026-06-25T23:57:37.347Z"
+    },
+    {
+      "offset": 1200,
+      "count": 200,
+      "approved": 92,
+      "review": 0,
+      "human": 76,
+      "recycle": 32,
+      "errors": 0,
+      "at": "2026-06-25T23:57:42.137Z"
+    },
+    {
+      "offset": 1400,
+      "count": 200,
+      "approved": 98,
+      "review": 0,
+      "human": 73,
+      "recycle": 29,
+      "errors": 0,
+      "at": "2026-06-25T23:57:50.260Z"
+    },
+    {
+      "offset": 1600,
+      "count": 200,
+      "approved": 124,
+      "review": 0,
+      "human": 65,
+      "recycle": 11,
+      "errors": 0,
+      "at": "2026-06-25T23:57:59.754Z"
+    },
+    {
+      "offset": 1800,
+      "count": 200,
+      "approved": 87,
+      "review": 0,
+      "human": 90,
+      "recycle": 23,
+      "errors": 0,
+      "at": "2026-06-25T23:58:13.594Z"
+    },
+    {
+      "offset": 2000,
+      "count": 200,
+      "approved": 110,
+      "review": 0,
+      "human": 71,
+      "recycle": 19,
+      "errors": 0,
+      "at": "2026-06-25T23:58:22.786Z"
+    },
+    {
+      "offset": 2200,
+      "count": 200,
+      "approved": 109,
+      "review": 0,
+      "human": 66,
+      "recycle": 25,
+      "errors": 0,
+      "at": "2026-06-25T23:58:38.176Z"
+    },
+    {
+      "offset": 2400,
+      "count": 200,
+      "approved": 80,
+      "review": 0,
+      "human": 83,
+      "recycle": 37,
+      "errors": 0,
+      "at": "2026-06-25T23:58:47.203Z"
+    },
+    {
+      "offset": 2600,
+      "count": 200,
+      "approved": 103,
+      "review": 0,
+      "human": 83,
+      "recycle": 14,
+      "errors": 0,
+      "at": "2026-06-25T23:59:10.893Z"
+    },
+    {
+      "offset": 2800,
+      "count": 200,
+      "approved": 122,
+      "review": 0,
+      "human": 68,
+      "recycle": 10,
+      "errors": 0,
+      "at": "2026-06-25T23:59:20.859Z"
+    },
+    {
+      "offset": 3000,
+      "count": 200,
+      "approved": 84,
+      "review": 0,
+      "human": 80,
+      "recycle": 36,
+      "errors": 0,
+      "at": "2026-06-25T23:59:28.467Z"
+    },
+    {
+      "offset": 3200,
+      "count": 200,
+      "approved": 87,
+      "review": 0,
+      "human": 82,
+      "recycle": 31,
+      "errors": 0,
+      "at": "2026-06-25T23:59:38.529Z"
+    },
+    {
+      "offset": 3400,
+      "count": 200,
+      "approved": 90,
+      "review": 0,
+      "human": 70,
+      "recycle": 40,
+      "errors": 0,
+      "at": "2026-06-25T23:59:47.525Z"
+    }
+  ],
+  "lastRunAt": "2026-06-25T23:59:47.525Z"
+}

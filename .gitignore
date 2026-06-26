@@ -24,3 +24,6 @@ whatsapp-qr.png
 add_groups_result.json
 scripts/migrate_offset.txt
 .env*.local
+.env.scripts
+.env.local.fixed
+.env.vercel.local
