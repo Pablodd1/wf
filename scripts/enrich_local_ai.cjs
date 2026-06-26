@@ -96,14 +96,18 @@ function buildUpdate(ex, row) {
   const verdict = conf>=APPROVE_T?'APPROVED':conf<35?'RECYCLE':'HUMAN';
   if(verdict==='HUMAN') return null; // no change — skip write
 
-  // Only send non-null fields + required id/verdict/confidence
-  const update = {id:row.id, verdict, confidence:conf};
-  if(brand)  update.brand     = brand;
-  if(ref)    update.reference = ref;
-  if(price)  update.price_raw = price;
-  if(price)  update.price_usd = toUSD(price,cur);
-  if(cur)    update.currency  = cur;
-  if(ex.condition) update.condition = ex.condition;
+  // All rows must have identical keys for Supabase batch upsert
+  const update = {
+    id:         row.id,
+    verdict,
+    confidence: conf,
+    brand:      brand    || null,
+    reference:  ref      || null,
+    price_raw:  price    || null,
+    price_usd:  price ? toUSD(price,cur) : null,
+    currency:   cur      || null,
+    condition:  ex?.condition || null,
+  };
   return update;
 }
 

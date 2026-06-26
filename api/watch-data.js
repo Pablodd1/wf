@@ -29,6 +29,13 @@ function loadCatalogImages() {
         const ref = entry.reference.toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
         _catalogByRef.set(ref, entry.imageUrl);
       }
+      // Also handle snake_case image_url field
+      if (entry.image_url && entry.reference) {
+        const ref = entry.reference.toUpperCase().replace(/[^A-Z0-9\/\-]/g, '');
+        if (!_catalogByRef.has(ref)) {
+          _catalogByRef.set(ref, entry.image_url);
+        }
+      }
     }
     console.log(`[catalog] Loaded ${_catalogByRef.size} image URLs for catalog enrichment`);
   } catch (e) {

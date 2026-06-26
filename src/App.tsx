@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 
 // Code-split every route — each page loads on demand, not all at once.
@@ -24,9 +24,10 @@ function PageLoader() {
 }
 
 export default function App() {
+  const location = useLocation();
   return (
     <Suspense fallback={<PageLoader />}>
-      <Routes>
+      <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Home />} />
         <Route path="/search" element={<SearchPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
