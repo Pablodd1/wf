@@ -1,5 +1,5 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { lazy, Suspense, memo } from 'react';
+import { lazy, Suspense } from 'react';
 
 // Code-split every route — each page loads on demand, not all at once.
 const Home = lazy(() => import('@/pages/Home'));
@@ -24,7 +24,7 @@ function PageLoader() {
 }
 
 /** Wrapper that forces route remount on location change via key */
-const AppRoutes = memo(function AppRoutes() {
+function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
@@ -39,7 +39,7 @@ const AppRoutes = memo(function AppRoutes() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
-});
+}
 
 export default function App() {
   const location = useLocation();
