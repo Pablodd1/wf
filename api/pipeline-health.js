@@ -40,13 +40,26 @@ module.exports = async function handler(req, res) {
     const countRange = countResp.headers.get('content-range') || '0/0';
     const totalLive = parseInt(countRange.split('/')[1] || '0');
 
-    // Get total from watch_records (historical)
+    // Get total from watch_records (main catalog — the big number)
     const histResp = await fetch(
       `${SUPABASE_URL}/rest/v1/watch_records?select=*`,
       { headers: { ...headers, 'Prefer': 'count=exact', 'Range': '0-0' } }
     );
     const histRange = histResp.headers.get('content-range') || '0/0';
     const totalHistorical = parseInt(histRange.split('/')[1] || '0');
+
+    // Verdict breakdown from watch_records
+    const verdictCounts = {};
+    for (const v of ['APPROVED','HUMAN','RECYCLE','REVIEW']) {
+      try {
+        const vr = await fetch(
+          `${SUPABASE_URL}/rest/v1/watch_records?select=count&verdict=eq.${v}`,
+          { headers: { ...headers, 'Prefer': 'count=exact' } }
+        );
+        const vcr = vr.headers.get('content-range') || '0/0';
+        verdictCounts[v] = parseInt(vcr.split('/')[1] || '0');
+      } catch { verdictCounts[v] = 0; }
+    }
 
     // Get recent records (last 100) for breakdowns
     const recentResp = await fetch(
@@ -96,7 +109,8 @@ module.exports = async function handler(req, res) {
       totals: {
         liveRecords: totalLive,
         historicalRecords: totalHistorical,
-        combined: totalLive + totalHistorical,
+        combined: totalHistorical || (totalLive + totalHistorical),
+        watchRecords: totalHistorical,
       },
       
       recentActivity: {
@@ -105,6 +119,7 @@ module.exports = async function handler(req, res) {
         messagesInLast100: recent.length,
       },
       
+      verdicts: verdictCounts,
       breakdowns: {
         bySource,
         byBrand: Object.entries(byBrand)

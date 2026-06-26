@@ -385,27 +385,40 @@ export function useWatchData() {
     return () => { alive = false; clearInterval(progressTimer); };
   }, []);
 
-  // Fetch live stats from pipeline-health API (accururate, not cached)
+  // Fetch live stats from watch_records (the full 1.5M record DB)
   useEffect(() => {
-    fetch('/api/pipeline-health')
+    fetch('/api/watch-data?stats=true')
       .then(r => r.json())
       .then(data => {
-        if (data?.totals?.liveRecords) {
-          const b = data.breakdowns?.byVerdict || {};
-          const approved = b.APPROVED || 0;
-          const human = b.HUMAN || 0;
-          const recycle = b.RECYCLE || 0;
-          const total = approved + human + recycle;
+        const v = data?.verdicts || {};
+        const approved = v.APPROVED || 0;
+        const human    = v.HUMAN    || 0;
+        const recycle  = v.RECYCLE  || 0;
+        const total    = data.total || (approved + human + recycle);
+        if (total > 0) {
           setLiveStats({
-            accuracyRate: total > 0 ? Math.round((approved / total) * 100) : 0,
-            totalProcessed: data.totals.liveRecords,
+            accuracyRate:   total > 0 ? Math.round((approved / total) * 100) : 0,
+            totalProcessed: total,
             approved,
             human,
             recycle,
           });
+        } else {
+          // Fallback to pipeline-health if watch-data stats unavailable
+          fetch('/api/pipeline-health')
+            .then(r2 => r2.json())
+            .then(ph => {
+              const b = ph?.breakdowns?.byVerdict || {};
+              const a2 = b.APPROVED || 0, h2 = b.HUMAN || 0, r2c = b.RECYCLE || 0;
+              const t2 = ph?.totals?.combined || (a2+h2+r2c);
+              if (t2 > 0) setLiveStats({
+                accuracyRate: Math.round((a2/t2)*100),
+                totalProcessed: t2, approved: a2, human: h2, recycle: r2c,
+              });
+            }).catch(() => {});
         }
       })
-      .catch(e => console.warn('[useWatchData] pipeline-health fetch failed:', e));
+      .catch(e => console.warn('[useWatchData] stats fetch failed:', e));
   }, []);
 
   const stats = {

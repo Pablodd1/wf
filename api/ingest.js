@@ -522,17 +522,52 @@ module.exports = async function handler(req, res) {
     });
   }
 
-  // Batch insert all records to Supabase
+  // Persist to Supabase — TWO tables:
+  // 1. live_ingest: real-time stream (all messages, chronological)
+  // 2. watch_records: main catalog (run-once, skip if already scored)
   let persisted = 0;
   if (supabaseUrl && serviceKey && allRecords.length > 0) {
+    // Write to live_ingest (always — this is the live feed)
     try {
       persisted = await supabaseBatchInsert(allRecords, supabaseUrl, serviceKey);
     } catch (e) {
-      console.error('[ingest] Supabase write failed:', e.message);
-      // Fallback: insert one by one
+      console.error('[ingest] live_ingest write failed:', e.message);
       for (const record of allRecords) {
         try { await supabaseUpsert(record, supabaseUrl, serviceKey); persisted++; } catch {}
       }
+    }
+
+    // Also write to watch_records (main catalog) — ignore duplicates
+    // This is the RUN-ONCE guarantee: same message never re-processed
+    try {
+      const wrRecords = allRecords.map(r => ({
+        id: r.id || r.message_hash || (`demo_${Date.now()}_${Math.random().toString(36).slice(2)}`),
+        brand: r.brand,
+        reference: r.reference,
+        dial_color: r.dial_color,
+        condition: r.condition,
+        year: r.year,
+        price_raw: r.price_raw,
+        price_usd: r.price_usd,
+        currency: r.currency,
+        confidence: r.confidence,
+        verdict: r.verdict,
+        source: r.source || 'whatsapp',
+        raw_message: r.raw_message,
+        flags: r.flags || {},
+      }));
+      await fetch(\`\${supabaseUrl}/rest/v1/watch_records\`, {
+        method: 'POST',
+        headers: {
+          'apikey': serviceKey,
+          'Authorization': \`Bearer \${serviceKey}\`,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=ignore-duplicates,return=minimal',
+        },
+        body: JSON.stringify(wrRecords),
+      });
+    } catch (e) {
+      console.error('[ingest] watch_records write failed:', e.message);
     }
   }
 
