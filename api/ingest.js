@@ -558,11 +558,11 @@ module.exports = async function handler(req, res) {
         raw_message: r.raw_message,
         flags: r.flags || {},
       }));
-      await fetch(\`\${supabaseUrl}/rest/v1/watch_records\`, {
+      await fetch(`\${supabaseUrl}/rest/v1/watch_records`, {
         method: 'POST',
         headers: {
           'apikey': serviceKey,
-          'Authorization': \`Bearer \${serviceKey}\`,
+          'Authorization': `Bearer \${serviceKey}`,
           'Content-Type': 'application/json',
           'Prefer': 'resolution=ignore-duplicates,return=minimal',
         },
