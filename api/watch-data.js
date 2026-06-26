@@ -41,15 +41,15 @@ export default async function handler(req, res) {
     }
   }
 
-  // Helper: count with fallback to 0
+  // Helper: count with estimated fallback (exact times out on 1.3M+ rows)
   async function countVerdict(verdict) {
     try {
       const r = await sbFetch(
-        `${supabaseUrl}/rest/v1/watch_records?select=count&verdict=eq.${verdict}`,
-        { headers: { ...headers, 'Prefer': 'count=exact' } },
+        `${supabaseUrl}/rest/v1/watch_records?select=id&verdict=eq.${verdict}&limit=0`,
+        { headers: { ...headers, 'Prefer': 'count=estimated' } },
         9000
       );
-      const cr = r.headers.get('content-range') || '0/0';
+      const cr = r.headers.get('content-range') || '*/0';
       return parseInt(cr.split('/')[1] || '0');
     } catch { return 0; }
   }
@@ -64,11 +64,11 @@ export default async function handler(req, res) {
       let total = 0;
       try {
         const cr = await sbFetch(
-          `${supabaseUrl}/rest/v1/watch_records?select=count`,
-          { headers: { ...headers, 'Prefer': 'count=exact', 'Range': '0-0' } },
+          `${supabaseUrl}/rest/v1/watch_records?select=id&limit=0`,
+          { headers: { ...headers, 'Prefer': 'count=estimated' } },
           9000
         );
-        const crh = cr.headers.get('content-range') || '0/0';
+        const crh = cr.headers.get('content-range') || '*/0';
         total = parseInt(crh.split('/')[1] || '0');
       } catch { total = 0; }
 
