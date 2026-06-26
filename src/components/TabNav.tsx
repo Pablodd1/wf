@@ -26,8 +26,6 @@ export function TabNav({ totalProcessed }: TabNavProps) {
             key={to}
             to={to}
             end={to === '/'}
-            target="_blank"
-            rel="noopener noreferrer"
             className={({ isActive }) =>
               `flex items-center gap-2 px-4 py-2.5 text-xs font-semibold uppercase tracking-wider border-b-2 transition-colors ${
                 isActive
