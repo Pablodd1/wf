@@ -1,0 +1,111 @@
+Starting batch verdict update...
+Total records: 100000
+Error prod_ad4be21b-83ca-45c1-9: fetch failed
+Error prod_5c19b883-e577-4ae5-9: fetch failed
+Error prod_f372bcc1-2812-4553-8: fetch failed
+Progress: 1000/100000 (1.0%) - 0 OK, 1000 failed
+Progress: 2000/100000 (2.0%) - 0 OK, 2000 failed
+Progress: 3000/100000 (3.0%) - 0 OK, 3000 failed
+Progress: 4000/100000 (4.0%) - 0 OK, 4000 failed
+Progress: 5000/100000 (5.0%) - 0 OK, 5000 failed
+Progress: 6000/100000 (6.0%) - 0 OK, 6000 failed
+Progress: 7000/100000 (7.0%) - 0 OK, 7000 failed
+Progress: 8000/100000 (8.0%) - 0 OK, 8000 failed
+Progress: 9000/100000 (9.0%) - 0 OK, 9000 failed
+Progress: 10000/100000 (10.0%) - 0 OK, 10000 failed
+Progress: 11000/100000 (11.0%) - 0 OK, 11000 failed
+Progress: 12000/100000 (12.0%) - 0 OK, 12000 failed
+Progress: 13000/100000 (13.0%) - 0 OK, 13000 failed
+Progress: 14000/100000 (14.0%) - 0 OK, 14000 failed
+Progress: 15000/100000 (15.0%) - 0 OK, 15000 failed
+Progress: 16000/100000 (16.0%) - 0 OK, 16000 failed
+Progress: 17000/100000 (17.0%) - 0 OK, 17000 failed
+Progress: 18000/100000 (18.0%) - 0 OK, 18000 failed
+Progress: 19000/100000 (19.0%) - 0 OK, 19000 failed
+Progress: 20000/100000 (20.0%) - 0 OK, 20000 failed
+Progress: 21000/100000 (21.0%) - 0 OK, 21000 failed
+Progress: 22000/100000 (22.0%) - 0 OK, 22000 failed
+Progress: 23000/100000 (23.0%) - 0 OK, 23000 failed
+Progress: 24000/100000 (24.0%) - 0 OK, 24000 failed
+Progress: 25000/100000 (25.0%) - 0 OK, 25000 failed
+Progress: 26000/100000 (26.0%) - 0 OK, 26000 failed
+Progress: 27000/100000 (27.0%) - 0 OK, 27000 failed
+Progress: 28000/100000 (28.0%) - 0 OK, 28000 failed
+Progress: 29000/100000 (29.0%) - 0 OK, 29000 failed
+Progress: 30000/100000 (30.0%) - 0 OK, 30000 failed
+Progress: 31000/100000 (31.0%) - 0 OK, 31000 failed
+Progress: 32000/100000 (32.0%) - 0 OK, 32000 failed
+Progress: 33000/100000 (33.0%) - 0 OK, 33000 failed
+Progress: 34000/100000 (34.0%) - 0 OK, 34000 failed
+Progress: 35000/100000 (35.0%) - 0 OK, 35000 failed
+Progress: 36000/100000 (36.0%) - 0 OK, 36000 failed
+Progress: 37000/100000 (37.0%) - 0 OK, 37000 failed
+Progress: 38000/100000 (38.0%) - 0 OK, 38000 failed
+Progress: 39000/100000 (39.0%) - 0 OK, 39000 failed
+Progress: 40000/100000 (40.0%) - 0 OK, 40000 failed
+Progress: 41000/100000 (41.0%) - 0 OK, 41000 failed
+Progress: 42000/100000 (42.0%) - 0 OK, 42000 failed
+Progress: 43000/100000 (43.0%) - 0 OK, 43000 failed
+Progress: 44000/100000 (44.0%) - 0 OK, 44000 failed
+Progress: 45000/100000 (45.0%) - 0 OK, 45000 failed
+Progress: 46000/100000 (46.0%) - 0 OK, 46000 failed
+Progress: 47000/100000 (47.0%) - 0 OK, 47000 failed
+Progress: 48000/100000 (48.0%) - 0 OK, 48000 failed
+Progress: 49000/100000 (49.0%) - 0 OK, 49000 failed
+Progress: 50000/100000 (50.0%) - 0 OK, 50000 failed
+Progress: 51000/100000 (51.0%) - 0 OK, 51000 failed
+Progress: 52000/100000 (52.0%) - 0 OK, 52000 failed
+Progress: 53000/100000 (53.0%) - 0 OK, 53000 failed
+Progress: 54000/100000 (54.0%) - 0 OK, 54000 failed
+Progress: 55000/100000 (55.0%) - 0 OK, 55000 failed
+Progress: 56000/100000 (56.0%) - 0 OK, 56000 failed
+Progress: 57000/100000 (57.0%) - 0 OK, 57000 failed
+Progress: 58000/100000 (58.0%) - 0 OK, 58000 failed
+Progress: 59000/100000 (59.0%) - 0 OK, 59000 failed
+Progress: 60000/100000 (60.0%) - 0 OK, 60000 failed
+Progress: 61000/100000 (61.0%) - 0 OK, 61000 failed
+Progress: 62000/100000 (62.0%) - 0 OK, 62000 failed
+Progress: 63000/100000 (63.0%) - 0 OK, 63000 failed
+Progress: 64000/100000 (64.0%) - 0 OK, 64000 failed
+Progress: 65000/100000 (65.0%) - 0 OK, 65000 failed
+Progress: 66000/100000 (66.0%) - 0 OK, 66000 failed
+Progress: 67000/100000 (67.0%) - 0 OK, 67000 failed
+Progress: 68000/100000 (68.0%) - 0 OK, 68000 failed
+Progress: 69000/100000 (69.0%) - 0 OK, 69000 failed
+Progress: 70000/100000 (70.0%) - 0 OK, 70000 failed
+Progress: 71000/100000 (71.0%) - 0 OK, 71000 failed
+Progress: 72000/100000 (72.0%) - 0 OK, 72000 failed
+Progress: 73000/100000 (73.0%) - 0 OK, 73000 failed
+Progress: 74000/100000 (74.0%) - 0 OK, 74000 failed
+Progress: 75000/100000 (75.0%) - 0 OK, 75000 failed
+Progress: 76000/100000 (76.0%) - 0 OK, 76000 failed
+Progress: 77000/100000 (77.0%) - 0 OK, 77000 failed
+Progress: 78000/100000 (78.0%) - 0 OK, 78000 failed
+Progress: 79000/100000 (79.0%) - 0 OK, 79000 failed
+Progress: 80000/100000 (80.0%) - 0 OK, 80000 failed
+Progress: 81000/100000 (81.0%) - 0 OK, 81000 failed
+Progress: 82000/100000 (82.0%) - 0 OK, 82000 failed
+Progress: 83000/100000 (83.0%) - 0 OK, 83000 failed
+Progress: 84000/100000 (84.0%) - 0 OK, 84000 failed
+Progress: 85000/100000 (85.0%) - 0 OK, 85000 failed
+Progress: 86000/100000 (86.0%) - 0 OK, 86000 failed
+Progress: 87000/100000 (87.0%) - 0 OK, 87000 failed
+Progress: 88000/100000 (88.0%) - 0 OK, 88000 failed
+Progress: 89000/100000 (89.0%) - 0 OK, 89000 failed
+Progress: 90000/100000 (90.0%) - 0 OK, 90000 failed
+Progress: 91000/100000 (91.0%) - 0 OK, 91000 failed
+Progress: 92000/100000 (92.0%) - 0 OK, 92000 failed
+Progress: 93000/100000 (93.0%) - 0 OK, 93000 failed
+Progress: 94000/100000 (94.0%) - 0 OK, 94000 failed
+Progress: 95000/100000 (95.0%) - 0 OK, 95000 failed
+Progress: 96000/100000 (96.0%) - 0 OK, 96000 failed
+Progress: 97000/100000 (97.0%) - 0 OK, 97000 failed
+Progress: 98000/100000 (98.0%) - 0 OK, 98000 failed
+Progress: 99000/100000 (99.0%) - 0 OK, 99000 failed
+Progress: 100000/100000 (100.0%) - 0 OK, 100000 failed
+
+UPDATE COMPLETE!
+Total: 100000
+Success: 0
+Failed: 100000
+Success rate: 0.00%
