@@ -92,6 +92,7 @@ function inferBrand(ref) {
   if (/^5[0-9]{3}[A-Z]|^7[0-9]{3}[A-Z]|^8[0-9]{3}[A-Z]|^9[0-9]{3}[A-Z]/.test(r)) return 'Breguet';
   if (/^A[0-9]{4,5}/.test(r) || /^AB[0-9]{4}/.test(r) || /^EB[0-9]{4}/.test(r)) return 'Breitling';
   if (/^IW[0-9]{4,6}/.test(r)) return 'IWC';
+  if (/^BR0?[0-9]{1,2}[-]?[A-Z0-9]{2,8}/i.test(ref)) return 'Bell & Ross';
   return null;
 }
 

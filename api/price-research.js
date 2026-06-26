@@ -92,7 +92,47 @@ module.exports = async function handler(req, res) {
       rows = supaResp.ok ? await supaResp.json() : [];
     }
 
+    // Fallback: check market_prices_seed.json for current price data
     if (!rows || rows.length === 0) {
+      try {
+        const { readFileSync } = require('fs');
+        const { resolve } = require('path');
+        const seedPath = resolve(process.cwd(), 'public', 'market_prices_seed.json');
+        const seedData = JSON.parse(readFileSync(seedPath, 'utf8'));
+        const refUpper = reference.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const seedMatch = seedData.find(s => {
+          const sRef = (s.reference || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+          return sRef === refUpper || sRef.startsWith(refUpper) || refUpper.startsWith(sRef);
+        });
+        if (seedMatch) {
+          return res.status(200).json({
+            success: true,
+            reference,
+            brand: seedMatch.brand,
+            model: seedMatch.model,
+            primaryDial: 'Unknown',
+            dialColors: [],
+            liquidity: { fsCount: seedMatch.listings_count || 0 },
+            pricing: {
+              current: {
+                min: seedMatch.current_min_usd,
+                avg: seedMatch.current_avg_usd,
+                max: seedMatch.current_max_usd,
+                count: seedMatch.listings_count || 0,
+              },
+              drift: seedMatch.trend === 'up' ? 5 : seedMatch.trend === 'down' ? -5 : 0,
+              previousAvg: seedMatch.current_avg_usd,
+            },
+            chart: [],
+            listings: [],
+            totalListings: seedMatch.listings_count || 0,
+            outliers: 0, duplicates: 0,
+            source: seedMatch.source,
+            note: 'Market reference data — upload listings to see full chart',
+          });
+        }
+      } catch (seedErr) { /* seed fallback failed, continue */ }
+
       return res.status(200).json({
         success: false,
         reference,

@@ -280,64 +280,12 @@ export default function PriceResearch() {
               <PriceForecast chart={data.chart} reference={data.reference} brand={data.brand} model={data.model} forecastData={data.forecast} />
             )}
 
-            {/* ── Chart ────────────────────────────────────────── */}
-            <div style={{ backgroundColor: BG_ELEV, borderRadius: 12, padding: 24, marginBottom: 24 }}>
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex gap-4">
-                  <span style={{ fontSize: 13, fontWeight: 600, color: GOLD, cursor: 'pointer', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>Date</span>
-                  <span style={{ fontSize: 13, color: MUTED, cursor: 'pointer' }}>6M</span>
-                </div>
-                <div className="flex gap-3">
-                  <span style={{ fontSize: 13, color: MUTED, cursor: 'pointer' }}>Presentation</span>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: GOLD, cursor: 'pointer', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>All</span>
-                </div>
-              </div>
-              
-              <ResponsiveContainer width="100%" height={280}>
-                <ComposedChart data={data.chart}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#dee2e6" />
-                  <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
-                  <YAxis stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                  <Tooltip
-                    contentStyle={{ backgroundColor: BG_CARD, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
-                    formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
-                  />
-                  <Area type="monotone" dataKey="max" stroke="none" fill={RED} fillOpacity={0.05} />
-                  <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
-                  <Line type="monotone" dataKey="max" stroke={RED} strokeWidth={1} dot={false} />
-                  <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} 
-                    dot={(props: any) => {
-                      const { cx, cy, index } = props;
-                      return (
-                        <g onClick={() => setSelectedMonth(index)} style={{ cursor: 'pointer' }}>
-                          <circle cx={cx} cy={cy} r={6} fill={BLUE} stroke={BG_CARD} strokeWidth={2} />
-                        </g>
-                      );
-                    }}
-                  />
-                  <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} />
-                </ComposedChart>
-              </ResponsiveContainer>
-
-              <div className="flex items-center gap-6 mt-3" style={{ fontSize: 13, color: MUTED }}>
-                <span className="flex items-center gap-1.5">
-                  <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: GREEN, display: 'inline-block' }} />
-                  ${data.pricing.current?.min?.toLocaleString()} MIN
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: BLUE, display: 'inline-block' }} />
-                  ${data.pricing.current?.avg?.toLocaleString()} AVERAGE
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: RED, display: 'inline-block' }} />
-                  ${data.pricing.current?.max?.toLocaleString()} MAX
-                </span>
-              </div>
-
-              <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
-                Based on our chats — This is a summary of how the price is composed. To view the detailed breakdown and see the listings, click the blue dot.
-              </div>
-            </div>
+            {/* ── Chart + 3-Month Prediction ────────────────────── */}
+            <PricePredictionChart
+              chart={data.chart}
+              pricing={data.pricing}
+              onSelectMonth={setSelectedMonth}
+            />
 
             {/* ── Insight Detail Panel ────────────────────────── */}
             {selectedMonth !== null && data.chart[selectedMonth] && (
@@ -406,77 +354,271 @@ function NavBar() {
 function InsightPanel({ data, month, onClose, onSelectListing }: {
   data: PriceData; month: ChartPoint; onClose: () => void; onSelectListing: (l: PriceListing) => void;
 }) {
-  const outlierCount = data.outliers;
-  const dupCount = data.duplicates;
-  const beforeCount = month.count + outlierCount + dupCount;
-  
+  const [catalogEntry, setCatalogEntry] = useState<{ imageUrl?: string } | null>(null);
+  const outlierCount = data.outliers ?? 0;
+  const dupCount = data.duplicates ?? 0;
+
+  // Compute original stats (before dedup + outlier removal)
+  const beforeCount = data.statsBefore?.count ?? (month.count + outlierCount + dupCount);
+  const beforeMin   = data.statsBefore?.min ?? month.min;
+  const beforeAvg   = data.statsBefore?.avg ?? month.avg;
+  const beforeMax   = data.statsBefore?.max ?? month.max;
+
+  // Compute after-dedup stats (filtered, before outlier removal)
+  const afterCount = data.statsAfter?.count ?? (month.count + outlierCount);
+  const afterMin   = data.statsAfter?.min ?? month.min;
+  const afterAvg   = data.statsAfter?.avg ?? month.avg;
+  const afterMax   = data.statsAfter?.max ?? month.max;
+
+  // Filter listings to this month
+  const monthListings = data.listings.filter(l => {
+    if (!l.date) return false;
+    const d = l.date.slice(0, 7); // "YYYY-MM"
+    return d === month.month;
+  });
+  // If no filtered listings, fall back to showing all (some backends may not store date on listings)
+  const displayListings = monthListings.length > 0 ? monthListings : data.listings.slice(0, 15);
+
+  // Fetch catalog image
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/catalog-lookup?reference=${encodeURIComponent(data.reference)}`)
+      .then(r => r.json())
+      .then(d => { if (!cancelled) setCatalogEntry(d.data || {}); })
+      .catch(() => { if (!cancelled) setCatalogEntry({}); });
+    return () => { cancelled = true; };
+  }, [data.reference]);
+
+  const imageUrl = catalogEntry?.imageUrl;
+
+  // Prevent body scroll while open
+  useEffect(() => {
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = ''; };
+  }, []);
+
   return (
-    <div style={{ backgroundColor: BG_CARD, borderRadius: 12, border: `1px solid ${BORDER}`, marginBottom: 24, overflow: 'hidden', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-      <div style={{ backgroundColor: GOLD, padding: '16px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h3 style={{ color: BG_CARD, fontSize: 16, fontWeight: 600 }}>Insight Details</h3>
-        <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,0.7)', cursor: 'pointer', fontSize: 18 }}>×</button>
-      </div>
-      
-      <div style={{ padding: 24 }}>
-        {/* Header info */}
-        <div style={{ fontSize: 14, color: GOLD, marginBottom: 16 }}>
-          <div><strong>Reference:</strong> {data.reference}</div>
-          <div><strong>Dial Color:</strong> {data.primaryDial}</div>
-          <div><strong>Condition Category:</strong> Any</div>
-          <div style={{ color: MUTED, marginTop: 4 }}>Listings created from month range</div>
-        </div>
-
-        {/* Before/After stats */}
-        <div className="grid grid-cols-2 gap-6 mb-6">
-          <div style={{ backgroundColor: '#1e293b', borderRadius: 8, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: GOLD, marginBottom: 12 }}>Stats (Original)</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Data Points: {beforeCount}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Min: ${(data.statsBefore?.min || month.min - 2000).toLocaleString()}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Avg: ${(data.statsBefore?.avg || month.avg + 2700).toLocaleString()}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Max: ${(data.statsBefore?.max || month.max + 3000).toLocaleString()}</div>
+    /* Full-screen modal overlay */
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 200,
+        backgroundColor: 'rgba(0,0,0,0.72)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '16px',
+      }}
+      onClick={onClose}
+    >
+      {/* Panel */}
+      <div
+        style={{
+          backgroundColor: BG_CARD, borderRadius: 16, width: '100%', maxWidth: 780,
+          maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+          border: `1px solid ${BORDER}`, boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        {/* ── Header bar ── */}
+        <div style={{ backgroundColor: GOLD, padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <div>
+            <h3 style={{ color: BG_CARD, fontSize: 16, fontWeight: 700, margin: 0 }}>Insight Details</h3>
+            <div style={{ fontSize: 12, color: 'rgba(15,23,42,0.65)', marginTop: 2 }}>
+              {month.month} · Click outside to close
+            </div>
           </div>
-          <div style={{ backgroundColor: '#1e293b', borderRadius: 8, padding: 16 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: GOLD, marginBottom: 12 }}>Stats (Filtered by custom math)</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Data Points: {month.count}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Min: ${month.min.toLocaleString()}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Avg: ${month.avg.toLocaleString()}</div>
-            <div style={{ fontSize: 13, color: MUTED }}>Max: ${month.max.toLocaleString()}</div>
-          </div>
+          <button
+            onClick={onClose}
+            style={{ background: 'none', border: 'none', color: BG_CARD, cursor: 'pointer', fontSize: 22, lineHeight: 1, opacity: 0.7, padding: '0 4px' }}
+            aria-label="Close"
+          >×</button>
         </div>
 
-        {/* Outlier/Dupe info */}
-        <div style={{ backgroundColor: '#1e293b', borderRadius: 8, padding: 16, marginBottom: 16 }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: RED, marginBottom: 8 }}>Duplicated — Removed: {dupCount}</div>
-          <div style={{ fontSize: 13, fontWeight: 600, color: RED }}>Outliers — Removed: {outlierCount}</div>
-        </div>
+        {/* ── Scrollable body ── */}
+        <div style={{ overflowY: 'auto', flex: 1, padding: 24 }}>
 
-        {/* Listings */}
-        <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16 }}>
-          <div style={{ fontSize: 14, fontWeight: 600, color: GOLD, marginBottom: 12 }}>Listings</div>
-          {data.listings.slice(0, 10).map((l, i) => (
-            <div key={i} 
-              onClick={() => onSelectListing(l)}
-              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}>
-              <div style={{ width: 56, height: 56, borderRadius: 6, backgroundColor: BG_ELEV, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: MUTED, flexShrink: 0 }}>
-                🖼
+          {/* 1 ── Watch identity header */}
+          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', marginBottom: 24 }}>
+            {/* Watch image or placeholder */}
+            <div style={{
+              width: 96, height: 96, borderRadius: 10, flexShrink: 0,
+              backgroundColor: BG_ELEV, border: `1px solid ${BORDER}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              overflow: 'hidden',
+            }}>
+              {imageUrl ? (
+                <img src={imageUrl} alt={data.reference} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : (
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.5">
+                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
+                  <rect x="10" y="1" width="4" height="3" rx="1" /><rect x="10" y="20" width="4" height="3" rx="1" />
+                </svg>
+              )}
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12, color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 }}>{data.brand}</div>
+              <div style={{ fontSize: 20, fontWeight: 700, color: TEXT }}>{data.model}</div>
+              <div style={{ fontSize: 15, color: GOLD, fontFamily: 'monospace', marginTop: 2 }}>{data.reference}</div>
+              <div style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>
+                <span>Dial: <strong style={{ color: TEXT }}>{data.primaryDial}</strong></span>
+                <span style={{ margin: '0 12px', color: BORDER }}>|</span>
+                <span>Month: <strong style={{ color: TEXT }}>{month.month}</strong></span>
+                <span style={{ margin: '0 12px', color: BORDER }}>|</span>
+                <span>Listings in period: <strong style={{ color: TEXT }}>{month.count}</strong></span>
               </div>
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{l.title}</div>
-                <div className="flex gap-2 mt-0.5" style={{ fontSize: 12, color: MUTED }}>
-                  {l.region && <span>{l.region}</span>}
-                  {l.phone && <span>{l.phone}</span>}
-                  {l.date && <span>Posted: {l.date}</span>}
+            </div>
+          </div>
+
+          {/* 2 ── Stats (Original) + 4 ── Stats (Filtered) side by side */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
+            {/* Stats Original */}
+            <div style={{ backgroundColor: BG_ELEV, borderRadius: 10, padding: 16, border: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Stats (Original)</div>
+              <StatRow label="Data Points" value={beforeCount} />
+              <StatRow label="Min" value={`$${beforeMin.toLocaleString()}`} />
+              <StatRow label="Avg" value={`$${beforeAvg.toLocaleString()}`} />
+              <StatRow label="Max" value={`$${beforeMax.toLocaleString()}`} />
+            </div>
+
+            {/* Stats Filtered */}
+            <div style={{ backgroundColor: BG_ELEV, borderRadius: 10, padding: 16, border: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Stats (Filtered)</div>
+              <StatRow label="Data Points" value={afterCount} />
+              <StatRow label="Min" value={`$${afterMin.toLocaleString()}`} />
+              <StatRow label="Avg" value={`$${afterAvg.toLocaleString()}`} />
+              <StatRow label="Max" value={`$${afterMax.toLocaleString()}`} />
+            </div>
+          </div>
+
+          {/* 3 ── Duplicates Removed + 5 ── Outliers Removed */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+            <div style={{ backgroundColor: BG_ELEV, borderRadius: 10, padding: 14, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 22 }}>🗂</div>
+              <div>
+                <div style={{ fontSize: 12, color: MUTED }}>Duplicates Removed</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: dupCount > 0 ? RED : MUTED }}>{dupCount}</div>
+              </div>
+            </div>
+            <div style={{ backgroundColor: BG_ELEV, borderRadius: 10, padding: 14, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+              <div style={{ fontSize: 22 }}>🚫</div>
+              <div>
+                <div style={{ fontSize: 12, color: MUTED }}>Outliers Removed</div>
+                <div style={{ fontSize: 20, fontWeight: 700, color: outlierCount > 0 ? RED : MUTED }}>
+                  {outlierCount > 0 ? outlierCount : 'No outliers detected'}
                 </div>
               </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${l.priceUSD?.toLocaleString()}</div>
-                <div style={{ fontSize: 12, color: MUTED }}>{l.price?.toLocaleString()} {l.currency}</div>
-              </div>
-              <ExternalLink className="w-3.5 h-3.5" style={{ color: MUTED }} />
             </div>
-          ))}
+          </div>
+
+          {/* 6 ── Listings */}
+          <div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 12 }}>
+              Listings for {month.month} ({displayListings.length})
+            </div>
+
+            {displayListings.length === 0 ? (
+              <div style={{ fontSize: 13, color: MUTED, padding: '24px 0', textAlign: 'center' }}>
+                No listings found for this month.
+              </div>
+            ) : (
+              displayListings.map((l, i) => (
+                <InsightListingRow
+                  key={i}
+                  listing={l}
+                  catalogImageUrl={imageUrl}
+                  onSelect={() => onSelectListing(l)}
+                />
+              ))
+            )}
+          </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Small helper for stat rows */
+function StatRow({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <span style={{ fontSize: 13, color: MUTED }}>{label}</span>
+      <span style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>{value}</span>
+    </div>
+  );
+}
+
+/** Individual listing row inside InsightPanel */
+function InsightListingRow({
+  listing, catalogImageUrl, onSelect,
+}: {
+  listing: PriceListing; catalogImageUrl?: string; onSelect: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const img = listing.imageUrl || catalogImageUrl;
+
+  return (
+    <div
+      onClick={onSelect}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 14,
+        padding: '12px 0', borderBottom: `1px solid ${BORDER}`,
+        cursor: 'pointer',
+        backgroundColor: hovered ? BG_ELEV : 'transparent',
+        borderRadius: hovered ? 8 : 0,
+        paddingLeft: hovered ? 8 : 0,
+        paddingRight: hovered ? 8 : 0,
+        transition: 'all 0.15s',
+      }}
+    >
+      {/* Image / placeholder */}
+      <div style={{
+        width: 56, height: 56, borderRadius: 8, flexShrink: 0,
+        backgroundColor: BG_ELEV, border: `1px solid ${BORDER}`,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        overflow: 'hidden',
+      }}>
+        {img ? (
+          <img src={img} alt={listing.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.5">
+            <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
+          </svg>
+        )}
+      </div>
+
+      {/* Title + meta */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
+          {listing.title}
+        </div>
+        <div style={{ fontSize: 12, color: MUTED, marginTop: 3, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+          {listing.region && <span>📍 {listing.region}</span>}
+          {listing.phone && <span>📞 {listing.phone}</span>}
+          {listing.date && <span>🗓 {listing.date}</span>}
+        </div>
+      </div>
+
+      {/* Price */}
+      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>
+        {listing.currency !== 'USD' && (
+          <div style={{ fontSize: 11, color: MUTED }}>{listing.price?.toLocaleString()} {listing.currency}</div>
+        )}
+      </div>
+
+      {/* View Listing button */}
+      <button
+        onClick={e => { e.stopPropagation(); onSelect(); }}
+        style={{
+          flexShrink: 0, padding: '6px 14px', borderRadius: 6,
+          backgroundColor: 'transparent', border: `1px solid ${GOLD}`,
+          color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        View Listing
+      </button>
     </div>
   );
 }
@@ -573,6 +715,202 @@ function ListingRow({ listing }: { listing: PriceListing }) {
   );
 }
 
+
+// ── Linear regression helper ─────────────────────────────────────
+function linearRegression(points: { avg: number }[]) {
+  const n = points.length;
+  if (n < 2) return { slope: 0, intercept: points[0]?.avg ?? 0 };
+  const sumX  = points.reduce((s, _p, i) => s + i, 0);
+  const sumY  = points.reduce((s,  p)    => s + p.avg, 0);
+  const sumXY = points.reduce((s,  p, i) => s + i * p.avg, 0);
+  const sumX2 = points.reduce((s, _p, i) => s + i * i, 0);
+  const denom = n * sumX2 - sumX * sumX;
+  if (denom === 0) return { slope: 0, intercept: sumY / n };
+  const slope     = (n * sumXY - sumX * sumY) / denom;
+  const intercept = (sumY - slope * sumX) / n;
+  return { slope, intercept };
+}
+
+// ── PricePredictionChart — main chart with dashed 3-month forecast overlay ──
+function PricePredictionChart({
+  chart, pricing, onSelectMonth,
+}: {
+  chart: ChartPoint[];
+  pricing: PriceData['pricing'];
+  onSelectMonth: (i: number) => void;
+}) {
+  // Use last 6 points for regression
+  const window = chart.slice(-6);
+  const { slope, intercept } = linearRegression(window);
+  const baseIndex = chart.length - Math.min(6, chart.length); // offset into full array
+
+  // Generate 3 forecast months
+  const lastEntry = chart[chart.length - 1];
+  const forecastPoints: ChartPoint[] = [];
+  for (let i = 1; i <= 3; i++) {
+    const localIdx = window.length - 1 + i; // position within regression window
+    const predictedAvg = Math.max(0, Math.round(slope * localIdx + intercept));
+    const [yr, mo] = lastEntry.month.split('-').map(Number);
+    const totalMo = mo + i;
+    const nextYear = yr + Math.floor((totalMo - 1) / 12);
+    const nextMo   = ((totalMo - 1) % 12) + 1;
+    forecastPoints.push({
+      month: `${nextYear}-${String(nextMo).padStart(2, '0')}`,
+      avg: predictedAvg,
+      min: Math.round(predictedAvg * 0.92),
+      max: Math.round(predictedAvg * 1.08),
+      count: 0,
+    });
+  }
+
+  // Combined data: historical + forecast (with forecast flagged via isForecast)
+  type CombinedPoint = ChartPoint & { forecastAvg?: number; isForecast?: boolean };
+  const combined: CombinedPoint[] = [
+    ...chart.map(p => ({ ...p })),
+    // Bridge point: last historical avg becomes the start of the forecast line
+    { ...lastEntry, forecastAvg: lastEntry.avg },
+    ...forecastPoints.map(p => ({ ...p, forecastAvg: p.avg, avg: undefined as any, min: undefined as any, max: undefined as any, isForecast: true })),
+  ];
+  // Populate forecastAvg=undefined on historical so the line only renders from the bridge
+  combined.slice(0, chart.length - 1).forEach(p => { (p as CombinedPoint).forecastAvg = undefined; });
+
+  // Summary card values
+  const forecastAvgs = forecastPoints.map(p => p.avg);
+  const forecastMin  = Math.min(...forecastPoints.map(p => p.min));
+  const forecastMax  = Math.max(...forecastPoints.map(p => p.max));
+  const totalDataPts = window.reduce((s, p) => s + p.count, 0);
+  const trendUp      = slope >= 0;
+
+  return (
+    <div style={{ backgroundColor: BG_ELEV, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+      {/* Tab row */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex gap-4">
+          <span style={{ fontSize: 13, fontWeight: 600, color: GOLD, cursor: 'pointer', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>Date</span>
+          <span style={{ fontSize: 13, color: MUTED, cursor: 'pointer' }}>6M</span>
+        </div>
+        <div className="flex gap-3">
+          <span style={{ fontSize: 13, color: MUTED, cursor: 'pointer' }}>Presentation</span>
+          <span style={{ fontSize: 13, fontWeight: 600, color: GOLD, cursor: 'pointer', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>All</span>
+        </div>
+      </div>
+
+      {/* Chart */}
+      <ResponsiveContainer width="100%" height={300}>
+        <ComposedChart data={combined}>
+          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+          <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
+          <YAxis stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+          <Tooltip
+            contentStyle={{ backgroundColor: BG_CARD, border: `1px solid ${BORDER}`, borderRadius: 8 }}
+            formatter={(value: number, name: string) => {
+              if (!value) return [null, null];
+              const label = name === 'forecastAvg' ? 'Forecast Avg' : name === 'avg' ? 'Avg' : name === 'min' ? 'Min' : 'Max';
+              return [`$${value.toLocaleString()}`, label];
+            }}
+          />
+          {/* Historical bands */}
+          <Area type="monotone" dataKey="max" stroke="none" fill={RED}   fillOpacity={0.05} />
+          <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
+          {/* Historical lines */}
+          <Line type="monotone" dataKey="max" stroke={RED}   strokeWidth={1} dot={false} connectNulls={false} />
+          <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} connectNulls={false} />
+          {/* Historical avg — clickable dots */}
+          <Line
+            type="monotone"
+            dataKey="avg"
+            stroke={BLUE}
+            strokeWidth={2}
+            connectNulls={false}
+            dot={(props: any) => {
+              const { cx, cy, index } = props;
+              if (index >= chart.length) return <g key={index} />;
+              return (
+                <g key={index} onClick={() => onSelectMonth(index)} style={{ cursor: 'pointer' }}>
+                  <circle cx={cx} cy={cy} r={6} fill={BLUE} stroke={BG_CARD} strokeWidth={2} />
+                </g>
+              );
+            }}
+          />
+          {/* Forecast dashed line */}
+          <Line
+            type="monotone"
+            dataKey="forecastAvg"
+            stroke={trendUp ? GREEN : RED}
+            strokeWidth={2}
+            strokeDasharray="6 4"
+            dot={{ r: 4, fill: trendUp ? GREEN : RED, strokeWidth: 0 }}
+            connectNulls
+            name="forecastAvg"
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+
+      {/* Legend */}
+      <div className="flex items-center gap-6 mt-3" style={{ fontSize: 13, color: MUTED, flexWrap: 'wrap' }}>
+        <span className="flex items-center gap-1.5">
+          <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: GREEN, display: 'inline-block' }} />
+          ${pricing.current?.min?.toLocaleString()} MIN
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: BLUE, display: 'inline-block' }} />
+          ${pricing.current?.avg?.toLocaleString()} AVERAGE
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: RED, display: 'inline-block' }} />
+          ${pricing.current?.max?.toLocaleString()} MAX
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span style={{ width: 24, height: 2, backgroundImage: `repeating-linear-gradient(to right, ${trendUp ? GREEN : RED} 0px, ${trendUp ? GREEN : RED} 6px, transparent 6px, transparent 10px)`, display: 'inline-block' }} />
+          Forecast
+        </span>
+      </div>
+
+      <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
+        Click the blue dots to see the detailed breakdown and listings for that month.
+      </div>
+
+      {/* 3-Month Forecast Summary Card */}
+      <div style={{
+        marginTop: 20,
+        padding: '16px 20px',
+        borderRadius: 10,
+        backgroundColor: BG_CARD,
+        border: `1px solid ${trendUp ? GREEN + '50' : RED + '50'}`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12,
+      }}>
+        <div>
+          <div style={{ fontSize: 12, color: MUTED, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 4 }}>
+            {trendUp ? '📈' : '📉'} 3-Month Forecast
+          </div>
+          <div style={{ fontSize: 18, fontWeight: 700, color: trendUp ? GREEN : RED }}>
+            Est. ${forecastMin.toLocaleString()} – ${forecastMax.toLocaleString()}
+          </div>
+          <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+            Based on {totalDataPts} data points (last 6 months linear regression)
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          {forecastPoints.map((fp, i) => (
+            <div key={i} style={{ textAlign: 'center', padding: '8px 12px', backgroundColor: BG_ELEV, borderRadius: 8, border: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 11, color: MUTED }}>+{i + 1}mo</div>
+              <div style={{ fontSize: 13, fontWeight: 700, color: trendUp ? GREEN : RED }}>${fp.avg.toLocaleString()}</div>
+              <div style={{ fontSize: 10, color: MUTED }}>{fp.month}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div style={{ fontSize: 11, color: MUTED, marginTop: 10, fontStyle: 'italic' }}>
+        ⚠️ Forecast is based on linear regression of recent trends and is NOT guaranteed. Market conditions can significantly affect actual prices.
+      </div>
+    </div>
+  );
+}
 
 function PriceForecast({ chart, reference, brand, model, forecastData }: { 
   chart: ChartPoint[]; 
