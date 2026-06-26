@@ -17,7 +17,8 @@ module.exports = async function handler(req, res) {
 
   try {
     // Fetch recent records with intent classification from live_ingest
-    const url = `${SUPABASE_URL}/rest/v1/live_ingest?select=reference,brand,collection,intent,price&limit=5000&order=created_at.desc`;
+    // Note: avoid 'collection' column — it doesn't exist in live_ingest table
+    const url = `${SUPABASE_URL}/rest/v1/live_ingest?select=reference,brand,intent,price&limit=5000&order=created_at.desc`;
     const r = await fetch(url, {
       headers: {
         'apikey': SUPABASE_KEY,
@@ -41,7 +42,7 @@ module.exports = async function handler(req, res) {
       if (!byRef[ref]) {
         byRef[ref] = {
           reference: ref,
-          collection: rec.collection || rec.brand || 'Unknown',
+          collection: rec.brand || 'Unknown',  // live_ingest has no 'collection' column, fallback to brand
           model: '',
           case_metal: '',
           production_years: '',
