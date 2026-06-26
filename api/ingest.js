@@ -74,7 +74,26 @@ function isYearLike(n) {
   return Number.isFinite(n) && n >= 1990 && n <= 2030;
 }
 
-function parsePrice(text) {
+/** P0-B: Return true if a bare number matches a known reference pattern already extracted. */
+function isReferenceNumber(n, normalizedRef) {
+  if (!normalizedRef) return false;
+  // Remove non-digit chars from the reference and compare
+  const refDigits = normalizedRef.replace(/[^0-9]/g, '');
+  return refDigits === String(n);
+}
+
+/** P0-C: Return true if "k" after a number means karat (gold), not thousand. */
+function isKaratContext(text, matchIndex, matchLength) {
+  // Check text around the "k" — if followed by "gold", it's karat
+  const afterK = text.substring(matchIndex + matchLength, matchIndex + matchLength + 10).toLowerCase();
+  if (/\bgold\b/.test(afterK)) return true;
+  // If preceded by nothing that looks like a price context, could be karat
+  const beforeK = text.substring(Math.max(0, matchIndex - 10), matchIndex).toLowerCase();
+  if (/(?:\bkarat\b|\bgold\b)/.test(beforeK)) return true;
+  return false;
+}
+
+function parsePrice(text, normalizedRef = null) {
   const t = text.replace(/,/g, '');
 
   // ── Helper: return a candidate only when it is NOT a year-like value ──
@@ -109,10 +128,20 @@ function parsePrice(text) {
   if (kBeforeUsd) return safe(Math.round(parseFloat(kBeforeUsd[1]) * 1000));
 
   // General m/k patterns — but require currency context to avoid grabbing years
+  // P0-C: skip k-pattern if the "k" is in karat (gold) context
   const mMatch = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
   if (mMatch) return safe(Math.round(parseFloat(mMatch[1]) * 1_000_000));
-  const kMatch = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
-  if (kMatch) return safe(Math.round(parseFloat(kMatch[1]) * 1000));
+  // Only match k-thousand when NOT karat context
+  const kMatchAll = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\b/gi);
+  if (kMatchAll) {
+    for (const kM of kMatchAll) {
+      const kIdx = t.indexOf(kM);
+      const digitMatch = kM.match(/(\d{1,4}(?:\.\d{1,2})?)/);
+      if (digitMatch && !isKaratContext(t, kIdx, kM.length)) {
+        return safe(Math.round(parseFloat(digitMatch[1]) * 1000));
+      }
+    }
+  }
 
   // Plain number — only if preceded by currency symbol or 5+ digits (not a year)
   const usdMatch = t.match(/(?:USD|USDT|\$)\s*(\d{4,8})/i);
@@ -121,12 +150,18 @@ function parsePrice(text) {
   // Plain number — only match 5-8 digit bare numbers when there is NO
   // reference-like pattern visible. Rolex refs (6 digits) and AP refs
   // (5 digits) are NOT prices.
+  // P0-B: also reject if the number matches the currently extracted reference
   // Heuristic: if the message contains any known reference pattern, skip
   // bare-number matching to avoid assigning a ref number as price.
   const hasRefPattern = /\b(?:RM\s?\d{2}|[345]\d{3}[A-Z]?[\/-]|\d{6}[A-Z]{0,5}\b|\d{5}[A-Z]{2,5}\b|PAM\d{3,5}|IW\d{6,8}|BR0?\d)/i.test(t);
   if (!hasRefPattern) {
     const plainMatch = t.match(/\b(\d{5,8})\b/);
-    if (plainMatch) return safe(parseInt(plainMatch[1], 10));
+    if (plainMatch) {
+      const candidate = parseInt(plainMatch[1], 10);
+      if (!isReferenceNumber(candidate, normalizedRef)) {
+        return safe(candidate);
+      }
+    }
   }
   return null;
 }
@@ -197,14 +232,17 @@ function parseFull(rawMsg) {
   else if (/\bap\b|audemars\s?piguet/i.test(text)) brand = 'Audemars Piguet';
   else if (/\brm\b|richard\s?mille/i.test(text)) brand = 'Richard Mille';
   else if (/rolex/i.test(text)) brand = 'Rolex';
-  else if (/vacheron|constantin/i.test(text)) brand = 'Vacheron Constantin';
+  // ── P0-A: Vacheron — catch "VC" abbreviation before broader checks ──
+  else if (/(?:\bvc\b|vacheron|constantin)/i.test(text)) brand = 'Vacheron Constantin';
   else if (/omega/i.test(text)) brand = 'Omega';
   else if (/cartier/i.test(text)) brand = 'Cartier';
-  else if (/a\.?\s?lange|lange\s?\&/i.test(text)) brand = 'A. Lange & Söhne';
+  // ── P0-A: A. Lange — match standalone "LANGE" (common in all-caps dealer messages) ──
+  else if (/a\.?\s?lange|\blange\b|lange\s?[&]?\s?s[oö]hne/i.test(text)) brand = 'A. Lange & Söhne';
   else if (/\biwc\b|schaffhausen/i.test(text)) brand = 'IWC';
   else if (/panerai|pam\d/i.test(text)) brand = 'Panerai';
   else if (/seiko|grand\s?seiko/i.test(text)) brand = 'Seiko';
-  else if (/tudor/i.test(text)) brand = 'Tudor';
+  // ── P0-A: Tudor — catch "TD" abbreviation ──
+  else if (/(?:\btd\b|tudor)/i.test(text)) brand = 'Tudor';
   else if (/hublot/i.test(text)) brand = 'Hublot';
   else if (/breitling/i.test(text)) brand = 'Breitling';
   else if (/jaeger|jlc/i.test(text)) brand = 'Jaeger-LeCoultre';
@@ -278,7 +316,15 @@ function parseFull(rawMsg) {
   const yearM = text.match(/[Nn]\d\/(\d{4})/) || text.match(/\b(20[12]\d)\b/);
   const year = yearM ? parseInt(yearM[1], 10) : null;
 
-  let priceRaw = parsePrice(text);
+  let priceRaw = parsePrice(text, ref);
+
+  // ── P0-B: Reject price if it matches the extracted reference digits ──
+  if (priceRaw !== null && ref && priceRaw !== null) {
+    const refDigits = String(ref).replace(/[^0-9]/g, '');
+    if (refDigits.length >= 4 && String(priceRaw) === refDigits) {
+      priceRaw = null;
+    }
+  }
 
   // ── Year guard: reject prices that look like years (1990–2030) ──
   // parsePrice() already has an isYearLike() guard internally, but the LLM

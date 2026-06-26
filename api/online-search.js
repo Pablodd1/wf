@@ -188,12 +188,23 @@ async function callAnthropic(reference, brand, rawMessage, apiKey) {
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method Not Allowed' });
 
-  const { reference, brand, rawMessage } = req.body || {};
+  // ── P0-D: Allow GET with query params (e.g. ?reference=5712/1A&brand=Patek+Philippe) ──
+  let reference, brand, rawMessage;
+  if (req.method === 'GET') {
+    const url = new URL(req.url, `https://${req.headers.host || 'localhost'}`);
+    reference = url.searchParams.get('reference');
+    brand = url.searchParams.get('brand');
+    rawMessage = url.searchParams.get('rawMessage');
+  } else if (req.method === 'POST') {
+    ({ reference, brand, rawMessage } = req.body || {});
+  } else {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
   if (!reference || typeof reference !== 'string') {
     return res.status(400).json({ error: 'reference field required' });
   }
