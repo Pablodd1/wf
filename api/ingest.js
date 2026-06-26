@@ -300,8 +300,46 @@ function splitMultiWatch(text) {
   // If only 1 reference found, return as single message
   if (refMatches.length <= 1) return [text];
   
-  // Multiple references found — try to split
-  // Strategy: split by lines that start with a reference number or emoji bullet
+  // ── NEW: Single-line bundle with + or | separators ──
+  // Detect if this is a single line with multiple separator-delimited listings
+  const separatorPattern = /\s\+\s|\s\|\s/;  // " + " or " | "
+  if (separatorPattern.test(text) && !text.includes('\n')) {
+    // Split on separator positions that are followed by a watch brand name
+    const brandStartPattern = /\b(Rolex|Patek|PP\b|Audemars|AP\b|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse|RM\s?\d{2}|[345]\d{3})/iu;
+    
+    // Strategy: split on " + " or " | " but only where the text before the separator
+    // has a valid watch reference (brand or ref number)
+    // Use a regex that matches the separator only when preceded by a reference
+    const splitRegex = /(\s\+[\s]|\s\|\s)/g;
+    
+    // Try splitting by the separators
+    const rawParts = text.split(splitRegex).filter((_, i) => i % 2 === 0).map(s => s.trim()).filter(s => s.length > 0);
+    
+    if (rawParts.length > 1) {
+      // Further refine: remove trailing "X watches bundle" or similar count text from last part
+      const refined = rawParts.map((part, i) => {
+        if (i === rawParts.length - 1) {
+          // Strip trailing "N watches bundle" / "N watche" / "total N watches" etc.
+          return part.replace(/\s+\d+\s*(?:watches?\s*)?bundle\s*$/i, '');
+        }
+        return part;
+      });
+      
+      // Validate: each part should have a reference or brand+price
+      const validParts = refined.filter(p => {
+        const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]?|PAM\d|IW\d|\d{3}\.\d{3})\b/i.test(p);
+        const hasBrand = /\b(Rolex|Patek|PP|Audemars|AP|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse|RM)\b/i.test(p);
+        const hasPrice = /(?:HKD|USD|USDT|\$)\s*\d/i.test(p) || /\d+(?:\.\d+)?\s*(?:k|m|million)/i.test(p) || /\d{4,}\s*(?:k|m|HKD|USD|USDT)/i.test(p) || /\d{4,}\s*HKD/i.test(p);
+        return hasRef || hasBrand || hasPrice;
+      });
+      
+      if (validParts.length > 1) return validParts;
+      // Fall through: if separator split didn't yield multiple valid parts,
+      // try the newline-based split below
+    }
+  }
+  
+  // ── ORIGINAL: Newline-based split ──
   const lines = text.split(/\n/);
   const parts = [];
   let currentPart = '';

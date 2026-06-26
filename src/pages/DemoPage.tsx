@@ -3,7 +3,8 @@ import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import {
   FlaskConical, Search, BookOpen, Activity, Gavel, TrendingUp,
-  ChevronDown, ChevronUp, Loader2, Trash2, Zap,
+  ChevronDown, ChevronUp, Loader2, Trash2, Zap, AlertTriangle,
+  Brain, Edit3, Check, X as XIcon,
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
@@ -47,10 +48,10 @@ const EXAMPLES = [
 /* ------------------------------------------------------------------ */
 
 function confidenceColor(score: number): string {
-  if (score >= 100) return '#22c55e'; // green-500
-  if (score >= 80)  return '#eab308'; // yellow-500
-  if (score >= 60)  return '#f97316'; // orange-500
-  return '#ef4444';                    // red-500
+  if (score >= 100) return '#22c55e';
+  if (score >= 80)  return '#eab308';
+  if (score >= 60)  return '#f97316';
+  return '#ef4444';
 }
 
 function confidenceLabel(score: number): string {
@@ -116,6 +117,69 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Editable Field                                                     */
+/* ------------------------------------------------------------------ */
+
+function EditableField({
+  label, value, onSave,
+}: {
+  label: string; value: string; onSave: (v: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value);
+
+  function handleSave() {
+    onSave(draft);
+    setEditing(false);
+  }
+
+  function handleCancel() {
+    setDraft(value);
+    setEditing(false);
+  }
+
+  if (!editing) {
+    return (
+      <div className="flex items-start justify-between py-1 border-b border-gray-700/50 last:border-0 group">
+        <span className="text-[11px] uppercase tracking-wider text-gray-500 shrink-0 w-32">{label}</span>
+        <span className="text-sm text-white text-right font-medium flex items-center gap-2">
+          {value || <span className="text-gray-600 italic text-xs">—</span>}
+          <button
+            onClick={() => { setDraft(value); setEditing(true); }}
+            className="opacity-0 group-hover:opacity-100 transition-opacity text-yellow-400 hover:text-yellow-300"
+            title={`Edit ${label}`}
+          >
+            <Edit3 size={12} />
+          </button>
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start justify-between py-1 border-b border-gray-700/50 last:border-0">
+      <span className="text-[11px] uppercase tracking-wider text-gray-500 shrink-0 w-32">{label}</span>
+      <div className="flex items-center gap-1">
+        <input
+          type="text"
+          value={draft}
+          onChange={e => setDraft(e.target.value)}
+          className="bg-gray-900 border border-gray-600 rounded px-2 py-0.5 text-sm text-white w-32 text-right font-mono"
+          autoFocus
+          onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') handleCancel(); }}
+        />
+        <button onClick={handleSave} className="text-green-400 hover:text-green-300" title="Save">
+          <Check size={14} />
+        </button>
+        <button onClick={handleCancel} className="text-red-400 hover:text-red-300" title="Cancel">
+          <XIcon size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Collapsible JSON viewer                                            */
 /* ------------------------------------------------------------------ */
 
@@ -142,11 +206,114 @@ function JsonViewer({ data }: { data: unknown }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  HUMAN Alert Banner                                                 */
+/* ------------------------------------------------------------------ */
+
+function HumanAlert({ result, onAiReAnalyze }: {
+  result: ParseResult;
+  onAiReAnalyze: () => void;
+}) {
+  if (result.verdict !== 'HUMAN') return null;
+
+  return (
+    <div className="mb-4 rounded-xl border-2 border-orange-500/50 bg-orange-500/10 p-4">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5">
+          <AlertTriangle size={20} className="text-orange-400" />
+        </div>
+        <div className="flex-1">
+          <div className="text-sm font-bold text-orange-400 mb-1 uppercase tracking-wider">
+            ⚠ Human Review Required
+          </div>
+          <p className="text-xs text-orange-300/80 mb-3">
+            Low confidence ({result.confidence}%) — the parser could not fully identify this listing.
+            Review the extracted fields below, edit if needed, or use AI to re-analyze.
+          </p>
+          <button
+            onClick={onAiReAnalyze}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500 hover:bg-orange-400 text-gray-900 font-bold text-xs rounded-lg transition-colors"
+          >
+            <Brain size={14} />
+            AI Re-Analyze
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/*  AI Insight Panel (re-analysis result)                              */
+/* ------------------------------------------------------------------ */
+
+function AiInsightPanel({ result, onClose }: {
+  result: { brand?: string; reference?: string; price?: number; currency?: string } | null;
+  onClose: () => void;
+}) {
+  if (!result) return null;
+  return (
+    <div className="mb-4 rounded-xl bg-purple-500/10 border border-purple-500/30 p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-bold uppercase tracking-widest text-purple-400">🤖 AI Insight</span>
+        <button onClick={onClose} className="text-gray-500 hover:text-white text-xs">Dismiss</button>
+      </div>
+      <div className="space-y-1 text-xs text-purple-300">
+        {result.brand && <div>Brand: <strong className="text-white">{result.brand}</strong></div>}
+        {result.reference && <div>Reference: <strong className="text-white">{result.reference}</strong></div>}
+        {result.price != null && <div>Price: <strong className="text-white">${result.price.toLocaleString()} {result.currency || 'USD'}</strong></div>}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Pipeline display for one result                                    */
 /* ------------------------------------------------------------------ */
 
-function PipelineResult({ result, index }: { result: ParseResult; index: number }) {
+function PipelineResult({
+  result, index, onUpdateResult, rawMessage,
+}: {
+  result: ParseResult; index: number;
+  onUpdateResult?: (idx: number, updated: Partial<ParseResult>) => void;
+  rawMessage?: string;
+}) {
   const score = result.confidence ?? 0;
+  const [aiInsight, setAiInsight] = useState<{ brand?: string; reference?: string; price?: number; currency?: string } | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  async function handleAiReAnalyze() {
+    setAiLoading(true);
+    setAiInsight(null);
+    try {
+      // Use the same ingest endpoint — re-parse with LLM focus on this specific listing
+      const res = await fetch('/api/ai-parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          rawMessage: rawMessage || result.reference || result.brand,
+          brand: result.brand,
+          reference: result.reference,
+          priceUSD: result.priceUSD,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.brand || data.reference) {
+          setAiInsight(data);
+          // Auto-update the fields with AI's suggestions
+          if (data.brand && data.brand !== result.brand) onUpdateResult?.(index, { brand: data.brand });
+          if (data.reference && data.reference !== result.reference) onUpdateResult?.(index, { reference: data.reference });
+        }
+      }
+    } catch {} finally {
+      setAiLoading(false);
+    }
+  }
+
+  function handleEdit(field: string, value: string) {
+    if (!onUpdateResult) return;
+    onUpdateResult(index, { [field]: value } as Partial<ParseResult>);
+  }
 
   return (
     <div className="mb-6">
@@ -158,17 +325,20 @@ function PipelineResult({ result, index }: { result: ParseResult; index: number 
         </div>
       )}
 
+      {/* HUMAN alert */}
+      <HumanAlert result={result} onAiReAnalyze={handleAiReAnalyze} />
+
+      {/* AI Insight result */}
+      {aiInsight && <AiInsightPanel result={aiInsight} onClose={() => setAiInsight(null)} />}
+
       {/* Stage 1: PARSE */}
       <StageCard number={1} title="Parse" icon={Search}>
-        <Field label="Brand" value={result.brand !== 'Unknown' ? result.brand : null} />
-        <Field label="Reference" value={result.reference} />
-        <Field
+        <EditableField label="Brand" value={result.brand !== 'Unknown' ? result.brand : ''} onSave={v => handleEdit('brand', v)} />
+        <EditableField label="Reference" value={result.reference || ''} onSave={v => handleEdit('reference', v)} />
+        <EditableField
           label="Price"
-          value={
-            result.priceUSD != null
-              ? `$${result.priceUSD.toLocaleString()} USD`
-              : null
-          }
+          value={result.priceUSD != null ? `$${result.priceUSD.toLocaleString()}` : ''}
+          onSave={v => handleEdit('priceUSD', v.replace(/[$,]/g, ''))}
         />
         <Field label="Currency" value={result.currency} />
         <Field label="Source" value={
@@ -293,6 +463,13 @@ export default function DemoPage() {
     setError(null);
   }
 
+  function handleUpdateResult(idx: number, updated: Partial<ParseResult>) {
+    if (!response) return;
+    const newResults = [...response.results];
+    newResults[idx] = { ...newResults[idx], ...updated };
+    setResponse({ ...response, results: newResults });
+  }
+
   return (
     <Layout>
       <TabNav />
@@ -366,6 +543,14 @@ export default function DemoPage() {
           </div>
         )}
 
+        {/* Bundle hint */}
+        {response?.split && (
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-3 mb-4 text-xs text-blue-300 flex items-center gap-2">
+            <Zap size={14} />
+            Multi-watch bundle detected — {response.listingsFound} listings extracted
+          </div>
+        )}
+
         {/* Results */}
         {response && (
           <div>
@@ -391,7 +576,7 @@ export default function DemoPage() {
 
             {/* Per-listing pipeline stages */}
             {response.results.map((result, i) => (
-              <PipelineResult key={result.index} result={result} index={i} />
+              <PipelineResult key={result.index} result={result} index={i} onUpdateResult={handleUpdateResult} rawMessage={message} />
             ))}
 
             {/* Raw JSON viewer */}

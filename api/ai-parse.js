@@ -1,165 +1,105 @@
 /**
- * AI parser — Gemini 2.5 Flash, Kimi K2.6, or Claude
- * For multi-line chat messages, sends the full message to Gemini with
- * instructions to extract ALL watch listings as an array.
- * Falls back to line-by-line Kimi if Gemini times out.
- * CommonJS for Vercel serverless — maxDuration: 60
+ * AI PARSE ENDPOINT — POST /api/ai-parse
+ *
+ * Re-analyses a single watch listing using Ollama local AI.
+ * Used by the Demo page's "AI Re-Analyze" button for HUMAN-verdict records.
+ *
+ * POST body:
+ *   { rawMessage: string, brand?: string, reference?: string, priceUSD?: number }
+ *
+ * Returns:
+ *   { brand: string|null, reference: string|null, price: number|null, currency: string|null, confidence: number }
  */
 
-const KIMI_URL = 'https://api.moonshot.ai/v1/chat/completions';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || 'qwen3.5:4b-q4_K_M';
 
-const SYS = `You are a luxury watch expert parsing WhatsApp chat listings.
-Extract ALL watch listings from the message. For each listing extract:
-- reference: watch reference number
-- dialColor: dial color in English
-- brand: brand name
-- condition: "New", "Used", or "Unknown"
-- year: 4-digit year if mentioned, else null
-- price: numeric value only
-- currency: "HKD", "USD", "USDT", or "EUR"
-- intent: "SELL" if offering for sale, "BUY" if looking to purchase (WTB, want to buy, looking for, NTQ, ISO), "INQUIRY" if asking a question
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'POST only' });
+  }
+
+  const { rawMessage, brand, reference, priceUSD } = req.body || {};
+  if (!rawMessage && !reference) {
+    return res.status(400).json({ error: 'rawMessage or reference required' });
+  }
+
+  try {
+    const message = rawMessage || `${brand || ''} ${reference || ''} ${priceUSD ? '$' + priceUSD : ''}`;
+    const prompt = `Watch listing message. Extract watch details as JSON only.
+Message: "${message.replace(/"/g, "'").slice(0, 400)}"
 
 Rules:
-1. Reference suffixes indicate dial: LN=Black, LB=Blue, LV=Green, CHNR=Brown, R=Brown, G=Blue, J=Champagne, P=Blue, ST=Blue, OR=Pink, TI=Grey, BC=Black
-2. If multiple listings are present, return an ARRAY of objects.
-3. If only one listing, return a single object (not array).
-4. ALWAYS resolve brand from reference number if not stated. Examples: 5164R→Patek Philippe, 116610LV→Rolex, IW328904→IWC, 5146R→Patek Philippe, RM11-03→Richard Mille, 15400ST→Audemars Piguet, 5712/1A→Patek Philippe
-5. Return ONLY valid JSON. No markdown, no explanations.`;
+- brand: normalized brand name or null if unclear
+- reference: exact model reference number or null
+- price: numeric price in USD (not a year 1990-2030) or null
+- currency: currency code (USD/HKD/EUR/GBP/CHF) or null
+- confidence: 0-100 score (80+ = good extraction, 50-79 = partial, <50 = uncertain)
 
-/** Try Gemini first (handles multi-listing natively), then Kimi line-by-line */
-async function tryAI(text, gKey, kKey, cKey) {
-  const flat = text; // preserve newlines — Gemini needs structure
+Return ONLY a JSON object with fields: brand, reference, price, currency, confidence`;
 
-  // Gemini — can handle multi-listing in one shot
-  if (gKey) {
-    try {
-      const ac = new AbortController();
-      const t = setTimeout(() => ac.abort(), 12000);
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${gKey}`,
-        { method: 'POST', headers: { 'Content-Type': 'application/json' }, signal: ac.signal,
-          body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: SYS + '\n\nMessage:\n"""\n' + flat + '\n"""\nExtract JSON:' }] }],
-            generationConfig: { maxOutputTokens: 2048, temperature: 0 } }) }
-      );
-      clearTimeout(t);
-      if (r.ok) {
-        const d = await r.json();
-        const c = d.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const jsonMatch = c.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          // Normalize: always wrap single obj in array
-          const arr = Array.isArray(parsed) ? parsed : [parsed];
-          if (arr.length > 0) return { ok: true, p: arr, src: 'gemini' };
-        }
-      }
-    } catch (e) { console.error('[ai] Gemini:', e.message); }
-  }
+    const response = await fetch(`${OLLAMA_URL}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt,
+        stream: false,
+        options: { temperature: 0.05, num_predict: 150, top_k: 5 },
+      }),
+    });
 
-  // Kimi — try full message first, fallback to per-line
-  if (kKey) {
-    const tryKimi = async (msg) => {
-      const ac = new AbortController();
-      const t = setTimeout(() => ac.abort(), 10000);
-      const r = await fetch(KIMI_URL, { method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${kKey}` }, signal: ac.signal,
-        body: JSON.stringify({ model: 'kimi-k2.6',
-          messages: [{ role: 'system', content: SYS + '\nReturn an ARRAY if multiple listings.' },
-                     { role: 'user', content: 'Message:\n"""\n' + msg + '\n"""\nExtract JSON:' }],
-          temperature: 0.5, max_tokens: 8192 }) });
-      clearTimeout(t);
-      if (r.status === 429) return { retry: true };
-      if (r.ok) {
-        const d = await r.json();
-        const ch = d.choices?.[0];
-        let content = ch?.message?.content;
-        if (!content && ch?.message?.reasoning_content) content = ch.message.reasoning_content;
-        if (content) {
-          const m = content.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
-          if (m) {
-            const parsed = JSON.parse(m[0]);
-            const arr = Array.isArray(parsed) ? parsed : [parsed];
-            if (arr.length > 0) return { ok: true, p: arr, src: 'kimi' };
-          }
-        }
-      }
-      return { ok: false };
-    };
-
-    // Full message attempt
-    let res = await tryKimi(text);
-    if (res.retry) { await new Promise(r => setTimeout(r, 1000)); res = await tryKimi(text); }
-    if (res.ok) return res;
-
-    // If full message failed, try splitting into lines and parse each
-    const lines = text.split(/[\r\n]+/).map(l => l.trim()).filter(l => l.length > 5);
-    if (lines.length >= 2) {
-      const results = [];
-      for (const line of lines) {
-        res = await tryKimi(line);
-        if (res.retry) { await new Promise(r => setTimeout(r, 1000)); res = await tryKimi(line); }
-        if (res.ok) results.push(res.p[0]);
-      }
-      if (results.length > 0) return { ok: true, p: results, src: 'kimi', multi: true };
+    if (!response.ok) {
+      return res.status(502).json({ error: `Ollama error: ${response.status}` });
     }
-  }
 
-  // Claude
-  if (cKey) {
+    const data = await response.json();
+    const raw = (data.response || '').trim();
+    const jsonMatch = raw.match(/\{[\s\S]*?\}/);
+    
+    if (!jsonMatch) {
+      return res.json({
+        brand: brand || null,
+        reference: reference || null,
+        price: priceUSD || null,
+        currency: null,
+        confidence: 0,
+        note: 'AI could not parse this message',
+      });
+    }
+
+    let parsed;
     try {
-      const ac = new AbortController();
-      const t = setTimeout(() => ac.abort(), 10000);
-      const r = await fetch('https://api.anthropic.com/v1/messages', { method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-api-key': cKey, 'anthropic-version': '2023-06-01' },
-        signal: ac.signal,
-        body: JSON.stringify({ model: 'claude-3-5-sonnet-20241022', max_tokens: 1024, system: SYS,
-          messages: [{ role: 'user', content: 'Message:\n"""\n' + flat + '\n"""\nExtract JSON:' }] }) });
-      clearTimeout(t);
-      if (r.ok) {
-        const d = await r.json();
-        const c = d.content?.[0]?.text || '';
-        const m = c.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
-        if (m) {
-          const parsed = JSON.parse(m[0]);
-          const arr = Array.isArray(parsed) ? parsed : [parsed];
-          if (arr.length > 0) return { ok: true, p: arr, src: 'claude' };
-        }
-      }
-    } catch (e) { console.error('[ai] Claude:', e.message); }
-  }
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch {
+      return res.json({
+        brand: brand || null,
+        reference: reference || null,
+        price: priceUSD || null,
+        currency: null,
+        confidence: 0,
+      });
+    }
 
-  return { ok: false };
+    // Validate price is not a year
+    const price = parsed.price;
+    const validPrice = (price !== null && price !== undefined && (price < 1990 || price > 2030)) ? price : null;
+
+    return res.json({
+      brand: parsed.brand || brand || null,
+      reference: parsed.reference || reference || null,
+      price: validPrice || priceUSD || null,
+      currency: parsed.currency || null,
+      confidence: parsed.confidence || 0,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: error.message,
+      brand: brand || null,
+      reference: reference || null,
+      price: priceUSD || null,
+      currency: null,
+      confidence: 0,
+    });
+  }
 }
-
-module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') {
-    res.setHeader('Allow', 'POST');
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
-
-  const { rawMessage, currentGuess } = req.body;
-  if (!rawMessage || typeof rawMessage !== 'string') {
-    return res.status(400).json({ error: 'rawMessage (string) required' });
-  }
-
-  const gKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  const kKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
-  const cKey = process.env.ANTHROPIC_API_KEY;
-
-  if (!gKey && !kKey && !cKey) {
-    return res.status(500).json({ error: 'No AI API key configured.' });
-  }
-
-  const r = await tryAI(rawMessage, gKey, kKey, cKey);
-  if (!r.ok) return res.status(500).json({ error: 'All AI providers failed' });
-
-  // Normalize: if single result, return object (not array) for backwards compat
-  if (r.p.length === 1 && !r.multi) {
-    return res.status(200).json({ success: true, parsed: r.p[0], source: r.src });
-  }
-  return res.status(200).json({ success: true, parsed: r.p, source: r.src, multi: true });
-};
