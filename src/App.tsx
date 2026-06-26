@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 
 // Code-split every route — each page loads on demand, not all at once.
@@ -24,19 +24,18 @@ function PageLoader() {
 }
 
 export default function App() {
-  const location = useLocation();
   return (
     <Suspense fallback={<PageLoader />}>
-      <Routes location={location} key={location.pathname}>
-        <Route path="/" element={<Home />} />
-        <Route path="/search" element={<SearchPage />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/review" element={<ReviewPage />} />
-        <Route path="/clean" element={<CleanPage />} />
-        <Route path="/admin" element={<AdminPage />} />
-        <Route path="/price-research" element={<PriceResearch />} />
-        <Route path="/demand" element={<DemandSignals />} />
-        <Route path="/demo" element={<DemoPage />} />
+      <Routes>
+        <Route path="/" element={<Home key="/" />} />
+        <Route path="/search" element={<SearchPage key="/search" />} />
+        <Route path="/analytics" element={<AnalyticsPage key="/analytics" />} />
+        <Route path="/review" element={<ReviewPage key="/review" />} />
+        <Route path="/clean" element={<CleanPage key="/clean" />} />
+        <Route path="/admin" element={<AdminPage key="/admin" />} />
+        <Route path="/price-research" element={<PriceResearch key="/price-research" />} />
+        <Route path="/demand" element={<DemandSignals key="/demand" />} />
+        <Route path="/demo" element={<DemoPage key="/demo" />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
