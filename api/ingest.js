@@ -126,6 +126,8 @@ function inferBrandFromRef(ref) {
   if (/^RDDB\w*/.test(r) || /^WHCH\w*/.test(r)) return 'Cartier';
   // A. Lange & Söhne — 3 digits . 3 digits (e.g. 414.032)
   if (/^\d{3}\.\d{3}/.test(r)) return 'A. Lange & Söhne';
+  // Bell & Ross — BR + 2 digits (BR0192, BR0394, BR05A, BR01-SKULL)
+  if (/^BR0?[0-9]{1,2}[-]?[A-Z0-9]{2,}/i.test(r)) return 'Bell & Ross';
   // Seiko
   if (/^(WSSA|SPB|SRP|SBDY|SNE)\d{3,4}/.test(r)) return 'Seiko';
   return null;

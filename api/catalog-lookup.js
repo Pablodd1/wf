@@ -143,13 +143,18 @@ module.exports = async function handler(req, res) {
   const brand = result?.brand || inferBrand(reference);
 
   return res.status(200).json({
-    success: true,
-    reference: reference,
+    success:      true,
+    reference,
     normalizedRef: ref,
-    found: !!result,
+    found:        !!result,
     brand,
-    data: result || null,
-    catalogSize: catalogMap.size,
+    model:        result?.model        || result?.collection || null,
+    collection:   result?.collection   || result?.model      || null,
+    dialColors:   result?.dialColors   || [],
+    imageUrl:     result?.imageUrl     || null,
+    productionYears: result?.productionYears || null,
+    data:         result || null,
+    catalogSize:  catalogMap.size,
     enrichedSize: enrichedMap.size,
   });
 }
