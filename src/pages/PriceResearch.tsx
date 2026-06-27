@@ -7,6 +7,8 @@ import { generatePriceResearchReport } from '@/lib/reports';
 // ── Types ──────────────────────────────────────────────────────
 interface PriceListing {
   title: string;
+  normalizedTitle?: string;
+  rawMessage?: string;
   price: number;
   currency: string;
   priceUSD: number;
@@ -35,6 +37,7 @@ interface PriceData {
   reference: string;
   brand: string;
   model: string;
+  catalogImageUrl?: string;
   primaryDial: string;
   dialColors: string[];
   liquidity: { fsCount: number; buyers?: number; sellers?: number; buyerSellerRatio?: number };
@@ -258,48 +261,71 @@ export default function PriceResearch() {
           <>
             {/* ── Watch Identity ──────────────────────────────── */}
             <div className="mb-8" style={{ padding: '24px 0', borderBottom: `1px solid ${BORDER}` }}>
-              <div style={{ fontSize: 13, color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
-                {data.brand}
-              </div>
-              <div className="flex items-baseline gap-3 mb-3">
-                <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
-                <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{data.reference}</span>
-              </div>
-              <div style={{ fontSize: 14, color: MUTED, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
-                <span style={{ fontWeight: 600 }}>Dial:</span>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => setSelectedDial(null)}
-                    style={{
-                      padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                      backgroundColor: selectedDial === null ? BLUE : BG_ELEV,
-                      color: selectedDial === null ? '#ffffff' : MUTED,
-                      border: selectedDial === null ? 'none' : `1px solid ${BORDER}`,
-                      transition: 'all 0.2s'
-                    }}
-                  >
-                    ALL
-                  </button>
-                  {data.dialColors.map((color: string) => (
-                    <button
-                      key={color}
-                      onClick={() => setSelectedDial(color)}
-                      style={{
-                        padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
-                        backgroundColor: selectedDial === color ? BLUE : BG_ELEV,
-                        color: selectedDial === color ? '#ffffff' : MUTED,
-                        border: selectedDial === color ? 'none' : `1px solid ${BORDER}`,
-                        textTransform: 'uppercase',
-                        transition: 'all 0.2s'
-                      }}
-                    >
-                      {color}
-                    </button>
-                  ))}
+              <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+                {/* Hero watch image */}
+                <div style={{
+                  width: 180, height: 180, borderRadius: 12, backgroundColor: BG_ELEV,
+                  overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', border: `1px solid ${BORDER}`,
+                }}>
+                  {(data.catalogImageUrl || data.listings.find(l => l.imageUrl)?.imageUrl) ? (
+                    <img
+                      src={data.catalogImageUrl || data.listings.find(l => l.imageUrl)?.imageUrl}
+                      alt={`${data.brand} ${data.model}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                    />
+                  ) : (
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.5">
+                      <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
+                    </svg>
+                  )}
                 </div>
-              </div>
-              <div style={{ fontSize: 32, fontWeight: 700, marginTop: 8, color: GOLD }}>
-                {data.brand} {data.model} {data.reference}
+                {/* Identity info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
+                    {data.brand}
+                  </div>
+                  <div className="flex items-baseline gap-3 mb-3">
+                    <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
+                    <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{data.reference}</span>
+                  </div>
+                  <div style={{ fontSize: 14, color: MUTED, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+                    <span style={{ fontWeight: 600 }}>Dial:</span>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => setSelectedDial(null)}
+                        style={{
+                          padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                          backgroundColor: selectedDial === null ? BLUE : BG_ELEV,
+                          color: selectedDial === null ? '#ffffff' : MUTED,
+                          border: selectedDial === null ? 'none' : `1px solid ${BORDER}`,
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        ALL
+                      </button>
+                      {data.dialColors.map((color: string) => (
+                        <button
+                          key={color}
+                          onClick={() => setSelectedDial(color)}
+                          style={{
+                            padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                            backgroundColor: selectedDial === color ? BLUE : BG_ELEV,
+                            color: selectedDial === color ? '#ffffff' : MUTED,
+                            border: selectedDial === color ? 'none' : `1px solid ${BORDER}`,
+                            textTransform: 'uppercase',
+                            transition: 'all 0.2s'
+                          }}
+                        >
+                          {color}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 28, fontWeight: 700, marginTop: 8, color: GOLD }}>
+                    {data.brand} {data.model} {data.reference}
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -414,6 +440,11 @@ export default function PriceResearch() {
               </div>
             ) : null}
 
+            {/* ── Market Indicator Bar (MIN / AVG / MAX) ────────── */}
+            {data.pricing.current && data.pricing.current.avg > 0 && (
+              <MarketIndicatorBar pricing={data.pricing.current} />
+            )}
+
             {/* ── Insight Detail Panel ────────────────────────── */}
             {selectedMonth !== null && data.chart[selectedMonth] && (
               <InsightPanel
@@ -452,6 +483,70 @@ export default function PriceResearch() {
 }
 
 // ── Sub-Components ─────────────────────────────────────────────
+
+function MarketIndicatorBar({ pricing }: { pricing: { min: number; avg: number; max: number; count: number } }) {
+  const { min, avg, max } = pricing;
+  const range = max - min || 1;
+  const avgPct = ((avg - min) / range) * 100;
+
+  return (
+    <div style={{
+      backgroundColor: BG_ELEV, borderRadius: 12, padding: '28px 32px', marginBottom: 24,
+      border: `1px solid ${BORDER}`,
+    }}>
+      {/* Dollar labels row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: 6 }}>
+        <span style={{ fontSize: 14, color: MUTED, fontWeight: 500 }}>${min.toLocaleString()}</span>
+        <span style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>${avg.toLocaleString()}</span>
+        <span style={{ fontSize: 14, color: MUTED, fontWeight: 500 }}>${max.toLocaleString()}</span>
+      </div>
+
+      {/* Bar with dots */}
+      <div style={{ position: 'relative', height: 20, margin: '8px 0' }}>
+        {/* Gray track */}
+        <div style={{
+          position: 'absolute', top: '50%', left: 0, right: 0,
+          height: 4, backgroundColor: '#4b5563', borderRadius: 2,
+          transform: 'translateY(-50%)',
+        }} />
+        {/* MIN dot */}
+        <div style={{
+          position: 'absolute', left: 0, top: '50%', transform: 'translate(-50%, -50%)',
+          width: 14, height: 14, borderRadius: '50%', backgroundColor: BLUE,
+          border: '2px solid #1e3a5f', boxShadow: '0 0 8px rgba(59,130,246,0.4)',
+        }} />
+        {/* AVG dot */}
+        <div style={{
+          position: 'absolute', left: `${avgPct}%`, top: '50%', transform: 'translate(-50%, -50%)',
+          width: 18, height: 18, borderRadius: '50%', backgroundColor: BLUE,
+          border: '3px solid #1e3a5f', boxShadow: '0 0 12px rgba(59,130,246,0.5)',
+          zIndex: 1,
+        }} />
+        {/* MAX dot */}
+        <div style={{
+          position: 'absolute', right: 0, top: '50%', transform: 'translate(50%, -50%)',
+          width: 14, height: 14, borderRadius: '50%', backgroundColor: BLUE,
+          border: '2px solid #1e3a5f', boxShadow: '0 0 8px rgba(59,130,246,0.4)',
+        }} />
+      </div>
+
+      {/* Labels row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4, marginBottom: 12 }}>
+        <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>MIN</span>
+        <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>AVERAGE</span>
+        <span style={{ fontSize: 11, color: MUTED, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1 }}>MAX</span>
+      </div>
+
+      {/* Subtitle */}
+      <div style={{ textAlign: 'center', fontSize: 12, color: MUTED, fontStyle: 'italic' }}>
+        Based on our chats
+      </div>
+      <div style={{ textAlign: 'center', fontSize: 12, color: MUTED, marginTop: 4, fontStyle: 'italic' }}>
+        This is a summary of how the price is composed. To view the detailed breakdown, click on the chart above.
+      </div>
+    </div>
+  );
+}
 
 function NavBar() {
   return (
@@ -759,7 +854,7 @@ function InsightListingRow({
       {/* Title + meta */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 13, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
-          {listing.title}
+          {listing.normalizedTitle || listing.title}
         </div>
         <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {listing.region && <span>📍 {listing.region}</span>}
@@ -791,6 +886,12 @@ function InsightListingRow({
     </div>
   );
 }
+
+const VerifiedBadge = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="#3b82f6" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+    <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+  </svg>
+);
 
 function ListingModal({ listing, data, onClose }: { listing: PriceListing; data: PriceData; onClose: () => void }) {
   const [catalogEntry, setCatalogEntry] = useState<{ imageUrl?: string } | null>(null);
@@ -874,11 +975,6 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
     desc = `${data.brand} ${data.model} luxury watch`;
   }
 
-  const VerifiedBadge = () => (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="#3b82f6" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
-      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-    </svg>
-  );
 
   return (
     <div style={{
@@ -1018,8 +1114,14 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
                 )}
               </div>
 
-              <div style={{ fontSize: 14, color: '#374151', margin: '0 0 16px 0', lineHeight: 1.5, fontStyle: 'italic' }}>
-                "{listing.title}"
+              {listing.normalizedTitle && (
+                <div style={{ fontSize: 15, fontWeight: 600, color: '#111827', marginBottom: 8 }}>
+                  {listing.normalizedTitle}
+                </div>
+              )}
+              <div style={{ fontSize: 12, color: '#6b7280', margin: '0 0 16px 0', lineHeight: 1.5, fontStyle: 'italic', backgroundColor: '#f9fafb', padding: '8px 12px', borderRadius: 6, border: '1px solid #e5e7eb', maxHeight: 80, overflowY: 'auto' }}>
+                <span style={{ fontSize: 10, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 1, display: 'block', marginBottom: 4 }}>Original message</span>
+                "{listing.rawMessage || listing.title}"
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f3f4f6', paddingTop: 12, marginBottom: 16 }}>
@@ -1128,12 +1230,17 @@ function ListingRow({ listing, onSelect }: { listing: PriceListing; onSelect: ()
       style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', textDecoration: 'none' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = BG_ELEV)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
-      <div style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: BG_ELEV, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, color: MUTED }}>⌚</div>
+      <div style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: BG_ELEV, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+        {listing.imageUrl ? (
+          <img src={listing.imageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <span style={{ fontSize: 18, color: MUTED }}>⌚</span>
+        )}
+      </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{listing.title}</div>
+        <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{listing.normalizedTitle || listing.title}</div>
         <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
-          {listing.region && <span className="mr-2">{listing.region}</span>}
-          {listing.phone && <span className="mr-2">{listing.phone}</span>}
+          {listing.condition && listing.condition !== 'Unknown' && <span className="mr-2" style={{ color: listing.condition === 'New' ? GREEN : MUTED }}>{listing.condition}</span>}
           {listing.date && <span>{listing.date}</span>}
         </div>
         {confidenceObj && (

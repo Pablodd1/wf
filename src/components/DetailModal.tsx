@@ -4,7 +4,7 @@
  * Save merges changes and fires re-run pipeline.
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Package, Paperclip, Star, Check, Settings, AlertTriangle, Trash2, Play, RotateCcw } from 'lucide-react';
 import type { WatchRecord, FailureFlag } from '@/types';
@@ -83,25 +83,35 @@ const labelCls = 'text-[10px] text-text-muted uppercase tracking-wider block mb-
 export function DetailModal({ record, open, onClose, onApprove, onEdit, onFlag, onDelete }: DetailModalProps) {
   const [sourceExpanded, setSourceExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState<Partial<WatchRecord>>({});
-
-  useEffect(() => {
+  const editFormFromRecord = useMemo<Partial<WatchRecord>>(() => {
+    if (!record) return {};
+    return {
+      brand: record.brand,
+      reference: record.reference,
+      dialColor: record.dialColor,
+      price: record.price,
+      condition: record.condition,
+      year: record.year,
+      rawMessage: record.rawMessage,
+      originalCurrency: record.originalCurrency,
+      hasBox: record.hasBox,
+      hasPapers: record.hasPapers,
+    };
+  }, [record]);
+  const [editForm, setEditForm] = useState<Partial<WatchRecord>>(editFormFromRecord);
+  const [prevRecord, setPrevRecord] = useState(record);
+  if (record !== prevRecord) {
+    setPrevRecord(record);
     if (record && open) {
-      setEditForm({
-        brand: record.brand,
-        reference: record.reference,
-        dialColor: record.dialColor,
-        price: record.price,
-        condition: record.condition,
-        year: record.year,
-        rawMessage: record.rawMessage,
-        originalCurrency: record.originalCurrency,
-        hasBox: record.hasBox,
-        hasPapers: record.hasPapers,
-      });
+      setEditForm(editFormFromRecord);
     }
+  }
+
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open !== prevOpen) {
+    setPrevOpen(open);
     if (!open) setEditing(false);
-  }, [record, open]);
+  }
 
   useEffect(() => {
     if (open) document.body.style.overflow = 'hidden';

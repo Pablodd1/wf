@@ -47,15 +47,16 @@ const currencyOptions = ['USD', 'HKD', 'EUR', 'GBP'];
 const boxPapersOptions = ['Full Set', 'Box Only', 'Papers Only', 'None', 'Unknown'];
 
 export function EditModal({ record, open, onClose, onSave }: EditModalProps) {
-  const [form, setForm] = useState<Partial<WatchRecord>>({});
-  const [sellerRating, setSellerRating] = useState(3);
-
-  useEffect(() => {
+  const [form, setForm] = useState<Partial<WatchRecord>>(() => record ? { ...record } : {});
+  const [sellerRating, setSellerRating] = useState(() => record?.sellerRating ?? 3);
+  const [prevRecord, setPrevRecord] = useState(record);
+  if (record !== prevRecord) {
+    setPrevRecord(record);
     if (record) {
       setForm({ ...record });
       setSellerRating(record.sellerRating);
     }
-  }, [record]);
+  }
 
   // Lock body scroll
   useEffect(() => {

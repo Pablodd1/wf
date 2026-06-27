@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { TrendingUp, AlertTriangle, Activity, Watch } from 'lucide-react';
 import type { WatchRecord } from '@/types';
@@ -10,24 +10,20 @@ interface AIOpportunitiesProps {
 }
 
 export function AIOpportunities({ records, onSelect }: AIOpportunitiesProps) {
-  const [stats, setStats] = useState<any>(null);
-
-  useEffect(() => {
+  const [stats] = useState<any>({
     // In production, this fetches from /api/dashboard-stats
     // For now, we simulate the live parsed dashboard_stats table
-    setStats({
-      volume_leaders: [
-        { reference: '126710BLNR', points: 566, name: 'Rolex Batgirl' },
-        { reference: '5167A', points: 528, name: 'Patek Aquanaut' }
-      ],
-      datejust_stats: {
-        avg_confidence: 83,
-        manual_review_rate: '80%',
-        bottleneck: true
-      },
-      richard_mille_alert: true,
-    });
-  }, []);
+    volume_leaders: [
+      { reference: '126710BLNR', points: 566, name: 'Rolex Batgirl' },
+      { reference: '5167A', points: 528, name: 'Patek Aquanaut' }
+    ],
+    datejust_stats: {
+      avg_confidence: 83,
+      manual_review_rate: '80%',
+      bottleneck: true
+    },
+    richard_mille_alert: true,
+  });
 
   if (!stats) return null;
 

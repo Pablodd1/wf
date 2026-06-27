@@ -442,7 +442,9 @@ export function useWatchData() {
 
   useEffect(() => {
     if (_cache) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRecords(_cache);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLoading(false);
       
       // Perform background delta sync to pull new records since last sync

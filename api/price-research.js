@@ -154,6 +154,7 @@ module.exports = async function handler(req, res) {
     // Transform rows into listings
     const brand = resolvedBrand || (rows[0] ? rows[0].brand : null) || inferBrand(activeRef);
     let model = resolvedModel;
+    let catalogImageUrl = null;
     if (!model) {
       try {
         const fs = require('fs');
@@ -161,8 +162,9 @@ module.exports = async function handler(req, res) {
         const catalogPath = path.resolve(process.cwd(), 'public', 'catalog.json');
         const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
         const catMatch = catalog.find(c => c.reference === activeRef);
-        if (catMatch && catMatch.model) {
-          model = catMatch.model;
+        if (catMatch) {
+          if (catMatch.model) model = catMatch.model;
+          if (catMatch.imageUrl) catalogImageUrl = catMatch.imageUrl;
         }
       } catch (e) { /* ignore */ }
     }
@@ -180,9 +182,16 @@ module.exports = async function handler(req, res) {
       const media_assets = parsedFlags.media_assets || [];
       const imageUrl = media_assets.length > 0 ? media_assets[0] : (r.image_url || null);
 
+      // Build a clean normalized title from parsed fields instead of raw message
+      const titleParts = [r.brand, r.reference, r.dial_color, r.condition, r.year]
+        .filter(v => v && v !== 'Unknown' && v !== 'UNKNOWN' && v !== null);
+      const normalizedTitle = titleParts.length > 0 ? titleParts.join(' · ') : null;
+
       return {
         id: r.id || r.message_hash || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
-        title: r.raw_message || '',
+        title: normalizedTitle || r.raw_message || '',
+        normalizedTitle,
+        rawMessage: r.raw_message || '',
         price: r.price_raw || 0,
         currency: r.currency || 'USD',
         priceUSD,
@@ -276,6 +285,7 @@ module.exports = async function handler(req, res) {
       reference: activeRef,
       brand,
       model: model,
+      catalogImageUrl,
       dialColors: dialSet.length > 0 ? dialSet : ['Unknown'],
       primaryDial: dialSet[0] || 'Unknown',
       liquidity: {
