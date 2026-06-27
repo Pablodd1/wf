@@ -27,7 +27,7 @@ function getVerdict(r: WatchRecord): 'APPROVED' | 'HUMAN' | 'RECYCLE' {
 }
 
 export default function Home() {
-  const { records, stats, loading, loadProgress } = useWatchData();
+  const { records, stats, loading, loadProgress, setRecords } = useWatchData();
   
   // Public pages only show APPROVED records (HUMAN/RECYCLE hidden)
   const publicRecords = useMemo(() => records.filter(r => getVerdict(r) === 'APPROVED'), [records]);
@@ -66,19 +66,39 @@ export default function Home() {
     setEditingRecord(null);
   }, []);
 
-  const handleApprove = useCallback((record: WatchRecord) => {
+  const handleApprove = useCallback(async (record: WatchRecord) => {
     setApprovedRecords((prev) => new Set(prev).add(record.id));
     setReviewedRecords((prev) => new Set(prev).add(record.id));
     setDetailModalOpen(false);
     setSelectedRecord(null);
-  }, []);
+    try {
+      await fetch('/api/update-record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: record.id, verdict: 'APPROVED' })
+      });
+      setRecords((prev: WatchRecord[]) => prev.map(r => r.id === record.id ? { ...r, severity: 'INFO', isResidue: false } : r));
+    } catch (err) {
+      console.error('Failed to save approval to database:', err);
+    }
+  }, [setRecords]);
 
-  const handleDelete = useCallback((record: WatchRecord) => {
+  const handleDelete = useCallback(async (record: WatchRecord) => {
     setDeletedRecords((prev) => new Set(prev).add(record.id));
     setReviewedRecords((prev) => new Set(prev).add(record.id));
     setDetailModalOpen(false);
     setSelectedRecord(null);
-  }, []);
+    try {
+      await fetch('/api/update-record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: record.id, verdict: 'RECYCLE' })
+      });
+      setRecords((prev: WatchRecord[]) => prev.map(r => r.id === record.id ? { ...r, severity: 'CRITICAL', isResidue: true } : r));
+    } catch (err) {
+      console.error('Failed to save delete/recycle to database:', err);
+    }
+  }, [setRecords]);
 
   const handleFlag = useCallback((record: WatchRecord) => {
     setReviewedRecords((prev) => new Set(prev).add(record.id));
@@ -105,9 +125,9 @@ export default function Home() {
           },
         }),
       });
-      const data = await res.json();
-      if (data.success) {
-        const ai = Array.isArray(data.parsed) ? data.parsed[0] : data.parsed;
+      const resData = await res.json();
+      if (resData.success) {
+        const ai = Array.isArray(resData.parsed) ? resData.parsed[0] : resData.parsed;
         if (ai) {
           // Merge AI insights back into the record
           const updated: WatchRecord = {
@@ -125,23 +145,66 @@ export default function Home() {
           };
           // Route to correct pipeline: ≥90 auto-approve, 60-89 AI review, <60 human
           updated.isResidue = updated.confidence < 60;
-          // Update the record in local state (replace in records)
-          // Note: records from useWatchData are read-only; edit is cosmetic in this session
-          console.log('[Save] Record', record.id, 're-parsed, confidence:', updated.confidence,
+          const newVerdict = updated.confidence >= 90 ? 'APPROVED' : (updated.confidence >= 60 ? 'REVIEW' : 'HUMAN');
+
+          // Persist changes to Supabase!
+          await fetch('/api/update-record', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id: record.id,
+              verdict: newVerdict,
+              brand: updated.brand,
+              reference: updated.reference,
+              dial_color: updated.dialColor,
+              condition: updated.condition,
+              year: updated.year,
+              price_raw: updated.originalPrice,
+              price_usd: updated.price,
+              currency: updated.originalCurrency,
+              confidence: updated.confidence
+            })
+          });
+
+          // Update local state
+          setRecords((prev: WatchRecord[]) => prev.map(r => r.id === record.id ? updated : r));
+          
+          console.log('[Save] Record', record.id, 're-parsed & saved to database, confidence:', updated.confidence,
             updated.isResidue ? '→ Residue' : updated.confidence >= 90 ? '→ Auto-Approved' : '→ AI Review');
         }
       }
     } catch (e) {
       console.error('[Save] AI re-parse failed:', e);
-      // Even if AI fails, mark as human-approved with boosted confidence
+      // Fallback: approve record as-is
       const updated: WatchRecord = {
         ...record,
         confidence: Math.min(100, record.confidence + 15),
         isResidue: false,
       };
-      void updated; // read-only dataset, edit is cosmetic
+      try {
+        await fetch('/api/update-record', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: record.id,
+            verdict: 'APPROVED',
+            brand: updated.brand,
+            reference: updated.reference,
+            dial_color: updated.dialColor,
+            condition: updated.condition,
+            year: updated.year,
+            price_raw: updated.originalPrice,
+            price_usd: updated.price,
+            currency: updated.originalCurrency,
+            confidence: updated.confidence
+          })
+        });
+        setRecords((prev: WatchRecord[]) => prev.map(r => r.id === record.id ? updated : r));
+      } catch (err) {
+        console.error('Failed to save fallback edit to database:', err);
+      }
     }
-  }, [records]);
+  }, [setRecords]);
 
   const handleExportExcel = useCallback(async () => {
     if (!records || records.length === 0) return;

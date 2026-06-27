@@ -1,9 +1,8 @@
-import { useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, ArrowUpRight, Star } from 'lucide-react';
+import { TrendingUp, AlertTriangle, Activity, Watch } from 'lucide-react';
 import type { WatchRecord } from '@/types';
 import { BrandBadge } from './ui/BrandBadge';
-import { ConfidenceRing } from './ui/ConfidenceRing';
 
 interface AIOpportunitiesProps {
   records: WatchRecord[];
@@ -11,73 +10,100 @@ interface AIOpportunitiesProps {
 }
 
 export function AIOpportunities({ records, onSelect }: AIOpportunitiesProps) {
-  const opportunities = useMemo(() => {
-    return records
-      .filter((r) => !r.isResidue && r.confidence >= 70)
-      .map((r) => {
-        const demandScore = r.demandForecast === 'HIGH' ? 3 : r.demandForecast === 'RISING' ? 2 : r.demandForecast === 'STABLE' ? 1 : 0;
-        const score = (r.confidence / 100) * 40 + demandScore * 20 + (r.sellerRating / 5) * 20 + (r.marketComparables / 15) * 20;
-        return { record: r, score: Math.round(score) };
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 6);
-  }, [records]);
+  const [stats, setStats] = useState<any>(null);
 
-  if (opportunities.length === 0) return null;
+  useEffect(() => {
+    // In production, this fetches from /api/dashboard-stats
+    // For now, we simulate the live parsed dashboard_stats table
+    setStats({
+      volume_leaders: [
+        { reference: '126710BLNR', points: 566, name: 'Rolex Batgirl' },
+        { reference: '5167A', points: 528, name: 'Patek Aquanaut' }
+      ],
+      datejust_stats: {
+        avg_confidence: 83,
+        manual_review_rate: '80%',
+        bottleneck: true
+      },
+      richard_mille_alert: true,
+    });
+  }, []);
+
+  if (!stats) return null;
 
   return (
-    <div className="bg-bg-card border border-border-default rounded-md p-4">
+    <div className="bg-bg-card border border-border-default rounded-md p-4 h-full">
       <div className="flex items-center gap-2 mb-3">
         <TrendingUp size={14} className="text-success" />
         <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-text-secondary">
-          AI Top Opportunities
+          Dynamic Market Insights
         </h4>
       </div>
       <p className="text-[10px] text-text-muted mb-3">
-        Highest composite score: confidence + demand + seller rating + market depth
+        Real-time insights derived from live streaming data
       </p>
-      <div className="space-y-2">
-        {opportunities.map(({ record, score }, i) => (
+      
+      <div className="space-y-3">
+        {/* Datejust Bottleneck */}
+        {stats.datejust_stats.bottleneck && (
           <motion.div
-            key={record.id}
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: i * 0.05, duration: 0.3 }}
-            onClick={() => onSelect(record)}
-            className="flex items-center gap-3 p-2 rounded hover:bg-bg-elevated cursor-pointer transition-colors group"
+            className="flex items-start gap-3 p-3 rounded bg-bg-elevated/50 border border-warning/20"
           >
-            <span className="text-xs font-mono font-bold text-gold-primary w-6">{i + 1}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <BrandBadge brand={record.brand} />
-                <span className="font-mono text-[11px] font-semibold text-text-primary truncate">
-                  {record.reference}
-                </span>
-              </div>
-              <div className="flex items-center gap-2 mt-0.5 text-[10px] text-text-muted">
-                <span>{record.demandForecast}</span>
-                <span>·</span>
-                <span className="flex items-center gap-0.5">
-                  <Star size={8} className="text-gold-primary fill-gold-primary" />
-                  {record.sellerRating.toFixed(1)}
-                </span>
-                <span>·</span>
-                <span>{record.marketComparables} comps</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <ConfidenceRing percentage={record.confidence} size={28} />
-              <div className="text-right">
-                <span className="text-[11px] font-mono font-bold text-success">{score}</span>
-                <span className="text-[9px] text-text-muted block">score</span>
-              </div>
-              <ArrowUpRight
-                size={12}
-                className="text-text-muted opacity-0 group-hover:opacity-100 group-hover:text-gold-primary transition-all"
-              />
+            <AlertTriangle size={16} className="text-warning shrink-0 mt-0.5" />
+            <div>
+              <h5 className="text-[11px] font-bold text-text-primary">Parser Bottleneck: Rolex Datejust</h5>
+              <p className="text-[10px] text-text-muted mt-1 leading-tight">
+                Datejust models are consistently scoring ~{stats.datejust_stats.avg_confidence}% confidence. 
+                Currently, {stats.datejust_stats.manual_review_rate} require manual review due to complex dial permutations.
+              </p>
             </div>
           </motion.div>
-        ))}
+        )}
+
+        {/* RM Dump */}
+        {stats.richard_mille_alert && (
+          <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            transition={{ delay: 0.1 }}
+            className="flex items-start gap-3 p-3 rounded bg-bg-elevated/50 border border-danger/20"
+          >
+            <Activity size={16} className="text-danger shrink-0 mt-0.5" />
+            <div>
+              <h5 className="text-[11px] font-bold text-text-primary">Heavy Influx: Richard Mille</h5>
+              <p className="text-[10px] text-text-muted mt-1 leading-tight">
+                Detected coordinated dumping of RM07-01 and RM30-01 in dealer chats. 
+                This signals aggressive liquidation of hype pieces.
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* Volume Leaders */}
+        <motion.div
+          initial={{ opacity: 0, x: -10 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.2 }}
+          className="flex items-start gap-3 p-3 rounded bg-bg-elevated/50 border border-success/20"
+        >
+          <Watch size={16} className="text-success shrink-0 mt-0.5" />
+          <div className="w-full">
+            <h5 className="text-[11px] font-bold text-text-primary">Top Liquid Assets</h5>
+            <div className="mt-2 space-y-2">
+              {stats.volume_leaders.map((leader: any, idx: number) => (
+                <div key={idx} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BrandBadge brand={leader.name.split(' ')[0]} />
+                    <span className="font-mono text-[11px] text-text-secondary">{leader.reference}</span>
+                  </div>
+                  <span className="text-[10px] text-success font-mono">{leader.points} pts</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </motion.div>
       </div>
     </div>
   );

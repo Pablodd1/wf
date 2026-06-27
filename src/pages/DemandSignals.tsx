@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import {
   Users, ShoppingCart, TrendingUp, MessageCircle,
   Flame, Search, ArrowRight, BarChart3, Activity,
@@ -275,7 +275,7 @@ function NavBar() {
         <a href="/" style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif", textDecoration: 'none' }}>WatchFacts</a>
         <div className="flex gap-6" style={{ fontSize: 14 }}>
           {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => (
-            <a key={item} href={item === 'Price Research' ? '/price-research' : '#'} onClick={(e) => { if (item !== 'Price Research') e.preventDefault(); }} style={{ color: MUTED, textDecoration: 'none' }}>{item}</a>
+            <Link key={item} to={item === 'Price Research' ? '/price-research' : (item === 'Trading' ? '/review' : '/')} style={{ color: MUTED, textDecoration: 'none' }}>{item}</Link>
           ))}
         </div>
       </div>

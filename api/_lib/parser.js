@@ -20,14 +20,14 @@
  *   toUSD(amount, currency)  — FX conversion
  *   hashMessage(text)        — SHA-256 for dedup
  *   RATES                    — currency rates
- *   APPROVE_THRESHOLD        — 90
- *   HUMAN_THRESHOLD          — 70
+ *   APPROVE_THRESHOLD        — 100
+ *   HUMAN_THRESHOLD          — 80
  */
 
 const crypto = require('crypto');
 
-const APPROVE_THRESHOLD = 90;
-const HUMAN_THRESHOLD = 70;
+const APPROVE_THRESHOLD = 100;
+const HUMAN_THRESHOLD = 80;
 
 const RATES = {
   USD: 1.0, USDT: 1.0, HKD: 0.128, EUR: 1.08,
@@ -66,48 +66,47 @@ function isKaratContext(text, matchIndex, matchLength) {
   return false;
 }
 
-function parsePrice(text, normalizedRef = null) {
+function parsePriceDetailed(text, normalizedRef = null) {
   // Strip commas but preserve text for European-decimal detection
   const t = text.replace(/,/g, '');
 
-  const safe = (n) => (isYearLike(n) ? null : n);
+  const safe = (n, curr = null) => (isYearLike(n) ? { priceRaw: null, explicitCurrency: null } : { priceRaw: n, explicitCurrency: curr });
 
   // P1: European decimal-thousands before currency: 64.000Usdt → 64000
-  // Pattern: digits.3digits followed immediately by USDT/USD/HKD
-  const euDecM = t.match(/(\d{1,4})\.(\d{3})\s*(?:usdt|usd|hkd)\b/i);
+  const euDecM = t.match(/(\d{1,4})\.(\d{3})\s*(usdt|usd|hkd)\b/i);
   if (euDecM) {
     const candidate = parseInt(euDecM[1] + euDecM[2], 10);
-    return safe(candidate);
+    return safe(candidate, euDecM[3].toUpperCase());
   }
 
   // P1: hk$ prefix with m/k multipliers
   const hkDollarM = t.match(/hk\$\s*(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
-  if (hkDollarM) return safe(Math.round(parseFloat(hkDollarM[1]) * 1_000_000));
+  if (hkDollarM) return safe(Math.round(parseFloat(hkDollarM[1]) * 1_000_000), 'HKD');
   const hkDollarK = t.match(/hk\$\s*(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
-  if (hkDollarK) return safe(Math.round(parseFloat(hkDollarK[1]) * 1000));
+  if (hkDollarK) return safe(Math.round(parseFloat(hkDollarK[1]) * 1000), 'HKD');
   const hkDollarPlain = t.match(/hk\$\s*(\d{4,8})/i);
-  if (hkDollarPlain) return safe(parseInt(hkDollarPlain[1], 10));
+  if (hkDollarPlain) return safe(parseInt(hkDollarPlain[1], 10), 'HKD');
 
   // HKD with decimals: HKD4.15m, HKD1.43m, etc.
   const hkdM = t.match(/HKD\s*(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
-  if (hkdM) return safe(Math.round(parseFloat(hkdM[1]) * 1_000_000));
+  if (hkdM) return safe(Math.round(parseFloat(hkdM[1]) * 1_000_000), 'HKD');
   const hkdK = t.match(/HKD\s*(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
-  if (hkdK) return safe(Math.round(parseFloat(hkdK[1]) * 1000));
+  if (hkdK) return safe(Math.round(parseFloat(hkdK[1]) * 1000), 'HKD');
 
   const hkdPlain = t.match(/HKD\s*(\d{4,8})/i);
-  if (hkdPlain) return safe(parseInt(hkdPlain[1], 10));
+  if (hkdPlain) return safe(parseInt(hkdPlain[1], 10), 'HKD');
 
   const numBeforeHkd = t.match(/(\d{5,8})\s*HKD/i);
-  if (numBeforeHkd) return safe(parseInt(numBeforeHkd[1], 10));
+  if (numBeforeHkd) return safe(parseInt(numBeforeHkd[1], 10), 'HKD');
   const kBeforeHkd = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\s*HKD/i);
-  if (kBeforeHkd) return safe(Math.round(parseFloat(kBeforeHkd[1]) * 1000));
+  if (kBeforeHkd) return safe(Math.round(parseFloat(kBeforeHkd[1]) * 1000), 'HKD');
   const mBeforeHkd = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\s*HKD/i);
-  if (mBeforeHkd) return safe(Math.round(parseFloat(mBeforeHkd[1]) * 1_000_000));
+  if (mBeforeHkd) return safe(Math.round(parseFloat(mBeforeHkd[1]) * 1_000_000), 'HKD');
 
   const numBeforeUsd = t.match(/(\d{4,8})\s*(?:USD|USDT)/i);
-  if (numBeforeUsd) return safe(parseInt(numBeforeUsd[1], 10));
+  if (numBeforeUsd) return safe(parseInt(numBeforeUsd[1], 10), 'USD');
   const kBeforeUsd = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\s*(?:USD|USDT)/i);
-  if (kBeforeUsd) return safe(Math.round(parseFloat(kBeforeUsd[1]) * 1000));
+  if (kBeforeUsd) return safe(Math.round(parseFloat(kBeforeUsd[1]) * 1000), 'USD');
 
   const mMatch = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
   if (mMatch) return safe(Math.round(parseFloat(mMatch[1]) * 1_000_000));
@@ -124,7 +123,7 @@ function parsePrice(text, normalizedRef = null) {
   }
 
   const usdMatch = t.match(/(?:USD|USDT|\$)\s*(\d{4,8})/i);
-  if (usdMatch) return safe(parseInt(usdMatch[1], 10));
+  if (usdMatch) return safe(parseInt(usdMatch[1], 10), 'USD');
 
   const hasRefPattern = /\b(?:RM\s?\d{2}|[345]\d{3}[A-Z]?[\/\-]|\d{6}[A-Z]{0,5}\b|\d{5}[A-Z]{2,5}\b|PAM\d{3,5}|IW\d{6,8}|BR0?\d)/i.test(t);
   if (!hasRefPattern) {
@@ -132,11 +131,17 @@ function parsePrice(text, normalizedRef = null) {
     if (plainMatch) {
       const candidate = parseInt(plainMatch[1], 10);
       if (!isReferenceNumber(candidate, normalizedRef)) {
-        return safe(candidate);
+        return safe(candidate, euDecM[3].toUpperCase());
       }
     }
   }
   return null;
+}
+
+
+function parsePrice(text, normalizedRef = null) {
+  const res = parsePriceDetailed(text, normalizedRef);
+  return res ? res.priceRaw : null;
 }
 
 function parseCurrency(text) {
@@ -160,8 +165,8 @@ function inferBrandFromRef(ref) {
   const r = ref.toUpperCase().replace(/[^A-Z0-9\/\-\.]/g, '');
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
   if (/^[345]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
-  if (/^[345]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
-  if (/^[345]\d{3}-/.test(r)) return 'Patek Philippe';
+  if (/^[1-5]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
+  if (/^[1-5]\d{3}-/.test(r)) return 'Patek Philippe';
   if (/^\d{5}[A-Z]{2,5}$/.test(r)) return 'Audemars Piguet';
   if (/^\d{6}[A-Z]{0,5}$/.test(r)) return 'Rolex';
   if (/^[48]\d{3}[A-Z]$/.test(r)) return 'Vacheron Constantin';
@@ -317,7 +322,9 @@ function parseFull(rawMsg) {
     year = yearM ? parseInt(yearM[1], 10) : null;
   }
 
-  let priceRaw = parsePrice(text, ref);
+  let priceRes = parsePriceDetailed(text, ref);
+  let priceRaw = priceRes ? priceRes.priceRaw : null;
+  let explicitCurrency = priceRes ? priceRes.explicitCurrency : null;
 
   // P0-B: Reject price if it matches the extracted reference digits
   if (priceRaw !== null && ref) {
@@ -337,7 +344,7 @@ function parseFull(rawMsg) {
     priceRaw = null;
   }
 
-  const currency = parseCurrency(text);
+  const currency = explicitCurrency || parseCurrency(text);
 
   // P4: Set/accessories extraction
   let accessories = {

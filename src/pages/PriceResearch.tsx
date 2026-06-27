@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams, Link } from 'react-router-dom';
 import { ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
 import { generatePriceResearchReport } from '@/lib/reports';
@@ -15,6 +15,7 @@ interface PriceListing {
   region?: string;
   phone?: string;
   imageUrl?: string;
+  media_assets?: string[];
   condition?: string;
   boxPapers?: string;
   confidence?: {
@@ -83,11 +84,13 @@ const BLUE = '#3b82f6';         // blue-500
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
   const [query, setQuery] = useState(searchParams.get('ref') || '126334');
-  const [data, setData] = useState<PriceData | null>(null);
+  const [apiData, setApiData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
   const [selectedListing, setSelectedListing] = useState<PriceListing | null>(null);
+  const [downloadingReport, setDownloadingReport] = useState(false);
+  const [selectedDial, setSelectedDial] = useState<string | null>(null);
 
   const fetchData = useCallback(async (ref: string) => {
     if (!ref || ref.length < 2) return;
@@ -95,6 +98,7 @@ export default function PriceResearch() {
     setError('');
     setSelectedMonth(null);
     setSelectedListing(null);
+    setSelectedDial(null);
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 20000);
@@ -102,7 +106,7 @@ export default function PriceResearch() {
       clearTimeout(timeoutId);
       if (!r.ok) { setError(`Server error (${r.status})`); return; }
       const d = await r.json();
-      if (d.success) setData(d);
+      if (d.success) setApiData(d);
       else setError(d.error || 'No data for this reference');
     } catch (e) {
       setError((e as Error).name === 'AbortError' ? 'Request timed out — try again' : 'Failed to fetch data');
@@ -111,6 +115,78 @@ export default function PriceResearch() {
   }, []);
 
   useEffect(() => { fetchData(query); }, [query, fetchData]);
+
+  const filteredData = useMemo(() => {
+    if (!apiData) return null;
+    if (!selectedDial) return apiData;
+
+    const lowerDial = selectedDial.toLowerCase();
+    const filteredListings = apiData.listings.filter((l: any) => (l.dial || '').toLowerCase() === lowerDial);
+
+    if (filteredListings.length === 0) {
+      return {
+        ...apiData,
+        listings: [],
+        liquidity: { ...apiData.liquidity, fsCount: 0 },
+        pricing: {
+          ...apiData.pricing,
+          current: { min: 0, avg: 0, max: 0, count: 0 },
+          drift: 0
+        },
+        chart: []
+      };
+    }
+
+    const prices = filteredListings.map((l: any) => l.priceUSD || l.price || 0).filter(Boolean);
+    const min = prices.length ? Math.min(...prices) : 0;
+    const max = prices.length ? Math.max(...prices) : 0;
+    const avg = prices.length ? Math.round(prices.reduce((sum, p) => sum + p, 0) / prices.length) : 0;
+
+    const monthlyGroups: Record<string, number[]> = {};
+    filteredListings.forEach((l: any) => {
+      if (!l.date) return;
+      const month = l.date.slice(0, 7);
+      if (!monthlyGroups[month]) monthlyGroups[month] = [];
+      monthlyGroups[month].push(l.priceUSD || l.price || 0);
+    });
+
+    const newChart = Object.keys(monthlyGroups)
+      .sort()
+      .map(month => {
+        const monthPrices = monthlyGroups[month];
+        const mMin = Math.min(...monthPrices);
+        const mMax = Math.max(...monthPrices);
+        const mAvg = Math.round(monthPrices.reduce((s, p) => s + p, 0) / monthPrices.length);
+        return {
+          month,
+          min: mMin,
+          avg: mAvg,
+          max: mMax,
+          count: monthPrices.length
+        };
+      });
+
+    return {
+      ...apiData,
+      listings: filteredListings,
+      liquidity: {
+        ...apiData.liquidity,
+        fsCount: filteredListings.length
+      },
+      pricing: {
+        ...apiData.pricing,
+        current: {
+          min,
+          avg,
+          max,
+          count: filteredListings.length
+        }
+      },
+      chart: newChart.length > 0 ? newChart : [{ month: 'N/A', min: 0, avg: 0, max: 0, count: 0 }]
+    };
+  }, [apiData, selectedDial]);
+
+  const data = filteredData;
 
   if (loading) {
     return (
@@ -187,8 +263,38 @@ export default function PriceResearch() {
                 <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
                 <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{data.reference}</span>
               </div>
-              <div style={{ fontSize: 14, color: MUTED }}>
-                Dial: <span style={{ color: TEXT, fontWeight: 500 }}>{data.dialColors.join(', ')}</span>
+              <div style={{ fontSize: 14, color: MUTED, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
+                <span style={{ fontWeight: 600 }}>Dial:</span>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => setSelectedDial(null)}
+                    style={{
+                      padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                      backgroundColor: selectedDial === null ? BLUE : BG_ELEV,
+                      color: selectedDial === null ? '#ffffff' : MUTED,
+                      border: selectedDial === null ? 'none' : `1px solid ${BORDER}`,
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    ALL
+                  </button>
+                  {data.dialColors.map((color: string) => (
+                    <button
+                      key={color}
+                      onClick={() => setSelectedDial(color)}
+                      style={{
+                        padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                        backgroundColor: selectedDial === color ? BLUE : BG_ELEV,
+                        color: selectedDial === color ? '#ffffff' : MUTED,
+                        border: selectedDial === color ? 'none' : `1px solid ${BORDER}`,
+                        textTransform: 'uppercase',
+                        transition: 'all 0.2s'
+                      }}
+                    >
+                      {color}
+                    </button>
+                  ))}
+                </div>
               </div>
               <div style={{ fontSize: 32, fontWeight: 700, marginTop: 8, color: GOLD }}>
                 {data.brand} {data.model} {data.reference}
@@ -243,41 +349,54 @@ export default function PriceResearch() {
                   </span>
                 </div>
                 <button 
-                  onClick={() => window.open(`/price-research?ref=${encodeURIComponent(data.reference)}`, '_self')}
+                  onClick={() => window.location.href = `/price-research?ref=${encodeURIComponent(data.reference)}`}
                   style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: GOLD, color: BG_CARD, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
                   Explore Marketplace →
                 </button>
                 <button 
-                  onClick={() => {
+                  disabled={downloadingReport}
+                  onClick={async () => {
                     if (!data) return;
-                    const report = generatePriceResearchReport(
-                      data.reference,
-                      data.brand,
-                      data.model,
-                      {
-                        min: data.pricing.current?.min || 0,
-                        avg: data.pricing.current?.avg || 0,
-                        max: data.pricing.current?.max || 0,
-                        count: data.pricing.current?.count || 0,
-                        drift: data.pricing.drift || 0,
-                        previousAvg: data.pricing.previousAvg || 53189,
-                        currentAvg: data.pricing.current?.avg || 41500
-                      },
-                      data.listings,
-                      data.liquidity,
-                      data.forecast
-                    );
-                    console.log('Report generated:', report);
+                    setDownloadingReport(true);
+                    try {
+                      // Fetch all records for report generation (up to 10k)
+                      const res = await fetch(`/api/price-research?reference=${encodeURIComponent(data.reference)}&limit=10000`);
+                      const fullData = await res.json();
+                      const listings = fullData.success ? fullData.listings : data.listings;
+                      
+                      const report = generatePriceResearchReport(
+                        data.reference,
+                        data.brand,
+                        data.model,
+                        {
+                          min: data.pricing.current?.min || 0,
+                          avg: data.pricing.current?.avg || 0,
+                          max: data.pricing.current?.max || 0,
+                          count: fullData.success ? listings.length : (data.pricing.current?.count || 0),
+                          drift: data.pricing.drift || 0,
+                          previousAvg: data.pricing.previousAvg || 53189,
+                          currentAvg: data.pricing.current?.avg || 41500
+                        },
+                        listings,
+                        data.liquidity,
+                        data.forecast
+                      );
+                      console.log('Report generated:', report);
+                    } catch (err) {
+                      console.error("Failed to generate full report", err);
+                    } finally {
+                      setDownloadingReport(false);
+                    }
                   }}
-                  style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, backgroundColor: BG_CARD, color: GOLD, border: `2px solid ${GOLD}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <FileSpreadsheet size={16} /> Download Report
+                  style={{ marginTop: 12, padding: '10px 20px', borderRadius: 8, backgroundColor: BG_CARD, color: GOLD, border: `2px solid ${GOLD}`, fontSize: 14, fontWeight: 500, cursor: downloadingReport ? 'not-allowed' : 'pointer', display: 'flex', alignItems: 'center', gap: 8, opacity: downloadingReport ? 0.7 : 1 }}>
+                  <FileSpreadsheet size={16} /> {downloadingReport ? 'Generating...' : 'Download Report'}
                 </button>
               </div>
             </div>
 
             {/* ── Price Forecast ───────────────────────────────── */}
             {data && data.chart && data.chart.length >= 3 && (
-              <PriceForecast chart={data.chart} reference={data.reference} brand={data.brand} model={data.model} forecastData={data.forecast} />
+              <PriceForecast chart={data.chart} reference={data.reference} brand={data.brand} model={data.model} forecastData={data.forecast} onSelectMonth={setSelectedMonth} />
             )}
 
             {/* ── Chart + 3-Month Prediction ────────────────────── */}
@@ -314,7 +433,7 @@ export default function PriceResearch() {
                 Listings ({data.listings.length} of {data.totalListings})
               </div>
               {data.listings.map((l, i) => (
-                <ListingRow key={i} listing={l} />
+                <ListingRow key={i} listing={l} onSelect={() => setSelectedListing(l)} />
               ))}
             </div>
 
@@ -340,15 +459,21 @@ function NavBar() {
           WatchFacts
         </div>
         <div className="flex gap-6" style={{ fontSize: 14 }}>
-          {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => (
-            <a key={item} href="#" onClick={(e) => { e.preventDefault(); }} style={{ 
+          {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => {
+            let to = '/';
+            if (item === 'Trading') to = '/review';
+            else if (item === 'Price Research') to = '/price-research';
+            else if (item === 'Dealer Directory') to = '/search';
+            
+            return (
+            <Link key={item} to={to} style={{ 
               color: item === 'Price Research' ? GOLD : MUTED, 
               fontWeight: item === 'Price Research' ? 600 : 400,
               textDecoration: 'none',
               borderBottom: item === 'Price Research' ? `2px solid ${GOLD}` : 'none',
               paddingBottom: 4,
-            }}>{item}</a>
-          ))}
+            }}>{item}</Link>
+          )})}
         </div>
       </div>
     </nav>
@@ -666,6 +791,7 @@ function InsightListingRow({
 }
 function ListingModal({ listing, data, onClose }: { listing: PriceListing; data: PriceData; onClose: () => void }) {
   const [catalogEntry, setCatalogEntry] = useState<{ imageUrl?: string } | null>(null);
+  const [currentImgIdx, setCurrentImgIdx] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -676,7 +802,10 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
     return () => { cancelled = true; };
   }, [data.reference]);
 
-  const img = listing.imageUrl || catalogEntry?.imageUrl;
+  // Combine media assets and fallback image
+  const images = listing.media_assets && listing.media_assets.length > 0 
+    ? listing.media_assets 
+    : [listing.imageUrl || catalogEntry?.imageUrl].filter(Boolean) as string[];
 
   // Extract box/papers logic
   const hasBox = /box|full\s*set/i.test(listing.title) || /box/i.test(listing.boxPapers || '');
@@ -714,14 +843,62 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
         {/* Content Body: Two columns */}
         <div style={{ display: 'flex', flex: 1, overflowY: 'auto', flexWrap: 'wrap' }}>
           
-          {/* Left Column: Image */}
+          {/* Left Column: Image Carousel */}
           <div style={{
             flex: '1 1 400px', minHeight: 300, maxHeight: 500, backgroundColor: '#f3f4f6',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-            borderRight: '1px solid #e5e7eb'
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+            borderRight: '1px solid #e5e7eb', position: 'relative'
           }}>
-            {img ? (
-              <img src={img} alt={listing.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {images.length > 0 ? (
+              <>
+                <img src={images[currentImgIdx]} alt={listing.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                
+                {images.length > 1 && (
+                  <>
+                    {/* Prev Button */}
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setCurrentImgIdx(prev => (prev - 1 + images.length) % images.length); }}
+                      style={{
+                        position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
+                        backgroundColor: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%',
+                        width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', color: '#374151', fontWeight: 'bold'
+                      }}
+                    >
+                      ←
+                    </button>
+                    
+                    {/* Next Button */}
+                    <button 
+                      onClick={(e) => { e.stopPropagation(); setCurrentImgIdx(prev => (prev + 1) % images.length); }}
+                      style={{
+                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+                        backgroundColor: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%',
+                        width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', color: '#374151', fontWeight: 'bold'
+                      }}
+                    >
+                      →
+                    </button>
+
+                    {/* Dot indicators */}
+                    <div style={{
+                      position: 'absolute', bottom: 12, display: 'flex', gap: 6
+                    }}>
+                      {images.map((_, idx) => (
+                        <div 
+                          key={idx}
+                          style={{
+                            width: 8, height: 8, borderRadius: '50%',
+                            backgroundColor: idx === currentImgIdx ? '#3b82f6' : 'rgba(255,255,255,0.5)',
+                            transition: 'background-color 0.2s'
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
             ) : (
               <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
                 <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
@@ -835,7 +1012,7 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
     </div>
   );
 }
-function ListingRow({ listing }: { listing: PriceListing }) {
+function ListingRow({ listing, onSelect }: { listing: PriceListing; onSelect: () => void }) {
   const rawConfidence = listing.confidence;
   // Normalize: API may return confidence as {score, aiFields, catalogFields} or just a number
   const confidenceObj = rawConfidence && typeof rawConfidence === 'object' 
@@ -845,10 +1022,8 @@ function ListingRow({ listing }: { listing: PriceListing }) {
   const scoreColor = score === 100 ? GREEN : score >= 90 ? BLUE : score >= 80 ? '#fd7e14' : RED;
   const scoreLabel = score === 100 ? '✓ VERIFIED' : score >= 90 ? '🔍 REVIEW' : score >= 80 ? '⚠ CHECK' : '🚫 FLAGGED';
   
-  const listingUrl = `/price-research?ref=${encodeURIComponent(listing.title?.match(/\b\d{4,6}[A-Z]?\b/)?.[0] || '')}`;
-  
   return (
-    <a href={listingUrl} target="_blank" rel="noopener noreferrer"
+    <div onClick={onSelect}
       style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer', textDecoration: 'none' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = BG_ELEV)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}>
@@ -881,10 +1056,10 @@ function ListingRow({ listing }: { listing: PriceListing }) {
         )}
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${listing.priceUSD?.toLocaleString() || listing.price?.toLocaleString()}</div>
       </div>
       <ExternalLink className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
-    </a>
+    </div>
   );
 }
 
@@ -1085,12 +1260,13 @@ function PricePredictionChart({
   );
 }
 
-function PriceForecast({ chart, reference, brand, model, forecastData }: { 
+function PriceForecast({ chart, reference, brand, model, forecastData, onSelectMonth }: { 
   chart: ChartPoint[]; 
   reference: string; 
   brand: string; 
   model: string;
   forecastData?: PriceData['forecast'];
+  onSelectMonth?: (i: number) => void;
 }) {
   // Use API forecast data if available, otherwise compute locally
   const hasApiForecast = forecastData && forecastData.forecasts.length > 0;
@@ -1192,7 +1368,21 @@ function PriceForecast({ chart, reference, brand, model, forecastData }: {
             />
             <Area type="monotone" dataKey="max" stroke="none" fill="#b8d4f0" fillOpacity={0.3} />
             <Area type="monotone" dataKey="min" stroke="none" fill="#fff" fillOpacity={1} />
-            <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 3 }} />
+            <Line 
+              type="monotone" 
+              dataKey="avg" 
+              stroke={BLUE} 
+              strokeWidth={2} 
+              dot={(props: { cx: number; cy: number; index: number }) => {
+                const { cx, cy, index } = props;
+                if (index >= chart.length) return <g key={index} />;
+                return (
+                  <g key={index} onClick={() => onSelectMonth && onSelectMonth(index)} style={{ cursor: 'pointer' }}>
+                    <circle cx={cx} cy={cy} r={6} fill={BLUE} stroke="#ffffff" strokeWidth={2} />
+                  </g>
+                );
+              }}
+            />
             <Line 
               type="monotone" 
               dataKey="avg" 
@@ -1319,45 +1509,45 @@ function Footer() {
         <div>
           <div style={sectionTitle}>Features</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Trading Floor</a>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>ChronoMatch</a>
+            <Link to="/review" style={linkStyle}>Trading Floor</Link>
+            <Link to="/demand" style={linkStyle}>ChronoMatch</Link>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Tools</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Glossary</a>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Currency Converter</a>
+            <Link to="/" style={linkStyle}>Glossary</Link>
+            <Link to="/" style={linkStyle}>Currency Converter</Link>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Dealers</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Dealer Directory</a>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Do Not Trade List</a>
+            <Link to="/search" style={linkStyle}>Dealer Directory</Link>
+            <Link to="/" style={linkStyle}>Do Not Trade List</Link>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Apps</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Get the App</a>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Hire Fi</a>
+            <Link to="/" style={linkStyle}>Get the App</Link>
+            <Link to="/" style={linkStyle}>Hire Fi</Link>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Community</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Join Groups</a>
+            <Link to="/" style={linkStyle}>Join Groups</Link>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Company</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>About Us</a>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>About Simon</a>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Contact</a>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Terms</a>
-            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Privacy Policy</a>
+            <Link to="/" style={linkStyle}>About Us</Link>
+            <Link to="/" style={linkStyle}>About Simon</Link>
+            <Link to="/" style={linkStyle}>Contact</Link>
+            <Link to="/" style={linkStyle}>Terms</Link>
+            <Link to="/" style={linkStyle}>Privacy Policy</Link>
           </div>
         </div>
       </div>

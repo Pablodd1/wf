@@ -16,6 +16,11 @@
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
+// ── Statistics Cache Globals ──
+let cachedStats = null;
+let cachedStatsTime = 0;
+const STATS_CACHE_TTL = 30 * 1000; // 30 seconds
+
 // ── Catalog image lookup (lazy-loaded singleton) ──
 let _catalogByRef = null;
 function loadCatalogImages() {
@@ -111,10 +116,16 @@ export default async function handler(req, res) {
 
   try {
     const { stats, page = '1', limit = '500', brand, verdict,
-            reference, dial_color, search, order = 'id', ascending = 'false' } = req.query;
+            reference, dial_color, search, order = 'id', ascending = 'false', last_sync } = req.query;
 
     // ── STATS MODE ─────────────────────────────────────────────────────────
     if (stats === 'true') {
+      const now = Date.now();
+      if (cachedStats && (now - cachedStatsTime < STATS_CACHE_TTL)) {
+        res.setHeader('X-Cache', 'HIT-Memory');
+        return res.status(200).json(cachedStats);
+      }
+
       // Total count
       let total = 0;
       try {
@@ -160,17 +171,21 @@ export default async function handler(req, res) {
         } catch {}
       }));
 
-      return res.status(200).json({
+      cachedStats = {
         total: derivedTotal,
         brands: brandCounts,
         verdicts: verdictCounts,
         cached_at: new Date().toISOString(),
-      });
+      };
+      cachedStatsTime = now;
+      res.setHeader('X-Cache', 'MISS-Memory');
+
+      return res.status(200).json(cachedStats);
     }
 
     // ── PAGINATED DATA MODE ────────────────────────────────────────────────
     const pageNum  = Math.max(1, parseInt(page));
-    const limitNum = Math.min(1000, Math.max(1, parseInt(limit)));
+    const limitNum = Math.min(50000, Math.max(1, parseInt(limit)));
     const offset   = (pageNum - 1) * limitNum;
     const endRange = offset + limitNum - 1;
 
@@ -184,6 +199,7 @@ export default async function handler(req, res) {
     if (reference)  filters.push(`reference=eq.${encodeURIComponent(reference)}`);
     if (dial_color) filters.push(`dial_color=eq.${encodeURIComponent(dial_color)}`);
     if (search)     filters.push(`reference=ilike.%${encodeURIComponent(search)}%`);
+    if (last_sync)  filters.push(`created_at=gt.${encodeURIComponent(last_sync)}`);
     if (filters.length) query += '&' + filters.join('&');
 
     const dataRes = await sbFetch(query, {

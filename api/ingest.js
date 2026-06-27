@@ -96,25 +96,51 @@ async function supabaseUpsert(record, supabaseUrl, serviceKey) {
 }
 
 /**
- * Check Supabase for an existing record with the same raw_message text.
- * Falls back to raw_message match since message_hash column may not exist yet.
+ * Check Supabase for an existing record with the same message_hash.
+ * Uses the UNIQUE index on message_hash for a fast O(log n) lookup.
+ * Falls back to raw_message scan if the column doesn't exist yet.
  * Returns the existing record (object) if found, or null.
  */
 async function findDuplicate(messageHash, supabaseUrl, serviceKey, rawMessage) {
+  const headers = { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` };
   try {
-    // Try message_hash first (fast index lookup if column exists)
-    const hashResp = await fetch(
-      `${supabaseUrl}/rest/v1/live_ingest?select=id,raw_message&limit=1&raw_message=eq.${encodeURIComponent(rawMessage.trim())}`,
-      { headers: { 'apikey': serviceKey, 'Authorization': `Bearer ${serviceKey}` } }
-    );
-    if (hashResp.ok) {
-      const rows = await hashResp.json();
-      if (rows && rows.length > 0) return rows[0];
+    // Primary: indexed hash lookup (fast)
+    if (messageHash) {
+      const hashResp = await fetch(
+        `${supabaseUrl}/rest/v1/live_ingest?select=id,raw_message,last_seen&limit=1&message_hash=eq.${encodeURIComponent(messageHash)}`,
+        { headers }
+      );
+      if (hashResp.ok) {
+        const rows = await hashResp.json();
+        if (rows && rows.length > 0) return rows[0];
+      }
     }
     return null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Update the last_seen timestamp on an existing live_ingest row.
+ * This is how we count repeat sightings without adding duplicate rows.
+ */
+async function bumpLastSeen(existingId, supabaseUrl, serviceKey) {
+  try {
+    await fetch(
+      `${supabaseUrl}/rest/v1/live_ingest?id=eq.${encodeURIComponent(existingId)}`,
+      {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+          'Prefer': 'return=minimal',
+        },
+        body: JSON.stringify({ last_seen: new Date().toISOString() }),
+      }
+    );
+  } catch { /* best-effort */ }
 }
 
 module.exports = async function handler(req, res) {
@@ -172,17 +198,21 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: 'rawMessage required (min 5 chars)' });
   }
 
-  // ── DEDUPLICATION: compute SHA-256 of the raw message ──
-  const messageHash = hashMessage(rawMessage);
+  // ── DEDUPLICATION: compute SHA-256 of the raw message + dealer ID ──
+  const messageHash = hashMessage(rawMessage + '|' + (channelId || ''));
 
   // Check for existing record with the same hash before doing any work
   if (supabaseUrl && serviceKey) {
     const existing = await findDuplicate(messageHash, supabaseUrl, serviceKey, rawMessage);
     if (existing) {
+      // Bump last_seen on the existing row to track repeat sightings
+      await bumpLastSeen(existing.id, supabaseUrl, serviceKey);
       return res.status(200).json({
         duplicate: true,
         message_hash: messageHash,
-        existing: [existing],
+        existing_id: existing.id,
+        last_seen: new Date().toISOString(),
+        action: 'last_seen_updated',
       });
     }
   }
@@ -248,10 +278,11 @@ module.exports = async function handler(req, res) {
       channel_id: channelId,
       image_url: lookupCatalogImage(parsed.ref),
       llm_used: usedLLM,
-      // Dedup hash — only stored on the first part (the whole message hash)
-      // so that the guard above fires on any repeat of the original message.
-      message_hash: i === 0 ? messageHash : null,
+      // Dedup hash — stored on every part so each sub-record is individually findable.
+      // The guard above uses i===0 hash (whole message) to catch any repeat.
+      message_hash: i === 0 ? messageHash : hashMessage(part),
       received_at: new Date().toISOString(),
+      last_seen: new Date().toISOString(),
     };
     
     allRecords.push(record);

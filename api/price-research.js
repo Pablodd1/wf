@@ -31,6 +31,9 @@ module.exports = async function handler(req, res) {
     return res.status(503).json({ error: 'Database not configured' });
   }
 
+  const limitVal = parseInt(url.searchParams.get('limit') || '1000', 10);
+  const limit = Math.min(10000, Math.max(1, isNaN(limitVal) ? 1000 : limitVal));
+
   try {
     const headers = {
       'apikey': SUPABASE_KEY,
@@ -40,7 +43,7 @@ module.exports = async function handler(req, res) {
     // Query watch_records for this reference
     // Try exact match first, then fuzzy (ilike) for variants like "5711/1A" → "5711A", "RM07-01" → "RM 07-01"
     let supaResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/watch_records?reference=eq.${encodeURIComponent(reference)}&limit=1000&order=created_at.desc`,
+      `${SUPABASE_URL}/rest/v1/watch_records?reference=eq.${encodeURIComponent(reference)}&limit=${limit}&order=created_at.desc`,
       { headers }
     );
     let rows = supaResp.ok ? await supaResp.json() : [];
@@ -50,7 +53,7 @@ module.exports = async function handler(req, res) {
       // Remove spaces, dashes, slashes for broader matching
       const cleanRef = reference.replace(/[\s\-\/]/g, '');
       supaResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/watch_records?reference=ilike.*${encodeURIComponent(cleanRef)}*&limit=1000&order=created_at.desc`,
+        `${SUPABASE_URL}/rest/v1/watch_records?reference=ilike.*${encodeURIComponent(cleanRef)}*&limit=${limit}&order=created_at.desc`,
         { headers }
       );
       rows = supaResp.ok ? await supaResp.json() : [];
@@ -60,7 +63,7 @@ module.exports = async function handler(req, res) {
     if ((!rows || rows.length === 0) && /^\d{4,6}/.test(reference)) {
       const numPart = reference.match(/^\d{4,6}/)[0];
       supaResp = await fetch(
-        `${SUPABASE_URL}/rest/v1/watch_records?reference=ilike.${encodeURIComponent(numPart)}*&limit=1000&order=created_at.desc`,
+        `${SUPABASE_URL}/rest/v1/watch_records?reference=ilike.${encodeURIComponent(numPart)}*&limit=${limit}&order=created_at.desc`,
         { headers }
       );
       rows = supaResp.ok ? await supaResp.json() : [];
@@ -118,6 +121,15 @@ module.exports = async function handler(req, res) {
     const brand = rows[0].brand || inferBrand(reference);
     const listings = rows.map(r => {
       const priceUSD = r.price_usd || toUSD(r.price_raw || 0, r.currency);
+      // Parse flags if it's a string, or use directly if it's an object
+      let parsedFlags = {};
+      try {
+        parsedFlags = typeof r.flags === 'string' ? JSON.parse(r.flags) : (r.flags || {});
+      } catch (e) { /* fallback */ }
+      
+      const media_assets = parsedFlags.media_assets || [];
+      const imageUrl = media_assets.length > 0 ? media_assets[0] : (r.image_url || null);
+
       return {
         id: r.id || r.message_hash || `ref_${Date.now()}_${Math.random().toString(36).substr(2, 6)}`,
         title: r.raw_message || '',
@@ -130,6 +142,8 @@ module.exports = async function handler(req, res) {
         condition: r.condition || 'Unknown',
         confidence: r.confidence || 0,
         verdict: r.verdict || 'UNKNOWN',
+        imageUrl,
+        media_assets,
       };
     });
 

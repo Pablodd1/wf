@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS live_ingest (
   verdict      TEXT,
   source       TEXT,
   channel_id   TEXT,
+  message_hash TEXT        UNIQUE,
+  last_seen    TIMESTAMPTZ DEFAULT NOW(),
   received_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -48,6 +50,7 @@ CREATE INDEX IF NOT EXISTS idx_watch_records_verdict   ON watch_records (verdict
 CREATE INDEX IF NOT EXISTS idx_watch_records_brand     ON watch_records (brand);
 CREATE INDEX IF NOT EXISTS idx_watch_records_reference ON watch_records (reference);
 CREATE INDEX IF NOT EXISTS idx_live_ingest_received_at ON live_ingest  (received_at);
+CREATE INDEX IF NOT EXISTS idx_live_ingest_message_hash ON live_ingest (message_hash);
 
 -- -------------------------------------------------------------
 -- 4. Row-Level Security
@@ -102,44 +105,46 @@ BEGIN
     verdict,
     source,
     raw_message,
-    flags,
-    reprocessed_at,
-    created_at
+    flags
   )
   SELECT
-    (rec ->> 'id')::TEXT,
-    (rec ->> 'brand')::TEXT,
-    (rec ->> 'reference')::TEXT,
-    (rec ->> 'dial_color')::TEXT,
-    (rec ->> 'condition')::TEXT,
-    (rec ->> 'year')::INT,
-    (rec ->> 'price_raw')::NUMERIC,
-    (rec ->> 'price_usd')::NUMERIC,
-    (rec ->> 'currency')::TEXT,
-    (rec ->> 'confidence')::INT,
-    (rec ->> 'verdict')::TEXT,
-    (rec ->> 'source')::TEXT,
-    (rec ->> 'raw_message')::TEXT,
-    (rec -> 'flags'),                           -- already JSONB
-    (rec ->> 'reprocessed_at')::TIMESTAMPTZ,
-    COALESCE((rec ->> 'created_at')::TIMESTAMPTZ, NOW())
-  FROM jsonb_array_elements(records) AS rec
+    r->>'id',
+    r->>'brand',
+    r->>'reference',
+    r->>'dial_color',
+    r->>'condition',
+    (r->>'year')::INT,
+    (r->>'price_raw')::NUMERIC,
+    (r->>'price_usd')::NUMERIC,
+    r->>'currency',
+    (r->>'confidence')::INT,
+    r->>'verdict',
+    r->>'source',
+    r->>'raw_message',
+    (r->>'flags')::JSONB
+  FROM jsonb_array_elements(records) AS r
   ON CONFLICT (id) DO UPDATE SET
-    brand          = EXCLUDED.brand,
-    reference      = EXCLUDED.reference,
-    dial_color     = EXCLUDED.dial_color,
-    condition      = EXCLUDED.condition,
-    year           = EXCLUDED.year,
-    price_raw      = EXCLUDED.price_raw,
-    price_usd      = EXCLUDED.price_usd,
-    currency       = EXCLUDED.currency,
-    confidence     = EXCLUDED.confidence,
-    verdict        = EXCLUDED.verdict,
-    source         = EXCLUDED.source,
-    raw_message    = EXCLUDED.raw_message,
-    flags          = EXCLUDED.flags,
-    reprocessed_at = EXCLUDED.reprocessed_at
-    -- created_at intentionally not overwritten on conflict
+    brand        = EXCLUDED.brand,
+    reference    = EXCLUDED.reference,
+    dial_color   = EXCLUDED.dial_color,
+    condition    = EXCLUDED.condition,
+    year         = EXCLUDED.year,
+    price_raw    = EXCLUDED.price_raw,
+    price_usd    = EXCLUDED.price_usd,
+    currency     = EXCLUDED.currency,
+    confidence   = EXCLUDED.confidence,
+    verdict      = EXCLUDED.verdict,
+    source       = EXCLUDED.source,
+    raw_message  = EXCLUDED.raw_message,
+    flags        = EXCLUDED.flags
   RETURNING id;
 END;
 $$;
+
+-- -------------------------------------------------------------
+-- 6. Migration: add message_hash + last_seen to live_ingest
+--    (safe to run on an existing database)
+-- -------------------------------------------------------------
+ALTER TABLE live_ingest ADD COLUMN IF NOT EXISTS message_hash TEXT UNIQUE;
+ALTER TABLE live_ingest ADD COLUMN IF NOT EXISTS last_seen    TIMESTAMPTZ DEFAULT NOW();
+CREATE INDEX IF NOT EXISTS idx_live_ingest_message_hash ON live_ingest (message_hash);
