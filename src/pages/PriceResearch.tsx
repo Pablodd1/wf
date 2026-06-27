@@ -243,7 +243,7 @@ export default function PriceResearch() {
                   </span>
                 </div>
                 <button 
-                  onClick={() => window.open(`https://watchfacts.com/buy/all?listing_type=sale&reference=${encodeURIComponent(data.reference)}`, '_blank')}
+                  onClick={() => window.open(`/price-research?ref=${encodeURIComponent(data.reference)}`, '_self')}
                   style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: GOLD, color: BG_CARD, border: 'none', fontSize: 14, fontWeight: 500, cursor: 'pointer' }}>
                   Explore Marketplace →
                 </button>
