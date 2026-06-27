@@ -685,7 +685,7 @@ function ListingRow({ listing }: { listing: PriceListing }) {
   const scoreColor = score === 100 ? GREEN : score >= 90 ? BLUE : score >= 80 ? '#fd7e14' : RED;
   const scoreLabel = score === 100 ? '✓ VERIFIED' : score >= 90 ? '🔍 REVIEW' : score >= 80 ? '⚠ CHECK' : '🚫 FLAGGED';
   
-  const listingUrl = `/buy/all?listing_type=sale&reference=${encodeURIComponent((listing as any).id || listing.title?.split(' ')[0] || '')}`;
+  const listingUrl = `/price-research?ref=${encodeURIComponent(listing.title?.match(/\b\d{4,6}[A-Z]?\b/)?.[0] || '')}`;
   
   return (
     <a href={listingUrl} target="_blank" rel="noopener noreferrer"

@@ -263,8 +263,8 @@ export default function CleanPage() {
               <h2 className="text-sm font-bold text-text-primary">Results Summary</h2>
             <div className="flex items-center gap-2">
               <button
-                onClick={() => {
-                  if (res) exportCleanExcel(res.watches, res.summary);
+                onClick={async () => {
+                  if (res) await exportCleanExcel(res.watches, res.summary);
                 }}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gold-primary/30 text-gold-primary text-xs font-bold hover:bg-gold-primary/10 transition-colors"
               >

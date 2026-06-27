@@ -5,6 +5,7 @@ import ReviewPage from '@/pages/ReviewPage';
 import CleanPage from '@/pages/CleanPage';
 import AdminPage from '@/pages/AdminPage';
 import PriceResearch from '@/pages/PriceResearch';
+import InsightDetails from '@/pages/InsightDetails';
 import DemandSignals from '@/pages/DemandSignals';
 import SearchPage from '@/pages/SearchPage';
 import DemoPage from '@/pages/DemoPage';
@@ -19,6 +20,7 @@ export default function App() {
       <Route path="/clean" element={<CleanPage />} />
       <Route path="/admin" element={<AdminPage />} />
       <Route path="/price-research" element={<PriceResearch />} />
+      <Route path="/insight" element={<InsightDetails />} />
       <Route path="/demand" element={<DemandSignals />} />
       <Route path="/demo" element={<DemoPage />} />
       <Route path="*" element={<Navigate to="/" replace />} />

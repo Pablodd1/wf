@@ -103,11 +103,8 @@ function getMissingCount(w: CleanWatch): number {
   return missing;
 }
 
-export function exportCleanExcel(watches: CleanWatch[], summary: any) {
-  const XLSX = (window as any).XLSX;
-  if (!XLSX) {
-    throw new Error('xlsx library not loaded');
-  }
+export async function exportCleanExcel(watches: CleanWatch[], summary: any) {
+  const XLSX = await import('xlsx');
 
   const wb = XLSX.utils.book_new();
 
