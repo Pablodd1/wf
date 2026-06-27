@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams, Link } from 'react-router-dom';
+import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
 import { generatePriceResearchReport } from '@/lib/reports';
@@ -18,6 +18,7 @@ interface PriceListing {
   media_assets?: string[];
   condition?: string;
   boxPapers?: string;
+  id?: string;
   confidence?: {
     score: number;
     aiFields: string[];
@@ -83,6 +84,7 @@ const BLUE = '#3b82f6';         // blue-500
 // ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [query, setQuery] = useState(searchParams.get('ref') || '126334');
   const [apiData, setApiData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -396,7 +398,7 @@ export default function PriceResearch() {
 
             {/* ── Price Forecast ───────────────────────────────── */}
             {data && data.chart && data.chart.length >= 3 && (
-              <PriceForecast chart={data.chart} reference={data.reference} brand={data.brand} model={data.model} forecastData={data.forecast} onSelectMonth={setSelectedMonth} />
+              <PriceForecast chart={data.chart} reference={data.reference} brand={data.brand} model={data.model} forecastData={data.forecast} onSelectMonth={() => navigate(`/insight?ref=${encodeURIComponent(data.reference)}`)} />
             )}
 
             {/* ── Chart + 3-Month Prediction ────────────────────── */}
@@ -404,7 +406,7 @@ export default function PriceResearch() {
               <PricePredictionChart
                 chart={data.chart}
                 pricing={data.pricing}
-                onSelectMonth={setSelectedMonth}
+                onSelectMonth={() => navigate(`/insight?ref=${encodeURIComponent(data.reference)}`)}
               />
             ) : data.chart && data.chart.length > 0 && data.chart[0].month === 'N/A' ? (
               <div style={{ backgroundColor: BG_ELEV, borderRadius: 12, padding: 24, marginBottom: 24, textAlign: 'center' }}>
@@ -789,6 +791,7 @@ function InsightListingRow({
     </div>
   );
 }
+
 function ListingModal({ listing, data, onClose }: { listing: PriceListing; data: PriceData; onClose: () => void }) {
   const [catalogEntry, setCatalogEntry] = useState<{ imageUrl?: string } | null>(null);
   const [currentImgIdx, setCurrentImgIdx] = useState(0);
@@ -812,13 +815,70 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
   const hasPapers = /papers?|warranty|guarantee|card|full\s*set/i.test(listing.title) || /papers?/i.test(listing.boxPapers || '') || listing.title.includes("228238") || listing.title.includes("5621404");
 
   // Deal rating: good deal if price is lower than current average
-  const isGoodDeal = listing.priceUSD < (data.pricing.current?.avg || 999999);
+  const avgPrice = data.pricing.current?.avg || 999999;
+  const isGoodDeal = listing.priceUSD < avgPrice;
+  const isBadDeal = listing.priceUSD > avgPrice * 1.05;
 
   // Prevent body scroll while open
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => { document.body.style.overflow = ''; };
   }, []);
+
+  // Deterministic user metadata from listing id
+  const hash = (str: string) => {
+    let h = 0;
+    for (let i = 0; i < str.length; i++) h = (h << 5) - h + str.charCodeAt(i);
+    return Math.abs(h);
+  };
+  
+  const hVal = hash(listing.id || listing.title || '');
+  const usernames = ['Zare', 'Michelle Sallum', 'Alex Watch', 'WatchTraders', 'GoldTime', 'AsiaChronos', 'ApexTime', 'PrecisionCo'];
+  const locations = ['Asia', 'North America', 'Europe', 'Hong Kong', 'Singapore', 'Middle East'];
+  
+  const username = usernames[hVal % usernames.length];
+  const location = locations[hVal % locations.length];
+  const wtsCount = (hVal % 15) + 1;
+  const wtbCount = hVal % 3 === 0 ? 1 : 0;
+  const memberYear = 2023 + (hVal % 3);
+  const memberMonths = ['January', 'April', 'July', 'October'];
+  const memberMonth = memberMonths[hVal % 4];
+  const reviewCount = hVal % 10;
+
+  // Format date for the overlay badge
+  const formatFriendlyDate = (dateStr: string) => {
+    if (!dateStr) return 'September 2025';
+    const parts = dateStr.split('-');
+    if (parts.length === 3) {
+      const date = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+      return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+    return dateStr;
+  };
+
+  const friendlyDate = formatFriendlyDate(listing.date);
+
+  // Watch description details based on reference
+  let desc = '39 mm, steel case, automatic movement';
+  if (data.reference === '52508') {
+    desc = '39 mm, 18 kt yellow gold, polished finish';
+  } else if (data.reference === '228238') {
+    desc = '40 mm, 18 kt yellow gold, fluted bezel, President bracelet';
+  } else if (data.reference === '126334') {
+    desc = '41 mm, Oystersteel and white gold, fluted bezel';
+  } else if (data.reference === '5711/1A') {
+    desc = '40 mm, steel case, blue dial, integrated bracelet';
+  } else if (data.reference === '116610LV') {
+    desc = '40 mm, Oystersteel, green Cerachrom bezel';
+  } else if (data.brand && data.model) {
+    desc = `${data.brand} ${data.model} luxury watch`;
+  }
+
+  const VerifiedBadge = () => (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="#3b82f6" style={{ display: 'inline-block', verticalAlign: 'middle' }}>
+      <path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+    </svg>
+  );
 
   return (
     <div style={{
@@ -831,126 +891,165 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
         backgroundColor: '#ffffff', borderRadius: 16, width: '100%', maxWidth: 960,
         maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
         border: '1px solid #e5e7eb', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
-        color: '#1f2937'
+        color: '#1f2937', position: 'relative'
       }} onClick={e => e.stopPropagation()}>
         
-        {/* Header bar */}
-        <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <h3 style={{ color: '#111827', fontSize: 18, fontWeight: 700, margin: 0 }}>Post Details</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 24, lineHeight: 1, padding: 0 }}>×</button>
-        </div>
+        {/* Floating Close Button */}
+        <button onClick={onClose} style={{
+          position: 'absolute', right: 16, top: 16, zIndex: 310,
+          background: 'rgba(255,255,255,0.8)', border: '1px solid #e5e7eb', borderRadius: '50%',
+          width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          color: '#4b5563', cursor: 'pointer', fontSize: 20, fontWeight: 'bold',
+          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+        }}>×</button>
 
         {/* Content Body: Two columns */}
-        <div style={{ display: 'flex', flex: 1, overflowY: 'auto', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', overflowY: 'auto', flexWrap: 'wrap', padding: 24, gap: 24 }}>
           
-          {/* Left Column: Image Carousel */}
+          {/* Left Column: Watch Card */}
           <div style={{
-            flex: '1 1 400px', minHeight: 300, maxHeight: 500, backgroundColor: '#f3f4f6',
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
-            borderRight: '1px solid #e5e7eb', position: 'relative'
+            flex: '1 1 380px', backgroundColor: '#f8f9fa', borderRadius: 12,
+            border: '1px solid #e5e7eb', padding: 20, display: 'flex', flexDirection: 'column',
+            gap: 16
           }}>
-            {images.length > 0 ? (
-              <>
-                <img src={images[currentImgIdx]} alt={listing.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                
-                {images.length > 1 && (
-                  <>
-                    {/* Prev Button */}
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setCurrentImgIdx(prev => (prev - 1 + images.length) % images.length); }}
-                      style={{
-                        position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-                        backgroundColor: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%',
-                        width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', color: '#374151', fontWeight: 'bold'
-                      }}
-                    >
-                      ←
-                    </button>
-                    
-                    {/* Next Button */}
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); setCurrentImgIdx(prev => (prev + 1) % images.length); }}
-                      style={{
-                        position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-                        backgroundColor: 'rgba(255,255,255,0.8)', border: 'none', borderRadius: '50%',
-                        width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', color: '#374151', fontWeight: 'bold'
-                      }}
-                    >
-                      →
-                    </button>
+            {/* Header row inside card */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>New model</span>
+              <span style={{ fontSize: 13, fontWeight: 600, color: '#16a34a', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}>
+                💚 Add to favorites
+              </span>
+            </div>
 
-                    {/* Dot indicators */}
-                    <div style={{
-                      position: 'absolute', bottom: 12, display: 'flex', gap: 6
-                    }}>
-                      {images.map((_, idx) => (
-                        <div 
-                          key={idx}
-                          style={{
-                            width: 8, height: 8, borderRadius: '50%',
-                            backgroundColor: idx === currentImgIdx ? '#3b82f6' : 'rgba(255,255,255,0.5)',
-                            transition: 'background-color 0.2s'
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </>
-                )}
-              </>
-            ) : (
-              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
-                <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
-              </svg>
-            )}
+            {/* Watch Image with Overlay Badge */}
+            <div style={{
+              height: 300, backgroundColor: '#ffffff', borderRadius: 8, overflow: 'hidden',
+              position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: '1px solid #e5e7eb'
+            }}>
+              {images.length > 0 ? (
+                <img src={images[currentImgIdx]} alt={listing.title} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              ) : (
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
+                  <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
+                </svg>
+              )}
+
+              {/* Prev/Next buttons for carousel */}
+              {images.length > 1 && (
+                <>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setCurrentImgIdx(prev => (prev - 1 + images.length) % images.length); }}
+                    style={{
+                      position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)',
+                      backgroundColor: 'rgba(255,255,255,0.8)', border: '1px solid #e5e7eb', borderRadius: '50%',
+                      width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', color: '#374151', fontSize: 12, fontWeight: 'bold'
+                    }}
+                  >
+                    ←
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setCurrentImgIdx(prev => (prev + 1) % images.length); }}
+                    style={{
+                      position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)',
+                      backgroundColor: 'rgba(255,255,255,0.8)', border: '1px solid #e5e7eb', borderRadius: '50%',
+                      width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      cursor: 'pointer', color: '#374151', fontSize: 12, fontWeight: 'bold'
+                    }}
+                  >
+                    →
+                  </button>
+                </>
+              )}
+
+              {/* Price & Date Overlay Badge */}
+              <div style={{
+                position: 'absolute', bottom: 12, right: 12,
+                backgroundColor: '#ffffff', borderRadius: 8, padding: '8px 12px',
+                boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -1px rgba(0,0,0,0.06)',
+                textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 2
+              }}>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#4b5563' }}>{friendlyDate}</span>
+                <span style={{ fontSize: 13, fontWeight: 700, color: '#111827' }}>
+                  Price $ {(listing.priceUSD || listing.price || 0).toLocaleString()}
+                </span>
+              </div>
+            </div>
+
+            {/* Model Name and Details */}
+            <div>
+              <h3 style={{ fontSize: 22, fontWeight: 800, color: '#111827', margin: '0 0 4px 0' }}>
+                {data.model}
+              </h3>
+              <p style={{ fontSize: 13, color: '#6b7280', margin: 0, whiteSpace: 'pre-line', lineHeight: 1.5 }}>
+                {desc}
+                {"\n"}Reference {data.reference}
+              </p>
+            </div>
           </div>
 
-          {/* Right Column: Card Details */}
-          <div style={{ flex: '1 2 500px', padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Right Column: Cards */}
+          <div style={{ flex: '1 2 460px', display: 'flex', flexDirection: 'column', gap: 20 }}>
             
             {/* Card A: Post Information */}
             <div style={{ backgroundColor: '#ffffff', borderRadius: 12, border: '1px solid #e5e7eb', padding: 20 }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>
                 Post Information:
               </div>
 
-              {isGoodDeal && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontWeight: 700, fontSize: 13, marginBottom: 8 }}>
-                  <span>📈 GOOD DEAL</span>
-                </div>
-              )}
-
-              <h2 style={{ fontSize: 20, fontWeight: 700, color: '#111827', margin: '0 0 8px 0', lineHeight: 1.4 }}>
-                {listing.title}
-              </h2>
-
-              <div style={{ fontSize: 24, fontWeight: 800, color: '#b45309', marginBottom: 12 }}>
-                ${listing.priceUSD?.toLocaleString() || listing.price?.toLocaleString()}
-                {listing.currency !== 'USD' && <span style={{ fontSize: 14, color: '#6b7280', marginLeft: 8 }}>({listing.price?.toLocaleString()} {listing.currency})</span>}
+              {/* Deal Status Badge */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: isGoodDeal ? '#16a34a' : isBadDeal ? '#dc2626' : '#4b5563', fontWeight: 700, fontSize: 13, marginBottom: 12 }}>
+                {isGoodDeal ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                      <polyline points="18 15 12 9 6 15"/>
+                    </svg>
+                    GOOD DEAL
+                  </span>
+                ) : isBadDeal ? (
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+                      <polyline points="6 9 12 15 18 9"/>
+                    </svg>
+                    ABOVE AVERAGE
+                  </span>
+                ) : (
+                  <span>FAIR PRICE</span>
+                )}
               </div>
 
-              <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 16 }}>
-                #{listing.title?.match(/\b\d{6,8}\b/)?.[0] || '5621404'} · Posted on {listing.date || 'Jan 20, 2026'} · Reposted 2x
+              <div style={{ fontSize: 14, color: '#374151', margin: '0 0 16px 0', lineHeight: 1.5, fontStyle: 'italic' }}>
+                "{listing.title}"
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid #f3f4f6', paddingTop: 12, marginBottom: 16 }}>
+                <span style={{ fontSize: 12, color: '#9ca3af' }}>
+                  #{listing.title?.match(/\b\d{6,8}\b/)?.[0] || '6854883'}
+                </span>
+                <span style={{ fontSize: 12, color: '#9ca3af' }}>
+                  Posted on {listing.date ? new Date(listing.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Sep 10, 2025'}
+                </span>
               </div>
 
               {/* Accessories Pills */}
               <div style={{ display: 'flex', gap: 10 }}>
                 <span style={{
                   padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-                  backgroundColor: hasBox ? '#10b98115' : '#f3f4f6',
-                  color: hasBox ? '#10b981' : '#9ca3af',
-                  border: `1px solid ${hasBox ? '#10b98130' : '#e5e7eb'}`
+                  backgroundColor: hasBox ? '#16a34a15' : '#f3f4f6',
+                  color: hasBox ? '#16a34a' : '#9ca3af',
+                  border: `1px solid ${hasBox ? '#16a34a30' : '#e5e7eb'}`,
+                  display: 'flex', alignItems: 'center', gap: 4
                 }}>
-                  Box: {hasBox ? 'Yes' : 'No'}
+                  📂 Box: {hasBox ? 'Yes' : 'No'}
                 </span>
                 <span style={{
                   padding: '6px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600,
-                  backgroundColor: hasPapers ? '#10b98115' : '#f3f4f6',
-                  color: hasPapers ? '#10b981' : '#9ca3af',
-                  border: `1px solid ${hasPapers ? '#10b98130' : '#e5e7eb'}`
+                  backgroundColor: hasPapers ? '#16a34a15' : '#f3f4f6',
+                  color: hasPapers ? '#16a34a' : '#9ca3af',
+                  border: `1px solid ${hasPapers ? '#16a34a30' : '#e5e7eb'}`,
+                  display: 'flex', alignItems: 'center', gap: 4
                 }}>
-                  Papers: {hasPapers ? 'Yes' : 'No'}
+                  📄 Papers: {hasPapers ? 'Yes' : 'No'}
                 </span>
               </div>
             </div>
@@ -963,23 +1062,24 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16, marginBottom: 20 }}>
                 <div>
-                  <h4 style={{ fontSize: 18, fontWeight: 700, color: '#111827', margin: '0 0 6px 0', textDecoration: 'underline', cursor: 'pointer' }}>
-                    Michelle Sallum
+                  <h4 style={{ fontSize: 18, fontWeight: 700, color: '#111827', margin: '0 0 4px 0', textDecoration: 'underline', cursor: 'pointer' }}>
+                    {username}
                   </h4>
-                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Member since July, 2025</div>
-                  <div style={{ fontSize: 13, color: '#4b5563' }}>North America</div>
-                  <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 4, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}>
-                    ★ (5) - Reviews →
+                  <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 4 }}>Member since {memberMonth}, {memberYear}</div>
+                  <div style={{ fontSize: 13, color: '#4b5563' }}>{location}</div>
+                  <div style={{ fontSize: 12, color: '#3b82f6', marginTop: 6, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, fontWeight: 600 }}>
+                    <VerifiedBadge />
+                    ({reviewCount}) - Reviews →
                   </div>
                 </div>
 
                 <div style={{ display: 'flex', gap: 10 }}>
-                  <div style={{ textAlign: 'center', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 16px', minWidth: 100 }}>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: '#111827' }}>3</div>
+                  <div style={{ textAlign: 'center', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 16px', minWidth: 100, backgroundColor: '#f9fafb' }}>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#111827' }}>{wtsCount}</div>
                     <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>WTS Listings →</div>
                   </div>
-                  <div style={{ textAlign: 'center', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 16px', minWidth: 100 }}>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: '#111827' }}>3</div>
+                  <div style={{ textAlign: 'center', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 16px', minWidth: 100, backgroundColor: '#f9fafb' }}>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: '#111827' }}>{wtbCount}</div>
                     <div style={{ fontSize: 10, color: '#6b7280', marginTop: 2 }}>WTB Listing →</div>
                   </div>
                 </div>
@@ -990,16 +1090,16 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
                   width: '100%', border: '1px solid #3b82f6', backgroundColor: '#ffffff',
                   color: '#3b82f6', borderRadius: 8, padding: '12px', fontWeight: 600,
                   display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8,
-                  cursor: 'pointer', fontSize: 13
-                }}>
+                  cursor: 'pointer', fontSize: 13, transition: 'background-color 0.2s'
+                }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#3b82f610'} onMouseLeave={e => e.currentTarget.style.backgroundColor = '#ffffff'}>
                   💬 CHECK AVAILABILITY
                 </button>
                 <button style={{
-                  width: '100%', backgroundColor: '#4b5563', color: '#ffffff',
+                  width: '100%', backgroundColor: '#475569', color: '#ffffff',
                   borderRadius: 8, padding: '12px', fontWeight: 600,
                   display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 8,
-                  cursor: 'pointer', border: 'none', fontSize: 13
-                }}>
+                  cursor: 'pointer', border: 'none', fontSize: 13, transition: 'background-color 0.2s'
+                }} onMouseEnter={e => e.currentTarget.style.backgroundColor = '#334155'} onMouseLeave={e => e.currentTarget.style.backgroundColor = '#475569'}>
                   👤 SEE USER PROFILE
                 </button>
               </div>
@@ -1012,6 +1112,7 @@ function ListingModal({ listing, data, onClose }: { listing: PriceListing; data:
     </div>
   );
 }
+
 function ListingRow({ listing, onSelect }: { listing: PriceListing; onSelect: () => void }) {
   const rawConfidence = listing.confidence;
   // Normalize: API may return confidence as {score, aiFields, catalogFields} or just a number
@@ -1161,8 +1262,38 @@ function PricePredictionChart({
           <Area type="monotone" dataKey="max" stroke="none" fill={RED}   fillOpacity={0.05} />
           <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
           {/* Historical lines */}
-          <Line type="monotone" dataKey="max" stroke={RED}   strokeWidth={1} dot={false} connectNulls={false} />
-          <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} connectNulls={false} />
+          <Line 
+            type="monotone" 
+            dataKey="max" 
+            stroke={RED}   
+            strokeWidth={1} 
+            connectNulls={false}
+            dot={(props: { cx: number; cy: number; index: number }) => {
+              const { cx, cy, index } = props;
+              if (index >= chart.length) return <g key={index} />;
+              return (
+                <g key={index} onClick={() => onSelectMonth(index)} style={{ cursor: 'pointer' }}>
+                  <circle cx={cx} cy={cy} r={5} fill={BLUE} stroke={BG_CARD} strokeWidth={2} />
+                </g>
+              );
+            }}
+          />
+          <Line 
+            type="monotone" 
+            dataKey="min" 
+            stroke={GREEN} 
+            strokeWidth={1} 
+            connectNulls={false}
+            dot={(props: { cx: number; cy: number; index: number }) => {
+              const { cx, cy, index } = props;
+              if (index >= chart.length) return <g key={index} />;
+              return (
+                <g key={index} onClick={() => onSelectMonth(index)} style={{ cursor: 'pointer' }}>
+                  <circle cx={cx} cy={cy} r={5} fill={BLUE} stroke={BG_CARD} strokeWidth={2} />
+                </g>
+              );
+            }}
+          />
           {/* Historical avg — clickable dots */}
           <Line
             type="monotone"

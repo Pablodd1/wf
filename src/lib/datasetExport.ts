@@ -16,7 +16,7 @@ import type { WatchRecord } from '@/types';
 
 // Lazy-load SheetJS to avoid bloating the initial bundle
 async function getXLSX() {
-  const mod = await import('xlsx');
+  const mod = await import('xlsx-js-style');
   return mod;
 }
 

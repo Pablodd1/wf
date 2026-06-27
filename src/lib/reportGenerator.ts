@@ -115,7 +115,7 @@ function intentFg(s: string): any {
 
 // ── Main export ──
 export async function downloadStyledReport(records: ReportRecord[], filename?: string) {
-  const XLSX = await import('xlsx');
+  const XLSX = await import('xlsx-js-style');
   const stamp = new Date().toISOString().slice(0, 10);
   const wb = XLSX.utils.book_new();
 

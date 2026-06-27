@@ -195,7 +195,7 @@ let _cache: WatchRecord[] | null = null;
 let _cachePromise: Promise<WatchRecord[]> | null = null;
 const CACHE_KEY = 'wf_watch_data_cache';
 const CACHE_TIMESTAMP_KEY = 'wf_watch_data_timestamp';
-const CACHE_TTL = 10 * 60 * 1000; // 10 minutes — data stays fresh for 10 min
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours — cache stays warm, background delta sync keeps it fresh
 
 // ── Catalog image lookup (client-side) ──
 let _catalogImages: Map<string, string> | null = null;
@@ -359,14 +359,21 @@ function loadWatchData(): Promise<WatchRecord[]> {
         
         _cache = records;
         // Persist to localStorage for instant load on refresh/new tab
-        try {
-          // Only cache first 5000 records to stay under localStorage 5MB limit
-          const toCache = records.slice(0, 5000);
-          localStorage.setItem(CACHE_KEY, JSON.stringify(toCache));
-          localStorage.setItem(CACHE_TIMESTAMP_KEY, String(Date.now()));
-          console.log(`[cache] Saved ${toCache.length} records to localStorage`);
-        } catch (e) {
-          console.warn('[cache] localStorage save failed (too large):', e);
+        let cacheSuccess = false;
+        let tryLimit = 5000;
+        while (!cacheSuccess && tryLimit >= 1000) {
+          try {
+            const toCache = records.slice(0, tryLimit);
+            localStorage.setItem(CACHE_KEY, JSON.stringify(toCache));
+            localStorage.setItem(CACHE_TIMESTAMP_KEY, String(Date.now()));
+            console.log(`[cache] Saved ${toCache.length} records to localStorage (limit: ${tryLimit})`);
+            cacheSuccess = true;
+          } catch (err) {
+            tryLimit -= 1000;
+          }
+        }
+        if (!cacheSuccess) {
+          console.warn('[cache] localStorage save failed completely.');
         }
         console.timeEnd('loadWatchData');
         console.log(`Loaded ${records.length} records from Supabase (total: ${totalCount})`);
@@ -497,12 +504,20 @@ export function useWatchData() {
               _cache = unique;
               setRecords(unique);
               
-              try {
-                localStorage.setItem(CACHE_KEY, JSON.stringify(unique.slice(0, 5000)));
-                localStorage.setItem(CACHE_TIMESTAMP_KEY, String(Date.now()));
-                console.log(`[cache] Delta sync added ${newRecords.length} records in background.`);
-              } catch (err) {
-                console.warn('[cache] Delta sync localStorage save failed:', err);
+              let cacheSuccess = false;
+              let tryLimit = 5000;
+              while (!cacheSuccess && tryLimit >= 1000) {
+                try {
+                  localStorage.setItem(CACHE_KEY, JSON.stringify(unique.slice(0, tryLimit)));
+                  localStorage.setItem(CACHE_TIMESTAMP_KEY, String(Date.now()));
+                  console.log(`[cache] Delta sync saved ${unique.slice(0, tryLimit).length} records to localStorage (limit: ${tryLimit})`);
+                  cacheSuccess = true;
+                } catch (err) {
+                  tryLimit -= 1000;
+                }
+              }
+              if (!cacheSuccess) {
+                console.warn('[cache] Delta sync localStorage save failed completely.');
               }
             }
           })

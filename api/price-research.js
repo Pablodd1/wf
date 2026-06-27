@@ -34,24 +34,58 @@ module.exports = async function handler(req, res) {
   const limitVal = parseInt(url.searchParams.get('limit') || '1000', 10);
   const limit = Math.min(10000, Math.max(1, isNaN(limitVal) ? 1000 : limitVal));
 
+  let activeRef = reference;
+  let resolvedModel = null;
+  let resolvedBrand = null;
+
+  // Resolve reference from catalog.json if it represents a model/brand name
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const catalogPath = path.resolve(process.cwd(), 'public', 'catalog.json');
+    const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+
+    const queryClean = reference.trim().toLowerCase();
+    
+    // 1. Try exact or fuzzy reference match first
+    const refMatch = catalog.find(c => c.reference && c.reference.toLowerCase() === queryClean);
+    if (refMatch) {
+      activeRef = refMatch.reference;
+      resolvedModel = refMatch.model;
+      resolvedBrand = refMatch.brand;
+    } else {
+      // 2. Try match on model name or brand + model
+      const modelMatch = catalog.find(c => 
+        c.model && (
+          c.model.toLowerCase() === queryClean ||
+          c.model.toLowerCase().includes(queryClean) ||
+          `${c.brand} ${c.model}`.toLowerCase().includes(queryClean)
+        )
+      );
+      if (modelMatch) {
+        activeRef = modelMatch.reference;
+        resolvedModel = modelMatch.model;
+        resolvedBrand = modelMatch.brand;
+      }
+    }
+  } catch (e) { /* ignore */ }
+
   try {
     const headers = {
       'apikey': SUPABASE_KEY,
       'Authorization': `Bearer ${SUPABASE_KEY}`,
     };
 
-    // Query watch_records for this reference
-    // Try exact match first, then fuzzy (ilike) for variants like "5711/1A" → "5711A", "RM07-01" → "RM 07-01"
+    // Query watch_records for activeRef
     let supaResp = await fetch(
-      `${SUPABASE_URL}/rest/v1/watch_records?reference=eq.${encodeURIComponent(reference)}&limit=${limit}&order=created_at.desc`,
+      `${SUPABASE_URL}/rest/v1/watch_records?reference=eq.${encodeURIComponent(activeRef)}&limit=${limit}&order=created_at.desc`,
       { headers }
     );
     let rows = supaResp.ok ? await supaResp.json() : [];
 
     // If no exact match, try fuzzy search
     if (!rows || rows.length === 0) {
-      // Remove spaces, dashes, slashes for broader matching
-      const cleanRef = reference.replace(/[\s\-\/]/g, '');
+      const cleanRef = activeRef.replace(/[\s\-\/]/g, '');
       supaResp = await fetch(
         `${SUPABASE_URL}/rest/v1/watch_records?reference=ilike.*${encodeURIComponent(cleanRef)}*&limit=${limit}&order=created_at.desc`,
         { headers }
@@ -60,8 +94,8 @@ module.exports = async function handler(req, res) {
     }
 
     // Still no match? Try just the numeric portion
-    if ((!rows || rows.length === 0) && /^\d{4,6}/.test(reference)) {
-      const numPart = reference.match(/^\d{4,6}/)[0];
+    if ((!rows || rows.length === 0) && /^\d{4,6}/.test(activeRef)) {
+      const numPart = activeRef.match(/^\d{4,6}/)[0];
       supaResp = await fetch(
         `${SUPABASE_URL}/rest/v1/watch_records?reference=ilike.${encodeURIComponent(numPart)}*&limit=${limit}&order=created_at.desc`,
         { headers }
@@ -76,7 +110,7 @@ module.exports = async function handler(req, res) {
         const { resolve } = require('path');
         const seedPath = resolve(process.cwd(), 'public', 'market_prices_seed.json');
         const seedData = JSON.parse(readFileSync(seedPath, 'utf8'));
-        const refUpper = reference.toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const refUpper = activeRef.toUpperCase().replace(/[^A-Z0-9]/g, '');
         const seedMatch = seedData.find(s => {
           const sRef = (s.reference || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
           return sRef === refUpper || sRef.startsWith(refUpper) || refUpper.startsWith(sRef);
@@ -84,9 +118,9 @@ module.exports = async function handler(req, res) {
         if (seedMatch) {
           return res.status(200).json({
             success: true,
-            reference,
-            brand: seedMatch.brand,
-            model: seedMatch.model,
+            reference: activeRef,
+            brand: resolvedBrand || seedMatch.brand,
+            model: resolvedModel || seedMatch.model,
             primaryDial: 'Unknown',
             dialColors: [],
             liquidity: { fsCount: seedMatch.listings_count || 0 },
@@ -112,13 +146,29 @@ module.exports = async function handler(req, res) {
 
       return res.status(200).json({
         success: false,
-        reference,
-        error: `No data found for reference "${reference}". Try: 126334, 5711/1A, 116610LV, RM07-01`,
+        reference: activeRef,
+        error: `No data found for reference "${activeRef}". Try: 126334, 5711/1A, 116610LV, RM07-01`,
       });
     }
 
     // Transform rows into listings
-    const brand = rows[0].brand || inferBrand(reference);
+    const brand = resolvedBrand || (rows[0] ? rows[0].brand : null) || inferBrand(activeRef);
+    let model = resolvedModel;
+    if (!model) {
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const catalogPath = path.resolve(process.cwd(), 'public', 'catalog.json');
+        const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
+        const catMatch = catalog.find(c => c.reference === activeRef);
+        if (catMatch && catMatch.model) {
+          model = catMatch.model;
+        }
+      } catch (e) { /* ignore */ }
+    }
+    if (!model) {
+      model = `${brand} ${activeRef}`;
+    }
     const listings = rows.map(r => {
       const priceUSD = r.price_usd || toUSD(r.price_raw || 0, r.currency);
       // Parse flags if it's a string, or use directly if it's an object
@@ -223,9 +273,9 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      reference,
+      reference: activeRef,
       brand,
-      model: `${brand} ${reference}`,
+      model: model,
       dialColors: dialSet.length > 0 ? dialSet : ['Unknown'],
       primaryDial: dialSet[0] || 'Unknown',
       liquidity: {

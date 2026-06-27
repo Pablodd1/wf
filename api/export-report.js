@@ -12,7 +12,7 @@
  * Colors: conditional row coloring per verdict
  */
 
-const XLSX = require('xlsx');
+const XLSX = require('xlsx-js-style');
 
 const COLORS = {
   APPROVED: { fg: { rgb: '006100' }, bg: { rgb: 'C6EFCE' } },   // green

@@ -1,4 +1,4 @@
-import * as XLSX from 'xlsx';
+import * as XLSX from 'xlsx-js-style';
 
 export function downloadCSV(data: Record<string, any>[], filename: string) {
   if (!data.length) return;
