@@ -16,7 +16,7 @@ CREATE TABLE IF NOT EXISTS watch_records (
   price_usd        NUMERIC,
   currency         TEXT,
   confidence       INT,
-  verdict          TEXT        CHECK (verdict IN ('APPROVED', 'HUMAN', 'RECYCLE')),
+  verdict          TEXT        CHECK (verdict IN ('APPROVED', 'REVIEW', 'HUMAN', 'RECYCLE')),
   source           TEXT,
   raw_message      TEXT,
   flags            JSONB,

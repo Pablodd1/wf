@@ -1,7 +1,26 @@
 #!/usr/bin/env python3
+"""
+run_mysql_pull.py — launcher for mysql_to_supabase.py
+
+USAGE:
+  export SUPABASE_KEY="<your-service-role-key>"
+  export SUPABASE_URL="https://bptrvfncppbjnchsaxtb.supabase.co"
+  export MYSQL_PASS="<mysql-password>"
+  python3 scripts/run_mysql_pull.py
+
+All credentials MUST be set as environment variables before running.
+Never hardcode keys in this file.
+"""
 import os, runpy, sys
-os.environ['SUPABASE_KEY'] = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU"
-os.environ['SUPABASE_URL'] = "https://bptrvfncppbjnchsaxtb.supabase.co"
+
+# Validate required env vars before launching
+required = ['SUPABASE_KEY', 'SUPABASE_URL']
+missing = [k for k in required if not os.environ.get(k)]
+if missing:
+    print(f"ERROR: Missing required environment variables: {', '.join(missing)}")
+    print("Set them before running: export SUPABASE_KEY=<key>")
+    sys.exit(1)
+
 script = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'mysql_to_supabase.py')
 sys.argv = [script]
 runpy.run_path(script, run_name='__main__')

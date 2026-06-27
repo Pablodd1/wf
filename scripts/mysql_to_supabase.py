@@ -18,17 +18,14 @@ from decimal import Decimal
 import pymysql
 
 # ── Config ──────────────────────────────────────────────────────────────────
-MYSQL_HOST = "161.35.0.209"
-MYSQL_PORT = 3306
-MYSQL_USER = "john"
-MYSQL_PASS = "U0aeAr1zFt2\\"
+MYSQL_HOST = os.environ.get("MYSQL_HOST", "161.35.0.209")
+MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
+MYSQL_USER = os.environ.get("MYSQL_USER", "john")
+MYSQL_PASS = os.environ.get("MYSQL_PASS", "")  # Set MYSQL_PASS env var before running
 
-SUPABASE_URL = "https://bptrvfncppbjnchsaxtb.supabase.co"
-# Read from environment variable SUPABASE_KEY (set before launching)
-SUPABASE_KEY = os.environ.get(
-    "SUPABASE_KEY",
-    "eyJhbG...u8SU",
-)
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://bptrvfncppbjnchsaxtb.supabase.co")
+# REQUIRED: export SUPABASE_KEY=<your-service-role-key> before running
+SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "")
 
 TABLE = "watch_records"
 BATCH_SIZE = 500

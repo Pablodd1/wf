@@ -1,7 +1,18 @@
 -- ============================================================
--- WatchFacts — Supabase Performance Indexes
+-- WatchFacts — Supabase Migrations & Performance Indexes
 -- Run in Supabase SQL Editor: https://app.supabase.com → SQL Editor
 -- ============================================================
+
+-- ─── MIGRATION: Add REVIEW verdict to watch_records constraint ───
+-- Run this BEFORE executing update_verdicts_final.cjs bulk update
+-- Otherwise ~21K REVIEW rows will be rejected by Postgres
+
+ALTER TABLE watch_records 
+  DROP CONSTRAINT IF EXISTS watch_records_verdict_check;
+ALTER TABLE watch_records 
+  ADD CONSTRAINT watch_records_verdict_check 
+  CHECK (verdict IN ('APPROVED', 'REVIEW', 'HUMAN', 'RECYCLE'));
+
 
 -- Index 1: Verdict filtering (price-research.js filters by verdict)
 -- Before: full table scan on 2.39M rows

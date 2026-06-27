@@ -23,6 +23,7 @@ export default function App() {
       <Route path="/insight" element={<InsightDetails />} />
       <Route path="/demand" element={<DemandSignals />} />
       <Route path="/demo" element={<DemoPage />} />
+      <Route path="/wf-home" element={<Home />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
