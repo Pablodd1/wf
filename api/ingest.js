@@ -332,6 +332,10 @@ function parseFull(rawMsg) {
   if (priceRaw !== null && isYearLike(priceRaw)) {
     priceRaw = null;
   }
+  // ── Year-as-price edge case: if price equals the extracted year, nullify ──
+  if (priceRaw !== null && year !== null && priceRaw === year) {
+    priceRaw = null;
+  }
 
   const currency = parseCurrency(text);
 
