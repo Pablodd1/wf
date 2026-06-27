@@ -1097,7 +1097,7 @@ function NextSteps({ reference, brand, model, currentAvg, liquidity }: {
       icon: '🛍️', 
       label: 'Find Dealers', 
       desc: 'Connect with verified dealers selling this watch',
-      action: () => window.open('#', '_blank')
+      action: () => window.open(`/search?ref=${encodeURIComponent(reference)}`, '_blank')
     },
     { 
       icon: '🔔', 

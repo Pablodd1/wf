@@ -19,7 +19,7 @@ const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 const {
-  parseFull, verdict,
+  parseFull, verdict, splitMultiWatch,
   toUSD,
   APPROVE_THRESHOLD, HUMAN_THRESHOLD,
 } = require('./_lib/parser');
@@ -41,7 +41,7 @@ async function sendTelegramMessage(chatId, text) {
 async function getStats() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return null;
   try {
-    const resp = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=*`, {
+    const resp = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id`, {
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'count=exact', 'Range': '0-0' }
     });
     const range = resp.headers.get('content-range') || '0/0';
@@ -190,51 +190,63 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({ ok: true, skipped: 'no watch data detected' });
     }
 
-    // Parse using SHARED parser
-    const parsed = parseFull(text);
-    if (!parsed || (!parsed.ref && !parsed.brand)) {
+    // Split multi-watch messages + parse each part using SHARED parser
+    const watchParts = splitMultiWatch(text);
+    const allRecords = [];
+    const parseResults = [];
+
+    for (let i = 0; i < watchParts.length; i++) {
+      const part = watchParts[i];
+      const parsed = parseFull(part);
+      if (!parsed || (!parsed.ref && !parsed.brand)) continue;
+
+      const v = verdict(parsed);
+      const priceUSD = parsed.price ? toUSD(parsed.price, parsed.currency || 'USD') : null;
+
+      const record = {
+        id: `tg_${msg.message_id}_${chatId}_${i}`,
+        raw_message: part.substring(0, 2000),
+        brand: parsed.brand || 'Unknown',
+        reference: parsed.ref || null,
+        dial_color: parsed.dial || null,
+        condition: parsed.condition || null,
+        year: parsed.year || null,
+        price_raw: parsed.price || null,
+        price_usd: priceUSD,
+        currency: parsed.currency || null,
+        confidence: parsed.confidence,
+        verdict: v,
+        source: 'telegram',
+        channel_id: String(chatId),
+        received_at: new Date().toISOString(),
+      };
+
+      allRecords.push(record);
+      parseResults.push(`${parsed.brand || '?'} ${parsed.ref || '?'} ${v}`);
+    }
+
+    if (allRecords.length === 0) {
       return res.status(200).json({ ok: true, skipped: 'not a watch listing' });
     }
 
-    const v = verdict(parsed);
-    const priceUSD = parsed.price ? toUSD(parsed.price, parsed.currency || 'USD') : null;
+    // DUAL WRITE: live_ingest + watch_records for all parts
+    let liveOk = false;
+    let wrOk = false;
+    for (const record of allRecords) {
+      const lo = await insertToLive(record);
+      const wo = await insertToWatchRecords(record);
+      liveOk = liveOk || lo;
+      wrOk = wrOk || wo;
+    }
 
-    const record = {
-      id: `tg_${msg.message_id}_${chatId}`,
-      raw_message: text.substring(0, 2000),
-      brand: parsed.brand || 'Unknown',
-      reference: parsed.ref || null,
-      dial_color: parsed.dial || null,
-      condition: parsed.condition || null,
-      year: parsed.year || null,
-      price_raw: parsed.price || null,
-      price_usd: priceUSD,
-      currency: parsed.currency || null,
-      confidence: parsed.confidence,
-      verdict: v,
-      source: 'telegram',
-      channel_id: String(chatId),
-      received_at: new Date().toISOString(),
-    };
-
-    // DUAL WRITE: live_ingest + watch_records
-    const liveOk = await insertToLive(record);
-    const wrOk = await insertToWatchRecords(record);
-
-    console.log(`[telegram-ingest] ${chatTitle} @${senderName}: "${text.substring(0, 60)}..." → ${parsed.brand || '?'} ${parsed.ref || '?'} ${v} (conf=${parsed.confidence}) live=${liveOk} wr=${wrOk}`);
+    console.log(`[telegram-ingest] ${chatTitle} @${senderName}: ${allRecords.length} listings parsed → live=${liveOk} wr=${wrOk} parts=${watchParts.length}`);
 
     return res.status(200).json({
       ok: true,
       handled: 'watch_message',
-      parsed: {
-        brand: parsed.brand,
-        reference: parsed.ref,
-        dial: parsed.dial,
-        price: parsed.price,
-        currency: parsed.currency,
-        confidence: parsed.confidence,
-        verdict: v,
-      },
+      split: watchParts.length > 1,
+      listingsFound: allRecords.length,
+      results: parseResults,
       persisted: liveOk,
       watchRecordsWritten: wrOk,
     });

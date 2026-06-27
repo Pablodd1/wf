@@ -442,21 +442,21 @@ export default function AdminPage() {
 
             <div className="space-y-2">
               <button
-                onClick={() => window.open('/#/review', '_blank')}
+                onClick={() => window.open('/review', '_blank')}
                 className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border-default bg-bg-card hover:bg-bg-elevated/50 transition-colors text-left"
               >
                 <Eye size={14} className="text-blue-400" />
                 <span className="text-xs text-text-primary">Open Review Queue</span>
               </button>
               <button
-                onClick={() => window.open('/#/clean', '_blank')}
+                onClick={() => window.open('/clean', '_blank')}
                 className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border-default bg-bg-card hover:bg-bg-elevated/50 transition-colors text-left"
               >
                 <Sparkles size={14} className="text-purple-400" />
                 <span className="text-xs text-text-primary">Manual Analysis</span>
               </button>
               <button
-                onClick={() => window.open('/#/price-research', '_blank')}
+                onClick={() => window.open('/price-research', '_blank')}
                 className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border-default bg-bg-card hover:bg-bg-elevated/50 transition-colors text-left"
               >
                 <DollarSign size={14} className="text-gold-primary" />

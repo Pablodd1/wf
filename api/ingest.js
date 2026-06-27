@@ -146,6 +146,15 @@ module.exports = async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
+  // ── AUTH GUARD: optional token check (set INGEST_TOKEN env var to enable) ──
+  const ingestToken = process.env.INGEST_TOKEN;
+  if (ingestToken) {
+    const providedToken = req.headers['x-ingest-token'] || req.headers['authorization']?.replace('Bearer ', '');
+    if (providedToken !== ingestToken) {
+      return res.status(401).json({ error: 'Unauthorized: invalid or missing X-Ingest-Token header' });
+    }
+  }
+
   // Normalize body — support direct POST or Telegram webhook format
   const body = req.body || {};
   let rawMessage = body.rawMessage;
@@ -293,11 +302,11 @@ module.exports = async function handler(req, res) {
         raw_message: r.raw_message,
         flags: r.flags || {},
       }));
-      await fetch(`\${supabaseUrl}/rest/v1/watch_records`, {
+      await fetch(`${supabaseUrl}/rest/v1/watch_records`, {
         method: 'POST',
         headers: {
           'apikey': serviceKey,
-          'Authorization': `Bearer \${serviceKey}`,
+          'Authorization': `Bearer ${serviceKey}`,
           'Content-Type': 'application/json',
           'Prefer': 'resolution=ignore-duplicates,return=minimal',
         },

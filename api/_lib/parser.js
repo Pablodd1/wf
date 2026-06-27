@@ -122,7 +122,7 @@ function parsePrice(text, normalizedRef = null) {
 
 function parseCurrency(text) {
   const t = text.toUpperCase();
-  if (/\bUSDTO?\b|USDT/.test(t)) return 'USDT';
+  if (/\bUSDT\b/.test(t)) return 'USDT';
   if (/HKD/i.test(text)) return 'HKD';
   if (/\bEUR\b|€/.test(t)) return 'EUR';
   if (/\bGBP\b|£/.test(t)) return 'GBP';
@@ -283,6 +283,8 @@ function verdict(parsed) {
   if (!hasRef && !hasBrand) return 'RECYCLE';
   if (parsed.confidence < 35) return 'RECYCLE';
   if (parsed.confidence >= APPROVE_THRESHOLD && hasRef && hasBrand) return 'APPROVED';
+  // REVIEW tier: high enough to suggest but not auto-approve
+  if (parsed.confidence >= HUMAN_THRESHOLD && (hasRef || hasBrand)) return 'REVIEW';
   return 'HUMAN';
 }
 

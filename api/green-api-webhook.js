@@ -35,7 +35,7 @@ function parsedToRecord(parsed, part, chatId, idx) {
     dial_color: parsed.dial || null,
     condition: parsed.condition || null,
     year: parsed.year || null,
-    price_raw: parsed.price || 0,
+    price_raw: parsed.price || null,
     price_usd: priceUSD,
     currency: parsed.currency || 'USD',
     confidence: parsed.confidence,

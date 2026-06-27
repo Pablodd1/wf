@@ -1,0 +1,98 @@
+name: CI/CD — Build, Lint & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─── JOB 1: Lint + Build (runs on every push and PR) ───
+  build:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # ─── JOB 2: Smoke test API endpoints ───
+  smoke-test:
+    name: API Smoke Tests
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Health check
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://watchfacts-poc.vercel.app/api/health)
+          echo "Health endpoint: $response"
+          if [ "$response" != "200" ]; then
+            echo "FAILED: Health check returned $response"
+            exit 1
+          fi
+
+      - name: Pipeline health check
+        run: |
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://watchfacts-poc.vercel.app/api/pipeline-health)
+          echo "Pipeline health: $response"
+          if [ "$response" != "200" ]; then
+            echo "FAILED: Pipeline health returned $response"
+            exit 1
+          fi
+
+      - name: Parser smoke test
+        run: |
+          result=$(curl -s -X POST https://watchfacts-poc.vercel.app/api/ingest \
+            -H "Content-Type: application/json" \
+            -H "X-Ingest-Token: ${{ secrets.INGEST_TOKEN }}" \
+            -d '{"rawMessage":"Rolex 126334 Blue Jubilee 2025 New 117000 HKD","source":"ci_smoke_test"}')
+          echo "Parser result: $result"
+          echo "$result" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          assert d.get('success'), f'Ingest failed: {d}'
+          assert d.get('results'), 'No results returned'
+          print('Smoke test PASSED')
+          "
+
+  # ─── JOB 3: Deploy notification (Vercel auto-deploys on push to main) ───
+  notify:
+    name: Notify Deploy
+    runs-on: ubuntu-latest
+    needs: [build, smoke-test]
+    if: github.ref == 'refs/heads/main' && success()
+    steps:
+      - name: Deploy summary
+        run: |
+          echo "✅ Build passed"
+          echo "✅ Smoke tests passed"
+          echo "🚀 Vercel deployment triggered automatically via GitHub integration"
+          echo "Live URL: https://watchfacts-poc.vercel.app"
