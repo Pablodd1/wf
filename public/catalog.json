@@ -1,5 +1,19 @@
 [
   {
+    "brand": "Audemars Piguet",
+    "model": "Royal Oak",
+    "reference": "19500",
+    "dialColor": "Dark Grey",
+    "imageUrl": "/images/ap_19500.png"
+  },
+  {
+    "brand": "Rolex",
+    "model": "Datejust",
+    "reference": "1601",
+    "dialColor": "Blue",
+    "imageUrl": "/images/rolex_1601.png"
+  },
+  {
     "brand": "Tudor",
     "model": "Pelagos FXD Chrono",
     "reference": "M25827KN-0001",

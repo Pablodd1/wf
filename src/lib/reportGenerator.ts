@@ -147,7 +147,7 @@ export async function downloadStyledReport(records: ReportRecord[], filename?: s
       dCell(r.year ?? '—', sb, 'center'),
       dCell(r.condition || '—', sb, 'center'),
       // Confidence as percentage
-      { v: r.confidence, t: 'n', s: {
+      { v: r.confidence / 100, t: 'n', s: {
         font: {
           sz: 9,
           bold: true,
