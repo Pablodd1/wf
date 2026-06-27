@@ -218,6 +218,21 @@ module.exports = async function handler(req, res) {
       validListings.reduce((s, l) => s + (l.confidence || 0), 0) / validListings.length
     );
 
+    // Compute buyer/seller counts from raw_message WTB/WTS patterns
+    let buyers = 0;
+    let sellers = 0;
+    for (const l of validListings) {
+      const title = (l.title || '').toUpperCase();
+      // Detect WTB: "WTB", "Want to Buy", "Looking for", "ISO" (In Search Of), "NTQ" (Need to Quote)
+      if (/\bWTB\b|\bWANT\s+TO\s+BUY\b|\bLOOKING\s+FOR\b|\bISO\b|\bNTQ\b|\bBUY(?:ER|ING)?\b.*\bSEEK\b|\bIN\s+SEARCH\s+OF\b/i.test(title)) {
+        buyers++;
+      } else {
+        sellers++;
+      }
+    }
+    const total = buyers + sellers;
+    const buyerSellerRatio = sellers > 0 ? parseFloat((buyers / sellers).toFixed(2)) : 0;
+
     return res.status(200).json({
       success: true,
       reference,
@@ -227,9 +242,9 @@ module.exports = async function handler(req, res) {
       primaryDial: dialSet[0] || 'Unknown',
       liquidity: {
         fsCount: validListings.length,
-        buyers: 0,
-        sellers: validListings.length,
-        buyerSellerRatio: 0,
+        buyers,
+        sellers,
+        buyerSellerRatio,
       },
       pricing: {
         current: {

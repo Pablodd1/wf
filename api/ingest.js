@@ -413,12 +413,12 @@ function splitMultiWatch(text) {
         return part;
       });
       
-      // Validate: each part should have a reference or brand+price
+      // Validate: each part MUST have its own reference to prevent cross-contamination
+      // where all prices from a multi-watch dump get assigned to one reference.
       const validParts = refined.filter(p => {
         const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]?|PAM\d|IW\d|\d{3}\.\d{3})\b/i.test(p);
-        const hasBrand = /\b(Rolex|Patek|PP|Audemars|AP|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse|RM)\b/i.test(p);
-        const hasPrice = /(?:HKD|USD|USDT|\$)\s*\d/i.test(p) || /\d+(?:\.\d+)?\s*(?:k|m|million)/i.test(p) || /\d{4,}\s*(?:k|m|HKD|USD|USDT)/i.test(p) || /\d{4,}\s*HKD/i.test(p);
-        return hasRef || hasBrand || hasPrice;
+        // Require reference — price-only or brand-only fragments cause cross-contamination
+        return hasRef;
       });
       
       if (validParts.length > 1) return validParts;
@@ -450,11 +450,11 @@ function splitMultiWatch(text) {
   }
   if (currentPart.trim()) parts.push(currentPart.trim());
   
-  // Validate: each part should have a reference or brand+price
+  // Validate: each part MUST have its own reference to prevent cross-contamination
   const validParts = parts.filter(p => {
     const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]?|PAM\d|IW\d|\d{3}\.\d{3})\b/i.test(p);
-    const hasPrice = /(?:HKD|USD|USDT|\$)\s*\d/i.test(p) || /\d+(?:\.\d+)?\s*(?:k|m|million)/i.test(p) || /\d{4,}\s*(?:k|m|HKD|USD|USDT)/i.test(p) || /\d{4,}\s*HKD/i.test(p);
-    return hasRef || hasPrice;
+    // Require reference — price-only lines cause cross-contamination (Bug 2)
+    return hasRef;
   });
   
   return validParts.length > 1 ? validParts : [text];
@@ -599,9 +599,11 @@ module.exports = async function handler(req, res) {
         if (!parsed.dial && llm.dialColor && llm.dialColor !== 'Unknown') parsed.dial = llm.dialColor;
         if (!parsed.condition && llm.condition) parsed.condition = llm.condition;
         if (!parsed.year && llm.year) parsed.year = llm.year;
-        // LLM price: only accept if it passes the year guard
+        // LLM price: only accept if it passes the year guard AND isn't the reference
         if (!parsed.price && llm.price && !isYearLike(Number(llm.price))) {
-          parsed.price = llm.price;
+          if (!isReferenceNumber(Number(llm.price), parsed.ref)) {
+            parsed.price = Number(llm.price);
+          }
         }
         if (!parsed.currency && llm.currency && llm.currency !== 'Unknown') parsed.currency = llm.currency;
         parsed.confidence = Math.min(100, Math.max(parsed.confidence, parseInt(llm.confidence) || 0));
