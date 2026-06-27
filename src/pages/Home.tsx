@@ -232,7 +232,7 @@ export default function Home() {
         {/* Stats Bar */}
         <StatsBar
         totalProcessed={stats.totalProcessed}
-        accuracyRate={stats.accuracyRate}
+        autoApproveRate={stats.accuracyRate}
         mlAvgTime={stats.mlAvgTime}
         residueRate={stats.residueRate}
       />

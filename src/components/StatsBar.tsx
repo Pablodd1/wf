@@ -1,9 +1,9 @@
-import { Activity, Shield, Zap, AlertTriangle, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Activity, Shield, Zap, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface StatsBarProps {
   totalProcessed: number;
-  accuracyRate: number;
+  autoApproveRate: number;
   mlAvgTime: number;
   residueRate: number;
 }
@@ -21,26 +21,21 @@ const itemVariants = {
   }),
 };
 
-export function StatsBar({ totalProcessed, accuracyRate, mlAvgTime, residueRate }: StatsBarProps) {
+export function StatsBar({ totalProcessed, autoApproveRate, mlAvgTime, residueRate }: StatsBarProps) {
   const stats = [
     {
       icon: Activity,
       iconColor: 'text-gold-primary',
       label: 'RECORDS PROCESSED',
       value: totalProcessed.toLocaleString(),
-      trend: '+8.3%',
-      trendIcon: ArrowUpRight,
-      trendColor: 'text-success',
       valueColor: 'text-text-primary',
     },
     {
       icon: Shield,
       iconColor: 'text-info',
-      label: 'ACCURACY RATE',
-      value: `${accuracyRate}%`,
-      trend: '+1.2%',
-      trendIcon: ArrowUpRight,
-      trendColor: 'text-success',
+      label: 'AUTO-APPROVE RATE',
+      value: `${autoApproveRate}%`,
+      subtitle: 'Passed confidence threshold (not ground-truth accuracy)',
       valueColor: 'text-info',
     },
     {
@@ -48,9 +43,6 @@ export function StatsBar({ totalProcessed, accuracyRate, mlAvgTime, residueRate 
       iconColor: 'text-purple',
       label: 'ML INFERENCE AVG',
       value: `${mlAvgTime}ms`,
-      trend: '-23 ms',
-      trendIcon: ArrowDownRight,
-      trendColor: 'text-success',
       valueColor: 'text-purple',
     },
     {
@@ -58,9 +50,6 @@ export function StatsBar({ totalProcessed, accuracyRate, mlAvgTime, residueRate 
       iconColor: 'text-warning',
       label: 'RESIDUE RATE',
       value: `${residueRate}%`,
-      trend: '+0.8%',
-      trendIcon: ArrowUpRight,
-      trendColor: 'text-danger',
       valueColor: 'text-warning',
     },
   ];
@@ -70,7 +59,6 @@ export function StatsBar({ totalProcessed, accuracyRate, mlAvgTime, residueRate 
       <div className="flex gap-3 h-full">
         {stats.map((stat, i) => {
           const Icon = stat.icon;
-          const TrendIcon = stat.trendIcon;
           return (
             <motion.div
               key={stat.label}
@@ -80,21 +68,20 @@ export function StatsBar({ totalProcessed, accuracyRate, mlAvgTime, residueRate 
               variants={itemVariants}
               className="flex-1 bg-bg-card border border-border-default rounded-md p-3 flex flex-col justify-between"
             >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Icon size={18} className={stat.iconColor} />
-                  <span className="text-[10px] text-muted uppercase tracking-[0.06em]">
-                    {stat.label}
-                  </span>
-                </div>
-                <div className={`flex items-center gap-0.5 ${stat.trendColor}`}>
-                  <TrendIcon size={14} className="animate-bounce" style={{ animationDuration: '2s' }} />
-                  <span className="text-[10px] font-medium">{stat.trend}</span>
-                </div>
+              <div className="flex items-center gap-2">
+                <Icon size={18} className={stat.iconColor} />
+                <span className="text-[10px] text-muted uppercase tracking-[0.06em]">
+                  {stat.label}
+                </span>
               </div>
               <span className={`text-lg font-bold ${stat.valueColor} leading-none mt-1`}>
                 {stat.value}
               </span>
+              {stat.subtitle && (
+                <span className="text-[9px] text-muted mt-0.5 leading-tight" title={stat.subtitle}>
+                  {stat.subtitle}
+                </span>
+              )}
             </motion.div>
           );
         })}
