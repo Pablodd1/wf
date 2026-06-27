@@ -305,9 +305,9 @@ function loadWatchData(): Promise<WatchRecord[]> {
       const stats = await statsResp.json();
       const totalCount = stats.total || 0;
       
-      // Fetch up to 50,000 records from Supabase for display and full exports
+      // Fetch a small subset (100) of records for dashboard display
       const allData: any[] = [];
-      const dataResp = await fetch(`/api/watch-data?page=1&limit=5000`);
+      const dataResp = await fetch(`/api/watch-data?page=1&limit=100`);
       const dataJson = await dataResp.json();
       if (dataJson.data && dataJson.data.length > 0) {
         allData.push(...dataJson.data);

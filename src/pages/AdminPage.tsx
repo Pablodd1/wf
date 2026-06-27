@@ -17,11 +17,7 @@ interface StatsData {
   approved: number;
   human: number;
   recycle: number;
-  missingRef: number;
-  missingPrice: number;
-  unknownBrand: number;
-  unknownDial: number;
-  missingYear: number;
+  brands?: Record<string, number>;
   avgConfidence: number;
   processingRate: number;
 }
@@ -115,13 +111,14 @@ export default function AdminPage() {
       const verdicts = health.verdicts || {};
       const totalFromVerdicts = (verdicts.APPROVED || 0) + (verdicts.HUMAN || 0) + (verdicts.RECYCLE || 0);
       
-      // Try to get total from watch-data stats (best-effort, may timeout)
       let total = totalFromVerdicts;
+      let brands = {};
       try {
         const statsRes = await fetch('/api/watch-data?stats=true');
         if (statsRes.ok) {
           const statsData = await statsRes.json();
           if (statsData.total > 0) total = statsData.total;
+          if (statsData.brands) brands = statsData.brands;
         }
       } catch { /* fallback to verdict sum */ }
       
@@ -130,11 +127,7 @@ export default function AdminPage() {
         approved: verdicts.APPROVED || 0,
         human: verdicts.HUMAN || 0,
         recycle: verdicts.RECYCLE || 0,
-        missingRef: 0,
-        missingPrice: 0,
-        unknownBrand: 0,
-        unknownDial: 0,
-        missingYear: 0,
+        brands,
         avgConfidence: 85,
         processingRate: 0,
       });
@@ -164,86 +157,14 @@ export default function AdminPage() {
     }
   };
 
-  const exportData = async (format: 'excel' | 'csv') => {
-    setActionLoading(`export-${format}`);
-    try {
-      const watchesRes = await fetch('/parsedWatches.json');
-      const watchesData = await watchesRes.json();
-      const rows = Array.isArray(watchesData) ? watchesData : [];
-
-      // Client-side generation — no server POST (fixes FUNCTION_PAYLOAD_TOO_LARGE)
-      const flat = rows.map((row: any[]) => ({
-        reference: row[2] || '',
-        brand: row[1] || '',
-        dialColor: row[3] || '',
-        condition: row[7] || '',
-        year: row[12] || '',
-        price: row[4] || 0,
-        currency: row[6] || '',
-        confidence: row[9] || 0,
-        verdict: row[10] || 'UNKNOWN',
-        flags: Array.isArray(row[11]) ? row[11].join('; ') : String(row[11] || ''),
-        rawMessage: row[8] || '',
-      }));
-
-      if (format === 'csv') {
-        const headers = ['Reference','Brand','Dial Color','Condition','Year','Price','Currency','Confidence','Verdict','Flags','Raw Message'];
-        const csv = [headers.join(',')].concat(
-          flat.map((r: any) => [
-            `"${r.reference}"`, `"${r.brand}"`, `"${r.dialColor}"`, `"${r.condition}"`,
-            r.year, r.price, `"${r.currency}"`, r.confidence, `"${r.verdict}"`,
-            `"${r.flags}"`, `"${(r.rawMessage || '').replace(/"/g,'""')}"`
-          ].join(','))
-        ).join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `watchfacts-report-${new Date().toISOString().slice(0,10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
-      } else {
-        // Client-side XLSX — lazy load to keep bundle small
-        const XLSX = await import('xlsx');
-        const wb = XLSX.utils.book_new();
-        const verdicts = { APPROVED: flat.filter((r:any) => r.verdict === 'APPROVED'), HUMAN: flat.filter((r:any) => r.verdict === 'HUMAN'), RECYCLE: flat.filter((r:any) => r.verdict === 'RECYCLE') };
-        const headers = ['Reference','Brand','Dial Color','Condition','Year','Price','Currency','Confidence','Verdict','Flags','Raw Message'];
-        for (const [name, data] of Object.entries(verdicts)) {
-          const wsData = [headers, ...data.map((r:any) => [r.reference, r.brand, r.dialColor, r.condition, r.year, r.price, r.currency, r.confidence, r.verdict, r.flags, r.rawMessage])];
-          const ws = XLSX.utils.aoa_to_sheet(wsData);
-          ws['!cols'] = headers.map(h => ({ wch: Math.min(40, Math.max(h.length, 12)) }));
-          XLSX.utils.book_append_sheet(wb, ws, name);
-        }
-        // Also add "ALL" sheet
-        const wsAll = XLSX.utils.aoa_to_sheet([headers, ...flat.map((r:any) => [r.reference, r.brand, r.dialColor, r.condition, r.year, r.price, r.currency, r.confidence, r.verdict, r.flags, r.rawMessage])]);
-        wsAll['!cols'] = headers.map(h => ({ wch: Math.min(40, Math.max(h.length, 12)) }));
-        XLSX.utils.book_append_sheet(wb, wsAll, 'ALL');
-        const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' });
-        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `watchfacts-report-${new Date().toISOString().slice(0,10)}.xlsx`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-      setMessage(`Exported ${flat.length.toLocaleString()} records (${format.toUpperCase()})`);
-    } catch (e: any) {
-      setMessage(`Export failed: ${e.message}`);
-    } finally {
-      setActionLoading(null);
-    }
-  };
-
-  const statsMock = stats || {
-    totalRecords: 117744, approved: 39694, human: 45850, recycle: 32200,
-    missingRef: 7425, missingPrice: 42682, unknownBrand: 31834, unknownDial: 21095, missingYear: 54153,
-    avgConfidence: 67, processingRate: 3925,
+  const statsData = stats || {
+    totalRecords: 0, approved: 0, human: 0, recycle: 0,
+    brands: {}, avgConfidence: 0, processingRate: 0,
   };
 
   return (
-    <Layout totalProcessed={statsMock.totalRecords} normalizedCount={statsMock.approved} residueCount={statsMock.recycle}>
-      <TabNav totalProcessed={statsMock.totalRecords} />
+    <Layout totalProcessed={statsData.totalRecords} normalizedCount={statsData.approved} residueCount={statsData.recycle}>
+      <TabNav totalProcessed={statsData.totalRecords} />
 
       <div className="max-w-7xl mx-auto px-5 py-8">
         {/* ═══ HEADER ═══ */}
@@ -259,11 +180,11 @@ export default function AdminPage() {
 
         {/* ═══ STATS GRID ═══ */}
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-8">
-          <StatCard label="Total Records" value={statsMock.totalRecords.toLocaleString()} icon={Database} color="text-blue-400" />
-          <StatCard label="Approved" value={statsMock.approved.toLocaleString()} sub={`${Math.round((statsMock.approved/statsMock.totalRecords)*100)}%`} icon={CheckCircle2} color="text-emerald-400" trend="up" />
-          <StatCard label="Human Review" value={statsMock.human.toLocaleString()} sub={`${Math.round((statsMock.human/statsMock.totalRecords)*100)}%`} icon={Users} color="text-amber-400" trend="neutral" />
-          <StatCard label="Recycle" value={statsMock.recycle.toLocaleString()} sub={`${Math.round((statsMock.recycle/statsMock.totalRecords)*100)}%`} icon={Trash2} color="text-red-400" trend="down" />
-          <StatCard label="Avg Confidence" value={`${statsMock.avgConfidence}%`} icon={Activity} color="text-purple-400" />
+          <StatCard label="Total Records" value={statsData.totalRecords > 0 ? statsData.totalRecords.toLocaleString() : '-'} icon={Database} color="text-blue-400" />
+          <StatCard label="Approved" value={statsData.approved > 0 ? statsData.approved.toLocaleString() : '-'} sub={statsData.totalRecords > 0 ? `${Math.round((statsData.approved/statsData.totalRecords)*100)}%` : ''} icon={CheckCircle2} color="text-emerald-400" trend="up" />
+          <StatCard label="Human Review" value={statsData.human > 0 ? statsData.human.toLocaleString() : '-'} sub={statsData.totalRecords > 0 ? `${Math.round((statsData.human/statsData.totalRecords)*100)}%` : ''} icon={Users} color="text-amber-400" trend="neutral" />
+          <StatCard label="Recycle" value={statsData.recycle > 0 ? statsData.recycle.toLocaleString() : '-'} sub={statsData.totalRecords > 0 ? `${Math.round((statsData.recycle/statsData.totalRecords)*100)}%` : ''} icon={Trash2} color="text-red-400" trend="down" />
+          <StatCard label="Avg Confidence" value={`${statsData.avgConfidence}%`} icon={Activity} color="text-purple-400" />
         </div>
 
         {/* ═══ MESSAGE BANNER ═══ */}
@@ -286,27 +207,11 @@ export default function AdminPage() {
 
             <BulkActionCard
               title="Re-process HUMAN + RECYCLE"
-              desc={`Run all ${(statsMock.human + statsMock.recycle).toLocaleString()} records through AI + web enrichment`}
+              desc={`Run all ${(statsData.human + statsData.recycle).toLocaleString()} records through AI + web enrichment`}
               icon={RefreshCw}
               color="text-cyan-400"
               onClick={() => runBulkAction('reprocess')}
               loading={actionLoading === 'reprocess'}
-            />
-            <BulkActionCard
-              title="Export Excel Report"
-              desc="Colored 3-sheet report with all records"
-              icon={FileSpreadsheet}
-              color="text-emerald-400"
-              onClick={() => exportData('excel')}
-              loading={actionLoading === 'export-excel'}
-            />
-            <BulkActionCard
-              title="Export CSV"
-              desc="Raw data export for external tools"
-              icon={FileText}
-              color="text-blue-400"
-              onClick={() => exportData('csv')}
-              loading={actionLoading === 'export-csv'}
             />
 
             <div className="flex items-center gap-2 mt-6 mb-2">
@@ -341,26 +246,31 @@ export default function AdminPage() {
           {/* ═══ CENTER: DATA QUALITY ═══ */}
           <div className="lg:col-span-1 space-y-4">
             <div className="flex items-center gap-2 mb-2">
-              <Search size={14} className="text-gold-primary" />
-              <span className="text-xs font-bold uppercase tracking-wider text-text-primary">Data Quality Audit</span>
+              <BarChart3 size={14} className="text-gold-primary" />
+              <span className="text-xs font-bold uppercase tracking-wider text-text-primary">Top Brands</span>
             </div>
 
             <div className="rounded-xl border border-border-default bg-bg-card p-4 space-y-4">
-              {[
-                { label: 'Missing Reference', count: statsMock.missingRef, total: statsMock.totalRecords, color: 'bg-red-500' },
-                { label: 'Missing Price', count: statsMock.missingPrice, total: statsMock.totalRecords, color: 'bg-amber-500' },
-                { label: 'Unknown Brand', count: statsMock.unknownBrand, total: statsMock.totalRecords, color: 'bg-orange-500' },
-                { label: 'Unknown Dial', count: statsMock.unknownDial, total: statsMock.totalRecords, color: 'bg-yellow-500' },
-                { label: 'Missing Year', count: statsMock.missingYear, total: statsMock.totalRecords, color: 'bg-blue-500' },
-              ].map(item => (
-                <div key={item.label}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-text-secondary">{item.label}</span>
-                    <span className="text-[10px] font-mono text-text-muted">{item.count.toLocaleString()}</span>
-                  </div>
-                  <ProgressBar value={item.count} max={item.total} color={item.color} />
-                </div>
-              ))}
+              {!statsData.brands || Object.keys(statsData.brands).length === 0 ? (
+                <div className="text-xs text-text-muted text-center py-4">Loading brand data...</div>
+              ) : (
+                Object.entries(statsData.brands)
+                  .sort((a, b) => b[1] - a[1])
+                  .slice(0, 7)
+                  .map(([brand, count], i) => (
+                    <div key={brand}>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-xs text-text-secondary">{brand}</span>
+                        <span className="text-[10px] font-mono text-text-muted">{count.toLocaleString()}</span>
+                      </div>
+                      <ProgressBar 
+                        value={count} 
+                        max={Object.values(statsData.brands || {})[0] || count} 
+                        color={['bg-blue-500', 'bg-emerald-500', 'bg-gold-primary', 'bg-purple-500', 'bg-cyan-500', 'bg-rose-500', 'bg-amber-500'][i % 7]} 
+                      />
+                    </div>
+                  ))
+              )}
             </div>
 
             <div className="flex items-center gap-2 mt-6 mb-2">
@@ -371,7 +281,7 @@ export default function AdminPage() {
             <div className="rounded-xl border border-border-default bg-bg-card p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-text-secondary">Records / day</span>
-                <span className="text-xs font-mono text-text-primary">{statsMock.processingRate.toLocaleString()}</span>
+                <span className="text-xs font-mono text-text-primary">Live</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-text-secondary">Avg processing time</span>
@@ -402,35 +312,35 @@ export default function AdminPage() {
                     <div className="w-3 h-3 rounded-full bg-emerald-500" />
                     <span className="text-xs text-text-secondary">APPROVED</span>
                   </div>
-                  <span className="text-xs font-mono text-text-primary">{statsMock.approved.toLocaleString()}</span>
+                  <span className="text-xs font-mono text-text-primary">{statsData.approved.toLocaleString()}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-amber-500" />
                     <span className="text-xs text-text-secondary">HUMAN</span>
                   </div>
-                  <span className="text-xs font-mono text-text-primary">{statsMock.human.toLocaleString()}</span>
+                  <span className="text-xs font-mono text-text-primary">{statsData.human.toLocaleString()}</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-red-500" />
                     <span className="text-xs text-text-secondary">RECYCLE</span>
                   </div>
-                  <span className="text-xs font-mono text-text-primary">{statsMock.recycle.toLocaleString()}</span>
+                  <span className="text-xs font-mono text-text-primary">{statsData.recycle.toLocaleString()}</span>
                 </div>
               </div>
 
               <div className="mt-4 pt-3 border-t border-border-default">
                 <div className="text-[10px] text-text-muted mb-2">Distribution</div>
                 <div className="flex h-3 rounded-full overflow-hidden">
-                  <div className="bg-emerald-500" style={{ width: `${(statsMock.approved/statsMock.totalRecords)*100}%` }} />
-                  <div className="bg-amber-500" style={{ width: `${(statsMock.human/statsMock.totalRecords)*100}%` }} />
-                  <div className="bg-red-500" style={{ width: `${(statsMock.recycle/statsMock.totalRecords)*100}%` }} />
+                  <div className="bg-emerald-500" style={{ width: `${statsData.totalRecords ? (statsData.approved/statsData.totalRecords)*100 : 0}%` }} />
+                  <div className="bg-amber-500" style={{ width: `${statsData.totalRecords ? (statsData.human/statsData.totalRecords)*100 : 0}%` }} />
+                  <div className="bg-red-500" style={{ width: `${statsData.totalRecords ? (statsData.recycle/statsData.totalRecords)*100 : 0}%` }} />
                 </div>
                 <div className="flex justify-between mt-1">
-                  <span className="text-[9px] text-emerald-400">{Math.round((statsMock.approved/statsMock.totalRecords)*100)}%</span>
-                  <span className="text-[9px] text-amber-400">{Math.round((statsMock.human/statsMock.totalRecords)*100)}%</span>
-                  <span className="text-[9px] text-red-400">{Math.round((statsMock.recycle/statsMock.totalRecords)*100)}%</span>
+                  <span className="text-[9px] text-emerald-400">{statsData.totalRecords ? Math.round((statsData.approved/statsData.totalRecords)*100) : 0}%</span>
+                  <span className="text-[9px] text-amber-400">{statsData.totalRecords ? Math.round((statsData.human/statsData.totalRecords)*100) : 0}%</span>
+                  <span className="text-[9px] text-red-400">{statsData.totalRecords ? Math.round((statsData.recycle/statsData.totalRecords)*100) : 0}%</span>
                 </div>
               </div>
             </div>
@@ -442,25 +352,11 @@ export default function AdminPage() {
 
             <div className="space-y-2">
               <button
-                onClick={() => window.open('/review', '_blank')}
+                onClick={() => window.open('https://supabase.com/dashboard/project/_/editor', '_blank')}
                 className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border-default bg-bg-card hover:bg-bg-elevated/50 transition-colors text-left"
               >
-                <Eye size={14} className="text-blue-400" />
-                <span className="text-xs text-text-primary">Open Review Queue</span>
-              </button>
-              <button
-                onClick={() => window.open('/clean', '_blank')}
-                className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border-default bg-bg-card hover:bg-bg-elevated/50 transition-colors text-left"
-              >
-                <Sparkles size={14} className="text-purple-400" />
-                <span className="text-xs text-text-primary">Manual Analysis</span>
-              </button>
-              <button
-                onClick={() => window.open('/price-research', '_blank')}
-                className="w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border-default bg-bg-card hover:bg-bg-elevated/50 transition-colors text-left"
-              >
-                <DollarSign size={14} className="text-gold-primary" />
-                <span className="text-xs text-text-primary">Price Research</span>
+                <FileSpreadsheet size={14} className="text-emerald-400" />
+                <span className="text-xs text-text-primary">Detailed Reports (Full DB Export)</span>
               </button>
             </div>
           </div>
