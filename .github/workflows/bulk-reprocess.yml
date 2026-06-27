@@ -1,0 +1,92 @@
+name: Bulk Reprocess — One Time Run
+
+# Run manually from GitHub Actions UI: Actions → Bulk Reprocess → Run workflow
+# Do NOT schedule this — it is a one-time migration job
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run only (no DB writes)'
+        required: false
+        default: 'false'
+        type: choice
+        options: ['false', 'true']
+      batch_size:
+        description: 'Records per batch (default 500)'
+        required: false
+        default: '500'
+      max_records:
+        description: 'Max records to process (0 = all). Use 1000 for a test run first.'
+        required: false
+        default: '0'
+      filter:
+        description: 'Supabase filter e.g. verdict=eq.HUMAN (leave blank for all unprocessed)'
+        required: false
+        default: ''
+
+jobs:
+  bulk-reprocess:
+    name: Bulk Reprocess (${{ github.event.inputs.dry_run == 'true' && 'DRY RUN' || 'LIVE' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # 6 hours max — 2.39M records at 500/batch + 50ms delay ≈ 3-4h
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Validate secrets
+        run: |
+          if [ -z "$SUPABASE_SERVICE_ROLE_KEY" ]; then
+            echo "ERROR: SUPABASE_SERVICE_ROLE_KEY secret is not set in GitHub repo secrets"
+            exit 1
+          fi
+          if [ -z "$SUPABASE_URL" ]; then
+            echo "ERROR: SUPABASE_URL secret is not set in GitHub repo secrets"
+            exit 1
+          fi
+          echo "✅ Secrets validated"
+        env:
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+
+      - name: Run dry run first (safety check)
+        if: github.event.inputs.dry_run != 'true'
+        run: |
+          echo "Running dry-run sample (first 50 records)..."
+          node scripts/bulk-reprocess.cjs --dry-run --max=50
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: Run bulk reprocess
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ -n "${{ github.event.inputs.batch_size }}" ]; then ARGS="$ARGS --batch-size=${{ github.event.inputs.batch_size }}"; fi
+          if [ "${{ github.event.inputs.max_records }}" != "0" ] && [ -n "${{ github.event.inputs.max_records }}" ]; then
+            ARGS="$ARGS --max=${{ github.event.inputs.max_records }}"
+          fi
+          if [ -n "${{ github.event.inputs.filter }}" ]; then ARGS="$ARGS --filter=${{ github.event.inputs.filter }}"; fi
+          echo "Running: node scripts/bulk-reprocess.cjs $ARGS"
+          node scripts/bulk-reprocess.cjs $ARGS
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      - name: Upload progress report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bulk-reprocess-progress
+          path: scripts/bulk-reprocess-progress.json
+          if-no-files-found: ignore
+          retention-days: 30

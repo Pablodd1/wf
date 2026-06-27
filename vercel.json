@@ -12,6 +12,9 @@
     "api/clean-analyze.js": {
       "maxDuration": 120
     },
+    "api/batch-process.js": {
+      "maxDuration": 60
+    },
     "api/price-research.js": {
       "maxDuration": 60
     },
