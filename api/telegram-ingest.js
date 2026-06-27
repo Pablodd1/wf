@@ -2,9 +2,8 @@
  * TELEGRAM INGEST WEBHOOK — /api/telegram-ingest
  *
  * Receives ALL messages from Telegram groups where the bot is a member.
- * Parses watch listings from dealer messages and inserts into Supabase.
- *
- * Also handles bot commands: /stats, /search, /help, /status
+ * Uses the shared parser (api/_lib/parser.js) for unified parsing.
+ * Dual-writes to live_ingest + watch_records.
  *
  * Setup:
  *   1. Create bot via @BotFather
@@ -19,138 +18,26 @@ const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-const APPROVE_THRESHOLD = 90;
-const HUMAN_THRESHOLD = 70;
+const {
+  parseFull, verdict,
+  toUSD,
+  APPROVE_THRESHOLD, HUMAN_THRESHOLD,
+} = require('./_lib/parser');
 
-const RATES = {
-  USD: 1.0, USDT: 1.0, HKD: 0.128, EUR: 1.08,
-  GBP: 1.27, CHF: 1.13, SGD: 0.74, AUD: 0.65,
-  CAD: 0.73, JPY: 0.0066, CNY: 0.138, RMB: 0.138,
-};
-
-function toUSD(amount, currency) {
-  const rate = RATES[(currency || 'USD').toUpperCase()] || 1.0;
-  return Math.round(amount * rate);
-}
-
-function parsePrice(text) {
-  const t = text.replace(/,/g, '');
-  const mMatch = t.match(/\b(\d{1,4}(?:\.\d{1,3})?)\s*(?:m|million)\b/i);
-  if (mMatch) return Math.round(parseFloat(mMatch[1]) * 1_000_000);
-  const kMatch = t.match(/\b(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
-  if (kMatch) return Math.round(parseFloat(kMatch[1]) * 1000);
-  const plainMatch = t.match(/\b(\d{4,8})\b/);
-  if (plainMatch) return parseInt(plainMatch[1], 10);
-  return null;
-}
-
-function parseCurrency(text) {
-  const t = text.toUpperCase();
-  if (/\bUSDTO?\b|USDT/.test(t)) return 'USDT';
-  if (/\bHKD\b|HK\$/.test(t)) return 'HKD';
-  if (/\bEUR\b|€/.test(t)) return 'EUR';
-  if (/\bGBP\b|£/.test(t)) return 'GBP';
-  if (/\bCHF\b/.test(t)) return 'CHF';
-  if (/\bSGD\b/.test(t)) return 'SGD';
-  if (/\bUSD\b|\$/.test(t)) return 'USD';
-  return null;
-}
-
-function inferBrandFromRef(ref) {
-  if (!ref) return null;
-  const r = ref.toUpperCase().replace(/[^A-Z0-9\/\-\.]/g, '');
-  // A. Lange & Söhne — decimal format (check FIRST)
-  if (/^\d{3}\.\d{3}/.test(r)) return 'A. Lange & Söhne';
-  // Richard Mille
-  if (/^RM\d{2}/.test(r)) return 'Richard Mille';
-  // Vacheron Constantin — check BEFORE Patek
-  if (/^[48]\d{3}[A-Z]$/.test(r)) return 'Vacheron Constantin';
-  if (/^[48]\d{4}[A-Z]$/.test(r)) return 'Vacheron Constantin';
-  // Patek Philippe
-  if (/^[345]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
-  if (/^[345]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
-  // Audemars Piguet
-  if (/^\d{5}[A-Z]{2,5}$/.test(r)) return 'Audemars Piguet';
-  // Rolex — exactly 6 digits + optional letters
-  if (/^\d{6}[A-Z]{0,5}$/.test(r)) return 'Rolex';
-  // Panerai, IWC, Cartier, Seiko
-  if (/^PAM\d{3,5}/.test(r)) return 'Panerai';
-  if (/^IW\d{6,8}/.test(r)) return 'IWC';
-  if (/^RDDB\w*/.test(r) || /^WHCH\w*/.test(r)) return 'Cartier';
-  if (/^(WSSA|SPB|SRP|SBDY|SNE)\d{3,4}/.test(r)) return 'Seiko';
-  return null;
-}
-
-function parseWatchMessage(text) {
-  let brand = null;
-  if (/\bpp\b|patek\s?philippe|patek/i.test(text)) brand = 'Patek Philippe';
-  else if (/\bap\b|audemars\s?piguet/i.test(text)) brand = 'Audemars Piguet';
-  else if (/\brm\b|richard\s?mille/i.test(text)) brand = 'Richard Mille';
-  else if (/rolex/i.test(text)) brand = 'Rolex';
-  else if (/vacheron|constantin/i.test(text)) brand = 'Vacheron Constantin';
-  else if (/omega/i.test(text)) brand = 'Omega';
-  else if (/cartier/i.test(text)) brand = 'Cartier';
-
-  let ref = null;
-  const rmM = text.match(/\bRM\s?\d{2}[-\s]?\d{2}[A-Z]?\b/i);
-  const ppM = text.match(/\b[345]\d{3}[A-Z]?\/\d{1,4}[A-Z]{0,4}(?:-\d{3})?\b/i);
-  const shortPP = text.match(/\b[345]\d{3}[A-Z]\b/i);
-  const apM = text.match(/\b\d{5}[A-Z]{2,4}\b/i);
-  const rolexM = text.match(/\b\d{6}[A-Z]{0,4}\b/i);
-  if (rmM) ref = rmM[0].toUpperCase().replace(/\s/g, '');
-  else if (ppM) ref = ppM[0].toUpperCase();
-  else if (shortPP) ref = shortPP[0].toUpperCase();
-  else if (apM) ref = apM[0].toUpperCase();
-  else if (rolexM) ref = rolexM[0].toUpperCase();
-
-  if (!brand && ref) brand = inferBrandFromRef(ref);
-
-  let dial = null;
-  const dialM = text.match(/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|tiffany|panda|hulk)\b/i);
-  if (dialM) dial = dialM[1].charAt(0).toUpperCase() + dialM[1].slice(1).toLowerCase();
-
-  let condition = null;
-  if (/\bnew\b|unworn|bnib/i.test(text)) condition = 'New';
-  else if (/\bused\b|pre-?owned|worn/i.test(text)) condition = 'Used';
-
-  const yearM = text.match(/[Nn]\d\/(\d{4})/) || text.match(/\b(20[12]\d)\b/);
-  const year = yearM ? parseInt(yearM[1], 10) : null;
-
-  const price = parsePrice(text);
-  const currency = parseCurrency(text);
-
-  let confidence = 0;
-  if (ref) confidence += 40;
-  if (brand) confidence += 25;
-  if (dial) confidence += 10;
-  if (condition) confidence += 8;
-  if (price) confidence += 10;
-  if (year) confidence += 4;
-  if (currency) confidence += 3;
-
-  return { brand, ref, dial, condition, year, price, currency, confidence };
-}
-
-function getVerdict(parsed) {
-  const hasRef = !!(parsed.ref && parsed.ref.length > 2);
-  const hasBrand = !!(parsed.brand && parsed.brand !== 'Unknown');
-  if (!hasRef && !hasBrand) return 'RECYCLE';
-  if (parsed.confidence < 35) return 'RECYCLE';
-  if (parsed.confidence >= APPROVE_THRESHOLD && hasRef && hasBrand) return 'APPROVED';
-  return 'HUMAN';
-}
-
+// ─── Telegram messaging ───
 async function sendTelegramMessage(chatId, text) {
-  if (!BOT_TOKEN) return;
+  if (!BOT_TOKEN) return false;
   try {
     await fetch(`${TELEGRAM_API}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: chatId, text, parse_mode: 'Markdown' }),
     });
-  } catch (e) { /* silent */ }
+    return true;
+  } catch { return false; }
 }
 
+// ─── Supabase stats ───
 async function getStats() {
   if (!SUPABASE_URL || !SUPABASE_KEY) return null;
   try {
@@ -163,7 +50,8 @@ async function getStats() {
   } catch { return null; }
 }
 
-async function insertToSupabase(record) {
+// ─── Insert to live_ingest ───
+async function insertToLive(record) {
   if (!SUPABASE_URL || !SUPABASE_KEY) return false;
   try {
     const resp = await fetch(`${SUPABASE_URL}/rest/v1/live_ingest`, {
@@ -180,14 +68,53 @@ async function insertToSupabase(record) {
   } catch { return false; }
 }
 
-export default async function handler(req, res) {
+// ─── Dual-write to watch_records ───
+async function insertToWatchRecords(record) {
+  if (!SUPABASE_URL || !SUPABASE_KEY) return false;
+  try {
+    const resp = await fetch(`${SUPABASE_URL}/rest/v1/watch_records`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Prefer': 'resolution=ignore-duplicates,return=minimal',
+      },
+      body: JSON.stringify([{
+        id: record.id,
+        brand: record.brand,
+        reference: record.reference,
+        dial_color: record.dial_color,
+        condition: record.condition,
+        year: record.year,
+        price_raw: record.price_raw,
+        price_usd: record.price_usd,
+        currency: record.currency,
+        confidence: record.confidence,
+        verdict: record.verdict,
+        source: record.source,
+        raw_message: record.raw_message,
+        channel_id: record.channel_id,
+        received_at: record.received_at,
+      }]),
+    });
+    return resp.ok;
+  } catch { return false; }
+}
+
+// ─── Handler ───
+module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   // GET — health check
   if (req.method === 'GET') {
     return res.status(200).json({
       status: 'ok',
+      parser: 'shared (_lib/parser.js)',
+      dualWrite: !!(SUPABASE_URL && SUPABASE_KEY),
       bot: !!BOT_TOKEN,
       supabase: !!(SUPABASE_URL && SUPABASE_KEY),
       webhook_url: `${req.headers.host}/api/telegram-ingest`,
@@ -215,7 +142,8 @@ export default async function handler(req, res) {
         case '/help': {
           await sendTelegramMessage(chatId,
             `*WF Showroom Bot*\n\n` +
-            `I monitor watch dealer groups and parse listings automatically.\n\n` +
+            `I monitor watch dealer groups and parse listings automatically.\n` +
+            `Uses shared parser (v2) with P0 fixes applied.\n\n` +
             `*Commands:*\n` +
             `/stats — Database stats\n` +
             `/status — System status\n` +
@@ -230,7 +158,7 @@ export default async function handler(req, res) {
             await sendTelegramMessage(chatId,
               `*WF Showroom Stats*\n\n` +
               `Total records: ${stats.total.toLocaleString()}\n` +
-              `Source: Supabase (live)\n` +
+              `Source: Supabase (watch_records)\n` +
               `[Open Dashboard](https://watchfacts-poc.vercel.app)`
             );
           } else {
@@ -241,10 +169,10 @@ export default async function handler(req, res) {
         case '/status': {
           await sendTelegramMessage(chatId,
             `*System Status*\n\n` +
-            `Bot: Online\n` +
-            `Supabase: ${SUPABASE_URL ? 'Connected' : 'Not configured'}\n` +
-            `Webhook: Active\n` +
-            `Parsing: Regex + LLM fallback`
+            `Parser: shared v2 (P0 fixes active)\n` +
+            `Dual-write: ${SUPABASE_URL ? 'live_ingest + watch_records' : 'offline'}\n` +
+            `Bot: ${BOT_TOKEN ? 'Online' : 'Token missing'}\n` +
+            `Webhook: Active`
           );
           break;
         }
@@ -257,19 +185,23 @@ export default async function handler(req, res) {
       return res.status(200).json({ ok: true, skipped: 'short private message' });
     }
 
-    // Skip non-watch messages (basic filter: must contain a number or price)
-    if (!/\d{3,}/.test(text) && !/\b(k|k$|hkd|usd|usdt)\b/i.test(text)) {
+    // Skip non-watch messages
+    if (!/\d{3,}/.test(text) && !/\b(k|hkd|usd|usdt)\b/i.test(text)) {
       return res.status(200).json({ ok: true, skipped: 'no watch data detected' });
     }
 
-    // Parse the message
-    const parsed = parseWatchMessage(text);
-    const v = getVerdict(parsed);
+    // Parse using SHARED parser
+    const parsed = parseFull(text);
+    if (!parsed || (!parsed.ref && !parsed.brand)) {
+      return res.status(200).json({ ok: true, skipped: 'not a watch listing' });
+    }
+
+    const v = verdict(parsed);
     const priceUSD = parsed.price ? toUSD(parsed.price, parsed.currency || 'USD') : null;
 
     const record = {
       id: `tg_${msg.message_id}_${chatId}`,
-      raw_message: text,
+      raw_message: text.substring(0, 2000),
       brand: parsed.brand || 'Unknown',
       reference: parsed.ref || null,
       dial_color: parsed.dial || null,
@@ -285,10 +217,11 @@ export default async function handler(req, res) {
       received_at: new Date().toISOString(),
     };
 
-    // Insert to Supabase
-    const persisted = await insertToSupabase(record);
+    // DUAL WRITE: live_ingest + watch_records
+    const liveOk = await insertToLive(record);
+    const wrOk = await insertToWatchRecords(record);
 
-    console.log(`[telegram-ingest] ${chatTitle} @${senderName}: "${text.substring(0, 60)}..." → ${parsed.brand || '?'} ${parsed.ref || '?'} ${v} (conf=${parsed.confidence}) ${persisted ? '✓' : '✗'}`);
+    console.log(`[telegram-ingest] ${chatTitle} @${senderName}: "${text.substring(0, 60)}..." → ${parsed.brand || '?'} ${parsed.ref || '?'} ${v} (conf=${parsed.confidence}) live=${liveOk} wr=${wrOk}`);
 
     return res.status(200).json({
       ok: true,
@@ -302,9 +235,10 @@ export default async function handler(req, res) {
         confidence: parsed.confidence,
         verdict: v,
       },
-      persisted,
+      persisted: liveOk,
+      watchRecordsWritten: wrOk,
     });
   }
 
   return res.status(200).json({ ok: true, no_message: true });
-}
+};
