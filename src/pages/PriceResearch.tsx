@@ -382,7 +382,7 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
     const d = l.date.slice(0, 7); // "YYYY-MM"
     return d === month.month;
   });
-  // If no filtered listings, fall back to showing all (some backends may not store date on listings)
+  // If no filtered listings, fall back to showing all
   const displayListings = monthListings.length > 0 ? monthListings : data.listings.slice(0, 15);
 
   // Fetch catalog image
@@ -395,7 +395,7 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
     return () => { cancelled = true; };
   }, [data.reference]);
 
-  const imageUrl = catalogEntry?.imageUrl;
+  const imageUrl = catalogEntry?.imageUrl || data.listings.find(l => l.imageUrl)?.imageUrl;
 
   // Prevent body scroll while open
   useEffect(() => {
@@ -403,12 +403,36 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
     return () => { document.body.style.overflow = ''; };
   }, []);
 
+  // Format date utility
+  const formatDate = (dStr: string) => {
+    if (!dStr) return '';
+    const dateObj = new Date(dStr);
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${months[dateObj.getMonth()]} ${String(dateObj.getDate()).padStart(2, '0')}`;
+  };
+
+  let dateRangeStr = '';
+  if (displayListings.length > 0) {
+    const sortedListings = [...displayListings].sort((a, b) => a.date.localeCompare(b.date));
+    const startStr = formatDate(sortedListings[0].date);
+    const endStr = formatDate(sortedListings[sortedListings.length - 1].date);
+    dateRangeStr = `Listings created from ${startStr} to ${endStr}`;
+  }
+
+  // Find duplicate prices
+  const priceFreq: Record<number, number> = {};
+  displayListings.forEach(l => { priceFreq[l.priceUSD] = (priceFreq[l.priceUSD] || 0) + 1; });
+  const duplicatePrices = Object.keys(priceFreq)
+    .map(Number)
+    .filter(p => priceFreq[p] > 1)
+    .map(p => `$${p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+
   return (
     /* Full-screen modal overlay */
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 200,
-        backgroundColor: 'rgba(0,0,0,0.72)',
+        backgroundColor: 'rgba(0,0,0,0.6)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         padding: '16px',
       }}
@@ -417,23 +441,19 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
       {/* Panel */}
       <div
         style={{
-          backgroundColor: BG_CARD, borderRadius: 16, width: '100%', maxWidth: 780,
-          maxHeight: '90vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
-          border: `1px solid ${BORDER}`, boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+          backgroundColor: '#ffffff', borderRadius: 12, width: '100%', maxWidth: 960,
+          maxHeight: '92vh', overflow: 'hidden', display: 'flex', flexDirection: 'column',
+          border: '1px solid #e5e7eb', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04)',
+          color: '#1f2937'
         }}
         onClick={e => e.stopPropagation()}
       >
         {/* ── Header bar ── */}
-        <div style={{ backgroundColor: GOLD, padding: '14px 24px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
-          <div>
-            <h3 style={{ color: BG_CARD, fontSize: 16, fontWeight: 700, margin: 0 }}>Insight Details</h3>
-            <div style={{ fontSize: 12, color: 'rgba(15,23,42,0.65)', marginTop: 2 }}>
-              {month.month} · Click outside to close
-            </div>
-          </div>
+        <div style={{ padding: '20px 24px', borderBottom: '1px solid #e5e7eb', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexShrink: 0 }}>
+          <h3 style={{ color: '#111827', fontSize: 18, fontWeight: 700, margin: 0 }}>Insight Details</h3>
           <button
             onClick={onClose}
-            style={{ background: 'none', border: 'none', color: BG_CARD, cursor: 'pointer', fontSize: 22, lineHeight: 1, opacity: 0.7, padding: '0 4px' }}
+            style={{ background: 'none', border: 'none', color: '#9ca3af', cursor: 'pointer', fontSize: 24, lineHeight: 1, padding: 0 }}
             aria-label="Close"
           >×</button>
         </div>
@@ -441,99 +461,125 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
         {/* ── Scrollable body ── */}
         <div style={{ overflowY: 'auto', flex: 1, padding: 24 }}>
 
-          {/* 1 ── Watch identity header */}
-          <div style={{ display: 'flex', gap: 20, alignItems: 'flex-start', marginBottom: 24 }}>
+          {/* 1 ── Watch identity header with image on left */}
+          <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start', marginBottom: 24, flexWrap: 'wrap' }}>
             {/* Watch image or placeholder */}
             <div style={{
-              width: 96, height: 96, borderRadius: 10, flexShrink: 0,
-              backgroundColor: BG_ELEV, border: `1px solid ${BORDER}`,
+              width: 240, height: 160, borderRadius: 8, flexShrink: 0,
+              backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               overflow: 'hidden',
             }}>
               {imageUrl ? (
                 <img src={imageUrl} alt={data.reference} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               ) : (
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.5">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
                   <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
-                  <rect x="10" y="1" width="4" height="3" rx="1" /><rect x="10" y="20" width="4" height="3" rx="1" />
                 </svg>
               )}
             </div>
 
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 12, color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 2 }}>{data.brand}</div>
-              <div style={{ fontSize: 20, fontWeight: 700, color: TEXT }}>{data.model}</div>
-              <div style={{ fontSize: 15, color: GOLD, fontFamily: 'monospace', marginTop: 2 }}>{data.reference}</div>
-              <div style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>
-                <span>Dial: <strong style={{ color: TEXT }}>{data.primaryDial}</strong></span>
-                <span style={{ margin: '0 12px', color: BORDER }}>|</span>
-                <span>Month: <strong style={{ color: TEXT }}>{month.month}</strong></span>
-                <span style={{ margin: '0 12px', color: BORDER }}>|</span>
-                <span>Listings in period: <strong style={{ color: TEXT }}>{month.count}</strong></span>
+            <div style={{ flex: 1, minWidth: 280 }}>
+              <div style={{ marginBottom: 12, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ fontSize: 14, color: '#4b5563' }}>
+                  Reference: <strong style={{ color: '#111827' }}>{data.reference}</strong>
+                </div>
+                <div style={{ fontSize: 14, color: '#4b5563' }}>
+                  Dial Color: <strong style={{ color: '#111827' }}>{data.primaryDial || 'Blue'}</strong>
+                </div>
+                <div style={{ fontSize: 14, color: '#4b5563' }}>
+                  Condition Category: <strong style={{ color: '#111827' }}>Any</strong>
+                </div>
+                {dateRangeStr && (
+                  <div style={{ fontSize: 14, color: '#4b5563', marginTop: 4 }}>
+                    Listings created from <strong style={{ color: '#111827' }}>{dateRangeStr.replace('Listings created from ', '')}</strong>
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* 2 ── Stats (Original) + 4 ── Stats (Filtered) side by side */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 16 }}>
-            {/* Stats Original */}
-            <div style={{ backgroundColor: BG_ELEV, borderRadius: 10, padding: 16, border: `1px solid ${BORDER}` }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Stats (Original)</div>
-              <StatRow label="Data Points" value={beforeCount} />
-              <StatRow label="Min" value={`$${beforeMin.toLocaleString()}`} />
-              <StatRow label="Avg" value={`$${beforeAvg.toLocaleString()}`} />
-              <StatRow label="Max" value={`$${beforeMax.toLocaleString()}`} />
-            </div>
-
-            {/* Stats Filtered */}
-            <div style={{ backgroundColor: BG_ELEV, borderRadius: 10, padding: 16, border: `1px solid ${BORDER}` }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: GOLD, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 12 }}>Stats (Filtered)</div>
-              <StatRow label="Data Points" value={afterCount} />
-              <StatRow label="Min" value={`$${afterMin.toLocaleString()}`} />
-              <StatRow label="Avg" value={`$${afterAvg.toLocaleString()}`} />
-              <StatRow label="Max" value={`$${afterMax.toLocaleString()}`} />
-            </div>
-          </div>
-
-          {/* 3 ── Duplicates Removed + 5 ── Outliers Removed */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
-            <div style={{ backgroundColor: BG_ELEV, borderRadius: 10, padding: 14, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 22 }}>🗂</div>
-              <div>
-                <div style={{ fontSize: 12, color: MUTED }}>Duplicates Removed</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: dupCount > 0 ? RED : MUTED }}>{dupCount}</div>
+          {/* 2 ── 4 Columns Side by Side Cards */}
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 16,
+            marginBottom: 24
+          }}>
+            {/* Card 1: Stats (Original) */}
+            <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <div style={{ backgroundColor: '#3b82f6', color: '#ffffff', padding: '10px 16px', fontWeight: 600, fontSize: 13, textAlign: 'center' }}>
+                Stats (Original)
+              </div>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'center', fontSize: 13 }}>
+                <div>Data Points: {beforeCount}</div>
+                <div>Min: ${beforeMin.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div>Avg: ${beforeAvg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div>Max: ${beforeMax.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
               </div>
             </div>
-            <div style={{ backgroundColor: BG_ELEV, borderRadius: 10, padding: 14, border: `1px solid ${BORDER}`, display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div style={{ fontSize: 22 }}>🚫</div>
-              <div>
-                <div style={{ fontSize: 12, color: MUTED }}>Outliers Removed</div>
-                <div style={{ fontSize: 20, fontWeight: 700, color: outlierCount > 0 ? RED : MUTED }}>
-                  {outlierCount > 0 ? outlierCount : 'No outliers detected'}
+
+            {/* Card 2: Duplicated */}
+            <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <div style={{ backgroundColor: '#f3f4f6', color: '#374151', padding: '10px 16px', fontWeight: 600, fontSize: 13, textAlign: 'center', borderBottom: '1px solid #e5e7eb' }}>
+                Duplicated
+              </div>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'center', fontSize: 13 }}>
+                <div>Removed: {dupCount}</div>
+                <div style={{ color: '#1f2937', fontSize: 12, marginTop: 4 }}>
+                  {duplicatePrices.length > 0 ? duplicatePrices.join(', ') : '—'}
+                </div>
+              </div>
+            </div>
+
+            {/* Card 3: Stats (Filtered by custom math) */}
+            <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <div style={{ backgroundColor: '#10b981', color: '#ffffff', padding: '10px 16px', fontWeight: 600, fontSize: 13, textAlign: 'center' }}>
+                Stats (Filtered by custom math)
+              </div>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'center', fontSize: 13 }}>
+                <div>Data Points: {afterCount}</div>
+                <div>Min: ${afterMin.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                <div>Avg: ${afterAvg.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+                <div>Max: ${afterMax.toLocaleString(undefined, { maximumFractionDigits: 0 })}</div>
+              </div>
+            </div>
+
+            {/* Card 4: Outliers */}
+            <div style={{ backgroundColor: '#ffffff', borderRadius: 8, border: '1px solid #e5e7eb', overflow: 'hidden' }}>
+              <div style={{ backgroundColor: '#ef4444', color: '#ffffff', padding: '10px 16px', fontWeight: 600, fontSize: 13, textAlign: 'center' }}>
+                Outliers
+              </div>
+              <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10, textAlign: 'center', fontSize: 13 }}>
+                <div>Removed: {outlierCount}</div>
+                <div style={{ color: '#9ca3af', fontSize: 12, marginTop: 4 }}>
+                  {outlierCount > 0 ? `${outlierCount} outliers removed` : 'No outliers detected.'}
                 </div>
               </div>
             </div>
           </div>
 
-          {/* 6 ── Listings */}
+          {/* 3 ── Listings */}
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: GOLD, marginBottom: 12 }}>
-              Listings for {month.month} ({displayListings.length})
+            <div style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 12, borderBottom: '1px solid #e5e7eb', paddingBottom: 8 }}>
+              Listings
             </div>
 
             {displayListings.length === 0 ? (
-              <div style={{ fontSize: 13, color: MUTED, padding: '24px 0', textAlign: 'center' }}>
+              <div style={{ fontSize: 13, color: '#6b7280', padding: '24px 0', textAlign: 'center' }}>
                 No listings found for this month.
               </div>
             ) : (
-              displayListings.map((l, i) => (
-                <InsightListingRow
-                  key={i}
-                  listing={l}
-                  catalogImageUrl={imageUrl}
-                  onSelect={() => onSelectListing(l)}
-                />
-              ))
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {displayListings.map((l, i) => (
+                  <InsightListingRow
+                    key={i}
+                    listing={l}
+                    catalogImageUrl={imageUrl}
+                    onSelect={() => onSelectListing(l)}
+                  />
+                ))}
+              </div>
             )}
           </div>
         </div>
@@ -542,7 +588,6 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
   );
 }
 
-/** Small helper for stat rows */
 function StatRow({ label, value }: { label: string; value: string | number }) {
   return (
     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
@@ -568,9 +613,9 @@ function InsightListingRow({
       onMouseLeave={() => setHovered(false)}
       style={{
         display: 'flex', alignItems: 'center', gap: 14,
-        padding: '12px 0', borderBottom: `1px solid ${BORDER}`,
+        padding: '12px 0', borderBottom: '1px solid #e5e7eb',
         cursor: 'pointer',
-        backgroundColor: hovered ? BG_ELEV : 'transparent',
+        backgroundColor: hovered ? '#f9fafb' : 'transparent',
         borderRadius: hovered ? 8 : 0,
         paddingLeft: hovered ? 8 : 0,
         paddingRight: hovered ? 8 : 0,
@@ -580,14 +625,14 @@ function InsightListingRow({
       {/* Image / placeholder */}
       <div style={{
         width: 56, height: 56, borderRadius: 8, flexShrink: 0,
-        backgroundColor: BG_ELEV, border: `1px solid ${BORDER}`,
+        backgroundColor: '#f3f4f6', border: '1px solid #e5e7eb',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         overflow: 'hidden',
       }}>
         {img ? (
           <img src={img} alt={listing.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         ) : (
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={MUTED} strokeWidth="1.5">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
             <circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 3" />
           </svg>
         )}
@@ -595,10 +640,10 @@ function InsightListingRow({
 
       {/* Title + meta */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
+        <div style={{ fontSize: 13, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>
           {listing.title}
         </div>
-        <div style={{ fontSize: 12, color: MUTED, marginTop: 3, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 3, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           {listing.region && <span>📍 {listing.region}</span>}
           {listing.phone && <span>📞 {listing.phone}</span>}
           {listing.date && <span>🗓 {listing.date}</span>}
@@ -607,9 +652,9 @@ function InsightListingRow({
 
       {/* Price */}
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: '#b45309' }}>${listing.priceUSD?.toLocaleString()}</div>
         {listing.currency !== 'USD' && (
-          <div style={{ fontSize: 11, color: MUTED }}>{listing.price?.toLocaleString()} {listing.currency}</div>
+          <div style={{ fontSize: 11, color: '#6b7280' }}>{listing.price?.toLocaleString()} {listing.currency}</div>
         )}
       </div>
 
@@ -618,8 +663,8 @@ function InsightListingRow({
         onClick={e => { e.stopPropagation(); onSelect(); }}
         style={{
           flexShrink: 0, padding: '6px 14px', borderRadius: 6,
-          backgroundColor: 'transparent', border: `1px solid ${GOLD}`,
-          color: GOLD, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+          backgroundColor: 'transparent', border: '1px solid #b45309',
+          color: '#b45309', fontSize: 12, fontWeight: 600, cursor: 'pointer',
           whiteSpace: 'nowrap',
         }}
       >
@@ -628,7 +673,6 @@ function InsightListingRow({
     </div>
   );
 }
-
 function ListingModal({ listing, data, onClose }: { listing: PriceListing; data: PriceData; onClose: () => void }) {
   return (
     <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={onClose}>
