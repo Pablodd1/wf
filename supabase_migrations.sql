@@ -52,6 +52,31 @@ CREATE INDEX IF NOT EXISTS idx_watch_records_processed_at
 CREATE INDEX IF NOT EXISTS idx_watch_records_parser_version
   ON watch_records (parser_version);
 
+-- ─── RPC: Atomically claim a batch of queue items ───────────────────────────
+-- Prevents duplicate processing when multiple cron workers run simultaneously.
+-- Called by api/batch-process.js via POST /rest/v1/rpc/claim_reprocess_batch
+
+CREATE OR REPLACE FUNCTION claim_reprocess_batch(batch_size INT DEFAULT 100)
+RETURNS TABLE (id TEXT, record_id TEXT, reason TEXT)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RETURN QUERY
+  UPDATE reprocess_queue q
+  SET started_at = NOW()
+  WHERE q.id IN (
+    SELECT q2.id
+    FROM reprocess_queue q2
+    WHERE q2.completed_at IS NULL
+      AND q2.started_at IS NULL
+    ORDER BY q2.priority ASC, q2.queued_at ASC
+    LIMIT batch_size
+    FOR UPDATE SKIP LOCKED
+  )
+  RETURNING q.id, q.record_id, q.reason;
+END;
+$$;
+
 -- Step 5: Verify
 SELECT 
   COUNT(*) FILTER (WHERE processed_at IS NULL) AS unprocessed,

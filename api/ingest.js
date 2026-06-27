@@ -287,7 +287,7 @@ module.exports = async function handler(req, res) {
     // This is the RUN-ONCE guarantee: same message never re-processed
     try {
       const wrRecords = allRecords.map(r => ({
-        id: r.id || r.message_hash || (`demo_${Date.now()}_${Math.random().toString(36).slice(2)}`),
+        id: r.id || r.message_hash || (`ingest_${Date.now()}_${Math.random().toString(36).slice(2)}`),
         brand: r.brand,
         reference: r.reference,
         dial_color: r.dial_color,
@@ -301,6 +301,11 @@ module.exports = async function handler(req, res) {
         source: r.source || 'whatsapp',
         raw_message: r.raw_message,
         flags: r.flags || {},
+        // Pipeline tracking fields
+        processed_at:   new Date().toISOString(),
+        parser_version: 'v2.0',
+        listing_type:   r.listing_type || null,
+        edit_source:    'ingest',
       }));
       await fetch(`${supabaseUrl}/rest/v1/watch_records`, {
         method: 'POST',
@@ -312,6 +317,21 @@ module.exports = async function handler(req, res) {
         },
         body: JSON.stringify(wrRecords),
       });
+
+      // Fire-and-forget: enqueue for background re-parse by batch-process cron
+      // This ensures any future parser updates re-process these records automatically
+      for (const wr of wrRecords) {
+        fetch(`${supabaseUrl}/rest/v1/reprocess_queue`, {
+          method: 'POST',
+          headers: {
+            'apikey': serviceKey,
+            'Authorization': `Bearer ${serviceKey}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=ignore-duplicates,return=minimal',
+          },
+          body: JSON.stringify({ record_id: wr.id, reason: 'new_ingest', priority: 5 }),
+        }).catch(() => {}); // intentionally fire-and-forget
+      }
     } catch (e) {
       console.error('[ingest] watch_records write failed:', e.message);
     }

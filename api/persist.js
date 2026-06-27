@@ -39,7 +39,8 @@ function chunk(arr, size) {
  * @param {Record<string, any>} record
  * @returns {Record<string, any>}
  */
-function toWatchRecord(record) {
+function toWatchRecord(record, mode) {
+  const isHumanEdit = mode === 'reprocess';
   return {
     id:             record.id,
     brand:          record.brand          ?? null,
@@ -57,6 +58,12 @@ function toWatchRecord(record) {
     flags:          record.flags          ?? null,
     reprocessed_at: record.reprocessed_at ?? record.reprocessedAt ?? null,
     created_at:     record.created_at     ?? record.createdAt     ?? undefined,
+    // Pipeline tracking
+    processed_at:   new Date().toISOString(),
+    parser_version: record.parser_version ?? 'v2.0',
+    human_edited:   isHumanEdit ? true : undefined,
+    edit_source:    isHumanEdit ? 'human_review' : 'ingest',
+    listing_type:   record.listing_type ?? null,
   };
 }
 
@@ -142,7 +149,8 @@ module.exports = async function handler(req, res) {
   }
 
   // ── Map & batch upsert ──────────────────────────────────────
-  const mapped  = records.map(toWatchRecord);
+  const isHumanEdit = mode === 'reprocess';
+  const mapped  = records.map(r => toWatchRecord(r, mode));
   const batches = chunk(mapped, BATCH_SIZE);
 
   let totalSaved = 0;
@@ -152,6 +160,28 @@ module.exports = async function handler(req, res) {
     const { saved, errors } = await upsertBatch(supabaseUrl, serviceKey, batch);
     totalSaved += saved;
     allErrors.push(...errors);
+  }
+
+  // ── Fire-and-forget: enqueue all saved records for background re-parse ────
+  // Human edits get priority=1 (processed first in next 5-min cron cycle)
+  if (totalSaved > 0 && supabaseUrl && serviceKey) {
+    const priority = isHumanEdit ? 1 : 5;
+    const reason   = isHumanEdit ? 'human_edit' : 'ingest';
+    const queuePayload = mapped
+      .filter(r => r.id)
+      .map(r => ({ record_id: r.id, reason, priority }));
+    if (queuePayload.length) {
+      fetch(`${supabaseUrl}/rest/v1/reprocess_queue`, {
+        method: 'POST',
+        headers: {
+          'Content-Type':  'application/json',
+          'apikey':        serviceKey,
+          'Authorization': `Bearer ${serviceKey}`,
+          'Prefer':        'resolution=ignore-duplicates,return=minimal',
+        },
+        body: JSON.stringify(queuePayload),
+      }).catch(() => {}); // intentionally fire-and-forget
+    }
   }
 
   // ── Response ────────────────────────────────────────────────
