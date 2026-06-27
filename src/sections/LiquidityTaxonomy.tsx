@@ -91,7 +91,7 @@ export function LiquidityTaxonomy() {
           {/* Sort */}
           <select
             value={sortBy}
-            onChange={(e) => setSortBy(e.target.value as any)}
+            onChange={(e) => setSortBy(e.target.value as 'liquidity' | 'mentions' | 'ratio')}
             className="bg-bg-elevated border border-border-default rounded px-2 py-1 text-[11px] text-text-primary"
           >
             <option value="liquidity">Sort: Liquidity</option>

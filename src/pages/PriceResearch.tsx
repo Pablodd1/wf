@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { ExternalLink, Download, FileSpreadsheet } from 'lucide-react';
+import { ExternalLink, FileSpreadsheet } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
 import { generatePriceResearchReport } from '@/lib/reports';
 
@@ -104,7 +104,7 @@ export default function PriceResearch() {
       const d = await r.json();
       if (d.success) setData(d);
       else setError(d.error || 'No data for this reference');
-    } catch (e: any) {
+    } catch (e) {
       setError(e.name === 'AbortError' ? 'Request timed out — try again' : 'Failed to fetch data');
     }
     finally { setLoading(false); }
@@ -319,9 +319,7 @@ export default function PriceResearch() {
             </div>
 
             {/* ── Next Steps ──────────────────────────────────── */}
-            <NextSteps reference={data.reference} brand={data.brand} model={data.model} 
-              currentAvg={data.pricing.current?.avg || 0} 
-              liquidity={data.liquidity.fsCount} />
+            <NextSteps reference={data.reference} currentAvg={data.pricing.current?.avg || 0} />
           </>
         )}
 
@@ -588,14 +586,7 @@ function InsightPanel({ data, month, onClose, onSelectListing }: {
   );
 }
 
-function StatRow({ label, value }: { label: string; value: string | number }) {
-  return (
-    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-      <span style={{ fontSize: 13, color: MUTED }}>{label}</span>
-      <span style={{ fontSize: 13, fontWeight: 600, color: TEXT }}>{value}</span>
-    </div>
-  );
-}
+
 
 /** Individual listing row inside InsightPanel */
 function InsightListingRow({
@@ -925,7 +916,7 @@ function PricePredictionChart({
   const windowSize = 6;
   const chartWindow = chart.slice(-windowSize);
   const { slope, intercept } = linearRegression(chartWindow);
-  const baseIndex = chart.length - Math.min(6, chart.length); // offset into full array
+  
 
   // Generate 3 forecast months
   const lastEntry = chart[chart.length - 1];
@@ -952,12 +943,12 @@ function PricePredictionChart({
     ...chart.map(p => ({ ...p })),
     // Bridge point: last historical avg becomes the start of the forecast line
     { ...lastEntry, forecastAvg: lastEntry.avg },
-    ...forecastPoints.map(p => ({ ...p, forecastAvg: p.avg, avg: undefined as any, min: undefined as any, max: undefined as any, isForecast: true })),
+    ...forecastPoints.map(p => ({ ...p, forecastAvg: p.avg, avg: undefined as unknown as number, min: undefined as unknown as number, max: undefined as unknown as number, isForecast: true })),
   ];
   // Populate forecastAvg=undefined on historical so the line only renders from the bridge
   combined.slice(0, chart.length - 1).forEach(p => { (p as CombinedPoint).forecastAvg = undefined; });
 
-  const forecastAvgs = forecastPoints.map(p => p.avg);
+  
   const forecastMin  = Math.min(...forecastPoints.map(p => p.min));
   const forecastMax  = Math.max(...forecastPoints.map(p => p.max));
   const totalDataPts = chartWindow.reduce((s, p) => s + p.count, 0);
@@ -1004,7 +995,7 @@ function PricePredictionChart({
             stroke={BLUE}
             strokeWidth={2}
             connectNulls={false}
-            dot={(props: any) => {
+            dot={(props: { cx: number; cy: number; index: number }) => {
               const { cx, cy, index } = props;
               if (index >= chart.length) return <g key={index} />;
               return (
@@ -1252,8 +1243,8 @@ function PriceForecast({ chart, reference, brand, model, forecastData }: {
 }
 
 
-function NextSteps({ reference, brand, model, currentAvg, liquidity }: { 
-  reference: string; brand: string; model: string; currentAvg: number; liquidity: number;
+function NextSteps({ reference, currentAvg }: { 
+  reference: string; currentAvg: number;
 }) {
   const steps = [
     { 

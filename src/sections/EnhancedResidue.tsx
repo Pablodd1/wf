@@ -117,7 +117,7 @@ export function EnhancedResidue({
     });
   };
 
-  const SortIcon = ({ col }: { col: SortKey }) => {
+  const renderSortIcon = (col: SortKey) => {
     if (sortKey !== col) return <span className="text-text-muted/30 ml-1">↕</span>;
     return sortDir === 'asc' ? <ChevronUp size={10} className="ml-1 text-gold-primary" /> : <ChevronDown size={10} className="ml-1 text-gold-primary" />;
   };
@@ -209,12 +209,12 @@ export function EnhancedResidue({
       <div className="bg-bg-card border border-border-default rounded-md overflow-hidden">
         <div className="mobile-table-scroll">
           <div className="grid grid-cols-[60px_100px_80px_100px_80px_100px_180px] gap-2 px-4 py-2 bg-bg-elevated border-b border-border-default text-[10px] font-bold uppercase tracking-wider text-text-muted min-w-[700px]">
-            <button onClick={() => handleSort('id')} className="text-left flex items-center">ID <SortIcon col="id" /></button>
-            <button onClick={() => handleSort('reference')} className="text-left flex items-center">Ref <SortIcon col="reference" /></button>
-            <button onClick={() => handleSort('price')} className="text-right flex items-center justify-end">Price <SortIcon col="price" /></button>
+            <button onClick={() => handleSort('id')} className="text-left flex items-center">ID {renderSortIcon('id')}</button>
+            <button onClick={() => handleSort('reference')} className="text-left flex items-center">Ref {renderSortIcon('reference')}</button>
+            <button onClick={() => handleSort('price')} className="text-right flex items-center justify-end">Price {renderSortIcon('price')}</button>
             <span className="text-left">Why Flagged</span>
-            <button onClick={() => handleSort('severity')} className="text-left flex items-center">Sev <SortIcon col="severity" /></button>
-            <button onClick={() => handleSort('confidence')} className="text-right flex items-center justify-end">Conf <SortIcon col="confidence" /></button>
+            <button onClick={() => handleSort('severity')} className="text-left flex items-center">Sev {renderSortIcon('severity')}</button>
+            <button onClick={() => handleSort('confidence')} className="text-right flex items-center justify-end">Conf {renderSortIcon('confidence')}</button>
             <span className="text-right">Actions</span>
           </div>
         </div>

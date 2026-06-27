@@ -66,6 +66,7 @@ export function scoreColors(n: number) {
 }
 
 // Compute per-feature scores from a result + catalogs
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function computeFeatureScores(result: any, catalogs: CatalogComparison | null): FeatureScores {
   // Parser: how many fields are recognized
   const fieldsOk = [
