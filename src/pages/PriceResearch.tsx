@@ -105,7 +105,7 @@ export default function PriceResearch() {
       if (d.success) setData(d);
       else setError(d.error || 'No data for this reference');
     } catch (e) {
-      setError(e.name === 'AbortError' ? 'Request timed out — try again' : 'Failed to fetch data');
+      setError((e as Error).name === 'AbortError' ? 'Request timed out — try again' : 'Failed to fetch data');
     }
     finally { setLoading(false); }
   }, []);
@@ -341,7 +341,7 @@ function NavBar() {
         </div>
         <div className="flex gap-6" style={{ fontSize: 14 }}>
           {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => (
-            <a key={item} href="#" style={{ 
+            <a key={item} href="#" onClick={(e) => { e.preventDefault(); }} style={{ 
               color: item === 'Price Research' ? GOLD : MUTED, 
               fontWeight: item === 'Price Research' ? 600 : 400,
               textDecoration: 'none',
@@ -1319,45 +1319,45 @@ function Footer() {
         <div>
           <div style={sectionTitle}>Features</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>Trading Floor</a>
-            <a href="#" style={linkStyle}>ChronoMatch</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Trading Floor</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>ChronoMatch</a>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Tools</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>Glossary</a>
-            <a href="#" style={linkStyle}>Currency Converter</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Glossary</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Currency Converter</a>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Dealers</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>Dealer Directory</a>
-            <a href="#" style={linkStyle}>Do Not Trade List</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Dealer Directory</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Do Not Trade List</a>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Apps</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>Get the App</a>
-            <a href="#" style={linkStyle}>Hire Fi</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Get the App</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Hire Fi</a>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Community</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>Join Groups</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Join Groups</a>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Company</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>About Us</a>
-            <a href="#" style={linkStyle}>About Simon</a>
-            <a href="#" style={linkStyle}>Contact</a>
-            <a href="#" style={linkStyle}>Terms</a>
-            <a href="#" style={linkStyle}>Privacy Policy</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>About Us</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>About Simon</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Contact</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Terms</a>
+            <a href="#" onClick={(e) => e.preventDefault()} style={linkStyle}>Privacy Policy</a>
           </div>
         </div>
       </div>

@@ -275,7 +275,7 @@ function NavBar() {
         <a href="/" style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif", textDecoration: 'none' }}>WatchFacts</a>
         <div className="flex gap-6" style={{ fontSize: 14 }}>
           {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => (
-            <a key={item} href={item === 'Price Research' ? '/price-research' : '#'} style={{ color: MUTED, textDecoration: 'none' }}>{item}</a>
+            <a key={item} href={item === 'Price Research' ? '/price-research' : '#'} onClick={(e) => { if (item !== 'Price Research') e.preventDefault(); }} style={{ color: MUTED, textDecoration: 'none' }}>{item}</a>
           ))}
         </div>
       </div>
