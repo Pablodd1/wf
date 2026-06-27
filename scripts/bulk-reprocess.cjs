@@ -3,8 +3,8 @@
  * bulk-reprocess.cjs
  *
  * ONE-TIME bulk reprocess of ALL watch_records using the current parser.
- * Run this once after a parser upgrade. Never run again unless the parser
- * has a major update.
+ * Uses key-set pagination (id > lastId) to process 2.39M records safely
+ * without hitting statement timeouts.
  *
  * USAGE:
  *   export SUPABASE_URL="https://bptrvfncppbjnchsaxtb.supabase.co"
@@ -14,13 +14,12 @@
  * FLAGS:
  *   --dry-run        Parse + log only, no DB writes
  *   --batch-size N   Records per batch (default 500)
- *   --start-offset N Resume from offset N (for restarts)
- *   --filter verdict=HUMAN  Only reprocess specific verdicts
  *   --max N          Stop after N records (for testing)
+ *   --filter Query   Custom PostgREST query filter (e.g. "verdict=eq.HUMAN")
  *
  * PROGRESS:
  *   State is saved to scripts/bulk-reprocess-progress.json
- *   If the script crashes, re-run and it will resume from where it left off.
+ *   If the script crashes or times out, re-run and it will resume from the last processed ID.
  */
 
 'use strict';
@@ -36,7 +35,7 @@ const PARSER_VERSION = 'v2.0';
 
 if (!SUPABASE_KEY) {
   console.error('[fatal] SUPABASE_SERVICE_ROLE_KEY env var is required');
-  console.error('  export SUPABASE_SERVICE_ROLE_KEY=<your-rotated-key>');
+  console.error('  export SUPABASE_SERVICE_ROLE_KEY=<your-key>');
   process.exit(1);
 }
 
@@ -45,11 +44,9 @@ const args = process.argv.slice(2);
 const DRY_RUN     = args.includes('--dry-run');
 const batchArg    = args.find(a => a.startsWith('--batch-size='));
 const maxArg      = args.find(a => a.startsWith('--max='));
-const offsetArg   = args.find(a => a.startsWith('--start-offset='));
 const filterArg   = args.find(a => a.startsWith('--filter='));
 const BATCH_SIZE  = batchArg ? parseInt(batchArg.split('=')[1]) : 500;
 const MAX_RECORDS = maxArg  ? parseInt(maxArg.split('=')[1])  : 0;
-const START_OFFSET= offsetArg ? parseInt(offsetArg.split('=')[1]) : null;
 const FILTER      = filterArg ? filterArg.split('=').slice(1).join('=') : null;
 
 // Progress file for resumable runs
@@ -77,23 +74,28 @@ const HEADERS = {
   'Content-Type':  'application/json',
 };
 
-async function fetchBatch(offset, limit, filter) {
-  let url = `${SUPABASE_URL}/rest/v1/${TABLE}?select=id,raw_message,brand,reference,verdict,confidence,price_usd,currency,source,created_at&limit=${limit}&offset=${offset}&order=created_at.asc`;
-  if (filter) {
-    // e.g. filter="verdict=eq.HUMAN" or "parser_version=eq.v1"
-    url += `&${filter}`;
-  } else {
-    // Default: only records not yet processed with this parser version
-    url += `&parser_version=neq.${PARSER_VERSION}`;
+async function fetchBatch(lastId, limit, filter) {
+  // Use key-set pagination (id > lastId) ordered by id.asc
+  // This is extremely fast (uses primary key index) and avoids offset timeouts.
+  let url = `${SUPABASE_URL}/rest/v1/${TABLE}?select=id,raw_message,brand,reference,verdict,confidence,price_usd,currency,source,created_at&limit=${limit}&order=id.asc`;
+  
+  if (lastId) {
+    url += `&id=gt.${encodeURIComponent(lastId)}`;
   }
-  const res = await fetch(url, { headers: { ...HEADERS, 'Prefer': 'count=exact', 'Range': `${offset}-${offset + limit - 1}` } });
-  if (!res.ok) throw new Error(`Fetch failed: ${res.status} ${await res.text()}`);
-  const total = parseInt((res.headers.get('content-range') || '0/0').split('/')[1] || '0');
-  return { records: await res.json(), total };
+  
+  if (filter) {
+    url += `&${filter}`;
+  }
+
+  const res = await fetch(url, { headers: HEADERS });
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Fetch failed: ${res.status} ${errText}`);
+  }
+  return await res.json();
 }
 
 async function updateBatch(updates) {
-  // Batch PATCH via upsert with ON CONFLICT
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
     method: 'POST',
     headers: { ...HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
@@ -149,44 +151,44 @@ function processRecord(record) {
 // ─── MAIN ──────────────────────────────────────────────────────────────────────
 async function main() {
   console.log('════════════════════════════════════════════');
-  console.log(' WatchFacts Bulk Reprocess');
+  console.log(' WatchFacts Bulk Reprocess (Keyset Mode)');
   console.log(`  Parser version: ${PARSER_VERSION}`);
   console.log(`  Batch size:     ${BATCH_SIZE}`);
   console.log(`  Dry run:        ${DRY_RUN}`);
-  console.log(`  Filter:         ${FILTER || 'parser_version != v2.0'}`);
+  if (FILTER) console.log(`  Filter:         ${FILTER}`);
   if (MAX_RECORDS) console.log(`  Max records:    ${MAX_RECORDS}`);
   console.log('════════════════════════════════════════════\n');
 
-  // Load or init progress
-  let progress = { offset: 0, processed: 0, errors: 0, startedAt: new Date().toISOString() };
-  if (START_OFFSET !== null) {
-    progress.offset = START_OFFSET;
-    console.log(`[progress] Resuming from offset ${START_OFFSET}`);
-  } else if (fs.existsSync(PROGRESS_FILE)) {
+  // Load progress
+  let progress = { lastId: null, processed: 0, errors: 0, startedAt: new Date().toISOString() };
+  if (fs.existsSync(PROGRESS_FILE)) {
     try {
       progress = JSON.parse(fs.readFileSync(PROGRESS_FILE, 'utf8'));
-      console.log(`[progress] Resuming from offset ${progress.offset} (${progress.processed} already processed)`);
+      console.log(`[progress] Resuming from lastId: "${progress.lastId}" (${progress.processed} records already processed)`);
     } catch (e) {
       console.log('[progress] Starting fresh');
     }
   }
 
-  let totalKnown = 0;
-  let offset     = progress.offset;
-  let batchNum   = 0;
+  let lastId   = progress.lastId;
+  let batchNum = 0;
 
   while (true) {
     batchNum++;
-    const { records, total } = await fetchBatch(offset, BATCH_SIZE, FILTER);
-    if (!totalKnown && total) totalKnown = total;
+    let records;
+    try {
+      records = await fetchBatch(lastId, BATCH_SIZE, FILTER);
+    } catch (e) {
+      console.error(`\n[fatal] Fetch failed on batch ${batchNum}: ${e.message}`);
+      process.exit(1);
+    }
 
     if (!records.length) {
-      console.log('\n[done] No more records to process.');
+      console.log('\n[done] No more records found.');
       break;
     }
 
-    const pct = totalKnown ? ((progress.processed / totalKnown) * 100).toFixed(1) : '?';
-    process.stdout.write(`\r[batch ${batchNum}] offset=${offset} processed=${progress.processed}/${totalKnown} (${pct}%)  `);
+    process.stdout.write(`\r[batch ${batchNum}] lastId="${lastId || 'start'}" processed=${progress.processed}  `);
 
     const updates = [];
     for (const record of records) {
@@ -199,20 +201,20 @@ async function main() {
         await updateBatch(updates);
         progress.processed += updates.length;
       } catch (e) {
-        console.error(`\n[error] Batch ${batchNum}: ${e.message}`);
+        console.error(`\n[error] Batch ${batchNum} update failed: ${e.message}`);
         progress.errors++;
-        // Continue — don't stop on a single failed batch
       }
     } else if (DRY_RUN) {
       progress.processed += updates.length;
       if (batchNum === 1) {
-        console.log('\n[dry-run] Sample output (first 3):');
-        updates.slice(0, 3).forEach(u => console.log(JSON.stringify(u, null, 2)));
+        console.log('\n[dry-run] Sample output (first record):');
+        if (updates[0]) console.log(JSON.stringify(updates[0], null, 2));
       }
     }
 
-    offset += BATCH_SIZE;
-    progress.offset = offset;
+    // Keep track of the last processed ID in this batch
+    lastId = records[records.length - 1].id;
+    progress.lastId = lastId;
 
     // Save progress after every batch
     if (!DRY_RUN) {
@@ -224,7 +226,7 @@ async function main() {
       break;
     }
 
-    // Small delay to avoid rate limiting Supabase REST API
+    // Short sleep to prevent hitting database connection limits
     await new Promise(r => setTimeout(r, 50));
   }
 
