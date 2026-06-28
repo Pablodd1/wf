@@ -11,14 +11,25 @@ import { AIMarketSentiment } from '@/components/AIMarketSentiment';
 interface AIInsightsProps {
   records: WatchRecord[];
   onSelectRecord: (record: WatchRecord) => void;
+  totalProcessed?: number;
+  normalizedCount?: number;
+  residueCount?: number;
+  accuracyRate?: number;
 }
 
-export function AIInsights({ records, onSelectRecord }: AIInsightsProps) {
-  const normalCount = records.filter((r) => !r.isResidue).length;
-  const residueCount = records.filter((r) => r.isResidue).length;
-  const avgConf = normalCount > 0
-    ? Math.round(records.filter((r) => !r.isResidue).reduce((s, r) => s + r.confidence, 0) / normalCount)
-    : 0;
+export function AIInsights({ 
+  records, 
+  onSelectRecord,
+  totalProcessed,
+  normalizedCount,
+  residueCount,
+  accuracyRate
+}: AIInsightsProps) {
+  const normalCount = normalizedCount ?? records.filter((r) => !r.isResidue).length;
+  const resCount = residueCount ?? records.filter((r) => r.isResidue).length;
+  const avgConf = accuracyRate ?? (records.filter((r) => !r.isResidue).length > 0
+    ? Math.round(records.filter((r) => !r.isResidue).reduce((s, r) => s + r.confidence, 0) / records.filter((r) => !r.isResidue).length)
+    : 0);
 
   return (
     <motion.section
@@ -36,12 +47,12 @@ export function AIInsights({ records, onSelectRecord }: AIInsightsProps) {
         <div className="flex items-center gap-2 ml-auto">
           <span className="flex items-center gap-1 text-[10px] text-text-muted">
             <Zap size={10} className="text-purple" />
-            {normalCount} analyzed
+            {normalCount.toLocaleString()} analyzed
           </span>
           <span className="text-[10px] text-text-muted">·</span>
           <span className="text-[10px] text-text-muted">Avg Conf: {avgConf}%</span>
           <span className="text-[10px] text-text-muted">·</span>
-          <span className="text-[10px] text-danger">{residueCount} flagged</span>
+          <span className="text-[10px] text-danger">{resCount.toLocaleString()} flagged</span>
         </div>
       </div>
 

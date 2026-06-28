@@ -203,9 +203,9 @@ function inferBrandFromRef(ref) {
   if (!ref) return null;
   const r = ref.toUpperCase().replace(/[^A-Z0-9\/\-\.]/g, '');
   if (/^RM\d{2}/.test(r)) return 'Richard Mille';
-  if (/^[345]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
-  if (/^[1-5]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
-  if (/^[1-5]\d{3}-/.test(r)) return 'Patek Philippe';
+  if (/^[34579]\d{3}[A-Z]?\//.test(r)) return 'Patek Philippe';
+  if (/^[34579]\d{3}[A-Z]$/.test(r)) return 'Patek Philippe';
+  if (/^[34579]\d{3}-/.test(r)) return 'Patek Philippe';
   if (/^\d{5}[A-Z]{2,5}$/.test(r)) return 'Audemars Piguet';
   if (/^\d{6}[A-Z]{0,5}$/.test(r)) return 'Rolex';
   if (/^[48]\d{3}[A-Z]$/.test(r)) return 'Vacheron Constantin';
@@ -273,8 +273,8 @@ function parseFull(rawMsg) {
 
   let ref = null;
   const rmM = text.match(/\bRM\s?\d{2}[-\s]?\d{2}[A-Z]?\b/i);
-  const ppM = text.match(/\b[345]\d{3}[A-Z]?\/\d{1,4}[A-Z]{0,4}(?:-\d{3})?\b/i);
-  const shortPP = text.match(/\b[345]\d{3}[A-Z]\b/i);
+  const ppM = text.match(/\b[34579]\d{3}[A-Z]?\/\d{1,4}[A-Z]{0,4}(?:-\d{3})?\b/i);
+  const shortPP = text.match(/\b[34579]\d{3}[A-Z]?\b/i);
   // P6: Updated AP reference regex to capture long formats like 26420IO.OO.A402CA.01
   const apM = text.match(/\b\d{5}[A-Z]{2,5}(?:[.\/][A-Z0-9]+){0,4}\b/i);
   const rolexM = text.match(/\b\d{6}[A-Z]{0,5}\b/i);
@@ -287,7 +287,7 @@ function parseFull(rawMsg) {
   const langeM = text.match(/\b\d{3}\.\d{3}\b/);
   const bellRossM = text.match(/(BR[0-9A-Z]{2,10}(?:[-][A-Z0-9]+){1,4})/i);
   const seikoM = text.match(/\b(?:WSSA|SPB|SRP|SBDY|SNE)\d{3,4}\b/i);
-  const ppVintage = text.match(/\b(2499|5971|5970|3970|3979|5004|5959|5160|5168|5170|5205|5208|5216|5270|5372|5470|5520|5539|5905|5935|5940|5960|6002|6300|7040|7118|7120|7130|7140|7150|7230|7320)\b/i);
+  const ppVintage = text.match(/\b(2499|5971|5970|3970|3979|5004|5959|5160|5168|5170|5205|5208|5216|5270|5372|5470|5520|5539|5905|5935|5940|5960|6002|6300|7040|7118|7120|7130|7140|7150|7230|7300|7320)\b/i);
   const pp82 = text.match(/\b8239[-\s]?\d{4}\b/i);
 
   if (rmM) ref = rmM[0].toUpperCase().replace(/\s/g, '');
@@ -355,9 +355,9 @@ function parseFull(rawMsg) {
     }
   }
 
-  // Fallback: bare 4-digit year
+  // Fallback: bare 4-digit year or year with y/Y suffix
   if (!year) {
-    const yearM = text.match(/\b(20[12]\d)\b/);
+    const yearM = text.match(/\b(19\d{2}|20[123]\d)[Yy]?\b/);
     year = yearM ? parseInt(yearM[1], 10) : null;
   }
 
@@ -473,35 +473,58 @@ function verdict(parsed) {
 function splitMultiWatch(text) {
   if (!text || text.length < 10) return [text];
 
-  const refPattern = /\b(?:RM\s?\d{2}[-\s]?\d{2}|[345]\d{3}[A-Z]?(?:[\/\-]\d+)?\b|\d{6}[A-Z]{0,5}\b|\d{5}[A-Z]{2,5}\b|PAM\d{3,5}\b|IW\d{6,8}\b|\d{3}\.\d{3}\b)/gi;
+  const refPattern = /\b(?:RM\s?\d{2}[-\s]?\d{2}|[34579]\d{3}[A-Z]?(?:[\/\-]\d+[A-Z]?)?\b|\d{5,6}[A-Z]{0,5}\b|PAM\d{3,5}\b|IW\d{6,8}\b|\d{3}\.\d{3}\b)/gi;
   const refMatches = text.match(refPattern) || [];
   if (refMatches.length <= 1) return [text];
 
-  // P1: Added // separator alongside + and |
-  const separatorPattern = /\s\+\s|\s\|\s|\s\/\/\s/;
-  if (separatorPattern.test(text) && !text.includes('\n')) {
-    const splitRegex = /(\s\+[\s]|\s\|\s|\s\/\/\s)/g;
-    const rawParts = text.split(splitRegex).filter((_, i) => i % 2 === 0).map(s => s.trim()).filter(s => s.length > 0);
-    if (rawParts.length > 1) {
-      const refined = rawParts.map((part, i) => {
-        if (i === rawParts.length - 1) {
-          return part.replace(/\s+\d+\s*(?:watches?\s*)?bundle\s*$/i, '');
-        }
-        return part;
-      });
-      // Broadened: allow multi-letter suffixes like 15500ST, 116610LN
-      const validParts = refined.filter(p => {
-        const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]{0,5}|PAM\d|IW\d|\d{3}\.\d{3})\b/i.test(p);
-        return hasRef;
-      });
-      if (validParts.length > 1) return validParts;
+  // 1. Split by emoji or list/bullet separators if present
+  const separatorRegex = /[\p{Emoji_Presentation}\p{Extended_Pictographic}]|[\u2022\u2023\u25E6\u2043\u2219\u25C6\u25A0\u25C0\u25B6\u27A1\u27A2]|\s+[-*+]\s+/gu;
+  
+  if (separatorRegex.test(text)) {
+    const rawParts = [];
+    let lastIdx = 0;
+    let match;
+    separatorRegex.lastIndex = 0;
+    while ((match = separatorRegex.exec(text)) !== null) {
+      rawParts.push(text.slice(lastIdx, match.index));
+      lastIdx = match.index + match[0].length;
     }
+    rawParts.push(text.slice(lastIdx));
+
+    const refinedParts = [];
+    let currentAccumulator = '';
+    
+    for (const part of rawParts) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      
+      // Test if this part contains any watch reference
+      refPattern.lastIndex = 0;
+      const hasRef = refPattern.test(trimmed);
+      if (hasRef) {
+        if (currentAccumulator) {
+          refinedParts.push((currentAccumulator + ' ' + trimmed).trim());
+          currentAccumulator = '';
+        } else {
+          refinedParts.push(trimmed);
+        }
+      } else {
+        currentAccumulator = (currentAccumulator + ' ' + trimmed).trim();
+      }
+    }
+    
+    if (currentAccumulator && refinedParts.length > 0) {
+      refinedParts[refinedParts.length - 1] = (refinedParts[refinedParts.length - 1] + ' ' + currentAccumulator).trim();
+    }
+
+    if (refinedParts.length > 1) return refinedParts;
   }
 
+  // 2. Fallback: Split by newline
   const lines = text.split(/\n/);
   const parts = [];
   let currentPart = '';
-  const newListingPattern = /^[\s\u2600-\u27BF\u{1F000}-\u{1FAFF}\ufe0f]*?(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d|Rolex|Patek|Audemars|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse)/iu;
+  const newListingPattern = /^[\s\u2600-\u27BF\u{1F000}-\u{1FAFF}\ufe0f]*?(?:RM\s?\d{2}|[34579]\d{3}|\d{5,6}[A-Z]|PAM\d|IW\d|Rolex|Patek|Audemars|Richard|Cartier|Hublot|Omega|Tudor|IWC|Panerai|A\.?\s?Lange|Zenith|Breitling|Jaeger|Vacheron|Franck|Ulysse)/iu;
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -516,13 +539,15 @@ function splitMultiWatch(text) {
   if (currentPart.trim()) parts.push(currentPart.trim());
 
   const validParts = parts.filter(p => {
-    const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]?|PAM\d|IW\d|\d{3}\.\d{3})\b/i.test(p);
-    return hasRef;
+    refPattern.lastIndex = 0;
+    return refPattern.test(p);
   });
 
-  if (validParts.length <= 1 && !text.includes('\n')) {
-    // 4b) MID-LINE SECOND-REFERENCE SPLIT — space-separated line with multiple refs
-    const STRONG_REF_RE = /(?:RM\s?\d{2}[-\s]?\d{2}|\b[345]\d{3}[A-Z]?(?:[\/\-]\d+)?\b|\b\d{6}[A-Z]{0,5}\b|\b\d{5}[A-Z]{2,5}\b|\bPAM\d{3,5}\b|\bIW\d{6,8}\b|\b\d{3}\.\d{3}\b)/gi;
+  if (validParts.length > 1) return validParts;
+
+  // 3. Fallback: Mid-line price-ref boundary split for space-separated listings without newlines
+  if (!text.includes('\n')) {
+    const STRONG_REF_RE = /(?:RM\s?\d{2}[-\s]?\d{2}|[34579]\d{3}[A-Z]?(?:[\/\-]\d+[A-Z]?)?\b|\d{5,6}[A-Z]{0,5}\b|PAM\d{3,5}\b|IW\d{6,8}\b|\d{3}\.\d{3}\b)/gi;
     const PRICE_TOKEN_RE = /\d{2,3}\s?[kKmM]\b|[$€£]|\b(?:hkd|usd|usdt|eur|chf|gbp|sgd)\b|[\d,]{4,}|\b\d+\s*U\b/i;
     
     const hits = [];
@@ -562,7 +587,7 @@ function splitMultiWatch(text) {
     }
   }
 
-  return validParts.length > 1 ? validParts : [text];
+  return [text];
 }
 
 module.exports = {

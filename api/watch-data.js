@@ -184,11 +184,11 @@ export default async function handler(req, res) {
       await Promise.all(topBrands.map(async (b) => {
         try {
           const r = await sbFetch(
-            `${supabaseUrl}/rest/v1/watch_records?select=count&verdict=eq.APPROVED&brand=eq.${encodeURIComponent(b)}`,
-            { headers: { ...headers, 'Prefer': 'count=exact' } },
-            8000
+            `${supabaseUrl}/rest/v1/watch_records?select=id&brand=eq.${encodeURIComponent(b)}&limit=0`,
+            { headers: { ...headers, 'Prefer': 'count=estimated' } },
+            5000
           );
-          const cr = r.headers.get('content-range') || '0/0';
+          const cr = r.headers.get('content-range') || '*/0';
           const cnt = parseInt(cr.split('/')[1] || '0');
           if (cnt > 0) brandCounts[b] = cnt;
         } catch {}

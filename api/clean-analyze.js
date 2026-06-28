@@ -315,7 +315,7 @@ function isImageUrl(u) { return IMG_EXT_RE.test(u) || IMG_CDN_RE.test(u); }
  */
 
 // Emoji that dealers use as brand markers / bullet points mid-line
-const EMOJI_SPLIT_RE = /([🔥🏮🔵⭕🟢⚫🔴🟠🟡⚪🔶🟣🟤✅🔹🔸▶►])/u;
+const EMOJI_SPLIT_RE = /([\p{Emoji_Presentation}\p{Extended_Pictographic}])/u;
 
 function splitWatches(raw) {
   // WF_SPLIT_FULLWIDTH — normalize full-width punctuation to ASCII BEFORE any
@@ -430,9 +430,29 @@ function splitWatches(raw) {
       if (current.trim()) parts.push(current.trim());
       // Only accept if >= 2 parts contain a reference-like token
       const refLike = /\b\d{4,}[/\s]?\d?[A-Z]{1,4}\b/i;
-      if (parts.filter(p => refLike.test(p)).length >= 2) {
-        expanded.push(...parts);
-        continue;
+      const validParts = parts.filter(p => refLike.test(p));
+      if (validParts.length >= 2) {
+        const refinedParts = [];
+        let currentAccumulator = '';
+        for (const p of parts) {
+          if (refLike.test(p)) {
+            if (currentAccumulator) {
+              refinedParts.push((currentAccumulator + ' ' + p).trim());
+              currentAccumulator = '';
+            } else {
+              refinedParts.push(p);
+            }
+          } else {
+            currentAccumulator = (currentAccumulator + ' ' + p).trim();
+          }
+        }
+        if (currentAccumulator && refinedParts.length > 0) {
+          refinedParts[refinedParts.length - 1] = (refinedParts[refinedParts.length - 1] + ' ' + currentAccumulator).trim();
+        }
+        if (refinedParts.length > 1) {
+          expanded.push(...refinedParts);
+          continue;
+        }
       }
     }
     expanded.push(block);

@@ -241,7 +241,7 @@ export default function PriceResearch() {
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 placeholder="Enter any reference (e.g. 126334, 5711A, RM 07-01, 26238ST)"
-                style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none' }}
+                style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none', backgroundColor: BG_ELEV, color: TEXT }}
               />
             </div>
             <button onClick={handleSearch}
@@ -435,10 +435,7 @@ export default function PriceResearch() {
               </div>
             </div>
 
-            {/* ── Price Forecast ───────────────────────────────── */}
-            {data && data.chart && data.chart.length >= 3 && (
-              <PriceForecast chart={data.chart} reference={data.reference} brand={data.brand} model={data.model} forecastData={data.forecast} onSelectMonth={() => navigate(`/insight?ref=${encodeURIComponent(data.reference)}`)} />
-            )}
+            {/* ── Price Forecast Removed ───────────────────────── */}
 
             {/* ── Chart + 3-Month Prediction ────────────────────── */}
             {data.chart && data.chart.length > 0 && data.chart[0].month !== 'N/A' && data.chart[0].count > 0 ? (

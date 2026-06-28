@@ -1,0 +1,13 @@
+{
+  "timestamp": "2026-06-28T02:12:17.380Z",
+  "total": 100000,
+  "success": 66457,
+  "failed": 33543,
+  "successRate": "66.46%",
+  "distribution": {
+    "APPROVED": 24134,
+    "REVIEW": 20890,
+    "HUMAN": 11811,
+    "RECYCLE": 43165
+  }
+}

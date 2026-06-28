@@ -69,3 +69,31 @@ describe('listing_type in parseFull output', () => {
     expect(r.listing_type).toBe('WTB');
   });
 });
+
+describe('multi-watch bundle splitting and 7xxx reference matching', () => {
+  const { splitMultiWatch } = require('../api/_lib/parser');
+
+  it('splits single-line emoji-delimited bundles', () => {
+    const input = '🔥used in hk full set🔥 PP 🌷5172g salmon 2023y hkd422k 🌷7300/1201r coffee 2021y hkd327k 🌷7118/1200a white 2021y hkd832k 🌷7118/1200a blue 2024y hkd721k';
+    const parts = splitMultiWatch(input);
+    expect(parts.length).toBe(4);
+    expect(parts[0]).toContain('5172g');
+    expect(parts[1]).toContain('7300/1201r');
+    expect(parts[2]).toContain('7118/1200a white');
+    expect(parts[3]).toContain('7118/1200a blue');
+  });
+
+  it('parses Patek references starting with 7 and 9', () => {
+    const r1 = parseFull('PP 7300/1201r coffee dial 2021y used hkd327k');
+    expect(r1.brand).toBe('Patek Philippe');
+    expect(r1.ref).toBe('7300/1201R');
+    expect(r1.price).toBe(327000);
+    expect(r1.currency).toBe('HKD');
+    expect(r1.year).toBe(2021);
+
+    const r2 = parseFull('PP 7118/1200a white 2021y hkd832k');
+    expect(r2.brand).toBe('Patek Philippe');
+    expect(r2.ref).toBe('7118/1200A');
+    expect(r2.year).toBe(2021);
+  });
+});

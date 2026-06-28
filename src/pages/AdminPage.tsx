@@ -17,6 +17,7 @@ interface StatsData {
   approved: number;
   human: number;
   recycle: number;
+  review?: number;
   brands?: Record<string, number>;
   avgConfidence: number;
   processingRate: number;
@@ -109,7 +110,7 @@ export default function AdminPage() {
       // Use health.verdicts — these come from watch_records (real 2.4M count)
       // NOT health.breakdowns?.byVerdict — that's from live_ingest (only ~4K records)
       const verdicts = health.verdicts || {};
-      const totalFromVerdicts = (verdicts.APPROVED || 0) + (verdicts.HUMAN || 0) + (verdicts.RECYCLE || 0);
+      const totalFromVerdicts = (verdicts.APPROVED || 0) + (verdicts.HUMAN || 0) + (verdicts.RECYCLE || 0) + (verdicts.REVIEW || 0);
       
       let total = totalFromVerdicts;
       let brands = {};
@@ -127,6 +128,7 @@ export default function AdminPage() {
         approved: verdicts.APPROVED || 0,
         human: verdicts.HUMAN || 0,
         recycle: verdicts.RECYCLE || 0,
+        review: verdicts.REVIEW || 0,
         brands,
         avgConfidence: 85,
         processingRate: 0,
@@ -158,7 +160,7 @@ export default function AdminPage() {
   };
 
   const statsData = stats || {
-    totalRecords: 0, approved: 0, human: 0, recycle: 0,
+    totalRecords: 0, approved: 0, human: 0, recycle: 0, review: 0,
     brands: {}, avgConfidence: 0, processingRate: 0,
   };
 
@@ -179,12 +181,13 @@ export default function AdminPage() {
         </div>
 
         {/* ═══ STATS GRID ═══ */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 mb-8">
           <StatCard label="Total Records" value={statsData.totalRecords > 0 ? statsData.totalRecords.toLocaleString() : '-'} icon={Database} color="text-blue-400" />
           <StatCard label="Approved" value={statsData.approved > 0 ? statsData.approved.toLocaleString() : '-'} sub={statsData.totalRecords > 0 ? `${Math.round((statsData.approved/statsData.totalRecords)*100)}%` : ''} icon={CheckCircle2} color="text-emerald-400" trend="up" />
+          <StatCard label="AI Review" value={statsData.review !== undefined && statsData.review > 0 ? statsData.review.toLocaleString() : '-'} sub={statsData.totalRecords > 0 ? `${Math.round(((statsData.review || 0)/statsData.totalRecords)*100)}%` : ''} icon={Zap} color="text-purple-400" trend="neutral" />
           <StatCard label="Human Review" value={statsData.human > 0 ? statsData.human.toLocaleString() : '-'} sub={statsData.totalRecords > 0 ? `${Math.round((statsData.human/statsData.totalRecords)*100)}%` : ''} icon={Users} color="text-amber-400" trend="neutral" />
           <StatCard label="Recycle" value={statsData.recycle > 0 ? statsData.recycle.toLocaleString() : '-'} sub={statsData.totalRecords > 0 ? `${Math.round((statsData.recycle/statsData.totalRecords)*100)}%` : ''} icon={Trash2} color="text-red-400" trend="down" />
-          <StatCard label="Avg Confidence" value={`${statsData.avgConfidence}%`} icon={Activity} color="text-purple-400" />
+          <StatCard label="Avg Confidence" value={`${statsData.avgConfidence}%`} icon={Activity} color="text-indigo-400" />
         </div>
 
         {/* ═══ MESSAGE BANNER ═══ */}

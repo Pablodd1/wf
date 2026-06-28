@@ -464,7 +464,7 @@ export function useWatchData() {
   const [loadProgress, setLoadProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   // Live stats from pipeline-health (accurate, not derived from cached client array)
-  const [liveStats, setLiveStats] = useState<{ accuracyRate: number; totalProcessed: number; approved: number; human: number; recycle: number } | null>(null);
+  const [liveStats, setLiveStats] = useState<{ accuracyRate: number; totalProcessed: number; approved: number; human: number; recycle: number; review: number } | null>(null);
 
   useEffect(() => {
     if (_cache) {
@@ -589,7 +589,8 @@ export function useWatchData() {
         const approved = v.APPROVED || 0;
         const human    = v.HUMAN    || 0;
         const recycle  = v.RECYCLE  || 0;
-        const total    = data.total || (approved + human + recycle);
+        const review   = v.REVIEW   || 0;
+        const total    = data.total || (approved + human + recycle + review);
         if (total > 0) {
           setLiveStats({
             accuracyRate:   total > 0 ? Math.round((approved / total) * 100) : 0,
@@ -597,6 +598,7 @@ export function useWatchData() {
             approved,
             human,
             recycle,
+            review,
           });
         } else {
           // Fallback to pipeline-health if watch-data stats unavailable
@@ -604,11 +606,11 @@ export function useWatchData() {
             .then(r2 => r2.json())
             .then(ph => {
               const b = ph?.breakdowns?.byVerdict || {};
-              const a2 = b.APPROVED || 0, h2 = b.HUMAN || 0, r2c = b.RECYCLE || 0;
-              const t2 = ph?.totals?.combined || (a2+h2+r2c);
+              const a2 = b.APPROVED || 0, h2 = b.HUMAN || 0, r2c = b.RECYCLE || 0, rev2 = b.REVIEW || 0;
+              const t2 = ph?.totals?.combined || (a2+h2+r2c+rev2);
               if (t2 > 0) setLiveStats({
                 accuracyRate: Math.round((a2/t2)*100),
-                totalProcessed: t2, approved: a2, human: h2, recycle: r2c,
+                totalProcessed: t2, approved: a2, human: h2, recycle: r2c, review: rev2,
               });
             }).catch(() => { /* pipeline-health fallback unavailable */ });
         }
@@ -619,7 +621,7 @@ export function useWatchData() {
   const stats = {
     totalProcessed: liveStats?.totalProcessed ?? records.length,
     normalizedCount: liveStats ? (liveStats.approved + liveStats.human) : records.filter((r) => !r.isResidue).length,
-    residueCount: liveStats ? liveStats.recycle : records.filter((r) => r.isResidue).length,
+    residueCount: liveStats ? (liveStats.recycle + liveStats.review) : records.filter((r) => r.isResidue).length,
     throughputRate: Math.round((liveStats?.totalProcessed ?? records.length) / 2.4),
     avgLatency: 45,
     accuracyRate: liveStats?.accuracyRate ?? (records.length > 0
@@ -627,7 +629,7 @@ export function useWatchData() {
       : 0),
     mlAvgTime: 45,
     residueRate: liveStats?.totalProcessed
-      ? Math.round((liveStats.recycle / liveStats.totalProcessed) * 100)
+      ? Math.round(((liveStats.recycle + liveStats.review) / liveStats.totalProcessed) * 100)
       : (records.length > 0
         ? Math.round((records.filter((r) => r.isResidue).length / records.length) * 100)
         : 0),

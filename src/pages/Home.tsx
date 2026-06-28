@@ -323,6 +323,10 @@ export default function Home() {
       <AIInsights
         records={publicRecords}
         onSelectRecord={handleSelectRecord}
+        totalProcessed={stats.totalProcessed}
+        normalizedCount={stats.normalizedCount}
+        residueCount={stats.residueCount}
+        accuracyRate={stats.accuracyRate}
       />
 
       {/* Enhanced Residue Bin — NEW */}
