@@ -67,9 +67,9 @@
   }
 
   body {
-    @apply bg-bg-primary text-text-primary font-sans antialiased;
-    background-color: #0A0A0F;
-    color: #FFFFFF;
+    @apply font-sans antialiased;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
     font-family: "Inter", system-ui, sans-serif;
   }
 
