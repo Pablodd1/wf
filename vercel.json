@@ -1,4 +1,8 @@
 {
+  "framework": "vite",
+  "buildCommand": "npm install && npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm install",
   "crons": [
     {
       "path": "/api/batch-process",
