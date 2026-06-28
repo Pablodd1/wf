@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import type { DashboardStats } from '@/types';
 import { formatPrice, formatNumber, confidenceColor } from '@/lib/utils';
-import { Layout } from '@/components/Layout';
 
 const CHART_COLORS = ['#C9A96E', '#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6', '#F97316'];
 
@@ -119,19 +118,16 @@ export default function Home() {
   }, [stats]);
 
   if (loading) {
-    return (
-      <Layout>
+    return (<>
         <div className="flex items-center justify-center h-[60vh]">
           <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
           <span className="ml-3 text-gray-400">Loading dashboard...</span>
         </div>
-      </Layout>
-    );
+      </>);
   }
 
   if (!stats) {
-    return (
-      <Layout>
+    return (<>
         <div className="flex flex-col items-center justify-center h-[60vh] text-gray-400">
           <Activity className="w-12 h-12 mb-4 text-gray-600" />
           <p>Failed to load dashboard data</p>
@@ -142,8 +138,7 @@ export default function Home() {
             <RefreshCw size={16} /> Retry
           </button>
         </div>
-      </Layout>
-    );
+      </>);
   }
 
   const kpiCards = [
@@ -155,8 +150,7 @@ export default function Home() {
     { label: 'Avg Confidence', value: `${stats.avgConfidence}%`, icon: Target, color: 'text-purple-400' },
   ];
 
-  return (
-    <Layout totalProcessed={stats.totalRecords} normalizedCount={Math.round(stats.totalRecords * 0.85)} residueCount={stats.recycled}>
+  return (<>
       <div className="p-5 max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -370,6 +364,5 @@ export default function Home() {
           </div>
         </motion.div>
       </div>
-    </Layout>
-  );
+    </>);
 }

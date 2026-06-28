@@ -10,7 +10,6 @@ import {
 } from 'lucide-react';
 import type { DashboardStats } from '@/types';
 import { formatPrice, confidenceColor } from '@/lib/utils';
-import { Layout } from '@/components/Layout';
 
 const CHART_COLORS = ['#C9A96E', '#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6', '#F97316'];
 
@@ -133,8 +132,7 @@ export default function AnalyticsPage() {
     URL.revokeObjectURL(url);
   }, [sortedRefs]);
 
-  return (
-    <Layout>
+  return (<>
       <div className="p-5 max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -390,6 +388,5 @@ export default function AnalyticsPage() {
           </>
         )}
       </div>
-    </Layout>
-  );
+    </>);
 }

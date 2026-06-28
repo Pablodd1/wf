@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import type { ParsedResult, Verdict } from '@/types';
 import { confidenceColor, confidenceLabel, formatPrice } from '@/lib/utils';
-import { Layout } from '@/components/Layout';
 import { BrandBadge } from '@/components/ui/BrandBadge';
 import { ConditionBadge } from '@/components/ui/ConditionBadge';
 import { ConfidenceRing } from '@/components/ui/ConfidenceRing';
@@ -256,8 +255,7 @@ export default function DemoPage() {
     navigator.clipboard.writeText(SAMPLE_INPUT);
   }, []);
 
-  return (
-    <Layout>
+  return (<>
       <div className="p-5 max-w-[1800px] mx-auto h-[calc(100vh-56px)]">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -499,6 +497,5 @@ export default function DemoPage() {
           </div>
         </div>
       </div>
-    </Layout>
-  );
+    </>);
 }

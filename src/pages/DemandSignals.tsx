@@ -11,7 +11,6 @@ import {
 } from 'recharts';
 import type { DemandSignal } from '@/types';
 import { formatPrice } from '@/lib/utils';
-import { Layout } from '@/components/Layout';
 
 const CHART_COLORS = ['#C9A96E', '#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6', '#F97316'];
 
@@ -60,18 +59,15 @@ export default function DemandSignals() {
   const OverallIcon = overallGauge.icon;
 
   if (loading) {
-    return (
-      <Layout>
+    return (<>
         <div className="flex items-center justify-center h-[60vh]">
           <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
           <span className="ml-3 text-gray-400">Loading demand signals...</span>
         </div>
-      </Layout>
-    );
+      </>);
   }
 
-  return (
-    <Layout>
+  return (<>
       <div className="p-5 max-w-[1400px] mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -259,6 +255,5 @@ export default function DemandSignals() {
           })}
         </motion.div>
       </div>
-    </Layout>
-  );
+    </>);
 }

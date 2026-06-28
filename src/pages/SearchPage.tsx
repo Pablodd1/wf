@@ -4,7 +4,6 @@ import { Search, Filter, ChevronLeft, ChevronRight, Loader2, AlertCircle, X } fr
 import type { WatchRecord } from '@/types';
 import { formatPrice, confidenceColor } from '@/lib/utils';
 import { WatchCard } from '@/components/WatchCard';
-import { Layout } from '@/components/Layout';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
@@ -91,8 +90,7 @@ export default function SearchPage() {
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  return (
-    <Layout>
+  return (<>
       <div className="p-5 max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="mb-6">
@@ -245,6 +243,5 @@ export default function SearchPage() {
           </div>
         )}
       </div>
-    </Layout>
-  );
+    </>);
 }

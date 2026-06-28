@@ -7,7 +7,6 @@ import {
   Download, XCircle, BarChart3, Layers, Eye, Cpu,
 } from 'lucide-react';
 import type { ActivityLogEntry } from '@/types';
-import { Layout } from '@/components/Layout';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 
@@ -97,8 +96,7 @@ export default function AdminPage() {
 
   const totalVerdicts = Object.values(stats.recordsByVerdict).reduce((a, b) => a + b, 0);
 
-  return (
-    <Layout>
+  return (<>
       <div className="p-5 max-w-[1600px] mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -315,6 +313,5 @@ export default function AdminPage() {
           </div>
         </motion.div>
       </div>
-    </Layout>
-  );
+    </>);
 }

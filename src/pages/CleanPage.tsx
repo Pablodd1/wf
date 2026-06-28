@@ -5,7 +5,6 @@ import {
   CheckCircle2, AlertCircle, Loader2, ArrowRight, Table, Settings,
   RefreshCw, Eye, ChevronDown, ChevronUp,
 } from 'lucide-react';
-import { Layout } from '@/components/Layout';
 
 interface PreviewRow {
   [key: string]: string | number | null;
@@ -158,8 +157,7 @@ export default function CleanPage() {
     setNormalized(null);
   }, []);
 
-  return (
-    <Layout>
+  return (<>
       <div className="p-5 max-w-[1400px] mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
@@ -332,6 +330,5 @@ export default function CleanPage() {
           </motion.div>
         )}
       </div>
-    </Layout>
-  );
+    </>);
 }

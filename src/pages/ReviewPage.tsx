@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import type { WatchRecord, Verdict } from '@/types';
 import { confidenceColor, confidenceLabel, formatPrice } from '@/lib/utils';
-import { Layout } from '@/components/Layout';
 import { BrandBadge } from '@/components/ui/BrandBadge';
 import { ConditionBadge } from '@/components/ui/ConditionBadge';
 import { ConfidenceRing } from '@/components/ui/ConfidenceRing';
@@ -78,8 +77,7 @@ export default function ReviewPage() {
   const processedToday = queue.filter(r => r.verdict === 'APPROVED').length;
   const accuracyRate = queue.length > 0 ? ((queue.filter(r => (r.confidence ?? 0) >= 70).length / queue.length) * 100).toFixed(1) : '0';
 
-  return (
-    <Layout>
+  return (<>
       <div className="p-5 max-w-[1600px] mx-auto h-[calc(100vh-56px)] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
@@ -312,6 +310,5 @@ export default function ReviewPage() {
           </div>
         )}
       </div>
-    </Layout>
-  );
+    </>);
 }
