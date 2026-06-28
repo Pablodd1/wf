@@ -3,31 +3,13 @@ import { Navbar } from './Navbar';
 
 interface LayoutProps {
   children: ReactNode;
-  totalProcessed?: number;
-  normalizedCount?: number;
-  residueCount?: number;
-  throughputRate?: number;
-  avgLatency?: number;
 }
 
-export function Layout({
-  children,
-  totalProcessed,
-  normalizedCount,
-  residueCount,
-  throughputRate,
-  avgLatency,
-}: LayoutProps) {
+export function Layout({ children }: LayoutProps) {
   return (
-    <div className="min-h-[100dvh]" style={{ backgroundColor: '#0A0A0F' }}>
-      <Navbar
-        totalProcessed={totalProcessed}
-        normalizedCount={normalizedCount}
-        residueCount={residueCount}
-        throughputRate={throughputRate}
-        avgLatency={avgLatency}
-      />
-      <main className="relative z-[1]">{children}</main>
+    <div className="min-h-[100dvh] bg-[#0A0A0F] text-white">
+      <Navbar />
+      <main className="relative">{children}</main>
     </div>
   );
 }

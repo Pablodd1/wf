@@ -1,104 +1,88 @@
-/**
- * WatchImage Component
- * ====================
- * Displays a watch image with intelligent multi-layer fallback.
- *
- * Falls back through image sources when one fails:
- * 1. Local catalog (/images/{brand}_{reference}.png)
- * 2. Brand website / Chrono24 CDN
- * 3. Silhouette placeholder SVG
- *
- * Usage:
- *   <WatchImage brand="Patek Philippe" reference="5711/1A" size="md" />
- *   <WatchImage brand="Rolex" reference="126710BLNR" size="lg" className="my-4" />
- */
+import { useState, useEffect } from 'react';
 
-import { useState, useCallback } from 'react';
-import { resolveWatchImage, getLocalImagePath } from '@/lib/watchImages';
-
-export interface WatchImageProps {
-  /** Watch brand name (e.g. "Patek Philippe") */
-  brand: string;
-  /** Watch reference number (e.g. "5711/1A") */
-  reference: string;
-  /** Additional CSS classes */
+interface WatchImageProps {
+  brand?: string;
+  reference?: string;
+  src?: string;
+  alt?: string;
   className?: string;
-  /** Image size preset */
-  size?: 'sm' | 'md' | 'lg';
 }
 
-/**
- * WatchImage — React component with automatic fallback chain.
- *
- * When the current image source fails to load (onError),
- * the component automatically tries the next source in the chain.
- */
-export function WatchImage({
-  brand,
-  reference,
-  className = '',
-  size = 'md',
-}: WatchImageProps) {
-  const [srcIndex, setSrcIndex] = useState(0);
+// Brand CDN fallbacks
+const BRAND_PATTERNS: Record<string, (ref: string) => string> = {
+  'Patek Philippe': (ref) => `https://static.patek.com/images/articles/face_white/350/${ref.replace(/\//g, '-')}_1.jpg`,
+  'Rolex': (ref) => `https://cdn2.chrono24.com/images/uhren/images_${ref.replace(/[^A-Z0-9]/gi, '')}_2.jpg`,
+  'Audemars Piguet': (ref) => `https://www.audemarspiguet.com/content/dam/ap/com/products/watches/${ref.toLowerCase().replace(/\//g, '_')}/assets/landing.jpg`,
+  'Richard Mille': (ref) => `https://www.richardmille.com/sites/default/files/styles/watch_large/public/watches/${ref.toLowerCase().replace(/[^a-z0-9-]/g, '')}.png`,
+};
 
-  // Build the ordered list of sources to try
-  const sources: string[] = [
-    getLocalImagePath(brand, reference),
-    resolveWatchImage(brand, reference),
-    '/watch-silhouette.svg',
-  ];
+let catalogCache: any[] | null = null;
 
-  /**
-   * Handle image load failure — advance to next source.
-   * Prevents infinite loops by stopping at the last source (silhouette).
-   */
-  const handleError = useCallback(() => {
-    if (srcIndex < sources.length - 1) {
-      setSrcIndex((prev) => prev + 1);
+function findInCatalog(brand?: string, reference?: string): string | null {
+  if (!reference) return null;
+  
+  // Try catalog cache
+  if (catalogCache) {
+    const normRef = reference.toUpperCase().replace(/[^A-Z0-9/]/g, '');
+    const match = catalogCache.find(c => {
+      const catRef = c.reference?.toUpperCase().replace(/[^A-Z0-9/]/g, '');
+      return catRef === normRef || catRef?.includes(normRef) || normRef?.includes(catRef);
+    });
+    if (match?.imageUrl) return match.imageUrl;
+  }
+  
+  // Try brand CDN patterns
+  if (brand && BRAND_PATTERNS[brand]) {
+    return BRAND_PATTERNS[brand](reference);
+  }
+  
+  return null;
+}
+
+export default function WatchImage({ brand, reference, src, alt, className = '' }: WatchImageProps) {
+  const [imageSrc, setImageSrc] = useState<string | null>(src || null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (src) { setImageSrc(src); return; }
+    
+    // Load catalog on first use
+    if (!catalogCache) {
+      fetch('/catalog.json')
+        .then(r => r.json())
+        .then(data => { catalogCache = data; })
+        .catch(() => {})
+        .finally(() => {
+          const found = findInCatalog(brand, reference);
+          if (found) setImageSrc(found);
+        });
+    } else {
+      const found = findInCatalog(brand, reference);
+      if (found) setImageSrc(found);
     }
-  }, [srcIndex, sources.length]);
+  }, [brand, reference, src]);
 
-  const sizeClasses = {
-    sm: 'w-24 h-24',
-    md: 'w-48 h-48',
-    lg: 'w-64 h-64',
-  };
-
-  const currentSrc = sources[srcIndex];
+  if (error || !imageSrc) {
+    return (
+      <div className={`bg-gradient-to-br from-[#1A1A24] to-[#111118] rounded-lg flex flex-col items-center justify-center border border-[#1E1E2E] ${className}`}>
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#2A2A3E" strokeWidth="1.5">
+          <circle cx="12" cy="12" r="10"/>
+          <circle cx="12" cy="12" r="6"/>
+          <line x1="12" y1="8" x2="12" y2="11"/>
+          <line x1="12" y1="12" x2="14" y2="13"/>
+        </svg>
+        <span className="text-[9px] text-gray-600 mt-1 uppercase tracking-wider">{brand || 'Watch'}</span>
+      </div>
+    );
+  }
 
   return (
-    <div
-      className={`${sizeClasses[size]} bg-gray-50 rounded-lg flex items-center justify-center overflow-hidden ${className}`}
-      title={`${brand} ${reference}`}
-    >
-      <img
-        src={currentSrc}
-        alt={`${brand} ${reference}`}
-        className="w-full h-full object-contain"
-        onError={handleError}
-        loading="lazy"
-      />
-    </div>
-  );
-}
-
-/**
- * Compact watch image variant for table/list views.
- * Smaller footprint with tooltip on hover.
- */
-export function WatchImageSmall({
-  brand,
-  reference,
-  className = '',
-}: Omit<WatchImageProps, 'size'>) {
-  return (
-    <WatchImage
-      brand={brand}
-      reference={reference}
-      size="sm"
-      className={`${className}`}
+    <img
+      src={imageSrc}
+      alt={alt || `${brand} ${reference}`}
+      className={`object-contain rounded-lg border border-[#1E1E2E] bg-[#111118] ${className}`}
+      onError={() => setError(true)}
+      loading="lazy"
     />
   );
 }
-
-export default WatchImage;
