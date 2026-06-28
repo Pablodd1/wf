@@ -1,319 +1,337 @@
-import { useState } from 'react';
-import { Layout } from '@/components/Layout';
-import { TabNav } from '@/components/TabNav';
-import { Footer } from '@/components/Footer';
-import { useWatchData } from '@/hooks/useWatchData';
-import { cleanAnalyze, saveCleanWatchToSupabase } from '@/lib/cleanAnalyze';
-import { exportCleanExcel, exportCleanCsv } from '@/lib/cleanExport';
-import { enrichWatch } from '@/lib/enrich';
-import type { CleanResponse, CleanWatch, CleanStage, Verdict } from '@/lib/cleanAnalyze';
-import type { EnrichmentData } from '@/lib/enrich';
+import { useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Sparkles, Search, Cog, Download, FileSpreadsheet,
-  CheckCircle2, UserCheck, Trash2, AlertTriangle, Loader2,
-  ExternalLink, TrendingUp,
+  Upload, FileJson, FileSpreadsheet, Download, Play, Trash2,
+  CheckCircle2, AlertCircle, Loader2, ArrowRight, Table, Settings,
+  RefreshCw, Eye, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import { Layout } from '@/components/Layout';
 
-const SAMPLE = `5712/1A Blue N5/2026 New 850k HKD
-RM35-03 White unworn 2.1M HKD
-126334 Black 2025 used 45k USD
-Patek green new 500k`;
-
-
-const verdictMeta: Record<Verdict, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
-  APPROVED: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30', Icon: CheckCircle2 },
-  HUMAN:    { label: 'Human Review', color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/30', Icon: UserCheck },
-  RECYCLE:  { label: 'Recycle Bin', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30', Icon: Trash2 },
-};
-
-const stageIcon: Record<string, React.ElementType> = {
-  PARSE: Cog, AI_TEXT: Sparkles, ONLINE: Search, IMAGE: AlertTriangle,
-};
-
-function ConfidenceBar({ value }: { value: number }) {
-  const color = value >= 85 ? 'bg-emerald-500' : value >= 35 ? 'bg-amber-500' : 'bg-red-500';
-  return (
-    <div className="flex items-center gap-2 w-full">
-      <div className="flex-1 h-1.5 rounded-full bg-bg-elevated overflow-hidden">
-        <div className={`h-full ${color} transition-all duration-500`} style={{ width: `${value}%` }} />
-      </div>
-      <span className="text-[11px] font-mono text-text-secondary w-9 text-right">{value}%</span>
-    </div>
-  );
+interface PreviewRow {
+  [key: string]: string | number | null;
 }
 
-function StageRow({ s, idx }: { s: CleanStage; idx: number }) {
-  const Icon = stageIcon[s.stage] || Search;
-  const mismatch = s.verdict === 'MISMATCH';
-  return (
-    <div className="flex gap-3">
-      <div className="flex flex-col items-center">
-        <div className={`h-7 w-7 rounded-full flex items-center justify-center border ${mismatch ? 'border-red-500/50 bg-red-500/10' : 'border-border-default bg-bg-elevated'}`}>
-          <Icon size={13} className={mismatch ? 'text-red-400' : 'text-gold-primary'} />
-        </div>
-        {idx < 99 && <div className="w-px flex-1 bg-border-default my-1" />}
-      </div>
-      <div className="flex-1 pb-4">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-[11px] font-bold uppercase tracking-wider text-text-secondary">{s.stage.replace('_', ' ')}</span>
-          <span className="text-[9px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted font-mono">{s.engine}</span>
-          {s.verdict && (
-            <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${
-              s.verdict === 'MATCH' ? 'bg-emerald-500/15 text-emerald-400' :
-              s.verdict === 'MISMATCH' ? 'bg-red-500/15 text-red-400' : 'bg-amber-500/15 text-amber-400'}`}>
-              {s.verdict}
-            </span>
-          )}
-        </div>
-        {s.note && <p className="text-[11px] text-text-muted mt-0.5 leading-snug">{s.note}</p>}
-        {s.error && <p className="text-[11px] text-red-400 mt-0.5">⚠ {s.error}</p>}
-        <div className="mt-1.5"><ConfidenceBar value={s.confidence} /></div>
-        {s.data && Object.keys(s.data).length > 0 && (
-          <div className="mt-1.5 flex flex-wrap gap-1">
-            {Object.entries(s.data)
-              .filter(([, v]) => v !== null && v !== undefined && v !== '' && v !== 'Unknown')
-              .slice(0, 8)
-              .map(([k, v]) => (
-                <span key={k} className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated/60 text-text-muted font-mono">
-                  <span className="text-text-secondary/60">{k}:</span> {String(v).slice(0, 28)}
-                </span>
-              ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+interface ColumnMapping {
+  source: string;
+  target: string;
+  confidence: number;
 }
 
-function WatchCard({ w, n, enrichment, onEnrich }: { w: CleanWatch; n: number; enrichment?: EnrichmentData; onEnrich?: () => void }) {
-  const meta = verdictMeta[w.verdict];
-  const [loadingEnrich, setLoadingEnrich] = useState(false);
-
-  async function handleEnrich() {
-    if (!w.parsed.reference || loadingEnrich || !onEnrich) return;
-    setLoadingEnrich(true);
-    await onEnrich();
-    setLoadingEnrich(false);
-  }
-
-  return (
-    <div className="rounded-xl border border-border-default bg-bg-card overflow-hidden">
-      {/* header */}
-      <div className="flex items-start justify-between gap-3 p-4 border-b border-border-default">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-mono text-text-muted">#{n}</span>
-            <span className="text-sm font-bold text-text-primary truncate">
-              {w.parsed.brand !== 'Unknown' ? w.parsed.brand : 'Unidentified'}
-              {w.parsed.reference ? ` · ${w.parsed.reference}` : ''}
-            </span>
-          </div>
-          <p className="text-[11px] text-text-muted mt-1 line-clamp-2">{w.input}</p>
-        </div>
-        <div className={`shrink-0 flex flex-col items-end gap-1 px-2.5 py-1.5 rounded-lg border ${meta.bg}`}>
-          <div className="flex items-center gap-1.5">
-            <meta.Icon size={14} className={meta.color} />
-            <span className={`text-xs font-bold ${meta.color}`}>{meta.label}</span>
-          </div>
-          <span className="text-[10px] font-mono text-text-muted">{w.confidence}%</span>
-        </div>
-      </div>
-      {/* reason */}
-      <div className="px-4 py-2 bg-bg-elevated/40 flex items-start gap-2">
-        {w.verdict === 'HUMAN' && <AlertTriangle size={12} className="text-amber-400 mt-0.5 shrink-0" />}
-        <p className="text-[11px] text-text-secondary leading-snug">{w.reason}</p>
-      </div>
-      {/* enrichment bar */}
-      {w.parsed.reference && (
-        <div className="px-4 py-2 border-b border-border-default flex items-center gap-2">
-          <button
-            onClick={handleEnrich}
-            disabled={loadingEnrich}
-            className="flex items-center gap-1.5 text-[11px] font-bold text-gold-primary hover:text-gold-bright transition-colors disabled:opacity-40"
-          >
-            {loadingEnrich ? <Loader2 size={12} className="animate-spin" /> : <TrendingUp size={12} />}
-            {loadingEnrich ? 'Enriching…' : enrichment ? 'Re-enrich' : 'Enrich'}
-          </button>
-          {enrichment?.catalog?.collection && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted font-mono">
-              {enrichment.catalog.collection}
-            </span>
-          )}
-          {enrichment?.market?.chrono24?.priceRange && (
-            <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono">
-              ${enrichment.market.chrono24.priceRange.median.toLocaleString()}
-            </span>
-          )}
-          {enrichment?.officialUrl && (
-            <a href={enrichment.officialUrl} target="_blank" rel="noopener noreferrer"
-              className="text-[10px] text-text-muted hover:text-gold-primary transition-colors flex items-center gap-0.5">
-              <ExternalLink size={10} /> Official
-            </a>
-          )}
-        </div>
-      )}
-      {/* stages */}
-      <div className="p-4 pt-3">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-3">Workflow · {w.stages.length} stages</p>
-        {w.stages.map((s, i) => <StageRow key={i} s={s} idx={i === w.stages.length - 1 ? 99 : i} />)}
-      </div>
-    </div>
-  );
-}
+const TARGET_FIELDS = [
+  'reference', 'brand', 'family', 'price', 'condition', 'year',
+  'dialColor', 'currency', 'box', 'papers', 'description', 'ignore',
+];
 
 export default function CleanPage() {
-  const { stats } = useWatchData();
-  const [text, setText] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [previewData, setPreviewData] = useState<PreviewRow[]>([]);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [mappings, setMappings] = useState<ColumnMapping[]>([]);
   const [loading, setLoading] = useState(false);
-  const [res, setRes] = useState<CleanResponse | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [enrichments, setEnrichments] = useState<Record<number, EnrichmentData>>({});
+  const [normalized, setNormalized] = useState<PreviewRow[] | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
 
-  async function run() {
-    if (!text.trim()) return;
-    setLoading(true); setErr(null); setRes(null); setEnrichments({});
-    const r = await cleanAnalyze(text);
-    setLoading(false);
-    if (!r.success) { setErr(r.error || 'Analysis failed'); return; }
-    setRes(r);
-    // Auto-save each result to Supabase (fire-and-forget, non-blocking)
-    r.watches.forEach(async (w) => {
+  const parseFile = useCallback(async (f: File) => {
+    setLoading(true);
+    const text = await f.text();
+    let data: PreviewRow[] = [];
+
+    if (f.name.endsWith('.json')) {
       try {
-        const saveRes = await saveCleanWatchToSupabase(w);
-        if (!saveRes.success || !saveRes.persisted) {
-          console.warn('[CleanPage] Supabase save failed:', saveRes.error);
-        }
-      } catch (e) {
-        console.warn('[CleanPage] Supabase save error:', e);
+        const parsed = JSON.parse(text);
+        data = Array.isArray(parsed) ? parsed : [parsed];
+      } catch {
+        alert('Invalid JSON');
+        setLoading(false);
+        return;
       }
-    });
-  }
-
-  async function handleEnrich(idx: number, ref: string, brand: string) {
-    const data = await enrichWatch(ref, brand);
-    if (data.success && data.enrichment) {
-      setEnrichments(prev => ({ ...prev, [idx]: data.enrichment! }));
+    } else {
+      // CSV
+      const lines = text.split('\n').filter(l => l.trim());
+      if (lines.length < 2) { setLoading(false); return; }
+      const headers = lines[0].split(',').map(h => h.trim().replace(/^["']|["']$/g, ''));
+      data = lines.slice(1).map(line => {
+        const values = line.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
+        const row: PreviewRow = {};
+        headers.forEach((h, i) => { row[h] = values[i] || null; });
+        return row;
+      });
     }
-  }
+
+    if (data.length > 0) {
+      const cols = Object.keys(data[0]);
+      setColumns(cols);
+      setPreviewData(data.slice(0, 100));
+      // Auto-map columns
+      const autoMappings: ColumnMapping[] = cols.map(col => {
+        const lower = col.toLowerCase();
+        let target = 'ignore';
+        if (/ref/i.test(lower)) target = 'reference';
+        else if (/brand|make|manufacturer/i.test(lower)) target = 'brand';
+        else if (/family|model|collection/i.test(lower)) target = 'family';
+        else if (/price|cost|value/i.test(lower)) target = 'price';
+        else if (/condition|state/i.test(lower)) target = 'condition';
+        else if (/year|date/i.test(lower)) target = 'year';
+        else if (/dial|color/i.test(lower)) target = 'dialColor';
+        else if (/currency|cur/i.test(lower)) target = 'currency';
+        else if (/box/i.test(lower)) target = 'box';
+        else if (/paper/i.test(lower)) target = 'papers';
+        else if (/desc|message|note/i.test(lower)) target = 'description';
+        return { source: col, target, confidence: target !== 'ignore' ? 85 : 0 };
+      });
+      setMappings(autoMappings);
+    }
+    setLoading(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setDragOver(false);
+    const f = e.dataTransfer.files[0];
+    if (f) { setFile(f); parseFile(f); }
+  }, [parseFile]);
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) { setFile(f); parseFile(f); }
+  }, [parseFile]);
+
+  const handleNormalize = useCallback(() => {
+    setLoading(true);
+    setTimeout(() => {
+      const normalized = previewData.map(row => {
+        const out: PreviewRow = {};
+        mappings.forEach(m => {
+          if (m.target !== 'ignore') {
+            let val = row[m.source];
+            // Simple normalization
+            if (m.target === 'price' && val) {
+              val = String(val).replace(/[^\d.]/g, '');
+            }
+            if (m.target === 'brand' && val) {
+              const s = String(val);
+              if (/patek|pp/i.test(s)) val = 'Patek Philippe';
+              else if (/rolex/i.test(s)) val = 'Rolex';
+              else if (/audemars|ap/i.test(s)) val = 'Audemars Piguet';
+              else if (/richard|rm/i.test(s)) val = 'Richard Mille';
+              else if (/vacheron|vc/i.test(s)) val = 'Vacheron Constantin';
+            }
+            if (m.target === 'condition' && val) {
+              const s = String(val).toLowerCase();
+              if (/new|bnib/i.test(s)) val = 'New';
+              else if (/like|excellent|lnib/i.test(s)) val = 'Like New';
+              else if (/naked|head/i.test(s)) val = 'Naked';
+              else val = 'Used';
+            }
+            out[m.target] = val;
+          }
+        });
+        return out;
+      });
+      setNormalized(normalized);
+      setLoading(false);
+    }, 1500);
+  }, [previewData, mappings]);
+
+  const exportCleaned = useCallback(() => {
+    if (!normalized) return;
+    const headers = Object.keys(normalized[0]);
+    const csv = [
+      headers.join(','),
+      ...normalized.map(row => headers.map(h => `"${String(row[h] ?? '').replace(/"/g, '""')}"`).join(',')),
+    ].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cleaned-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [normalized]);
+
+  const clearAll = useCallback(() => {
+    setFile(null);
+    setPreviewData([]);
+    setColumns([]);
+    setMappings([]);
+    setNormalized(null);
+  }, []);
 
   return (
-    <Layout
-      totalProcessed={stats.totalProcessed}
-      normalizedCount={stats.normalizedCount}
-      residueCount={stats.residueCount}
-      throughputRate={stats.throughputRate}
-      avgLatency={stats.avgLatency}
-    >
-      <TabNav totalProcessed={stats.totalProcessed} />
-
-      <div className="max-w-3xl mx-auto px-5 py-8">
-        {/* header */}
-        <div className="mb-6">
-          <h1 className="text-xl font-extrabold text-text-primary tracking-tight flex items-center gap-2">
-            <Sparkles size={18} className="text-gold-primary" />
-            Clean · Manual Analysis
-          </h1>
-          <p className="text-sm text-text-muted mt-1">
-            Paste one or several watch descriptions. Each watch is analyzed
-            <span className="text-text-secondary"> individually</span> through the full pipeline —
-            <span className="text-text-secondary"> Parse → AI → Online → Image</span> — with a single 85% gate:
-            <span className="text-emerald-400"> ≥85% Approved</span>,
-            <span className="text-amber-400"> below → Human</span>,
-            <span className="text-red-400"> no info → Recycle</span>.
-          </p>
-        </div>
-
-        {/* input */}
-        <div className="rounded-xl border border-border-default bg-bg-card p-4">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            placeholder={"Paste watch description(s) here…\n\n" + SAMPLE}
-            rows={7}
-            className="w-full bg-bg-elevated/50 border border-border-default rounded-lg p-3 text-sm text-text-primary placeholder:text-text-muted/50 font-mono resize-y focus:outline-none focus:border-gold-primary/50"
-          />
-          <div className="flex items-center justify-between mt-3">
-            <button
-              onClick={() => setText(SAMPLE)}
-              className="text-[11px] text-text-muted hover:text-text-secondary transition-colors"
-            >
-              Load sample
-            </button>
-            <button
-              onClick={run}
-              disabled={loading || !text.trim()}
-              className="flex items-center gap-2 px-5 py-2 rounded-lg bg-gold-primary text-bg-primary text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:brightness-110 transition-all"
-            >
-              {loading ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-              {loading ? 'Analyzing…' : 'Analyze'}
+    <Layout>
+      <div className="p-5 max-w-[1400px] mx-auto">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              <Settings size={22} className="text-amber-400" /> Data Cleaning
+            </h1>
+            <p className="text-sm text-gray-400 mt-1">Upload, preview, normalize, and export watch data</p>
+          </div>
+          <div className="flex gap-2">
+            {normalized && (
+              <button onClick={exportCleaned} className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-lg font-medium transition-colors flex items-center gap-2 text-sm">
+                <Download size={16} /> Export Cleaned
+              </button>
+            )}
+            <button onClick={clearAll} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm">
+              <Trash2 size={16} /> Clear
             </button>
           </div>
         </div>
 
-        {err && (
-          <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-400 flex items-center gap-2">
-            <AlertTriangle size={14} /> {err}
+        {/* Upload Area */}
+        {!file && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={handleDrop}
+            className={`border-2 border-dashed rounded-lg p-12 text-center transition-colors ${
+              dragOver ? 'border-amber-400 bg-amber-400/5' : 'border-gray-700 bg-gray-900'
+            }`}
+          >
+            <Upload className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+            <p className="text-lg text-white font-medium mb-2">Drop CSV or JSON file here</p>
+            <p className="text-sm text-gray-500 mb-4">or click to browse</p>
+            <label className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-lg font-medium transition-colors cursor-pointer inline-flex items-center gap-2">
+              <Table size={16} /> Select File
+              <input type="file" accept=".csv,.json" onChange={handleFileSelect} className="hidden" />
+            </label>
+          </motion.div>
+        )}
+
+        {loading && (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
+            <span className="ml-3 text-gray-400">Processing...</span>
           </div>
         )}
 
-        {/* summary */}
-        {res && (
-          <div className="mt-6">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-bold text-text-primary">Results Summary</h2>
-            <div className="flex items-center gap-2">
+        {/* Column Mapping */}
+        {file && !loading && columns.length > 0 && !normalized && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-4">
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider flex items-center gap-2">
+                  <Table size={14} /> Column Mapping
+                </h3>
+                <span className="text-xs text-gray-500">{previewData.length} rows previewed</span>
+              </div>
+              <div className="space-y-2">
+                {mappings.map((m, i) => (
+                  <div key={m.source} className="flex items-center gap-3 bg-gray-950 rounded-lg p-3 border border-gray-800">
+                    <div className="flex-1">
+                      <div className="text-[10px] text-gray-500 uppercase">Source Column</div>
+                      <div className="text-sm font-mono text-white">{m.source}</div>
+                    </div>
+                    <ArrowRight size={16} className="text-gray-600" />
+                    <div className="flex-1">
+                      <div className="text-[10px] text-gray-500 uppercase">Target Field</div>
+                      <select
+                        value={m.target}
+                        onChange={(e) => {
+                          const newMappings = [...mappings];
+                          newMappings[i] = { ...m, target: e.target.value };
+                          setMappings(newMappings);
+                        }}
+                        className="w-full bg-gray-900 border border-gray-700 rounded px-2 py-1 text-sm text-white focus:outline-none focus:border-amber-400/50"
+                      >
+                        {TARGET_FIELDS.map(f => <option key={f} value={f}>{f}</option>)}
+                      </select>
+                    </div>
+                    <div className="w-16 text-right">
+                      <div className="text-[10px] text-gray-500 uppercase">Match</div>
+                      <div className={`text-sm font-mono ${m.confidence >= 85 ? 'text-green-400' : m.confidence > 0 ? 'text-yellow-400' : 'text-gray-500'}`}>
+                        {m.confidence}%
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
               <button
-                onClick={async () => {
-                  if (res) await exportCleanExcel(res.watches, res.summary);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gold-primary/30 text-gold-primary text-xs font-bold hover:bg-gold-primary/10 transition-colors"
+                onClick={handleNormalize}
+                className="mt-4 w-full px-4 py-3 bg-amber-500 hover:bg-amber-400 text-black rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
               >
-                <Download size={12} />
-                Export Excel
-              </button>
-              <button
-                onClick={() => {
-                  if (res) exportCleanCsv(res.watches, res.summary);
-                }}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-text-muted/30 text-text-muted text-xs font-bold hover:bg-bg-elevated transition-colors"
-              >
-                <FileSpreadsheet size={12} />
-                Download CSV
+                <Play size={18} /> Normalize Data
               </button>
             </div>
+
+            {/* Data Preview */}
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <button onClick={() => setShowPreview(!showPreview)} className="flex items-center gap-2 text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">
+                <Eye size={14} /> Data Preview
+                {showPreview ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+              <AnimatePresence>
+                {showPreview && (
+                  <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
+                            {columns.map(col => <th key={col} className="text-left py-2 px-2">{col}</th>)}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {previewData.slice(0, 10).map((row, i) => (
+                            <tr key={i} className="border-b border-gray-800 hover:bg-gray-800/50">
+                              {columns.map(col => (
+                                <td key={col} className="py-2 px-2 text-gray-300 font-mono text-xs truncate max-w-[200px]">
+                                  {row[col] ?? '—'}
+                                </td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {previewData.length > 10 && <p className="text-xs text-gray-500 mt-2">...and {previewData.length - 10} more rows</p>}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { label: 'Total', val: res.summary.total, color: 'text-text-primary' },
-                { label: 'Approved', val: res.summary.approved, color: 'text-emerald-400' },
-                { label: 'Human', val: res.summary.human, color: 'text-amber-400' },
-                { label: 'Recycle', val: res.summary.recycle, color: 'text-red-400' },
-              ].map((c) => (
-                <div key={c.label} className="rounded-lg border border-border-default bg-bg-card p-3 text-center">
-                  <div className={`text-2xl font-extrabold ${c.color}`}>{c.val}</div>
-                  <div className="text-[10px] uppercase tracking-wider text-text-muted mt-0.5">{c.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          </motion.div>
         )}
 
-        {/* results */}
-        {res && (
-          <div className="mt-4 space-y-4">
-            {res.watches.map((w, i) => (
-              <WatchCard
-                key={i}
-                w={w}
-                n={i + 1}
-                enrichment={enrichments[i]}
-                onEnrich={w.parsed.reference ? () => handleEnrich(i, w.parsed.reference!, w.parsed.brand) : undefined}
-              />
-            ))}
-          </div>
+        {/* Normalized Result */}
+        {normalized && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <div className="flex items-center gap-2 mb-4">
+              <CheckCircle2 size={20} className="text-green-400" />
+              <span className="text-green-400 font-medium">Normalization complete!</span>
+              <span className="text-gray-500 text-sm">{normalized.length} rows processed</span>
+            </div>
+
+            <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Cleaned Data Preview</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-gray-400 text-xs uppercase tracking-wider border-b border-gray-800">
+                      {Object.keys(normalized[0]).map(col => <th key={col} className="text-left py-2 px-2">{col}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {normalized.slice(0, 20).map((row, i) => (
+                      <tr key={i} className="border-b border-gray-800 hover:bg-gray-800/50">
+                        {Object.keys(normalized[0]).map(col => (
+                          <td key={col} className="py-2 px-2 text-gray-300 font-mono text-xs truncate max-w-[200px]">
+                            {row[col] ?? '—'}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {normalized.length > 20 && <p className="text-xs text-gray-500 mt-2">...and {normalized.length - 20} more rows</p>}
+              </div>
+            </div>
+          </motion.div>
         )}
       </div>
-      <Footer />
     </Layout>
   );
 }

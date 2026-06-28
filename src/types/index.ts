@@ -1,80 +1,146 @@
-export type StageName = 'INGEST' | 'VALIDATE' | 'NORMALIZE' | 'ENRICH' | 'ML_SCORE';
-
-export type FailureFlag = string;
-
-export interface PipelineStage {
-  name: StageName;
-  status: 'pending' | 'active' | 'completed' | 'failed';
-  message: string;
-  timestamp: number;
-}
-
 export interface WatchRecord {
-  id: string;
-  source: 'whatsapp' | 'websocket' | 'csv';
-  rawMessage: string;
-  timestamp: string;
-  brand: string;
+  id?: string;
   reference: string;
-  family: string;
+  brand: string;
+  family?: string;
   price: number;
   originalPrice: number;
   originalCurrency: string;
-  dialColor: string;
   condition: string;
-  hasBox: boolean;
-  hasPapers: boolean;
-  year: number | null;
-  sellerRating: number;
-  daysOnMarket: number;
-  confidence: number;
-  mlPredictedPrice: number;
-  priceVariance: number;
-  demandForecast: string;
-  outcomeClassification: string;
-  marketComparables: number;
-  processingTime: number;
-  pipelineLog: PipelineStage[];
-  isResidue: boolean;
-  failureFlags: string[];
-  severity: 'CRITICAL' | 'WARNING' | 'INFO';
-  imageUrl?: string | null;
-  imageCount?: number;
-  imageConfirmed?: boolean;
-  autoResolvedFlags?: string[];
+  year?: number;
+  dialColor: string;
+  confidence?: number;
+  demandForecast?: string;
   buyerCount?: number;
   sellerCount?: number;
   buyerSellerRatio?: number;
   liquidityScore?: number;
-  description?: string;
+  mlPredictedPrice: number;
+  imageUrl?: string;
+  imageConfirmed?: boolean;
+  hasBox?: boolean;
+  hasPapers?: boolean;
+  sellerRating?: number;
+  status?: string;
+  verdict?: Verdict;
+  createdAt?: string;
+  updatedAt?: string;
+  source?: string;
+  rawMessage?: string;
 }
 
-export interface DashboardState {
+export type Verdict = 'APPROVED' | 'REVIEW' | 'HUMAN' | 'RECYCLE';
+
+export interface DashboardStats {
+  totalRecords: number;
+  approvedRate: number;
+  humanReview: number;
+  recycled: number;
+  avgPrice: number;
+  avgConfidence: number;
+  brandDistribution: BrandStat[];
+  confidenceDistribution: ConfidenceBin[];
+  priceDistribution: PriceBin[];
+  dailyTrends: DailyTrend[];
+  topReferences: ReferenceStat[];
+}
+
+export interface BrandStat {
+  brand: string;
+  count: number;
+  percentage: number;
+}
+
+export interface ConfidenceBin {
+  range: string;
+  min: number;
+  max: number;
+  count: number;
+  percentage: number;
+}
+
+export interface PriceBin {
+  range: string;
+  min: number;
+  max: number;
+  count: number;
+}
+
+export interface DailyTrend {
+  date: string;
+  count: number;
+  avgConfidence: number;
+  avgPrice: number;
+}
+
+export interface ReferenceStat {
+  reference: string;
+  brand: string;
+  count: number;
+  avgPrice: number;
+  avgConfidence: number;
+}
+
+export interface ReportCache {
+  generatedAt: string;
+  stats: DashboardStats;
   records: WatchRecord[];
-  currentTheaterRecord: WatchRecord | null;
-  theaterStage: number;
-  filters: {
-    search: string;
-    brands: string[];
-    priceMin: number;
-    priceMax: number;
-    conditions: string[];
-    currencies: string[];
-    confidenceMin: number;
-  };
-  stats: {
-    totalProcessed: number;
-    normalizedCount: number;
-    residueCount: number;
-    throughputRate: number;
-    avgLatency: number;
-    accuracyRate: number;
-    mlAvgTime: number;
-    residueRate: number;
-  };
-  selectedRecord: WatchRecord | null;
-  detailModalOpen: boolean;
-  editModalOpen: boolean;
-  editingRecord: WatchRecord | null;
-  residueBinOpen: boolean;
+}
+
+export interface ParsedResult {
+  reference: string;
+  brand: string;
+  family: string;
+  price: number;
+  originalPrice: number;
+  originalCurrency: string;
+  condition: string;
+  year: number;
+  dialColor: string;
+  confidence: number;
+  verdict: Verdict;
+  description: string;
+  raw: string;
+}
+
+export interface ConditionDist {
+  condition: string;
+  count: number;
+  percentage: number;
+}
+
+export interface CatalogMatchStat {
+  matched: boolean;
+  count: number;
+  percentage: number;
+}
+
+export interface ActivityLogEntry {
+  id: string;
+  action: string;
+  target: string;
+  status: 'success' | 'error' | 'pending';
+  timestamp: string;
+  details?: string;
+}
+
+export interface Insight {
+  id: string;
+  title: string;
+  description: string;
+  severity: 'info' | 'warning' | 'critical';
+  category: string;
+  affectedReferences: string[];
+  createdAt: string;
+}
+
+export interface DemandSignal {
+  reference: string;
+  brand: string;
+  buyerCount: number;
+  sellerCount: number;
+  ratio: number;
+  trend: 'up' | 'down' | 'stable';
+  lastPrice: number;
+  sentiment: number;
 }

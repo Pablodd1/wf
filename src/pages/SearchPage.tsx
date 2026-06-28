@@ -1,529 +1,247 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Search, X, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
-import { Layout } from '@/components/Layout';
-import { TabNav } from '@/components/TabNav';
-import { useWatchData } from '@/hooks/useWatchData';
+import { useState, useEffect, useCallback } from 'react';
+import { motion } from 'framer-motion';
+import { Search, Filter, ChevronLeft, ChevronRight, Loader2, AlertCircle, X } from 'lucide-react';
 import type { WatchRecord } from '@/types';
+import { formatPrice, confidenceColor } from '@/lib/utils';
+import { WatchCard } from '@/components/WatchCard';
+import { Layout } from '@/components/Layout';
 
-const BRANDS = ['Patek Philippe', 'Rolex', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Tudor', 'Cartier', 'A. Lange & Söhne', 'Omega', 'IWC', 'Breitling', 'Hublot', 'Panerai', 'Unknown'];
-const DIAL_COLORS = ['Black', 'Blue', 'Green', 'White', 'Brown', 'Grey', 'Champagne', 'Pink', 'Ice Blue', 'Purple', 'Yellow', 'Salmon', 'Red', 'Diamond', 'UNKNOWN'];
-const CONDITIONS = ['New', 'Used', 'UNKNOWN'];
-const VERDICTS = ['APPROVED', 'HUMAN', 'RECYCLE'];
-const PAGE_SIZE = 100;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-type SortField = 'price' | 'confidence' | 'year' | 'reference';
-type SortDir = 'asc' | 'desc';
+const BRANDS = ['All', 'Patek Philippe', 'Rolex', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin'];
+const CONDITIONS = ['All', 'New', 'Used', 'Like New', 'Naked'];
+const CURRENCIES = ['All', 'USD', 'EUR', 'GBP', 'CHF', 'HKD', 'SGD'];
 
-/** Shape of a raw Supabase record from the API */
-interface SupabaseRecord {
-  id: string;
-  brand?: string;
-  reference?: string;
-  normalized_reference?: string;
-  model?: string;
-  dial_color?: string;
-  condition?: string;
-  year?: number | null;
-  price_usd?: number;
-  price_raw?: number;
-  currency?: string;
-  confidence?: number;
-  verdict?: string;
-  raw_message?: string;
-  title?: string;
-  created_at?: string;
-  received_at?: string;
-  flags?: string[];
-  box?: string;
-  papers?: string;
-  image_url?: string | null;
-  front_image?: string | null;
-}
-
-function transformRecord(r: SupabaseRecord): WatchRecord {
-  return {
-    id: r.id || '',
-    source: 'whatsapp' as const,
-    rawMessage: r.raw_message || r.title || '',
-    timestamp: r.created_at || r.received_at || '',
-    brand: r.brand || 'Unknown',
-    reference: r.reference || r.normalized_reference || '',
-    family: r.model || '',
-    price: r.price_usd || r.price_raw || 0,
-    originalPrice: r.price_raw || 0,
-    originalCurrency: r.currency || 'USD',
-    dialColor: r.dial_color || 'UNKNOWN',
-    condition: r.condition || 'Unknown',
-    hasBox: r.box === 'Yes',
-    hasPapers: r.papers === 'Yes',
-    year: r.year ?? null,
-    sellerRating: 0,
-    daysOnMarket: 0,
-    confidence: Math.min(100, Math.max(0, r.confidence || 0)),
-    mlPredictedPrice: 0,
-    priceVariance: 0,
-    demandForecast: 'STABLE',
-    outcomeClassification: 'HOLD',
-    marketComparables: 0,
-    processingTime: 0,
-    pipelineLog: [],
-    isResidue: r.verdict === 'RECYCLE',
-    failureFlags: r.flags || [],
-    severity: r.verdict === 'RECYCLE' ? 'CRITICAL' : r.verdict === 'HUMAN' ? 'WARNING' : 'INFO',
-    imageUrl: r.image_url || (r.front_image ? `/images/${r.front_image}` : null),
-    imageCount: r.image_url || r.front_image ? 1 : 0,
-    imageConfirmed: !!r.image_url,
-    autoResolvedFlags: [],
-    buyerCount: 0,
-    sellerCount: 0,
-    buyerSellerRatio: 0,
-    liquidityScore: 0,
-    description: r.raw_message || '',
-  };
-}
+const demoRecords: WatchRecord[] = [
+  { id: '1', reference: '5711/1A', brand: 'Patek Philippe', family: 'Nautilus', price: 185000, originalPrice: 185000, originalCurrency: 'USD', condition: 'New', year: 2023, dialColor: 'Blue', confidence: 96, demandForecast: 'HIGH', buyerCount: 12, sellerCount: 3, buyerSellerRatio: 4.0, liquidityScore: 92, mlPredictedPrice: 178000, hasBox: true, hasPapers: true, sellerRating: 5, status: 'active' },
+  { id: '2', reference: '126610LN', brand: 'Rolex', family: 'Submariner', price: 14200, originalPrice: 14200, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'Black', confidence: 94, demandForecast: 'STABLE', buyerCount: 8, sellerCount: 5, buyerSellerRatio: 1.6, liquidityScore: 85, mlPredictedPrice: 13800, hasBox: true, hasPapers: true, sellerRating: 4, status: 'active' },
+  { id: '3', reference: '15202ST', brand: 'Audemars Piguet', family: 'Royal Oak', price: 98700, originalPrice: 98700, originalCurrency: 'USD', condition: 'Used', year: 2022, dialColor: 'Blue', confidence: 91, demandForecast: 'HIGH', buyerCount: 7, sellerCount: 2, buyerSellerRatio: 3.5, liquidityScore: 88, mlPredictedPrice: 95000, hasBox: true, hasPapers: true, sellerRating: 5, status: 'active' },
+  { id: '4', reference: 'RM11-03', brand: 'Richard Mille', family: 'RM', price: 385000, originalPrice: 385000, originalCurrency: 'USD', condition: 'New', year: 2023, dialColor: 'Black', confidence: 88, demandForecast: 'RISING', buyerCount: 4, sellerCount: 1, buyerSellerRatio: 4.0, liquidityScore: 78, mlPredictedPrice: 400000, hasBox: true, hasPapers: true, sellerRating: 5, status: 'active' },
+  { id: '5', reference: '116500LN', brand: 'Rolex', family: 'Daytona', price: 28500, originalPrice: 28500, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 93, demandForecast: 'STABLE', buyerCount: 9, sellerCount: 4, buyerSellerRatio: 2.25, liquidityScore: 90, mlPredictedPrice: 27200, hasBox: true, hasPapers: true, sellerRating: 4, status: 'active' },
+  { id: '6', reference: '4500V', brand: 'Vacheron Constantin', family: 'Overseas', price: 28900, originalPrice: 28900, originalCurrency: 'USD', condition: 'Like New', year: 2023, dialColor: 'Blue', confidence: 89, demandForecast: 'STABLE', buyerCount: 5, sellerCount: 3, buyerSellerRatio: 1.67, liquidityScore: 82, mlPredictedPrice: 28500, hasBox: true, hasPapers: false, sellerRating: 4, status: 'active' },
+];
 
 export default function SearchPage() {
-  const { stats: globalStats } = useWatchData();
-  const [records, setRecords] = useState<WatchRecord[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [totalCount, setTotalCount] = useState(0);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(0);
-
-  // Filters
   const [query, setQuery] = useState('');
-  const [selectedBrands, setSelectedBrands] = useState<Set<string>>(new Set());
-  const [selectedDials, setSelectedDials] = useState<Set<string>>(new Set());
-  const [selectedConditions, setSelectedConditions] = useState<Set<string>>(new Set());
-  const [selectedVerdicts, setSelectedVerdicts] = useState<Set<string>>(new Set());
-  const [priceMin, setPriceMin] = useState('');
-  const [priceMax, setPriceMax] = useState('');
-  const [yearMin, setYearMin] = useState('');
-  const [yearMax, setYearMax] = useState('');
-  const [sortBy, setSortBy] = useState<SortField>('price');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
-  const [showFilters, setShowFilters] = useState(true);
+  const [brandFilter, setBrandFilter] = useState('All');
+  const [conditionFilter, setConditionFilter] = useState('All');
+  const [currencyFilter, setCurrencyFilter] = useState('All');
+  const [confMin, setConfMin] = useState(0);
+  const [records, setRecords] = useState<WatchRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [total, setTotal] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  const [selectedRecord, setSelectedRecord] = useState<WatchRecord | null>(null);
+  const pageSize = 50;
 
-  // Debounced search — avoid refetching on every keystroke
-  const [debouncedQuery, setDebouncedQuery] = useState('');
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  useEffect(() => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedQuery(query), 500);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [query]);
-
-  // Reset page when filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [debouncedQuery, selectedBrands, selectedDials, selectedConditions, selectedVerdicts, priceMin, priceMax, yearMin, yearMax]);
-
-  const fetchResults = useCallback(async (page: number) => {
+  const fetchRecords = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
+      if (!SUPABASE_URL || !SUPABASE_KEY) {
+        // Demo mode
+        let filtered = demoRecords;
+        if (query) filtered = filtered.filter(r => r.reference.toLowerCase().includes(query.toLowerCase()) || r.brand.toLowerCase().includes(query.toLowerCase()));
+        if (brandFilter !== 'All') filtered = filtered.filter(r => r.brand === brandFilter);
+        if (conditionFilter !== 'All') filtered = filtered.filter(r => r.condition === conditionFilter);
+        if (currencyFilter !== 'All') filtered = filtered.filter(r => r.originalCurrency === currencyFilter);
+        filtered = filtered.filter(r => (r.confidence ?? 0) >= confMin);
+        setRecords(filtered);
+        setTotal(filtered.length);
+        return;
+      }
+
       const params = new URLSearchParams();
-      params.set('limit', String(PAGE_SIZE));
-      params.set('page', String(page));
-      params.set('order', sortBy === 'price' ? 'price_usd' : sortBy === 'confidence' ? 'confidence' : sortBy === 'year' ? 'year' : 'reference');
-      params.set('ascending', sortDir === 'asc' ? 'true' : 'false');
+      params.set('select', '*');
+      params.set('limit', String(pageSize));
+      params.set('offset', String(page * pageSize));
+      if (query) params.set('reference', `ilike.*${query}*`);
+      if (brandFilter !== 'All') params.set('brand', `eq.${brandFilter}`);
+      if (conditionFilter !== 'All') params.set('condition', `eq.${conditionFilter}`);
 
-      if (debouncedQuery.trim()) {
-        params.set('search', debouncedQuery.trim());
-      }
-      if (selectedBrands.size === 1) {
-        params.set('brand', Array.from(selectedBrands)[0]);
-      }
-      if (selectedVerdicts.size === 1) {
-        params.set('verdict', Array.from(selectedVerdicts)[0]);
-      }
-      if (selectedDials.size === 1) {
-        params.set('dial_color', Array.from(selectedDials)[0]);
-      }
-
-      const res = await fetch(`/api/watch-data?${params.toString()}`);
-      const json = await res.json();
-      if (json.data) {
-        const transformed: WatchRecord[] = (json.data as SupabaseRecord[]).map(transformRecord);
-        setRecords(transformed);
-        setTotalCount(json.total || transformed.length);
-        setTotalPages(json.pages || Math.ceil((json.total || transformed.length) / PAGE_SIZE));
-      }
-    } catch (e) {
-      console.error('[SearchPage] fetch error:', e);
+      const url = `${SUPABASE_URL}/rest/v1/watch_records?${params.toString()}`;
+      const res = await fetch(url, {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      setRecords(data || []);
+      setTotal(Number(res.headers.get('content-range')?.split('/')[1] || data?.length || 0));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch records');
+      setRecords(demoRecords);
+      setTotal(demoRecords.length);
     } finally {
       setLoading(false);
     }
-  }, [debouncedQuery, selectedBrands, selectedVerdicts, selectedDials, sortBy, sortDir]);
+  }, [query, brandFilter, conditionFilter, currencyFilter, confMin, page]);
 
   useEffect(() => {
-    fetchResults(currentPage);
-  }, [fetchResults, currentPage]);
+    const timer = setTimeout(() => {
+      fetchRecords();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query, brandFilter, conditionFilter, currencyFilter, confMin, page, fetchRecords]);
 
-  // Client-side filtering for condition, price range, year range (not sent to API)
-  const filtered = useMemo(() => {
-    let result = records;
-
-    // Client-side text search on local data too (API already filters server-side)
-    if (selectedBrands.size > 1) {
-      result = result.filter(r => selectedBrands.has(r.brand));
-    }
-    if (selectedDials.size > 1) {
-      result = result.filter(r => selectedDials.has(r.dialColor));
-    }
-    if (selectedConditions.size > 0) {
-      result = result.filter(r => selectedConditions.has(r.condition));
-    }
-    if (selectedVerdicts.size > 1) {
-      result = result.filter(r => {
-        let verdict: string;
-        if (r.isResidue || r.confidence < 35) verdict = 'RECYCLE';
-        else if (r.confidence >= 90 && !r.failureFlags?.length) verdict = 'APPROVED';
-        else verdict = 'HUMAN';
-        return selectedVerdicts.has(verdict);
-      });
-    }
-
-    const pMin = parseFloat(priceMin);
-    const pMax = parseFloat(priceMax);
-    if (!isNaN(pMin)) result = result.filter(r => r.price >= pMin);
-    if (!isNaN(pMax)) result = result.filter(r => r.price <= pMax);
-
-    const yMin = parseInt(yearMin);
-    const yMax = parseInt(yearMax);
-    if (!isNaN(yMin)) result = result.filter(r => (r.year ?? 0) >= yMin);
-    if (!isNaN(yMax)) result = result.filter(r => (r.year ?? 0) <= yMax);
-
-    return result;
-  }, [records, selectedBrands, selectedDials, selectedConditions, selectedVerdicts, priceMin, priceMax, yearMin, yearMax]);
-
-  const toggleSet = (set: Set<string>, value: string, setter: (s: Set<string>) => void) => {
-    const next = new Set(set);
-    if (next.has(value)) next.delete(value); else next.add(value);
-    setter(next);
-  };
-
-  const clearAll = () => {
-    setQuery('');
-    setSelectedBrands(new Set());
-    setSelectedDials(new Set());
-    setSelectedConditions(new Set());
-    setSelectedVerdicts(new Set());
-    setPriceMin(''); setPriceMax('');
-    setYearMin(''); setYearMax('');
-    setCurrentPage(1);
-  };
-
-  const activeFilterCount = selectedBrands.size + selectedDials.size + selectedConditions.size + selectedVerdicts.size +
-    (priceMin ? 1 : 0) + (priceMax ? 1 : 0) + (yearMin ? 1 : 0) + (yearMax ? 1 : 0);
-
-  const formatPrice = (p: number) => p >= 1000000 ? `$${(p/1000000).toFixed(2)}M` : p >= 1000 ? `$${(p/1000).toFixed(0)}K` : `$${p}`;
-
-  const goToPage = (page: number) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
-  };
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
-    <Layout totalProcessed={globalStats.totalProcessed} normalizedCount={globalStats.normalizedCount} residueCount={globalStats.residueCount}>
-      <TabNav totalProcessed={globalStats.totalProcessed} />
-      <div className="max-w-7xl mx-auto px-5 py-6">
+    <Layout>
+      <div className="p-5 max-w-[1600px] mx-auto">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-white">Search Database</h1>
+          <p className="text-sm text-gray-400 mt-1">Search and filter watch records by reference, brand, or keywords</p>
+        </div>
+
         {/* Search Bar */}
         <div className="flex gap-3 mb-4">
-          <div className="relative flex-1">
-            <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
+          <div className="flex-1 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
             <input
               type="text"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by reference, brand, dial color, or message text…"
-              className="w-full pl-10 pr-4 py-3 bg-bg-card border border-border-default rounded-lg text-sm text-text-primary placeholder-text-muted focus:border-gold-primary focus:outline-none transition-colors"
+              onChange={(e) => { setQuery(e.target.value); setPage(0); }}
+              placeholder="Search reference, brand, or keywords..."
+              className="w-full pl-10 pr-4 py-2.5 bg-gray-900 border border-gray-800 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-amber-400/50 transition-colors"
             />
             {query && (
-              <button onClick={() => setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary">
+              <button onClick={() => { setQuery(''); setPage(0); }} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white">
                 <X size={16} />
               </button>
             )}
           </div>
           <button
             onClick={() => setShowFilters(!showFilters)}
-            className={`flex items-center gap-2 px-4 py-3 rounded-lg text-xs font-semibold uppercase tracking-wider transition-colors ${
-              activeFilterCount > 0 ? 'bg-gold-primary text-black' : 'bg-bg-card border border-border-default text-text-secondary hover:border-gold-primary'
-            }`}
+            className={`px-4 py-2.5 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 border ${showFilters ? 'bg-amber-500 text-black border-amber-500' : 'bg-gray-800 text-white border-gray-700 hover:bg-gray-700'}`}
           >
-            <Filter size={14} />
-            Filters
-            {activeFilterCount > 0 && <span className="bg-black/20 px-1.5 py-0.5 rounded text-[10px]">{activeFilterCount}</span>}
+            <Filter size={16} /> Filters
           </button>
-          {(activeFilterCount > 0 || query) && (
-            <button onClick={clearAll} className="px-3 py-3 rounded-lg text-xs font-semibold text-danger hover:bg-danger/10 transition-colors">
-              Clear All
-            </button>
-          )}
         </div>
 
-        {/* Filters Panel */}
+        {/* Filter Row */}
         {showFilters && (
-          <div className="mb-4 p-4 bg-bg-card border border-border-default rounded-lg space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {/* Brand */}
-              <div>
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block mb-2">Brand</label>
-                <div className="flex flex-wrap gap-1">
-                  {BRANDS.map(b => (
-                    <button
-                      key={b}
-                      onClick={() => toggleSet(selectedBrands, b, setSelectedBrands)}
-                      className={`px-2 py-1 text-[11px] rounded border transition-colors ${
-                        selectedBrands.has(b) ? 'bg-gold-primary text-black border-gold-primary' : 'bg-bg-elevated text-text-secondary border-border-default hover:border-gold-primary/50'
-                      }`}
-                    >{b}</button>
-                  ))}
-                </div>
-              </div>
-              {/* Dial Color */}
-              <div>
-                <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block mb-2">Dial Color</label>
-                <div className="flex flex-wrap gap-1">
-                  {DIAL_COLORS.map(d => (
-                    <button
-                      key={d}
-                      onClick={() => toggleSet(selectedDials, d, setSelectedDials)}
-                      className={`px-2 py-1 text-[11px] rounded border transition-colors ${
-                        selectedDials.has(d) ? 'bg-gold-primary text-black border-gold-primary' : 'bg-bg-elevated text-text-secondary border-border-default hover:border-gold-primary/50'
-                      }`}
-                    >{d}</button>
-                  ))}
-                </div>
-              </div>
-              {/* Condition + Verdict */}
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block mb-2">Condition</label>
-                  <div className="flex flex-wrap gap-1">
-                    {CONDITIONS.map(c => (
-                      <button
-                        key={c}
-                        onClick={() => toggleSet(selectedConditions, c, setSelectedConditions)}
-                        className={`px-2 py-1 text-[11px] rounded border transition-colors ${
-                          selectedConditions.has(c) ? 'bg-gold-primary text-black border-gold-primary' : 'bg-bg-elevated text-text-secondary border-border-default hover:border-gold-primary/50'
-                        }`}
-                      >{c}</button>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block mb-2">Verdict</label>
-                  <div className="flex flex-wrap gap-1">
-                    {VERDICTS.map(v => (
-                      <button
-                        key={v}
-                        onClick={() => toggleSet(selectedVerdicts, v, setSelectedVerdicts)}
-                        className={`px-2 py-1 text-[11px] rounded border transition-colors ${
-                          selectedVerdicts.has(v) ? 'bg-gold-primary text-black border-gold-primary' : 'bg-bg-elevated text-text-secondary border-border-default hover:border-gold-primary/50'
-                        }`}
-                      >{v}</button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              {/* Price + Year */}
-              <div className="space-y-3">
-                <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block mb-2">Price (USD)</label>
-                  <div className="flex gap-2 items-center">
-                    <input type="number" value={priceMin} onChange={e => setPriceMin(e.target.value)} placeholder="Min" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
-                    <span className="text-text-muted text-[11px]">—</span>
-                    <input type="number" value={priceMax} onChange={e => setPriceMax(e.target.value)} placeholder="Max" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block mb-2">Year</label>
-                  <div className="flex gap-2 items-center">
-                    <input type="number" value={yearMin} onChange={e => setYearMin(e.target.value)} placeholder="Min" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
-                    <span className="text-text-muted text-[11px]">—</span>
-                    <input type="number" value={yearMax} onChange={e => setYearMax(e.target.value)} placeholder="Max" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
-                  </div>
-                </div>
-              </div>
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+          >
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 block">Brand</label>
+              <select value={brandFilter} onChange={(e) => { setBrandFilter(e.target.value); setPage(0); }}
+                className="w-full px-3 py-2 bg-gray-950 border border-gray-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-400/50">
+                {BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
+              </select>
             </div>
-            {/* Sort */}
-            <div className="flex items-center gap-3 pt-2 border-t border-border-default">
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">Sort by</span>
-              {(['price', 'confidence', 'year', 'reference'] as SortField[]).map(field => (
-                <button
-                  key={field}
-                  onClick={() => { setSortBy(field); setCurrentPage(1); }}
-                  className={`px-2 py-1 text-[11px] rounded capitalize transition-colors ${sortBy === field ? 'text-gold-primary font-semibold' : 'text-text-muted hover:text-text-secondary'}`}
-                >
-                  {field}
-                  {sortBy === field && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
-                </button>
-              ))}
-              <button onClick={() => { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); setCurrentPage(1); }} className="ml-auto text-[11px] text-text-muted hover:text-text-secondary">
-                {sortDir === 'asc' ? 'Ascending' : 'Descending'}
-              </button>
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 block">Condition</label>
+              <select value={conditionFilter} onChange={(e) => { setConditionFilter(e.target.value); setPage(0); }}
+                className="w-full px-3 py-2 bg-gray-950 border border-gray-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-400/50">
+                {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 block">Currency</label>
+              <select value={currencyFilter} onChange={(e) => { setCurrencyFilter(e.target.value); setPage(0); }}
+                className="w-full px-3 py-2 bg-gray-950 border border-gray-800 rounded-lg text-white text-sm focus:outline-none focus:border-amber-400/50">
+                {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5 block">
+                Min Confidence: {confMin}%
+              </label>
+              <input
+                type="range" min={0} max={100} value={confMin}
+                onChange={(e) => { setConfMin(Number(e.target.value)); setPage(0); }}
+                className="w-full accent-amber-400"
+              />
+            </div>
+          </motion.div>
+        )}
+
+        {/* Stats Bar */}
+        <div className="flex items-center justify-between mb-4 text-sm">
+          <span className="text-gray-400">
+            Showing <span className="text-white font-mono">{records.length}</span> of <span className="text-white font-mono">{total}</span> results
+          </span>
+          {loading && <Loader2 className="w-4 h-4 text-amber-400 animate-spin" />}
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="mb-4 p-3 bg-red-400/10 border border-red-400/30 rounded-lg flex items-center gap-2 text-red-400 text-sm">
+            <AlertCircle size={16} /> {error}
           </div>
         )}
 
-        {/* Results count + Verdict Summary */}
-        <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
-          <span className="text-xs text-text-muted">
-            {loading ? 'Searching…' : `${filtered.length.toLocaleString()} results on this page`}
-            {!loading && totalCount > 0 && ` · ${totalCount.toLocaleString()} total records`}
-            {!loading && totalPages > 1 && ` · Page ${currentPage} of ${totalPages}`}
-          </span>
-          {!loading && filtered.length > 0 && (
-            <div className="flex gap-2">
-              {(['APPROVED', 'HUMAN', 'RECYCLE'] as const).map(v => {
-                const count = filtered.filter(r => {
-                  if (r.isResidue || r.confidence < 35) return v === 'RECYCLE';
-                  if (r.confidence >= 90 && !r.failureFlags?.length) return v === 'APPROVED';
-                  return v === 'HUMAN';
-                }).length;
-                const colors = { APPROVED: 'text-success border-success/30 bg-success/10', HUMAN: 'text-warning border-warning/30 bg-warning/10', RECYCLE: 'text-danger border-danger/30 bg-danger/10' };
-                return (
-                  <button
-                    key={v}
-                    onClick={() => {
-                      if (selectedVerdicts.has(v)) {
-                        const next = new Set(selectedVerdicts); next.delete(v); setSelectedVerdicts(next);
-                      } else {
-                        setSelectedVerdicts(new Set([v]));
-                      }
-                    }}
-                    className={`px-2 py-1 text-[10px] font-semibold uppercase rounded border transition-all ${colors[v]} ${selectedVerdicts.has(v) ? 'ring-1 ring-current' : 'opacity-60 hover:opacity-100'}`}
-                  >
-                    {v} <span className="font-mono">{count.toLocaleString()}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-
-        {/* Results Table */}
-        {!loading && filtered.length > 0 && (
-          <div className="overflow-x-auto bg-bg-card border border-border-default rounded-lg">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border-default text-[10px] uppercase tracking-wider text-text-muted">
-                  <th className="text-left px-3 py-2 font-semibold w-12">Image</th>
-                  <th className="text-left px-3 py-2 font-semibold">Reference</th>
-                  <th className="text-left px-3 py-2 font-semibold">Brand</th>
-                  <th className="text-left px-3 py-2 font-semibold">Dial</th>
-                  <th className="text-right px-3 py-2 font-semibold">Price</th>
-                  <th className="text-center px-3 py-2 font-semibold">Year</th>
-                  <th className="text-center px-3 py-2 font-semibold">Conf</th>
-                  <th className="text-center px-3 py-2 font-semibold">Verdict</th>
-                  <th className="text-left px-3 py-2 font-semibold hidden lg:table-cell">Message</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => {
-                  let verdict: string;
-                  if (r.isResidue || r.confidence < 35) verdict = 'RECYCLE';
-                  else if (r.confidence >= 90 && !r.failureFlags?.length) verdict = 'APPROVED';
-                  else verdict = 'HUMAN';
-                  const verdictColor = verdict === 'APPROVED' ? 'text-success' : verdict === 'HUMAN' ? 'text-warning' : 'text-danger';
-                  return (
-                    <tr key={r.id} className="border-b border-border-default/50 hover:bg-bg-elevated/50 transition-colors">
-                      <td className="px-3 py-1">
-                        <div className="w-8 h-8 rounded bg-bg-elevated overflow-hidden flex items-center justify-center border border-border-default/30">
-                          {r.imageUrl ? (
-                            <img src={r.imageUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
-                          ) : (
-                            <span className="text-text-muted text-[10px]">⌚</span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs text-gold-primary font-semibold">{r.reference}</td>
-                      <td className="px-3 py-2 text-xs text-text-secondary">{r.brand}</td>
-                      <td className="px-3 py-2 text-xs text-text-secondary">{r.dialColor}</td>
-                      <td className="px-3 py-2 text-right font-mono text-xs text-text-primary">{formatPrice(r.price)}</td>
-                      <td className="px-3 py-2 text-center text-xs text-text-muted">{r.year ?? '—'}</td>
-                      <td className="px-3 py-2 text-center text-xs">
-                        <span className={r.confidence >= 90 ? 'text-success' : r.confidence >= 80 ? 'text-warning' : 'text-danger'}>
-                          {r.confidence}%
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-center text-xs">
-                        <span className={verdictColor}>{verdict}</span>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-text-muted hidden lg:table-cell max-w-xs truncate">{r.rawMessage}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        {/* Results Grid */}
+        {records.length === 0 && !loading ? (
+          <div className="text-center py-20 text-gray-500">
+            <Search className="w-12 h-12 mx-auto mb-4 text-gray-600" />
+            <p className="text-lg">No records found</p>
+            <p className="text-sm mt-1">Try adjusting your search or filters</p>
+          </div>
+        ) : (
+          <div className="card-grid mb-6">
+            {records.map((record, i) => (
+              <WatchCard key={record.id || i} record={record} index={i} onSelect={setSelectedRecord} />
+            ))}
           </div>
         )}
 
         {/* Pagination */}
-        {!loading && totalPages > 1 && (
-          <div className="flex items-center justify-center gap-2 mt-4">
+        {total > pageSize && (
+          <div className="flex items-center justify-center gap-3">
             <button
-              onClick={() => goToPage(currentPage - 1)}
-              disabled={currentPage <= 1}
-              className="flex items-center gap-1 px-3 py-2 text-xs rounded-md bg-bg-card border border-border-default text-text-secondary hover:border-gold-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              onClick={() => setPage(Math.max(0, page - 1))}
+              disabled={page === 0}
+              className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white disabled:opacity-30 hover:bg-gray-700 transition-colors flex items-center gap-1 text-sm"
             >
-              <ChevronLeft size={14} /> Previous
+              <ChevronLeft size={16} /> Prev
             </button>
-            {/* Page numbers */}
-            <div className="flex gap-1">
-              {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
-                let pageNum: number;
-                if (totalPages <= 7) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 4) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 3) {
-                  pageNum = totalPages - 6 + i;
-                } else {
-                  pageNum = currentPage - 3 + i;
-                }
-                return (
-                  <button
-                    key={pageNum}
-                    onClick={() => goToPage(pageNum)}
-                    className={`px-3 py-2 text-xs rounded-md transition-colors ${
-                      currentPage === pageNum
-                        ? 'bg-gold-primary text-black font-semibold'
-                        : 'bg-bg-card border border-border-default text-text-secondary hover:border-gold-primary'
-                    }`}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-            </div>
+            <span className="text-sm text-gray-400 font-mono">
+              Page {page + 1} / {totalPages}
+            </span>
             <button
-              onClick={() => goToPage(currentPage + 1)}
-              disabled={currentPage >= totalPages}
-              className="flex items-center gap-1 px-3 py-2 text-xs rounded-md bg-bg-card border border-border-default text-text-secondary hover:border-gold-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              onClick={() => setPage(Math.min(totalPages - 1, page + 1))}
+              disabled={page >= totalPages - 1}
+              className="px-3 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white disabled:opacity-30 hover:bg-gray-700 transition-colors flex items-center gap-1 text-sm"
             >
-              Next <ChevronRight size={14} />
+              Next <ChevronRight size={16} />
             </button>
           </div>
         )}
 
-        {/* No results */}
-        {!loading && filtered.length === 0 && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Search size={48} className="text-text-muted/30 mb-4" />
-            <p className="text-sm text-text-muted">No watches match your filters</p>
-            <button onClick={clearAll} className="mt-4 px-4 py-2 text-xs text-gold-primary hover:underline">Clear all filters</button>
-          </div>
-        )}
-
-        {/* Loading */}
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-20">
-            <div className="w-10 h-10 border-2 border-gold-primary/30 border-t-gold-primary rounded-full animate-spin mb-4" />
-            <p className="text-xs text-text-muted">Searching {totalCount > 0 ? `${totalCount.toLocaleString()} records` : 'database'}…</p>
+        {/* Record Detail Modal */}
+        {selectedRecord && (
+          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setSelectedRecord(null)}>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-lg w-full max-h-[80vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold font-mono text-white">{selectedRecord.reference}</h2>
+                <button onClick={() => setSelectedRecord(null)} className="text-gray-500 hover:text-white"><X size={20} /></button>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-gray-400">Brand</span><span className="text-white">{selectedRecord.brand}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Family</span><span className="text-white">{selectedRecord.family}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Price</span><span className="text-amber-400 font-mono">{formatPrice(selectedRecord.price)}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Condition</span><span className="text-white">{selectedRecord.condition}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Year</span><span className="text-white">{selectedRecord.year}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Dial</span><span className="text-white">{selectedRecord.dialColor}</span></div>
+                <div className="flex justify-between"><span className="text-gray-400">Confidence</span><span className="font-mono" style={{ color: confidenceColor(selectedRecord.confidence ?? 0) }}>{selectedRecord.confidence}%</span></div>
+              </div>
+            </motion.div>
           </div>
         )}
       </div>
