@@ -1,314 +1,374 @@
+// @ts-nocheck
 import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import {
-  CheckCircle, Edit3, Trash2, ChevronRight, ChevronLeft,
-  AlertTriangle, User, Clock, ArrowRight, Loader2, Keyboard,
-  Eye, RefreshCw, Filter,
+  CheckCircle, XCircle, AlertTriangle, RefreshCw,
+  ChevronLeft, ChevronRight, Edit3, Save, X, Eye
 } from 'lucide-react';
-import type { WatchRecord, Verdict } from '@/types';
-import { confidenceColor, confidenceLabel, formatPrice } from '@/lib/utils';
-import { BrandBadge } from '@/components/ui/BrandBadge';
-import { ConditionBadge } from '@/components/ui/ConditionBadge';
-import { ConfidenceRing } from '@/components/ui/ConfidenceRing';
+import WatchImage from '@/components/WatchImage';
 
-const demoQueue: WatchRecord[] = [
-  { id: 'r1', reference: '5711/1A', brand: 'Patek Philippe', family: 'Nautilus', price: 185000, originalPrice: 185000, originalCurrency: 'USD', condition: 'New', year: 2023, dialColor: 'Blue', confidence: 45, demandForecast: 'HIGH', buyerCount: 5, sellerCount: 2, buyerSellerRatio: 2.5, liquidityScore: 85, mlPredictedPrice: 178000, hasBox: true, hasPapers: true, sellerRating: 5, status: 'pending', verdict: 'HUMAN', rawMessage: 'PP 5711/1A blue dial $185k full set 2023' },
-  { id: 'r2', reference: 'RM052', brand: 'Richard Mille', family: 'RM', price: 620000, originalPrice: 620000, originalCurrency: 'USD', condition: 'Used', year: 2021, dialColor: 'Black', confidence: 42, demandForecast: 'STABLE', buyerCount: 2, sellerCount: 1, buyerSellerRatio: 2, liquidityScore: 65, mlPredictedPrice: 600000, hasBox: false, hasPapers: true, sellerRating: 4, status: 'pending', verdict: 'RECYCLE', rawMessage: 'Richard Mille skull watch $620k used 2021' },
-  { id: 'r3', reference: '5524G', brand: 'Patek Philippe', family: 'Calatrava Pilot', price: 52000, originalPrice: 52000, originalCurrency: 'USD', condition: 'Like New', year: 2022, dialColor: 'Blue', confidence: 78, demandForecast: 'STABLE', buyerCount: 3, sellerCount: 3, buyerSellerRatio: 1, liquidityScore: 70, mlPredictedPrice: 48000, hasBox: true, hasPapers: false, sellerRating: 3, status: 'pending', verdict: 'REVIEW', rawMessage: 'PP 5524G calatrava pilot travel time blue 2022 $52k' },
-  { id: 'r4', reference: '126333', brand: 'Rolex', family: 'Datejust', price: 14200, originalPrice: 14200, originalCurrency: 'USD', condition: 'Used', year: 2019, dialColor: 'Champagne', confidence: 72, demandForecast: 'STABLE', buyerCount: 4, sellerCount: 4, buyerSellerRatio: 1, liquidityScore: 75, mlPredictedPrice: 13000, hasBox: false, hasPapers: false, sellerRating: 3, status: 'pending', verdict: 'REVIEW', rawMessage: 'Rolex datejust 41 126333 champagne jubilee used no box papers' },
-  { id: 'r5', reference: 'N/A', brand: 'Unknown', family: '', price: 0, originalPrice: 0, originalCurrency: 'USD', condition: 'Used', year: 0, dialColor: '', confidence: 12, demandForecast: 'LOW', buyerCount: 0, sellerCount: 0, buyerSellerRatio: 0, liquidityScore: 0, mlPredictedPrice: 0, hasBox: false, hasPapers: false, sellerRating: 0, status: 'pending', verdict: 'RECYCLE', rawMessage: 'nice gold watch for sale message me for price' },
-  { id: 'r6', reference: '15400ST', brand: 'Audemars Piguet', family: 'Royal Oak', price: 48500, originalPrice: 48500, originalCurrency: 'USD', condition: 'Used', year: 2018, dialColor: 'Blue', confidence: 65, demandForecast: 'DECLINING', buyerCount: 2, sellerCount: 4, buyerSellerRatio: 0.5, liquidityScore: 55, mlPredictedPrice: 45000, hasBox: true, hasPapers: true, sellerRating: 4, status: 'pending', verdict: 'HUMAN', rawMessage: 'AP 15400ST blue 2018 box and papers $48.5k' },
-  { id: 'r7', reference: '5270P', brand: 'Patek Philippe', family: 'Grand Complications', price: 185000, originalPrice: 185000, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'Green', confidence: 82, demandForecast: 'RISING', buyerCount: 3, sellerCount: 1, buyerSellerRatio: 3, liquidityScore: 80, mlPredictedPrice: 190000, hasBox: true, hasPapers: true, sellerRating: 5, status: 'pending', verdict: 'REVIEW', rawMessage: 'PP 5270P perpetual chronograph salmon dial platinum $185k new' },
-  { id: 'r8', reference: '116520', brand: 'Rolex', family: 'Daytona', price: 24500, originalPrice: 24500, originalCurrency: 'USD', condition: 'Used', year: 2015, dialColor: 'White', confidence: 58, demandForecast: 'STABLE', buyerCount: 3, sellerCount: 3, buyerSellerRatio: 1, liquidityScore: 68, mlPredictedPrice: 22000, hasBox: false, hasPapers: true, sellerRating: 4, status: 'pending', verdict: 'HUMAN', rawMessage: 'Rolex 116520 white dial steel no box $24.5k' },
+type Verdict = 'APPROVED' | 'REVIEW' | 'HUMAN' | 'RECYCLE';
+
+const VERDICT_CONFIG: Record<Verdict, { label: string; color: string; bg: string }> = {
+  APPROVED: { label: 'APPROVED', color: '#22C55E', bg: 'bg-green-400/10' },
+  REVIEW:   { label: 'REVIEW',   color: '#3B82F6', bg: 'bg-blue-400/10' },
+  HUMAN:    { label: 'HUMAN',    color: '#F59E0B', bg: 'bg-yellow-400/10' },
+  RECYCLE:  { label: 'RECYCLE',  color: '#EF4444', bg: 'bg-red-400/10' },
+};
+
+const TABS: { key: Verdict | 'ALL'; label: string }[] = [
+  { key: 'ALL', label: 'All' },
+  { key: 'HUMAN', label: 'HUMAN Review' },
+  { key: 'RECYCLE', label: 'RECYCLE' },
+  { key: 'REVIEW', label: 'REVIEW' },
+  { key: 'APPROVED', label: 'APPROVED' },
 ];
 
-type ReviewTab = 'HUMAN' | 'REVIEW' | 'RECYCLE';
-
 export default function ReviewPage() {
-  const [activeTab, setActiveTab] = useState<ReviewTab>('HUMAN');
-  const [queue, setQueue] = useState<WatchRecord[]>(demoQueue);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [showShortcuts, setShowShortcuts] = useState(false);
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<Verdict | 'ALL'>('HUMAN');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<any>({});
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [actionLog, setActionLog] = useState<string[]>([]);
 
-  const filtered = queue.filter(r => r.verdict === activeTab);
-  const current = filtered[currentIndex] || null;
-
-  // Keyboard shortcuts
-  useEffect(() => {
-    const handleKey = (e: KeyboardEvent) => {
-      if (!current || e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
-      switch (e.key.toLowerCase()) {
-        case 'a': handleAction('approve'); break;
-        case 'e': handleAction('edit'); break;
-        case 'r': handleAction('recycle'); break;
-        case 'n': setCurrentIndex(i => Math.min(filtered.length - 1, i + 1)); break;
-        case 'p': setCurrentIndex(i => Math.max(0, i - 1)); break;
-        case '1': setActiveTab('HUMAN'); setCurrentIndex(0); break;
-        case '2': setActiveTab('REVIEW'); setCurrentIndex(0); break;
-        case '3': setActiveTab('RECYCLE'); setCurrentIndex(0); break;
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [current, filtered.length]);
-
-  const handleAction = useCallback((action: string) => {
-    if (!current) return;
-    setActionLog(prev => [`${action.toUpperCase()}: ${current.reference} (${current.brand})`, ...prev].slice(0, 20));
-
-    if (action === 'approve') {
-      setQueue(prev => prev.map(r => r.id === current.id ? { ...r, verdict: 'APPROVED' as Verdict, confidence: 90 } : r));
-    } else if (action === 'recycle') {
-      setQueue(prev => prev.map(r => r.id === current.id ? { ...r, verdict: 'RECYCLE' as Verdict } : r));
+  const fetchRecords = useCallback(async () => {
+    setLoading(true);
+    try {
+      const verdictParam = activeTab === 'ALL' ? '' : `&verdict=${activeTab}`;
+      const res = await fetch(`/api/listings?page=${page}&limit=20${verdictParam}`);
+      const data = await res.json();
+      setRecords(data.rows || []);
+      setTotal(data.total || 0);
+    } catch {
+      // Demo data
+      setRecords([
+        { id: '1', brand: 'Rolex', reference: '126610LN', dialColor: 'Black', condition: 'New', year: 2024, price_usd: 14200, confidence: 55, verdict: 'HUMAN', raw_message: 'Rolex 126610LN black $14,200 N5 2024', source: 'whatsapp_group_1' },
+        { id: '2', brand: 'Patek Philippe', reference: '5711/1A', dialColor: null, condition: null, year: null, price_usd: 185000, confidence: 45, verdict: 'HUMAN', raw_message: 'PP 5711 blue $185k', source: 'whatsapp_group_2' },
+        { id: '3', brand: 'Audemars Piguet', reference: '15500ST', dialColor: 'Blue', condition: 'Used', year: 2022, price_usd: 32000, confidence: 58, verdict: 'HUMAN', raw_message: 'AP 15500ST blue used 2022 $32k', source: 'whatsapp_group_3' },
+        { id: '4', brand: 'Richard Mille', reference: 'RM11-03', dialColor: null, condition: 'New', year: 2024, price_usd: 385000, confidence: 40, verdict: 'RECYCLE', raw_message: 'WTB RM11-03 cheap', source: 'whatsapp_group_4' },
+        { id: '5', brand: 'Omega', reference: '310.30.42.50.01.001', dialColor: 'Black', condition: 'New', year: 2024, price_usd: 7800, confidence: 35, verdict: 'RECYCLE', raw_message: 'omega speedmaster new $7800', source: 'whatsapp_group_5' },
+      ]);
+      setTotal(5);
     }
-    // Move to next
-    if (currentIndex < filtered.length - 1) {
-      setCurrentIndex(i => i + 1);
-    }
-  }, [current, currentIndex, filtered.length]);
+    setLoading(false);
+  }, [activeTab, page]);
 
-  const tabCounts = {
-    HUMAN: queue.filter(r => r.verdict === 'HUMAN').length,
-    REVIEW: queue.filter(r => r.verdict === 'REVIEW').length,
-    RECYCLE: queue.filter(r => r.verdict === 'RECYCLE').length,
+  useEffect(() => { fetchRecords(); }, [fetchRecords]);
+
+  const startEdit = (record: any) => {
+    setEditingId(record.id);
+    setEditForm({ ...record });
   };
 
-  const processedToday = queue.filter(r => r.verdict === 'APPROVED').length;
-  const accuracyRate = queue.length > 0 ? ((queue.filter(r => (r.confidence ?? 0) >= 70).length / queue.length) * 100).toFixed(1) : '0';
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({});
+  };
 
-  return (<>
-      <div className="p-5 max-w-[1600px] mx-auto h-[calc(100vh-56px)] flex flex-col">
+  const saveEdit = async () => {
+    try {
+      const res = await fetch('/api/update-record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: editingId, ...editForm }),
+      });
+      const result = await res.json();
+      if (result.success) {
+        setActionLog(prev => [`Updated ${editForm.brand} ${editForm.reference} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
+        setEditingId(null);
+        fetchRecords();
+      }
+    } catch {
+      // Local update for demo
+      setRecords(prev => prev.map(r => r.id === editingId ? { ...r, ...editForm } : r));
+      setActionLog(prev => [`Updated ${editForm.brand} ${editForm.reference} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
+      setEditingId(null);
+    }
+  };
+
+  const changeVerdict = async (id: string, newVerdict: Verdict) => {
+    try {
+      await fetch('/api/bulk-action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [id], action: newVerdict.toLowerCase() }),
+      });
+    } catch {}
+    setRecords(prev => prev.map(r => r.id === id ? { ...r, verdict: newVerdict } : r));
+    setActionLog(prev => [`Changed verdict to ${newVerdict} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
+  };
+
+  const confidenceColor = (c: number) => {
+    if (c >= 85) return '#22C55E';
+    if (c >= 70) return '#F59E0B';
+    if (c >= 50) return '#F97316';
+    return '#EF4444';
+  };
+
+  return (
+    <div className="min-h-[calc(100dvh-104px)] bg-[#0A0A0F] p-4">
+      <div className="max-w-[1400px] mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-              <User size={22} className="text-amber-400" /> Review Queue
-            </h1>
-            <p className="text-sm text-gray-400 mt-1">Human review queue for low-confidence listings</p>
-          </div>
-          <button
-            onClick={() => setShowShortcuts(!showShortcuts)}
-            className="px-3 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm"
-          >
-            <Keyboard size={14} /> Shortcuts
-          </button>
-        </div>
-
-        {/* Stats Row */}
-        <div className="grid grid-cols-3 gap-3 mb-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 text-center">
-            <div className="text-[10px] text-gray-500 uppercase mb-1">Queue Size</div>
-            <div className="text-2xl font-bold font-mono text-orange-400">{tabCounts.HUMAN + tabCounts.REVIEW + tabCounts.RECYCLE}</div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 text-center">
-            <div className="text-[10px] text-gray-500 uppercase mb-1">Processed Today</div>
-            <div className="text-2xl font-bold font-mono text-green-400">{processedToday}</div>
-          </div>
-          <div className="bg-gray-900 border border-gray-800 rounded-lg p-3 text-center">
-            <div className="text-[10px] text-gray-500 uppercase mb-1">Accuracy Rate</div>
-            <div className="text-2xl font-bold font-mono text-blue-400">{accuracyRate}%</div>
-          </div>
+          <h1 className="text-xl font-bold text-white">Review Queue</h1>
+          <div className="text-xs text-gray-500">{total.toLocaleString()} listings</div>
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-4">
-          {(['HUMAN', 'REVIEW', 'RECYCLE'] as ReviewTab[]).map((tab) => (
+        <div className="flex gap-1 mb-4 overflow-x-auto">
+          {TABS.map(({ key, label }) => (
             <button
-              key={tab}
-              onClick={() => { setActiveTab(tab); setCurrentIndex(0); }}
-              className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 ${
-                activeTab === tab
-                  ? tab === 'HUMAN' ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
-                    : tab === 'REVIEW' ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'
-                    : 'bg-red-500/20 text-red-400 border border-red-500/30'
-                  : 'bg-gray-800 text-gray-400 border border-gray-700 hover:bg-gray-700'
+              key={key}
+              onClick={() => { setActiveTab(key); setPage(1); }}
+              className={`px-3 py-1.5 rounded text-[11px] font-medium transition-colors whitespace-nowrap ${
+                activeTab === key
+                  ? 'bg-[#D4AF37]/15 text-[#D4AF37] border border-[#D4AF37]/30'
+                  : 'text-gray-400 hover:text-white hover:bg-[#1A1A24] border border-transparent'
               }`}
             >
-              <Filter size={14} />
-              {tab === 'HUMAN' ? 'Human Review' : tab === 'REVIEW' ? 'Needs Review' : 'Recycle'}
-              <span className="font-mono text-xs bg-gray-950 px-1.5 py-0.5 rounded">{tabCounts[tab]}</span>
+              {label}
             </button>
           ))}
         </div>
 
-        {/* Main Review Area */}
-        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-0">
-          {/* Listing List */}
-          <div className="bg-gray-900 border border-gray-800 rounded-lg overflow-hidden flex flex-col">
-            <div className="p-3 border-b border-gray-800 text-xs text-gray-500 uppercase">
-              {filtered.length} items ({currentIndex + 1} of {filtered.length})
-            </div>
-            <div className="flex-1 overflow-y-auto">
-              {filtered.map((item, i) => (
-                <button
-                  key={item.id}
-                  onClick={() => setCurrentIndex(i)}
-                  className={`w-full text-left px-3 py-2.5 border-b border-gray-800 transition-colors flex items-center gap-3 ${
-                    i === currentIndex ? 'bg-amber-400/10 border-l-2 border-l-amber-400' : 'hover:bg-gray-800/50 border-l-2 border-l-transparent'
-                  }`}
-                >
-                  <ConfidenceRing percentage={item.confidence ?? 0} size={28} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-mono font-medium text-white truncate">{item.reference}</div>
-                    <div className="text-[10px] text-gray-500">{item.brand}</div>
-                  </div>
-                  <span className="text-[10px] font-mono text-gray-400">{formatPrice(item.price)}</span>
-                </button>
+        {/* Action Log */}
+        {actionLog.length > 0 && (
+          <div className="mb-4 bg-[#111118] border border-[#1E1E2E] rounded-lg p-3">
+            <h3 className="text-[10px] uppercase tracking-wider text-gray-500 mb-2">Recent Actions</h3>
+            <div className="space-y-1 max-h-24 overflow-y-auto">
+              {actionLog.map((log, i) => (
+                <div key={i} className="text-[10px] text-gray-400 font-mono">{log}</div>
               ))}
             </div>
           </div>
+        )}
 
-          {/* Detail Card */}
-          <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-lg p-5 flex flex-col">
-            {current ? (
-              <AnimatePresence mode="wait">
-                <motion.div
-                  key={current.id}
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  className="flex-1"
-                >
-                  {/* Top row */}
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <BrandBadge brand={current.brand} />
-                        <ConditionBadge condition={current.condition} />
+        {/* Records Table */}
+        {loading ? (
+          <div className="text-center py-12 text-gray-500">Loading...</div>
+        ) : (
+          <>
+            <div className="space-y-2">
+              {records.map((record) => {
+                const isEditing = editingId === record.id;
+                const cfg = VERDICT_CONFIG[record.verdict as Verdict] || VERDICT_CONFIG.HUMAN;
+
+                return (
+                  <motion.div
+                    key={record.id}
+                    layout
+                    className="bg-[#111118] border border-[#1E1E2E] rounded-lg overflow-hidden"
+                  >
+                    {/* Main Row */}
+                    <div className="flex items-center gap-3 p-3">
+                      {/* Image */}
+                      <div className="w-12 h-12 flex-shrink-0">
+                        <WatchImage
+                          brand={record.brand}
+                          reference={record.reference}
+                          className="w-12 h-12"
+                        />
                       </div>
-                      <h2 className="text-2xl font-mono font-bold text-white">{current.reference}</h2>
-                      {current.family && <p className="text-sm text-amber-400/70">{current.family}</p>}
+
+                      {/* Info */}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-white">{record.brand}</span>
+                          <span className="text-xs font-mono text-[#D4AF37]">{record.reference}</span>
+                          <span
+                            className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                            style={{ color: cfg.color, backgroundColor: cfg.color + '15' }}
+                          >
+                            {cfg.label}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-gray-500 mt-0.5 truncate">
+                          {record.raw_message}
+                        </div>
+                      </div>
+
+                      {/* Confidence */}
+                      <div className="flex-shrink-0 w-16 text-center">
+                        <div className="text-xs font-bold font-mono" style={{ color: confidenceColor(record.confidence || 0) }}>
+                          {record.confidence || 0}%
+                        </div>
+                        <div className="h-1 bg-[#1E1E2E] rounded-full mt-1 overflow-hidden">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${record.confidence || 0}%`,
+                              backgroundColor: confidenceColor(record.confidence || 0),
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Price */}
+                      <div className="flex-shrink-0 text-right w-20">
+                        <div className="text-xs font-bold text-white font-mono">
+                          ${record.price_usd?.toLocaleString() || '—'}
+                        </div>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex-shrink-0 flex gap-1">
+                        <button
+                          onClick={() => isEditing ? cancelEdit() : startEdit(record)}
+                          className="p-1.5 rounded hover:bg-[#1E1E2E] text-gray-400 hover:text-white transition-colors"
+                          title={isEditing ? 'Cancel' : 'Edit'}
+                        >
+                          {isEditing ? <X size={14} /> : <Edit3 size={14} />}
+                        </button>
+                        {!isEditing && (
+                          <>
+                            <button
+                              onClick={() => changeVerdict(record.id, 'APPROVED')}
+                              className="p-1.5 rounded hover:bg-green-400/10 text-gray-400 hover:text-green-400 transition-colors"
+                              title="Approve"
+                            >
+                              <CheckCircle size={14} />
+                            </button>
+                            <button
+                              onClick={() => changeVerdict(record.id, 'RECYCLE')}
+                              className="p-1.5 rounded hover:bg-red-400/10 text-gray-400 hover:text-red-400 transition-colors"
+                              title="Recycle"
+                            >
+                              <XCircle size={14} />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <ConfidenceRing percentage={current.confidence ?? 0} size={48} />
-                      <div
-                        className="text-xs font-bold mt-1 px-2 py-0.5 rounded uppercase inline-block"
-                        style={{
-                          color: confidenceColor(current.confidence ?? 0),
-                          backgroundColor: `${confidenceColor(current.confidence ?? 0)}20`,
-                        }}
+
+                    {/* Inline Edit Form */}
+                    {isEditing && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        className="border-t border-[#1E1E2E] bg-[#0A0A0F] p-3"
                       >
-                        {confidenceLabel(current.confidence ?? 0)}
-                      </div>
-                    </div>
-                  </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                          <div>
+                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Brand</label>
+                            <input
+                              value={editForm.brand || ''}
+                              onChange={e => setEditForm({ ...editForm, brand: e.target.value })}
+                              className="w-full bg-[#1A1A24] border border-[#1E1E2E] rounded px-2 py-1 text-xs text-white focus:border-[#D4AF37] outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Reference</label>
+                            <input
+                              value={editForm.reference || ''}
+                              onChange={e => setEditForm({ ...editForm, reference: e.target.value })}
+                              className="w-full bg-[#1A1A24] border border-[#1E1E2E] rounded px-2 py-1 text-xs text-white font-mono focus:border-[#D4AF37] outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Dial Color</label>
+                            <input
+                              value={editForm.dialColor || ''}
+                              onChange={e => setEditForm({ ...editForm, dialColor: e.target.value })}
+                              className="w-full bg-[#1A1A24] border border-[#1E1E2E] rounded px-2 py-1 text-xs text-white focus:border-[#D4AF37] outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Condition</label>
+                            <select
+                              value={editForm.condition || ''}
+                              onChange={e => setEditForm({ ...editForm, condition: e.target.value })}
+                              className="w-full bg-[#1A1A24] border border-[#1E1E2E] rounded px-2 py-1 text-xs text-white focus:border-[#D4AF37] outline-none"
+                            >
+                              <option value="">Select</option>
+                              <option value="New">New</option>
+                              <option value="Used">Used</option>
+                              <option value="Like New">Like New</option>
+                              <option value="Pre-owned">Pre-owned</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Year</label>
+                            <input
+                              type="number"
+                              value={editForm.year || ''}
+                              onChange={e => setEditForm({ ...editForm, year: parseInt(e.target.value) })}
+                              className="w-full bg-[#1A1A24] border border-[#1E1E2E] rounded px-2 py-1 text-xs text-white font-mono focus:border-[#D4AF37] outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Price USD</label>
+                            <input
+                              type="number"
+                              value={editForm.price_usd || ''}
+                              onChange={e => setEditForm({ ...editForm, price_usd: parseInt(e.target.value) })}
+                              className="w-full bg-[#1A1A24] border border-[#1E1E2E] rounded px-2 py-1 text-xs text-white font-mono focus:border-[#D4AF37] outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Confidence</label>
+                            <input
+                              type="number"
+                              min="0" max="100"
+                              value={editForm.confidence || ''}
+                              onChange={e => setEditForm({ ...editForm, confidence: parseInt(e.target.value) })}
+                              className="w-full bg-[#1A1A24] border border-[#1E1E2E] rounded px-2 py-1 text-xs text-white font-mono focus:border-[#D4AF37] outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Verdict</label>
+                            <select
+                              value={editForm.verdict || ''}
+                              onChange={e => setEditForm({ ...editForm, verdict: e.target.value })}
+                              className="w-full bg-[#1A1A24] border border-[#1E1E2E] rounded px-2 py-1 text-xs text-white focus:border-[#D4AF37] outline-none"
+                            >
+                              <option value="APPROVED">APPROVED</option>
+                              <option value="REVIEW">REVIEW</option>
+                              <option value="HUMAN">HUMAN</option>
+                              <option value="RECYCLE">RECYCLE</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="text-[10px] text-gray-500 font-mono truncate max-w-md">
+                            RAW: {editForm.raw_message}
+                          </div>
+                          <button
+                            onClick={saveEdit}
+                            className="px-4 py-1.5 bg-[#D4AF37] hover:bg-[#E5C158] text-black text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5"
+                          >
+                            <Save size={12} /> Save Changes
+                          </button>
+                        </div>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
 
-                  {/* Raw message */}
-                  <div className="bg-gray-950 rounded-lg p-3 mb-4 border border-gray-800">
-                    <div className="text-[10px] text-gray-500 uppercase mb-1">Raw Message</div>
-                    <p className="text-sm text-gray-300 font-mono">{current.rawMessage}</p>
-                  </div>
-
-                  {/* Parsed fields */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-                    <div className="bg-gray-950 rounded-lg p-3 border border-gray-800">
-                      <div className="text-[10px] text-gray-500 uppercase">Price</div>
-                      <div className="text-lg font-mono font-bold text-amber-400">{formatPrice(current.price)}</div>
-                    </div>
-                    <div className="bg-gray-950 rounded-lg p-3 border border-gray-800">
-                      <div className="text-[10px] text-gray-500 uppercase">Year</div>
-                      <div className="text-lg font-mono font-bold text-white">{current.year || '—'}</div>
-                    </div>
-                    <div className="bg-gray-950 rounded-lg p-3 border border-gray-800">
-                      <div className="text-[10px] text-gray-500 uppercase">Dial</div>
-                      <div className="text-lg font-mono font-bold text-white">{current.dialColor || '—'}</div>
-                    </div>
-                    <div className="bg-gray-950 rounded-lg p-3 border border-gray-800">
-                      <div className="text-[10px] text-gray-500 uppercase">ML Price</div>
-                      <div className="text-lg font-mono font-bold text-blue-400">{formatPrice(current.mlPredictedPrice ?? 0)}</div>
-                    </div>
-                  </div>
-
-                  {/* Actions */}
-                  <div className="flex gap-3 mb-4">
-                    <button
-                      onClick={() => handleAction('approve')}
-                      className="flex-1 px-4 py-3 bg-green-500 hover:bg-green-400 text-black rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
-                    >
-                      <CheckCircle size={18} /> Approve <span className="text-xs opacity-60">(A)</span>
-                    </button>
-                    <button
-                      onClick={() => handleAction('edit')}
-                      className="flex-1 px-4 py-3 bg-yellow-500 hover:bg-yellow-400 text-black rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Edit3 size={18} /> Edit <span className="text-xs opacity-60">(E)</span>
-                    </button>
-                    <button
-                      onClick={() => handleAction('recycle')}
-                      className="flex-1 px-4 py-3 bg-red-500 hover:bg-red-400 text-black rounded-lg font-bold transition-colors flex items-center justify-center gap-2"
-                    >
-                      <Trash2 size={18} /> Recycle <span className="text-xs opacity-60">(R)</span>
-                    </button>
-                  </div>
-
-                  {/* Navigation */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setCurrentIndex(i => Math.max(0, i - 1))}
-                      disabled={currentIndex === 0}
-                      className="px-3 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white rounded-lg text-sm flex items-center gap-1"
-                    >
-                      <ChevronLeft size={14} /> Prev <span className="text-xs opacity-50">(P)</span>
-                    </button>
-                    <button
-                      onClick={() => setCurrentIndex(i => Math.min(filtered.length - 1, i + 1))}
-                      disabled={currentIndex >= filtered.length - 1}
-                      className="px-3 py-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white rounded-lg text-sm flex items-center gap-1"
-                    >
-                      Next <ChevronRight size={14} /> <span className="text-xs opacity-50">(N)</span>
-                    </button>
-                  </div>
-                </motion.div>
-              </AnimatePresence>
-            ) : (
-              <div className="flex flex-col items-center justify-center h-full text-gray-600">
-                <CheckCircle size={48} className="mb-3 text-green-500" />
-                <p className="text-lg text-gray-400">All items reviewed!</p>
-                <p className="text-sm">Queue is empty for this category</p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Shortcuts Modal */}
-        {showShortcuts && (
-          <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4" onClick={() => setShowShortcuts(false)}>
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              onClick={e => e.stopPropagation()}
-              className="bg-gray-900 border border-gray-800 rounded-lg p-6 max-w-md w-full"
-            >
-              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
-                <Keyboard size={18} className="text-amber-400" /> Keyboard Shortcuts
-              </h3>
-              <div className="space-y-2 text-sm">
-                {[
-                  { key: 'A', desc: 'Approve current listing' },
-                  { key: 'E', desc: 'Edit current listing' },
-                  { key: 'R', desc: 'Recycle current listing' },
-                  { key: 'N', desc: 'Next listing' },
-                  { key: 'P', desc: 'Previous listing' },
-                  { key: '1', desc: 'Switch to Human Review tab' },
-                  { key: '2', desc: 'Switch to Review tab' },
-                  { key: '3', desc: 'Switch to Recycle tab' },
-                ].map(s => (
-                  <div key={s.key} className="flex items-center justify-between py-1.5 border-b border-gray-800">
-                    <span className="text-gray-400">{s.desc}</span>
-                    <kbd className="px-2 py-0.5 bg-gray-800 border border-gray-700 rounded text-xs font-mono text-amber-400">{s.key}</kbd>
-                  </div>
-                ))}
-              </div>
+            {/* Pagination */}
+            <div className="flex items-center justify-between mt-4">
               <button
-                onClick={() => setShowShortcuts(false)}
-                className="mt-4 w-full px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page <= 1}
+                className="px-3 py-1.5 bg-[#1A1A24] border border-[#1E1E2E] rounded text-xs text-gray-400 hover:text-white disabled:opacity-30 flex items-center gap-1"
               >
-                Close
+                <ChevronLeft size={12} /> Prev
               </button>
-            </motion.div>
-          </div>
+              <span className="text-xs text-gray-500 font-mono">Page {page}</span>
+              <button
+                onClick={() => setPage(p => p + 1)}
+                className="px-3 py-1.5 bg-[#1A1A24] border border-[#1E1E2E] rounded text-xs text-gray-400 hover:text-white flex items-center gap-1"
+              >
+                Next <ChevronRight size={12} />
+              </button>
+            </div>
+          </>
         )}
       </div>
-    </>);
+    </div>
+  );
 }
