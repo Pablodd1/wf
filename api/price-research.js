@@ -306,7 +306,7 @@ module.exports = async function handler(req, res) {
       },
       chart: chart.length > 0 ? chart : [{ month: 'N/A', min: 0, avg: 0, max: 0, count: 0 }],
       forecast,
-      listings: validListings.slice(0, 50),
+      listings: url.searchParams.get('all') === 'true' ? validListings : validListings.slice(0, 50),
       statsBefore: {
         min: prices[0],
         avg: Math.round(prices.reduce((a, b) => a + b, 0) / prices.length),

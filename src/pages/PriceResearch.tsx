@@ -88,7 +88,8 @@ const BLUE = '#3b82f6';         // blue-500
 export default function PriceResearch() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [query, setQuery] = useState(searchParams.get('ref') || '126334');
+  const refParam = searchParams.get('ref') || '126334';
+  const [query, setQuery] = useState(refParam);
   const [apiData, setApiData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -119,7 +120,19 @@ export default function PriceResearch() {
     finally { setLoading(false); }
   }, []);
 
-  useEffect(() => { fetchData(query); }, [query, fetchData]);
+  useEffect(() => {
+    setQuery(refParam);
+  }, [refParam]);
+
+  useEffect(() => {
+    fetchData(refParam);
+  }, [refParam, fetchData]);
+
+  const handleSearch = () => {
+    if (query.trim()) {
+      navigate(`/price-research?ref=${encodeURIComponent(query.trim())}`);
+    }
+  };
 
   const filteredData = useMemo(() => {
     if (!apiData) return null;
@@ -226,12 +239,12 @@ export default function PriceResearch() {
               <input
                 type="text" value={query}
                 onChange={e => setQuery(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && fetchData(query)}
+                onKeyDown={e => e.key === 'Enter' && handleSearch()}
                 placeholder="Enter any reference (e.g. 126334, 5711A, RM 07-01, 26238ST)"
                 style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none' }}
               />
             </div>
-            <button onClick={() => fetchData(query)}
+            <button onClick={handleSearch}
               style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: BG_CARD, border: 'none', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
               Search
             </button>

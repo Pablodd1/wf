@@ -37,6 +37,7 @@ interface InsightData {
   brand: string;
   model: string;
   primaryDial: string;
+  catalogImageUrl?: string;
   dateRange: string;
   liquidity?: { buyers?: number; sellers?: number; buyerSellerRatio?: number };
   statsOriginal: {
@@ -64,7 +65,7 @@ interface InsightData {
 
 export default function InsightDetails() {
   const [searchParams] = useSearchParams();
-  const [ref, setRef] = useState(searchParams.get('ref') || '52506');
+  const [ref, setRef] = useState(searchParams.get('ref') || '52508');
   const [data, setData] = useState<InsightData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -74,7 +75,7 @@ export default function InsightDetails() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`/api/price-research?reference=${encodeURIComponent(reference)}`);
+      const res = await fetch(`/api/price-research?reference=${encodeURIComponent(reference)}&all=true&limit=10000`);
       const apiData = await res.json();
       if (!apiData.success) {
         setError(apiData.error || 'No data');
@@ -83,24 +84,38 @@ export default function InsightDetails() {
       }
 
       // Compute stats from actual listings
-      const prices = apiData.listings.map((l: any) => l.priceUSD);
-      const sorted = [...prices].sort((a, b) => a - b);
-      const q1 = sorted[Math.floor(sorted.length * 0.25)];
-      const q3 = sorted[Math.floor(sorted.length * 0.75)];
+      const prices = apiData.listings.map((l: any) => l.priceUSD).filter((p: number) => p > 0);
+      
+      const uniquePrices: number[] = [];
+      const seen = new Set<number>();
+      const duplicatePrices: number[] = [];
+      
+      prices.forEach((p: number) => {
+        if (seen.has(p)) {
+          duplicatePrices.push(p);
+        } else {
+          seen.add(p);
+          uniquePrices.push(p);
+        }
+      });
+
+      const sortedUnique = [...uniquePrices].sort((a, b) => a - b);
+      const q1 = sortedUnique[Math.floor(sortedUnique.length * 0.25)] || 0;
+      const q3 = sortedUnique[Math.floor(sortedUnique.length * 0.75)] || 0;
       const iqr = q3 - q1;
       const lowerBound = q1 - 1.5 * iqr;
       const upperBound = q3 + 1.5 * iqr;
 
-      // Detect outliers
-      const outlierPrices = prices.filter((p: number) => p < lowerBound || p > upperBound);
-      const filteredPrices = prices.filter((p: number) => p >= lowerBound && p <= upperBound);
+      const filteredPrices = uniquePrices.filter(p => p >= lowerBound && p <= upperBound);
+      const outlierPrices = uniquePrices.filter(p => p < lowerBound || p > upperBound);
 
-      // Detect duplicates
-      const priceCounts: Record<number, number> = {};
-      prices.forEach((p: number) => { priceCounts[p] = (priceCounts[p] || 0) + 1; });
-      const dupPrices = Object.entries(priceCounts)
-        .filter(([, count]) => count > 1)
-        .map(([price]) => Number(price));
+      const minOriginal = prices.length ? Math.min(...prices) : 0;
+      const maxOriginal = prices.length ? Math.max(...prices) : 0;
+      const avgOriginal = prices.length ? Math.round(prices.reduce((a: number, b: number) => a + b, 0) / prices.length) : 0;
+
+      const minFiltered = filteredPrices.length ? Math.min(...filteredPrices) : 0;
+      const maxFiltered = filteredPrices.length ? Math.max(...filteredPrices) : 0;
+      const avgFiltered = filteredPrices.length ? Math.round(filteredPrices.reduce((a: number, b: number) => a + b, 0) / filteredPrices.length) : 0;
 
       const insight: InsightData = {
         success: true,
@@ -108,23 +123,24 @@ export default function InsightDetails() {
         brand: apiData.brand,
         model: apiData.model,
         primaryDial: apiData.primaryDial,
-        dateRange: 'Jun 24 \u2014 Dec 21',
+        catalogImageUrl: apiData.catalogImageUrl || apiData.listings.find((l: any) => l.imageUrl)?.imageUrl || undefined,
+        dateRange: 'Jul 23 — Jan 19',
         liquidity: apiData.liquidity,
         statsOriginal: {
-          dataPoints: apiData.statsBefore?.count || prices.length,
-          min: apiData.statsBefore?.min || Math.min(...prices),
-          avg: apiData.statsBefore?.avg || Math.round(prices.reduce((a: number, b: number) => a + b, 0) / prices.length),
-          max: apiData.statsBefore?.max || Math.max(...prices),
+          dataPoints: prices.length,
+          min: minOriginal,
+          avg: avgOriginal,
+          max: maxOriginal,
         },
         duplicated: {
-          count: apiData.duplicates || dupPrices.length,
-          prices: dupPrices,
+          count: duplicatePrices.length,
+          prices: duplicatePrices,
         },
         statsFiltered: {
           dataPoints: filteredPrices.length,
-          min: Math.min(...filteredPrices),
-          avg: Math.round(filteredPrices.reduce((a: number, b: number) => a + b, 0) / filteredPrices.length),
-          max: Math.max(...filteredPrices),
+          min: minFiltered,
+          avg: avgFiltered,
+          max: maxFiltered,
         },
         outliers: {
           count: outlierPrices.length,
@@ -221,76 +237,100 @@ export default function InsightDetails() {
           <>
             {/* Watch Identity */}
             <div className="mb-8" style={{ padding: '24px 0', borderBottom: `1px solid ${BORDER}` }}>
-              <div style={{ fontSize: 13, color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>{data.brand}</div>
-              <div className="flex items-baseline gap-3 mb-3">
-                <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
-                <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{data.reference}</span>
-              </div>
-              <div className="flex gap-6 flex-wrap" style={{ fontSize: 14, color: MUTED }}>
-                <span>Dial: <strong style={{ color: TEXT }}>{data.primaryDial}</strong></span>
-                <span>Condition: <strong style={{ color: TEXT }}>Any</strong></span>
-                <span>Range: <strong style={{ color: TEXT }}>{data.dateRange}</strong></span>
-                {data.liquidity?.buyers !== undefined && (
-                  <span>B/S Ratio: <strong style={{ color: (data.liquidity.buyerSellerRatio || 0) > 1 ? RED : GREEN }}>{data.liquidity.buyerSellerRatio?.toFixed(2)}</strong></span>
-                )}
-              </div>
-              {data.liquidity?.buyers !== undefined && (
-                <div className="mt-3" style={{ maxWidth: 300 }}>
-                  <div className="flex items-center justify-between mb-1">
-                    <span style={{ fontSize: 12, color: MUTED }}>Buyers: {data.liquidity.buyers}</span>
-                    <span style={{ fontSize: 12, color: MUTED }}>Sellers: {data.liquidity.sellers}</span>
+              <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+                {/* Watch Image */}
+                <div style={{
+                  width: 180, height: 180, borderRadius: 12, backgroundColor: LIGHT_GRAY,
+                  overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center',
+                  justifyContent: 'center', border: `1px solid ${BORDER}`,
+                }}>
+                  {data.catalogImageUrl ? (
+                    <img src={data.catalogImageUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                  ) : (
+                    <span style={{ fontSize: 36 }}>⌚</span>
+                  )}
+                </div>
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>{data.brand}</div>
+                  <div className="flex items-baseline gap-3 mb-3">
+                    <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model}</h2>
+                    <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{data.reference}</span>
                   </div>
-                  <div style={{ width: '100%', height: 8, backgroundColor: BORDER, borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
-                    <div style={{ width: `${(data.liquidity.buyers / (data.liquidity.buyers + (data.liquidity.sellers || 0))) * 100}%`, height: '100%', backgroundColor: RED }} />
-                    <div style={{ width: `${((data.liquidity.sellers || 0) / (data.liquidity.buyers + (data.liquidity.sellers || 0))) * 100}%`, height: '100%', backgroundColor: GREEN }} />
+                  <div className="flex flex-col gap-2" style={{ fontSize: 14, color: MUTED }}>
+                    <div>Reference: <strong style={{ color: TEXT }}>{data.reference}</strong></div>
+                    <div>Dial Color: <strong style={{ color: TEXT }}>{data.primaryDial}</strong></div>
+                    <div>Condition Category: <strong style={{ color: TEXT }}>Any</strong></div>
+                    <div>Listings created from <strong style={{ color: TEXT }}>{data.dateRange}</strong></div>
                   </div>
                 </div>
-              )}
+              </div>
             </div>
 
             {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-              {/* Original Stats */}
-              <div style={{ backgroundColor: '#fff8f0', borderRadius: 12, padding: 24 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Stats (Original)</div>
-                <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Data Points: <strong style={{ color: TEXT }}>{data.statsOriginal.dataPoints}</strong></div>
-                <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Min: <strong style={{ color: TEXT }}>${data.statsOriginal.min.toLocaleString()}</strong></div>
-                <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Avg: <strong style={{ color: TEXT }}>${data.statsOriginal.avg.toLocaleString()}</strong></div>
-                <div style={{ fontSize: 13, color: MUTED }}>Max: <strong style={{ color: TEXT }}>${data.statsOriginal.max.toLocaleString()}</strong></div>
-              </div>
-
-              {/* Removed */}
-              <div style={{ backgroundColor: '#fef2f2', borderRadius: 12, padding: 24 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: RED, marginBottom: 16 }}>Removed</div>
-                <div style={{ fontSize: 13, color: MUTED, marginBottom: 12 }}>
-                  Duplicated: <strong style={{ color: RED }}>{data.duplicated.count}</strong>
-                  {data.duplicated.prices.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {data.duplicated.prices.map((price, i) => (
-                        <span key={i} style={{ padding: '2px 8px', borderRadius: 4, backgroundColor: '#fee2e2', color: RED, fontSize: 11 }}>${price.toLocaleString()}</span>
-                      ))}
-                    </div>
-                  )}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+              {/* Original Stats (Blue Header) */}
+              <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', backgroundColor: WHITE }}>
+                <div style={{ backgroundColor: '#3b82f6', color: WHITE, padding: '12px 16px', fontWeight: 700, fontSize: 14 }}>
+                  Stats (Original)
                 </div>
-                <div style={{ fontSize: 13, color: MUTED }}>
-                  Outliers: <strong style={{ color: RED }}>{data.outliers.count}</strong>
-                  {data.outliers.prices.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-1">
-                      {data.outliers.prices.map((price, i) => (
-                        <span key={i} style={{ padding: '2px 8px', borderRadius: 4, backgroundColor: '#fee2e2', color: RED, fontSize: 11 }}>${price.toLocaleString()}</span>
-                      ))}
-                    </div>
-                  )}
+                <div style={{ padding: 16 }}>
+                  <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Data Points: <strong style={{ color: TEXT }}>{data.statsOriginal.dataPoints}</strong></div>
+                  <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Min: <strong style={{ color: TEXT }}>${data.statsOriginal.min.toLocaleString()}</strong></div>
+                  <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Avg: <strong style={{ color: TEXT }}>${data.statsOriginal.avg.toLocaleString()}</strong></div>
+                  <div style={{ fontSize: 13, color: MUTED }}>Max: <strong style={{ color: TEXT }}>${data.statsOriginal.max.toLocaleString()}</strong></div>
                 </div>
               </div>
 
-              {/* Filtered Stats */}
-              <div style={{ backgroundColor: '#f0f8f0', borderRadius: 12, padding: 24 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Stats (Filtered)</div>
-                <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Data Points: <strong style={{ color: TEXT }}>{data.statsFiltered.dataPoints}</strong></div>
-                <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Min: <strong style={{ color: TEXT }}>${data.statsFiltered.min.toLocaleString()}</strong></div>
-                <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Avg: <strong style={{ color: TEXT }}>${data.statsFiltered.avg.toLocaleString()}</strong></div>
-                <div style={{ fontSize: 13, color: MUTED }}>Max: <strong style={{ color: TEXT }}>${data.statsFiltered.max.toLocaleString()}</strong></div>
+              {/* Duplicated (White Card, Grey Border) */}
+              <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', backgroundColor: WHITE }}>
+                <div style={{ backgroundColor: WHITE, borderBottom: `1px solid ${BORDER}`, color: TEXT, padding: '12px 16px', fontWeight: 700, fontSize: 14 }}>
+                  Duplicated
+                </div>
+                <div style={{ padding: 16 }}>
+                  <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Removed: <strong style={{ color: RED }}>{data.duplicated.count}</strong></div>
+                  <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, fontFamily: 'monospace', color: MUTED }}>
+                    {data.duplicated.prices.length > 0 ? (
+                      data.duplicated.prices.map((price, i) => (
+                        <div key={i}>${price.toLocaleString()}</div>
+                      ))
+                    ) : (
+                      <div className="italic">None</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Filtered Stats (Green Header) */}
+              <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', backgroundColor: WHITE }}>
+                <div style={{ backgroundColor: '#22c55e', color: WHITE, padding: '12px 16px', fontWeight: 700, fontSize: 14 }}>
+                  Stats (Filtered by custom math)
+                </div>
+                <div style={{ padding: 16 }}>
+                  <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Data Points: <strong style={{ color: TEXT }}>{data.statsFiltered.dataPoints}</strong></div>
+                  <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Min: <strong style={{ color: TEXT }}>${data.statsFiltered.min.toLocaleString()}</strong></div>
+                  <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Avg: <strong style={{ color: TEXT }}>${data.statsFiltered.avg.toLocaleString()}</strong></div>
+                  <div style={{ fontSize: 13, color: MUTED }}>Max: <strong style={{ color: TEXT }}>${data.statsFiltered.max.toLocaleString()}</strong></div>
+                </div>
+              </div>
+
+              {/* Outliers (Red Header) */}
+              <div style={{ border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', backgroundColor: WHITE }}>
+                <div style={{ backgroundColor: '#ef4444', color: WHITE, padding: '12px 16px', fontWeight: 700, fontSize: 14 }}>
+                  Outliers
+                </div>
+                <div style={{ padding: 16 }}>
+                  <div style={{ fontSize: 13, color: MUTED, marginBottom: 8 }}>Removed: <strong style={{ color: RED }}>{data.outliers.count}</strong></div>
+                  <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 2, fontSize: 11, fontFamily: 'monospace', color: MUTED }}>
+                    {data.outliers.prices.length > 0 ? (
+                      data.outliers.prices.map((price, i) => (
+                        <div key={i}>${price.toLocaleString()}</div>
+                      ))
+                    ) : (
+                      <div className="italic">None</div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
 
