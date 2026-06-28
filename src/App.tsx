@@ -8,6 +8,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from '@/components/Layout';
 import Home from '@/pages/Home';
+import ReportsPage from '@/pages/ReportsPage';
 import AnalyticsPage from '@/pages/AnalyticsPage';
 import ReviewPage from '@/pages/ReviewPage';
 import CleanPage from '@/pages/CleanPage';
@@ -43,6 +44,7 @@ export default function App() {
     <Routes>
       {/* Public site — watchfacts.com replica, uses PublicNavbar */}
       <Route path="/" element={<Home />} />
+      <Route path="/reports" element={<ReportsPage />} />
 
       {/* Admin dashboard — all routes under /admin/* with admin navbar */}
       <Route path="/admin/*" element={<AdminRoutes />} />

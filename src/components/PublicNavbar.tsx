@@ -1,4 +1,4 @@
-import { Link } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 
 /**
  * Public Navbar — EXACT replica of watchfacts.com
@@ -6,8 +6,11 @@ import { Link } from 'react-router-dom';
  * NO admin tabs on public site
  */
 export function PublicNavbar() {
+  const location = useLocation();
+  const isLight = location.pathname === '/reports';
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-[60px] bg-[#1A1A1A]/90 backdrop-blur-sm flex items-center justify-between px-6 md:px-10">
+    <header className={`fixed top-0 left-0 right-0 z-50 h-[60px] flex items-center justify-between px-6 md:px-10 transition-colors ${isLight ? 'bg-white border-b border-gray-100' : 'bg-[#1A1A1A]/90 backdrop-blur-sm'}`}>
       {/* Logo */}
       <Link to="/" className="flex items-center">
         <img
@@ -19,19 +22,17 @@ export function PublicNavbar() {
 
       {/* Navigation */}
       <nav className="flex items-center gap-6">
-        <a
-          href="https://watchfacts.com/reports"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="text-[11px] font-medium text-white/80 hover:text-white uppercase tracking-[0.08em] transition-colors"
+        <Link
+          to="/reports"
+          className={`text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ${isLight ? 'text-[#3B5BFE] border-b-2 border-[#3B5BFE] pb-[2px]' : 'text-white/80 hover:text-white'}`}
         >
           Reports
-        </a>
+        </Link>
         <a
           href="https://watchfacts.com/partners"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[11px] font-medium text-white/80 hover:text-white uppercase tracking-[0.08em] transition-colors"
+          className={`text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ${isLight ? 'text-gray-600 hover:text-gray-900' : 'text-white/80 hover:text-white'}`}
         >
           Partners
         </a>
@@ -39,7 +40,7 @@ export function PublicNavbar() {
           href="https://watchfacts.com/lux-fi"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-[11px] font-medium text-white/80 hover:text-white uppercase tracking-[0.08em] transition-colors"
+          className={`text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ${isLight ? 'text-gray-600 hover:text-gray-900' : 'text-white/80 hover:text-white'}`}
         >
           Hire Fi
         </a>
