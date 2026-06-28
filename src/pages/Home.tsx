@@ -77,14 +77,35 @@ export default function Home() {
     try {
       setLoading(true);
       setError(null);
-      const res = await fetch('/reports/master-report.json');
-      if (!res.ok) throw new Error('Report not found');
+      // Try real API first
+      const res = await fetch('/api/stats');
       const data = await res.json();
-      setStats(data.stats || data);
-      setLastUpdated(new Date().toLocaleString());
+      if (data.totalRecords) {
+        setStats({
+          totalRecords: data.totalRecords,
+          approvedRate: data.approvedCount ? Math.round((data.approvedCount / data.totalRecords) * 100) : 0,
+          humanReview: data.humanCount || 0,
+          recycled: data.recycleCount || 0,
+          avgPrice: data.avgPrice || 0,
+          avgConfidence: data.avgConfidence || 0,
+          brandDistribution: data.brandDistribution?.map((b: any) => ({
+            brand: b.brand,
+            count: b.count,
+            percentage: Math.round((b.count / data.totalRecords) * 100 * 10) / 10,
+          })) || [],
+          confidenceDistribution: [],
+          priceDistribution: [],
+          dailyTrends: [],
+          topReferences: [],
+        });
+        setLastUpdated(new Date().toLocaleString());
+        if (data.demo) setError('Connected — using cached stats');
+      } else {
+        throw new Error('No data');
+      }
     } catch {
       setStats(demoStats);
-      setError('Using demo data — pre-computed report not found');
+      setError('Database connection failed — showing demo data');
       setLastUpdated(new Date().toLocaleString());
     } finally {
       setLoading(false);
