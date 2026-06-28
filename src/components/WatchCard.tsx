@@ -142,11 +142,11 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
       </div>
 
       {/* ML Predicted Price */}
-      {record.mlPredictedPrice > 0 && (
+      {(record.mlPredictedPrice ?? 0) > 0 && (
         <div className="flex items-center justify-between text-[10px] text-text-muted mb-2 px-2 py-1 bg-bg-elevated rounded border border-border-default">
           <span>AI Est. Market Value</span>
           <span className="font-mono font-bold text-text-primary">
-            ${record.mlPredictedPrice.toLocaleString()}
+            ${(record.mlPredictedPrice ?? 0).toLocaleString()}
           </span>
         </div>
       )}

@@ -20,21 +20,23 @@ export function AIAnomalies({ records, onSelect }: AIAnomaliesProps) {
   const anomalies = useMemo<Anomaly[]>(() => {
     const result: Anomaly[] = [];
     records.forEach((r) => {
-      if (!r.isResidue && r.price > 0 && r.mlPredictedPrice > 0) {
-        const variance = Math.abs(r.priceVariance);
-        if (r.price > 2000000 && r.priceVariance > 15) {
+      const mlPrice = r.mlPredictedPrice ?? 0;
+      const priceVar = r.priceVariance ?? 0;
+      if (!r.isResidue && r.price > 0 && mlPrice > 0) {
+        const variance = Math.abs(priceVar);
+        if (r.price > 2000000 && priceVar > 15) {
           result.push({
             record: r,
             type: 'PRICE_SPIKE',
             severity: 'critical',
-            message: `Price $${r.price.toLocaleString()} is ${r.priceVariance.toFixed(1)}% above ML prediction`,
+            message: `Price $${r.price.toLocaleString()} is ${priceVar.toFixed(1)}% above ML prediction`,
           });
         } else if (r.price > 500000 && variance > 25) {
           result.push({
             record: r,
             type: 'HIGH_VARIANCE',
             severity: 'warning',
-            message: `${r.priceVariance > 0 ? '+' : ''}${r.priceVariance.toFixed(1)}% variance from predicted $${r.mlPredictedPrice.toLocaleString()}`,
+            message: `${priceVar > 0 ? '+' : ''}${priceVar.toFixed(1)}% variance from predicted $${mlPrice.toLocaleString()}`,
           });
         }
       }

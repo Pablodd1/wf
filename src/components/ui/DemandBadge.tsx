@@ -16,7 +16,8 @@ const demandConfig: Record<string, { icon: LucideIcon; color: string; arrow: str
 };
 
 export function DemandBadge({ forecast, className }: DemandBadgeProps) {
-  const config = demandConfig[forecast] ?? demandConfig.STABLE;
+  const safeForecast = forecast ?? 'STABLE';
+  const config = demandConfig[safeForecast] ?? demandConfig.STABLE;
   const Icon = config.icon;
 
   return (

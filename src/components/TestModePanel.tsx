@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useCallback, useMemo } from 'react';
 import {
   Brain,

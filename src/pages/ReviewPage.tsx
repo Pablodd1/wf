@@ -218,7 +218,7 @@ export default function ReviewPage() {
                     </div>
                     <div className="bg-gray-950 rounded-lg p-3 border border-gray-800">
                       <div className="text-[10px] text-gray-500 uppercase">ML Price</div>
-                      <div className="text-lg font-mono font-bold text-blue-400">{formatPrice(current.mlPredictedPrice)}</div>
+                      <div className="text-lg font-mono font-bold text-blue-400">{formatPrice(current.mlPredictedPrice ?? 0)}</div>
                     </div>
                   </div>
 
