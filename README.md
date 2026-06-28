@@ -1,188 +1,300 @@
-# WatchFacts
+# WatchFacts v2
 
-Luxury watch intelligence platform. Ingest raw WhatsApp/Telegram dealer messages, parse watch details, enrich from a 6K+ reference catalog, score confidence, and export colored Excel/CSV reports.
+Luxury watch intelligence platform. Parse raw WhatsApp/Telegram dealer messages, extract watch details, analyze market prices with outlier detection, and export colored reports.
 
-**Live:** https://watchfacts-poc.vercel.app · **Repo:** `Pablodd1/wf`
-
----
-
-## What the app does
-
-1. **Ingest** — dealer messages arrive via POST `/api/ingest` (or Telegram webhook). The pipeline splits bundled messages, extracts brand/reference/dial/price/condition/year, scores confidence, and persists to Supabase (2.39M records and counting).
-
-2. **Parse** — regex-first engine covers 15+ brands with pattern matching (Patek 5711/1A, Rolex 126334, AP 26238ST, RM 07-01, Lange 414.032, VC 4500V, and more). Detects currency (HKD/USD/EUR/GBP/CHF), condition (New/Used/Like New), dial color (from ref suffix + keywords), and year.
-
-3. **Enrich** — three-tier cascade:
-   - **Catalog lookup** — 6K+ references with model, collection, case metal, production years, buyer/seller liquidity scores
-   - **AI online search** — GPT-4o-mini → OpenRouter free models → Claude Haiku fallback
-   - **Web scrape** — Chrono24/WatchCharts (best-effort; blocked from Vercel IPs)
-
-4. **Score** — confidence from 0-100. >=90 + brand + ref = APPROVED. <35 = RECYCLE. Everything else = HUMAN review.
-
-5. **Price Research** — query 2.39M historical records by reference. IQR outlier filtering, duplicate detection, FX conversion, 3-month linear regression forecast, buyer/seller ratios, downloadable Excel reports with confidence badges.
-
-6. **Dashboard** — live stats (total records, approval rate, brand breakdown), data quality audit (missing fields count), AI cost tracker, bulk actions.
-
-7. **Review UI** — keyboard shortcuts (N/P/E/A/R/S/H/Esc), inline field editing, AI re-analysis per row, web lookup per row.
-
-8. **Demo page** — paste raw dealer text, get parsed cards with confidence scores, Clear All to reset, export CSV/Excel.
-
-9. **Export** — colored Excel (3 sheets), CSV with BOM. Conditional formatting: green=clean, yellow=partial, red=issues.
+**Live:** https://watchfacts-poc.vercel.app | **Repo:** `Pablodd1/wf`
 
 ---
 
-## Architecture
+## What Changed (2026-06-29)
+
+Complete rewrite. The v1 codebase (39 API endpoints, ~25K SLOC) was a proof-of-concept that grew organically. v2 is a focused rebuild with proper architecture.
+
+### What Was Built
+
+| Page | Route | What It Does |
+|------|-------|-------------|
+| **Home** | `/` | Dashboard — KPI cards, 4 charts (brand dist, confidence pie, price area, daily trends), top 10 refs |
+| **Search** | `/#/search` | Full database search — filters by brand, condition, confidence, currency. Paginated (50/page). Direct Supabase queries |
+| **Price Research** | `/#/price-research` | **THE FLAGSHIP** — Search reference → chart with monthly blue dots → hover shows Min/Avg/Max → click dot → Insight Details |
+| **Insight Details** | `/#/insight?ref=X&month=Y` | Drill-down from chart dot. 4 stat cards: Original (blue), Duplicated (gray), Filtered (green), Outliers (red) |
+| **Demo** | `/#/demo` | Paste multiple raw WhatsApp messages → animated 5-stage pipeline → parsed cards with confidence rings → export Excel |
+| **Review** | `/#/review` | Human review queue — HUMAN/REVIEW/RECYCLE tabs, keyboard shortcuts (A/E/R/N/P), inline editing |
+| **Admin** | `/#/admin` | System health, data quality metrics, connection test, action buttons |
+| **Analytics** | `/#/analytics` | Extended charts — condition distribution, catalog match rate, full reference table |
+| **Clean** | `/#/clean` | Data cleaning — CSV/JSON upload, column mapping, normalize, export |
+
+### Outlier Logic (NEW)
+
+**Outliers are EXCLUDED from Min/Avg/Max calculations but REPORTED separately.**
+
+```
+Original 40 listings
+    → Remove 7 duplicates (same ref + price + condition)
+    → Remove 3 outliers via IQR method ($196K, $300K, $315K)
+    = Filtered 33 listings ← stats calculated on THIS
+```
+
+IQR Method: Q1 - 1.5xIQR = lower fence, Q3 + 1.5xIQR = upper fence. Anything outside = outlier.
+
+---
+
+## Architecture v2
 
 | Layer | Stack |
 |-------|-------|
 | Frontend | React 19 + TypeScript + Vite |
-| Routing | React Router v7 (HashRouter) |
-| UI | Tailwind CSS + Lucide icons + Motion |
-| Charts | Chart.js via react-chartjs-2 |
+| Routing | React Router v7 (**HashRouter**) |
+| Styling | Tailwind CSS |
+| Icons | Lucide React |
+| Charts | Recharts |
+| Animation | Framer Motion |
 | Excel | SheetJS (xlsx) |
-| Backend | 39 Vercel Serverless Functions (Node.js CJS) |
-| AI | DeepSeek (primary), GPT-4o-mini, OpenRouter free, Claude Haiku |
+| Backend | 8 Vercel Serverless Functions (Node.js CJS) |
 | Database | Supabase PostgreSQL (2.39M watch_records) |
-| Hosting | Vercel Hobby (maxDuration: 60s) |
+| Hosting | Vercel |
 
-### Files by line count
+### File Structure
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `api/clean-analyze.js` | 2,020 | Full visible-watch analysis pipeline |
-| `api/ingest.js` | 716 | Live ingestion endpoint + parser |
-| `api/reprocess.js` | 598 | Bulk re-process existing records |
-| `src/utils/parseEngine.ts` | 570 | Client-side regex parser |
-| `src/lib/pipeline.ts` | 551 | Pipeline simulation logic |
-| `src/hooks/useWatchData.ts` | 493 | Central data hook (fetch + transform) |
-| `src/pages/PriceResearch.tsx` | 1,209 | Price research dashboard |
-| `src/pages/ReviewPage.tsx` | 955 | Human review interface |
-| `src/pages/DemoPage.tsx` | 589 | Demo parsing page |
-| `src/lib/normalize.ts` | 616 | Brand/reference normalization |
-| `src/lib/masterCatalog.ts` | 339 | Master catalog builder |
-
-39 API files (11,466 total lines) + frontend (13,740 total lines) = ~25K SLOC.
-
----
-
-## All API Endpoints
-
-| Endpoint | Method | Status | Purpose |
-|----------|--------|--------|---------|
-| `/api/health` | GET | ✅ | Health check + AI provider status |
-| `/api/pipeline-health` | GET | ✅ | Live pipeline stats (2.39M records) |
-| `/api/ingest` | POST/GET | ✅ | Live message ingestion |
-| `/api/price-research` | GET | ✅ | Reference price analysis |
-| `/api/catalog-lookup` | GET | ✅ | 6K+ reference catalog lookup |
-| `/api/web-lookup` | GET | ✅ | Catalog + DDG web search |
-| `/api/enrich` | GET | ✅ | Multi-source enrichment |
-| `/api/online-search` | GET/POST | ✅ | AI-powered watch search (P0-D fixed) |
-| `/api/daily-report` | GET | ✅ | Automated daily digest |
-| `/api/reprocess` | POST | ✅ | Bulk re-process records |
-| `/api/ai-parse` | POST | ✅ | AI-only parsing |
-| `/api/clean-analyze` | POST | ✅ | Full visible watch analysis |
-| `/api/verify-image` | POST | ⚠️ TIMEOUT | Image verification (exceeds 60s Vercel limit) |
-| `/api/image-verify` | POST | ⚠️ TIMEOUT | Alternative image verify (same issue) |
-| `/api/telegram-bot` | POST | ⚠️ OFFLINE | Needs TELEGRAM_BOT_TOKEN |
-| `/api/telegram-ingest` | POST | ⚠️ OFFLINE | WhatsApp listener (no QR scan) |
-| `/api/green-api-webhook` | POST | ⚠️ OFFLINE | Green API webhook |
-| `/api/co-pilot` | POST | ✅ | AI co-pilot suggestions |
-| `/api/batch-enrich` | POST | ✅ | Batch enrichment |
-| `/api/batch-image-dial` | POST | ✅ | Batch image dial detection |
-| `/api/bulk-disambiguate` | POST | ✅ | Bulk brand disambiguation |
-| `/api/demand-signals` | GET | ✅ | Market demand signals |
-| `/api/disambiguate` | POST | ✅ | Single brand disambiguation |
-| `/api/export-report` | POST | ✅ | Excel export generator |
-| `/api/extract` | POST | ✅ | Standalone extraction |
-| `/api/feedback` | POST | ✅ | Human review feedback loop |
-| `/api/ingest-catalog` | POST | ✅ | Catalog ingestion |
-| `/api/instagram-post` | POST | ✅ | Instagram caption generator |
-| `/api/normalize-bulk` | POST | ✅ | Bulk normalization |
-| `/api/persist` | POST | ✅ | Save to Supabase |
-| `/api/pipeline-parse` | POST | ✅ | Pipeline parsing |
-| `/api/scrape-marketplace` | POST | ✅ | Marketplace scraper |
-| `/api/study-log` | POST | ✅ | Study logging |
-| `/api/test-mode-compare` | POST | ✅ | Test mode comparison |
-| `/api/validate-reference` | GET | ✅ | Reference validation |
-| `/api/vision-dial` | POST | ✅ | Vision-based dial detection |
-| `/api/watch-data` | GET | ✅ | Watch data endpoint |
+```
+wf/
+├── api/                          # Serverless functions
+│   ├── _lib/
+│   │   └── parser.js             # Core watch parser (757 lines)
+│   ├── batch-process.js          # Queue-based reprocessing
+│   ├── bulk-action.js            # Bulk actions on records
+│   ├── cache-dashboard.js        # Dashboard stats cache
+│   ├── export-excel.js           # On-demand Excel export
+│   ├── generate-report.js        # Daily report generation
+│   ├── insight-details.js        # Outlier detection + stats pipeline
+│   ├── price-research.js         # Monthly price aggregation
+│   └── update-record.js          # Single record update
+├── src/
+│   ├── components/
+│   │   ├── ui/                   # UI primitives
+│   │   │   ├── BrandBadge.tsx
+│   │   │   ├── ConfidenceRing.tsx
+│   │   │   ├── ConditionBadge.tsx
+│   │   │   ├── DemandBadge.tsx
+│   │   │   ├── DialColorSwatch.tsx
+│   │   │   └── StatusPill.tsx
+│   │   ├── ExportButtons.tsx     # Excel/CSV/JSON export dropdown
+│   │   ├── Layout.tsx            # App shell with Navbar
+│   │   ├── Navbar.tsx            # Top bar with stats
+│   │   ├── StatsBar.tsx          # KPI bar
+│   │   ├── TestModePanel.tsx     # Parser testing
+│   │   ├── WatchCard.tsx         # Watch listing card
+│   │   └── WatchImage.tsx        # 3-layer image fallback
+│   ├── lib/
+│   │   ├── reportExport.ts       # 6-sheet colored Excel export
+│   │   ├── utils.ts              # cn(), formatPrice(), confidenceColor()
+│   │   └── watchImages.ts        # Brand CDN URL patterns
+│   ├── pages/                    # All 10 page components
+│   │   ├── Home.tsx
+│   │   ├── SearchPage.tsx
+│   │   ├── PriceResearch.tsx     # FLAGSHIP — chart + dots + drilldown
+│   │   ├── InsightDetails.tsx    # Outlier stats + pipeline viz
+│   │   ├── DemoPage.tsx
+│   │   ├── ReviewPage.tsx
+│   │   ├── AdminPage.tsx
+│   │   ├── AnalyticsPage.tsx
+│   │   ├── CleanPage.tsx
+│   │   └── DemandSignals.tsx
+│   ├── types/
+│   │   └── index.ts              # All TypeScript types
+│   ├── App.tsx                   # Router with all 10 routes
+│   └── main.tsx                  # HashRouter + ErrorBoundary
+├── public/
+│   ├── images/                   # Catalog images (add yours here)
+│   └── reports/                  # Generated report cache
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+├── tailwind.config.js
+└── vercel.json                   # Cron jobs
+```
 
 ---
 
-## P0 Fixes (2026-06-26)
+## API Endpoints (v2)
 
-Deployed in commit `788d851`:
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/batch-process` | POST | Process reprocess_queue in batches (cron) |
+| `/api/bulk-action` | POST | Bulk approve/recycle/review |
+| `/api/cache-dashboard` | POST | Generate dashboard stats cache |
+| `/api/export-excel` | POST | Filtered Excel export |
+| `/api/generate-report` | POST | Full report from 2.39M records (cron) |
+| `/api/insight-details` | GET | Outlier detection + duplicate removal + stats |
+| `/api/price-research` | GET | Monthly price aggregation (avg/min/max/count) |
+| `/api/update-record` | POST | Single record update |
 
-| Fix | What changed | Before | After |
-|-----|-------------|--------|-------|
-| Brand aliases | `api/ingest.js` parseFull() | VC→Unknown, LANGE→Rolex, TD→AP | VC=Vacheron, LANGE=A.Lange, TD=Tudor |
-| Ref vs price | `api/ingest.js` parsePrice() + parseFull() | 126334→$126,334 price | 126334=ref, 117000hkd=price |
-| Karat filter | `api/ingest.js` isKaratContext() + kMatch | 14k gold→$14,000 | 14k gold=karat, $3550=price |
-| online-search GET | `api/online-search.js` handler() | 405 Method Not Allowed | 200 OK with query params |
+**Query examples:**
+```bash
+# Price Research — monthly aggregates for chart
+GET /api/price-research?reference=52508&dial=White&months=6
+
+# Insight Details — full pipeline for a month
+GET /api/insight-details?reference=52508&month=2026-03&dial=White
+```
 
 ---
 
-## Pending Work
+## Data Pipeline
 
-### P0 — Parsing accuracy (3 remaining)
-- [ ] No-price inquiry → HUMAN (currently APPROVED if confidence high)
-- [ ] 7010R → Patek (currently Rolex — fixed by brand-before-ref ordering but untested)
-- [ ] Additional brand edge cases from HUMAN queue
+```
+RAW MESSAGE (WhatsApp/Telegram)
+    ↓
+[1] INGEST — parseFull() — regex extraction
+    ↓
+{ brand, reference, dialColor, condition, year, price, currency, confidence }
+    ↓
+[2] DUPLICATE DETECTION — same ref + price($100 rounded) + condition
+    ↓
+Unique records
+    ↓
+[3] OUTLIER DETECTION — IQR method (Q1 - 1.5xIQR, Q3 + 1.5xIQR)
+    ↓
+Clean records (outliers flagged but NOT removed from DB)
+    ↓
+[4] STATS — Min, Avg (Mean), Max calculated on CLEAN records only
+    ↓
+INSIGHT DETAILS → 4 cards: Original | Duplicated | Filtered | Outliers
+```
 
-### P1 — Price Research UI (not started)
-- [ ] Brand dropdown (currently hardcoded)
-- [ ] Model selector with autocomplete
-- [ ] Date range toggle (1M/6M/1Y/All)
-- [ ] Blue dot on chart for month selection
-- [ ] Insight Details panel (min/avg/max, outlier tracking)
-- [ ] Two-column listing detail layout
+### Price Research Chart
 
-### Stage 3 — Data integrity
-- [ ] CleanPage: save results to Supabase (ZERO Supabase calls currently)
-- [ ] Bulk UPDATE verdicts on historical records
-- [ ] Normalize brand spellings
+```
+Search "52508" → Supabase query → group by month → avg/min/max per month
+    ↓
+Render line chart with blue dots
+    ↓
+Hover dot → tooltip: Min $23,012 | Avg $24,400 | Max $26,660
+    ↓
+Click dot → navigate to /insight?ref=52508&month=2026-03
+    ↓
+Insight page → run full pipeline → show 4 stat cards
+```
 
-### Stage 4 — Smart cascade
-- [ ] Always fire online-search on catalog miss
-- [ ] Agreement scoring (online vs parsed)
-- [ ] Store successful lookups to catalog_building table
+---
 
-### Blocked / broken
-- [ ] Image verify — Vercel 60s timeout (needs client-side move)
-- [ ] Web scraping — Chrono24/WatchCharts blocked from Vercel IPs
-- [ ] Telegram bot — needs TELEGRAM_BOT_TOKEN
-- [ ] WhatsApp listener — needs QR scan
+## Image Resolution (3-Layer Fallback)
+
+The `WatchImage` component tries sources in order:
+
+1. **Local catalog** — `/images/{brand}_{reference}.png`
+   - Copy your images from `C:\Users\jasme\Downloads\Catalog` here
+   - Rename to: `Rolex_52508.png`, `Patek Philippe_5711_1A.png`, etc.
+
+2. **Brand website CDN** — 20+ brands configured
+   - Patek: `static.patek.com/images/articles/face_white/350/{ref}~01.jpg`
+   - AP: `audemarspiguet.com/content/dam/ap/com/products/watches/{ref}/assets/landing.jpg`
+   - RM: `richardmille.com/sites/default/files/.../{ref}.png`
+   - Others → Chrono24 CDN
+
+3. **Silhouette placeholder** — `/watch-silhouette.svg`
+
+---
+
+## Environment Variables
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `VITE_SUPABASE_URL` | ✅ | Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | ✅ | Supabase anon key (frontend) |
+| `SUPABASE_URL` | ✅ | Same, for API endpoints |
+| `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Service role key (API endpoints) |
+| `ALLOWED_ORIGIN` | ❌ | CORS origin (default: `*`) |
 
 ---
 
 ## Development
 
 ```bash
-cd /home/jasme/wf
+cd ~/wf
 npm install
-npm run dev          # Dev server on port 3000
-npm run build        # tsc -b && vite build
-npx vercel --prod    # Deploy to production
-git push origin main # Push to Pablodd1/wf
+npm run dev          # Dev server on localhost:3000
+npm run build        # Production build
+npx vercel --prod    # Deploy
 ```
 
-### Live test commands
+### Adding Catalog Images
 
 ```bash
-# Pipeline health
-curl -s https://watchfacts-poc.vercel.app/api/pipeline-health | jq
-
-# Price research
-curl -s "https://watchfacts-poc.vercel.app/api/price-research?reference=5711/1A" | jq
-
-# Online search (now supports GET)
-curl -s "https://watchfacts-poc.vercel.app/api/online-search?reference=5712/1A&brand=Patek+Philippe" | jq
-
-# Ingest a test message
-curl -s -X POST https://watchfacts-poc.vercel.app/api/ingest \
-  -H "Content-Type: application/json" \
-  -d '{"rawMessage":"Rolex 126334 blue dial 117000hkd"}' | jq
-
-# Daily report
-curl -s https://watchfacts-poc.vercel.app/api/daily-report | jq
+# Copy your catalog images
+Copy from: C:\Users\jasme\Downloads\Catalog
+Paste to:  public/images/
+Rename to: {Brand}_{Reference}.png  (e.g., Rolex_52508.png)
 ```
+
+### Cron Jobs (vercel.json)
+
+```json
+{
+  "crons": [
+    { "path": "/api/batch-process", "schedule": "0 */6 * * *" },
+    { "path": "/api/generate-report", "schedule": "0 3 * * *" }
+  ]
+}
+```
+
+---
+
+## What Was Deleted (v1 → v2)
+
+v1 had 39 API endpoints, many experimental/unused. v2 keeps only what's needed:
+
+**Deleted (will not work anymore):**
+- `api/ingest.js` — old ingestion (had `\${}` template literal bug)
+- `api/green-api-webhook.js` — WhatsApp webhook
+- `api/telegram-ingest.js` — Telegram ingestion
+- `api/catalog-lookup.js` — old catalog (replaced by direct Supabase queries)
+- `api/verify-image.js` — 60s timeout, never worked
+- `api/ai-parse.js` — ES module syntax bug
+- `api/enrich.js`, `api/online-search.js` — AI enrichment cascade
+- `api/daily-report.js` — replaced by `generate-report.js`
+- All `scripts/` — Python migration scripts (no longer needed)
+- All `src/sections/` — replaced by `src/pages/`
+
+**To recover a deleted file:** `git show HEAD~1:api/ingest.js > api/ingest.js`
+
+---
+
+## Pending Work
+
+### P0 — Deploy & Test
+- [ ] `npm install && npm run build` — verify no errors
+- [ ] `npx vercel --prod` — deploy
+- [ ] Add Supabase env vars to Vercel dashboard
+- [ ] Test Price Research → search "52508" → click chart dot → verify Insight Details
+
+### P1 — Catalog Images
+- [ ] Copy images from `C:\Users\jasme\Downloads\Catalog` to `public/images/`
+- [ ] Verify WatchImage component finds them
+
+### P2 — Theme Consistency
+- [ ] Price Research + Insight use white theme (matches your screenshots)
+- [ ] Rest of app uses dark theme (gray-950)
+- [ ] Decide: unify to one theme or keep dual?
+
+### P3 — Features
+- [ ] Wire ExportButtons to all pages (Home, Search, Price Research)
+- [ ] Parser v2 integration — swap `api/_lib/parser.js` for enhanced version
+- [ ] Mobile responsive pass
+- [ ] Currency converter page (linked in footer but 404s)
+- [ ] Glossary page (linked in footer but broken)
+
+### Blocked
+- [ ] Image verification — needs client-side Gemini SDK (Vercel 60s limit)
+- [ ] WhatsApp/Telegram ingestion — needs QR scan + bot tokens
+
+---
+
+## Key Design Decisions
+
+1. **HashRouter over BrowserRouter** — Vercel static hosting compatibility
+2. **Outliers excluded from stats** — IQR method, reported separately in red card
+3. **Mean (not Median) for averages** — matches your reference images
+4. **White theme for Price Research** — matches your screenshots
+5. **Demo data fallback** — works without Supabase for development
+6. **Client-side parsing in Demo** — no API call needed for paste workflow
