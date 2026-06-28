@@ -28,15 +28,32 @@ module.exports = async function handler(req, res) {
     const { verdict, brand, dateFrom, dateTo } = req.body || {};
     const supabase = getClient();
 
-    // Build query
-    let q = supabase.from('watch_records').select('*');
+    // Safety: require at least one filter to prevent exporting all 2.39M rows
+    if (!verdict && !brand && !dateFrom && !dateTo) {
+      return res.status(400).json({ 
+        error: 'At least one filter required (verdict, brand, or date range). Use verdict=REVIEW to export review records.' 
+      });
+    }
+
+    // Build query with max limit
+    const MAX_EXPORT_ROWS = 50000;
+    let q = supabase.from('watch_records').select('*', { count: 'exact' });
     if (verdict) q = q.eq('verdict', verdict);
     if (brand) q = q.eq('brand', brand);
     if (dateFrom) q = q.gte('received_at', dateFrom);
     if (dateTo) q = q.lte('received_at', dateTo);
 
-    const { data: rows, error } = await q.order('brand').order('reference');
+    const { data: rows, error, count } = await q
+      .order('brand')
+      .order('reference')
+      .limit(MAX_EXPORT_ROWS);
+    
     if (error) throw error;
+    
+    const totalMatched = count || rows?.length || 0;
+    if (totalMatched > MAX_EXPORT_ROWS) {
+      console.warn(`[export-excel] Query matched ${totalMatched} rows, limited to ${MAX_EXPORT_ROWS}`);
+    }
 
     const records = rows || [];
     const columns = [
@@ -62,7 +79,8 @@ module.exports = async function handler(req, res) {
     let output = '';
     output += 'WATCHFACTS EXPORT REPORT\n';
     output += 'Generated: ' + new Date().toISOString() + '\n';
-    output += 'Total Records: ' + records.length + '\n\n';
+    output += 'Total Matched: ' + totalMatched + '\n';
+    output += 'Exported: ' + records.length + (totalMatched > MAX_EXPORT_ROWS ? ` (limited to ${MAX_EXPORT_ROWS})` : '') + '\n\n';
 
     // Summary
     output += '=== SUMMARY ===\n';
