@@ -214,6 +214,15 @@ export default function AdminPage() {
               loading={actionLoading === 'reprocess'}
             />
 
+            <BulkActionCard
+              title="Deduplicate Database"
+              desc="Remove existing duplicate entries where reference, price, and year match exactly in same batch"
+              icon={Trash2}
+              color="text-rose-400"
+              onClick={() => runBulkAction('deduplicate')}
+              loading={actionLoading === 'deduplicate'}
+            />
+
             <div className="flex items-center gap-2 mt-6 mb-2">
               <DollarSign size={14} className="text-gold-primary" />
               <span className="text-xs font-bold uppercase tracking-wider text-text-primary">AI Cost Tracker</span>

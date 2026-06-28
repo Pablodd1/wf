@@ -67,10 +67,22 @@ function isKaratContext(text, matchIndex, matchLength) {
 }
 
 function parsePriceDetailed(text, normalizedRef = null) {
-  // Strip commas but preserve text for European-decimal detection
-  const t = text.replace(/,/g, '');
+  // Normalize European thousands separator period: e.g. "16.500" or "153.000"
+  // If there is a period followed by exactly three digits at the end of a word or string
+  let cleanedText = text.replace(/(\d+)\.(\d{3})\b/g, '$1$2');
 
-  const safe = (n, curr = null) => (isYearLike(n) ? { priceRaw: null, explicitCurrency: null } : { priceRaw: n, explicitCurrency: curr });
+  // Strip commas but preserve text for European-decimal detection
+  const t = cleanedText.replace(/,/g, '');
+
+  const safe = (n, curr = null) => {
+    if (isYearLike(n)) return { priceRaw: null, explicitCurrency: null };
+    // Convert to USD equivalent to check sanity
+    const usdVal = toUSD(n, curr || 'USD');
+    if (usdVal > 5000000) {
+      return { priceRaw: null, explicitCurrency: null }; // reject insane prices (> $5M USD)
+    }
+    return { priceRaw: n, explicitCurrency: curr };
+  };
 
   // P1: European decimal-thousands before currency: 64.000Usdt → 64000
   const euDecM = t.match(/(\d{1,4})\.(\d{3})\s*(usdt|usd|hkd)\b/i);
@@ -81,7 +93,11 @@ function parsePriceDetailed(text, normalizedRef = null) {
 
   // P1: hk$ prefix with m/k multipliers
   const hkDollarM = t.match(/hk\$\s*(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
-  if (hkDollarM) return safe(Math.round(parseFloat(hkDollarM[1]) * 1_000_000), 'HKD');
+  if (hkDollarM) {
+    const val = parseFloat(hkDollarM[1]);
+    const isCaseSize = val >= 24 && val <= 50 && !hkDollarM[1].includes('.');
+    if (!isCaseSize) return safe(Math.round(val * 1_000_000), 'HKD');
+  }
   const hkDollarK = t.match(/hk\$\s*(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
   if (hkDollarK) return safe(Math.round(parseFloat(hkDollarK[1]) * 1000), 'HKD');
   const hkDollarPlain = t.match(/hk\$\s*(\d{4,8})/i);
@@ -89,7 +105,11 @@ function parsePriceDetailed(text, normalizedRef = null) {
 
   // HKD with decimals: HKD4.15m, HKD1.43m, etc.
   const hkdM = t.match(/HKD\s*(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
-  if (hkdM) return safe(Math.round(parseFloat(hkdM[1]) * 1_000_000), 'HKD');
+  if (hkdM) {
+    const val = parseFloat(hkdM[1]);
+    const isCaseSize = val >= 24 && val <= 50 && !hkdM[1].includes('.');
+    if (!isCaseSize) return safe(Math.round(val * 1_000_000), 'HKD');
+  }
   const hkdK = t.match(/HKD\s*(\d{1,4}(?:\.\d{1,2})?)\s*k\b/i);
   if (hkdK) return safe(Math.round(parseFloat(hkdK[1]) * 1000), 'HKD');
 
@@ -101,7 +121,11 @@ function parsePriceDetailed(text, normalizedRef = null) {
   const kBeforeHkd = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\s*HKD/i);
   if (kBeforeHkd) return safe(Math.round(parseFloat(kBeforeHkd[1]) * 1000), 'HKD');
   const mBeforeHkd = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\s*HKD/i);
-  if (mBeforeHkd) return safe(Math.round(parseFloat(mBeforeHkd[1]) * 1_000_000), 'HKD');
+  if (mBeforeHkd) {
+    const val = parseFloat(mBeforeHkd[1]);
+    const isCaseSize = val >= 24 && val <= 50 && !mBeforeHkd[1].includes('.');
+    if (!isCaseSize) return safe(Math.round(val * 1_000_000), 'HKD');
+  }
 
   const numBeforeUsd = t.match(/(\d{4,8})\s*(?:USD|USDT)/i);
   if (numBeforeUsd) return safe(parseInt(numBeforeUsd[1], 10), 'USD');
@@ -109,7 +133,11 @@ function parsePriceDetailed(text, normalizedRef = null) {
   if (kBeforeUsd) return safe(Math.round(parseFloat(kBeforeUsd[1]) * 1000), 'USD');
 
   const mMatch = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
-  if (mMatch) return safe(Math.round(parseFloat(mMatch[1]) * 1_000_000));
+  if (mMatch) {
+    const val = parseFloat(mMatch[1]);
+    const isCaseSize = val >= 24 && val <= 50 && !mMatch[1].includes('.');
+    if (!isCaseSize) return safe(Math.round(val * 1_000_000));
+  }
 
   const kMatchAll = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\b/gi);
   if (kMatchAll) {

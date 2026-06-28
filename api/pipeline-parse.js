@@ -842,25 +842,35 @@ function regexExtract(text) {
 
 // ─── AI Parse ───
 async function aiParse(kimiKey, rawMessage, currentGuess) {
-  const systemPrompt = `You are an expert luxury watch cataloging assistant. Parse unstructured dealer chat messages and extract structured watch metadata.
-
-Analyze the provided raw message and extract:
-- reference: The clean, uppercase reference number (e.g., '126710GRNR', 'PFC914-1020001-100182').
-- brand: The standardized brand name (e.g., 'Rolex', 'Patek Philippe', 'Parmigiani Fleurier').
-- dialColor: The dial color (e.g., 'Green', 'Silver', 'White').
-- condition: Standardized condition (e.g., 'New', 'Unworn', 'Used').
-- year: The 4-digit year of the watch (if mentioned).
-- price: The numeric price (if mentioned).
-- currency: The currency code (USD, HKD, EUR, etc.).
-- confidence: Your confidence 0-100.
+  const systemPrompt = `You are a specialized watch market data extraction engine. Parse raw text messages into structured JSON. If the line is a promotional header, empty broadcast, or generic text containing no individual asset pricing, you MUST discard it (set is_valid_asset: false).
 
 Rules:
-1. If the brand is omitted but the reference is highly iconic (e.g., '126710', '5711', '15500'), infer the brand.
-2. Map abbreviations: 'VC' -> 'Vacheron Constantin', 'AP' -> 'Audemars Piguet', 'PP' -> 'Patek Philippe', 'JLC' -> 'Jaeger-LeCoultre', 'AL&S' or 'Lange' -> 'A. Lange & Sohne'.
-3. If the message is just generic noise (e.g., 'Brand New Rolex' with no model/reference), return null for reference.
-4. Reference suffix -> dial: LN=Black LB=Blue LV=Green CHNR=Brown R=Brown G=Blue J=Champagne ST=Blue OR=Pink TI=Grey BC=Black.
+1. Brand Mapping Rules:
+   - "GLASHUTTE" -> "Glashütte Original"
+   - "F.P.JOURNE" -> "F.P. Journe"
+   - "PIAGET" -> "Piaget"
+   - "DELANEAU" -> "DeLaneau"
+   - "VC" or "VACHERON" -> "Vacheron Constantin"
+   - "AP" or "AUDEMARS" -> "Audemars Piguet"
+   - "PP" or "PATEK" -> "Patek Philippe"
+   - "JLC" or "JAEGER" -> "Jaeger-LeCoultre"
+   - "AL&S" or "LANGE" -> "A. Lange & Sohne"
+2. If the brand is omitted but the reference is highly iconic (e.g., '126710', '5711', '15500'), infer the brand. Never leave brand as UNKNOWN if a brand substring exists.
+3. Reference suffix -> dial: LN=Black LB=Blue LV=Green CHNR=Brown R=Brown G=Blue J=Champagne ST=Blue OR=Pink TI=Grey BC=Black.
 
-Output MUST be a valid JSON object with these exact keys: reference, brand, dialColor, condition, year, price, currency, confidence.`;
+Required Output Format:
+Output MUST be a valid JSON object with these exact keys:
+{
+  "is_valid_asset": boolean, // false if it is just a promo headline like '🚀 PP Used Full Set 🚀' or noise containing no individual asset pricing
+  "brand": string or null, // standardized brand name
+  "reference": string or null, // exact model reference number
+  "dialColor": string or null, // dial color
+  "condition": string or null, // standardized condition
+  "year": number or null, // 4-digit year
+  "price": number or null, // numeric price (unscaled, e.g. 153000 or 16500)
+  "currency": string or null, // currency code (USD, HKD, EUR, etc.)
+  "confidence": number // confidence score (0 to 100)
+}`;
 
   const userPrompt = `Regex guess: ${JSON.stringify(currentGuess || {})}\nRaw message:\n"""\n${rawMessage}\n"""\nReturn ONLY valid JSON:`;
 
@@ -1020,10 +1030,14 @@ async function analyzeOne(chunk, ctx) {
   let confidence = parsed.confidence;
   stages.push({ stage: 'PARSE', engine: 'regex', confidence, data: { ...parsed }, note: 'code-first extraction' });
 
+  let isValidAsset = true;
   const needsAi = !parsed.ref || !parsed.brand || confidence < APPROVE_THRESHOLD;
   if (needsAi && ctx.kimiKey) {
     try {
       const ai = await aiParse(ctx.kimiKey, chunk, parsed);
+      if (ai.is_valid_asset === false) {
+        isValidAsset = false;
+      }
       parsed = {
         brand: ai.brand || parsed.brand,
         ref: ai.reference || parsed.ref,
@@ -1125,7 +1139,11 @@ async function analyzeOne(chunk, ctx) {
 
   const identified = !!reference && brand !== 'Unknown';
   let verdict, reason;
-  if (!identified && confidence < RECYCLE_FLOOR) {
+  if (!isValidAsset) {
+    verdict = 'RECYCLE';
+    reason = 'Discarded by AI as promotional header / generic noise.';
+    confidence = 0;
+  } else if (!identified && confidence < RECYCLE_FLOOR) {
     verdict = 'RECYCLE';
     reason = 'Not enough information to identify the watch.';
   } else if (confidence >= APPROVE_THRESHOLD && !outlierFlag) {
