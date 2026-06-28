@@ -1,308 +1,212 @@
-import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import {
-  Search, TrendingUp, Shield, Database, ArrowRight,
-  Watch, BarChart3, FileSpreadsheet, CheckCircle
-} from 'lucide-react';
-import WatchImage from '@/components/WatchImage';
-import type { WatchRecord } from '@/types';
+import { PublicNavbar } from '@/components/PublicNavbar';
 
-/* ─── Brand logos ────────────────────────────────────────────────────── */
+/* ─── Brand logos (text-based, 15 brands) ───────────────────────────── */
 const BRANDS = [
-  'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille',
-  'Vacheron Constantin', 'Omega', 'Cartier', 'Breitling',
-  'IWC', 'Tudor', 'Panerai', 'Bvlgari',
-  'Breguet', 'Blancpain', 'Grand Seiko', 'TAG Heuer',
+  ['ROLEX', 'PATEK PHILIPPE', 'HUBLOT', 'AUDEMARS PIGUET', 'OMEGA'],
+  ['Cartier', 'BREITLING', 'IWC', 'PANERAI', 'TUDOR'],
+  ['HERMES', 'RICHARD MILLE', 'A. LANGE & SÖHNE', 'Chopard', 'BVLGARI'],
 ];
 
-/* ─── Hero ───────────────────────────────────────────────────────────── */
-function Hero() {
-  return (
-    <section
-      className="relative flex items-center justify-center min-h-[520px] bg-cover bg-center bg-no-repeat"
-      style={{
-        backgroundImage: `linear-gradient(to bottom, rgba(10,10,15,0.2), rgba(10,10,15,0.95)), url('https://images.unsplash.com/photo-1547996663-b8308d6e161c?auto=format&fit=crop&w=2000&q=80')`,
-      }}
-    >
-      <div className="text-center px-4 max-w-3xl mx-auto">
-        <motion.h1
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-4xl md:text-5xl lg:text-6xl font-extrabold text-white tracking-tight mb-4"
-          style={{ textShadow: '0 2px 20px rgba(0,0,0,0.8)' }}
-        >
-          The Most Comprehensive
-          <span className="block text-[#D4AF37]">Watch Intelligence Platform</span>
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="text-gray-300 text-base md:text-lg mb-8 max-w-xl mx-auto"
-        >
-          Real-time data from 600+ dealer group chats. 2.39M+ listings processed.
-          Instant price research and market analytics.
-        </motion.p>
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="flex flex-col sm:flex-row gap-3 justify-center"
-        >
-          <Link
-            to="/search"
-            className="px-6 py-3 bg-[#D4AF37] hover:bg-[#E5C158] text-black font-semibold rounded-md transition-colors flex items-center gap-2 justify-center"
-          >
-            <Search size={18} /> Search Watches
-          </Link>
-          <Link
-            to="/price-research"
-            className="px-6 py-3 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white font-semibold rounded-md transition-colors flex items-center gap-2 justify-center"
-          >
-            <TrendingUp size={18} /> Price Research
-          </Link>
-        </motion.div>
-      </div>
-    </section>
-  );
-}
+/* ─── How It Works steps ────────────────────────────────────────────── */
+const STEPS = [
+  {
+    num: '01',
+    title: 'Explore the Drop. Unlock the Deals.',
+    desc: 'Browse 125,000+ fresh listings dropped bi-weekly from 11,000+ pre-vetted global dealers\u2014featuring exclusive wholesale prices you won\u2019t find anywhere else.',
+  },
+  {
+    num: '02',
+    title: 'Certified. Verified. Yours.',
+    desc: 'Each item undergoes expert inspection and comes with a',
+    highlight: 'standardized appraisal and certification',
+    descAfter: '\u2014so you can buy luxury with total confidence.',
+  },
+  {
+    num: '03',
+    title: 'Upgrade Your Piece. Protect Your Peace.',
+    desc: 'Add a 1\u2011Year Service Warranty for worry-free ownership and total peace of mind.',
+  },
+];
 
-/* ─── Brands Section ─────────────────────────────────────────────────── */
-function BrandsSection() {
-  return (
-    <section className="py-12 bg-[#0A0A0F] border-b border-[#1E1E2E]">
-      <div className="max-w-6xl mx-auto px-4">
-        <h2 className="text-center text-sm uppercase tracking-[0.2em] text-gray-500 mb-8">
-          Some of the brands, we offer
-        </h2>
-        <div className="grid grid-cols-4 sm:grid-cols-8 gap-4">
-          {BRANDS.map((brand, i) => (
-            <motion.div
-              key={brand}
-              initial={{ opacity: 0, y: 10 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.03 }}
-              className="flex items-center justify-center py-3 px-2 bg-[#111118] border border-[#1E1E2E] rounded-md hover:border-[#D4AF37]/40 transition-colors cursor-pointer"
-            >
-              <span className="text-[10px] font-semibold text-gray-400 text-center uppercase tracking-wider">
-                {brand}
-              </span>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
+/* ─── Footer columns ────────────────────────────────────────────────── */
+const FOOTER = {
+  ABOUT: ['About Simon', 'About Us'],
+  REPORTS: ['Retailer Reports', 'Consumer Reports'],
+  APPS: ['Hire Fi'],
+  OTHERS: ['Buying Process', 'Selling Process', 'Glossary', 'Terms', 'Privacy Policy'],
+};
 
-/* ─── Stats Section ──────────────────────────────────────────────────── */
-function StatsSection({ stats }: { stats: any }) {
-  const items = [
-    { label: 'Total Listings', value: stats?.totalRecords?.toLocaleString() || '2,390,143', icon: Database },
-    { label: 'Brands Covered', value: '16+', icon: Watch },
-    { label: 'Dealer Groups', value: '600+', icon: Shield },
-    { label: 'Avg Confidence', value: `${stats?.avgConfidence || 72}%`, icon: CheckCircle },
-  ];
-
-  return (
-    <section className="py-12 bg-[#111118]">
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {items.map(({ label, value, icon: Icon }, i) => (
-            <motion.div
-              key={label}
-              initial={{ opacity: 0, scale: 0.95 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.1 }}
-              className="bg-[#0A0A0F] border border-[#1E1E2E] rounded-lg p-5 text-center"
-            >
-              <Icon size={20} className="text-[#D4AF37] mx-auto mb-2" />
-              <div className="text-2xl font-bold text-white font-mono">{value}</div>
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider mt-1">{label}</div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─── Recent Listings ────────────────────────────────────────────────── */
-function RecentListings() {
-  const [listings, setListings] = useState<WatchRecord[]>([]);
-
-  useEffect(() => {
-    fetch('/api/listings?limit=8')
-      .then(r => r.json())
-      .then(d => setListings(d.rows || []))
-      .catch(() => setListings([]));
-  }, []);
-
-  const demoListings: WatchRecord[] = [
-    { brand: 'Rolex', reference: '126610LN', dialColor: 'Black', condition: 'New', year: 2024, price: 14200, originalPrice: 14200, originalCurrency: 'USD', confidence: 97 },
-    { brand: 'Patek Philippe', reference: '5711/1A', dialColor: 'Blue', condition: 'New', year: 2023, price: 185000, originalPrice: 185000, originalCurrency: 'USD', confidence: 100 },
-    { brand: 'Audemars Piguet', reference: '15202ST', dialColor: 'Blue', condition: 'Used', year: 2022, price: 98700, originalPrice: 98700, originalCurrency: 'USD', confidence: 94 },
-    { brand: 'Richard Mille', reference: 'RM11-03', dialColor: 'Black', condition: 'New', year: 2024, price: 385000, originalPrice: 385000, originalCurrency: 'USD', confidence: 91 },
-    { brand: 'Vacheron Constantin', reference: '4500V', dialColor: 'Blue', condition: 'New', year: 2024, price: 28900, originalPrice: 28900, originalCurrency: 'USD', confidence: 93 },
-    { brand: 'Rolex', reference: '228238', dialColor: 'Champagne', condition: 'New', year: 2024, price: 47800, originalPrice: 47800, originalCurrency: 'USD', confidence: 98 },
-    { brand: 'Patek Philippe', reference: '5167A', dialColor: 'Black', condition: 'Used', year: 2021, price: 69900, originalPrice: 69900, originalCurrency: 'USD', confidence: 89 },
-    { brand: 'Omega', reference: '310.30.42.50.01.001', dialColor: 'Black', condition: 'New', year: 2024, price: 7800, originalPrice: 7800, originalCurrency: 'USD', confidence: 96 },
-  ] as any;
-
-  const displayListings = listings.length > 0 ? listings : demoListings;
-
-  return (
-    <section className="py-12 bg-[#0A0A0F]">
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-xl font-bold text-white">Recent Listings</h2>
-          <Link to="/search" className="text-[#D4AF37] text-sm flex items-center gap-1 hover:underline">
-            View All <ArrowRight size={14} />
-          </Link>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {displayListings.map((listing: any, i: number) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ delay: i * 0.05 }}
-              className="bg-[#111118] border border-[#1E1E2E] rounded-lg overflow-hidden hover:border-[#D4AF37]/40 transition-colors"
-            >
-              <div className="aspect-square bg-[#0A0A0F]">
-                <WatchImage
-                  brand={listing.brand}
-                  reference={listing.reference}
-                  className="w-full h-full p-2"
-                />
-              </div>
-              <div className="p-3">
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider">{listing.brand}</div>
-                <div className="text-xs font-bold text-white font-mono">{listing.reference}</div>
-                <div className="flex items-center justify-between mt-2">
-                  <span className="text-[10px] text-gray-400">{listing.condition} {listing.year}</span>
-                  <span className="text-xs font-bold text-[#D4AF37] font-mono">
-                    ${listing.price?.toLocaleString()}
-                  </span>
-                </div>
-                <div className="mt-1.5">
-                  <div className="h-1 bg-[#1E1E2E] rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${listing.confidence || 80}%`,
-                        backgroundColor: (listing.confidence || 80) >= 85 ? '#22C55E' : (listing.confidence || 80) >= 70 ? '#F59E0B' : '#EF4444',
-                      }}
-                    />
-                  </div>
-                  <span className="text-[9px] text-gray-500 mt-0.5 block">{listing.confidence || 80}% confidence</span>
-                </div>
-              </div>
-            </motion.div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─── Contact Section ────────────────────────────────────────────────── */
-function ContactSection() {
-  return (
-    <section className="py-12 bg-[#111118] border-t border-[#1E1E2E]">
-      <div className="max-w-6xl mx-auto px-4 text-center">
-        <h2 className="text-sm uppercase tracking-[0.2em] text-gray-500 mb-4">Have questions?</h2>
-        <h3 className="text-2xl font-bold text-white mb-6">Contact Us</h3>
-        <div className="flex justify-center gap-3">
-          <a
-            href="mailto:info@watchfacts.com"
-            className="px-5 py-2.5 bg-[#1A1A24] border border-[#1E1E2E] text-gray-300 text-sm rounded-md hover:border-[#D4AF37]/40 transition-colors flex items-center gap-2"
-          >
-            <span className="text-xs">✉</span> EMAIL
-          </a>
-          <a
-            href="https://api.whatsapp.com/send?phone=17869569201"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-5 py-2.5 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-sm rounded-md transition-colors flex items-center gap-2"
-          >
-            <span className="text-xs">💬</span> CHAT
-          </a>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* ─── Footer ─────────────────────────────────────────────────────────── */
-function Footer() {
-  return (
-    <footer className="bg-[#0A0A0F] border-t border-[#1E1E2E] pt-10 pb-6">
-      <div className="max-w-6xl mx-auto px-4">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-8 mb-8">
-          <div>
-            <h4 className="text-[10px] uppercase tracking-[0.15em] text-gray-500 mb-3">About</h4>
-            <ul className="space-y-2">
-              <li><span className="text-xs text-gray-400 hover:text-white cursor-pointer transition-colors">About Simon</span></li>
-              <li><span className="text-xs text-gray-400 hover:text-white cursor-pointer transition-colors">About Us</span></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-[10px] uppercase tracking-[0.15em] text-gray-500 mb-3">Reports</h4>
-            <ul className="space-y-2">
-              <li><span className="text-xs text-gray-400 hover:text-white cursor-pointer transition-colors">Retailer Reports</span></li>
-              <li><span className="text-xs text-gray-400 hover:text-white cursor-pointer transition-colors">Consumer Reports</span></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-[10px] uppercase tracking-[0.15em] text-gray-500 mb-3">Apps</h4>
-            <ul className="space-y-2">
-              <li><span className="text-xs text-gray-400 hover:text-white cursor-pointer transition-colors">Hire Fi</span></li>
-            </ul>
-          </div>
-          <div>
-            <h4 className="text-[10px] uppercase tracking-[0.15em] text-gray-500 mb-3">Others</h4>
-            <ul className="space-y-2">
-              <li><span className="text-xs text-gray-400 hover:text-white cursor-pointer transition-colors">Buying Process</span></li>
-              <li><span className="text-xs text-gray-400 hover:text-white cursor-pointer transition-colors">Selling Process</span></li>
-              <li><span className="text-xs text-gray-400 hover:text-white cursor-pointer transition-colors">Glossary</span></li>
-              <li><span className="text-xs text-gray-400 hover:text-white cursor-pointer transition-colors">Terms</span></li>
-              <li><span className="text-xs text-gray-400 hover:text-white cursor-pointer transition-colors">Privacy Policy</span></li>
-            </ul>
-          </div>
-        </div>
-        <div className="border-t border-[#1E1E2E] pt-4 text-center">
-          <p className="text-[10px] text-gray-600">© 2026 Watchfacts Inc. All Rights Reserved.</p>
-        </div>
-      </div>
-    </footer>
-  );
-}
-
-/* ─── Main Home Page ─────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   HOME PAGE — EXACT replica of watchfacts.com/wf-home
+   ═══════════════════════════════════════════════════════════════════════ */
 export default function Home() {
-  const [stats, setStats] = useState<any>(null);
-
-  useEffect(() => {
-    fetch('/api/stats')
-      .then(r => r.json())
-      .then(d => setStats(d))
-      .catch(() => {});
-  }, []);
-
   return (
-    <div>
-      <Hero />
-      <BrandsSection />
-      <StatsSection stats={stats} />
-      <RecentListings />
-      <ContactSection />
-      <Footer />
+    <div className="min-h-[100dvh] bg-white">
+      <PublicNavbar />
+
+      {/* ── HERO ─────────────────────────────────────────────────── */}
+      <section
+        className="relative flex items-center justify-center min-h-[100dvh] bg-cover bg-center bg-no-repeat"
+        style={{
+          backgroundImage: `linear-gradient(to right, rgba(10,10,10,0.85) 0%, rgba(10,10,10,0.4) 50%, rgba(10,10,10,0.2) 100%), url('https://images.unsplash.com/photo-1547996663-b8308d6e161c?auto=format&fit=crop&w=2000&q=80')`,
+        }}
+      >
+        <div className="text-center px-6 max-w-3xl mx-auto pt-[60px]">
+          <h1 className="text-3xl md:text-4xl lg:text-[42px] font-light text-white tracking-wide mb-6 leading-tight">
+            Own The Rare. Backed By Blockchain
+          </h1>
+          <p className="text-white/80 text-sm md:text-base leading-relaxed max-w-2xl mx-auto">
+            From iconic timepieces to statement handbags, our concierge team sources the world&apos;s most coveted luxury pieces&mdash;authentic, inspected, and delivered with a blockchain-certified digital passport that protects your investment and proves provenance.
+          </p>
+        </div>
+      </section>
+
+      {/* ── HOW IT WORKS ─────────────────────────────────────────── */}
+      <section className="bg-[#141414] py-20 px-6">
+        <div className="max-w-4xl mx-auto">
+          <h2 className="text-center text-xs uppercase tracking-[0.2em] text-white/50 mb-14">
+            How It Works
+          </h2>
+          <div className="space-y-16">
+            {STEPS.map((step) => (
+              <div key={step.num} className="flex gap-6 md:gap-10">
+                <span className="text-5xl md:text-6xl font-extralight text-white/20 flex-shrink-0 w-[60px] text-right">
+                  {step.num}
+                </span>
+                <div>
+                  <h3 className="text-lg md:text-xl font-semibold text-white mb-3">
+                    {step.title}
+                  </h3>
+                  <p className="text-white/60 text-sm leading-relaxed">
+                    {step.desc}
+                    {step.highlight && (
+                      <span className="text-[#3B5BFE] font-medium"> {step.highlight} </span>
+                    )}
+                    {step.descAfter}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CAN'T FIND ───────────────────────────────────────────── */}
+      <section className="bg-[#141414] pb-20 px-6">
+        <div className="max-w-2xl mx-auto text-center">
+          <h2 className="text-xl md:text-2xl font-semibold text-white mb-4">
+            Can&apos;t Find What you are Looking For?
+          </h2>
+          <p className="text-white/60 text-sm leading-relaxed mb-2">
+            Submit a sourcing request through our{' '}
+            <a href="https://watchfacts.com/want-to-buy" target="_blank" rel="noopener noreferrer" className="text-[#3B5BFE] hover:underline font-medium">
+              Want To Buy
+            </a>{' '}
+            and let our concierge team locate your item through our trusted network. We&apos;ll handle everything&mdash;negotiation, logistics, inspection, and delivery.
+          </p>
+        </div>
+      </section>
+
+      {/* ── BRANDS ───────────────────────────────────────────────── */}
+      <section className="bg-white py-16 px-6">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-center text-lg md:text-xl font-semibold text-[#1A1A1A] mb-10">
+            Some Of The Brands, We Offer
+          </h2>
+          <div className="space-y-0">
+            {BRANDS.map((row, ri) => (
+              <div key={ri} className="grid grid-cols-5 border-b border-[#E5E5E5] last:border-b-0">
+                {row.map((brand, ci) => (
+                  <div
+                    key={ci}
+                    className="flex items-center justify-center py-6 px-4 border-r border-[#E5E5E5] last:border-r-0"
+                  >
+                    <span className={`text-center text-[11px] font-semibold tracking-[0.1em] ${
+                      brand === brand.toUpperCase() ? 'uppercase' : ''
+                    } text-[#666]`}>
+                      {brand}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── CONTACT / MAP ────────────────────────────────────────── */}
+      <section className="relative">
+        {/* Map */}
+        <div className="h-[300px] w-full bg-[#F5F5F5]">
+          <iframe
+            src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3592.5!2d-80.1918!3d25.7617!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2zMjXCsDQ1JzQyLjEiTiA4MMKwMTEnMjAuNSJX!5e0!3m2!1sen!2sus!4v1"
+            width="100%"
+            height="300"
+            style={{ border: 0, filter: 'grayscale(100%)' }}
+            allowFullScreen
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            title="WatchFacts Location"
+          />
+        </div>
+        {/* Contact overlay */}
+        <div className="bg-white py-12 px-6 text-center">
+          <h2 className="text-base font-semibold text-[#1A1A1A] mb-6">
+            Have questions? Contact Us
+          </h2>
+          <div className="flex justify-center gap-3">
+            <a
+              href="mailto:info@watchfacts.com"
+              className="px-6 py-2.5 bg-[#F5F5F5] hover:bg-[#EEEEEE] text-[#666] text-xs font-medium rounded-sm transition-colors flex items-center gap-2 border border-[#E0E0E0]"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+              Email
+            </a>
+            <a
+              href="https://api.whatsapp.com/send?phone=17869569201"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-6 py-2.5 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-xs font-medium rounded-sm transition-colors flex items-center gap-2"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+              Chat
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* ── FOOTER ───────────────────────────────────────────────── */}
+      <footer className="bg-[#F5F5F5] pt-10 pb-6 px-6">
+        <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
+          {Object.entries(FOOTER).map(([title, links]) => (
+            <div key={title}>
+              <h4 className="text-[10px] uppercase tracking-[0.15em] text-[#999] font-medium mb-4">
+                {title}
+              </h4>
+              <ul className="space-y-2.5">
+                {links.map((link) => (
+                  <li key={link}>
+                    <a
+                      href={`https://watchfacts.com/${link.toLowerCase().replace(/\s+/g, '-')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-[#666] hover:text-[#1A1A1A] transition-colors"
+                    >
+                      {link}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="text-center border-t border-[#E0E0E0] pt-5">
+          <p className="text-[10px] text-[#999]">
+            &copy; 2026 Watchfacts Inc. All Rights Reserved.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
