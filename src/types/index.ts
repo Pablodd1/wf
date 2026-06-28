@@ -15,7 +15,7 @@ export interface WatchRecord {
   sellerCount?: number;
   buyerSellerRatio?: number;
   liquidityScore?: number;
-  mlPredictedPrice: number;
+  mlPredictedPrice?: number;
   imageUrl?: string;
   imageConfirmed?: boolean;
   hasBox?: boolean;
@@ -27,6 +27,18 @@ export interface WatchRecord {
   updatedAt?: string;
   source?: string;
   rawMessage?: string;
+  // Outlier / pipeline fields
+  isResidue?: boolean;
+  priceVariance?: number;
+  failureFlags?: string[];
+  outcomeClassification?: string;
+  marketComparables?: number;
+  autoResolvedFlags?: string[];
+  // Parser metadata
+  parser_version?: string;
+  field_confidence?: Record<string, number>;
+  // Listing type
+  listing_type?: 'WTS' | 'WTB' | 'WTT' | 'GARBAGE';
 }
 
 export type Verdict = 'APPROVED' | 'REVIEW' | 'HUMAN' | 'RECYCLE';
