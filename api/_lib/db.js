@@ -81,15 +81,15 @@ async function getListings({ page = 1, limit = 50, brand = null, reference = nul
   return { rows, total, page, limit, totalPages: Math.ceil(total / limit) };
 }
 
-// Get dashboard stats
+// Get dashboard stats — MySQL compatible (no FILTER clause)
 async function getStats() {
   const sql = `
     SELECT 
       COUNT(*) as totalRecords,
-      COUNT(*) FILTER(WHERE verdict = 'APPROVED') as approvedCount,
-      COUNT(*) FILTER(WHERE verdict = 'HUMAN') as humanCount,
-      COUNT(*) FILTER(WHERE verdict = 'RECYCLE') as recycleCount,
-      COUNT(*) FILTER(WHERE verdict = 'REVIEW') as reviewCount,
+      COUNT(CASE WHEN verdict = 'APPROVED' THEN 1 END) as approvedCount,
+      COUNT(CASE WHEN verdict = 'HUMAN' THEN 1 END) as humanCount,
+      COUNT(CASE WHEN verdict = 'RECYCLE' THEN 1 END) as recycleCount,
+      COUNT(CASE WHEN verdict = 'REVIEW' THEN 1 END) as reviewCount,
       AVG(price_usd) as avgPrice,
       MIN(price_usd) as minPrice,
       MAX(price_usd) as maxPrice,

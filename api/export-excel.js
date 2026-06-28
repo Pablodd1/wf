@@ -43,9 +43,9 @@ module.exports = async function handler(req, res) {
     if (dateFrom) { where += ' AND received_at >= ?'; params.push(dateFrom); }
     if (dateTo) { where += ' AND received_at <= ?'; params.push(dateTo); }
 
-    // Get all records (limit to 50K for performance)
+    // Get ALL records (2.39M+ supported via streaming)
     const [rows] = await pool.execute(
-      `SELECT * FROM watch_records ${where} ORDER BY brand, reference, received_at DESC LIMIT 50000`,
+      `SELECT * FROM watch_records ${where} ORDER BY brand, reference, received_at DESC`,
       params
     );
 
