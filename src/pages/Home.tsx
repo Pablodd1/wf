@@ -233,7 +233,7 @@ export default function Home() {
       year: r.year,
       confidence: r.confidence,
       status: r.isResidue ? 'HUMAN_REVIEW' : r.confidence >= 90 ? 'AUTO_APPROVED' : 'AI_REVIEW',
-      intent: (r as any).intent || 'SELL',
+      intent: 'SELL',
       rawMessage: r.rawMessage,
     })));
   }, [records]);

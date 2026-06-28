@@ -1,14 +1,14 @@
-import { Component, createElement } from 'react';
+import React, { Component, createElement } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App.tsx';
 
 // Error boundary to catch and display render errors
-class ErrorBoundary extends Component<{children: any}, {error: Error | null}> {
+class ErrorBoundary extends Component<{children: React.ReactNode}, {error: Error | null}> {
   state: { error: Error | null } = { error: null };
   static getDerivedStateFromError(error: Error) { return { error }; }
-  componentDidCatch(error: Error, info: any) {
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
     console.error('ErrorBoundary caught:', error.message, error.stack, info);
   }
   render() {

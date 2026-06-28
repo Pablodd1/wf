@@ -1,23 +1,94 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { Search, X, Filter, ChevronDown } from 'lucide-react';
+import { Search, X, Filter, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import { useWatchData } from '@/hooks/useWatchData';
 import type { WatchRecord } from '@/types';
 
-const BRANDS = ['Patek Philippe', 'Rolex', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Tudor', 'Cartier', 'A. Lange & Söhne', 'Unknown'];
+const BRANDS = ['Patek Philippe', 'Rolex', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Tudor', 'Cartier', 'A. Lange & Söhne', 'Omega', 'IWC', 'Breitling', 'Hublot', 'Panerai', 'Unknown'];
 const DIAL_COLORS = ['Black', 'Blue', 'Green', 'White', 'Brown', 'Grey', 'Champagne', 'Pink', 'Ice Blue', 'Purple', 'Yellow', 'Salmon', 'Red', 'Diamond', 'UNKNOWN'];
 const CONDITIONS = ['New', 'Used', 'UNKNOWN'];
 const VERDICTS = ['APPROVED', 'HUMAN', 'RECYCLE'];
+const PAGE_SIZE = 100;
 
 type SortField = 'price' | 'confidence' | 'year' | 'reference';
 type SortDir = 'asc' | 'desc';
+
+/** Shape of a raw Supabase record from the API */
+interface SupabaseRecord {
+  id: string;
+  brand?: string;
+  reference?: string;
+  normalized_reference?: string;
+  model?: string;
+  dial_color?: string;
+  condition?: string;
+  year?: number | null;
+  price_usd?: number;
+  price_raw?: number;
+  currency?: string;
+  confidence?: number;
+  verdict?: string;
+  raw_message?: string;
+  title?: string;
+  created_at?: string;
+  received_at?: string;
+  flags?: string[];
+  box?: string;
+  papers?: string;
+  image_url?: string | null;
+  front_image?: string | null;
+}
+
+function transformRecord(r: SupabaseRecord): WatchRecord {
+  return {
+    id: r.id || '',
+    source: 'whatsapp' as const,
+    rawMessage: r.raw_message || r.title || '',
+    timestamp: r.created_at || r.received_at || '',
+    brand: r.brand || 'Unknown',
+    reference: r.reference || r.normalized_reference || '',
+    family: r.model || '',
+    price: r.price_usd || r.price_raw || 0,
+    originalPrice: r.price_raw || 0,
+    originalCurrency: r.currency || 'USD',
+    dialColor: r.dial_color || 'UNKNOWN',
+    condition: r.condition || 'Unknown',
+    hasBox: r.box === 'Yes',
+    hasPapers: r.papers === 'Yes',
+    year: r.year ?? null,
+    sellerRating: 0,
+    daysOnMarket: 0,
+    confidence: Math.min(100, Math.max(0, r.confidence || 0)),
+    mlPredictedPrice: 0,
+    priceVariance: 0,
+    demandForecast: 'STABLE',
+    outcomeClassification: 'HOLD',
+    marketComparables: 0,
+    processingTime: 0,
+    pipelineLog: [],
+    isResidue: r.verdict === 'RECYCLE',
+    failureFlags: r.flags || [],
+    severity: r.verdict === 'RECYCLE' ? 'CRITICAL' : r.verdict === 'HUMAN' ? 'WARNING' : 'INFO',
+    imageUrl: r.image_url || (r.front_image ? `/images/${r.front_image}` : null),
+    imageCount: r.image_url || r.front_image ? 1 : 0,
+    imageConfirmed: !!r.image_url,
+    autoResolvedFlags: [],
+    buyerCount: 0,
+    sellerCount: 0,
+    buyerSellerRatio: 0,
+    liquidityScore: 0,
+    description: r.raw_message || '',
+  };
+}
 
 export default function SearchPage() {
   const { stats: globalStats } = useWatchData();
   const [records, setRecords] = useState<WatchRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
 
   // Filters
   const [query, setQuery] = useState('');
@@ -32,24 +103,31 @@ export default function SearchPage() {
   const [sortBy, setSortBy] = useState<SortField>('price');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [showFilters, setShowFilters] = useState(true);
-  const [visibleCount, setVisibleCount] = useState(50);
 
-  // Debounced search
+  // Debounced search — avoid refetching on every keystroke
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => setDebouncedQuery(query), 250);
+    debounceRef.current = setTimeout(() => setDebouncedQuery(query), 500);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
   }, [query]);
 
-  const fetchResults = useCallback(async () => {
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedQuery, selectedBrands, selectedDials, selectedConditions, selectedVerdicts, priceMin, priceMax, yearMin, yearMax]);
+
+  const fetchResults = useCallback(async (page: number) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.set('limit', '500');
-      
+      params.set('limit', String(PAGE_SIZE));
+      params.set('page', String(page));
+      params.set('order', sortBy === 'price' ? 'price_usd' : sortBy === 'confidence' ? 'confidence' : sortBy === 'year' ? 'year' : 'reference');
+      params.set('ascending', sortDir === 'asc' ? 'true' : 'false');
+
       if (debouncedQuery.trim()) {
         params.set('search', debouncedQuery.trim());
       }
@@ -66,103 +144,38 @@ export default function SearchPage() {
       const res = await fetch(`/api/watch-data?${params.toString()}`);
       const json = await res.json();
       if (json.data) {
-        const transformed: WatchRecord[] = json.data.map((r: any) => ({
-          id: r.id || '',
-          source: 'whatsapp' as const,
-          rawMessage: r.raw_message || r.title || '',
-          timestamp: r.created_at || r.received_at || '',
-          brand: r.brand || 'Unknown',
-          reference: r.reference || r.normalized_reference || '',
-          family: r.model || '',
-          price: r.price_usd || r.price_raw || 0,
-          originalPrice: r.price_raw || 0,
-          originalCurrency: r.currency || 'USD',
-          dialColor: r.dial_color || 'UNKNOWN',
-          condition: r.condition || 'Unknown',
-          hasBox: r.box === 'Yes',
-          hasPapers: r.papers === 'Yes',
-          year: r.year ?? null,
-          sellerRating: 0,
-          daysOnMarket: 0,
-          confidence: Math.min(100, Math.max(0, r.confidence || 0)),
-          mlPredictedPrice: 0,
-          priceVariance: 0,
-          demandForecast: 'STABLE',
-          outcomeClassification: 'HOLD',
-          marketComparables: 0,
-          processingTime: 0,
-          pipelineLog: [],
-          isResidue: r.verdict === 'RECYCLE' ? true : (r.verdict === 'HUMAN' ? false : false),
-          failureFlags: r.flags || [],
-          severity: r.verdict === 'RECYCLE' ? 'CRITICAL' : r.verdict === 'HUMAN' ? 'WARNING' : 'INFO',
-          imageUrl: r.image_url || null,
-          imageCount: r.image_url ? 1 : 0,
-          imageConfirmed: !!r.image_url,
-          autoResolvedFlags: [],
-          buyerCount: 0,
-          sellerCount: 0,
-          buyerSellerRatio: 0,
-          liquidityScore: 0,
-          description: r.raw_message || '',
-        }));
+        const transformed: WatchRecord[] = (json.data as SupabaseRecord[]).map(transformRecord);
         setRecords(transformed);
         setTotalCount(json.total || transformed.length);
+        setTotalPages(json.pages || Math.ceil((json.total || transformed.length) / PAGE_SIZE));
       }
     } catch (e) {
-      console.error(e);
+      console.error('[SearchPage] fetch error:', e);
     } finally {
       setLoading(false);
     }
-  }, [debouncedQuery, selectedBrands, selectedVerdicts, selectedDials]);
+  }, [debouncedQuery, selectedBrands, selectedVerdicts, selectedDials, sortBy, sortDir]);
 
   useEffect(() => {
-    fetchResults();
-  }, [fetchResults]);
+    fetchResults(currentPage);
+  }, [fetchResults, currentPage]);
 
-  const toggleSet = (set: Set<string>, value: string, setter: (s: Set<string>) => void) => {
-    const next = new Set(set);
-    if (next.has(value)) next.delete(value); else next.add(value);
-    setter(next);
-    setVisibleCount(50);
-  };
-
-  const clearAll = () => {
-    setQuery('');
-    setSelectedBrands(new Set());
-    setSelectedDials(new Set());
-    setSelectedConditions(new Set());
-    setSelectedVerdicts(new Set());
-    setPriceMin(''); setPriceMax('');
-    setYearMin(''); setYearMax('');
-    setVisibleCount(50);
-  };
-
+  // Client-side filtering for condition, price range, year range (not sent to API)
   const filtered = useMemo(() => {
     let result = records;
 
-    // Text search across reference, brand, rawMessage
-    if (debouncedQuery.trim()) {
-      const q = debouncedQuery.toLowerCase().trim();
-      result = result.filter(r =>
-        r.reference?.toLowerCase().includes(q) ||
-        r.brand?.toLowerCase().includes(q) ||
-        r.rawMessage?.toLowerCase().includes(q) ||
-        r.dialColor?.toLowerCase().includes(q)
-      );
-    }
-
-    if (selectedBrands.size > 0) {
+    // Client-side text search on local data too (API already filters server-side)
+    if (selectedBrands.size > 1) {
       result = result.filter(r => selectedBrands.has(r.brand));
     }
-    if (selectedDials.size > 0) {
+    if (selectedDials.size > 1) {
       result = result.filter(r => selectedDials.has(r.dialColor));
     }
     if (selectedConditions.size > 0) {
       result = result.filter(r => selectedConditions.has(r.condition));
     }
-    if (selectedVerdicts.size > 0) {
+    if (selectedVerdicts.size > 1) {
       result = result.filter(r => {
-        // Derive verdict from confidence + isResidue (same logic as backend)
         let verdict: string;
         if (r.isResidue || r.confidence < 35) verdict = 'RECYCLE';
         else if (r.confidence >= 90 && !r.failureFlags?.length) verdict = 'APPROVED';
@@ -181,43 +194,37 @@ export default function SearchPage() {
     if (!isNaN(yMin)) result = result.filter(r => (r.year ?? 0) >= yMin);
     if (!isNaN(yMax)) result = result.filter(r => (r.year ?? 0) <= yMax);
 
-    // Sort
-    const dir = sortDir === 'asc' ? 1 : -1;
-    result = [...result].sort((a, b) => {
-      let av: number | string, bv: number | string;
-      switch (sortBy) {
-        case 'price': av = a.price; bv = b.price; break;
-        case 'confidence': av = a.confidence; bv = b.confidence; break;
-        case 'year': av = a.year ?? 0; bv = b.year ?? 0; break;
-        case 'reference': av = a.reference; bv = b.reference; break;
-        default: av = 0; bv = 0;
-      }
-      if (typeof av === 'string' && typeof bv === 'string') return av.localeCompare(bv) * dir;
-      return ((av as number) - (bv as number)) * dir;
-    });
-
     return result;
-  }, [records, debouncedQuery, selectedBrands, selectedDials, selectedConditions, selectedVerdicts, priceMin, priceMax, yearMin, yearMax, sortBy, sortDir]);
+  }, [records, selectedBrands, selectedDials, selectedConditions, selectedVerdicts, priceMin, priceMax, yearMin, yearMax]);
 
-  const visibleResults = filtered.slice(0, visibleCount);
+  const toggleSet = (set: Set<string>, value: string, setter: (s: Set<string>) => void) => {
+    const next = new Set(set);
+    if (next.has(value)) next.delete(value); else next.add(value);
+    setter(next);
+  };
 
-  // Infinite scroll
-  const sentinelRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = sentinelRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      (entries) => { if (entries[0].isIntersecting) setVisibleCount(c => Math.min(c + 50, filtered.length)); },
-      { rootMargin: '200px' }
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [filtered.length]);
+  const clearAll = () => {
+    setQuery('');
+    setSelectedBrands(new Set());
+    setSelectedDials(new Set());
+    setSelectedConditions(new Set());
+    setSelectedVerdicts(new Set());
+    setPriceMin(''); setPriceMax('');
+    setYearMin(''); setYearMax('');
+    setCurrentPage(1);
+  };
 
   const activeFilterCount = selectedBrands.size + selectedDials.size + selectedConditions.size + selectedVerdicts.size +
     (priceMin ? 1 : 0) + (priceMax ? 1 : 0) + (yearMin ? 1 : 0) + (yearMax ? 1 : 0);
 
   const formatPrice = (p: number) => p >= 1000000 ? `$${(p/1000000).toFixed(2)}M` : p >= 1000 ? `$${(p/1000).toFixed(0)}K` : `$${p}`;
+
+  const goToPage = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   return (
     <Layout totalProcessed={globalStats.totalProcessed} normalizedCount={globalStats.normalizedCount} residueCount={globalStats.residueCount}>
@@ -327,17 +334,17 @@ export default function SearchPage() {
                 <div>
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block mb-2">Price (USD)</label>
                   <div className="flex gap-2 items-center">
-                    <input type="number" value={priceMin} onChange={e => { setPriceMin(e.target.value); setVisibleCount(50); }} placeholder="Min" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
+                    <input type="number" value={priceMin} onChange={e => setPriceMin(e.target.value)} placeholder="Min" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
                     <span className="text-text-muted text-[11px]">—</span>
-                    <input type="number" value={priceMax} onChange={e => { setPriceMax(e.target.value); setVisibleCount(50); }} placeholder="Max" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
+                    <input type="number" value={priceMax} onChange={e => setPriceMax(e.target.value)} placeholder="Max" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
                   </div>
                 </div>
                 <div>
                   <label className="text-[10px] font-semibold uppercase tracking-wider text-text-muted block mb-2">Year</label>
                   <div className="flex gap-2 items-center">
-                    <input type="number" value={yearMin} onChange={e => { setYearMin(e.target.value); setVisibleCount(50); }} placeholder="Min" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
+                    <input type="number" value={yearMin} onChange={e => setYearMin(e.target.value)} placeholder="Min" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
                     <span className="text-text-muted text-[11px]">—</span>
-                    <input type="number" value={yearMax} onChange={e => { setYearMax(e.target.value); setVisibleCount(50); }} placeholder="Max" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
+                    <input type="number" value={yearMax} onChange={e => setYearMax(e.target.value)} placeholder="Max" className="w-full px-2 py-1 text-[11px] bg-bg-elevated border border-border-default rounded text-text-primary focus:border-gold-primary focus:outline-none" />
                   </div>
                 </div>
               </div>
@@ -348,14 +355,14 @@ export default function SearchPage() {
               {(['price', 'confidence', 'year', 'reference'] as SortField[]).map(field => (
                 <button
                   key={field}
-                  onClick={() => { setSortBy(field); setVisibleCount(50); }}
+                  onClick={() => { setSortBy(field); setCurrentPage(1); }}
                   className={`px-2 py-1 text-[11px] rounded capitalize transition-colors ${sortBy === field ? 'text-gold-primary font-semibold' : 'text-text-muted hover:text-text-secondary'}`}
                 >
                   {field}
                   {sortBy === field && <span className="ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>}
                 </button>
               ))}
-              <button onClick={() => setSortDir(d => d === 'asc' ? 'desc' : 'asc')} className="ml-auto text-[11px] text-text-muted hover:text-text-secondary">
+              <button onClick={() => { setSortDir(d => d === 'asc' ? 'desc' : 'asc'); setCurrentPage(1); }} className="ml-auto text-[11px] text-text-muted hover:text-text-secondary">
                 {sortDir === 'asc' ? 'Ascending' : 'Descending'}
               </button>
             </div>
@@ -365,8 +372,9 @@ export default function SearchPage() {
         {/* Results count + Verdict Summary */}
         <div className="flex items-center justify-between mb-3 flex-wrap gap-3">
           <span className="text-xs text-text-muted">
-            {loading ? 'Loading data…' : `${filtered.length.toLocaleString()} results`}
-            {filtered.length !== totalCount && ` of ${totalCount.toLocaleString()} total`}
+            {loading ? 'Searching…' : `${filtered.length.toLocaleString()} results on this page`}
+            {!loading && totalCount > 0 && ` · ${totalCount.toLocaleString()} total records`}
+            {!loading && totalPages > 1 && ` · Page ${currentPage} of ${totalPages}`}
           </span>
           {!loading && filtered.length > 0 && (
             <div className="flex gap-2">
@@ -386,7 +394,6 @@ export default function SearchPage() {
                       } else {
                         setSelectedVerdicts(new Set([v]));
                       }
-                      setVisibleCount(50);
                     }}
                     className={`px-2 py-1 text-[10px] font-semibold uppercase rounded border transition-all ${colors[v]} ${selectedVerdicts.has(v) ? 'ring-1 ring-current' : 'opacity-60 hover:opacity-100'}`}
                   >
@@ -395,9 +402,6 @@ export default function SearchPage() {
                 );
               })}
             </div>
-          )}
-          {!loading && filtered.length > 0 && (
-            <span className="text-[10px] text-text-muted">Showing {Math.min(visibleCount, filtered.length).toLocaleString()}</span>
           )}
         </div>
 
@@ -419,7 +423,7 @@ export default function SearchPage() {
                 </tr>
               </thead>
               <tbody>
-                {visibleResults.map((r) => {
+                {filtered.map((r) => {
                   let verdict: string;
                   if (r.isResidue || r.confidence < 35) verdict = 'RECYCLE';
                   else if (r.confidence >= 90 && !r.failureFlags?.length) verdict = 'APPROVED';
@@ -430,7 +434,7 @@ export default function SearchPage() {
                       <td className="px-3 py-1">
                         <div className="w-8 h-8 rounded bg-bg-elevated overflow-hidden flex items-center justify-center border border-border-default/30">
                           {r.imageUrl ? (
-                            <img src={r.imageUrl} alt="" className="w-full h-full object-cover" />
+                            <img src={r.imageUrl} alt="" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                           ) : (
                             <span className="text-text-muted text-[10px]">⌚</span>
                           )}
@@ -455,12 +459,54 @@ export default function SearchPage() {
                 })}
               </tbody>
             </table>
-            {/* Infinite scroll sentinel */}
-            {visibleCount < filtered.length && (
-              <div ref={sentinelRef} className="flex items-center justify-center py-6">
-                <div className="w-8 h-8 border-2 border-gold-primary/30 border-t-gold-primary rounded-full animate-spin" />
-              </div>
-            )}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {!loading && totalPages > 1 && (
+          <div className="flex items-center justify-center gap-2 mt-4">
+            <button
+              onClick={() => goToPage(currentPage - 1)}
+              disabled={currentPage <= 1}
+              className="flex items-center gap-1 px-3 py-2 text-xs rounded-md bg-bg-card border border-border-default text-text-secondary hover:border-gold-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft size={14} /> Previous
+            </button>
+            {/* Page numbers */}
+            <div className="flex gap-1">
+              {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+                let pageNum: number;
+                if (totalPages <= 7) {
+                  pageNum = i + 1;
+                } else if (currentPage <= 4) {
+                  pageNum = i + 1;
+                } else if (currentPage >= totalPages - 3) {
+                  pageNum = totalPages - 6 + i;
+                } else {
+                  pageNum = currentPage - 3 + i;
+                }
+                return (
+                  <button
+                    key={pageNum}
+                    onClick={() => goToPage(pageNum)}
+                    className={`px-3 py-2 text-xs rounded-md transition-colors ${
+                      currentPage === pageNum
+                        ? 'bg-gold-primary text-black font-semibold'
+                        : 'bg-bg-card border border-border-default text-text-secondary hover:border-gold-primary'
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => goToPage(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+              className="flex items-center gap-1 px-3 py-2 text-xs rounded-md bg-bg-card border border-border-default text-text-secondary hover:border-gold-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              Next <ChevronRight size={14} />
+            </button>
           </div>
         )}
 
@@ -477,7 +523,7 @@ export default function SearchPage() {
         {loading && (
           <div className="flex flex-col items-center justify-center py-20">
             <div className="w-10 h-10 border-2 border-gold-primary/30 border-t-gold-primary rounded-full animate-spin mb-4" />
-            <p className="text-xs text-text-muted">Loading 117K records…</p>
+            <p className="text-xs text-text-muted">Searching {totalCount > 0 ? `${totalCount.toLocaleString()} records` : 'database'}…</p>
           </div>
         )}
       </div>

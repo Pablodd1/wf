@@ -139,7 +139,7 @@ export default function PriceResearch() {
     if (!selectedDial) return apiData;
 
     const lowerDial = selectedDial.toLowerCase();
-    const filteredListings = apiData.listings.filter((l: any) => (l.dial || '').toLowerCase() === lowerDial);
+    const filteredListings = apiData.listings.filter((l: PriceListing) => (l.dial || '').toLowerCase() === lowerDial);
 
     if (filteredListings.length === 0) {
       return {
@@ -155,13 +155,13 @@ export default function PriceResearch() {
       };
     }
 
-    const prices = filteredListings.map((l: any) => l.priceUSD || l.price || 0).filter(Boolean);
+    const prices = filteredListings.map((l: PriceListing) => l.priceUSD || l.price || 0).filter(Boolean);
     const min = prices.length ? Math.min(...prices) : 0;
     const max = prices.length ? Math.max(...prices) : 0;
     const avg = prices.length ? Math.round(prices.reduce((sum, p) => sum + p, 0) / prices.length) : 0;
 
     const monthlyGroups: Record<string, number[]> = {};
-    filteredListings.forEach((l: any) => {
+    filteredListings.forEach((l: PriceListing) => {
       if (!l.date) return;
       const month = l.date.slice(0, 7);
       if (!monthlyGroups[month]) monthlyGroups[month] = [];

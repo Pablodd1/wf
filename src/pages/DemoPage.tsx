@@ -324,8 +324,7 @@ function PipelineResult({
           if (data.reference && data.reference !== result.reference) onUpdateResult?.(index, { reference: data.reference });
         }
       }
-    } catch { /* ignore */ } finally {
-    }
+    } catch { /* ignored */ }
   }
 
   function handleEdit(field: string, value: string) {

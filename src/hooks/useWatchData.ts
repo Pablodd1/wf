@@ -61,6 +61,32 @@ interface EnrichedRef {
   total_mentions: number;
 }
 
+/** Shape of a record returned from the Supabase API */
+interface SupabaseRow {
+  id?: string;
+  brand?: string;
+  reference?: string;
+  normalized_reference?: string;
+  model?: string;
+  dial_color?: string;
+  condition?: string;
+  year?: number | null;
+  price_usd?: number;
+  price_raw?: number;
+  currency?: string;
+  confidence?: number;
+  verdict?: string;
+  raw_message?: string;
+  title?: string;
+  created_at?: string;
+  received_at?: string;
+  flags?: string[];
+  box?: string;
+  papers?: string;
+  image_url?: string | null;
+  front_image?: string | null;
+}
+
 function transformRecord(raw: RawRecord, enrichedMap: Map<string, EnrichedRef>): WatchRecord {
   // Map boxPapers string to booleans
   const bp = (raw.boxPapers || '').toLowerCase();
@@ -305,9 +331,9 @@ function loadWatchData(): Promise<WatchRecord[]> {
       const stats = await statsResp.json();
       const totalCount = stats.total || 0;
       
-      // Fetch a small subset (100) of records for dashboard display
-      const allData: any[] = [];
-      const dataResp = await fetch(`/api/watch-data?page=1&limit=100`);
+      // Fetch APPROVED records for dashboard display (1000 max)
+      const allData: SupabaseRow[] = [];
+      const dataResp = await fetch(`/api/watch-data?page=1&limit=1000&verdict=APPROVED`);
       const dataJson = await dataResp.json();
       if (dataJson.data && dataJson.data.length > 0) {
         allData.push(...dataJson.data);
@@ -316,7 +342,7 @@ function loadWatchData(): Promise<WatchRecord[]> {
       
       if (finalJson.data && finalJson.data.length > 0) {
         // Transform Supabase records to WatchRecord format
-        const records: WatchRecord[] = finalJson.data.map((r: any) => cleanRecordProtocols({
+        const records: WatchRecord[] = finalJson.data.map((r: SupabaseRow) => cleanRecordProtocols({
           id: r.id || '',
           source: 'whatsapp' as const,
           rawMessage: r.raw_message || r.title || '',
@@ -346,9 +372,9 @@ function loadWatchData(): Promise<WatchRecord[]> {
           failureFlags: r.flags || [],
           severity: r.verdict === 'RECYCLE' ? 'CRITICAL' : r.verdict === 'HUMAN' ? 'WARNING' : 'INFO',
           // Prefer server-enriched image_url, then client-side catalog lookup, then front_image fallback
-          imageUrl: r.image_url || lookupCatalogImage(r.reference) || (r.front_image ? `/images/${r.front_image}` : null),
-          imageCount: r.image_url || r.front_image || lookupCatalogImage(r.reference) ? 1 : 0,
-          imageConfirmed: !!(r.image_url || lookupCatalogImage(r.reference)),
+          imageUrl: r.image_url || lookupCatalogImage(r.reference || '') || (r.front_image ? `/images/${r.front_image}` : null),
+          imageCount: r.image_url || r.front_image || lookupCatalogImage(r.reference || '') ? 1 : 0,
+          imageConfirmed: !!(r.image_url || lookupCatalogImage(r.reference || '')),
           autoResolvedFlags: [],
           buyerCount: 0,
           sellerCount: 0,
@@ -379,7 +405,7 @@ function loadWatchData(): Promise<WatchRecord[]> {
         console.log(`Loaded ${records.length} records from Supabase (total: ${totalCount})`);
         return records;
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.warn('Supabase API failed, falling back to JSON:', e);
     }
     
@@ -397,18 +423,18 @@ function loadWatchData(): Promise<WatchRecord[]> {
     
     let records: RawRecord[];
     if (Array.isArray(rawData) && rawData.length > 0 && Array.isArray(rawData[0])) {
-      const rows = rawData as any[][];
+      const rows = rawData as unknown[][];
       records = rows.map((row) => ({
-        id: row[0], hash: '', sourceType: 'WhatsApp', sourceLine: row[8] || '',
-        brand: row[1], reference: row[2], family: '', dialColor: row[3], condition: row[7],
-        boxPapers: '', price: row[4], currency: row[6], priceUSD: row[5], year: row[12] ?? null,
-        seller: '', location: '', confidence: row[9], status: row[10] || 'NORMALIZED', flags: row[11] || [],
+        id: String(row[0] || ''), hash: '', sourceType: 'WhatsApp', sourceLine: String(row[8] || ''),
+        brand: String(row[1] || ''), reference: String(row[2] || ''), family: '', dialColor: String(row[3] || ''), condition: String(row[7] || ''),
+        boxPapers: '', price: Number(row[4]) || 0, currency: String(row[6] || ''), priceUSD: Number(row[5]) || 0, year: row[12] != null ? Number(row[12]) : null,
+        seller: '', location: '', confidence: Number(row[9]) || 0, status: String(row[10] || 'NORMALIZED'), flags: (Array.isArray(row[11]) ? row[11] : []) as string[],
         timestamp: '', mlPredictedPrice: 0, mlPriceConfidence: 0, mlDemandForecast: '',
         mlOutcomeClass: '', mlOutcomeConfidence: 0, marketComparables: 0, sellerRating: 0,
-        daysOnMarket: 0, stageLogs: [], imageUrl: row[14] || null, imageCount: row[14] ? 1 : 0,
+        daysOnMarket: 0, stageLogs: [], imageUrl: row[14] ? String(row[14]) : null, imageCount: row[14] ? 1 : 0,
         imageConfirmed: false, autoResolvedFlags: [], buyerCount: 0, sellerCount: 0,
-        buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10] === 'RECYCLE' || row[10] === 'RESIDUE' || row[10] === true,
-        description: row[13] || row[8] || '',
+        buyerSellerRatio: 0, liquidityScore: 0, isResidue: row[10] === 'RECYCLE' || row[10] === 'RESIDUE',
+        description: String(row[13] || row[8] || ''),
       }));
     } else {
       records = rawData as RawRecord[];
@@ -421,7 +447,7 @@ function loadWatchData(): Promise<WatchRecord[]> {
           const rec = transformRecord(r, enrichedMap);
           return rec ? cleanRecordProtocols(rec) : null;
         }
-        catch (e) { console.warn('Skipped malformed record', (r as any)?.id, e); return null; }
+        catch (e) { console.warn('Skipped malformed record', r?.id, e); return null; }
       })
       .filter((r): r is WatchRecord => r !== null);
     _cache = transformed;
@@ -455,7 +481,7 @@ export function useWatchData() {
           .then(r => r.json())
           .then(resJson => {
             if (resJson.data && resJson.data.length > 0) {
-              const newRecords = resJson.data.map((r: any) => cleanRecordProtocols({
+              const newRecords = resJson.data.map((r: SupabaseRow) => cleanRecordProtocols({
                 id: r.id || '',
                 source: 'whatsapp' as const,
                 rawMessage: r.raw_message || r.title || '',
@@ -484,9 +510,9 @@ export function useWatchData() {
                 isResidue: r.verdict === 'RECYCLE' ? true : (r.verdict === 'HUMAN' ? false : false),
                 failureFlags: r.flags || [],
                 severity: r.verdict === 'RECYCLE' ? 'CRITICAL' : r.verdict === 'HUMAN' ? 'WARNING' : 'INFO',
-                imageUrl: r.image_url || lookupCatalogImage(r.reference) || (r.front_image ? `/images/${r.front_image}` : null),
-                imageCount: r.image_url || r.front_image || lookupCatalogImage(r.reference) ? 1 : 0,
-                imageConfirmed: !!(r.image_url || lookupCatalogImage(r.reference)),
+                imageUrl: r.image_url || lookupCatalogImage(r.reference || '') || (r.front_image ? `/images/${r.front_image}` : null),
+                imageCount: r.image_url || r.front_image || lookupCatalogImage(r.reference || '') ? 1 : 0,
+                imageConfirmed: !!(r.image_url || lookupCatalogImage(r.reference || '')),
                 autoResolvedFlags: [],
                 buyerCount: 0,
                 sellerCount: 0,
@@ -584,7 +610,7 @@ export function useWatchData() {
                 accuracyRate: Math.round((a2/t2)*100),
                 totalProcessed: t2, approved: a2, human: h2, recycle: r2c,
               });
-            }).catch(() => {});
+            }).catch(() => { /* pipeline-health fallback unavailable */ });
         }
       })
       .catch(e => console.warn('[useWatchData] stats fetch failed:', e));

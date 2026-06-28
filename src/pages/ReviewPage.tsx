@@ -212,7 +212,7 @@ export default function ReviewPage() {
           reference: editForm.reference || editingRecord.reference,
           brand: editForm.brand || editingRecord.brand,
           collection: editForm.family || null,
-          model: (editForm as any).model || null,
+          model: (editForm as Record<string, unknown>).model as string || null,
           dialColor: editForm.dialColor || editingRecord.dialColor,
           source: 'human_approval',
           originalGuess: {
@@ -232,14 +232,14 @@ export default function ReviewPage() {
         console.error('[saveEdit] API returned error:', data);
         alert(`Save failed: ${data.error || 'unknown error'}`);
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error('[saveEdit] Network error:', e);
-      alert(`Save failed: ${e?.message || String(e)}`);
+      alert(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
     }
   }, [editingRecord, editForm]);
 
   // Build field-level suggestions from a Kimi parse result vs the current record.
-  const buildSuggestions = useCallback((record: WatchRecord, parsed: any, source: string): Suggestion[] => {
+  const buildSuggestions = useCallback((record: WatchRecord, parsed: Record<string, string | undefined>, source: string): Suggestion[] => {
     const suggestions: Suggestion[] = [];
     const src = source as Suggestion['source'];
     if (parsed.dialColor && parsed.dialColor.toUpperCase() !== (record.dialColor || '').toUpperCase()) {
@@ -567,7 +567,7 @@ export default function ReviewPage() {
             <label className="text-xs text-text-muted uppercase tracking-wider block mb-1">Verdict</label>
             <select
               value={filterVerdict}
-              onChange={e => setFilterVerdict(e.target.value as any)}
+              onChange={e => setFilterVerdict(e.target.value as 'all' | 'APPROVED' | 'HUMAN' | 'RECYCLE')}
               className="bg-bg-elevated border border-border-default rounded px-3 py-1.5 text-sm text-text-primary"
             >
               <option value="all">All Verdicts</option>
@@ -767,7 +767,7 @@ export default function ReviewPage() {
                         Confidence Breakdown
                       </label>
                       <div className="flex flex-wrap gap-2">
-                        {(record as any).confidenceReasons?.map((reason: string, i: number) => (
+                        {([] as string[]).map((reason: string, i: number) => (
                           <span key={i} className="text-xs px-2 py-1 rounded bg-bg-elevated text-text-secondary capitalize">
                             {reason.replace(/_/g, ' ')}
                           </span>

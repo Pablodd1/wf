@@ -20,13 +20,13 @@ RM35-03 White unworn 2.1M HKD
 Patek green new 500k`;
 
 
-const verdictMeta: Record<Verdict, { label: string; color: string; bg: string; Icon: any }> = {
+const verdictMeta: Record<Verdict, { label: string; color: string; bg: string; Icon: React.ElementType }> = {
   APPROVED: { label: 'Approved', color: 'text-emerald-400', bg: 'bg-emerald-500/10 border-emerald-500/30', Icon: CheckCircle2 },
   HUMAN:    { label: 'Human Review', color: 'text-amber-400', bg: 'bg-amber-500/10 border-amber-500/30', Icon: UserCheck },
   RECYCLE:  { label: 'Recycle Bin', color: 'text-red-400', bg: 'bg-red-500/10 border-red-500/30', Icon: Trash2 },
 };
 
-const stageIcon: Record<string, any> = {
+const stageIcon: Record<string, React.ElementType> = {
   PARSE: Cog, AI_TEXT: Sparkles, ONLINE: Search, IMAGE: AlertTriangle,
 };
 

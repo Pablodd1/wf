@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
-import { ExternalLink, Filter, X, BarChart3, Download, FileSpreadsheet } from 'lucide-react';
+import { ExternalLink, Download } from 'lucide-react';
 import { generateInsightReport } from '@/lib/reports';
 
 const NAVY = '#1a2744';
@@ -84,7 +84,7 @@ export default function InsightDetails() {
       }
 
       // Compute stats from actual listings
-      const prices = apiData.listings.map((l: any) => l.priceUSD).filter((p: number) => p > 0);
+      const prices = apiData.listings.map((l: { priceUSD?: number; price_usd?: number }) => l.priceUSD).filter((p: number) => p > 0);
       
       const uniquePrices: number[] = [];
       const seen = new Set<number>();
@@ -123,7 +123,7 @@ export default function InsightDetails() {
         brand: apiData.brand,
         model: apiData.model,
         primaryDial: apiData.primaryDial,
-        catalogImageUrl: apiData.catalogImageUrl || apiData.listings.find((l: any) => l.imageUrl)?.imageUrl || undefined,
+        catalogImageUrl: apiData.catalogImageUrl || apiData.listings.find((l: { imageUrl?: string }) => l.imageUrl)?.imageUrl || undefined,
         dateRange: 'Jul 23 — Jan 19',
         liquidity: apiData.liquidity,
         statsOriginal: {

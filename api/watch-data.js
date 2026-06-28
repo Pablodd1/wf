@@ -59,14 +59,37 @@ function lookupImageUrl(reference) {
   if (!reference) return null;
   const cat = loadCatalogImages();
   const ref = normalizeRef(reference);
-  // Exact match
+  if (!ref || ref.length < 3) return null;
+
+  // 1. Exact match
   if (cat.has(ref)) return cat.get(ref);
-  // Try partial match (e.g. "5711/1A-010" matches catalog entry for "5711/1A")
+
+  // 2. Prefix/suffix match (e.g. "5711/1A-010" matches "5711/1A")
   for (const [catalogRef, url] of cat) {
     if (ref.startsWith(catalogRef) || catalogRef.startsWith(ref)) {
       return url;
     }
   }
+
+  // 3. Strip dashes/slashes and try again (e.g. "116610LV" matches "116610-LV")
+  const refStripped = ref.replace(/[\-\/]/g, '');
+  for (const [catalogRef, url] of cat) {
+    const catStripped = catalogRef.replace(/[\-\/]/g, '');
+    if (refStripped === catStripped || refStripped.startsWith(catStripped) || catStripped.startsWith(refStripped)) {
+      return url;
+    }
+  }
+
+  // 4. First 4+ character match (for references like "5167A-001" matching "5167A")
+  if (ref.length >= 4) {
+    const refPrefix = ref.substring(0, Math.min(ref.length, 6));
+    for (const [catalogRef, url] of cat) {
+      if (catalogRef.startsWith(refPrefix) || refPrefix.startsWith(catalogRef.substring(0, Math.min(catalogRef.length, 6)))) {
+        return url;
+      }
+    }
+  }
+
   return null;
 }
 
@@ -198,7 +221,7 @@ export default async function handler(req, res) {
     if (verdict)    filters.push(`verdict=eq.${encodeURIComponent(verdict)}`);
     if (reference)  filters.push(`reference=eq.${encodeURIComponent(reference)}`);
     if (dial_color) filters.push(`dial_color=eq.${encodeURIComponent(dial_color)}`);
-    if (search)     filters.push(`reference=ilike.%${encodeURIComponent(search)}%`);
+    if (search)     filters.push(`or=(reference.ilike.%${encodeURIComponent(search)}%,brand.ilike.%${encodeURIComponent(search)}%,raw_message.ilike.%${encodeURIComponent(search)}%)`);
     if (last_sync)  filters.push(`created_at=gt.${encodeURIComponent(last_sync)}`);
     if (filters.length) query += '&' + filters.join('&');
 

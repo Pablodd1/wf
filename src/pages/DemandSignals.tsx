@@ -1,9 +1,9 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   Users, ShoppingCart, TrendingUp, MessageCircle,
-  Flame, Search, ArrowRight, BarChart3, Activity,
-  Download, FileSpreadsheet
+  Flame, Search, ArrowRight,
+  Download,
 } from 'lucide-react';
 import { useLiquidityData, type EnrichedRef } from '@/hooks/useLiquidityData';
 import { generateDemandReport } from '@/lib/reports';
@@ -199,7 +199,7 @@ export default function DemandSignals() {
   );
 }
 
-function StatCard({ icon: Icon, label, value, color }: { icon: any; label: string; value: number; color: string }) {
+function StatCard({ icon: Icon, label, value, color }: { icon: React.ElementType; label: string; value: number; color: string }) {
   return (
     <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 20 }}>
       <div className="flex items-center gap-2 mb-2">

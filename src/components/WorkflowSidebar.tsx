@@ -103,35 +103,46 @@ export function WorkflowSidebar({ totalRecords, normalizedCount, residueCount, o
                 <h3 className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-muted mb-2">
                   Quick Actions
                 </h3>
-                <button
-                  onClick={onExportExcel}
-                  className="w-full flex items-center gap-2 px-3 py-2 bg-gold-primary/10 hover:bg-gold-primary/20 rounded-md transition-colors text-left"
-                >
-                  <FileSpreadsheet size={12} className="text-gold-primary" />
-                  <span className="text-[11px] text-gold-primary">Export Excel</span>
-                </button>
-                <button
-                  onClick={onExportCsv}
-                  className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-gold-primary/5 hover:bg-gold-primary/10 rounded-md transition-colors text-left border border-gold-primary/20"
-                >
-                  <FileSpreadsheet size={12} className="text-gold-primary/70" />
-                  <span className="text-[11px] text-gold-primary/70">Export CSV</span>
-                </button>
-                {onExportReport && (
+                <div className="relative">
                   <button
-                    onClick={onExportReport}
-                    className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-bg-elevated hover:bg-bg-card rounded-md transition-colors text-left border border-border-default"
+                    onClick={onExportExcel}
+                    className="w-full flex items-center gap-2 px-3 py-2 bg-gold-primary/10 hover:bg-gold-primary/20 rounded-md transition-colors text-left"
                   >
-                    <BarChart3 size={12} className="text-gold-primary" />
-                    <span className="text-[11px] text-gold-primary">Styled Report</span>
+                    <FileSpreadsheet size={12} className="text-gold-primary" />
+                    <span className="text-[11px] text-gold-primary">Export Report</span>
                   </button>
-                )}
+                  {onExportReport && (
+                    <div className="flex gap-1 mt-1">
+                      <button
+                        onClick={onExportCsv}
+                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-bg-elevated hover:bg-bg-card rounded border border-border-default transition-colors"
+                        title="Download as CSV"
+                      >
+                        <span className="text-[9px] text-text-muted">CSV</span>
+                      </button>
+                      <button
+                        onClick={onExportReport}
+                        className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-bg-elevated hover:bg-bg-card rounded border border-border-default transition-colors"
+                        title="Styled PDF-ready report"
+                      >
+                        <span className="text-[9px] text-text-muted">Styled</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <a
+                  href="/analytics"
+                  className="w-full flex items-center gap-2 px-3 py-2 mt-2 bg-bg-elevated hover:bg-bg-card rounded-md transition-colors text-left border border-border-default"
+                >
+                  <BarChart3 size={12} className="text-gold-primary" />
+                  <span className="text-[11px] text-gold-primary">Detailed Reports →</span>
+                </a>
                 <button
                   onClick={() => window.location.reload()}
                   className="w-full flex items-center gap-2 px-3 py-2 mt-1 bg-bg-elevated hover:bg-bg-card rounded-md transition-colors text-left"
                 >
                   <RefreshCw size={12} className="text-text-muted" />
-                  <span className="text-[11px] text-text-muted">Re-run Pipeline</span>
+                  <span className="text-[11px] text-text-muted">Refresh Data</span>
                 </button>
               </div>
 

@@ -4,8 +4,8 @@ import { TabNav } from '@/components/TabNav';
 import {
   Shield, BarChart3, Users, Trash2, CheckCircle2, AlertTriangle,
   RefreshCw, DollarSign, Clock, Database, Zap,
-  TrendingUp, TrendingDown, Activity, Package, Search,
-  Loader2, FileSpreadsheet, FileText, ArrowRight, Eye, Sparkles,
+  TrendingUp, TrendingDown, Activity, Package,
+  Loader2, FileSpreadsheet, ArrowRight,
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
@@ -28,7 +28,7 @@ interface StatsData {
 
 function StatCard({ label, value, sub, icon: Icon, color, trend }: {
   label: string; value: string | number; sub?: string;
-  icon: any; color: string; trend?: 'up' | 'down' | 'neutral';
+  icon: React.ElementType; color: string; trend?: 'up' | 'down' | 'neutral';
 }) {
   const TrendIcon = trend === 'up' ? TrendingUp : trend === 'down' ? TrendingDown : Activity;
   return (
@@ -67,7 +67,7 @@ function ProgressBar({ value, max, color }: { value: number; max: number; color:
 /* ------------------------------------------------------------------ */
 
 function BulkActionCard({ title, desc, icon: Icon, color, onClick, loading }: {
-  title: string; desc: string; icon: any; color: string;
+  title: string; desc: string; icon: React.ElementType; color: string;
   onClick: () => void; loading: boolean;
 }) {
   return (
@@ -131,7 +131,7 @@ export default function AdminPage() {
         avgConfidence: 85,
         processingRate: 0,
       });
-    } catch (e: any) {
+    } catch (e: unknown) {
       setStats(null);
     }
   }, []);
@@ -150,8 +150,8 @@ export default function AdminPage() {
       const data = await res.json();
       setMessage(data.message || `${action} complete`);
       fetchStats();
-    } catch (e: any) {
-      setMessage(`Error: ${e.message}`);
+    } catch (e: unknown) {
+      setMessage(`Error: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setActionLoading(null);
     }

@@ -25,8 +25,22 @@ interface EditedRecord {
   notes?: string;
 }
 
+interface ParseResult {
+  brand?: string;
+  reference?: string;
+  dialColor?: string;
+  condition?: string;
+  price?: number;
+  currency?: string;
+  year?: number | null;
+  verdict?: string;
+  confidence?: number;
+  rawMessage?: string;
+  [key: string]: unknown;
+}
+
 interface Props {
-  result: any;
+  result: ParseResult | null;
   onRelaunch: (edited: EditedRecord) => Promise<void>;
   onAIReview: (msg: string) => Promise<any>;
   onClose: () => void;
@@ -299,17 +313,18 @@ function FeatureScoreGrid({ scores }: { scores: FeatureScores }) {
 export default function TestModePanel(props: Props) {
   const { result, onRelaunch, onAIReview, onClose, catalogs } = props;
   const [editing, setEditing] = useState(false);
-  const [aiSuggestion, setAiSuggestion] = useState<any>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<Record<string, string | undefined> | null>(null);
   const [showCopilot, setShowCopilot] = useState(false);
 
+
   const initial: EditedRecord = useMemo(() => ({
-    brand: result.brand || 'Unknown',
-    reference: result.reference || '',
-    dialColor: result.dialColor || 'UNKNOWN',
-    condition: result.condition || 'Unknown',
-    price: result.price || 0,
-    currency: result.currency || '',
-    year: result.year || null,
+    brand: result?.brand || 'Unknown',
+    reference: result?.reference || '',
+    dialColor: result?.dialColor || 'UNKNOWN',
+    condition: result?.condition || 'Unknown',
+    price: result?.price || 0,
+    currency: result?.currency || '',
+    year: result?.year || null,
     notes: '',
   }), [result]);
 
@@ -320,13 +335,15 @@ export default function TestModePanel(props: Props) {
     setEditing(false);
   }, [onRelaunch]);
 
-  const handleAISuggest = useCallback((parsed: any) => {
+  const handleAISuggest = useCallback((parsed: Record<string, string | undefined>) => {
     setAiSuggestion(parsed);
   }, []);
 
   const relaunch = useCallback(async () => {
     await onRelaunch(initial);
   }, [onRelaunch, initial]);
+
+  if (!result) return null;
 
   // Don't show this panel for already-approved records (unless manually opened)
   const verdictColor = result.verdict === 'APPROVED' || result.verdict === 'AUTO_APPROVED'
@@ -342,8 +359,8 @@ export default function TestModePanel(props: Props) {
             {verdictLabel}
           </div>
           <span className="text-xs text-gray-400">Confidence: <span className="font-mono font-bold" style={{ color: verdictColor }}>{result.confidence}%</span></span>
-          <span className="text-xs text-gray-500 truncate max-w-[300px]" title={result.rawMessage}>
-            "{result.rawMessage.slice(0, 80)}{result.rawMessage.length > 80 ? '...' : ''}"
+          <span className="text-xs text-gray-500 truncate max-w-[300px]" title={result.rawMessage || ''}>
+            "{(result.rawMessage || '').slice(0, 80)}{(result.rawMessage || '').length > 80 ? '...' : ''}"
           </span>
         </div>
         <button onClick={onClose} className="text-gray-500 hover:text-white">
