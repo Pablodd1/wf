@@ -1,9 +1,9 @@
 /**
  * POST /api/bulk-action
  * Body: { ids: ['1','2'], action: 'approve'|'recycle'|'review'|'human' }
- * Bulk change verdicts for review workflow
+ * Bulk change verdicts — SUPABASE
  */
-const { getPool } = require('./_lib/db');
+const { bulkUpdateVerdicts } = require('./_lib/supabase');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -17,29 +17,13 @@ module.exports = async function handler(req, res) {
       return res.status(400).json({ error: 'ids (array) and action required' });
     }
 
-    const verdictMap = {
-      approve: 'APPROVED',
-      recycle: 'RECYCLE',
-      review: 'REVIEW',
-      human: 'HUMAN',
-    };
-
+    const verdictMap = { approve: 'APPROVED', recycle: 'RECYCLE', review: 'REVIEW', human: 'HUMAN' };
     const verdict = verdictMap[action.toLowerCase()];
     if (!verdict) return res.status(400).json({ error: 'Invalid action' });
 
-    const pool = getPool();
-    const placeholders = ids.map(() => '?').join(',');
-    
-    const [result] = await pool.execute(
-      `UPDATE watch_records SET verdict = ?, updated_at = NOW() WHERE id IN (${placeholders})`,
-      [verdict, ...ids]
-    );
+    const updated = await bulkUpdateVerdicts(ids, verdict);
 
-    res.status(200).json({
-      success: true,
-      updated: result.affectedRows,
-      verdict,
-    });
+    res.status(200).json({ success: true, updated, verdict });
   } catch (err) {
     console.error('Bulk action error:', err.message);
     res.status(500).json({ error: err.message });

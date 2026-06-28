@@ -1,8 +1,8 @@
 /**
  * GET /api/monthly-prices?reference=52508&months=6
- * Returns monthly min/avg/max price data for chart
+ * Returns monthly min/avg/max price data for chart — SUPABASE
  */
-const { getMonthlyPrices } = require('./_lib/db');
+const { getMonthlyPrices } = require('./_lib/supabase');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');

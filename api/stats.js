@@ -1,8 +1,8 @@
 /**
  * GET /api/stats
- * Returns dashboard statistics from real MySQL database
+ * Returns dashboard statistics from SUPABASE
  */
-const { getStats, getBrandDistribution } = require('./_lib/db');
+const { getStats, getBrandDistribution } = require('./_lib/supabase');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -12,15 +12,7 @@ module.exports = async function handler(req, res) {
     const brands = await getBrandDistribution();
     
     res.status(200).json({
-      totalRecords: stats.totalRecords,
-      approvedCount: stats.approvedCount,
-      humanCount: stats.humanCount,
-      recycleCount: stats.recycleCount,
-      reviewCount: stats.reviewCount,
-      avgPrice: Math.round(stats.avgPrice || 0),
-      minPrice: stats.minPrice || 0,
-      maxPrice: stats.maxPrice || 0,
-      avgConfidence: Math.round(stats.avgConfidence || 0),
+      ...stats,
       brandDistribution: brands,
     });
   } catch (err) {
@@ -37,11 +29,11 @@ module.exports = async function handler(req, res) {
       maxPrice: 3150000,
       avgConfidence: 72,
       brandDistribution: [
-        { brand: 'Patek Philippe', count: 847293, avgPrice: 78450 },
-        { brand: 'Rolex', count: 612847, avgPrice: 23450 },
+        { brand: 'Rolex', count: 847293, avgPrice: 23450 },
+        { brand: 'Patek Philippe', count: 612847, avgPrice: 78450 },
         { brand: 'Audemars Piguet', count: 384921, avgPrice: 45600 },
         { brand: 'Richard Mille', count: 298471, avgPrice: 198000 },
-        { brand: 'Vacheron Constantin', count: 245611, avgPrice: 38200 },
+        { brand: 'Omega', count: 245611, avgPrice: 8200 },
       ],
       error: err.message,
       demo: true,

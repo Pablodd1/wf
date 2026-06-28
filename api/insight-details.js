@@ -1,10 +1,9 @@
 /**
- * GET /api/insight-details?reference=52508&month=2026-03&dial=White
- * Full pipeline: original → dedupe → outlier detection → stats
+ * GET /api/insight-details?reference=52508&month=2026-03
+ * Full pipeline: original → dedupe → outlier detection → stats — SUPABASE
  */
-const { getListingsByMonth } = require('./_lib/db');
+const { getListingsByMonth } = require('./_lib/supabase');
 
-// IQR outlier detection
 function detectOutliers(records) {
   const prices = records.map(r => r.price_usd).filter(p => p > 0).sort((a, b) => a - b);
   if (prices.length < 4) return { clean: records, outliers: [] };
@@ -31,19 +30,14 @@ function calcStats(records) {
   const prices = records.map(r => r.price_usd).filter(p => p > 0);
   if (!prices.length) return { count: 0, min: 0, avg: 0, max: 0 };
   const sum = prices.reduce((a, b) => a + b, 0);
-  return {
-    count: prices.length,
-    min: Math.min(...prices),
-    avg: Math.round(sum / prices.length),
-    max: Math.max(...prices),
-  };
+  return { count: prices.length, min: Math.min(...prices), avg: Math.round(sum / prices.length), max: Math.max(...prices) };
 }
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   
   try {
-    const { reference, month, dial } = req.query;
+    const { reference, month } = req.query;
     if (!reference || !month) return res.status(400).json({ error: 'reference and month required' });
     
     const records = await getListingsByMonth(reference, month);
@@ -58,7 +52,7 @@ module.exports = async function handler(req, res) {
       filtered,
       outliers: { count: outliers.length, prices: outliers.map(r => r.price_usd) },
       records: clean,
-      meta: { reference, month, dial, total: records.length },
+      meta: { reference, month, total: records.length },
     });
   } catch (err) {
     console.error('Insight error:', err.message);
