@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import type { DashboardStats } from '@/types';
 import { formatPrice, confidenceColor } from '@/lib/utils';
+import { useApi } from '@/hooks/useApi';
 
 const CHART_COLORS = ['#C9A96E', '#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6', '#F97316'];
 
@@ -90,16 +91,42 @@ type SortKey = 'reference' | 'brand' | 'count' | 'avgPrice' | 'avgConfidence';
 type SortDir = 'asc' | 'desc';
 
 export default function AnalyticsPage() {
+  const { data: apiStats, loading: apiLoading } = useApi<any>('/stats');
   const [stats, setStats] = useState<DashboardStats>(fullDemoStats);
   const [loading, setLoading] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('count');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [dateRange, setDateRange] = useState('30d');
 
+  // Merge real API stats with demo structure
+  useEffect(() => {
+    if (apiStats && apiStats.totalRecords) {
+      const total = apiStats.totalRecords;
+      const approved = apiStats.approvedCount || 0;
+      const human = apiStats.humanCount || 0;
+      const recycle = apiStats.recycleCount || 0;
+      const review = apiStats.reviewCount || 0;
+      
+      setStats(prev => ({
+        ...prev,
+        totalRecords: total,
+        approvedRate: total > 0 ? Math.round((approved / total) * 100) : 0,
+        humanReview: human,
+        recycled: recycle,
+        avgPrice: apiStats.avgPrice || 0,
+        avgConfidence: apiStats.avgConfidence || 0,
+        brandDistribution: apiStats.brandDistribution?.map((b: any) => ({
+          brand: b.brand,
+          count: b.count,
+          percentage: total > 0 ? Math.round((b.count / total) * 1000) / 10 : 0,
+        })) || prev.brandDistribution,
+      }));
+    }
+  }, [apiStats]);
+
   const fetchReport = useCallback(async () => {
     setLoading(true);
     await new Promise(r => setTimeout(r, 800));
-    setStats(fullDemoStats);
     setLoading(false);
   }, []);
 

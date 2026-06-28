@@ -40,38 +40,47 @@ export default function SearchPage() {
     setLoading(true);
     setError(null);
     try {
-      if (!SUPABASE_URL || !SUPABASE_KEY) {
-        // Demo mode
-        let filtered = demoRecords;
-        if (query) filtered = filtered.filter(r => r.reference.toLowerCase().includes(query.toLowerCase()) || r.brand.toLowerCase().includes(query.toLowerCase()));
-        if (brandFilter !== 'All') filtered = filtered.filter(r => r.brand === brandFilter);
-        if (conditionFilter !== 'All') filtered = filtered.filter(r => r.condition === conditionFilter);
-        if (currencyFilter !== 'All') filtered = filtered.filter(r => r.originalCurrency === currencyFilter);
-        filtered = filtered.filter(r => (r.confidence ?? 0) >= confMin);
-        setRecords(filtered);
-        setTotal(filtered.length);
-        return;
-      }
-
+      // Use our API endpoint (handles Supabase internally)
       const params = new URLSearchParams();
-      params.set('select', '*');
+      params.set('page', String(page + 1));
       params.set('limit', String(pageSize));
-      params.set('offset', String(page * pageSize));
-      if (query) params.set('reference', `ilike.*${query}*`);
-      if (brandFilter !== 'All') params.set('brand', `eq.${brandFilter}`);
-      if (conditionFilter !== 'All') params.set('condition', `eq.${conditionFilter}`);
+      if (query) {
+        params.set('search', query);
+      }
+      if (brandFilter !== 'All') params.set('brand', brandFilter);
+      if (conditionFilter !== 'All') params.set('condition', conditionFilter);
 
-      const url = `${SUPABASE_URL}/rest/v1/watch_records?${params.toString()}`;
-      const res = await fetch(url, {
-        headers: {
-          apikey: SUPABASE_KEY,
-          Authorization: `Bearer ${SUPABASE_KEY}`,
-        },
-      });
+      const res = await fetch(`/api/listings?${params.toString()}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setRecords(data || []);
-      setTotal(Number(res.headers.get('content-range')?.split('/')[1] || data?.length || 0));
+      
+      // Map API response to WatchRecord format
+      const mapped = (data.rows || []).map((r: any) => ({
+        id: r.id,
+        reference: r.reference || '',
+        brand: r.brand || '',
+        family: '',
+        price: r.price_usd || 0,
+        originalPrice: r.price_usd || 0,
+        originalCurrency: r.currency || 'USD',
+        condition: r.condition || '',
+        year: r.year || 0,
+        dialColor: r.dial_color || '',
+        confidence: r.confidence || 0,
+        demandForecast: '',
+        buyerCount: 0,
+        sellerCount: 0,
+        buyerSellerRatio: 0,
+        liquidityScore: 0,
+        mlPredictedPrice: 0,
+        hasBox: false,
+        hasPapers: false,
+        sellerRating: 0,
+        status: 'active',
+      }));
+      
+      setRecords(mapped);
+      setTotal(data.total || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch records');
       setRecords(demoRecords);
@@ -79,7 +88,7 @@ export default function SearchPage() {
     } finally {
       setLoading(false);
     }
-  }, [query, brandFilter, conditionFilter, currencyFilter, confMin, page]);
+  }, [query, brandFilter, conditionFilter, confMin, page]);
 
   useEffect(() => {
     const timer = setTimeout(() => {

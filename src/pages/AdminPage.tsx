@@ -7,6 +7,7 @@ import {
   Download, XCircle, BarChart3, Layers, Eye, Cpu,
 } from 'lucide-react';
 import type { ActivityLogEntry } from '@/types';
+import { useApi } from '@/hooks/useApi';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
 
@@ -27,22 +28,30 @@ const demoActivityLog: ActivityLogEntry[] = [
 ];
 
 export default function AdminPage() {
+  const { data: apiStats } = useApi<any>('/stats');
   const [dbConnected, setDbConnected] = useState<boolean | null>(null);
   const [testing, setTesting] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [log, setLog] = useState<ActivityLogEntry[]>(demoActivityLog);
-  const [stats, setStats] = useState({
-    totalProcessed: 1247,
-    successRate: 94.2,
+
+  // Real stats from API, fallback to demo
+  const stats = {
+    totalProcessed: apiStats?.totalRecords ?? 2392784,
+    successRate: apiStats?.avgConfidence ? Math.round(apiStats.avgConfidence) : 82,
     avgTime: 847,
-    queueSize: 12,
+    queueSize: apiStats?.humanCount ?? 267215,
     lastProcessed: '2026-06-27T14:23:00Z',
     parserVersion: 'v2.4.1',
-    recordsByVerdict: { APPROVED: 847, REVIEW: 213, HUMAN: 100, RECYCLE: 87 },
+    recordsByVerdict: {
+      APPROVED: apiStats?.approvedCount ?? 1084268,
+      REVIEW: apiStats?.reviewCount ?? 769922,
+      HUMAN: apiStats?.humanCount ?? 267215,
+      RECYCLE: apiStats?.recycleCount ?? 271379,
+    },
     dialCoverage: 82,
     priceCoverage: 91,
     brandCoverage: 98,
-  });
+  };
 
   const testConnection = useCallback(async () => {
     setTesting(true);
