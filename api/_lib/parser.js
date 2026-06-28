@@ -132,6 +132,16 @@ function parsePriceDetailed(text, normalizedRef = null) {
   const kBeforeUsd = t.match(/(\d{1,4}(?:\.\d{1,2})?)\s*k\s*(?:USD|USDT)/i);
   if (kBeforeUsd) return safe(Math.round(parseFloat(kBeforeUsd[1]) * 1000), 'USD');
 
+  // U suffix patterns: "400000U", "400kU", "400k U"
+  const uMatch = t.match(/(\d+(?:\.\d+)?)\s*([kKmM])?\s*U\b/i);
+  if (uMatch) {
+    let val = parseFloat(uMatch[1]);
+    const suf = (uMatch[2] || '').toLowerCase();
+    if (suf === 'm') val *= 1_000_000;
+    else if (suf === 'k') val *= 1_000;
+    return safe(Math.round(val), 'USD');
+  }
+
   const mMatch = t.match(/(\d{1,4}(?:\.\d{1,3})?)\s*m\b/i);
   if (mMatch) {
     const val = parseFloat(mMatch[1]);
@@ -184,6 +194,7 @@ function parseCurrency(text) {
   if (/\bCHF\b/.test(t)) return 'CHF';
   if (/\bCNY\b|\bRMB\b/.test(t)) return 'CNY';
   if (/\bSGD\b/.test(t)) return 'SGD';
+  if (/\b\d+\s*U\b/i.test(text)) return 'USD';
   if (/\bUSD\b|\$/.test(t)) return 'USD';
   return null;
 }
@@ -462,7 +473,7 @@ function verdict(parsed) {
 function splitMultiWatch(text) {
   if (!text || text.length < 10) return [text];
 
-  const refPattern = /\b(?:RM\s?\d{2}[-\s]?\d{2}|[345]\d{3}[A-Z]?[\/\-]?\d*|\d{6}[A-Z]{0,5}|\d{5}[A-Z]{2,5}|PAM\d{3,5}|IW\d{6,8}|\d{3}\.\d{3})\b/gi;
+  const refPattern = /\b(?:RM\s?\d{2}[-\s]?\d{2}|[345]\d{3}[A-Z]?(?:[\/\-]\d+)?\b|\d{6}[A-Z]{0,5}\b|\d{5}[A-Z]{2,5}\b|PAM\d{3,5}\b|IW\d{6,8}\b|\d{3}\.\d{3}\b)/gi;
   const refMatches = text.match(refPattern) || [];
   if (refMatches.length <= 1) return [text];
 
@@ -508,6 +519,49 @@ function splitMultiWatch(text) {
     const hasRef = /\b(?:RM\s?\d{2}|[345]\d{3}|\d{5,6}[A-Z]?|PAM\d|IW\d|\d{3}\.\d{3})\b/i.test(p);
     return hasRef;
   });
+
+  if (validParts.length <= 1 && !text.includes('\n')) {
+    // 4b) MID-LINE SECOND-REFERENCE SPLIT — space-separated line with multiple refs
+    const STRONG_REF_RE = /(?:RM\s?\d{2}[-\s]?\d{2}|\b[345]\d{3}[A-Z]?(?:[\/\-]\d+)?\b|\b\d{6}[A-Z]{0,5}\b|\b\d{5}[A-Z]{2,5}\b|\bPAM\d{3,5}\b|\bIW\d{6,8}\b|\b\d{3}\.\d{3}\b)/gi;
+    const PRICE_TOKEN_RE = /\d{2,3}\s?[kKmM]\b|[$€£]|\b(?:hkd|usd|usdt|eur|chf|gbp|sgd)\b|[\d,]{4,}|\b\d+\s*U\b/i;
+    
+    const hits = [];
+    let m;
+    STRONG_REF_RE.lastIndex = 0;
+    while ((m = STRONG_REF_RE.exec(text)) !== null) {
+      if (/^(?:19|20)\d{2}[Yy]?$/.test(m[0])) continue;
+      if (/^\d{3,7}(?:HKD|USD|USDT|EUR|CHF|GBP|SGD|JPY|AED|U)$/i.test(m[0])) continue;
+      hits.push({ ref: m[0], idx: m.index });
+    }
+    
+    const normRef = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const distinct = [...new Set(hits.map(h => normRef(h.ref)))];
+    
+    if (hits.length >= 2 && distinct.length >= 2) {
+      const cuts = [hits[0].idx];
+      for (let i = 1; i < hits.length; i++) {
+        const between = text.slice(hits[i - 1].idx, hits[i].idx);
+        if (normRef(hits[i].ref) === normRef(hits[i - 1].ref)) continue;
+        if (PRICE_TOKEN_RE.test(between)) cuts.push(hits[i].idx);
+      }
+      
+      if (cuts.length >= 2) {
+        const midParts = [];
+        for (let i = 0; i < cuts.length; i++) {
+          const start = cuts[i];
+          const end = i + 1 < cuts.length ? cuts[i + 1] : text.length;
+          const seg = text.slice(start, end).trim();
+          if (seg) midParts.push(seg);
+        }
+        if (cuts[0] > 0) {
+          const lead = text.slice(0, cuts[0]).trim();
+          if (lead) midParts[0] = (lead + ' ' + midParts[0]).trim();
+        }
+        return midParts;
+      }
+    }
+  }
+
   return validParts.length > 1 ? validParts : [text];
 }
 

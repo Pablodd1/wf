@@ -898,7 +898,7 @@ function regexParse(chunk) {
 
   // Pattern B: "AMOUNT CURRENCY" (right-side) — "447k HKD", "57,650 USDT", "152000hkd"
   // Using regex literal to avoid template-literal escaping issues
-  const RIGHT_CUR_RE = /\b([\d.,]+)\s*([MmKk])?\s*(USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED|euro?)\b/gi;
+  const RIGHT_CUR_RE = /\b([\d.,]+)\s*([MmKk])?\s*(USDT|HKD|USD|EUR|CHF|GBP|SGD|JPY|AED|euro?|U)\b/gi;
   while ((m = RIGHT_CUR_RE.exec(text)) !== null) {
     // Skip only if match starts INSIDE a Pattern-A-consumed range.
     // Matches that start BEFORE consumed text (e.g., "510,000 HKD" before "HKD 65,000")
@@ -909,6 +909,7 @@ function regexParse(chunk) {
     
     let cur = (m[3] || '').toUpperCase();  // capture group 3 = currency name
     if (cur === 'EURO') cur = 'EUR';
+    if (cur === 'U') cur = 'USD';
     if (!cur) continue;
     let val = parseFloat((m[1] || '').replace(/,/g, ''));
     const suf = (m[2] || '').toLowerCase();
@@ -926,7 +927,7 @@ function regexParse(chunk) {
   }
 
   // Pattern C: "$" suffix — "450000$", "39200usd" (no space between number and $/currency)
-  const DOLLAR_SUFFIX_RE = /\b(\d{4,7})\s*(\$|usdt?|usd|hkd|eur|euro?|gbp)(?=\s|$|[,.;/\-]|\b)/gi;
+  const DOLLAR_SUFFIX_RE = /\b(\d{4,7})\s*(\$|usdt?|usd|hkd|eur|euro?|gbp|u)(?=\s|$|[,.;/\-]|\b)/gi;
   while ((m = DOLLAR_SUFFIX_RE.exec(text)) !== null) {
     const matchStart = m.index;
     const matchEnd = matchStart + m[0].length;
@@ -938,6 +939,7 @@ function regexParse(chunk) {
     let cur;
     if (rawCur === '$') cur = 'USD';
     else if (rawCur === 'euro') cur = 'EUR';
+    else if (rawCur === 'u') cur = 'USD';
     else cur = rawCur.toUpperCase();
     let val = parseFloat((m[1] || '').replace(/,/g, ''));
     if (!isNaN(val) && val >= 100 && val < 100_000_000) {

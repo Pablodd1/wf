@@ -305,6 +305,16 @@ function extractPrice(text: string): { price: number; currency: string } {
   // Remove whitespace noise
   const cleaned = text.replace(/[\t\n]/g, ' ');
 
+  // Pattern 0: "400000U", "400kU", "400k U"
+  const mU = cleaned.match(/\b(\d+(?:\.\d+)?)\s*([kKmM])?\s*U\b/i);
+  if (mU) {
+    let val = parseFloat(mU[1]);
+    const suf = (mU[2] || '').toLowerCase();
+    if (suf === 'm') val *= 1_000_000;
+    else if (suf === 'k') val *= 1_000;
+    return { price: Math.round(val), currency: 'USD' };
+  }
+
   // Pattern 1: "850k HKD", "1.2m USD", "2.4M"
   let m = cleaned.match(/(\d+(?:\.\d+)?)\s*([kKmM])\b\s*(hkd|usd|usdt|eur|€|\$)?/);
   if (m) {
