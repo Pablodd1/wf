@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { useLocation, Link } from 'react-router-dom';
+import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { useAuth } from '@/hooks/useAuth';
 import {
   LayoutDashboard, Search, BarChart3, ClipboardCheck,
-  Settings, Sparkles, TrendingUp, Zap, Shield, CheckCircle
+  Sparkles, TrendingUp, Zap, Shield, CheckCircle, LogOut, User
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -19,6 +20,8 @@ const NAV_ITEMS = [
 
 export function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth();
   const [time, setTime] = useState('');
   const [stats, setStats] = useState<any>(null);
 
@@ -86,9 +89,28 @@ export function Navbar() {
             </span>
             <span className="text-[10px] text-green-400 font-medium uppercase tracking-wider">System Online</span>
           </div>
-          <button className="hidden md:block px-3 py-1.5 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-[11px] font-medium rounded-md transition-colors">
-            DEALER LOGIN
-          </button>
+          {user ? (
+            <div className="flex items-center gap-2">
+              <span className="hidden md:flex items-center gap-1.5 text-[11px] text-gray-300">
+                <User size={12} className="text-[#D4AF37]" />
+                {user.name || user.email}
+              </span>
+              <button
+                onClick={() => logout().then(() => navigate('/login'))}
+                className="flex items-center gap-1 px-3 py-1.5 bg-red-600/20 hover:bg-red-600/30 text-red-400 text-[11px] font-medium rounded-md transition-colors"
+              >
+                <LogOut size={12} />
+                <span className="hidden md:inline">Logout</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => navigate('/login')}
+              className="px-3 py-1.5 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-[11px] font-medium rounded-md transition-colors"
+            >
+              DEALER LOGIN
+            </button>
+          )}
         </div>
       </motion.header>
 
