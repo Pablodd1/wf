@@ -19,7 +19,7 @@ export function Layout({
   avgLatency,
 }: LayoutProps) {
   return (
-    <div className="min-h-[100dvh] bg-bg-primary">
+    <div className="min-h-[100dvh]" style={{ backgroundColor: '#0A0A0F' }}>
       <Navbar
         totalProcessed={totalProcessed}
         normalizedCount={normalizedCount}
