@@ -45,14 +45,26 @@ export default function Home() {
     <div className="min-h-[100dvh] bg-white">
       <PublicNavbar />
 
-      {/* ── HERO ─────────────────────────────────────────────────── */}
-      <section
-        className="relative flex items-center justify-center min-h-[100dvh] bg-cover bg-center bg-no-repeat"
-        style={{
-          backgroundImage: `linear-gradient(to right, rgba(10,10,10,0.85) 0%, rgba(10,10,10,0.4) 50%, rgba(10,10,10,0.2) 100%), url('https://images.unsplash.com/photo-1547996663-b8308d6e161c?auto=format&fit=crop&w=2000&q=80')`,
-        }}
-      >
-        <div className="text-center px-6 max-w-3xl mx-auto pt-[60px]">
+      {/* ── HERO with video background ───────────────────────────── */}
+      <section className="relative flex items-center justify-center min-h-[100dvh] overflow-hidden">
+        {/* Background video */}
+        <video
+          autoPlay
+          muted
+          loop
+          playsInline
+          className="absolute inset-0 w-full h-full object-cover"
+          src="/hero-video.mp4"
+        />
+        {/* Dark overlay for text readability */}
+        <div
+          className="absolute inset-0"
+          style={{
+            background: `linear-gradient(to right, rgba(10,10,10,0.85) 0%, rgba(10,10,10,0.5) 40%, rgba(10,10,10,0.3) 70%, rgba(10,10,10,0.5) 100%)`,
+          }}
+        />
+        {/* Content */}
+        <div className="relative z-10 text-center px-6 max-w-3xl mx-auto pt-[60px]">
           <h1 className="text-3xl md:text-4xl lg:text-[42px] font-light text-white tracking-wide mb-6 leading-tight">
             Own The Rare. Backed By Blockchain
           </h1>
