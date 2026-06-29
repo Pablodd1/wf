@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Filter, Info, User, CheckCircle, Globe, Loader2, TrendingUp, Shield, Award, DollarSign, Watch, Gem, X } from 'lucide-react';
+import { Search, Filter, Info, User, CheckCircle, Globe, Loader2, TrendingUp, Shield, Award, DollarSign, Watch, Gem, X, Zap } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
 
@@ -252,7 +252,7 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
 }
 
 // ─── Stats Bar ───────────────────────────────────────────────────────
-function StatsBar({ total, loaded, hasMore, onLoadAll }: { total: number; loaded: number; hasMore: boolean; onLoadAll: () => void }) {
+function StatsBar({ total, loaded, hasMore, loadAllMode, onLoadAll, onBackToPaginated }: { total: number; loaded: number; hasMore: boolean; loadAllMode: boolean; onLoadAll: () => void; onBackToPaginated: () => void }) {
   return (
     <div className="bg-white border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-6 overflow-x-auto">
@@ -274,13 +274,32 @@ function StatsBar({ total, loaded, hasMore, onLoadAll }: { total: number; loaded
         </div>
         <div className="flex-1" />
         <div className="flex items-center gap-3">
-          <div className="text-[11px] text-gray-400 whitespace-nowrap">
-            Showing <span className="font-semibold text-gray-700">{loaded}</span> loaded
-          </div>
-          {hasMore && (
-            <button onClick={onLoadAll} className="text-xs text-[#3B5BFE] font-medium hover:underline whitespace-nowrap">
-              Load All
-            </button>
+          {loadAllMode ? (
+            <>
+              <div className="text-[11px] text-[#D4AF37] font-semibold whitespace-nowrap">
+                {loaded.toLocaleString()} of {total.toLocaleString()} listings loaded
+              </div>
+              <button
+                onClick={onBackToPaginated}
+                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-semibold rounded-lg transition-colors whitespace-nowrap"
+              >
+                Back to Paginated
+              </button>
+            </>
+          ) : (
+            <>
+              <div className="text-[11px] text-gray-400 whitespace-nowrap">
+                Showing <span className="font-semibold text-gray-700">{loaded}</span> loaded
+              </div>
+              {hasMore && (
+                <button
+                  onClick={onLoadAll}
+                  className="px-4 py-2 bg-[#D4AF37] hover:bg-[#C4A030] text-black text-xs font-semibold rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+                >
+                  <Zap size={14} /> Load All Listings
+                </button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -311,8 +330,22 @@ export default function TradingFloor() {
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [imageMap, setImageMap] = useState<Record<string, string>>({});
+  const [loadAllMode, setLoadAllMode] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFetchingRef = useRef(false);
+
+  // ─── Fetch real-time total count from Supabase ───────────────────────
+  useEffect(() => {
+    fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count&limit=1`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'count=exact' }
+    })
+    .then(r => {
+      const range = r.headers.get('content-range') || '';
+      const count = parseInt(range.split('/')[1] || '0');
+      if (count > 0) setTotal(count);
+    })
+    .catch(() => {});
+  }, []);
 
   // ─── Fetch real images from Supabase reference_images table ──────────
   async function preloadImages(refs: string[]) {
@@ -373,13 +406,12 @@ export default function TradingFloor() {
 
       if (append) {
         setListings(prev => [...prev, ...processedData]);
-        setHasMore(processedData.length === currentPageSize);
+        setHasMore(processedData.length === currentPageSize && !loadAllMode);
       } else {
         setListings(processedData);
-        setHasMore(processedData.length === currentPageSize);
+        setHasMore(processedData.length === currentPageSize && !loadAllMode);
         setPage(1);
       }
-      setTotal(2392784);
 
       // ─── Preload images for newly loaded references ──────────────────
       const refs = processedData.map((l: WatchListing) => l.reference).filter(Boolean);
@@ -390,7 +422,7 @@ export default function TradingFloor() {
     isFetchingRef.current = false;
     setLoading(false);
     setLoadingMore(false);
-  }, [query, condition, listingType, page, pageSize]);
+  }, [query, condition, listingType, page, pageSize, loadAllMode]);
 
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
@@ -400,21 +432,30 @@ export default function TradingFloor() {
 
   useEffect(() => {
     const handleScroll = throttle(() => {
-      if (isFetchingRef.current || !hasMore || loading) return;
+      if (isFetchingRef.current || !hasMore || loading || loadAllMode) return;
       if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 800) {
         setPage(p => p + 1);
       }
     }, 200);
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
-  }, [hasMore, loading]);
+  }, [hasMore, loading, loadAllMode]);
 
   useEffect(() => { if (page > 1) fetchListings(true); }, [page]); // eslint-disable-line
 
   const handleLoadAll = useCallback(() => {
-    setPageSize(1000);
+    setLoadAllMode(true);
+    setPageSize(10000);
     setPage(1);
-    fetchListings(false, 1000);
+    fetchListings(false, 10000);
+  }, [fetchListings]);
+
+  const resetToPaginated = useCallback(() => {
+    setLoadAllMode(false);
+    setPageSize(100);
+    setPage(1);
+    setHasMore(true);
+    fetchListings(false, 100);
   }, [fetchListings]);
 
   return (
@@ -433,7 +474,7 @@ export default function TradingFloor() {
         </div>
       </div>
 
-      <StatsBar total={total} loaded={listings.length} hasMore={hasMore} onLoadAll={handleLoadAll} />
+      <StatsBar total={total} loaded={listings.length} hasMore={hasMore} loadAllMode={loadAllMode} onLoadAll={handleLoadAll} onBackToPaginated={resetToPaginated} />
 
       {/* Category Filter Pills + Search */}
       <div className="bg-white border-b border-gray-200 sticky top-[56px] z-40 shadow-sm">
@@ -457,7 +498,15 @@ export default function TradingFloor() {
             </div>
           </div>
 
-          <div className="flex="flex items-center justify-between flex-wrap gap-2">
+          {loadAllMode && (
+            <div className="mb-3 px-3 py-2 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-lg flex items-center gap-2">
+              <Zap size={14} className="text-[#D4AF37]" />
+              <span className="text-xs font-semibold text-[#B8960C]">
+                Load All Mode Active — {listings.length.toLocaleString()} of {total.toLocaleString()} listings loaded. Search and filters work client-side on loaded data.
+              </span>
+            </div>
+          )}
+          <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2 flex-wrap">
               {[
                 { id: 'forsale' as const, label: 'FOR SALE', icon: DollarSign },
@@ -535,7 +584,11 @@ export default function TradingFloor() {
               </div>
             )}
             {!hasMore && !loadingMore && (
-              <div className="text-center mt-10 text-xs text-gray-400">-- {listings.length.toLocaleString()} listings loaded --</div>
+              <div className="text-center mt-10 text-xs text-gray-400">
+                {loadAllMode
+                  ? `-- Showing first ${listings.length.toLocaleString()} listings of ${total.toLocaleString()} total --`
+                  : `-- ${listings.length.toLocaleString()} listings loaded --`}
+              </div>
             )}
           </>
         )}
