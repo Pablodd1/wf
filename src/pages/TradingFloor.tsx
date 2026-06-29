@@ -163,7 +163,7 @@ export default function TradingFloor() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(2392784);
   const pageSize = 12; // Smaller for faster initial load
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Optimized fetch: select only needed columns, smaller page
   const fetchListings = useCallback(async () => {
