@@ -8,6 +8,9 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Mail, MessageCircle, MapPin, Calendar, Tag, Shield, Star } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 
+const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NjI2MzEsImV4cCI6MjA5NzEzODYzMX0.ymAvXzEXu1Tz8gEec9RBmM3VtYQ9NdzQ0BCPvtb9jKQ';
+
 interface WatchDetail {
   id: string;
   brand: string;
@@ -37,15 +40,19 @@ export default function FlashSaleDetail() {
     const fetchDetail = async () => {
       setLoading(true);
       try {
-        // Search by ID through the listings API
-        const res = await fetch(`/api/listings?search=${encodeURIComponent(id)}&limit=10`);
+        // Direct Supabase query
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${encodeURIComponent(id)}&select=*`, {
+          headers: {
+            'apikey': SUPABASE_ANON_KEY,
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
-        // Find exact match or first result
-        const match = data.rows?.find((r: any) => r.id === id) || data.rows?.[0];
-        if (match) {
-          setListing(match);
+        if (data?.[0]) {
+          setListing(data[0]);
         } else {
           setError('Listing not found');
         }

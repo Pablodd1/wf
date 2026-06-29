@@ -25,6 +25,10 @@ interface WatchListing {
   year: number | null;
 }
 
+// Supabase config for direct browser access
+const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NjI2MzEsImV4cCI6MjA5NzEzODYzMX0.ymAvXzEXu1Tz8gEec9RBmM3VtYQ9NdzQ0BCPvtb9jKQ';
+
 const CONDITIONS = ['All', 'New', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9', 'Used', 'Pre-owned'];
 const REGIONS = ['All', 'North America', 'Europe', 'Asia', 'Middle East'];
 const SORT_OPTIONS = [
@@ -191,21 +195,55 @@ export default function TradingFloor() {
     setLoading(true);
     setError(null);
     try {
+      // Use Supabase REST API directly (works from browser)
       const params = new URLSearchParams();
-      params.set('page', String(page));
+      params.set('select', '*');
       params.set('limit', String(pageSize));
-      if (query) params.set('search', query);
-      if (condition !== 'All') params.set('condition', condition);
-      if (sortBy === 'newest') params.set('order', 'created_at.desc');
-      if (sortBy === 'oldest') params.set('order', 'created_at.asc');
-      if (sortBy === 'price_asc') params.set('order', 'price_usd.asc');
-      if (sortBy === 'price_desc') params.set('order', 'price_usd.desc');
+      params.set('offset', String((page - 1) * pageSize));
 
-      const res = await fetch(`/api/listings?${params.toString()}`);
+      // Build filters
+      const filters: string[] = [];
+      if (query) {
+        filters.push(`or=(reference.ilike.*${query}*,brand.ilike.*${query}*,raw_message.ilike.*${query}*)`);
+      }
+      if (condition !== 'All') {
+        filters.push(`condition=eq.${encodeURIComponent(condition)}`);
+      }
+
+      // Sort
+      let orderBy = 'created_at';
+      let orderDir = 'desc';
+      if (sortBy === 'oldest') orderDir = 'asc';
+      if (sortBy === 'price_asc') { orderBy = 'price_usd'; orderDir = 'asc'; }
+      if (sortBy === 'price_desc') { orderBy = 'price_usd'; orderDir = 'desc'; }
+
+      const url = `${SUPABASE_URL}/rest/v1/watch_records?${params.toString()}${filters.length > 0 ? '&' + filters.join('&') : ''}&order=${orderBy}.${orderDir}`;
+
+      const res = await fetch(url, {
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setListings(data.rows || []);
-      setTotal(data.total || 0);
+
+      // Get count via head request
+      const countRes = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count`, {
+        method: 'HEAD',
+        headers: {
+          'apikey': SUPABASE_ANON_KEY,
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Prefer': 'count=exact',
+        },
+      });
+      const countRange = countRes.headers.get('content-range') || '';
+      const totalCount = parseInt(countRange.split('/')[1] || '0') || data.length;
+
+      setListings(data || []);
+      setTotal(totalCount);
     } catch (err: any) {
       setError(err.message);
     } finally {
