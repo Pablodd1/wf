@@ -9,6 +9,7 @@ import {
   Database, Wifi, WifiOff, AlertTriangle, RefreshCw, Loader2,
   Server, Cpu, MessageSquare, BookOpen, Bot, Clock,
   CheckCircle, XCircle, Activity, Zap, Signal,
+  Shield, TrendingDown, BarChart3, Percent,
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
@@ -159,6 +160,67 @@ export default function HealthPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // ─── Parser Quality Metrics (Phase 6) ──────────────────────────────
+  const [qualityMetrics, setQualityMetrics] = useState({
+    total: 0,
+    approved: 0,
+    review: 0,
+    recycled: 0,
+    wtb: 0,
+    human: 0,
+    withErrors: 0,
+    recycleRate: 0,
+    approvalRate: 0,
+    loading: true,
+  });
+
+  // ─── Fetch parser quality metrics ──────────────────────────────────
+  const fetchQualityMetrics = useCallback(async () => {
+    try {
+      const [verdictRes, errorRes] = await Promise.all([
+        fetch(`${SUPABASE_URL}/rest/v1/mv_verdict_dist?select=verdict,count`, { headers: REQ }),
+        fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count&parser_error=not.is.null&limit=1`, {
+          method: 'GET', headers: { ...REQ, 'Prefer': 'count=exact' },
+        }),
+      ]);
+
+      let total = 0, approved = 0, review = 0, recycled = 0, wtb = 0, human = 0;
+      if (verdictRes.ok) {
+        const data = await verdictRes.json();
+        for (const row of data) {
+          const c = parseInt(row.count) || 0;
+          total += c;
+          if (row.verdict === 'APPROVED') approved += c;
+          else if (row.verdict === 'REVIEW') review += c;
+          else if (row.verdict === 'RECYCLE') recycled += c;
+          else if (row.verdict === 'WTB') wtb += c;
+          else if (row.verdict === 'HUMAN') human += c;
+        }
+      }
+
+      let withErrors = 0;
+      if (errorRes.ok) {
+        const range = errorRes.headers.get('content-range') || '';
+        withErrors = parseInt(range.split('/')[1] || '0');
+      }
+
+      setQualityMetrics({
+        total,
+        approved,
+        review,
+        recycled,
+        wtb,
+        human,
+        withErrors,
+        recycleRate: total > 0 ? (recycled / total) * 100 : 0,
+        approvalRate: total > 0 ? (approved / total) * 100 : 0,
+        loading: false,
+      });
+    } catch {
+      setQualityMetrics(prev => ({ ...prev, loading: false }));
+    }
+  }, []);
+
   // ─── Run all checks ────────────────────────────────────────────────
   const runChecks = useCallback(async () => {
     setChecking(true);
@@ -205,8 +267,11 @@ export default function HealthPage() {
       }
     }
 
+    // Also refresh quality metrics
+    await fetchQualityMetrics();
+
     setChecking(false);
-  }, []);
+  }, [fetchQualityMetrics]);
 
   // Auto-refresh every 30s
   useEffect(() => {
@@ -306,6 +371,95 @@ export default function HealthPage() {
         {services.map(s => (
           <ServiceCard key={s.id} service={s} onCheck={() => checkService(s.id)} />
         ))}
+      </div>
+
+      {/* ─── Parser Quality Metrics (Phase 6) ─────────────────────────── */}
+      <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-6">
+        <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+          <Shield size={14} /> Parser Quality Metrics
+        </h3>
+        {qualityMetrics.loading ? (
+          <div className="flex items-center gap-2 text-sm text-gray-500">
+            <Loader2 size={14} className="animate-spin" /> Loading metrics...
+          </div>
+        ) : (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+              <div className="bg-gray-950 rounded-lg p-3 border border-green-500/20">
+                <div className="text-[10px] text-gray-500 uppercase mb-1">Approval Rate</div>
+                <div className={`text-lg font-bold ${qualityMetrics.approvalRate >= 30 ? 'text-green-400' : 'text-amber-400'}`}>
+                  {qualityMetrics.approvalRate.toFixed(1)}%
+                </div>
+                <div className="text-[10px] text-gray-600">{qualityMetrics.approved.toLocaleString()} approved</div>
+              </div>
+              <div className="bg-gray-950 rounded-lg p-3 border border-red-500/20">
+                <div className="text-[10px] text-gray-500 uppercase mb-1">Recycle Rate</div>
+                <div className={`text-lg font-bold ${qualityMetrics.recycleRate < 5 ? 'text-green-400' : qualityMetrics.recycleRate < 15 ? 'text-amber-400' : 'text-red-400'}`}>
+                  {qualityMetrics.recycleRate.toFixed(1)}%
+                </div>
+                <div className="text-[10px] text-gray-600">{qualityMetrics.recycled.toLocaleString()} recycled</div>
+              </div>
+              <div className="bg-gray-950 rounded-lg p-3 border border-blue-500/20">
+                <div className="text-[10px] text-gray-500 uppercase mb-1">WTB Signals</div>
+                <div className="text-lg font-bold text-blue-400">{qualityMetrics.wtb.toLocaleString()}</div>
+                <div className="text-[10px] text-gray-600">{((qualityMetrics.wtb / qualityMetrics.total) * 100).toFixed(1)}% of total</div>
+              </div>
+              <div className="bg-gray-950 rounded-lg p-3 border border-yellow-500/20">
+                <div className="text-[10px] text-gray-500 uppercase mb-1">Validation Errors</div>
+                <div className={`text-lg font-bold ${qualityMetrics.withErrors === 0 ? 'text-green-400' : 'text-yellow-400'}`}>
+                  {qualityMetrics.withErrors.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-gray-600">Parser rejections</div>
+              </div>
+            </div>
+
+            {/* Verdict distribution bar */}
+            {qualityMetrics.total > 0 && (
+              <div>
+                <div className="text-[10px] text-gray-500 uppercase mb-2">Verdict Distribution</div>
+                <div className="w-full h-4 flex rounded-full overflow-hidden bg-gray-800">
+                  {qualityMetrics.approved > 0 && (
+                    <div className="h-full bg-green-500/70 flex items-center justify-center text-[9px] text-white font-medium"
+                      style={{ width: `${(qualityMetrics.approved / qualityMetrics.total) * 100}%` }} title={`APPROVED: ${qualityMetrics.approved.toLocaleString()}`}>
+                      {(qualityMetrics.approved / qualityMetrics.total * 100) > 8 && 'A'}
+                    </div>
+                  )}
+                  {qualityMetrics.review > 0 && (
+                    <div className="h-full bg-blue-500/70 flex items-center justify-center text-[9px] text-white font-medium"
+                      style={{ width: `${(qualityMetrics.review / qualityMetrics.total) * 100}%` }} title={`REVIEW: ${qualityMetrics.review.toLocaleString()}`}>
+                      {(qualityMetrics.review / qualityMetrics.total * 100) > 8 && 'R'}
+                    </div>
+                  )}
+                  {qualityMetrics.human > 0 && (
+                    <div className="h-full bg-yellow-500/70 flex items-center justify-center text-[9px] text-white font-medium"
+                      style={{ width: `${(qualityMetrics.human / qualityMetrics.total) * 100}%` }} title={`HUMAN: ${qualityMetrics.human.toLocaleString()}`}>
+                      {(qualityMetrics.human / qualityMetrics.total * 100) > 8 && 'H'}
+                    </div>
+                  )}
+                  {qualityMetrics.wtb > 0 && (
+                    <div className="h-full bg-purple-500/70 flex items-center justify-center text-[9px] text-white font-medium"
+                      style={{ width: `${(qualityMetrics.wtb / qualityMetrics.total) * 100}%` }} title={`WTB: ${qualityMetrics.wtb.toLocaleString()}`}>
+                      {(qualityMetrics.wtb / qualityMetrics.total * 100) > 8 && 'W'}
+                    </div>
+                  )}
+                  {qualityMetrics.recycled > 0 && (
+                    <div className="h-full bg-red-500/70 flex items-center justify-center text-[9px] text-white font-medium"
+                      style={{ width: `${(qualityMetrics.recycled / qualityMetrics.total) * 100}%` }} title={`RECYCLE: ${qualityMetrics.recycled.toLocaleString()}`}>
+                      {(qualityMetrics.recycled / qualityMetrics.total * 100) > 8 && 'C'}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-4 mt-2 text-[10px] text-gray-500">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500/70 inline-block" /> Approved</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500/70 inline-block" /> Review</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500/70 inline-block" /> Human</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500/70 inline-block" /> WTB</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500/70 inline-block" /> Recycled</span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Alerts Log */}
