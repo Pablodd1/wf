@@ -6,12 +6,11 @@ import {
   Sparkles, Zap, Shield,
   Activity, FileSpreadsheet, Database,
   Download, ShieldCheck, Target,
-  Settings,
+  Settings, Upload,
   Menu, X, ChevronRight,
 } from 'lucide-react';
 
-// Admin tabs — 13 tabs: Search, Data, Demo, Review, Analytics, Reports, Health, Export, Quality, Verify, Admin, Clean, Settings
-// All public for now. Auth protection will be added in Phase 2.
+// Admin tabs — 14 tabs: Search, Data, Demo, Review, Analytics, Reports, Health, Export, Quality, Verify, Admin, Clean, Import, Settings
 const NAV_ITEMS = [
   { label: 'Search', path: '/search', icon: Search },
   { label: 'Data', path: '/data', icon: Database },
@@ -25,6 +24,7 @@ const NAV_ITEMS = [
   { label: 'Verify', path: '/verification', icon: Target },
   { label: 'Admin', path: '/admin', icon: Shield },
   { label: 'Clean', path: '/clean', icon: Sparkles },
+  { label: 'Import', path: '/import', icon: Upload },
   { label: 'Settings', path: '/settings', icon: Settings },
 ] as const;
 
@@ -88,9 +88,7 @@ export function Navbar() {
     } else {
       document.body.style.overflow = '';
     }
-    return () => {
-      document.body.style.overflow = '';
-    };
+    return () => { document.body.style.overflow = ''; };
   }, [mobileMenuOpen]);
 
   const isActive = (path: string) => {
@@ -101,11 +99,8 @@ export function Navbar() {
   const total = stats?.totalRecords ?? 2390143;
   const approved = stats?.approvedCount ?? 805872;
 
-  // Click outside handler
   const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      setMobileMenuOpen(false);
-    }
+    if (e.target === e.currentTarget) setMobileMenuOpen(false);
   }, []);
 
   return (
@@ -119,11 +114,7 @@ export function Navbar() {
       >
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 group">
-          <img
-            src="/watchfacts-logo.png"
-            alt="WatchFacts"
-            className="h-8 w-auto object-contain group-hover:opacity-90 transition-opacity"
-          />
+          <img src="/watchfacts-logo.png" alt="WatchFacts" className="h-8 w-auto object-contain group-hover:opacity-90 transition-opacity" />
         </Link>
 
         {/* Center Stats — hidden on small screens, visible lg+ */}
@@ -140,7 +131,6 @@ export function Navbar() {
 
         {/* Right */}
         <div className="flex items-center gap-2 md:gap-3">
-          {/* System Status — hidden on small screens */}
           <div className="hidden md:flex items-center gap-1.5">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
@@ -148,21 +138,10 @@ export function Navbar() {
             </span>
             <span className="text-[10px] text-green-400 font-medium uppercase tracking-wider">System Online</span>
           </div>
-
-          {/* Trading Floor Button — hidden on smallest screens */}
-          <button
-            onClick={() => navigate('/trading')}
-            className="hidden sm:block px-3 py-1.5 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-[11px] font-medium rounded-md transition-colors"
-          >
+          <button onClick={() => navigate('/trading')} className="hidden sm:block px-3 py-1.5 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-[11px] font-medium rounded-md transition-colors">
             TRADING FLOOR
           </button>
-
-          {/* Mobile Hamburger Button */}
-          <button
-            onClick={() => setMobileMenuOpen(true)}
-            className="md:hidden flex items-center justify-center w-10 h-10 rounded-md text-gray-300 hover:text-white hover:bg-[#1A1A24] transition-colors active:scale-95"
-            aria-label="Open menu"
-          >
+          <button onClick={() => setMobileMenuOpen(true)} className="md:hidden flex items-center justify-center w-10 h-10 rounded-md text-gray-300 hover:text-white hover:bg-[#1A1A24] transition-colors active:scale-95" aria-label="Open menu">
             <Menu size={22} />
           </button>
         </div>
@@ -173,20 +152,8 @@ export function Navbar() {
         {NAV_ITEMS.map(({ label, path, icon: Icon }) => {
           const active = isActive(path);
           return (
-            <Link
-              key={path}
-              to={path}
-              className={`
-                flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-medium
-                transition-all duration-200 whitespace-nowrap
-                min-h-[36px] md:min-h-0
-                active:scale-95
-                ${active
-                  ? 'bg-[#D4AF37]/15 text-[#D4AF37]'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1A1A24]'
-                }
-              `}
-            >
+            <Link key={path} to={path}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-medium transition-all duration-200 whitespace-nowrap min-h-[36px] md:min-h-0 active:scale-95 ${active ? 'bg-[#D4AF37]/15 text-[#D4AF37]' : 'text-gray-400 hover:text-gray-200 hover:bg-[#1A1A24]'}`}>
               <Icon size={11} />
               {label}
             </Link>
@@ -197,38 +164,17 @@ export function Navbar() {
       {/* ── Mobile Menu Overlay ──────────────────────────────── */}
       <AnimatePresence>
         {mobileMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            onClick={handleBackdropClick}
-            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm md:hidden"
-          >
-            <motion.div
-              ref={menuRef}
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-              onClick={(e) => e.stopPropagation()}
-              className="absolute right-0 top-0 bottom-0 w-[85vw] max-w-[360px] bg-[#0A0A0F]/98 backdrop-blur-lg border-l border-[#1E1E2E] flex flex-col"
-            >
-              {/* Menu Header */}
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={handleBackdropClick}
+            className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm md:hidden">
+            <motion.div ref={menuRef} initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 30, stiffness: 300 }} onClick={e => e.stopPropagation()}
+              className="absolute right-0 top-0 bottom-0 w-[85vw] max-w-[360px] bg-[#0A0A0F]/98 backdrop-blur-lg border-l border-[#1E1E2E] flex flex-col">
               <div className="flex items-center justify-between px-5 h-14 border-b border-[#1E1E2E] flex-shrink-0">
                 <span className="text-sm font-semibold text-white tracking-wide">Menu</span>
-                <button
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-center w-10 h-10 rounded-md text-gray-300 hover:text-white hover:bg-[#1A1A24] transition-colors active:scale-95"
-                  aria-label="Close menu"
-                >
+                <button onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center w-10 h-10 rounded-md text-gray-300 hover:text-white hover:bg-[#1A1A24] transition-colors active:scale-95" aria-label="Close menu">
                   <X size={22} />
                 </button>
               </div>
-
-              {/* Scrollable Content */}
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
-                {/* Stats Section */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-gray-500 font-mono">{time}</span>
@@ -252,39 +198,16 @@ export function Navbar() {
                     </div>
                   </div>
                 </div>
-
-                {/* Trading Floor CTA */}
-                <button
-                  onClick={() => {
-                    setMobileMenuOpen(false);
-                    navigate('/trading');
-                  }}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-sm font-medium rounded-lg transition-colors active:scale-[0.98]"
-                >
-                  <Zap size={16} />
-                  TRADING FLOOR
+                <button onClick={() => { setMobileMenuOpen(false); navigate('/trading'); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-sm font-medium rounded-lg transition-colors active:scale-[0.98]">
+                  <Zap size={16} /> TRADING FLOOR
                 </button>
-
-                {/* Nav Items */}
                 <div className="space-y-1">
                   <div className="text-[10px] text-gray-500 font-mono uppercase tracking-wider px-1 mb-2">Navigation</div>
                   {NAV_ITEMS.map(({ label, path, icon: Icon }) => {
                     const active = isActive(path);
                     return (
-                      <Link
-                        key={path}
-                        to={path}
-                        onClick={() => setMobileMenuOpen(false)}
-                        className={`
-                          flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium
-                          transition-all duration-200 min-h-[48px]
-                          active:scale-[0.98]
-                          ${active
-                            ? 'bg-[#D4AF37]/15 text-[#D4AF37]'
-                            : 'text-gray-300 hover:text-white hover:bg-[#1A1A24]'
-                          }
-                        `}
-                      >
+                      <Link key={path} to={path} onClick={() => setMobileMenuOpen(false)}
+                        className={`flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-all duration-200 min-h-[48px] active:scale-[0.98] ${active ? 'bg-[#D4AF37]/15 text-[#D4AF37]' : 'text-gray-300 hover:text-white hover:bg-[#1A1A24]'}`}>
                         <Icon size={18} />
                         <span className="flex-1">{label}</span>
                         <ChevronRight size={14} className="text-gray-600" />
@@ -304,19 +227,8 @@ export function Navbar() {
           {BOTTOM_BAR_ITEMS.map(({ label, path, icon: Icon }) => {
             const active = isActive(path);
             return (
-              <Link
-                key={path}
-                to={path}
-                className={`
-                  flex flex-col items-center justify-center gap-0.5
-                  w-16 h-full rounded-lg transition-all duration-200
-                  active:scale-90
-                  ${active
-                    ? 'text-[#D4AF37]'
-                    : 'text-gray-500 hover:text-gray-300'
-                  }
-                `}
-              >
+              <Link key={path} to={path}
+                className={`flex flex-col items-center justify-center gap-0.5 w-16 h-full rounded-lg transition-all duration-200 active:scale-90 ${active ? 'text-[#D4AF37]' : 'text-gray-500 hover:text-gray-300'}`}>
                 <Icon size={20} strokeWidth={active ? 2.5 : 1.5} />
                 <span className="text-[10px] font-medium">{label}</span>
               </Link>
