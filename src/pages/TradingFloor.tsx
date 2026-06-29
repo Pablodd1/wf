@@ -347,30 +347,6 @@ export default function TradingFloor() {
     .catch(() => {});
   }, []);
 
-  // ─── Fetch real images from Supabase reference_images table ──────────
-  async function preloadImages(refs: string[]) {
-    const uniqueRefs = [...new Set(refs.filter(r => r))].slice(0, 100);
-    if (uniqueRefs.length === 0) return;
-
-    try {
-      const url = `${SUPABASE_URL}/rest/v1/reference_images?select=reference,image_url&reference=in.(${uniqueRefs.join(',')})&is_primary=eq.true&limit=100`;
-      const res = await fetch(url, {
-        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
-      });
-      if (!res.ok) return;
-      const data = await res.json();
-      const map: Record<string, string> = {};
-      for (const row of data) {
-        if (row.reference && row.image_url) {
-          map[row.reference] = row.image_url;
-        }
-      }
-      setImageMap(prev => ({ ...prev, ...map }));
-    } catch {
-      // silent fail -- images gracefully fall back to gradient
-    }
-  }
-
   const fetchListings = useCallback(async (append = false, customPageSize?: number) => {
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
@@ -404,6 +380,27 @@ export default function TradingFloor() {
         });
       }
 
+      // ─── Preload images BEFORE setting state ─────────────────────────
+      const refs = processedData.map((l: WatchListing) => l.reference).filter(Boolean);
+      const uniqueRefs = [...new Set(refs)].slice(0, 100);
+      let newImageMap: Record<string, string> = {};
+
+      if (uniqueRefs.length > 0) {
+        try {
+          const imgUrl = `${SUPABASE_URL}/rest/v1/reference_images?select=reference,image_url&reference=in.(${uniqueRefs.join(',')})&is_primary=eq.true&limit=100`;
+          const imgRes = await fetch(imgUrl, { headers: REQ });
+          if (imgRes.ok) {
+            const imgData = await imgRes.json();
+            for (const row of imgData) {
+              if (row.reference && row.image_url) newImageMap[row.reference] = row.image_url;
+            }
+          }
+        } catch {
+          // silent fail — images gracefully fall back to gradient
+        }
+      }
+      setImageMap(prev => ({ ...prev, ...newImageMap }));
+
       if (append) {
         setListings(prev => [...prev, ...processedData]);
         setHasMore(processedData.length === currentPageSize && !loadAllMode);
@@ -412,10 +409,6 @@ export default function TradingFloor() {
         setHasMore(processedData.length === currentPageSize && !loadAllMode);
         setPage(1);
       }
-
-      // ─── Preload images for newly loaded references ──────────────────
-      const refs = processedData.map((l: WatchListing) => l.reference).filter(Boolean);
-      preloadImages(refs);
     } catch {
       // Keep existing listings on error
     }
