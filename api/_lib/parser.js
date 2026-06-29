@@ -70,8 +70,8 @@ const BRAND_MAP = [
 
 /** Reference patterns per brand family. */
 const REF_PATTERNS = [
-  // Patek Philippe — e.g. 5712/1A-001, 5236P, 6300A
-  { regex: /\b(5\d{3}[\/\-]?[0-9A-Z]{2,4}[\-–]?\d{0,3}|4\d{3}[\/\-]?\d{0,3}[A-Z]{0,2}|6\d{3}[A-Z]?|3\d{3}[\/\-]?\d{0,3}[A-Z]{0,2})\b/i, brandHint: 'Patek Philippe' },
+  // Patek Philippe — e.g. 5712/1A-001, 5236P, 6300A, 7118, 7300
+  { regex: /\b([34567]\d{3}[\/\-]?[0-9A-Z]{1,4}[\-–]?\d{0,3}[A-Z]{0,2})\b/i, brandHint: 'Patek Philippe' },
   // Rolex — e.g. 126529, 116500LN, 228238, 124060
   { regex: /\b(\d{5,6}\s?[A-Z]{0,3})\b/i, brandHint: 'Rolex' },
   // AP Royal Oak / Offshore — e.g. 15210ST, 26420SO, 26240OR
@@ -232,6 +232,10 @@ function parseReference(text, brandHint) {
       const ref = m[1].replace(/\s+/g, '').toUpperCase();
       // Filter out obviously wrong matches (years, phone numbers)
       if (/^\d{4}$/.test(ref) && (ref.startsWith('19') || ref.startsWith('20'))) continue;
+      // Filter out price fragments: 080.000, 0.185, etc. (start with 0, contain dots)
+      if (/^0[\d.]/.test(ref)) continue;
+      // Filter out pure numbers with exactly 3 digits after dot (European price format)
+      if (/^\d+\.\d{3}$/.test(ref)) continue;
       if (/^\d{5,6}$/.test(ref)) {
         // Could be a price — if followed by currency hints, skip
         const after = clean.slice(m.index + m[0].length, m.index + m[0].length + 10).toLowerCase();
@@ -303,8 +307,8 @@ function inferBrandFromRef(ref) {
   if (!ref) return null;
   const r = ref.toUpperCase();
   if (r.startsWith('RM')) return 'Richard Mille';
-  if (r.startsWith('5') || r.startsWith('4') || r.startsWith('6') || r.startsWith('3')) {
-    // Patek Philippe references typically start with 3, 4, 5, 6
+  if (r.startsWith('5') || r.startsWith('4') || r.startsWith('6') || r.startsWith('3') || r.startsWith('7')) {
+    // Patek Philippe references typically start with 3, 4, 5, 6, 7
     if (/^\d{4,5}[\/\-]?/.test(r)) return 'Patek Philippe';
   }
   if (/^\d{6}/.test(r)) {
@@ -391,7 +395,7 @@ function parsePrice(text, ref) {
     // 268000 (bare number, likely a price if followed by currency or context)
     { regex: /\b(\d{4,7})\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, multiplier: 1 },
     // Bare number near price context words
-    { regex: /(?:price|asking|ask|sell|offer|offered|at)\s*[:]?\s*(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1 },
+    { regex: /(?:price|asking|ask|sell|offer|offered|at)\s*[:]?(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1 },
     // General fallback: any number with 4-7 digits
     { regex: /\b(\d{4,7})\b/g, multiplier: 1 },
   ];
@@ -723,6 +727,29 @@ function parseFull(rawMsg) {
 // ═══════════════════════════════════════════════════════════════
 // MODULE EXPORTS
 // ═══════════════════════════════════════════════════════════════
+
+// Quick validation
+if (require.main === module) {
+  const testCases = [
+    { input: '7118/1200r white new 04/2025 - 1.080.000 HKD', expectRef: '7118/1200R', expectBrand: 'Patek Philippe' },
+    { input: '5711/1A blue $185k', expectRef: '5711/1A', expectBrand: 'Patek Philippe' },
+    { input: 'Rolex 126334 datejust 41', expectRef: '126334', expectBrand: 'Rolex' },
+    { input: 'PP 7300/1200R white gold', expectRef: '7300/1200R', expectBrand: 'Patek Philippe' },
+  ];
+  let passed = 0;
+  for (const tc of testCases) {
+    const result = parseFull(tc.input);
+    const refOk = result.ref === tc.expectRef;
+    const brandOk = result.brand === tc.expectBrand;
+    if (refOk && brandOk) {
+      passed++;
+      console.log(`✅ ${tc.input.slice(0, 40)}... → ref=${result.ref}, brand=${result.brand}`);
+    } else {
+      console.log(`❌ ${tc.input.slice(0, 40)}... → ref=${result.ref} (want ${tc.expectRef}), brand=${result.brand} (want ${tc.expectBrand})`);
+    }
+  }
+  console.log(`\n${passed}/${testCases.length} tests passed`);
+}
 
 module.exports = {
   // Main entry
