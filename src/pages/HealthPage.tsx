@@ -1,15 +1,15 @@
 /**
  * Health Monitor — Real-time service status dashboard
- * Checks: Supabase DB, Green API, Parser, Catalog, Telegram
+ * Checks: Supabase DB, Parser, Catalog, Green API, Telegram
  * Auto-refreshes every 30s. Manual check buttons.
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Database, Wifi, WifiOff, AlertTriangle, RefreshCw, Loader2,
+  Database, WifiOff, AlertTriangle, RefreshCw, Loader2,
   Server, Cpu, MessageSquare, BookOpen, Bot, Clock,
   CheckCircle, XCircle, Activity, Zap, Signal,
-  Shield,
+  Shield, Code2,
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
@@ -38,52 +38,119 @@ interface AlertEvent {
 }
 
 // ─── Check functions ─────────────────────────────────────────────────
-async function checkSupabase(): Promise<{ status: 'online' | 'offline'; latency: number; message: string; count?: number }> {
+
+/** Check 1: Supabase Database */
+async function checkSupabase(): Promise<{ status: 'online' | 'offline'; latency: number; message: string }> {
   const start = performance.now();
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
-      method: 'GET', headers: REQ,
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count&limit=1`, {
+      method: 'GET',
+      headers: { ...REQ, 'Prefer': 'count=exact' },
     });
     const latency = Math.round(performance.now() - start);
-    if (!res.ok) {
-      return { status: 'offline', latency, message: `HTTP ${res.status} • ${res.statusText}` };
-    }
-    const data = await res.json();
-    const count = Array.isArray(data) ? data.length : 0;
-    return { status: 'online', latency, message: `${latency}ms • ${count >= 0 ? 'Connected' : 'No data'}`, count };
+    const range = res.headers.get('content-range') || '';
+    const count = parseInt(range.split('/')[1] || '0');
+    if (!res.ok) return { status: 'offline', latency, message: `HTTP ${res.status}` };
+    return { status: 'online', latency, message: `${latency}ms • ${count.toLocaleString()} records` };
   } catch (e: any) {
-    return { status: 'offline', latency: Math.round(performance.now() - start), message: `Connection failed: ${e?.message || 'Unknown'}` };
+    return { status: 'offline', latency: Math.round(performance.now() - start), message: e?.message || 'Connection failed' };
   }
 }
 
+/** Check 2: Parser Service — sends a test message to /api/batch-parse */
 async function checkParser(): Promise<{ status: 'online' | 'offline' | 'warning'; latency: number; message: string }> {
-  // Placeholder: would check parser service endpoint
-  await new Promise(r => setTimeout(r, 100));
-  return { status: 'warning', latency: 45, message: 'No parser endpoint configured' };
-}
-
-async function checkGreenAPI(): Promise<{ status: 'online' | 'offline' | 'warning'; latency: number; message: string }> {
-  // Placeholder: would check Green API webhook status
-  await new Promise(r => setTimeout(r, 80));
-  return { status: 'warning', latency: 32, message: 'Not configured — add credentials in Settings' };
-}
-
-async function checkTelegram(): Promise<{ status: 'online' | 'offline' | 'warning'; latency: number; message: string }> {
-  // Placeholder: would check Telegram bot
-  await new Promise(r => setTimeout(r, 60));
-  return { status: 'warning', latency: 28, message: 'Not configured — add bot token in Settings' };
-}
-
-async function checkCatalog(): Promise<{ status: 'online' | 'offline'; latency: number; message: string }> {
   const start = performance.now();
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=reference&limit=1`, {
-      method: 'GET', headers: REQ,
+    const res = await fetch('/api/batch-parse', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: ['Rolex 126334 datejust blue $12.5k'] }),
     });
     const latency = Math.round(performance.now() - start);
-    return { status: res.ok ? 'online' : 'offline', latency, message: `${latency}ms • ${res.ok ? 'Catalog sync OK' : 'Error'}` };
+    if (!res.ok) {
+      return { status: 'offline', latency, message: `HTTP ${res.status} • Parser endpoint unreachable` };
+    }
+    const data = await res.json();
+    const results = data.results || [];
+    if (results.length === 0) {
+      return { status: 'warning', latency, message: `${latency}ms • No parse results returned` };
+    }
+    const r = results[0];
+    const brandOk = r.brand === 'Rolex';
+    const refOk = r.reference === '126334' || r.ref === '126334';
+    if (brandOk && refOk) {
+      return { status: 'online', latency, message: `${latency}ms • Parsed correctly (Rolex 126334)` };
+    }
+    return { status: 'warning', latency, message: `${latency}ms • Parsed but accuracy low (${r.brand || '?'}/${r.reference || r.ref || '?'})` };
+  } catch (e: any) {
+    return { status: 'offline', latency: Math.round(performance.now() - start), message: `Endpoint error: ${e?.message || 'Failed'}` };
+  }
+}
+
+/** Check 3: Green API — checks if webhook is configured */
+async function checkGreenAPI(): Promise<{ status: 'online' | 'offline' | 'warning'; latency: number; message: string }> {
+  const start = performance.now();
+  try {
+    const res = await fetch('/api/parser-check?service=greenapi', { method: 'GET' });
+    const latency = Math.round(performance.now() - start);
+    if (res.ok) {
+      const data = await res.json();
+      return { status: data.configured ? 'online' : 'warning', latency, message: data.configured ? `${latency}ms • Webhook active` : `${latency}ms • Not configured` };
+    }
+    // Fallback: check if environment variable hints exist (client-side can't read env, so we infer from a lightweight endpoint)
+    return { status: 'warning', latency, message: 'Add GREEN_API_ID_INSTANCE + GREEN_API_API_TOKEN in Settings' };
   } catch {
-    return { status: 'offline', latency: Math.round(performance.now() - start), message: 'Catalog unreachable' };
+    return { status: 'warning', latency: Math.round(performance.now() - start), message: 'Not configured — add credentials in Settings' };
+  }
+}
+
+/** Check 4: Telegram Bot — checks if bot token is configured */
+async function checkTelegram(): Promise<{ status: 'online' | 'offline' | 'warning'; latency: number; message: string }> {
+  const start = performance.now();
+  try {
+    const res = await fetch('/api/parser-check?service=telegram', { method: 'GET' });
+    const latency = Math.round(performance.now() - start);
+    if (res.ok) {
+      const data = await res.json();
+      return { status: data.configured ? 'online' : 'warning', latency, message: data.configured ? `${latency}ms • Bot connected` : `${latency}ms • Not configured` };
+    }
+    return { status: 'warning', latency, message: 'Not configured — add TELEGRAM_BOT_TOKEN in Settings' };
+  } catch {
+    return { status: 'warning', latency: Math.round(performance.now() - start), message: 'Not configured — add bot token in Settings' };
+  }
+}
+
+/** Check 5: Catalog Sync — verifies reference_images table has data */
+async function checkCatalog(): Promise<{ status: 'online' | 'offline' | 'warning'; latency: number; message: string }> {
+  const start = performance.now();
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/reference_images?select=count&limit=1`, {
+      method: 'GET',
+      headers: { ...REQ, 'Prefer': 'count=exact' },
+    });
+    const latency = Math.round(performance.now() - start);
+    const range = res.headers.get('content-range') || '';
+    const count = parseInt(range.split('/')[1] || '0');
+    if (!res.ok) return { status: 'offline', latency, message: `HTTP ${res.status}` };
+    if (count === 0) return { status: 'warning', latency, message: `${latency}ms • Table empty` };
+    return { status: 'online', latency, message: `${latency}ms • ${count.toLocaleString()} images synced` };
+  } catch (e: any) {
+    return { status: 'offline', latency: Math.round(performance.now() - start), message: e?.message || 'Catalog unreachable' };
+  }
+}
+
+/** Check 6: Batch Parse API — lightweight health ping */
+async function checkBatchAPI(): Promise<{ status: 'online' | 'offline'; latency: number; message: string }> {
+  const start = performance.now();
+  try {
+    const res = await fetch('/api/batch-parse', { method: 'HEAD' });
+    const latency = Math.round(performance.now() - start);
+    if (res.ok || res.status === 405) {
+      return { status: 'online', latency, message: `${latency}ms • Endpoint reachable` };
+    }
+    return { status: 'offline', latency, message: `HTTP ${res.status}` };
+  } catch (e: any) {
+    return { status: 'offline', latency: Math.round(performance.now() - start), message: e?.message || 'Unreachable' };
   }
 }
 
@@ -151,8 +218,9 @@ export default function HealthPage() {
   const [services, setServices] = useState<ServiceCheck[]>([
     { id: 'supabase', name: 'Supabase DB', status: 'unknown', latency: 0, lastChecked: new Date().toISOString(), message: 'Not checked yet', icon: Database, checks: 0, fails: 0 },
     { id: 'parser', name: 'Parser Service', status: 'unknown', latency: 0, lastChecked: new Date().toISOString(), message: 'Not checked yet', icon: Cpu, checks: 0, fails: 0 },
-    { id: 'greenapi', name: 'Green API', status: 'unknown', latency: 0, lastChecked: new Date().toISOString(), message: 'Not checked yet', icon: MessageSquare, checks: 0, fails: 0 },
+    { id: 'batchapi', name: 'Batch Parse API', status: 'unknown', latency: 0, lastChecked: new Date().toISOString(), message: 'Not checked yet', icon: Code2, checks: 0, fails: 0 },
     { id: 'catalog', name: 'Catalog Sync', status: 'unknown', latency: 0, lastChecked: new Date().toISOString(), message: 'Not checked yet', icon: BookOpen, checks: 0, fails: 0 },
+    { id: 'greenapi', name: 'Green API', status: 'unknown', latency: 0, lastChecked: new Date().toISOString(), message: 'Not checked yet', icon: MessageSquare, checks: 0, fails: 0 },
     { id: 'telegram', name: 'Telegram Bot', status: 'unknown', latency: 0, lastChecked: new Date().toISOString(), message: 'Not checked yet', icon: Bot, checks: 0, fails: 0 },
   ]);
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
@@ -160,21 +228,12 @@ export default function HealthPage() {
   const [autoRefresh, setAutoRefresh] = useState(true);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // ─── Parser Quality Metrics (Phase 6) ──────────────────────────────
+  // ─── Parser Quality Metrics ────────────────────────────────────────
   const [qualityMetrics, setQualityMetrics] = useState({
-    total: 0,
-    approved: 0,
-    review: 0,
-    recycled: 0,
-    wtb: 0,
-    human: 0,
-    withErrors: 0,
-    recycleRate: 0,
-    approvalRate: 0,
-    loading: true,
+    total: 0, approved: 0, review: 0, recycled: 0, wtb: 0, human: 0,
+    withErrors: 0, recycleRate: 0, approvalRate: 0, loading: true,
   });
 
-  // ─── Fetch parser quality metrics ──────────────────────────────────
   const fetchQualityMetrics = useCallback(async () => {
     try {
       const [verdictRes, errorRes] = await Promise.all([
@@ -204,14 +263,7 @@ export default function HealthPage() {
         withErrors = parseInt(range.split('/')[1] || '0');
       }
 
-      setQualityMetrics({
-        total,
-        approved,
-        review,
-        recycled,
-        wtb,
-        human,
-        withErrors,
+      setQualityMetrics({ total, approved, review, recycled, wtb, human, withErrors,
         recycleRate: total > 0 ? (recycled / total) * 100 : 0,
         approvalRate: total > 0 ? (approved / total) * 100 : 0,
         loading: false,
@@ -226,15 +278,16 @@ export default function HealthPage() {
     setChecking(true);
     const now = new Date().toISOString();
 
-    const [db, parser, green, catalog, telegram] = await Promise.all([
-      checkSupabase(), checkParser(), checkGreenAPI(), checkCatalog(), checkTelegram(),
+    const [db, parser, batchapi, catalog, green, telegram] = await Promise.all([
+      checkSupabase(), checkParser(), checkBatchAPI(), checkCatalog(), checkGreenAPI(), checkTelegram(),
     ]);
 
     const results = [
       { id: 'supabase', result: db },
       { id: 'parser', result: parser },
-      { id: 'greenapi', result: green },
+      { id: 'batchapi', result: batchapi },
       { id: 'catalog', result: catalog },
+      { id: 'greenapi', result: green },
       { id: 'telegram', result: telegram },
     ];
 
@@ -267,9 +320,7 @@ export default function HealthPage() {
       }
     }
 
-    // Also refresh quality metrics
     await fetchQualityMetrics();
-
     setChecking(false);
   }, [fetchQualityMetrics]);
 
@@ -289,6 +340,7 @@ export default function HealthPage() {
     switch (id) {
       case 'supabase': result = await checkSupabase(); break;
       case 'parser': result = await checkParser(); break;
+      case 'batchapi': result = await checkBatchAPI(); break;
       case 'greenapi': result = await checkGreenAPI(); break;
       case 'catalog': result = await checkCatalog(); break;
       case 'telegram': result = await checkTelegram(); break;
@@ -373,7 +425,7 @@ export default function HealthPage() {
         ))}
       </div>
 
-      {/* ─── Parser Quality Metrics (Phase 6) ─────────────────────────── */}
+      {/* ─── Parser Quality Metrics ─────────────────────────────────── */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-6">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
           <Shield size={14} /> Parser Quality Metrics
@@ -465,7 +517,7 @@ export default function HealthPage() {
       {/* Alerts Log */}
       <div className="bg-gray-900 border border-gray-800 rounded-lg p-4">
         <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
-          <Wifi size={14} /> Alert History
+          <Server size={14} /> Alert History
         </h3>
         {alerts.length === 0 ? (
           <div className="text-center py-8 text-gray-500 text-sm">No alerts yet</div>
