@@ -98,10 +98,19 @@
 | **P3** | **Keyboard Shortcuts** | A=Approve, R=Recycle, E=Edit, N=Next in Review |
 | **P3** | **Daily Email Reports** | Scheduled report generation |
 
+### Session 10 (This Session) — Build Fix + Logo + HEAD Cleanup
+1. **Fixed corrupted package-lock.json**: Removed from git entirely, added to `.gitignore`. Vercel now generates clean lockfile during `npm install`.
+2. **Integrated new logo**: Uploaded `watchfacts-logo-2048x608.png` → `/public/watchfacts-logo.png`. Replaced text logo in Navbar with `<img>`.
+3. **Replaced old HD logo**: `watchfacts-logo-hd.png` now points to new 112KB logo (was 4.5MB).
+4. **Fixed all HEAD→GET requests**: AdminPage (×3), DataBrowser (×1), DemandSignals (×1), Navbar (×1). Supabase REST doesn't support HEAD method.
+5. **Added `.npmrc`**: `legacy-peer-deps=true` for Vercel compatibility.
+6. **Cleaned unused imports**: CheckCircle from Navbar, TrendingDown/BarChart3/Percent from HealthPage.
+
 ### Known Issues
-1. **Supabase DB latency**: GROUP BY queries on 2.39M can take 5-15 seconds. Analytics page has caching to mitigate.
-2. **Parser Service**: No running endpoint yet. Health page shows "Warning" accurately.
-3. **Trading Floor WTB filter**: Uses raw_message keyword search — may need refinement for accuracy.
+1. **Supabase DB latency**: GROUP BY queries on 2.39M can take 5-15 seconds. **Materialized views (Phase 1) solved this — <100ms.**
+2. **Parser Service**: No running endpoint yet. Health page shows "Warning" accurately. Phase 4 SQL migration ready to apply.
+3. **Trading Floor WTB filter**: Uses raw_message keyword search — may need refinement for accuracy. Phase 5 SQL migration ready to apply.
+4. **Vercel lockfile issue**: `package-lock.json` removed from git. May need `vercel.json` with `--no-package-lock` if issue persists.
 
 ### Files to Know
 ```
