@@ -34,6 +34,7 @@ import DemoPage from '@/pages/DemoPage';
 import HealthPage from '@/pages/HealthPage';
 import DataBrowser from '@/pages/DataBrowser';
 import AdminReportsPage from '@/pages/AdminReportsPage';
+import ReferenceCheck from '@/pages/ReferenceCheck';
 
 function AdminRoutes() {
   return (
@@ -80,6 +81,7 @@ export default function App() {
         <Route path="/buy" element={<Navigate to="/trading" replace />} />
         <Route path="/buy/all" element={<Navigate to="/trading" replace />} />
         <Route path="/price-research" element={<PriceResearch />} />
+        <Route path="/reference-check" element={<ReferenceCheck />} />
         <Route path="/insight" element={<InsightDetails />} />
 
         {/* Pricing */}

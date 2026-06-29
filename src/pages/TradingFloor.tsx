@@ -301,7 +301,11 @@ export default function TradingFloor() {
       if (condition !== 'All') url += `&condition=eq.${encodeURIComponent(condition)}`;
       // Price filter based on listing type
       if (listingType === 'forsale') url += `&price_usd=gt.0`;
-      if (listingType === 'wtb') url += `&price_usd=eq.0`;
+      // WTB: search raw_message for WTB/NTQ keywords (these listings still have prices!)
+      if (listingType === 'wtb') {
+        const wtbTerms = ['wtb','want to buy','looking for','iso ','in search of','ntq','need to buy','buying'];
+        url += `&or=(${wtbTerms.map(t => `raw_message.ilike.*${encodeURIComponent(t)}*`).join(',')})`;
+      }
 
       const res = await fetch(url, { headers: REQ });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);

@@ -270,7 +270,7 @@ function DataInterpretation({ result }: { result: PriceResult }) {
           <span className="font-semibold text-gray-800">Price Trend:</span> {trendDesc} The filtered average of {fmtPrice(result.overallAvg)} represents the most reliable market valuation based on cleaned data.
         </p>
         <p>
-          <span className="font-semibold text-gray-800">Dial Color Variations:</span> {result.dialBreakdown.length} different dial color{result.dialBreakdown.length !== 1 ? 's' : ''} identified in the dataset. 
+          <span className="font-semibold text-gray-800">Dial Color Variations:</span> {validDialBreakdown.length} different dial color{result.dialBreakdown.length !== 1 ? 's' : ''} identified in the dataset. 
           The price trend chart above shows separate lines for each dial color — prices vary significantly by dial (e.g., White dial vs Blue dial). 
           Click on any dial color row below to see per-dial detailed analytics including individual listings.
         </p>
@@ -437,14 +437,30 @@ export default function PriceResearch() {
     if (!result) return [];
     const ranges: Record<string, number> = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12 };
     const months = ranges[dateRange];
-    if (!months) return result.monthlyData;
-    const cutoff = new Date();
-    cutoff.setMonth(cutoff.getMonth() - months);
-    return result.monthlyData.filter(d => {
-      const [y, m] = d.monthKey.split('-');
-      return new Date(Number(y), Number(m) - 1, 1) >= cutoff;
+    let data = result.monthlyData;
+    if (months) {
+      const cutoff = new Date();
+      cutoff.setMonth(cutoff.getMonth() - months);
+      data = data.filter(d => {
+        const [y, m] = d.monthKey.split('-');
+        return new Date(Number(y), Number(m) - 1, 1) >= cutoff;
+      });
+    }
+    // Flatten dial prices into chart-compatible properties
+    return data.map(pt => {
+      const flat: any = { ...pt };
+      for (const [color, price] of Object.entries(pt.dialPrices)) {
+        flat[`dial_${color}`] = price;
+      }
+      return flat;
     });
   }, [result, dateRange]);
+
+  // ─── Filter valid dial breakdown (no NaN, no 0 count) ──────────────
+  const validDialBreakdown = useMemo(() => {
+    if (!result) return [];
+    return result.dialBreakdown.filter(d => d.count > 0 && !isNaN(d.avgPrice));
+  }, [result]);
 
   // ─── Watch image ───────────────────────────────────────────────────
   const watchImage = result ? resolveWatchImage(result.reference, result.brand) : '';
@@ -594,7 +610,7 @@ export default function PriceResearch() {
                   </tr>
                 </thead>
                 <tbody>
-                  {result.dialBreakdown.map((d, i) => (
+                  {validDialBreakdown.map((d, i) => (
                     <tr 
                       key={d.color} 
                       className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-blue-50/50 cursor-pointer transition-colors group`}
@@ -653,15 +669,10 @@ export default function PriceResearch() {
                       <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} axisLine={{ stroke: '#E5E7EB' }} />
                       <Tooltip content={<CustomTooltip />} />
 
-                      {/* One line per dial color */}
-                      {result && result.dialBreakdown.map((d) => {
+                      {/* One line per dial color — data keys pre-computed in useMemo */}
+                      {result && validDialBreakdown.map((d) => {
                         const color = getDialChartColor(d.color);
-                        // Transform data so each point has a property matching the dial color
                         const dataKey = `dial_${d.color}`;
-                        // We need to add the dataKey to each data point dynamically
-                        filteredData.forEach((pt: any) => {
-                          pt[dataKey] = pt.dialPrices?.[d.color] ?? null;
-                        });
                         return (
                           <Line
                             key={d.color}
@@ -696,7 +707,7 @@ export default function PriceResearch() {
 
               {/* Legend — Per Dial Color */}
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-4 text-xs text-gray-500 pt-3 border-t border-gray-100">
-                {result && result.dialBreakdown.map(d => (
+                {result && validDialBreakdown.map(d => (
                   <span key={d.color} className="flex items-center gap-1.5">
                     <span className="w-3 h-3 rounded-full" style={{ backgroundColor: getDialChartColor(d.color) }} />
                     {d.color} ({d.count})
@@ -721,8 +732,8 @@ export default function PriceResearch() {
                         <th className="px-5 py-2.5 whitespace-nowrap">Month</th>
                         <th className="px-4 py-2.5 whitespace-nowrap">Listings</th>
                         <th className="px-4 py-2.5 text-right whitespace-nowrap">Overall Avg</th>
-                        {/* One column per dial color */}
-                        {result && result.dialBreakdown.map(d => (
+                        {/* One column per valid dial color */}
+                        {validDialBreakdown.map(d => (
                           <th key={d.color} className="px-4 py-2.5 text-right whitespace-nowrap">
                             <span className="flex items-center justify-end gap-1">
                               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getDialChartColor(d.color) }} />
@@ -739,7 +750,56 @@ export default function PriceResearch() {
                           <td className="px-4 py-2.5 text-gray-500">{d.count}</td>
                           <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">{fmtPrice(d.avgPrice)}</td>
                           {/* Per-dial prices */}
-                          {result && result.dialBreakdown.map(dial => (
+                          {validDialBreakdown.map(dial => (
+                            <td key={dial.color} className="px-4 py-2.5 text-right font-mono whitespace-nowrap">
+                              {d.dialPrices?.[dial.color] ? (
+                                <span style={{ color: getDialChartColor(dial.color) }}>{fmtPrice(d.dialPrices[dial.color])}</span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+            </div>
+
+            {/* Data Table — Per Dial Color Monthly Breakdown */}
+            {filteredData.length > 0 && (
+              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
+                <div className="px-5 py-3.5 border-b border-gray-200">
+                  <h3 className="text-sm font-semibold text-gray-900">Monthly Breakdown — Per Dial Color</h3>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider">
+                        <th className="px-5 py-2.5 whitespace-nowrap">Month</th>
+                        <th className="px-4 py-2.5 whitespace-nowrap">Listings</th>
+                        <th className="px-4 py-2.5 text-right whitespace-nowrap">Overall Avg</th>
+                        {/* One column per dial color */}
+                        {result && validDialBreakdown.map(d => (
+                          <th key={d.color} className="px-4 py-2.5 text-right whitespace-nowrap">
+                            <span className="flex items-center justify-end gap-1">
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getDialChartColor(d.color) }} />
+                              {d.color}
+                            </span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredData.map((d: any, i) => (
+                        <tr key={d.monthKey} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-blue-50/30 transition-colors`}>
+                          <td className="px-5 py-2.5 font-medium text-gray-900 whitespace-nowrap">{d.month}</td>
+                          <td className="px-4 py-2.5 text-gray-500">{d.count}</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">{fmtPrice(d.avgPrice)}</td>
+                          {/* Per-dial prices */}
+                          {result && validDialBreakdown.map(dial => (
                             <td key={dial.color} className="px-4 py-2.5 text-right font-mono whitespace-nowrap">
                               {d.dialPrices?.[dial.color] ? (
                                 <span style={{ color: getDialChartColor(dial.color) }}>{fmtPrice(d.dialPrices[dial.color])}</span>
