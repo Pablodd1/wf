@@ -21,14 +21,69 @@ module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // GET = status, POST = process one batch
+  // GET = status/stats, POST = process one batch
   if (req.method === 'GET') {
+    const url = new URL(req.url, `http://${req.headers.host}`);
+
+    // ── Stats report: /api/reprocess-batch?action=stats ──
+    if (url.searchParams.get('action') === 'stats') {
+      try {
+        // v3 vs pre-v3 counts
+        const { count: v3Count } = await supabase.from('watch_records').select('*', { count: 'exact', head: true }).eq('parser_version', 'v3.0');
+        const { count: preCount } = await supabase.from('watch_records').select('*', { count: 'exact', head: true }).neq('parser_version', 'v3.0');
+
+        // Verdict distribution samples
+        const { data: v3Sample } = await supabase.from('watch_records').select('verdict').eq('parser_version', 'v3.0').limit(5000);
+        const { data: preSample } = await supabase.from('watch_records').select('verdict').neq('parser_version', 'v3.0').limit(5000);
+
+        const v3Verdicts = {}; for (const r of (v3Sample || [])) v3Verdicts[r.verdict] = (v3Verdicts[r.verdict] || 0) + 1;
+        const preVerdicts = {}; for (const r of (preSample || [])) preVerdicts[r.verdict] = (preVerdicts[r.verdict] || 0) + 1;
+
+        // Reference extraction rates
+        const { count: v3RefCount } = await supabase.from('watch_records').select('*', { count: 'exact', head: true }).eq('parser_version', 'v3.0').not('reference', 'is', null);
+        const { count: preRefCount } = await supabase.from('watch_records').select('*', { count: 'exact', head: true }).neq('parser_version', 'v3.0').not('reference', 'is', null);
+
+        // Brand distribution
+        const { data: v3Brands } = await supabase.from('watch_records').select('brand').eq('parser_version', 'v3.0').not('brand', 'is', null).limit(5000);
+        const { data: preBrands } = await supabase.from('watch_records').select('brand').neq('parser_version', 'v3.0').not('brand', 'is', null).limit(5000);
+        const v3BrandMap = {}; for (const r of (v3Brands || [])) v3BrandMap[r.brand] = (v3BrandMap[r.brand] || 0) + 1;
+        const preBrandMap = {}; for (const r of (preBrands || [])) preBrandMap[r.brand] = (preBrandMap[r.brand] || 0) + 1;
+
+        const total = (v3Count || 0) + (preCount || 0);
+
+        return res.status(200).json({
+          ok: true,
+          stats: {
+            total,
+            v3_processed: v3Count || 0,
+            pre_v3: preCount || 0,
+            percent_complete: total > 0 ? Math.round(((v3Count || 0) / total) * 100) : 0,
+            verdicts: { pre: preVerdicts, post: v3Verdicts },
+            brands: {
+              pre: Object.entries(preBrandMap).sort((a, b) => b[1] - a[1]).slice(0, 10),
+              post: Object.entries(v3BrandMap).sort((a, b) => b[1] - a[1]).slice(0, 10),
+            },
+            references: {
+              pre_with_ref: preRefCount || 0,
+              post_with_ref: v3RefCount || 0,
+              pre_rate: preCount > 0 ? Math.round(((preRefCount || 0) / preCount) * 100) : 0,
+              post_rate: v3Count > 0 ? Math.round(((v3RefCount || 0) / v3Count) * 100) : 0,
+            },
+            generated_at: new Date().toISOString(),
+          },
+        });
+      } catch (e) {
+        return res.status(500).json({ ok: false, error: e.message });
+      }
+    }
+
+    // ── Regular status ──
     const { data: progress } = await supabase
       .from('reprocessing_progress')
       .select('*')
       .eq('id', 1)
       .single();
-    
+
     const { data: recent } = await supabase
       .from('reprocessing_queue')
       .select('status, count(*)')
