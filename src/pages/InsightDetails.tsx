@@ -1,503 +1,324 @@
+/**
+ * Insight Details — Per-dial analytics for a specific reference
+ * Shows: original stats, duplicate removal, outlier detection (IQR),
+ * filtered stats, and individual listings
+ * Triggered by clicking blue dot on Price Research chart
+ */
 import { useState, useEffect, useMemo } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Loader2, AlertCircle, Database } from 'lucide-react';
-import type { WatchRecord } from '@/types';
-import { formatPrice } from '@/lib/utils';
+import { useSearchParams, Link } from 'react-router-dom';
+import { motion } from 'framer-motion';
+import { ArrowLeft, Mail, MessageCircle } from 'lucide-react';
+import { DealerNavbar } from '@/components/DealerNavbar';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
+const REQ_HEADERS = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
 
-/* ─── demo data ─── */
-const DEMO_RECORDS: WatchRecord[] = [
-  { id: '1', reference: '52508', brand: 'Rolex', family: '1908', price: 315000, originalPrice: 315000, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 92, mlPredictedPrice: 280000 },
-  { id: '2', reference: '52508', brand: 'Rolex', family: '1908', price: 46000, originalPrice: 46000, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 88, mlPredictedPrice: 45000 },
-  { id: '3', reference: '52508', brand: 'Rolex', family: '1908', price: 300000, originalPrice: 300000, originalCurrency: 'USD', condition: 'Unworn', year: 2024, dialColor: 'White', confidence: 45, mlPredictedPrice: 280000 },
-  { id: '4', reference: '52508', brand: 'Rolex', family: '1908', price: 45500, originalPrice: 45500, originalCurrency: 'USD', condition: 'Like New', year: 2023, dialColor: 'White', confidence: 85, mlPredictedPrice: 44000 },
-  { id: '5', reference: '52508', brand: 'Rolex', family: '1908', price: 196000, originalPrice: 196000, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 52, mlPredictedPrice: 180000 },
-  { id: '6', reference: '52508', brand: 'Rolex', family: '1908', price: 42800, originalPrice: 42800, originalCurrency: 'USD', condition: 'Used', year: 2023, dialColor: 'White', confidence: 78, mlPredictedPrice: 42000 },
-  { id: '7', reference: '52508', brand: 'Rolex', family: '1908', price: 1, originalPrice: 1, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 30, mlPredictedPrice: 45000 },
-  { id: '8', reference: '52508', brand: 'Rolex', family: '1908', price: 26780, originalPrice: 26780, originalCurrency: 'USD', condition: 'Used', year: 2022, dialColor: 'White', confidence: 72, mlPredictedPrice: 28000 },
-  { id: '9', reference: '52508', brand: 'Rolex', family: '1908', price: 1, originalPrice: 1, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 25, mlPredictedPrice: 45000 },
-  { id: '10', reference: '52508', brand: 'Rolex', family: '1908', price: 42300, originalPrice: 42300, originalCurrency: 'USD', condition: 'Like New', year: 2023, dialColor: 'White', confidence: 82, mlPredictedPrice: 41000 },
-  { id: '11', reference: '52508', brand: 'Rolex', family: '1908', price: 22309, originalPrice: 22309, originalCurrency: 'USD', condition: 'Used', year: 2021, dialColor: 'White', confidence: 68, mlPredictedPrice: 25000 },
-  { id: '12', reference: '52508', brand: 'Rolex', family: '1908', price: 1, originalPrice: 1, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 35, mlPredictedPrice: 45000 },
-  { id: '13', reference: '52508', brand: 'Rolex', family: '1908', price: 21780, originalPrice: 21780, originalCurrency: 'USD', condition: 'Used', year: 2020, dialColor: 'White', confidence: 70, mlPredictedPrice: 24000 },
-  { id: '14', reference: '52508', brand: 'Rolex', family: '1908', price: 43900, originalPrice: 43900, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 90, mlPredictedPrice: 43000 },
-  { id: '15', reference: '52508', brand: 'Rolex', family: '1908', price: 1908, originalPrice: 1908, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 20, mlPredictedPrice: 45000 },
-  { id: '16', reference: '52508', brand: 'Rolex', family: '1908', price: 41200, originalPrice: 41200, originalCurrency: 'USD', condition: 'Used', year: 2022, dialColor: 'White', confidence: 75, mlPredictedPrice: 40000 },
-  { id: '17', reference: '52508', brand: 'Rolex', family: '1908', price: 44800, originalPrice: 44800, originalCurrency: 'USD', condition: 'Like New', year: 2023, dialColor: 'White', confidence: 86, mlPredictedPrice: 42000 },
-  { id: '18', reference: '52508', brand: 'Rolex', family: '1908', price: 1, originalPrice: 1, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 40, mlPredictedPrice: 45000 },
-  { id: '19', reference: '52508', brand: 'Rolex', family: '1908', price: 26400, originalPrice: 26400, originalCurrency: 'USD', condition: 'Used', year: 2021, dialColor: 'White', confidence: 74, mlPredictedPrice: 27000 },
-  { id: '20', reference: '52508', brand: 'Rolex', family: '1908', price: 43100, originalPrice: 43100, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 89, mlPredictedPrice: 42000 },
-  { id: '21', reference: '52508', brand: 'Rolex', family: '1908', price: 39000, originalPrice: 39000, originalCurrency: 'USD', condition: 'Used', year: 2020, dialColor: 'White', confidence: 71, mlPredictedPrice: 38000 },
-  { id: '22', reference: '52508', brand: 'Rolex', family: '1908', price: 44200, originalPrice: 44200, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 91, mlPredictedPrice: 43000 },
-  { id: '23', reference: '52508', brand: 'Rolex', family: '1908', price: 22900, originalPrice: 22900, originalCurrency: 'USD', condition: 'Like New', year: 2022, dialColor: 'White', confidence: 73, mlPredictedPrice: 26000 },
-  { id: '24', reference: '52508', brand: 'Rolex', family: '1908', price: 41500, originalPrice: 41500, originalCurrency: 'USD', condition: 'Used', year: 2021, dialColor: 'White', confidence: 77, mlPredictedPrice: 40000 },
-  { id: '25', reference: '52508', brand: 'Rolex', family: '1908', price: 1908, originalPrice: 1908, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 22, mlPredictedPrice: 45000 },
-  { id: '26', reference: '52508', brand: 'Rolex', family: '1908', price: 45100, originalPrice: 45100, originalCurrency: 'USD', condition: 'Unworn', year: 2024, dialColor: 'White', confidence: 87, mlPredictedPrice: 44000 },
-  { id: '27', reference: '52508', brand: 'Rolex', family: '1908', price: 25600, originalPrice: 25600, originalCurrency: 'USD', condition: 'Used', year: 2019, dialColor: 'White', confidence: 69, mlPredictedPrice: 25000 },
-  { id: '28', reference: '52508', brand: 'Rolex', family: '1908', price: 43500, originalPrice: 43500, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 88, mlPredictedPrice: 42000 },
-  { id: '29', reference: '52508', brand: 'Rolex', family: '1908', price: 40500, originalPrice: 40500, originalCurrency: 'USD', condition: 'Used', year: 2020, dialColor: 'White', confidence: 76, mlPredictedPrice: 39000 },
-  { id: '30', reference: '52508', brand: 'Rolex', family: '1908', price: 46000, originalPrice: 46000, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 93, mlPredictedPrice: 45000 },
-  { id: '31', reference: '52508', brand: 'Rolex', family: '1908', price: 1, originalPrice: 1, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 28, mlPredictedPrice: 45000 },
-  { id: '32', reference: '52508', brand: 'Rolex', family: '1908', price: 21900, originalPrice: 21900, originalCurrency: 'USD', condition: 'Used', year: 2021, dialColor: 'White', confidence: 67, mlPredictedPrice: 24000 },
-  { id: '33', reference: '52508', brand: 'Rolex', family: '1908', price: 44400, originalPrice: 44400, originalCurrency: 'USD', condition: 'Like New', year: 2023, dialColor: 'White', confidence: 84, mlPredictedPrice: 43000 },
-  { id: '34', reference: '52508', brand: 'Rolex', family: '1908', price: 1, originalPrice: 1, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 32, mlPredictedPrice: 45000 },
-  { id: '35', reference: '52508', brand: 'Rolex', family: '1908', price: 23800, originalPrice: 23800, originalCurrency: 'USD', condition: 'Used', year: 2022, dialColor: 'White', confidence: 72, mlPredictedPrice: 26000 },
-  { id: '36', reference: '52508', brand: 'Rolex', family: '1908', price: 45700, originalPrice: 45700, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 90, mlPredictedPrice: 44000 },
-  { id: '37', reference: '52508', brand: 'Rolex', family: '1908', price: 42000, originalPrice: 42000, originalCurrency: 'USD', condition: 'Used', year: 2020, dialColor: 'White', confidence: 74, mlPredictedPrice: 41000 },
-  { id: '38', reference: '52508', brand: 'Rolex', family: '1908', price: 22100, originalPrice: 22100, originalCurrency: 'USD', condition: 'Like New', year: 2021, dialColor: 'White', confidence: 70, mlPredictedPrice: 25000 },
-  { id: '39', reference: '52508', brand: 'Rolex', family: '1908', price: 44500, originalPrice: 44500, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 89, mlPredictedPrice: 43000 },
-  { id: '40', reference: '52508', brand: 'Rolex', family: '1908', price: 1908, originalPrice: 1908, originalCurrency: 'USD', condition: 'New', year: 2024, dialColor: 'White', confidence: 18, mlPredictedPrice: 45000 },
-];
-
-/* ─── helpers ─── */
-function getMonthRange(month: string): { start: string; end: string } {
-  const [year, mon] = month.split('-');
-  const start = `${year}-${mon}-01`;
-  const lastDay = new Date(Number(year), Number(mon), 0).getDate();
-  const end = `${year}-${mon}-${String(lastDay).padStart(2, '0')}`;
-  return { start, end };
+interface Listing {
+  id: string;
+  brand: string;
+  reference: string;
+  dial_color: string;
+  condition: string;
+  price_usd: number;
+  raw_message: string;
+  source: string;
+  received_at: string;
+  year: number | null;
 }
 
-function detectDuplicates(records: WatchRecord[]): { unique: WatchRecord[]; duplicates: WatchRecord[] } {
-  const seen = new Map<string, WatchRecord>();
-  const duplicates: WatchRecord[] = [];
+function fmtPrice(n: number): string {
+  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
 
-  for (const record of records) {
-    const key = `${record.reference}-${record.price}-${record.condition}`;
+// ─── IQR Outlier Detection ───────────────────────────────────────────
+function detectOutliers(prices: number[]): { filtered: number[]; removed: number[]; lowerFence: number; upperFence: number } {
+  if (prices.length < 4) return { filtered: prices, removed: [], lowerFence: 0, upperFence: Infinity };
+  const sorted = [...prices].sort((a, b) => a - b);
+  const q1 = sorted[Math.floor(sorted.length * 0.25)];
+  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const iqr = q3 - q1;
+  const lowerFence = q1 - 1.5 * iqr;
+  const upperFence = q3 + 1.5 * iqr;
+  const filtered = prices.filter(p => p >= lowerFence && p <= upperFence);
+  const removed = prices.filter(p => p < lowerFence || p > upperFence);
+  return { filtered, removed, lowerFence, upperFence };
+}
+
+// ─── Duplicate Detection ─────────────────────────────────────────────
+function detectDuplicates(listings: Listing[]): { unique: Listing[]; duplicates: Listing[] } {
+  const seen = new Map<string, Listing>();
+  const duplicates: Listing[] = [];
+  for (const l of listings) {
+    // Key: same price + similar first 20 chars of raw message
+    const key = `${l.price_usd}_${(l.raw_message || '').slice(0, 20).toLowerCase().trim()}`;
     if (seen.has(key)) {
-      duplicates.push(record);
+      duplicates.push(l);
     } else {
-      seen.set(key, record);
+      seen.set(key, l);
     }
   }
-
   return { unique: Array.from(seen.values()), duplicates };
 }
 
-function detectOutliers(records: WatchRecord[]): { clean: WatchRecord[]; outliers: WatchRecord[] } {
-  const prices = records.map(r => r.price).filter(p => p > 0).sort((a, b) => a - b);
-  if (prices.length < 4) return { clean: records, outliers: [] };
-
-  const q1Idx = Math.floor(prices.length * 0.25);
-  const q3Idx = Math.floor(prices.length * 0.75);
-  const q1 = prices[q1Idx];
-  const q3 = prices[q3Idx];
-  const iqr = q3 - q1;
-  const lower = q1 - 1.5 * iqr;
-  const upper = q3 + 1.5 * iqr;
-
-  const clean: WatchRecord[] = [];
-  const outliers: WatchRecord[] = [];
-
-  for (const record of records) {
-    if (record.price >= lower && record.price <= upper) {
-      clean.push(record);
-    } else {
-      outliers.push(record);
-    }
-  }
-
-  return { clean, outliers };
-}
-
-function calcStats(records: WatchRecord[]) {
-  const prices = records.map(r => r.price).filter(p => p > 0);
-  if (prices.length === 0) return { count: 0, min: 0, avg: 0, max: 0 };
-  return {
-    count: records.length,
-    min: Math.min(...prices),
-    avg: prices.reduce((a, b) => a + b, 0) / prices.length,
-    max: Math.max(...prices),
-  };
-}
-
-function resolveWatchImage(brand: string, reference: string): string {
-  const cleanBrand = brand.replace(/\s+/g, '_');
-  const cleanRef = reference.replace(/[\/\s]/g, '_');
-  const localPath = `/images/${cleanBrand}_${cleanRef}.png`;
-  return localPath;
-}
-
-/* ─── stat card ─── */
-interface StatCardProps {
-  title: string;
-  color: 'blue' | 'gray' | 'green' | 'red';
-  dataPoints?: number;
-  min?: number;
-  avg?: number;
-  max?: number;
-  removed?: number;
-  removedList?: number[];
-}
-
-function StatCard({ title, color, dataPoints, min, avg, max, removed, removedList }: StatCardProps) {
-  const headerColors = {
-    blue: 'bg-blue-600',
-    gray: 'bg-gray-100 text-gray-700 border border-gray-200',
-    green: 'bg-green-600',
-    red: 'bg-red-500',
-  };
-
-  const textColorClass = color === 'gray' ? '' : 'text-white';
-
+// ─── Footer ──────────────────────────────────────────────────────────
+function Footer() {
   return (
-    <div className="rounded-lg overflow-hidden border border-gray-200 shadow-sm">
-      <div className={`px-4 py-3 font-medium text-sm ${headerColors[color]} ${textColorClass}`}>
-        {title}
+    <footer className="bg-white border-t border-gray-200 pt-10 pb-6 px-6">
+      <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-sm mb-10">
+        <div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Features</h4><ul className="space-y-2"><li><span className="text-gray-600">Trading Floor</span></li><li><span className="text-gray-600">ChronoMatch</span></li></ul></div>
+        <div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Tools</h4><ul className="space-y-2"><li><span className="text-gray-600">Glossary</span></li><li><span className="text-gray-600">Currency Converter</span></li></ul></div>
+        <div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Dealers</h4><ul className="space-y-2"><li><span className="text-gray-600">Dealer Directory</span></li><li><span className="text-gray-600">Do Not Trade List</span></li></ul></div>
+        <div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Company</h4><ul className="space-y-2"><li><span className="text-gray-600">About Us</span></li><li><span className="text-gray-600">About Simon</span></li><li><span className="text-gray-600">Contact</span></li><li><span className="text-gray-600">Terms</span></li><li><span className="text-gray-600">Privacy Policy</span></li></ul></div>
       </div>
-      <div className="bg-white p-4 space-y-2">
-        {dataPoints !== undefined && (
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500 text-sm">Data Points:</span>
-            <span className="font-mono font-semibold text-gray-900">{dataPoints}</span>
-          </div>
-        )}
-        {min !== undefined && (
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500 text-sm">Min:</span>
-            <span className="font-mono font-semibold text-gray-900">
-              ${min.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-        )}
-        {avg !== undefined && (
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500 text-sm">Avg:</span>
-            <span className="font-mono font-semibold text-gray-900">
-              ${avg.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-        )}
-        {max !== undefined && (
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500 text-sm">Max:</span>
-            <span className="font-mono font-semibold text-gray-900">
-              ${max.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-            </span>
-          </div>
-        )}
-        {removed !== undefined && (
-          <div className="flex justify-between items-center">
-            <span className="text-gray-500 text-sm">Removed:</span>
-            <span className="font-mono font-semibold text-gray-900">{removed}</span>
-          </div>
-        )}
-        {removedList && removedList.length > 0 && (
-          <div className="mt-2 pt-2 border-t border-gray-100 max-h-36 overflow-y-auto">
-            {removedList.map((price, i) => (
-              <div key={i} className="font-mono text-sm text-gray-600 py-0.5">
-                ${price.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
+      <div className="text-center text-[10px] text-gray-400 border-t border-gray-100 pt-4">&copy; 2026 Watchfacts Inc. All Rights Reserved.</div>
+    </footer>
   );
 }
 
-/* ─── main page ─── */
 export default function InsightDetails() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-
-  const reference = searchParams.get('ref') || '';
+  const ref = searchParams.get('ref') || '';
+  const dial = searchParams.get('dial') || 'Any';
   const month = searchParams.get('month') || '';
-  const dial = searchParams.get('dial') || '';
 
-  const [records, setRecords] = useState<WatchRecord[]>([]);
+  const [listings, setListings] = useState<Listing[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [usingDemo, setUsingDemo] = useState(false);
 
-  /* fetch */
+  // Fetch listings matching reference + dial color
   useEffect(() => {
-    let cancelled = false;
-
-    async function fetchData() {
+    if (!ref) return;
+    const fetchData = async () => {
       setLoading(true);
-      setError(null);
-
-      if (!reference || !month) {
-        setError('Missing reference or month parameter');
-        setLoading(false);
-        return;
-      }
-
-      const { start, end } = getMonthRange(month);
-
-      if (SUPABASE_URL && SUPABASE_ANON_KEY) {
-        try {
-          const dialFilter = dial ? `&dial_color=eq.${encodeURIComponent(dial)}` : '';
-          const url = `${SUPABASE_URL}/rest/v1/watch_records?reference=ilike.*${encodeURIComponent(reference)}*&received_at=gte.${start}&received_at=lte.${end}${dialFilter}&select=*&limit=1000`;
-
-          const res = await fetch(url, {
-            headers: {
-              apikey: SUPABASE_ANON_KEY,
-              Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-              'Content-Type': 'application/json',
-            },
-          });
-
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-
-          const data: WatchRecord[] = await res.json();
-
-          if (!cancelled) {
-            if (data.length === 0) {
-              setRecords(DEMO_RECORDS);
-              setUsingDemo(true);
-            } else {
-              setRecords(data);
-              setUsingDemo(false);
-            }
-          }
-        } catch (err) {
-          console.warn('Supabase fetch failed, using demo data:', err);
-          if (!cancelled) {
-            setRecords(DEMO_RECORDS);
-            setUsingDemo(true);
-          }
+      try {
+        let url = `${SUPABASE_URL}/rest/v1/watch_records?select=*&reference=eq.${encodeURIComponent(ref)}&limit=1000`;
+        if (dial && dial !== 'Any') {
+          url += `&dial_color=eq.${encodeURIComponent(dial)}`;
         }
-      } else {
-        // No Supabase config — use demo data
-        await new Promise(r => setTimeout(r, 600));
-        if (!cancelled) {
-          setRecords(DEMO_RECORDS);
-          setUsingDemo(true);
+        // Filter by month if provided
+        if (month) {
+          const [year, mon] = month.split('-');
+          const start = `${year}-${mon}-01`;
+          const endMon = parseInt(mon) + 1;
+          const endYear = endMon > 12 ? parseInt(year) + 1 : year;
+          const endMonStr = endMon > 12 ? '01' : String(endMon).padStart(2, '0');
+          const end = `${endYear}-${endMonStr}-01`;
+          url += `&received_at=gte.${start}&received_at=lt.${end}`;
         }
+
+        const res = await fetch(url, { headers: REQ_HEADERS });
+        const data = await res.json();
+        setListings(data || []);
+      } catch {
+        setListings([]);
       }
-
-      if (!cancelled) setLoading(false);
-    }
-
+      setLoading(false);
+    };
     fetchData();
-    return () => { cancelled = true; };
-  }, [reference, month, dial]);
+  }, [ref, dial, month]);
 
-  /* pipeline calculations — OUTLIERS REMOVED FROM STATS */
-  const {
-    originalStats,
-    duplicates,
-    duplicateStats,
-    outliers,
-    outlierStats,
-    filteredStats,
-  } = useMemo(() => {
-    // Step 1: Original stats (all records)
-    const orig = calcStats(records);
+  // ─── Stats calculations ────────────────────────────────────────────
+  const stats = useMemo(() => {
+    const allPrices = listings.map(l => l.price_usd).filter(p => p > 0);
+    if (allPrices.length === 0) return null;
 
-    // Step 2: Remove duplicates
-    const { unique: deduped, duplicates: dups } = detectDuplicates(records);
-    const dupPrices = dups.map(r => r.price);
+    // Original stats
+    const origMin = Math.min(...allPrices);
+    const origMax = Math.max(...allPrices);
+    const origAvg = Math.round(allPrices.reduce((a, b) => a + b, 0) / allPrices.length);
 
-    // Step 3: Remove outliers FROM the deduped set
-    const { clean, outliers: outs } = detectOutliers(deduped);
-    const outPrices = outs.map(r => r.price);
+    // Duplicate detection
+    const { unique, duplicates } = detectDuplicates(listings);
+    const uniquePrices = unique.map(l => l.price_usd).filter(p => p > 0);
 
-    // Step 4: Filtered stats = calculated on CLEAN data only (no outliers)
-    const filt = calcStats(clean);
+    // Outlier detection on unique prices
+    const { filtered: outlierFiltered, removed: outliers, lowerFence, upperFence } = detectOutliers(uniquePrices);
+
+    // Filtered stats
+    const filMin = outlierFiltered.length ? Math.min(...outlierFiltered) : 0;
+    const filMax = outlierFiltered.length ? Math.max(...outlierFiltered) : 0;
+    const filAvg = outlierFiltered.length ? Math.round(outlierFiltered.reduce((a, b) => a + b, 0) / outlierFiltered.length) : 0;
 
     return {
-      originalStats: orig,
-      duplicates: dups,
-      duplicateStats: { count: dups.length, prices: dupPrices },
-      outliers: outs,
-      outlierStats: { count: outs.length, prices: outPrices },
-      // Filtered = stats with outliers EXCLUDED
-      filteredStats: filt,
+      origCount: allPrices.length,
+      origMin, origMax, origAvg,
+      dupCount: duplicates.length,
+      dupPrices: duplicates.map(d => d.price_usd),
+      filCount: outlierFiltered.length,
+      filMin, filMax, filAvg,
+      outlierCount: outliers.length,
+      lowerFence, upperFence,
+      uniqueListings: unique,
     };
-  }, [records]);
+  }, [listings]);
 
-  /* image source */
-  const watchImage = useMemo(() => {
-    if (records.length > 0 && records[0]?.brand) {
-      return resolveWatchImage(records[0].brand, reference);
-    }
-    return '/watch-silhouette.svg';
-  }, [records, reference]);
+  // Date range string
+  const dateRangeStr = useMemo(() => {
+    if (listings.length === 0) return '';
+    const dates = listings.map(l => l.received_at ? new Date(l.received_at) : null).filter(Boolean) as Date[];
+    if (dates.length === 0) return '';
+    const min = new Date(Math.min(...dates.map(d => d.getTime())));
+    const max = new Date(Math.max(...dates.map(d => d.getTime())));
+    const fmt = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return `${fmt(min)} to ${fmt(max)}`;
+  }, [listings]);
 
-  /* watch metadata */
-  const watchMeta = useMemo(() => {
-    if (records.length === 0) return null;
-    const first = records[0];
-    return {
-      name: first.family || first.reference,
-      brand: first.brand,
-      reference: first.reference,
-    };
-  }, [records]);
-
-  const { start: rangeStart, end: rangeEnd } = useMemo(() => {
-    if (!month) return { start: '', end: '' };
-    return getMonthRange(month);
-  }, [month]);
-
-  /* ─── loading ─── */
   if (loading) {
     return (
-      <div className="bg-white min-h-[calc(100dvh-56px)] flex items-center justify-center">
-        <div className="text-center">
-          <Loader2 className="w-10 h-10 animate-spin text-blue-600 mx-auto mb-3" />
-          <p className="text-gray-500 text-sm">Loading insight data...</p>
+      <div className="min-h-screen bg-white flex flex-col">
+        <DealerNavbar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
         </div>
-      </div>
-    );
-  }
-
-  /* ─── error ─── */
-  if (error) {
-    return (
-      <div className="bg-white min-h-[calc(100dvh-56px)] p-5 max-w-[1400px] mx-auto">
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 mb-4 transition-colors"
-        >
-          <ArrowLeft size={16} /> Back to Price Research
-        </button>
-        <div className="flex items-center gap-3 text-red-500 bg-red-50 border border-red-200 rounded-lg p-4">
-          <AlertCircle size={20} />
-          <p>{error}</p>
-        </div>
+        <Footer />
       </div>
     );
   }
 
   return (
-    <div className="bg-white min-h-[calc(100dvh-56px)] p-5 max-w-[1400px] mx-auto">
-        {/* ── Back button ── */}
-        <button
-          onClick={() => navigate(-1)}
-          className="flex items-center gap-2 text-gray-500 hover:text-gray-900 mb-6 transition-colors text-sm"
-        >
+    <div className="min-h-screen bg-white flex flex-col">
+      <DealerNavbar />
+
+      <main className="flex-1 max-w-6xl mx-auto w-full px-4 py-6">
+        {/* Back link */}
+        <Link to="/price-research" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 mb-4 transition-colors">
           <ArrowLeft size={16} /> Back to Price Research
-        </button>
+        </Link>
 
-        {/* ── Page Title ── */}
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Insight Details</h1>
+        <h1 className="text-xl font-semibold text-gray-900 mb-6">Insight Details</h1>
 
-        {/* ── Demo badge ── */}
-        {usingDemo && (
-          <div className="flex items-center gap-2 text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-6 text-sm">
-            <Database size={14} />
-            <span>Showing demo data (Supabase not configured or no results found)</span>
-          </div>
-        )}
-
-        {/* ═══════════ TOP SECTION ═══════════ */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          {/* LEFT: Watch image + info */}
-          <div className="flex flex-col items-center text-center">
-            <div className="w-64 h-64 flex items-center justify-center bg-gray-50 rounded-xl border border-gray-200 mb-5 overflow-hidden">
-              <img
-                src={watchImage}
-                alt={watchMeta?.name || reference}
-                className="w-full h-full object-contain"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/watch-silhouette.svg';
-                }}
-              />
+        {/* Watch Info Header */}
+        <div className="flex flex-col sm:flex-row gap-6 mb-8">
+          {/* Watch Image Placeholder */}
+          <div className="w-full sm:w-48 h-48 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
+            <div className="text-center">
+              <div className="text-5xl mb-2 opacity-20">
+                {ref.startsWith('RM') ? '◇' : '⌚'}
+              </div>
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider">{listings[0]?.brand || 'Watch'}</span>
             </div>
-            <h2 className="text-xl font-bold text-gray-900 mb-1">
-              {watchMeta?.name || reference}
-            </h2>
-            <p className="text-sm text-gray-500 mb-1">
-              {watchMeta?.brand || 'Rolex'} · {dial || 'White'} Dial
-            </p>
-            <p className="text-sm font-mono text-gray-400">
-              型號 {reference}
-            </p>
           </div>
 
-          {/* RIGHT: Reference details */}
-          <div className="flex flex-col justify-center">
-            <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wider mb-3">
-                Reference Details
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <span className="text-gray-500 text-xs block mb-0.5">Reference</span>
-                  <span className="font-mono font-semibold text-gray-900 text-sm">{reference}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500 text-xs block mb-0.5">Dial Color</span>
-                  <span className="font-semibold text-gray-900 text-sm">{dial || 'White'}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500 text-xs block mb-0.5">Condition Category</span>
-                  <span className="font-semibold text-gray-900 text-sm">Any</span>
-                </div>
-                <div>
-                  <span className="text-gray-500 text-xs block mb-0.5">Date Range</span>
-                  <span className="font-semibold text-gray-900 text-sm">
-                    {rangeStart && rangeEnd
-                      ? `Listings created from ${new Date(rangeStart).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} to ${new Date(rangeEnd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                      : '—'}
-                  </span>
+          {/* Details */}
+          <div className="space-y-2 text-sm">
+            <p><span className="font-semibold text-gray-900">Reference:</span> <span className="font-mono">{ref}</span></p>
+            <p><span className="font-semibold text-gray-900">Dial Color:</span> {dial}</p>
+            <p><span className="font-semibold text-gray-900">Condition Category:</span> Any</p>
+            {dateRangeStr && (
+              <p className="text-gray-500">Listings created from <span className="font-semibold text-gray-700">{dateRangeStr}</span></p>
+            )}
+          </div>
+        </div>
+
+        {!stats ? (
+          <div className="text-center py-16 text-gray-400">No data found for this reference</div>
+        ) : (
+          <>
+            {/* 4 Stats Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+
+              {/* Stats (Original) — Blue */}
+              <div className="rounded-lg overflow-hidden border border-gray-200">
+                <div className="bg-blue-600 text-white px-4 py-3 text-sm font-semibold">Stats (Original)</div>
+                <div className="p-4 space-y-3 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-600">Data Points:</span><span className="font-semibold">{stats.origCount}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Min:</span><span className="font-mono font-semibold">{fmtPrice(stats.origMin)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Avg:</span><span className="font-mono font-semibold">{fmtPrice(stats.origAvg)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Max:</span><span className="font-mono font-semibold">{fmtPrice(stats.origMax)}</span></div>
                 </div>
               </div>
+
+              {/* Duplicated — Gray */}
+              <div className="rounded-lg overflow-hidden border border-gray-200">
+                <div className="bg-gray-500 text-white px-4 py-3 text-sm font-semibold">Duplicated</div>
+                <div className="p-4 space-y-3 text-sm text-center">
+                  <div className="text-2xl font-bold text-gray-700">Removed: {stats.dupCount}</div>
+                  {stats.dupPrices.length > 0 && (
+                    <div className="text-gray-500 text-xs">{stats.dupPrices.map(p => fmtPrice(p)).join(', ')}</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Stats (Filtered) — Green */}
+              <div className="rounded-lg overflow-hidden border border-gray-200">
+                <div className="bg-green-600 text-white px-4 py-3 text-sm font-semibold">Stats (Filtered by custom math)</div>
+                <div className="p-4 space-y-3 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-600">Data Points:</span><span className="font-semibold">{stats.filCount}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Min:</span><span className="font-mono font-semibold">{fmtPrice(stats.filMin)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Avg:</span><span className="font-mono font-semibold">{fmtPrice(stats.filAvg)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Max:</span><span className="font-mono font-semibold">{fmtPrice(stats.filMax)}</span></div>
+                </div>
+              </div>
+
+              {/* Outliers — Red */}
+              <div className="rounded-lg overflow-hidden border border-gray-200">
+                <div className="bg-red-500 text-white px-4 py-3 text-sm font-semibold">Outliers</div>
+                <div className="p-4 space-y-3 text-sm text-center">
+                  <div className="text-2xl font-bold text-gray-700">Removed: {stats.outlierCount}</div>
+                  {stats.outlierCount > 0 ? (
+                    <div className="text-gray-500 text-xs">Outside {fmtPrice(stats.lowerFence)} - {fmtPrice(stats.upperFence)}</div>
+                  ) : (
+                    <div className="text-gray-400 text-xs">No outliers detected.</div>
+                  )}
+                </div>
+              </div>
+
             </div>
-          </div>
-        </div>
 
-        {/* ═══════════ BOTTOM SECTION — 4 STAT CARDS ═══════════ */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
-          {/* 1. Original Stats — Blue */}
-          <StatCard
-            title="Stats (Original)"
-            color="blue"
-            dataPoints={originalStats.count}
-            min={originalStats.min}
-            avg={originalStats.avg}
-            max={originalStats.max}
-          />
+            {/* Individual Listings */}
+            <h2 className="text-lg font-semibold text-gray-900 mb-4">Listings</h2>
+            <div className="space-y-3">
+              {stats.uniqueListings.map((listing, i) => (
+                <motion.div
+                  key={listing.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: Math.min(i * 0.05, 0.5) }}
+                  className="flex gap-4 p-4 border border-gray-200 rounded-lg hover:shadow-sm transition-shadow"
+                >
+                  {/* Listing Image */}
+                  <div className="w-24 h-24 bg-gradient-to-br from-gray-100 to-gray-200 rounded flex items-center justify-center flex-shrink-0">
+                    <span className="text-2xl opacity-20">⌚</span>
+                  </div>
 
-          {/* 2. Duplicates — Gray */}
-          <StatCard
-            title="Duplicated"
-            color="gray"
-            removed={duplicateStats.count}
-            removedList={duplicateStats.prices}
-          />
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-medium text-gray-900 mb-1 line-clamp-2">
+                      {listing.condition ? `${listing.condition} ` : ''}
+                      {listing.brand} {listing.reference}
+                      {listing.dial_color ? ` - ${listing.dial_color} Dial` : ''}
+                      {listing.year ? ` (${listing.year})` : ''}
+                    </h3>
+                    <p className="text-xs text-gray-500 line-clamp-1 mb-2">{listing.raw_message}</p>
 
-          {/* 3. Filtered Stats — Green */}
-          <StatCard
-            title="Stats (Filtered by custom math)"
-            color="green"
-            dataPoints={filteredStats.count}
-            min={filteredStats.min}
-            avg={filteredStats.avg}
-            max={filteredStats.max}
-          />
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600">
+                      <span className="font-mono font-semibold text-gray-900">{fmtPrice(listing.price_usd)}</span>
+                      <span>North America</span>
+                      <span className="text-gray-400">{listing.source || 'Unknown'}</span>
+                    </div>
 
-          {/* 4. Outliers — Red */}
-          <StatCard
-            title="Outliers"
-            color="red"
-            removed={outlierStats.count}
-            removedList={outlierStats.prices}
-          />
-        </div>
+                    <div className="text-[11px] text-gray-400 mt-1">
+                      Posted: {listing.received_at ? new Date(listing.received_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Unknown'}
+                    </div>
+                  </div>
 
-        {/* ── Data pipeline flow ── */}
-        <div className="mt-8 text-center">
-          <p className="text-xs text-gray-500 mb-2">Data Processing Pipeline</p>
-          <div className="flex items-center justify-center gap-2 text-xs">
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" /> Original ({originalStats.count})</span>
-            <span className="text-gray-400">→</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-gray-400 inline-block" /> −{duplicateStats.count} Duplicates</span>
-            <span className="text-gray-400">→</span>
-            <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-full bg-red-500 inline-block" /> −{outlierStats.count} Outliers</span>
-            <span className="text-gray-400">→</span>
-            <span className="flex items-center gap-1 font-semibold text-green-700"><span className="w-2.5 h-2.5 rounded-full bg-green-600 inline-block" /> Filtered ({filteredStats.count})</span>
-          </div>
-          <p className="text-[10px] text-gray-400 mt-2 italic">
-            Outliers are excluded from Min/Avg/Max calculations but reported separately
-          </p>
-        </div>
-      </div>
+                  {/* View button */}
+                  <div className="flex-shrink-0 self-center">
+                    <Link
+                      to={`/flash-sales/${listing.id}`}
+                      className="px-4 py-2 text-xs font-medium text-[#3B5BFE] border border-[#3B5BFE] rounded hover:bg-[#3B5BFE] hover:text-white transition-colors"
+                    >
+                      View Listing
+                    </Link>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </>
+        )}
+      </main>
+
+      <Footer />
+    </div>
   );
 }

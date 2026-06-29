@@ -3,6 +3,7 @@
  * Select Model → Select Reference → See price charts with ALL 2.39M watches
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Info, Loader2, TrendingDown, TrendingUp } from 'lucide-react';
 import {
@@ -166,6 +167,7 @@ function Footer() {
 
 // ─── MAIN COMPONENT ──────────────────────────────────────────────────
 export default function PriceResearch() {
+  const navigate = useNavigate();
   const [models, setModels] = useState<string[]>(['All Models']);
   const [references, setReferences] = useState<string[]>([]);
   const [selectedModel, setSelectedModel] = useState('All Models');
@@ -434,7 +436,32 @@ export default function PriceResearch() {
                       <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} axisLine={{ stroke: '#E5E7EB' }} />
                       <Tooltip content={<CustomTooltip />} />
                       <Area type="monotone" dataKey="avgPrice" fill="url(#pg)" stroke="none" />
-                      <Line type="monotone" dataKey="avgPrice" stroke="#3B82F6" strokeWidth={2} dot={{ r: 4, fill: '#2563EB', stroke: '#fff', strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line
+                        type="monotone"
+                        dataKey="avgPrice"
+                        stroke="#3B82F6"
+                        strokeWidth={2}
+                        dot={(props: any) => {
+                          const { cx, cy, payload } = props;
+                          return (
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r={5}
+                              fill="#2563EB"
+                              stroke="#fff"
+                              strokeWidth={2}
+                              style={{ cursor: 'pointer' }}
+                              onClick={() => {
+                                if (result) {
+                                  navigate(`/insight?ref=${encodeURIComponent(result.reference)}&dial=${encodeURIComponent(selectedDial)}&month=${payload.monthKey}`);
+                                }
+                              }}
+                            />
+                          );
+                        }}
+                        activeDot={{ r: 8, fill: '#2563EB', stroke: '#fff', strokeWidth: 3 }}
+                      />
                       <Line type="monotone" dataKey="minPrice" stroke="#9CA3AF" strokeWidth={1} strokeDasharray="4 4" dot={false} />
                       <Line type="monotone" dataKey="maxPrice" stroke="#9CA3AF" strokeWidth={1} strokeDasharray="4 4" dot={false} />
                     </ComposedChart>
