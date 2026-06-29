@@ -7,7 +7,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useSearchParams, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Mail, MessageCircle, Info, CheckCircle, Globe, User, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Database, MessageCircle, Info, CheckCircle, Globe, User, ExternalLink } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
 
