@@ -210,9 +210,14 @@ export default function TradingFloor() {
         filters.push(`condition=eq.${encodeURIComponent(condition)}`);
       }
 
-      // NOTE: Ordering disabled - causes timeout on 2.39M rows without index
-      // Sort is applied client-side after fetch
-      const url = `${SUPABASE_URL}/rest/v1/watch_records?${params.toString()}${filters.length > 0 ? '&' + filters.join('&') : ''}`;
+      // Indexes are now created! Re-enable ordering
+      let orderBy = 'created_at';
+      let orderDir = 'desc';
+      if (sortBy === 'oldest') orderDir = 'asc';
+      if (sortBy === 'price_asc') { orderBy = 'price_usd'; orderDir = 'asc'; }
+      if (sortBy === 'price_desc') { orderBy = 'price_usd'; orderDir = 'desc'; }
+
+      const url = `${SUPABASE_URL}/rest/v1/watch_records?${params.toString()}${filters.length > 0 ? '&' + filters.join('&') : ''}&order=${orderBy}.${orderDir}`;
 
       const res = await fetch(url, {
         headers: {
@@ -225,15 +230,22 @@ export default function TradingFloor() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      // Use known total - count query times out on 2.39M rows
+      // Get real count via HEAD request (indexes make this fast now)
+      const countRes = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count${filters.length > 0 ? '&' + filters.join('&') : ''}`, {
+        method: 'HEAD',
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'count=exact' },
+      });
+      const countRange = countRes.headers.get('content-range') || '';
+      const totalCount = parseInt(countRange.split('/')[1] || '0') || (data?.length || 0);
+
       setListings(data || []);
-      setTotal(2392784);
+      setTotal(totalCount);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [query, condition, page]);
+  }, [query, condition, sortBy, page]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchListings(), 300);
