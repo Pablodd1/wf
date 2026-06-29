@@ -98,7 +98,7 @@ export default function AnalyticsPage() {
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [dateRange, setDateRange] = useState('30d');
 
-  // Merge real API stats with demo structure
+  // Merge real API stats — show TOTAL LISTINGS count
   useEffect(() => {
     if (apiStats && apiStats.totalRecords) {
       const total = apiStats.totalRecords;
@@ -106,7 +106,7 @@ export default function AnalyticsPage() {
       const human = apiStats.humanCount || 0;
       const recycle = apiStats.recycleCount || 0;
       const review = apiStats.reviewCount || 0;
-      
+
       setStats(prev => ({
         ...prev,
         totalRecords: total,
@@ -115,6 +115,13 @@ export default function AnalyticsPage() {
         recycled: recycle,
         avgPrice: apiStats.avgPrice || 0,
         avgConfidence: apiStats.avgConfidence || 0,
+        // Verdict distribution pie chart data
+        recordsByVerdict: {
+          APPROVED: approved,
+          REVIEW: review,
+          HUMAN: human,
+          RECYCLE: recycle,
+        },
         brandDistribution: apiStats.brandDistribution?.map((b: any) => ({
           brand: b.brand,
           count: b.count,
@@ -129,8 +136,6 @@ export default function AnalyticsPage() {
     await new Promise(r => setTimeout(r, 800));
     setLoading(false);
   }, []);
-
-  useEffect(() => { fetchReport(); }, [fetchReport]);
 
   const toggleSort = useCallback((key: SortKey) => {
     setSortDir(prev => sortKey === key ? (prev === 'asc' ? 'desc' : 'asc') : 'desc');
