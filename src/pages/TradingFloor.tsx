@@ -132,7 +132,7 @@ function extractTitle(raw: string | null): { line1: string; line2: string } {
   };
 }
 
-// ─── Compute rating from data quality ────────────────────────────────
+// ─── Compute rating from data quality ────────────────────────────────────────
 function computeRating(listing: WatchListing): { hasRating: boolean; score: number; label: string } {
   let score = 0;
   if (listing.brand) score += 20;
@@ -289,7 +289,7 @@ export default function TradingFloor() {
   const [showConverter, setShowConverter] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(2392784);
-  const pageSize = 12;
+  const pageSize = 24;
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchListings = useCallback(async () => {
@@ -310,7 +310,19 @@ export default function TradingFloor() {
       const res = await fetch(url, { headers: REQ });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setListings(data || []);
+      let processedData = data || [];
+
+      // Client-side WTB filtering for FOR SALE tab — WTB listings sometimes have prices too
+      if (listingType === 'forsale') {
+        const wtbTerms = ['wtb','want to buy','looking for','iso ','in search of','ntq','need to buy','buying'];
+        processedData = processedData.filter((l: WatchListing) => {
+          if (!l.raw_message) return true; // keep if no raw message
+          const lower = l.raw_message.toLowerCase();
+          return !wtbTerms.some(t => lower.includes(t));
+        });
+      }
+
+      setListings(processedData);
       setTotal(2392784);
     } catch {
       // Keep existing listings on error
@@ -322,7 +334,7 @@ export default function TradingFloor() {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(() => { setPage(1); fetchListings(); }, 300);
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
-  }, [query, condition, fetchListings]);
+  }, [query, condition, listingType, fetchListings]);
 
   useEffect(() => {
     fetchListings();
