@@ -29,10 +29,12 @@ const REQ_HEADERS = {
 interface MonthlyPoint {
   month: string;
   monthKey: string;
-  avgPrice: number;
-  minPrice: number;
-  maxPrice: number;
+  // Per-dial-color average prices: key = dial color, value = avg price
+  dialPrices: Record<string, number>;
+  // Total listings this month
   count: number;
+  // Overall avg (all dials combined)
+  avgPrice: number;
 }
 
 interface DialBreakdown {
@@ -87,30 +89,50 @@ function analyzeOutliers(prices: number[]): { filtered: number[]; outliers: numb
   return { filtered, outliers, q1, q3, iqr, lower, upper };
 }
 
-// ─── Group records by month ──────────────────────────────────────────
+// ─── Group records by month AND dial color ───────────────────────────
+// Returns monthly data with per-dial-color average prices
 function groupByMonth(records: any[]): MonthlyPoint[] {
-  const map = new Map<string, { prices: number[]; monthDate: Date }>();
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  // Map: monthKey -> { monthDate, dialMap: Map<dialColor, prices[]> }
+  const monthMap = new Map<string, { monthDate: Date; dialMap: Map<string, number[]>; allPrices: number[] }>();
 
   for (const r of records) {
     const date = r.received_at ? new Date(r.received_at) : r.created_at ? new Date(r.created_at) : new Date();
     if (isNaN(date.getTime())) continue;
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-    if (!map.has(key)) map.set(key, { prices: [], monthDate: date });
-    if (r.price_usd > 0) map.get(key)!.prices.push(r.price_usd);
+
+    if (!monthMap.has(key)) {
+      monthMap.set(key, { monthDate: date, dialMap: new Map(), allPrices: [] });
+    }
+    const monthEntry = monthMap.get(key)!;
+
+    if (r.price_usd > 0) {
+      monthEntry.allPrices.push(r.price_usd);
+      const dialColor = r.dial_color || 'Unknown';
+      if (!monthEntry.dialMap.has(dialColor)) monthEntry.dialMap.set(dialColor, []);
+      monthEntry.dialMap.get(dialColor)!.push(r.price_usd);
+    }
   }
 
-  const sorted = Array.from(map.entries()).sort((a, b) => a[1].monthDate.getTime() - b[1].monthDate.getTime());
+  const sorted = Array.from(monthMap.entries()).sort((a, b) => a[1].monthDate.getTime() - b[1].monthDate.getTime());
+
   return sorted.map(([key, val]) => {
-    const prices = val.prices.sort((a, b) => a - b);
-    const avg = prices.length ? Math.round(prices.reduce((s, p) => s + p, 0) / prices.length) : 0;
+    // Compute per-dial average
+    const dialPrices: Record<string, number> = {};
+    for (const [color, prices] of val.dialMap) {
+      dialPrices[color] = prices.length ? Math.round(prices.reduce((s, p) => s + p, 0) / prices.length) : 0;
+    }
+
+    // Overall avg
+    const avgPrice = val.allPrices.length ? Math.round(val.allPrices.reduce((s, p) => s + p, 0) / val.allPrices.length) : 0;
+
     return {
       monthKey: key,
       month: `${monthNames[val.monthDate.getMonth()]} ${val.monthDate.getFullYear()}`,
-      avgPrice: avg,
-      minPrice: prices[0] ?? 0,
-      maxPrice: prices[prices.length - 1] ?? 0,
-      count: prices.length,
+      dialPrices,
+      count: val.allPrices.length,
+      avgPrice,
     };
   }).filter(m => m.count > 0);
 }
@@ -137,20 +159,46 @@ function getDialBreakdown(records: any[]): DialBreakdown[] {
   return result.sort((a, b) => b.count - a.count);
 }
 
-// ─── Chart Tooltip ───────────────────────────────────────────────────
+// ─── Chart colors for dial colors ────────────────────────────────────
+const DIAL_CHART_COLORS: Record<string, string> = {
+  'White': '#E5E7EB', 'Black': '#1F2937', 'Blue': '#3B5BFE', 'Green': '#10B981',
+  'Silver': '#9CA3AF', 'Champagne': '#D4AF37', 'Grey': '#6B7280', 'Gray': '#6B7280',
+  'Red': '#EF4444', 'Brown': '#92400E', 'Purple': '#8B5CF6', 'Orange': '#F97316',
+  'Yellow': '#F59E0B', 'Pink': '#EC4899', 'Ivory': '#FEF3C7', 'Mother of Pearl': '#E0E7FF',
+  'Unknown': '#D1D5DB',
+};
+function getDialChartColor(dial: string): string {
+  return DIAL_CHART_COLORS[dial] || `hsl(${[...dial].reduce((s, c) => s + c.charCodeAt(0), 0) % 360}, 60%, 50%)`;
+}
+
+// ─── Chart Tooltip — Per Dial Color ──────────────────────────────────
 function CustomTooltip({ active, payload }: any) {
   if (!active || !payload?.length) return null;
   const d: MonthlyPoint = payload[0].payload;
   return (
-    <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-sm min-w-[180px]">
+    <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-sm min-w-[220px]">
       <div className="font-semibold text-gray-900 mb-2 pb-2 border-b border-gray-100">{d.month}</div>
-      <div className="space-y-1.5">
-        <div className="flex justify-between text-gray-600"><span>Listings:</span><span className="font-semibold text-gray-900">{d.count}</span></div>
-        <div className="flex justify-between text-gray-600"><span>Min:</span><span className="font-mono font-medium">{fmtPrice(d.minPrice)}</span></div>
-        <div className="flex justify-between text-blue-600"><span>Avg:</span><span className="font-mono font-bold">{fmtPrice(d.avgPrice)}</span></div>
-        <div className="flex justify-between text-gray-600"><span>Max:</span><span className="font-mono font-medium">{fmtPrice(d.maxPrice)}</span></div>
+      <div className="text-[11px] text-gray-500 mb-2">{d.count} listings</div>
+      {/* Per-dial-color prices */}
+      {Object.entries(d.dialPrices)
+        .sort(([, a], [, b]) => (b as number) - (a as number))
+        .map(([color, price]) => (
+          <div key={color} className="flex justify-between items-center py-0.5">
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getDialChartColor(color) }} />
+              <span className="text-gray-600">{color}</span>
+            </div>
+            <span className="font-mono font-semibold" style={{ color: getDialChartColor(color) }}>
+              {fmtPrice(price as number)}
+            </span>
+          </div>
+        ))}
+      {/* Overall */}
+      <div className="mt-2 pt-2 border-t border-gray-100 flex justify-between">
+        <span className="text-gray-500 font-medium">Overall Avg</span>
+        <span className="font-mono font-bold text-gray-900">{fmtPrice(d.avgPrice)}</span>
       </div>
-      <div className="text-[10px] text-blue-500 mt-2 pt-2 border-t border-gray-100 text-center">Click dot for details</div>
+      <div className="text-[10px] text-blue-500 mt-1 text-center">Click dot for per-dial details</div>
     </div>
   );
 }
@@ -223,6 +271,7 @@ function DataInterpretation({ result }: { result: PriceResult }) {
         </p>
         <p>
           <span className="font-semibold text-gray-800">Dial Color Variations:</span> {result.dialBreakdown.length} different dial color{result.dialBreakdown.length !== 1 ? 's' : ''} identified in the dataset. 
+          The price trend chart above shows separate lines for each dial color — prices vary significantly by dial (e.g., White dial vs Blue dial). 
           Click on any dial color row below to see per-dial detailed analytics including individual listings.
         </p>
       </div>
@@ -580,7 +629,7 @@ export default function PriceResearch() {
             <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-semibold text-gray-700 flex items-center gap-2">
-                  <TrendingUp size={15} className="text-[#3B5BFE]" /> Price Trend
+                  <TrendingUp size={15} className="text-[#3B5BFE]" /> Price Trend by Dial Color
                 </h3>
                 <select
                   value={dateRange}
@@ -596,48 +645,48 @@ export default function PriceResearch() {
               </div>
 
               {filteredData.length > 0 ? (
-                <div className="w-full h-[320px]">
+                <div className="w-full h-[340px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart data={filteredData} margin={{ top: 10, right: 20, left: 10, bottom: 10 }}>
-                      <defs>
-                        <linearGradient id="pg" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#3B5BFE" stopOpacity={0.15} />
-                          <stop offset="95%" stopColor="#3B5BFE" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
                       <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                       <XAxis dataKey="month" tick={{ fontSize: 11, fill: '#6B7280' }} axisLine={{ stroke: '#E5E7EB' }} />
                       <YAxis tick={{ fontSize: 11, fill: '#6B7280' }} tickFormatter={(v: number) => `$${(v / 1000).toFixed(0)}k`} axisLine={{ stroke: '#E5E7EB' }} />
                       <Tooltip content={<CustomTooltip />} />
-                      <Area type="monotone" dataKey="avgPrice" fill="url(#pg)" stroke="none" />
+
+                      {/* One line per dial color */}
+                      {result && result.dialBreakdown.map((d) => {
+                        const color = getDialChartColor(d.color);
+                        // Transform data so each point has a property matching the dial color
+                        const dataKey = `dial_${d.color}`;
+                        // We need to add the dataKey to each data point dynamically
+                        filteredData.forEach((pt: any) => {
+                          pt[dataKey] = pt.dialPrices?.[d.color] ?? null;
+                        });
+                        return (
+                          <Line
+                            key={d.color}
+                            type="monotone"
+                            dataKey={dataKey}
+                            stroke={color}
+                            strokeWidth={2}
+                            dot={{ r: 4, fill: color, stroke: '#fff', strokeWidth: 2 }}
+                            activeDot={{ r: 7, stroke: '#fff', strokeWidth: 2 }}
+                            connectNulls={false}
+                            name={d.color}
+                          />
+                        );
+                      })}
+
+                      {/* Overall average as dashed reference */}
                       <Line
                         type="monotone"
                         dataKey="avgPrice"
-                        stroke="#3B5BFE"
-                        strokeWidth={2.5}
-                        dot={(props: any) => {
-                          const { cx, cy, payload } = props;
-                          return (
-                            <circle
-                              cx={cx}
-                              cy={cy}
-                              r={6}
-                              fill="#3B5BFE"
-                              stroke="#fff"
-                              strokeWidth={2.5}
-                              style={{ cursor: 'pointer' }}
-                              onClick={() => {
-                                if (result) {
-                                  navigate(`/insight?ref=${encodeURIComponent(result.reference)}&dial=${encodeURIComponent('Any')}&month=${payload.monthKey}&brand=${encodeURIComponent(result.brand)}`);
-                                }
-                              }}
-                            />
-                          );
-                        }}
-                        activeDot={{ r: 9, fill: '#2563EB', stroke: '#fff', strokeWidth: 3 }}
+                        stroke="#9CA3AF"
+                        strokeWidth={1.5}
+                        strokeDasharray="6 3"
+                        dot={false}
+                        name="Overall Avg"
                       />
-                      <Line type="monotone" dataKey="minPrice" stroke="#9CA3AF" strokeWidth={1} strokeDasharray="4 4" dot={false} />
-                      <Line type="monotone" dataKey="maxPrice" stroke="#9CA3AF" strokeWidth={1} strokeDasharray="4 4" dot={false} />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
@@ -645,42 +694,65 @@ export default function PriceResearch() {
                 <div className="text-center py-10 text-gray-400 text-sm">No trend data available for this range</div>
               )}
 
-              {/* Legend */}
-              <div className="flex items-center gap-6 mt-4 text-xs text-gray-500 pt-3 border-t border-gray-100">
-                <span className="flex items-center gap-1.5"><span className="w-4 h-1 bg-[#3B5BFE] rounded" /> Avg Price</span>
-                <span className="flex items-center gap-1.5"><span className="w-4 h-0 border-t border-dashed border-gray-400" /> Min/Max</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-[#3B5BFE]" /> Click for details</span>
+              {/* Legend — Per Dial Color */}
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-4 text-xs text-gray-500 pt-3 border-t border-gray-100">
+                {result && result.dialBreakdown.map(d => (
+                  <span key={d.color} className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: getDialChartColor(d.color) }} />
+                    {d.color} ({d.count})
+                  </span>
+                ))}
+                <span className="flex items-center gap-1.5">
+                  <span className="w-4 h-0 border-t border-dashed border-gray-400" /> Overall Avg
+                </span>
               </div>
             </div>
 
-            {/* Data Table */}
+            {/* Data Table — Per Dial Color Monthly Breakdown */}
             {filteredData.length > 0 && (
               <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
                 <div className="px-5 py-3.5 border-b border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-900">Monthly Breakdown</h3>
+                  <h3 className="text-sm font-semibold text-gray-900">Monthly Breakdown — Per Dial Color</h3>
                 </div>
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider">
-                      <th className="px-5 py-2.5">Month</th>
-                      <th className="px-4 py-2.5">Listings</th>
-                      <th className="px-4 py-2.5 text-right">Min</th>
-                      <th className="px-4 py-2.5 text-right">Avg</th>
-                      <th className="px-4 py-2.5 text-right">Max</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredData.map((d, i) => (
-                      <tr key={d.monthKey} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-blue-50/30 transition-colors`}>
-                        <td className="px-5 py-2.5 font-medium text-gray-900">{d.month}</td>
-                        <td className="px-4 py-2.5 text-gray-500">{d.count}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-gray-600">{fmtPrice(d.minPrice)}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-[#3B5BFE] font-semibold">{fmtPrice(d.avgPrice)}</td>
-                        <td className="px-4 py-2.5 text-right font-mono text-gray-600">{fmtPrice(d.maxPrice)}</td>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider">
+                        <th className="px-5 py-2.5 whitespace-nowrap">Month</th>
+                        <th className="px-4 py-2.5 whitespace-nowrap">Listings</th>
+                        <th className="px-4 py-2.5 text-right whitespace-nowrap">Overall Avg</th>
+                        {/* One column per dial color */}
+                        {result && result.dialBreakdown.map(d => (
+                          <th key={d.color} className="px-4 py-2.5 text-right whitespace-nowrap">
+                            <span className="flex items-center justify-end gap-1">
+                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getDialChartColor(d.color) }} />
+                              {d.color}
+                            </span>
+                          </th>
+                        ))}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {filteredData.map((d: any, i) => (
+                        <tr key={d.monthKey} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-blue-50/30 transition-colors`}>
+                          <td className="px-5 py-2.5 font-medium text-gray-900 whitespace-nowrap">{d.month}</td>
+                          <td className="px-4 py-2.5 text-gray-500">{d.count}</td>
+                          <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">{fmtPrice(d.avgPrice)}</td>
+                          {/* Per-dial prices */}
+                          {result && result.dialBreakdown.map(dial => (
+                            <td key={dial.color} className="px-4 py-2.5 text-right font-mono whitespace-nowrap">
+                              {d.dialPrices?.[dial.color] ? (
+                                <span style={{ color: getDialChartColor(dial.color) }}>{fmtPrice(d.dialPrices[dial.color])}</span>
+                              ) : (
+                                <span className="text-gray-300">—</span>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               </div>
             )}
           </motion.div>
