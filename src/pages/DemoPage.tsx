@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Play, Trash2, FileSpreadsheet, Loader2, CheckCircle2,
   Circle, ArrowRight, ArrowDown, Zap, Database, Settings,
-  Sparkles, BarChart3, AlertTriangle, Package, Copy,
+  Sparkles, BarChart3, AlertTriangle, Package, Copy, XCircle,
 } from 'lucide-react';
 import type { ParsedResult, Verdict } from '@/types';
 import { confidenceColor, confidenceLabel, formatPrice } from '@/lib/utils';
@@ -490,11 +490,113 @@ export default function DemoPage() {
                         />
                       ))}
                     </div>
+
+                    {/* Field match indicator */}
+                    <div className="mt-2 flex gap-1">
+                      {[
+                        { label: 'Ref', found: result.reference && result.reference !== 'N/A' },
+                        { label: 'Brand', found: result.brand && result.brand !== 'Unknown' },
+                        { label: 'Price', found: result.price > 0 },
+                        { label: 'Dial', found: !!result.dialColor },
+                        { label: 'Year', found: result.year > 0 },
+                        { label: 'Cond', found: result.condition && result.condition !== 'Used' },
+                      ].map((field) => (
+                        <div
+                          key={field.label}
+                          className={`flex-1 text-center py-0.5 rounded text-[9px] font-medium ${
+                            field.found ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'
+                          }`}
+                          title={field.found ? `${field.label}: found` : `${field.label}: missing`}
+                        >
+                          {field.label}
+                        </div>
+                      ))}
+                    </div>
                   </motion.div>
                 ))}
               </AnimatePresence>
             </div>
           </div>
+        </div>
+
+        {/* ─── Catalog Match Confidence Protocol ──────────────────────────── */}
+        <div className="mt-6 bg-gray-900 border border-gray-800 rounded-lg overflow-hidden">
+          <div className="px-5 py-3 border-b border-gray-800 flex items-center gap-2">
+            <BarChart3 size={16} className="text-[#D4AF37]" />
+            <h3 className="text-sm font-semibold text-white">Catalog Match Confidence Protocol</h3>
+          </div>
+          <div className="overflow-x-auto p-4">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider border-b border-gray-800">
+                  <th className="pb-3 pr-4">Catalog Match</th>
+                  <th className="pb-3 pr-4">AI Intervention Needed</th>
+                  <th className="pb-3 pr-4">Confidence Score</th>
+                  <th className="pb-3">Action</th>
+                </tr>
+              </thead>
+              <tbody className="text-gray-300">
+                <tr className="border-b border-gray-800/50">
+                  <td className="py-3 pr-4 font-medium text-green-400">Everything found in catalog</td>
+                  <td className="py-3 pr-4 text-gray-500">None</td>
+                  <td className="py-3 pr-4">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-400/10 text-green-400 font-mono font-semibold">100%</span>
+                  </td>
+                  <td className="py-3">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-400/10 text-green-400 font-medium">Auto-approve</span>
+                  </td>
+                </tr>
+                <tr className="border-b border-gray-800/50">
+                  <td className="py-3 pr-4 font-medium text-blue-400">1 thing missing (e.g., dial color)</td>
+                  <td className="py-3 pr-4 text-gray-500">AI fills 1 gap</td>
+                  <td className="py-3 pr-4">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-400/10 text-blue-400 font-mono font-semibold">90%</span>
+                  </td>
+                  <td className="py-3">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-400/10 text-blue-400 font-medium">Review suggested</span>
+                  </td>
+                </tr>
+                <tr className="border-b border-gray-800/50">
+                  <td className="py-3 pr-4 font-medium text-amber-400">2 things missing (e.g., ref + dial)</td>
+                  <td className="py-3 pr-4 text-gray-500">AI fills 2 gaps</td>
+                  <td className="py-3 pr-4">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-400/10 text-amber-400 font-mono font-semibold">80%</span>
+                  </td>
+                  <td className="py-3">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-400/10 text-amber-400 font-medium">Must review</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td className="py-3 pr-4 font-medium text-red-400">3+ things missing or garbage</td>
+                  <td className="py-3 pr-4 text-gray-500">AI can't resolve</td>
+                  <td className="py-3 pr-4">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-400/10 text-red-400 font-mono font-semibold">&lt;80%</span>
+                  </td>
+                  <td className="py-3">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-400/10 text-red-400 font-medium">Manual intervention</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Overall accuracy summary */}
+          {results.length > 0 && (
+            <div className="px-5 py-3 border-t border-gray-800 flex items-center gap-6 text-xs text-gray-400">
+              <span className="flex items-center gap-1.5">
+                <CheckCircle2 size={13} className="text-green-400" />
+                {results.filter(r => r.confidence >= 85).length} auto-approved
+              </span>
+              <span className="flex items-center gap-1.5">
+                <AlertTriangle size={13} className="text-amber-400" />
+                {results.filter(r => r.confidence >= 70 && r.confidence < 85).length} review suggested
+              </span>
+              <span className="flex items-center gap-1.5">
+                <XCircle size={13} className="text-red-400" />
+                {results.filter(r => r.confidence < 70).length} need review
+              </span>
+            </div>
+          )}
         </div>
       </div>
     </>);
