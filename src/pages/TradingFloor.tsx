@@ -1,6 +1,7 @@
 /**
  * Trading Floor — watchfacts.com/buy/all replica
  * Enhanced UI: gold accents, better cards, stats bar, improved filters
+ * INFINITE SCROLL: loads 100 at a time, auto-loads more on scroll
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -137,7 +138,7 @@ function CurrencyConverter({ onClose }: { onClose: () => void }) {
 function extractTitle(raw: string | null): { line1: string; line2: string } {
   if (!raw) return { line1: '', line2: '' };
   const cleaned = raw
-    .replace(/[📢✨🍂🇭🇰🌹💋🎈🎁💞🍄🔵🔴🟢🎅]/g, ' ')
+    .replace(/[\ud83d\udce2\u2728\ud83c\udf42\ud83c\udded\ud83c\uddf0\ud83c\udf39\ud83d\udc8b\ud83c\udf88\ud83c\udf81\ud83d\udc9e\ud83c\udf44\ud83d\udd35\ud83d\udd34\ud83d\udfe2\ud83c\udf85]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   const words = cleaned.split(' ');
@@ -158,7 +159,7 @@ function computeRating(listing: WatchListing): { hasRating: boolean; score: numb
   if (listing.dial_color) score += 10;
   if (listing.year) score += 10;
   if (listing.raw_message && listing.raw_message.length > 20) score += 5;
-  
+
   if (score >= 80) return { hasRating: true, score, label: `${Math.round(score / 10)}/10` };
   return { hasRating: false, score, label: 'NO RATING' };
 }
@@ -173,7 +174,7 @@ function WatchCard({ listing }: { listing: WatchListing }) {
   const imgUrl = resolveWatchImage(listing.reference || '', listing.brand || '');
   const title = extractTitle(listing.raw_message);
   const rating = computeRating(listing);
-  const region = listing.source?.toLowerCase().includes('asia') ? 'ASIA' : 
+  const region = listing.source?.toLowerCase().includes('asia') ? 'ASIA' :
                  listing.source?.toLowerCase().includes('eu') ? 'EUROPE' : 'NORTH AMERICA';
   const sourceName = listing.source || 'Unknown';
 
@@ -265,7 +266,7 @@ function WatchCard({ listing }: { listing: WatchListing }) {
 }
 
 // ─── Stats Bar ───────────────────────────────────────────────────────
-function StatsBar({ total, loaded }: { total: number; loaded: number }) {
+function StatsBar({ total, loaded, hasMore, onLoadAll }: { total: number; loaded: number; hasMore: boolean; onLoadAll: () => void }) {
   return (
     <div className="bg-white border-b border-gray-200">
       <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-6 overflow-x-auto">
@@ -286,12 +287,34 @@ function StatsBar({ total, loaded }: { total: number; loaded: number }) {
           <span className="text-gray-500">Live Market Data</span>
         </div>
         <div className="flex-1" />
-        <div className="text-[11px] text-gray-400 whitespace-nowrap">
-          Showing <span className="font-semibold text-gray-700">{loaded}</span> per page
+        <div className="flex items-center gap-3">
+          <div className="text-[11px] text-gray-400 whitespace-nowrap">
+            Showing <span className="font-semibold text-gray-700">{loaded}</span> loaded
+          </div>
+          {hasMore && (
+            <button
+              onClick={onLoadAll}
+              className="text-xs text-[#3B5BFE] font-medium hover:underline whitespace-nowrap"
+            >
+              Load All
+            </button>
+          )}
         </div>
       </div>
     </div>
   );
+}
+
+// ─── Throttle helper ─────────────────────────────────────────────────
+function throttle<T extends (...args: unknown[]) => void>(fn: T, wait: number): T {
+  let lastTime = 0;
+  return ((...args: unknown[]) => {
+    const now = Date.now();
+    if (now - lastTime >= wait) {
+      lastTime = now;
+      fn(...args);
+    }
+  }) as T;
 }
 
 // ─── Main Component ──────────────────────────────────────────────────
@@ -305,8 +328,11 @@ export default function TradingFloor() {
   const [showConverter, setShowConverter] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(2392784);
-  const pageSize = 24;
+  const [pageSize, setPageSize] = useState(100);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isFetchingRef = useRef(false);
 
   // ─── Bulk Import State ──────────────────────────────────────────────
   const [bulkMode, setBulkMode] = useState(false);
@@ -316,11 +342,24 @@ export default function TradingFloor() {
   const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, errors: 0 });
   const [bulkResults, setBulkResults] = useState<{ success: number; errors: number } | null>(null);
 
-  const fetchListings = useCallback(async () => {
-    setLoading(true);
+  // ─── Fetch Listings (Infinite Scroll) ──────────────────────────────
+  const fetchListings = useCallback(async (append = false, customPageSize?: number) => {
+    // Prevent concurrent fetches
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+
     try {
-      const offset = (page - 1) * pageSize;
-      let url = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,currency,raw_message,verdict,confidence,source,created_at,year&limit=${pageSize}&offset=${offset}`;
+      const currentPageSize = customPageSize || pageSize;
+      const currentPage = append ? page : 1;
+      const offset = (currentPage - 1) * currentPageSize;
+      let url = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,currency,raw_message,verdict,confidence,source,created_at,year&limit=${currentPageSize}&offset=${offset}`;
+
       if (query) url += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
       if (condition !== 'All') url += `&condition=eq.${encodeURIComponent(condition)}`;
       // Price filter based on listing type
@@ -336,38 +375,72 @@ export default function TradingFloor() {
       const data = await res.json();
       let processedData = data || [];
 
-      // Client-side WTB filtering for FOR SALE tab — WTB listings sometimes have prices too
+      // Client-side WTB filtering for FOR SALE tab
       if (listingType === 'forsale') {
         const wtbTerms = ['wtb','want to buy','looking for','iso ','in search of','ntq','need to buy','buying'];
         processedData = processedData.filter((l: WatchListing) => {
-          if (!l.raw_message) return true; // keep if no raw message
+          if (!l.raw_message) return true;
           const lower = l.raw_message.toLowerCase();
           return !wtbTerms.some(t => lower.includes(t));
         });
       }
 
-      setListings(processedData);
+      if (append) {
+        setListings(prev => [...prev, ...processedData]);
+        setHasMore(processedData.length === currentPageSize);
+      } else {
+        setListings(processedData);
+        setHasMore(processedData.length === currentPageSize);
+        setPage(1);
+      }
       setTotal(2392784);
     } catch {
       // Keep existing listings on error
     }
+    isFetchingRef.current = false;
     setLoading(false);
-  }, [query, condition, listingType, page]);
+    setLoadingMore(false);
+  }, [query, condition, listingType, page, pageSize]);
 
+  // ─── Search / filter effect ────────────────────────────────────────
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    searchTimeout.current = setTimeout(() => { setPage(1); fetchListings(); }, 300);
+    searchTimeout.current = setTimeout(() => { fetchListings(false); }, 300);
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
   }, [query, condition, listingType, fetchListings]);
 
+  // ─── Infinite scroll listener (throttled to 200ms) ─────────────────
   useEffect(() => {
-    fetchListings();
-  }, [page, fetchListings]);
+    const handleScroll = throttle(() => {
+      if (isFetchingRef.current || !hasMore || loading) return;
+      const scrollBottom = window.innerHeight + window.scrollY;
+      const threshold = document.body.offsetHeight - 800;
+      if (scrollBottom >= threshold) {
+        setPage(p => p + 1);
+      }
+    }, 200);
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, [hasMore, loading]);
+
+  // ─── Fetch when page changes via scroll ────────────────────────────
+  useEffect(() => {
+    if (page > 1) {
+      fetchListings(true);
+    }
+  }, [page]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ─── Load All handler ─────────────────────────────────────────────
+  const handleLoadAll = useCallback(() => {
+    setPageSize(1000);
+    setPage(1);
+    fetchListings(false, 1000);
+  }, [fetchListings]);
 
   // ─── Bulk Import Functions ──────────────────────────────────────────
   async function parseBulkText(text: string): Promise<ParsedListing[]> {
     const lines = text.split('\n').filter(l => l.trim().length > 4);
-    // Filter out section headers (🚩ROLEX🚩, 🏆PP Ready, ⌚🇭🇰HK Ready, timestamp lines)
     const sectionHeaders = /^(\s*[🚩🏆⏳⌚🔥💎⭐🌟🎯🚨⚡]+\s*\w+|\s*\[?\d{1,2}:\d{2}\s*(AM|PM)\]?.*|\s*--+.*|\s*==+.*|\s*\*+.*)$/i;
     const cleanLines = lines.filter(l => !sectionHeaders.test(l.trim()));
     if (cleanLines.length === 0) return [];
@@ -439,7 +512,6 @@ export default function TradingFloor() {
         errors,
       });
 
-      // Small delay to prevent rate limiting
       await new Promise(r => setTimeout(r, 100));
     }
 
@@ -453,7 +525,6 @@ export default function TradingFloor() {
 
       {/* Header */}
       <div className="relative bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white py-6 px-4 overflow-hidden">
-        {/* Subtle pattern */}
         <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
         <div className="max-w-7xl mx-auto relative">
           <div className="flex items-center gap-2 mb-1">
@@ -465,12 +536,11 @@ export default function TradingFloor() {
       </div>
 
       {/* Stats Bar */}
-      <StatsBar total={total} loaded={listings.length} />
+      <StatsBar total={total} loaded={listings.length} hasMore={hasMore} onLoadAll={handleLoadAll} />
 
       {/* Category Filter Pills + Search */}
       <div className="bg-white border-b border-gray-200 sticky top-[56px] z-40 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-3">
-          {/* Search bar */}
           <div className="flex flex-col sm:flex-row gap-2 mb-3">
             <div className="flex-1 relative">
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -483,15 +553,15 @@ export default function TradingFloor() {
               />
             </div>
             <div className="flex gap-2">
-              <select 
-                value={condition} 
-                onChange={e => { setCondition(e.target.value); setPage(1); }} 
+              <select
+                value={condition}
+                onChange={e => { setCondition(e.target.value); setPage(1); }}
                 className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] bg-white"
               >
                 {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <button 
-                onClick={() => { setQuery(''); setCondition('All'); setRegion('All'); setListingType('forsale'); setPage(1); }}
+              <button
+                onClick={() => { setQuery(''); setCondition('All'); setRegion('All'); setListingType('forsale'); setPage(1); setPageSize(100); }}
                 className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors flex items-center gap-1.5"
               >
                 <Filter size={14} /> Reset
@@ -499,7 +569,6 @@ export default function TradingFloor() {
             </div>
           </div>
 
-          {/* Category Pills — matching screenshot */}
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2 flex-wrap">
               {[
@@ -527,7 +596,6 @@ export default function TradingFloor() {
               })}
             </div>
 
-            {/* Bulk Import Toggle */}
             <div className="relative">
               <button
                 onClick={() => { setBulkMode(!bulkMode); setBulkResults(null); }}
@@ -541,7 +609,6 @@ export default function TradingFloor() {
               </button>
             </div>
 
-            {/* Currency Converter */}
             <div className="relative">
               <button
                 onClick={() => setShowConverter(!showConverter)}
@@ -557,14 +624,9 @@ export default function TradingFloor() {
         </div>
       </div>
 
-      {/* ─── Bulk Import Panel ─────────────────────────────────────────── */}
+      {/* Bulk Import Panel */}
       {bulkMode && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="max-w-7xl mx-auto px-4 py-6"
-        >
-          {/* Header */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-7xl mx-auto px-4 py-6">
           <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-xl p-6 mb-6 text-white">
             <div className="flex items-center gap-3 mb-2">
               <div className="w-1 h-6 bg-[#D4AF37] rounded-full" />
@@ -576,11 +638,8 @@ export default function TradingFloor() {
             </p>
           </div>
 
-          {/* Text Area */}
           <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
-            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">
-              Dealer Messages
-            </label>
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Dealer Messages</label>
             <textarea
               value={bulkText}
               onChange={e => setBulkText(e.target.value)}
@@ -589,22 +648,11 @@ export default function TradingFloor() {
               placeholder={"Paste dealer messages here, one per line...\nExample:\n🇭🇰26240OR 2022 Full Set Used Green gold 50th HKD 865K\n🌟4910/1200A Green 5/2026 HKD 118K\n126234 Ombre Green 6/2026 hkd 120000\nRolex 126334 Datejust Blue Dial 2023 Box Papers $14500"}
             />
             <div className="flex items-center justify-between mt-3">
-              <span className="text-xs text-gray-400">
-                {bulkText.split('\n').filter(l => l.trim().length > 4).length} lines detected
-              </span>
+              <span className="text-xs text-gray-400">{bulkText.split('\n').filter(l => l.trim().length > 4).length} lines detected</span>
               <div className="flex gap-2">
+                <button onClick={() => setBulkText('')} className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors">Clear</button>
                 <button
-                  onClick={() => setBulkText('')}
-                  className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors"
-                >
-                  Clear
-                </button>
-                <button
-                  onClick={async () => {
-                    const parsed = await parseBulkText(bulkText);
-                    setBulkPreview(parsed);
-                    setBulkResults(null);
-                  }}
+                  onClick={async () => { const parsed = await parseBulkText(bulkText); setBulkPreview(parsed); setBulkResults(null); }}
                   disabled={!bulkText.trim() || bulkSubmitting}
                   className="px-5 py-2 bg-[#D4AF37] text-slate-900 rounded-lg text-xs font-semibold uppercase tracking-wider hover:bg-[#c4a030] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-sm"
                 >
@@ -614,144 +662,78 @@ export default function TradingFloor() {
             </div>
           </div>
 
-          {/* Preview Table */}
           {bulkPreview.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6"
-            >
-              {/* Preview Header */}
+            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6">
               <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <ClipboardList size={14} className="text-[#D4AF37]" />
-                  <span className="text-sm font-semibold text-gray-800">
-                    Preview: {bulkPreview.length} listings parsed
-                  </span>
-                  <span className="text-xs text-gray-400 ml-2">
-                    ({bulkPreview.filter(p => (p.confidence || 0) > 70).length} high confidence)
-                  </span>
+                  <span className="text-sm font-semibold text-gray-800">Preview: {bulkPreview.length} listings parsed</span>
+                  <span className="text-xs text-gray-400 ml-2">({bulkPreview.filter(p => (p.confidence || 0) > 70).length} high confidence)</span>
                 </div>
-                <div className="flex gap-2">
-                  {!bulkSubmitting && !bulkResults && (
-                    <button
-                      onClick={() => submitBulk(bulkPreview)}
-                      disabled={bulkPreview.length === 0}
-                      className="px-5 py-2 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-lg text-xs font-semibold uppercase tracking-wider hover:from-slate-800 hover:to-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-sm"
-                    >
-                      <Upload size={12} /> Submit All to Database
-                    </button>
-                  )}
-                </div>
+                {!bulkSubmitting && !bulkResults && (
+                  <button onClick={() => submitBulk(bulkPreview)} disabled={bulkPreview.length === 0}
+                    className="px-5 py-2 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-lg text-xs font-semibold uppercase tracking-wider hover:from-slate-800 hover:to-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-sm"
+                  >
+                    <Upload size={12} /> Submit All to Database
+                  </button>
+                )}
               </div>
 
-              {/* Progress Bar */}
               {bulkSubmitting && (
                 <div className="px-5 py-4 bg-amber-50/50 border-b border-gray-200">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium text-gray-700">
-                      Processing {bulkProgress.current}/{bulkProgress.total}...
-                    </span>
-                    <span className="text-xs text-gray-500">
-                      {bulkProgress.errors > 0 && (
-                        <span className="text-amber-600 font-medium">{bulkProgress.errors} errors</span>
-                      )}
-                    </span>
+                    <span className="text-sm font-medium text-gray-700">Processing {bulkProgress.current}/{bulkProgress.total}...</span>
+                    {bulkProgress.errors > 0 && <span className="text-xs text-amber-600 font-medium">{bulkProgress.errors} errors</span>}
                   </div>
                   <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-full transition-all duration-300"
-                      style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
-                    />
+                    <div className="h-full bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-full transition-all duration-300" style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }} />
                   </div>
                 </div>
               )}
 
-              {/* Results Summary */}
               {bulkResults && (
                 <div className="px-5 py-4 bg-green-50 border-b border-green-200">
                   <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-1.5 text-sm font-semibold text-green-700">
-                      <CheckCircle size={15} className="text-green-500" />
-                      <span>{bulkResults.success} inserted</span>
-                    </div>
-                    {bulkResults.errors > 0 && (
-                      <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-700">
-                        <AlertTriangle size={15} className="text-amber-500" />
-                        <span>{bulkResults.errors} failed</span>
-                      </div>
-                    )}
-                    <button
-                      onClick={() => { setBulkResults(null); setBulkPreview([]); setBulkText(''); }}
-                      className="ml-auto px-4 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
-                    >
-                      Import More
-                    </button>
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-green-700"><CheckCircle size={15} className="text-green-500" /><span>{bulkResults.success} inserted</span></div>
+                    {bulkResults.errors > 0 && <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-700"><AlertTriangle size={15} className="text-amber-500" /><span>{bulkResults.errors} failed</span></div>}
+                    <button onClick={() => { setBulkResults(null); setBulkPreview([]); setBulkText(''); }} className="ml-auto px-4 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors">Import More</button>
                   </div>
                 </div>
               )}
 
-              {/* Table */}
               <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-gray-50 z-10">
                     <tr className="border-b border-gray-200">
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">#</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Brand</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Reference</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Dial</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Year</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Condition</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Price</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Currency</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Confidence</th>
-                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                      {['#','Brand','Reference','Dial','Year','Condition','Price','Currency','Confidence','Status'].map(h => (
+                        <th key={h} className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                      ))}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {bulkPreview.map((item, idx) => (
-                      <tr
-                        key={idx}
-                        className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} ${item.error ? 'bg-red-50/50' : ''} hover:bg-amber-50/30 transition-colors`}
-                      >
+                      <tr key={idx} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} ${item.error ? 'bg-red-50/50' : ''} hover:bg-amber-50/30 transition-colors`}>
                         <td className="px-4 py-2.5 text-[11px] text-gray-400 font-mono">{idx + 1}</td>
                         <td className="px-4 py-2.5 text-[11px] font-semibold text-[#D4AF37]">{item.brand || '—'}</td>
                         <td className="px-4 py-2.5 text-[11px] font-medium text-gray-700 font-mono">{item.reference || '—'}</td>
                         <td className="px-4 py-2.5 text-[11px] text-gray-600">{item.dial || '—'}</td>
                         <td className="px-4 py-2.5 text-[11px] text-gray-600">{item.year || '—'}</td>
                         <td className="px-4 py-2.5 text-[11px] text-gray-600">{item.condition || '—'}</td>
-                        <td className="px-4 py-2.5 text-[11px] font-medium text-gray-900">
-                          {item.price ? item.price.toLocaleString() : '—'}
-                        </td>
+                        <td className="px-4 py-2.5 text-[11px] font-medium text-gray-900">{item.price ? item.price.toLocaleString() : '—'}</td>
                         <td className="px-4 py-2.5 text-[11px] text-gray-500">{item.currency || '—'}</td>
                         <td className="px-4 py-2.5">
                           <div className="flex items-center gap-1.5">
                             <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full rounded-full ${
-                                  (item.confidence || 0) > 85 ? 'bg-green-500' : (item.confidence || 0) > 70 ? 'bg-amber-500' : 'bg-red-400'
-                                }`}
-                                style={{ width: `${Math.min(item.confidence || 0, 100)}%` }}
-                              />
+                              <div className={`h-full rounded-full ${(item.confidence || 0) > 85 ? 'bg-green-500' : (item.confidence || 0) > 70 ? 'bg-amber-500' : 'bg-red-400'}`} style={{ width: `${Math.min(item.confidence || 0, 100)}%` }} />
                             </div>
-                            <span className={`text-[10px] font-semibold ${
-                              (item.confidence || 0) > 85 ? 'text-green-600' : (item.confidence || 0) > 70 ? 'text-amber-600' : 'text-red-500'
-                            }`}>
-                              {item.confidence || 0}%
-                            </span>
+                            <span className={`text-[10px] font-semibold ${(item.confidence || 0) > 85 ? 'text-green-600' : (item.confidence || 0) > 70 ? 'text-amber-600' : 'text-red-500'}`}>{item.confidence || 0}%</span>
                           </div>
                         </td>
                         <td className="px-4 py-2.5">
                           {item.error ? (
                             <span className="text-[10px] font-medium text-red-500 bg-red-50 px-2 py-0.5 rounded-full">ERROR</span>
                           ) : (
-                            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
-                              (item.confidence || 0) > 85
-                                ? 'text-green-700 bg-green-50'
-                                : (item.confidence || 0) > 70
-                                  ? 'text-amber-700 bg-amber-50'
-                                  : 'text-gray-600 bg-gray-100'
-                            }`}>
+                            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${(item.confidence || 0) > 85 ? 'text-green-700 bg-green-50' : (item.confidence || 0) > 70 ? 'text-amber-700 bg-amber-50' : 'text-gray-600 bg-gray-100'}`}>
                               {(item.confidence || 0) > 85 ? 'APPROVED' : (item.confidence || 0) > 70 ? 'REVIEW' : 'HUMAN'}
                             </span>
                           )}
@@ -764,41 +746,31 @@ export default function TradingFloor() {
             </motion.div>
           )}
 
-          {/* Empty state for bulk mode */}
           {bulkPreview.length === 0 && !bulkSubmitting && !bulkResults && (
             <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
               <div className="text-5xl mb-4 opacity-30">📋</div>
               <p className="text-sm font-medium text-gray-500 mb-1">Paste dealer messages above and click &quot;Parse Preview&quot;</p>
-              <p className="text-xs text-gray-400">
-                Supports all major formats: Rolex, Patek Philippe, AP, Richard Mille, and more.
-              </p>
+              <p className="text-xs text-gray-400">Supports all major formats: Rolex, Patek Philippe, AP, Richard Mille, and more.</p>
             </div>
           )}
         </motion.div>
       )}
 
-      {/* Results — with client-side filtering for watches/other */}
+      {/* Results */}
       {!bulkMode && (
       <div className="max-w-7xl mx-auto px-4 py-6">
         {(() => {
-          // Apply client-side brand filtering
           if (listingType === 'watches') {
             const filtered = listings.filter(l => KNOWN_WATCH_BRANDS.some(b => l.brand?.toLowerCase().includes(b.toLowerCase())));
-            if (filtered.length !== listings.length && listings.length > 0) {
-              // Update silently
-              setTimeout(() => setListings(filtered), 0);
-            }
+            if (filtered.length !== listings.length && listings.length > 0) { setTimeout(() => setListings(filtered), 0); }
           }
           if (listingType === 'other') {
             const filtered = listings.filter(l => !KNOWN_WATCH_BRANDS.some(b => l.brand?.toLowerCase().includes(b.toLowerCase())));
-            if (filtered.length !== listings.length && listings.length > 0) {
-              setTimeout(() => setListings(filtered), 0);
-            }
+            if (filtered.length !== listings.length && listings.length > 0) { setTimeout(() => setListings(filtered), 0); }
           }
           return null;
         })()}
 
-        {/* Loading skeleton */}
         {loading && listings.length === 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -823,36 +795,26 @@ export default function TradingFloor() {
           </div>
         )}
 
-        {/* Grid */}
         {listings.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              {listings.map((listing, idx) => (
+              {listings.map((listing) => (
                 <WatchCard key={listing.id} listing={listing} />
               ))}
             </div>
 
-            {/* Pagination */}
-            <div className="flex items-center justify-center gap-4 mt-10">
-              <button 
-                onClick={() => setPage(Math.max(1, page - 1))} 
-                disabled={page === 1}
-                className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm disabled:opacity-30 disabled:cursor-not-allowed transition-all bg-white"
-              >
-                Previous
-              </button>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-gray-500">Page</span>
-                <span className="text-sm font-bold text-gray-900 px-3 py-1 bg-white border border-gray-200 rounded-md">{page}</span>
+            {loadingMore && (
+              <div className="flex items-center justify-center gap-2 mt-10 text-sm text-gray-500">
+                <Loader2 size={16} className="animate-spin text-[#3B5BFE]" />
+                <span>Loading more listings...</span>
               </div>
-              <button 
-                onClick={() => setPage(page + 1)} 
-                disabled={listings.length < pageSize}
-                className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm disabled:opacity-30 disabled:cursor-not-allowed transition-all bg-white"
-              >
-                Next
-              </button>
-            </div>
+            )}
+
+            {!hasMore && !loadingMore && listings.length > 0 && (
+              <div className="text-center mt-10 text-xs text-gray-400">
+                — {listings.length.toLocaleString()} listings loaded —
+              </div>
+            )}
           </>
         )}
       </div>
