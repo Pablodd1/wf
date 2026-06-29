@@ -1,9 +1,12 @@
 /**
- * WatchFacts — Semantic Watch Parser
- * ====================================
+ * WatchFacts — Semantic Watch Parser v3
+ * ======================================
  * Extracts structured watch data from free-text dealer messages
  * received via WhatsApp / Telegram. Handles luxury brands, multi-format
- * prices, conditions, references, and multi-watch listings.
+ * prices, conditions, references, emoji/flags, and multi-watch listings.
+ *
+ * v3: WhatsApp format support — emoji stripping, section header detection,
+ *     HKD/K/M price formats, N5-N1 condition grading, MM/YYYY year parsing.
  *
  * CommonJS — runs in Vercel serverless and local Node scripts.
  */
@@ -121,14 +124,21 @@ const REF_DIAL_MAP = {
 
 /** Condition keywords and their canonical forms. */
 const CONDITION_MAP = [
-  { keywords: ['new', 'bnib', 'brand new'],                              canon: 'New',    score: 1.0 },
+  { keywords: ['brand new'],                              canon: 'New',    score: 1.0 },
+  { keywords: ['new', 'bnib'],                            canon: 'New',    score: 1.0 },
+  { keywords: ['n5'],                                     canon: 'New',    score: 0.95 },
   { keywords: ['like new', 'mint', '99%', '99 new', '98%', '97%', '96%', '95%'], canon: 'Like New', score: 0.95 },
-  { keywords: ['nos', 'new old stock'],                                   canon: 'NOS',    score: 0.98 },
-  { keywords: ['unused', 'unworn'],                                      canon: 'Unused', score: 0.99 },
+  { keywords: ['n4'],                                     canon: 'Like New', score: 0.90 },
+  { keywords: ['nos', 'new old stock'],                   canon: 'NOS',    score: 0.98 },
+  { keywords: ['unused', 'unworn'],                       canon: 'Unused', score: 0.99 },
   { keywords: ['excellent', 'exc', 'great condition', 'very good', 'vgc'], canon: 'Excellent', score: 0.85 },
-  { keywords: ['good', 'good condition', 'gwc'],                         canon: 'Good',   score: 0.7 },
-  { keywords: ['fair', 'used', 'pre-owned', 'preowned', 'pre owned'],    canon: 'Used',   score: 0.5 },
-  { keywords: ['poor', 'bad', 'damaged', 'scratches'],                   canon: 'Poor',   score: 0.2 },
+  { keywords: ['n3'],                                     canon: 'Excellent', score: 0.85 },
+  { keywords: ['good', 'good condition', 'gwc'],          canon: 'Good',   score: 0.7 },
+  { keywords: ['n2'],                                     canon: 'Good',   score: 0.70 },
+  { keywords: ['fair', 'used', 'pre-owned', 'preowned', 'pre owned'], canon: 'Used', score: 0.5 },
+  { keywords: ['n1'],                                     canon: 'Fair',   score: 0.50 },
+  { keywords: ['poor', 'bad', 'damaged', 'scratches'],    canon: 'Poor',   score: 0.2 },
+  { keywords: ['full set', 'fullset', 'complete set', 'completeset'], canon: 'Full Set', score: 1.0 },
 ];
 
 /** Box & papers accessory keywords. */
@@ -150,11 +160,9 @@ const PRICE_MULTIPLIERS = { k: 1e3, m: 1e6, b: 1e9 };
 
 function _createHash(input) {
   try {
-    // Node >= 19 — require is still available in CJS
     const crypto = require('crypto');
     return crypto.createHash('md5').update(input, 'utf8').digest('hex');
   } catch (_e) {
-    // Fallback for edge environments without crypto
     let h = 0;
     for (let i = 0; i < input.length; i++) {
       h = ((h << 5) - h + input.charCodeAt(i)) | 0;
@@ -164,17 +172,55 @@ function _createHash(input) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// WHATSAPP FORMAT HELPERS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Strip emoji, flags, and decorative characters from WhatsApp messages.
+ */
+function stripWhatsAppDecorations(text) {
+  if (!text) return '';
+  return text
+    .replace(/[\u{1F1E6}-\u{1F1FF}]{2}/gu, ' ')  // Country flags 🇭🇰 🇺🇸
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, ' ')      // Emoji range 1
+    .replace(/[\u{2600}-\u{26FF}]/gu, ' ')         // Emoji range 2 (symbols)
+    .replace(/[\u{2700}-\u{27BF}]/gu, ' ')         // Emoji range 3 (dingbats)
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, '')          // Variation selectors
+    .replace(/\[\d{1,2}:\d{2}\s*(?:AM|PM)\s*,\s*\d{1,2}\/\d{1,2}\/\d{4}\]\s*\+?[\d\s:]+/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Detect if a line is a section header (not a listing).
+ */
+function isSectionHeader(text) {
+  if (!text) return false;
+  const t = text.trim();
+  // 🚩🚩ROLEX🚩🚩 or 🏆Patek Philippe New in HK or ⌚🇭🇰PP Ready in HK
+  if (/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]*\s*\w+.*[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]*$/gu.test(t)) {
+    // If it contains brand names but no reference or price → header
+    const hasRef = /\b\d{4,6}/.test(t);
+    const hasPrice = /\d+[KkMm]|\d{4,7}|hkd|usd|usdt/i.test(t);
+    if (!hasRef && !hasPrice) return true;
+  }
+  // Pure emoji lines or bare phone numbers
+  if (/^\+?\d[\d\s]*$/.test(t)) return true;
+  if (t.length < 10 && !/\d/.test(t)) return true;
+  // Separator lines
+  if (/^-{3,}|={3,}|\*{3,}$/.test(t)) return true;
+  return false;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // EXPORTED FUNCTIONS
 // ═══════════════════════════════════════════════════════════════
 
 /**
  * Split a message that may contain multiple watches separated by // or |.
- * @param {string} text
- * @returns {string[]}
  */
 function splitMultiWatch(text) {
   if (!text) return [''];
-  // Split on // or | or \\ — but be careful not to split URLs
   const parts = text
     .split(/(?:\s*\/\/\s*|\s*\|\s*|\s*\\\s*)/)
     .map(p => p.trim())
@@ -184,21 +230,16 @@ function splitMultiWatch(text) {
 
 /**
  * Detect the watch brand from a dealer message.
- * @param {string} text
- * @returns {string | null}
  */
 function parseBrand(text) {
   if (!text) return null;
   const lower = text.toLowerCase();
   for (const entry of BRAND_MAP) {
     for (const alias of entry.names) {
-      // Use word-boundary matching where possible
       const pattern = new RegExp('(?:^|[^a-z])' + alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[^a-z])', 'i');
       if (pattern.test(lower)) {
         return entry.canon;
       }
-      // Fallback: substring match ONLY for longer aliases (>= 4 chars)
-      // Short aliases like "ap", "vc" cause false positives (e.g. "papers")
       if (alias.length >= 4 && lower.includes(alias)) {
         return entry.canon;
       }
@@ -209,17 +250,13 @@ function parseBrand(text) {
 
 /**
  * Extract a watch reference number from the message.
- * @param {string} text
- * @param {string} [brandHint] — known brand to prioritise patterns
- * @returns {string | null}
  */
 function parseReference(text, brandHint) {
   if (!text) return null;
   const clean = text
-    .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')   // zero-width chars
+    .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
     .replace(/\n/g, ' ');
 
-  // Re-order patterns so brand-hint matches come first
   const ordered = [...REF_PATTERNS].sort((a, b) => {
     if (a.brandHint && a.brandHint === brandHint) return -1;
     if (b.brandHint && b.brandHint === brandHint) return 1;
@@ -230,15 +267,14 @@ function parseReference(text, brandHint) {
     const m = clean.match(pat.regex);
     if (m) {
       const ref = m[1].replace(/\s+/g, '').toUpperCase();
-      // Filter out obviously wrong matches (years, phone numbers)
+      // Filter out obviously wrong matches
       if (/^\d{4}$/.test(ref) && (ref.startsWith('19') || ref.startsWith('20'))) continue;
-      // Filter out price fragments: 080.000, 0.185, etc. (start with 0, contain dots)
+      // Filter out price fragments: 080.000, 0.185, etc.
       if (/^0[\d.]/.test(ref)) continue;
-      // Filter out pure numbers with exactly 3 digits after dot (European price format)
+      // Filter out pure numbers with exactly 3 digits after dot (European price)
       if (/^\d+\.\d{3}$/.test(ref)) continue;
       if (/^\d{5,6}$/.test(ref)) {
-        // Could be a price — if followed by currency hints, skip
-        const after = clean.slice(m.index + m[0].length, m.index + m[0].length + 10).toLowerCase();
+        const after = clean.slice(m.index + m[0].length, m.index + m[0].length + 4).toLowerCase();
         if (after.includes('usd') || after.includes('hkd') || after.includes('eur') || after.includes('k') || after.includes('m')) {
           continue;
         }
@@ -251,15 +287,11 @@ function parseReference(text, brandHint) {
 
 /**
  * Extract the dial colour from the message text.
- * @param {string} text
- * @param {string} [ref] — reference number for suffix lookup
- * @returns {string | null}
  */
 function parseDial(text, ref) {
   if (!text) return null;
   const lower = text.toLowerCase();
 
-  // 1. Keyword search
   for (const [colour, aliases] of Object.entries(DIAL_KEYWORDS)) {
     for (const alias of aliases) {
       const rx = new RegExp('(?:^|[^a-z])' + alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[^a-z])', 'i');
@@ -269,7 +301,6 @@ function parseDial(text, ref) {
     }
   }
 
-  // 2. Reference suffix extraction
   if (ref) {
     const dialCode = inferDialFromRef(ref);
     if (dialCode) return dialCode;
@@ -280,18 +311,14 @@ function parseDial(text, ref) {
 
 /**
  * Infer dial colour from the alphabetic suffix of a reference number.
- * @param {string} ref
- * @returns {string | null}
  */
 function inferDialFromRef(ref) {
   if (!ref) return null;
-  // Extract trailing letters: 5712/1A-001 → ['A']; 15210ST → ['ST']
   const suffixMatch = ref.match(/[A-Za-z]+(?=\d*$|[\-\/]?\d*$)/g);
   if (suffixMatch) {
     for (const sfx of suffixMatch) {
       const upper = sfx.toUpperCase();
       if (REF_DIAL_MAP[upper]) return REF_DIAL_MAP[upper];
-      // Try single-letter prefix
       if (upper.length >= 1 && REF_DIAL_MAP[upper[0]]) return REF_DIAL_MAP[upper[0]];
     }
   }
@@ -300,33 +327,24 @@ function inferDialFromRef(ref) {
 
 /**
  * Infer brand from a known reference number pattern.
- * @param {string} ref
- * @returns {string | null}
  */
 function inferBrandFromRef(ref) {
   if (!ref) return null;
   const r = ref.toUpperCase();
   if (r.startsWith('RM')) return 'Richard Mille';
   if (r.startsWith('5') || r.startsWith('4') || r.startsWith('6') || r.startsWith('3') || r.startsWith('7')) {
-    // Patek Philippe references typically start with 3, 4, 5, 6, 7
     if (/^\d{4,5}[\/\-]?/.test(r)) return 'Patek Philippe';
   }
   if (/^\d{6}/.test(r)) {
-    // 6-digit refs are usually Rolex
     const first2 = parseInt(r.slice(0, 2), 10);
     if (first2 >= 11 && first2 <= 27) return 'Rolex';
   }
   if (/^\d{5}[A-Z]{2}/.test(r)) return 'Audemars Piguet';
-  if (r.startsWith('43') || r.startsWith('60') || r.startsWith('85') || r.startsWith('31')) {
-    return 'Vacheron Constantin';
-  }
   return null;
 }
 
 /**
  * Extract condition from the message.
- * @param {string} text
- * @returns {{ condition: string | null, score: number }}
  */
 function parseCondition(text) {
   if (!text) return { condition: null, score: 0 };
@@ -339,28 +357,31 @@ function parseCondition(text) {
       }
     }
   }
-  // Default
   return { condition: null, score: 0 };
 }
 
 /**
  * Extract the manufacturing year from the message.
- * @param {string} text
- * @returns {number | null}
  */
 function parseYear(text) {
   if (!text) return null;
   const lower = text.toLowerCase();
 
-  // Explicit year mentions: "2021", "year 2022", "2024 full set"
+  // MM/YYYY format: "5/2026", "6/2026", "04/2025"
+  const slashYear = text.match(/\b(\d{1,2})\/(\d{4})\b/);
+  if (slashYear) {
+    const y = parseInt(slashYear[2], 10);
+    if (y >= 2020 && y <= 2030) return y;
+  }
+
+  // Explicit year mentions: "2021", "year 2022"
   const explicit = lower.match(/\b(19[5-9]\d|20[0-3]\d)\b/);
   if (explicit) {
     const y = parseInt(explicit[1], 10);
     if (y >= 1950 && y <= 2030) return y;
   }
 
-  // "N5/N6 2026" → condition grading, not year
-  // "Dec 2021" → capture just the year
+  // "N5/N6 2026" → condition grading
   const nearCondition = lower.match(/(?:new\s+\d{2}|n\d{1,2}[/\\]n?\d{0,2})\s*(20\d{2})/);
   if (nearCondition) return parseInt(nearCondition[1], 10);
 
@@ -369,34 +390,34 @@ function parseYear(text) {
 
 /**
  * Extract price from the message text.
- * Handles: 208.000Usdt, 2.2M HKD, 138K HKD, 268000HKD, 1.43M HKD, etc.
- * @param {string} text
- * @param {string} [ref] — reference to avoid extracting ref as price
- * @returns {number | null}
+ * Handles: 208.000Usdt, 2.2M HKD, 138K HKD, 1.85m, 1,58m, 99000, etc.
  */
 function parsePrice(text, ref) {
   if (!text) return null;
   const clean = text.replace(/[\u200B\u200C\u200D\uFEFF]/g, ' ');
 
-  // Remove the reference number so we don't capture it as price
   let searchText = clean;
   if (ref) {
     searchText = searchText.replace(new RegExp(ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
   }
 
-  // Patterns in order of specificity
+  // Skip year numbers that could be mistaken for prices
+  searchText = searchText.replace(/\b(20[0-3]\d)\b/g, ' ');
+
   const patterns = [
-    // 2.2M, 1.43M (with optional spaces)
-    { regex: /\b(\d{1,3}(?:[.,]\d{1,3})?)\s*[Mm]\b(?![a-zA-Z])/g, multiplier: 1e6 },
-    // 138K, 45k
-    { regex: /\b(\d{1,3}(?:[.,]\d{1,3})?)\s*[Kk]\b(?![a-zA-Z])/g, multiplier: 1e3 },
-    // 208.000 (European decimal — thousands separator)
-    { regex: /\b(\d{1,3}[.,]\d{3})\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)?\b/gi, multiplier: 1, european: true },
-    // 268000 (bare number, likely a price if followed by currency or context)
+    // 1.85m, 1.4M, 1.265m, 2,35m (comma/dot + m/M)
+    { regex: /\b(\d{1,3}(?:[.,]\d{1,3})?)\s*[mM]\b(?![a-zA-Z])/g, multiplier: 1e6 },
+    // 865K, 118K, 120k (uppercase or lowercase K)
+    { regex: /\b(\d{1,6}(?:[.,]\d{1,3})?)\s*[kK]\b(?![a-zA-Z])/g, multiplier: 1e3 },
+    // 1,68M (European comma thousands)
+    { regex: /\b(\d{1,3},\d{3})\s*[mM]\b/g, multiplier: 1e6 },
+    // 208.000 (European dot thousands)
+    { regex: /\b(\d{1,3}\.\d{3})\b/g, multiplier: 1, european: true },
+    // 268000 with currency
     { regex: /\b(\d{4,7})\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, multiplier: 1 },
-    // Bare number near price context words
-    { regex: /(?:price|asking|ask|sell|offer|offered|at)\s*[:]?(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1 },
-    // General fallback: any number with 4-7 digits
+    // Price context words
+    { regex: /(?:price|asking|ask|sell|offer|offered|at|for)\s*[:]?\s*(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1 },
+    // General fallback
     { regex: /\b(\d{4,7})\b/g, multiplier: 1 },
   ];
 
@@ -406,14 +427,12 @@ function parsePrice(text, ref) {
       let raw = m[1].replace(/,/g, '');
       let value;
       if (pat.european && /\d\.\d{3}$/.test(raw)) {
-        // European thousands separator: 208.000 → 208000
         value = parseInt(raw.replace(/\./g, ''), 10);
       } else {
         value = parseFloat(raw.replace(/,/g, ''));
       }
       if (!isNaN(value) && value > 0) {
         const final = Math.round(value * (pat.multiplier || 1));
-        // Sanity check: luxury watch prices are typically 1K–5M
         if (final >= 500 && final <= 10_000_000) {
           return final;
         }
@@ -425,8 +444,6 @@ function parsePrice(text, ref) {
 
 /**
  * Extract the currency code from the message.
- * @param {string} text
- * @returns {string | null}
  */
 function parseCurrency(text) {
   if (!text) return null;
@@ -437,21 +454,14 @@ function parseCurrency(text) {
     ['cad', 'CAD'], ['jpy', 'JPY'], ['cny', 'CNY'], ['rmb', 'RMB'],
   ];
   for (const [code, canonical] of currencies) {
-    // Use a looser boundary: currency code must be preceded by non-letter
-    // and followed by non-letter (or string end). This handles "208.000Usdt"
-    // where 't' is preceded by a digit.
     const rx = new RegExp('(?:^|[^a-z])' + code + '(?:[^a-z]|$)', 'i');
     if (rx.test(lower)) return canonical;
   }
-  // Default: if no currency found but price present, assume USD in watch trading
   return null;
 }
 
 /**
  * Convert an amount from any supported currency to USD.
- * @param {number} amount
- * @param {string} currency
- * @returns {number}
  */
 function toUSD(amount, currency) {
   if (!amount || amount <= 0) return 0;
@@ -461,24 +471,19 @@ function toUSD(amount, currency) {
 
 /**
  * Detect box & papers status from the message.
- * @param {string} text
- * @returns {{ hasBox: boolean, hasPapers: boolean, note: string | null }}
  */
 function parseAccessories(text) {
   if (!text) return { hasBox: false, hasPapers: false, note: null };
   const lower = text.toLowerCase();
 
-  // Full set → both box and papers
   if (ACCESSORY_PATTERNS.fullSet.test(lower)) {
     return { hasBox: true, hasPapers: true, note: 'Full Set' };
   }
 
-  // No box & no papers
   if (ACCESSORY_PATTERNS.noBoxPapers.test(lower)) {
     return { hasBox: false, hasPapers: false, note: 'No Box/Papers' };
   }
 
-  // Individual checks
   const hasBox = ACCESSORY_PATTERNS.box.test(lower);
   const hasPapers = ACCESSORY_PATTERNS.papers.test(lower);
   const noBox = ACCESSORY_PATTERNS.noBox.test(lower);
@@ -491,21 +496,17 @@ function parseAccessories(text) {
   if (finalBox && finalPapers) note = 'Box & Papers';
   else if (finalBox && !finalPapers) note = 'Box Only';
   else if (!finalBox && finalPapers) note = 'Papers Only';
-  else if (!finalBox && !finalPapers) note = null;
 
   return { hasBox: finalBox, hasPapers: finalPapers, note };
 }
 
 /**
  * Classify the listing type (WTS / WTB / WTT / GARBAGE).
- * @param {string} text
- * @returns {'WTS' | 'WTB' | 'WTT' | 'GARBAGE'}
  */
 function classifyListingType(text) {
   if (!text || text.trim().length === 0) return 'GARBAGE';
   const lower = text.toLowerCase();
 
-  // GARBAGE signals — non-watch content
   const garbageSignals = [
     /\b(scam|spam|fake|replica|rep\b|superclone|1:1 clone)/i,
     /\b(crypto airdrop|join my group|click here|free money)/i,
@@ -515,7 +516,6 @@ function classifyListingType(text) {
     if (rx.test(lower)) return 'GARBAGE';
   }
 
-  // WTB signals — want to buy
   const wtbSignals = [
     /\b(wtb|want to buy|looking for|seeking|buying|wanted|in search of|iso\b)\b/i,
     /\bwant\s+this\s+watch\b/i,
@@ -525,7 +525,6 @@ function classifyListingType(text) {
     if (rx.test(lower)) return 'WTB';
   }
 
-  // WTT signals — want to trade
   const wttSignals = [
     /\b(wtt|want to trade|trade for|trading|swap for|swap with|exchange for|px\s+welcome|part\s*exchange)\b/i,
   ];
@@ -533,7 +532,6 @@ function classifyListingType(text) {
     if (rx.test(lower)) return 'WTT';
   }
 
-  // WTS signals — want to sell (default assumption for dealer messages)
   const wtsSignals = [
     /\b(wts|want to sell|selling|for sale|fs\b|available|asking|price is|offer|offered)\b/i,
     /\$\d/i, /\d+\s*(?:usd|usdt|hkd|eur|gbp)/i,
@@ -543,7 +541,6 @@ function classifyListingType(text) {
     if (rx.test(lower)) return 'WTS';
   }
 
-  // If it has brand + reference but no clear intent → assume WTS (dealer default)
   if (parseBrand(text) && parseReference(text)) {
     return 'WTS';
   }
@@ -553,8 +550,6 @@ function classifyListingType(text) {
 
 /**
  * Compute a deterministic hash for a message (used for dedup).
- * @param {string} text
- * @returns {string}
  */
 function hashMessage(text) {
   if (!text) return '';
@@ -564,62 +559,52 @@ function hashMessage(text) {
 
 /**
  * Calculate field-level and overall confidence scores.
- * @param {object} fields
- * @returns {{ confidence: number, fieldConfidence: Record<string, number> }}
  */
 function calculateConfidence(fields) {
   const fc = {};
 
-  // Brand confidence
   if (fields.brand) {
-    fc.brand = 95; // brand detection is very reliable
+    fc.brand = 95;
   } else {
     fc.brand = 0;
   }
 
-  // Reference confidence
   if (fields.reference) {
     fc.reference = 90;
   } else {
     fc.reference = 0;
   }
 
-  // Price confidence
   if (fields.price && fields.price > 0) {
     fc.price = fields.currency ? 95 : 75;
   } else {
     fc.price = 0;
   }
 
-  // Condition confidence
   if (fields.condition) {
     fc.condition = 85;
   } else {
-    fc.condition = 30; // partial — we can still process
+    fc.condition = 30;
   }
 
-  // Dial colour confidence
   if (fields.dial) {
     fc.dial = 80;
   } else {
     fc.dial = 20;
   }
 
-  // Year confidence
   if (fields.year) {
     fc.year = 90;
   } else {
     fc.year = 10;
   }
 
-  // Currency confidence
   if (fields.currency) {
     fc.currency = 95;
   } else {
-    fc.currency = 50; // we default to USD
+    fc.currency = 50;
   }
 
-  // Weighted average
   const weights = { brand: 0.20, reference: 0.20, price: 0.20, condition: 0.10, dial: 0.10, year: 0.10, currency: 0.10 };
   let totalWeight = 0;
   let weightedSum = 0;
@@ -634,18 +619,14 @@ function calculateConfidence(fields) {
 
 /**
  * Apply a business verdict based on parse confidence and field presence.
- * @param {object} parsed — object with at least { confidence, brand, reference, price }
- * @returns {'APPROVED' | 'HUMAN' | 'RECYCLE' | 'REVIEW'}
  */
 function verdict(parsed) {
   const c = parsed.confidence || 0;
 
-  // Must have brand and reference at minimum
   if (!parsed.brand || !parsed.reference) {
     return 'RECYCLE';
   }
 
-  // Must have a price for WTS listings
   if (parsed.listingType === 'WTS' && (!parsed.price || parsed.price <= 0)) {
     return 'HUMAN';
   }
@@ -658,8 +639,7 @@ function verdict(parsed) {
 
 /**
  * Full parse: extract all watch fields from a raw dealer message.
- * @param {string} rawMsg
- * @returns {object} parsed watch fields
+ * v3: Strips WhatsApp decorations before parsing.
  */
 function parseFull(rawMsg) {
   if (!rawMsg || typeof rawMsg !== 'string') {
@@ -678,7 +658,8 @@ function parseFull(rawMsg) {
     };
   }
 
-  const text = rawMsg.trim();
+  // v3: Strip WhatsApp decorations (emoji, flags, timestamps)
+  const text = stripWhatsAppDecorations(rawMsg);
 
   // Detect brand first (helps reference extraction)
   const brand = parseBrand(text);
@@ -728,29 +709,6 @@ function parseFull(rawMsg) {
 // MODULE EXPORTS
 // ═══════════════════════════════════════════════════════════════
 
-// Quick validation
-if (require.main === module) {
-  const testCases = [
-    { input: '7118/1200r white new 04/2025 - 1.080.000 HKD', expectRef: '7118/1200R', expectBrand: 'Patek Philippe' },
-    { input: '5711/1A blue $185k', expectRef: '5711/1A', expectBrand: 'Patek Philippe' },
-    { input: 'Rolex 126334 datejust 41', expectRef: '126334', expectBrand: 'Rolex' },
-    { input: 'PP 7300/1200R white gold', expectRef: '7300/1200R', expectBrand: 'Patek Philippe' },
-  ];
-  let passed = 0;
-  for (const tc of testCases) {
-    const result = parseFull(tc.input);
-    const refOk = result.ref === tc.expectRef;
-    const brandOk = result.brand === tc.expectBrand;
-    if (refOk && brandOk) {
-      passed++;
-      console.log(`✅ ${tc.input.slice(0, 40)}... → ref=${result.ref}, brand=${result.brand}`);
-    } else {
-      console.log(`❌ ${tc.input.slice(0, 40)}... → ref=${result.ref} (want ${tc.expectRef}), brand=${result.brand} (want ${tc.expectBrand})`);
-    }
-  }
-  console.log(`\n${passed}/${testCases.length} tests passed`);
-}
-
 module.exports = {
   // Main entry
   parseFull,
@@ -766,12 +724,16 @@ module.exports = {
   classifyListingType,
   hashMessage,
 
+  // WhatsApp helpers
+  stripWhatsAppDecorations,
+  isSectionHeader,
+
   // Data tables
   RATES,
   APPROVE_THRESHOLD,
   HUMAN_THRESHOLD,
 
-  // Also export internal helpers for testing / advanced use
+  // Internal helpers for testing
   parseBrand,
   parseReference,
   parseDial,
