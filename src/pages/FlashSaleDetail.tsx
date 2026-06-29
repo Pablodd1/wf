@@ -127,7 +127,7 @@ export default function FlashSaleDetail() {
               {/* Post ID + Date */}
               <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
                 <span className="font-mono">#{listing.id.slice(-7)}</span>
-                <span>Posted on {postedDate} · Reposted 2x</span>
+                <span>Posted on {postedDate}</span>
               </div>
 
               {/* Box / Papers Badges */}
@@ -141,43 +141,52 @@ export default function FlashSaleDetail() {
               </div>
             </div>
 
-            {/* User Information Card */}
+            {/* Source Information Card */}
             <div className="bg-white border border-gray-200 rounded-xl p-6">
-              <h3 className="text-sm font-medium text-gray-500 mb-4">User Information:</h3>
-
-              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <User size={14} />
-                <span>Member since July, 2025</span>
-              </div>
+              <h3 className="text-sm font-medium text-gray-500 mb-4">Source Information:</h3>
 
               <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
                 <Globe size={14} />
                 <span>{region}</span>
               </div>
 
-              <div className="flex items-center gap-2 mb-4 text-sm text-blue-600">
-                <CheckCircle size={14} />
-                <span className="hover:underline cursor-pointer">(0) - Reviews →</span>
+              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
+                <User size={14} />
+                <span className="truncate">{listing.source || 'Unknown Source'}</span>
               </div>
 
-              {/* WTS / WTB counts */}
+              <div className="flex items-center gap-2 mb-4 text-sm text-blue-600">
+                <CheckCircle size={14} />
+                <span>Confidence: {listing.confidence}%</span>
+              </div>
+
+              {/* Listing Stats */}
               <div className="grid grid-cols-2 gap-3 mb-4">
                 <div className="border border-gray-200 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-semibold text-gray-900">2</div>
-                  <div className="text-xs text-blue-600 hover:underline cursor-pointer">WTS Listings →</div>
+                  <div className="text-2xl font-semibold text-gray-900">{listing.condition || '—'}</div>
+                  <div className="text-xs text-gray-500">Condition</div>
                 </div>
                 <div className="border border-gray-200 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-semibold text-gray-900">2</div>
-                  <div className="text-xs text-blue-600 hover:underline cursor-pointer">WTB Listing →</div>
+                  <div className="text-2xl font-semibold text-gray-900">{listing.dial_color || '—'}</div>
+                  <div className="text-xs text-gray-500">Dial Color</div>
                 </div>
+              </div>
+
+              {/* Verdict Badge */}
+              <div className="mb-4">
+                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
+                  listing.verdict === 'APPROVED' ? 'bg-green-100 text-green-700' :
+                  listing.verdict === 'REVIEW' ? 'bg-blue-100 text-blue-700' :
+                  listing.verdict === 'HUMAN' ? 'bg-yellow-100 text-yellow-700' :
+                  'bg-red-100 text-red-700'
+                }`}>
+                  Verdict: {listing.verdict}
+                </span>
               </div>
 
               {/* Actions */}
               <button className="w-full py-3 border-2 border-[#3B5BFE] text-[#3B5BFE] text-sm font-semibold rounded-full hover:bg-[#3B5BFE] hover:text-white transition-all flex items-center justify-center gap-2 mb-3">
                 <Info size={16} /> Check Availability
-              </button>
-              <button className="w-full py-3 bg-gray-600 hover:bg-gray-700 text-white text-sm font-semibold rounded-full transition-colors flex items-center justify-center gap-2">
-                <User size={16} /> See User Profile
               </button>
             </div>
 

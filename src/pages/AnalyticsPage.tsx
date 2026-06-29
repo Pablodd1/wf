@@ -272,7 +272,7 @@ export default function AnalyticsPage() {
             <BarChart3 size={22} className="text-amber-400" /> Analytics
           </h1>
           <p className="text-sm text-gray-400 mt-1">
-            {loading ? 'Loading...' : `${records.length.toLocaleString()} sample records analyzed from ${totalRecords.toLocaleString()} total`}
+            {loading ? 'Loading...' : `${records.length.toLocaleString()} records analyzed from ${totalRecords.toLocaleString()} total`}
           </p>
           {stats && (
             <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
