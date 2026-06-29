@@ -766,55 +766,6 @@ export default function PriceResearch() {
                 </div>
               </div>
             )}
-            </div>
-
-            {/* Data Table — Per Dial Color Monthly Breakdown */}
-            {filteredData.length > 0 && (
-              <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm">
-                <div className="px-5 py-3.5 border-b border-gray-200">
-                  <h3 className="text-sm font-semibold text-gray-900">Monthly Breakdown — Per Dial Color</h3>
-                </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead className="bg-gray-50">
-                      <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider">
-                        <th className="px-5 py-2.5 whitespace-nowrap">Month</th>
-                        <th className="px-4 py-2.5 whitespace-nowrap">Listings</th>
-                        <th className="px-4 py-2.5 text-right whitespace-nowrap">Overall Avg</th>
-                        {/* One column per dial color */}
-                        {result && validDialBreakdown.map(d => (
-                          <th key={d.color} className="px-4 py-2.5 text-right whitespace-nowrap">
-                            <span className="flex items-center justify-end gap-1">
-                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getDialChartColor(d.color) }} />
-                              {d.color}
-                            </span>
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredData.map((d: any, i) => (
-                        <tr key={d.monthKey} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} hover:bg-blue-50/30 transition-colors`}>
-                          <td className="px-5 py-2.5 font-medium text-gray-900 whitespace-nowrap">{d.month}</td>
-                          <td className="px-4 py-2.5 text-gray-500">{d.count}</td>
-                          <td className="px-4 py-2.5 text-right font-mono font-semibold text-gray-900">{fmtPrice(d.avgPrice)}</td>
-                          {/* Per-dial prices */}
-                          {result && validDialBreakdown.map(dial => (
-                            <td key={dial.color} className="px-4 py-2.5 text-right font-mono whitespace-nowrap">
-                              {d.dialPrices?.[dial.color] ? (
-                                <span style={{ color: getDialChartColor(dial.color) }}>{fmtPrice(d.dialPrices[dial.color])}</span>
-                              ) : (
-                                <span className="text-gray-300">—</span>
-                              )}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            )}
           </motion.div>
         )}
       </main>

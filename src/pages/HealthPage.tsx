@@ -37,16 +37,21 @@ interface AlertEvent {
 }
 
 // ─── Check functions ─────────────────────────────────────────────────
-async function checkSupabase(): Promise<{ status: 'online' | 'offline'; latency: number; message: string }> {
+async function checkSupabase(): Promise<{ status: 'online' | 'offline'; latency: number; message: string; count?: number }> {
   const start = performance.now();
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count&limit=1`, {
-      method: 'HEAD', headers: REQ,
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
+      method: 'GET', headers: REQ,
     });
     const latency = Math.round(performance.now() - start);
-    return { status: res.ok ? 'online' : 'offline', latency, message: `${latency}ms • ${res.ok ? 'Connected' : 'HTTP Error'}` };
-  } catch {
-    return { status: 'offline', latency: Math.round(performance.now() - start), message: 'Connection failed' };
+    if (!res.ok) {
+      return { status: 'offline', latency, message: `HTTP ${res.status} • ${res.statusText}` };
+    }
+    const data = await res.json();
+    const count = Array.isArray(data) ? data.length : 0;
+    return { status: 'online', latency, message: `${latency}ms • ${count >= 0 ? 'Connected' : 'No data'}`, count };
+  } catch (e: any) {
+    return { status: 'offline', latency: Math.round(performance.now() - start), message: `Connection failed: ${e?.message || 'Unknown'}` };
   }
 }
 
@@ -72,7 +77,7 @@ async function checkCatalog(): Promise<{ status: 'online' | 'offline'; latency: 
   const start = performance.now();
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=reference&limit=1`, {
-      method: 'HEAD', headers: REQ,
+      method: 'GET', headers: REQ,
     });
     const latency = Math.round(performance.now() - start);
     return { status: res.ok ? 'online' : 'offline', latency, message: `${latency}ms • ${res.ok ? 'Catalog sync OK' : 'Error'}` };

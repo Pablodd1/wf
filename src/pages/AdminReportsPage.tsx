@@ -155,20 +155,60 @@ export default function AdminReportsPage() {
     URL.revokeObjectURL(url);
   };
 
-  const exportCSV = () => {
-    const rows = records.slice(0, 1000).map(r => ({
-      brand: r.brand, reference: r.reference, price: r.price_usd,
-      condition: r.condition, dial: r.dial_color, verdict: r.verdict,
-      confidence: r.confidence, source: r.source, date: r.created_at,
+  // ─── Export ALL listings to Excel-compatible CSV ───────────────────
+  const [exportingAll, setExportingAll] = useState(false);
+  const exportCSV = async (allRecords: boolean = false) => {
+    let dataToExport = records;
+    if (allRecords) {
+      setExportingAll(true);
+      try {
+        // Fetch up to 50,000 records for export
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/watch_records?select=*&limit=50000`,
+          { headers: REQ }
+        );
+        dataToExport = await res.json();
+      } catch {
+        setExportingAll(false);
+        return;
+      }
+      setExportingAll(false);
+    }
+    const rows = dataToExport.map(r => ({
+      id: r.id,
+      brand: r.brand || '',
+      model: r.model || '',
+      reference: r.reference || '',
+      dial_color: r.dial_color || '',
+      condition: r.condition || '',
+      price_usd: r.price_usd || 0,
+      currency: r.currency || '',
+      year: r.year || '',
+      confidence: r.confidence || 0,
+      verdict: r.verdict || '',
+      source: r.source || '',
+      created_at: r.created_at || '',
+      received_at: r.received_at || '',
+      raw_message: (r.raw_message || '').replace(/[\n\r]/g, ' '),
     }));
     if (!rows.length) return;
     const headers = Object.keys(rows[0]);
-    const csv = [headers.join(','), ...rows.map(r => headers.map(h => `"${String((r as any)[h] ?? '').replace(/"/g, '\\"')}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const csvRows = rows.map(r => headers.map(h => {
+      const val = String((r as any)[h] ?? '');
+      // Escape quotes and wrap in quotes if contains comma, quote, or newline
+      if (val.includes(',') || val.includes('"') || val.includes('\n')) {
+        return `"${val.replace(/"/g, '""')}"`;
+      }
+      return val;
+    }).join(','));
+    // UTF-8 BOM for Excel compatibility
+    const BOM = '\uFEFF';
+    const csv = BOM + [headers.join(','), ...csvRows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `watchfacts-export-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `watchfacts-all-listings-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -205,8 +245,13 @@ export default function AdminReportsPage() {
           <button onClick={exportJSON} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm">
             <FileJson size={16} /> JSON
           </button>
-          <button onClick={exportCSV} className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-lg font-medium transition-colors flex items-center gap-2 text-sm">
-            <FileSpreadsheet size={16} /> CSV
+          <button onClick={() => exportCSV(false)} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm">
+            <FileSpreadsheet size={16} /> CSV (Current)
+          </button>
+          <button onClick={() => exportCSV(true)} disabled={exportingAll}
+            className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-lg font-medium transition-colors flex items-center gap-2 text-sm disabled:opacity-50">
+            {exportingAll ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+            {exportingAll ? 'Exporting...' : 'Excel Export ALL'}
           </button>
         </div>
       </div>

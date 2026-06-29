@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle, XCircle, AlertTriangle, RefreshCw,
-  ChevronLeft, ChevronRight, Edit3, Save, X, Eye, Sparkles
+  ChevronLeft, ChevronRight, Edit3, Save, X, Eye, Sparkles,
+  Copy, Calendar, Search, Tag
 } from 'lucide-react';
 import { AISuggestionPanel } from '@/components/AISuggestionPanel';
 import { resolveWatchImage } from '@/lib/imageResolver';
@@ -23,44 +24,82 @@ const VERDICT_CONFIG: Record<Verdict, { label: string; color: string; bg: string
   RECYCLE:  { label: 'RECYCLE',  color: '#EF4444', bg: 'bg-red-400/10' },
 };
 
-const TABS: { key: Verdict | 'ALL'; label: string }[] = [
+const TABS: { key: Verdict | 'ALL' | 'WTB'; label: string }[] = [
   { key: 'ALL', label: 'All' },
   { key: 'HUMAN', label: 'HUMAN Review' },
+  { key: 'WTB', label: 'WTB / NTQ' },
   { key: 'RECYCLE', label: 'RECYCLE' },
   { key: 'REVIEW', label: 'REVIEW' },
   { key: 'APPROVED', label: 'APPROVED' },
 ];
 
+// ─── Year detection from raw message ─────────────────────────────────
+function detectYear(raw: string | null): number | null {
+  if (!raw) return null;
+  const patterns = [
+    /(\d{4})\s*y/i,        // "2019 y" or "2019y"
+    /\b(19\d{2}|20\d{2})\b/, // standalone 4-digit year
+    /year\s*:?\s*(\d{4})/i,  // "year: 2019"
+    /y\s*:?\s*(\d{4})/i,     // "y: 2019"
+    /\((\d{4})\)/,            // "(2019)"
+    /'(\d{2})\b/,             // "'19"
+  ];
+  for (const p of patterns) {
+    const m = raw.match(p);
+    if (m) {
+      let year = parseInt(m[1]);
+      if (year < 100) year += 2000; // '19 → 2019
+      if (year >= 1900 && year <= 2030) return year;
+    }
+  }
+  return null;
+}
+
+// ─── WTB detection ───────────────────────────────────────────────────
+function detectWTB(raw: string | null): boolean {
+  if (!raw) return false;
+  const wtbTerms = ['wtb', 'want to buy', 'looking for', 'iso ', 'in search of', 'ntq', 'need to buy', 'buying'];
+  const lower = raw.toLowerCase();
+  return wtbTerms.some(t => lower.includes(t));
+}
+
+// ─── Detect bundle (multiple watches in one message) ─────────────────
+function detectBundle(raw: string | null): { isBundle: boolean; count: number } {
+  if (!raw) return { isBundle: false, count: 1 };
+  const refMatches = raw.match(/\b\d{5,6}\b/g);
+  const uniqueRefs = new Set(refMatches);
+  return { isBundle: uniqueRefs.size > 1, count: uniqueRefs.size };
+}
+
 export default function ReviewPage() {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<Verdict | 'ALL'>('HUMAN');
+  const [activeTab, setActiveTab] = useState<Verdict | 'ALL' | 'WTB'>('HUMAN');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<any>({});
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [actionLog, setActionLog] = useState<string[]>([]);
+  const [showCopied, setShowCopied] = useState<string | null>(null);
 
   // ─── Fetch from Supabase directly ──────────────────────────────────
   const fetchRecords = useCallback(async () => {
     setLoading(true);
     try {
       const offset = (page - 1) * 20;
-      const verdictFilter = activeTab === 'ALL' ? '' : `&verdict=eq.${activeTab}`;
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/watch_records?select=*&limit=20&offset=${offset}${verdictFilter}`,
-        { headers: REQ_HEADERS }
-      );
+      let url = `${SUPABASE_URL}/rest/v1/watch_records?select=*&limit=20&offset=${offset}`;
+
+      if (activeTab === 'WTB') {
+        const wtbTerms = ['wtb','want to buy','looking for','iso ','in search of','ntq'];
+        url += `&or=(${wtbTerms.map(t => `raw_message.ilike.*${encodeURIComponent(t)}*`).join(',')})`;
+      } else if (activeTab !== 'ALL') {
+        url += `&verdict=eq.${activeTab}`;
+      }
+
+      const res = await fetch(url, { headers: REQ_HEADERS });
       const data = await res.json();
       setRecords(data || []);
-
-      // Get count
-      const countRes = await fetch(
-        `${SUPABASE_URL}/rest/v1/watch_records?select=count${verdictFilter}`,
-        { method: 'HEAD', headers: { ...REQ_HEADERS, 'Prefer': 'count=exact' } }
-      );
-      const countRange = countRes.headers.get('content-range') || '';
-      setTotal(parseInt(countRange.split('/')[1] || '0') || (data?.length || 0));
+      setTotal(data?.length || 0);
     } catch {
       setRecords([]);
       setTotal(0);
@@ -70,9 +109,17 @@ export default function ReviewPage() {
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
+  // ─── Auto-detect year when opening edit ────────────────────────────
   const startEdit = (record: any) => {
+    const detectedYear = detectYear(record.raw_message);
     setEditingId(record.id);
-    setEditForm({ ...record });
+    setEditForm({
+      ...record,
+      year: record.year || detectedYear || '',
+    });
+    if (detectedYear && !record.year) {
+      setActionLog(prev => [`Auto-detected year ${detectedYear} from message — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
+    }
   };
 
   const cancelEdit = () => {
@@ -80,41 +127,41 @@ export default function ReviewPage() {
     setEditForm({});
   };
 
+  // ─── Save edit ─────────────────────────────────────────────────────
   const saveEdit = async () => {
+    if (!editingId) return;
     try {
-      // Direct Supabase update
-      const updateBody: any = {};
-      if (editForm.brand !== undefined) updateBody.brand = editForm.brand;
-      if (editForm.reference !== undefined) updateBody.reference = editForm.reference;
-      if (editForm.dial_color !== undefined) updateBody.dial_color = editForm.dialColor;
-      if (editForm.condition !== undefined) updateBody.condition = editForm.condition;
-      if (editForm.year !== undefined) updateBody.year = editForm.year;
-      if (editForm.price_usd !== undefined) updateBody.price_usd = editForm.price_usd;
-      if (editForm.confidence !== undefined) updateBody.confidence = editForm.confidence;
-      if (editForm.verdict !== undefined) updateBody.verdict = editForm.verdict;
-      updateBody.human_edited = true;
-      updateBody.edit_source = 'review_page';
+      const updateData: any = {
+        brand: editForm.brand || null,
+        reference: editForm.reference || null,
+        dial_color: editForm.dial_color || editForm.dialColor || null,
+        condition: editForm.condition || null,
+        year: editForm.year || null,
+        price_usd: editForm.price_usd || null,
+        confidence: editForm.confidence || 0,
+        verdict: editForm.verdict || 'HUMAN',
+        human_edited: true,
+        edit_source: 'review_inline_edit',
+      };
 
-      const res = await fetch(
+      await fetch(
         `${SUPABASE_URL}/rest/v1/watch_records?id=eq.${editingId}`,
         {
           method: 'PATCH',
           headers: REQ_HEADERS,
-          body: JSON.stringify(updateBody),
+          body: JSON.stringify(updateData),
         }
       );
-      if (res.ok) {
-        setActionLog(prev => [`Updated ${editForm.brand} ${editForm.reference} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
-        setEditingId(null);
-        fetchRecords();
-      }
+      setRecords(prev => prev.map(r => r.id === editingId ? { ...r, ...updateData } : r));
+      setActionLog(prev => [`Saved changes to ${editForm.reference || 'record'} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
     } catch {
-      setRecords(prev => prev.map(r => r.id === editingId ? { ...r, ...editForm } : r));
-      setActionLog(prev => [`Updated ${editForm.brand} ${editForm.reference} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
-      setEditingId(null);
+      setActionLog(prev => [`Save failed — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
     }
+    setEditingId(null);
+    setEditForm({});
   };
 
+  // ─── Change verdict ────────────────────────────────────────────────
   const changeVerdict = async (id: string, newVerdict: Verdict) => {
     try {
       await fetch(
@@ -128,6 +175,35 @@ export default function ReviewPage() {
     } catch {}
     setRecords(prev => prev.map(r => r.id === id ? { ...r, verdict: newVerdict } : r));
     setActionLog(prev => [`Changed verdict to ${newVerdict} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
+  };
+
+  // ─── Copy/Split listing ────────────────────────────────────────────
+  const copyListing = async (record: any) => {
+    try {
+      const newRecord = {
+        ...record,
+        id: undefined, // Let Supabase generate new ID
+        raw_message: record.raw_message + ' [copy]',
+        human_edited: true,
+        edit_source: 'review_copy_split',
+        created_at: new Date().toISOString(),
+      };
+      delete newRecord.id;
+
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records`, {
+        method: 'POST',
+        headers: REQ_HEADERS,
+        body: JSON.stringify(newRecord),
+      });
+      if (res.ok) {
+        setActionLog(prev => [`Created copy of ${record.reference} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
+        setShowCopied(record.id);
+        setTimeout(() => setShowCopied(null), 2000);
+        fetchRecords();
+      }
+    } catch {
+      setActionLog(prev => [`Copy failed — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
+    }
   };
 
   const confidenceColor = (c: number) => {
@@ -184,6 +260,9 @@ export default function ReviewPage() {
               {records.map((record) => {
                 const isEditing = editingId === record.id;
                 const cfg = VERDICT_CONFIG[record.verdict as Verdict] || VERDICT_CONFIG.HUMAN;
+                const isWTB = detectWTB(record.raw_message);
+                const detectedYear = detectYear(record.raw_message);
+                const bundle = detectBundle(record.raw_message);
 
                 return (
                   <motion.div
@@ -204,7 +283,7 @@ export default function ReviewPage() {
 
                       {/* Info */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs font-bold text-white">{record.brand}</span>
                           <span className="text-xs font-mono text-[#D4AF37]">{record.reference}</span>
                           <span
@@ -213,6 +292,21 @@ export default function ReviewPage() {
                           >
                             {cfg.label}
                           </span>
+                          {isWTB && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-purple-400/10 text-purple-400">
+                              WTB
+                            </span>
+                          )}
+                          {bundle.isBundle && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-orange-400/10 text-orange-400" title={`${bundle.count} watches detected`}>
+                              BUNDLE ({bundle.count})
+                            </span>
+                          )}
+                          {detectedYear && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-400/10 text-blue-400 flex items-center gap-1">
+                              <Calendar size={9} /> {detectedYear}
+                            </span>
+                          )}
                         </div>
                         <div className="text-[10px] text-gray-500 mt-0.5 truncate">
                           {record.raw_message}
@@ -244,6 +338,18 @@ export default function ReviewPage() {
 
                       {/* Actions */}
                       <div className="flex-shrink-0 flex gap-1">
+                        <button
+                          onClick={() => copyListing(record)}
+                          className="p-1.5 rounded hover:bg-blue-400/10 text-gray-400 hover:text-blue-400 transition-colors relative"
+                          title="Copy/Split listing"
+                        >
+                          <Copy size={14} />
+                          {showCopied === record.id && (
+                            <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] bg-green-500 text-white px-1.5 py-0.5 rounded whitespace-nowrap">
+                              Copied!
+                            </span>
+                          )}
+                        </button>
                         <button
                           onClick={() => isEditing ? cancelEdit() : startEdit(record)}
                           className="p-1.5 rounded hover:bg-[#1E1E2E] text-gray-400 hover:text-white transition-colors"
@@ -284,6 +390,28 @@ export default function ReviewPage() {
                           record={record}
                           onApply={(field, value) => setEditForm((prev: any) => ({ ...prev, [field]: value }))}
                         />
+
+                        {/* Auto-detected fields banner */}
+                        {(detectedYear || isWTB || bundle.isBundle) && (
+                          <div className="mb-3 mt-3 flex gap-2 flex-wrap">
+                            {detectedYear && (
+                              <span className="text-[10px] px-2 py-1 bg-blue-400/10 text-blue-400 rounded flex items-center gap-1">
+                                <Calendar size={10} /> Year detected: {detectedYear}
+                              </span>
+                            )}
+                            {isWTB && (
+                              <span className="text-[10px] px-2 py-1 bg-purple-400/10 text-purple-400 rounded flex items-center gap-1">
+                                <Tag size={10} /> WTB detected
+                              </span>
+                            )}
+                            {bundle.isBundle && (
+                              <span className="text-[10px] px-2 py-1 bg-orange-400/10 text-orange-400 rounded flex items-center gap-1">
+                                <Copy size={10} /> Bundle: {bundle.count} watches
+                              </span>
+                            )}
+                          </div>
+                        )}
+
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 mt-3">
                           <div>
                             <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Brand</label>
@@ -304,8 +432,8 @@ export default function ReviewPage() {
                           <div>
                             <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Dial Color</label>
                             <input
-                              value={editForm.dialColor || ''}
-                              onChange={e => setEditForm({ ...editForm, dialColor: e.target.value })}
+                              value={editForm.dial_color || editForm.dialColor || ''}
+                              onChange={e => setEditForm({ ...editForm, dial_color: e.target.value })}
                               className="w-full bg-[#1A1A24] border border-[#1E1E2E] rounded px-2 py-1 text-xs text-white focus:border-[#D4AF37] outline-none"
                             />
                           </div>
@@ -318,13 +446,26 @@ export default function ReviewPage() {
                             >
                               <option value="">Select</option>
                               <option value="New">New</option>
+                              <option value="N1">N1</option>
+                              <option value="N2">N2</option>
+                              <option value="N3">N3</option>
+                              <option value="N4">N4</option>
+                              <option value="N5">N5</option>
+                              <option value="N6">N6</option>
+                              <option value="N7">N7</option>
+                              <option value="N8">N8</option>
+                              <option value="N9">N9</option>
                               <option value="Used">Used</option>
-                              <option value="Like New">Like New</option>
                               <option value="Pre-owned">Pre-owned</option>
                             </select>
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Year</label>
+                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">
+                              Year {detectedYear && !editForm.year && (
+                                <button onClick={() => setEditForm({ ...editForm, year: detectedYear })}
+                                  className="text-blue-400 hover:text-blue-300 ml-1">[Auto: {detectedYear}]</button>
+                              )}
+                            </label>
                             <input
                               type="number"
                               value={editForm.year || ''}
@@ -362,6 +503,7 @@ export default function ReviewPage() {
                               <option value="REVIEW">REVIEW</option>
                               <option value="HUMAN">HUMAN</option>
                               <option value="RECYCLE">RECYCLE</option>
+                              <option value="WTB">WTB</option>
                             </select>
                           </div>
                         </div>
@@ -369,12 +511,22 @@ export default function ReviewPage() {
                           <div className="text-[10px] text-gray-500 font-mono truncate max-w-md">
                             RAW: {editForm.raw_message}
                           </div>
-                          <button
-                            onClick={saveEdit}
-                            className="px-4 py-1.5 bg-[#D4AF37] hover:bg-[#E5C158] text-black text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5"
-                          >
-                            <Save size={12} /> Save Changes
-                          </button>
+                          <div className="flex gap-2">
+                            {bundle.isBundle && (
+                              <button
+                                onClick={() => copyListing(record)}
+                                className="px-3 py-1.5 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 text-xs font-medium rounded flex items-center gap-1.5"
+                              >
+                                <Copy size={12} /> Split Copy
+                              </button>
+                            )}
+                            <button
+                              onClick={saveEdit}
+                              className="px-4 py-1.5 bg-[#D4AF37] hover:bg-[#E5C158] text-black text-xs font-semibold rounded-md transition-colors flex items-center gap-1.5"
+                            >
+                              <Save size={12} /> Save Changes
+                            </button>
+                          </div>
                         </div>
                       </motion.div>
                     )}
