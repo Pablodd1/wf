@@ -31,6 +31,9 @@ import ReviewPage from '@/pages/ReviewPage';
 import CleanPage from '@/pages/CleanPage';
 import DemandSignals from '@/pages/DemandSignals';
 import DemoPage from '@/pages/DemoPage';
+import HealthPage from '@/pages/HealthPage';
+import DataBrowser from '@/pages/DataBrowser';
+import AdminReportsPage from '@/pages/AdminReportsPage';
 
 function AdminRoutes() {
   return (
@@ -38,8 +41,11 @@ function AdminRoutes() {
       <Routes>
         <Route path="/" element={<AdminPage />} />
         <Route path="/search" element={<SearchPage />} />
+        <Route path="/data" element={<DataBrowser />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/review" element={<ReviewPage />} />
+        <Route path="/reports" element={<AdminReportsPage />} />
+        <Route path="/health" element={<HealthPage />} />
         <Route path="/clean" element={<CleanPage />} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/demo" element={<DemoPage />} />
@@ -84,8 +90,10 @@ export default function App() {
 
         {/* Redirects */}
         <Route path="/search" element={<Navigate to="/admin/search" replace />} />
+        <Route path="/data" element={<Navigate to="/admin/data" replace />} />
         <Route path="/review" element={<Navigate to="/admin/review" replace />} />
         <Route path="/analytics" element={<Navigate to="/admin/analytics" replace />} />
+        <Route path="/health" element={<Navigate to="/admin/health" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
       <CookieConsent />

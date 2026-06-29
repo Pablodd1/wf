@@ -3,16 +3,20 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search, BarChart3, ClipboardCheck,
-  Sparkles, Zap, Shield, CheckCircle
+  Sparkles, Zap, Shield, CheckCircle,
+  Activity, FileSpreadsheet, Database,
 } from 'lucide-react';
 
-// Admin tabs — exactly 6 as requested: Search, Demo, Review, Analytics, Admin, Clean
-// All public, no login required. Price Research is standalone at /price-research
+// Admin tabs — 9 tabs: Search, Data, Demo, Review, Analytics, Reports, Health, Admin, Clean
+// All public for now. Auth protection will be added in Phase 2.
 const NAV_ITEMS = [
   { label: 'Search', path: '/search', icon: Search },
+  { label: 'Data', path: '/data', icon: Database },
   { label: 'Demo', path: '/demo', icon: Zap },
   { label: 'Review', path: '/review', icon: ClipboardCheck },
   { label: 'Analytics', path: '/analytics', icon: BarChart3 },
+  { label: 'Reports', path: '/reports', icon: FileSpreadsheet },
+  { label: 'Health', path: '/health', icon: Activity },
   { label: 'Admin', path: '/admin', icon: Shield },
   { label: 'Clean', path: '/clean', icon: Sparkles },
 ] as const;
