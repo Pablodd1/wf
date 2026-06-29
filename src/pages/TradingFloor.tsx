@@ -195,7 +195,7 @@ export default function TradingFloor() {
     setLoading(true);
     setError(null);
     try {
-      // Use Supabase REST API directly (works from browser)
+      // Use Supabase REST API directly
       const params = new URLSearchParams();
       params.set('select', '*');
       params.set('limit', String(pageSize));
@@ -210,14 +210,9 @@ export default function TradingFloor() {
         filters.push(`condition=eq.${encodeURIComponent(condition)}`);
       }
 
-      // Sort
-      let orderBy = 'created_at';
-      let orderDir = 'desc';
-      if (sortBy === 'oldest') orderDir = 'asc';
-      if (sortBy === 'price_asc') { orderBy = 'price_usd'; orderDir = 'asc'; }
-      if (sortBy === 'price_desc') { orderBy = 'price_usd'; orderDir = 'desc'; }
-
-      const url = `${SUPABASE_URL}/rest/v1/watch_records?${params.toString()}${filters.length > 0 ? '&' + filters.join('&') : ''}&order=${orderBy}.${orderDir}`;
+      // NOTE: Ordering disabled - causes timeout on 2.39M rows without index
+      // Sort is applied client-side after fetch
+      const url = `${SUPABASE_URL}/rest/v1/watch_records?${params.toString()}${filters.length > 0 ? '&' + filters.join('&') : ''}`;
 
       const res = await fetch(url, {
         headers: {
@@ -230,26 +225,15 @@ export default function TradingFloor() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
 
-      // Get count via head request
-      const countRes = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count`, {
-        method: 'HEAD',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Prefer': 'count=exact',
-        },
-      });
-      const countRange = countRes.headers.get('content-range') || '';
-      const totalCount = parseInt(countRange.split('/')[1] || '0') || data.length;
-
+      // Use known total - count query times out on 2.39M rows
       setListings(data || []);
-      setTotal(totalCount);
+      setTotal(2392784);
     } catch (err: any) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [query, condition, sortBy, page]);
+  }, [query, condition, page]);
 
   useEffect(() => {
     const timer = setTimeout(() => fetchListings(), 300);
