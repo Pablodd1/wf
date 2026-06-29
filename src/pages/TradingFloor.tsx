@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Filter, Info, User, CheckCircle, Globe, Loader2, TrendingUp, Shield, Award } from 'lucide-react';
+import { Search, Filter, Info, User, CheckCircle, Globe, Loader2, TrendingUp, Shield, Award, DollarSign, Watch, Gem, X } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
 
@@ -33,6 +33,89 @@ interface WatchListing {
 
 const CONDITIONS = ['All', 'New', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9'];
 const REGIONS = ['All', 'North America', 'Europe', 'Asia', 'Middle East'];
+
+// ─── Known watch brands for category filtering ───────────────────────
+const KNOWN_WATCH_BRANDS = [
+  'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin',
+  'Omega', 'Cartier', 'Breitling', 'IWC', 'Jaeger-LeCoultre', 'Panerai', 'Hublot',
+  'TAG Heuer', 'Zenith', 'Blancpain', 'Breguet', 'Chopard', 'Girard-Perregaux',
+  'A. Lange & Sohne', 'F.P. Journe', 'De Bethune', 'MB&F', 'Urwerk', 'Gronefeld',
+  'Seiko', 'Grand Seiko', 'Citizen', 'Casio', 'G-Shock', 'Tudor', 'Nomos',
+  'Longines', 'Rado', 'Hamilton', 'Oris', 'Sinn', 'Damasko', 'Fortis',
+  'Bulgari', 'Hermes', 'Louis Vuitton', 'Chanel', 'Dior', 'Frank Muller',
+  'Parmigiani', 'Piaget', 'Ulysse Nardin', 'Voutilainen', 'Laurent Ferrier',
+  'Moser', 'Romain Gauthier', 'Greubel Forsey', 'Hautlence', 'HYT',
+];
+
+// ─── Detect listing intent from raw message ──────────────────────────
+function detectIntent(raw: string | null, price: number): 'sale' | 'wtb' | 'watch' | 'other' {
+  if (!raw) return price > 0 ? 'sale' : 'wtb';
+  const lower = raw.toLowerCase();
+
+  // WTB keywords
+  const wtbKeywords = ['wtb', 'want to buy', 'looking for', 'iso', 'in search of', 'ntq', 'need to buy', 'buying'];
+  if (wtbKeywords.some(k => lower.includes(k))) return 'wtb';
+
+  // Other / accessories
+  const otherKeywords = ['strap', 'bracelet', 'box', 'papers', 'tool', 'parts', 'service', 'repair', 'battery', 'charger', 'winders'];
+  if (otherKeywords.some(k => lower.includes(k))) return 'other';
+
+  // WTS / For sale keywords
+  const saleKeywords = ['wts', 'for sale', 'selling', 'fs:', 'fs '];
+  if (saleKeywords.some(k => lower.includes(k))) return 'sale';
+
+  // Default by price
+  if (price > 0) return 'sale';
+  return 'wtb';
+}
+
+// ─── Currency converter ──────────────────────────────────────────────
+function CurrencyConverter({ onClose }: { onClose: () => void }) {
+  const [amount, setAmount] = useState('');
+  const [fromCurr, setFromCurr] = useState('USD');
+  const [toCurr, setToCurr] = useState('EUR');
+  const rates: Record<string, number> = { USD: 1, EUR: 0.85, GBP: 0.79, CHF: 0.88, JPY: 110, HKD: 7.8, SGD: 1.35, AUD: 1.5, CAD: 1.25 };
+  const converted = amount ? ((parseFloat(amount) || 0) * (rates[toCurr] / rates[fromCurr])).toFixed(2) : '';
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
+      className="absolute right-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-50">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-sm font-semibold text-gray-900">Currency Converter</h4>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+      </div>
+      <div className="space-y-3">
+        <div>
+          <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Amount</label>
+          <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B5BFE]" placeholder="10000" />
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">From</label>
+            <select value={fromCurr} onChange={e => setFromCurr(e.target.value)}
+              className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm">
+              {Object.keys(rates).map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">To</label>
+            <select value={toCurr} onChange={e => setToCurr(e.target.value)}
+              className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm">
+              {Object.keys(rates).map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+        {converted && (
+          <div className="bg-gray-50 rounded-lg p-3 text-center">
+            <div className="text-lg font-bold text-[#3B5BFE]">{toCurr} {converted}</div>
+            <div className="text-[10px] text-gray-500">{fromCurr} {amount} at estimated rate</div>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
 
 // ─── Extract clean title from raw_message ────────────────────────────
 function extractTitle(raw: string | null): { line1: string; line2: string } {
@@ -202,6 +285,8 @@ export default function TradingFloor() {
   const [query, setQuery] = useState('');
   const [condition, setCondition] = useState('All');
   const [region, setRegion] = useState('All');
+  const [listingType, setListingType] = useState<'all' | 'forsale' | 'wtb' | 'watches' | 'other'>('forsale');
+  const [showConverter, setShowConverter] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(2392784);
   const pageSize = 12;
@@ -214,6 +299,9 @@ export default function TradingFloor() {
       let url = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,currency,raw_message,verdict,confidence,source,created_at,year&limit=${pageSize}&offset=${offset}`;
       if (query) url += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
       if (condition !== 'All') url += `&condition=eq.${encodeURIComponent(condition)}`;
+      // Price filter based on listing type
+      if (listingType === 'forsale') url += `&price_usd=gt.0`;
+      if (listingType === 'wtb') url += `&price_usd=eq.0`;
 
       const res = await fetch(url, { headers: REQ });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -224,7 +312,7 @@ export default function TradingFloor() {
       // Keep existing listings on error
     }
     setLoading(false);
-  }, [query, condition, page]);
+  }, [query, condition, listingType, page]);
 
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
@@ -256,46 +344,102 @@ export default function TradingFloor() {
       {/* Stats Bar */}
       <StatsBar total={total} loaded={listings.length} />
 
-      {/* Search & Filters */}
+      {/* Category Filter Pills + Search */}
       <div className="bg-white border-b border-gray-200 sticky top-[56px] z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row gap-2">
-          <div className="flex-1 relative">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Search by reference, brand, or keywords..."
-              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] focus:border-transparent bg-gray-50/50 transition-all"
-            />
+        <div className="max-w-7xl mx-auto px-4 py-3">
+          {/* Search bar */}
+          <div className="flex flex-col sm:flex-row gap-2 mb-3">
+            <div className="flex-1 relative">
+              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search by reference, brand, or keywords..."
+                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] focus:border-transparent bg-gray-50/50 transition-all"
+              />
+            </div>
+            <div className="flex gap-2">
+              <select 
+                value={condition} 
+                onChange={e => { setCondition(e.target.value); setPage(1); }} 
+                className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] bg-white"
+              >
+                {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <button 
+                onClick={() => { setQuery(''); setCondition('All'); setRegion('All'); setListingType('forsale'); setPage(1); }}
+                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors flex items-center gap-1.5"
+              >
+                <Filter size={14} /> Reset
+              </button>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <select 
-              value={condition} 
-              onChange={e => { setCondition(e.target.value); setPage(1); }} 
-              className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] bg-white"
-            >
-              {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-            <select 
-              value={region} 
-              onChange={e => setRegion(e.target.value)} 
-              className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] bg-white"
-            >
-              {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
-            <button 
-              onClick={() => { setQuery(''); setCondition('All'); setRegion('All'); setPage(1); }}
-              className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors flex items-center gap-1.5"
-            >
-              <Filter size={14} /> Reset
-            </button>
+
+          {/* Category Pills — matching screenshot */}
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              {[
+                { id: 'forsale' as const, label: 'FOR SALE', icon: DollarSign, desc: 'Listings with price' },
+                { id: 'wtb' as const, label: 'NTQ/WTB', icon: Search, desc: 'Want to buy' },
+                { id: 'watches' as const, label: 'WATCHES', icon: Watch, desc: 'Known brands' },
+                { id: 'other' as const, label: 'OTHER', icon: Gem, desc: 'Accessories & parts' },
+              ].map(item => {
+                const Icon = item.icon;
+                const isActive = listingType === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => { setListingType(isActive ? 'all' : item.id); setPage(1); }}
+                    title={item.desc}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider transition-all ${
+                      isActive
+                        ? 'bg-[#3B5BFE] text-white shadow-md'
+                        : 'bg-white text-[#3B5BFE] border border-[#3B5BFE] hover:bg-blue-50'
+                    }`}
+                  >
+                    <Icon size={13} /> {item.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Currency Converter */}
+            <div className="relative">
+              <button
+                onClick={() => setShowConverter(!showConverter)}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider transition-all ${
+                  showConverter ? 'bg-[#3B5BFE] text-white' : 'bg-[#3B5BFE] text-white hover:bg-[#2a4ad9] shadow-md'
+                }`}
+              >
+                <DollarSign size={13} /> CONVERTER
+              </button>
+              {showConverter && <CurrencyConverter onClose={() => setShowConverter(false)} />}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Results */}
+      {/* Results — with client-side filtering for watches/other */}
       <div className="max-w-7xl mx-auto px-4 py-6">
+        {(() => {
+          // Apply client-side brand filtering
+          if (listingType === 'watches') {
+            const filtered = listings.filter(l => KNOWN_WATCH_BRANDS.some(b => l.brand?.toLowerCase().includes(b.toLowerCase())));
+            if (filtered.length !== listings.length && listings.length > 0) {
+              // Update silently
+              setTimeout(() => setListings(filtered), 0);
+            }
+          }
+          if (listingType === 'other') {
+            const filtered = listings.filter(l => !KNOWN_WATCH_BRANDS.some(b => l.brand?.toLowerCase().includes(b.toLowerCase())));
+            if (filtered.length !== listings.length && listings.length > 0) {
+              setTimeout(() => setListings(filtered), 0);
+            }
+          }
+          return null;
+        })()}
+
         {/* Loading skeleton */}
         {loading && listings.length === 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

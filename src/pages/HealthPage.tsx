@@ -193,7 +193,7 @@ export default function HealthPage() {
           id: `${r.id}-${Date.now()}`,
           service: r.id,
           message: `${r.id} is offline: ${r.result.message}`,
-          severity: 'critical',
+          severity: 'critical' as const,
           timestamp: now,
           resolved: false,
         }, ...prev].slice(0, 50));
