@@ -55,20 +55,53 @@ function detectYear(raw: string | null): number | null {
   return null;
 }
 
-// ─── WTB detection ───────────────────────────────────────────────────
+// ─── Enhanced WTB detection (Phase 5) ────────────────────────────────
 function detectWTB(raw: string | null): boolean {
-  if (!raw) return false;
-  const wtbTerms = ['wtb', 'want to buy', 'looking for', 'iso ', 'in search of', 'ntq', 'need to buy', 'buying'];
+  if (!raw || raw.length < 3) return false;
   const lower = raw.toLowerCase();
-  return wtbTerms.some(t => lower.includes(t));
+
+  // 25+ WTB indicator terms
+  const wtbTerms = [
+    'wtb', 'want to buy', 'wanting to buy',
+    'looking for', 'lookin for', 'lookin 4',
+    'iso ', 'in search of',
+    'ntq', 'need to buy', 'need to find',
+    'buying', 'searching for', 'search for',
+    'lf ', 'l.f.', 'l f ',
+    'wanted', 'wtbuy',
+    'help me find', 'trying to find',
+    'anyone selling', 'anyone has',
+    'where can i buy', 'where to buy',
+  ];
+  // Selling indicators (negative signal)
+  const sellTerms = [
+    'wts', 'want to sell', 'selling', 'for sale',
+    'fs:', 'f/s', 'price is', 'asking', 'obo',
+    'trade', 'trading', 'up for grabs',
+  ];
+
+  const hasWTB = wtbTerms.some(t => lower.includes(t));
+  const hasSell = sellTerms.some(t => lower.includes(t));
+
+  // Has WTB terms and no selling terms → WTB
+  if (hasWTB && !hasSell) return true;
+
+  // Secondary: no price + has reference + brand-like word = likely WTB
+  if (!hasSell && !/\$\d/.test(raw) && !/\b\d{3,}[^\d]*(?:usd|eur|gbp|chf)/i.test(raw)) {
+    if (/\b\d{5,6}\b/.test(raw) && /\b(rolex|patek|ap|audemars|omega|cartier)/i.test(raw)) {
+      return true;
+    }
+  }
+  return false;
 }
 
-// ─── Detect bundle (multiple watches in one message) ─────────────────
-function detectBundle(raw: string | null): { isBundle: boolean; count: number } {
-  if (!raw) return { isBundle: false, count: 1 };
+// ─── Enhanced bundle detection (Phase 5) ─────────────────────────────
+function detectBundle(raw: string | null): { isBundle: boolean; count: number; refs: string[] } {
+  if (!raw) return { isBundle: false, count: 0, refs: [] };
   const refMatches = raw.match(/\b\d{5,6}\b/g);
-  const uniqueRefs = new Set(refMatches);
-  return { isBundle: uniqueRefs.size > 1, count: uniqueRefs.size };
+  if (!refMatches) return { isBundle: false, count: 0, refs: [] };
+  const uniqueRefs = [...new Set(refMatches)];
+  return { isBundle: uniqueRefs.length > 1, count: uniqueRefs.length, refs: uniqueRefs };
 }
 
 export default function ReviewPage() {
