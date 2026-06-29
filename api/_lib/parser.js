@@ -85,7 +85,7 @@ const BRAND_MAP = [
 /** Reference patterns per brand family. */
 const REF_PATTERNS = [
   // Patek Philippe — e.g. 5712/1A-001, 5236P, 6300A, 7118, 7300
-  { regex: /\b([34567]\d{3}[\/\-]?[0-9A-Z]{1,4}[\-–]?\d{0,3}[A-Z]{0,2})\b/i, brandHint: 'Patek Philippe' },
+  { regex: /\b([34567]\d{3}[A-Z]?[\/\-]?[0-9A-Z]{1,4}[\-–]?[0-9A-Z]{0,5})\b/i, brandHint: 'Patek Philippe' },
   // Rolex — e.g. 126529, 116500LN, 228238, 124060
   { regex: /\b(\d{5,6}\s?[A-Z]{0,3})\b/i, brandHint: 'Rolex' },
   // AP Royal Oak / Offshore — e.g. 15210ST, 26420SO, 26240OR
@@ -208,8 +208,10 @@ function stripWhatsAppDecorations(text) {
 function isSectionHeader(text) {
   if (!text) return false;
   const t = text.trim();
+  // Lines starting with clock emoji are always headers
+  if (/^[\u231A\u231B]/u.test(t)) return true;
   // 🚩🚩ROLEX🚩🚩 or 🏆Patek Philippe New in HK or ⌚🇭🇰PP Ready in HK
-  if (/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]*\s*\w+.*[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]*$/gu.test(t)) {
+  if (/^[\u231A\u231B\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]*\s*\w+.*[\u231A\u231B\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]*$/gu.test(t)) {
     // If it contains brand names but no reference or price → header
     const hasRef = /\b\d{4,6}/.test(t);
     const hasPrice = /\d+[KkMm]|\d{4,7}|hkd|usd|usdt/i.test(t);
@@ -277,7 +279,8 @@ function parseReference(text, brandHint) {
   for (const pat of ordered) {
     const m = clean.match(pat.regex);
     if (m) {
-      const ref = m[1].replace(/\s+/g, '').toUpperCase();
+      let ref = m[1].replace(/\s+/g, '').toUpperCase()
+        .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD)/, '$1');
       // Filter out obviously wrong matches
       if (/^\d{4}$/.test(ref) && (ref.startsWith('19') || ref.startsWith('20'))) continue;
       // Filter out price fragments: 080.000, 0.185, etc.
@@ -285,8 +288,8 @@ function parseReference(text, brandHint) {
       // Filter out pure numbers with exactly 3 digits after dot (European price)
       if (/^\d+\.\d{3}$/.test(ref)) continue;
       if (/^\d{5,6}$/.test(ref)) {
-        const after = clean.slice(m.index + m[0].length, m.index + m[0].length + 4).toLowerCase();
-        if (after.includes('usd') || after.includes('hkd') || after.includes('eur') || after.includes('k') || after.includes('m')) {
+        const after = clean.slice(m.index + m[0].length, m.index + m[0].length + 6).toLowerCase();
+        if (/\b(usd|hkd|eur|k|m)\b/.test(after)) {
           continue;
         }
       }
@@ -416,18 +419,26 @@ function parsePrice(text, ref) {
   searchText = searchText.replace(/\b(20[0-3]\d)\b/g, ' ');
 
   const patterns = [
-    // 1.85m, 1.4M, 1.265m, 2,35m (comma/dot + m/M)
-    { regex: /\b(\d{1,3}(?:[.,]\d{1,3})?)\s*[mM]\b(?![a-zA-Z])/g, multiplier: 1e6 },
+    // European comma-decimal: 1,58m → 1.58 → 1,580,000
+    { regex: /\b(\d{1,3},\d{2})\s*[mM]\b/g, handler: (m) => parseFloat(m[1].replace(',', '.')) * 1e6 },
+    // 1.85m, 1.4M, 1.265m, 2.35m (dot + m/M)
+    { regex: /\b(\d{1,3}(?:\.\d{1,3})?)\s*[mM]\b(?![a-zA-Z])/g, multiplier: 1e6 },
     // 865K, 118K, 120k (uppercase or lowercase K)
     { regex: /\b(\d{1,6}(?:[.,]\d{1,3})?)\s*[kK]\b(?![a-zA-Z])/g, multiplier: 1e3 },
     // 1,68M (European comma thousands)
     { regex: /\b(\d{1,3},\d{3})\s*[mM]\b/g, multiplier: 1e6 },
-    // 208.000 (European dot thousands)
-    { regex: /\b(\d{1,3}\.\d{3})\b/g, multiplier: 1, european: true },
+    // 1.080.000 (European dot-thousands chain)
+    { regex: /\b(\d{1,3}(?:\.\d{3})+)\b/g, multiplier: 1, european: true },
+    // Currency stuck to number: HKD930K, HKD583K, USD185000
+    { regex: /(?:HKD|USD|USDT|EUR|GBP)\s*(\d{1,6}(?:[.,]\d{1,3})?)\s*([KkMm])?\b/g, handler: (m) => {
+      const num = parseFloat(m[1].replace(/,/g, ''));
+      const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] || 1;
+      return num * mult;
+    }},
     // 268000 with currency
     { regex: /\b(\d{4,7})\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, multiplier: 1 },
     // Price context words
-    { regex: /(?:price|asking|ask|sell|offer|offered|at|for)\s*[:]?\s*(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1 },
+    { regex: /(?:price|asking|ask|sell|offer|offered|at|for)\s*[:]?(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1 },
     // General fallback
     { regex: /\b(\d{4,7})\b/g, multiplier: 1 },
   ];
@@ -435,6 +446,17 @@ function parsePrice(text, ref) {
   for (const pat of patterns) {
     const matches = [...searchText.matchAll(pat.regex)];
     for (const m of matches) {
+      // Custom handler for complex patterns (e.g., European comma-decimal, currency-attached)
+      if (pat.handler) {
+        const value = pat.handler(m);
+        if (!isNaN(value) && value > 0) {
+          const final = Math.round(value);
+          if (final >= 500 && final <= 10_000_000) {
+            return final;
+          }
+        }
+        continue;
+      }
       let raw = m[1].replace(/,/g, '');
       let value;
       if (pat.european && /\d\.\d{3}$/.test(raw)) {
