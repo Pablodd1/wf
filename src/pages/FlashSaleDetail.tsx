@@ -9,7 +9,7 @@ import { ArrowLeft, Mail, MessageCircle, MapPin, Calendar, Tag, Shield, Star } f
 import { DealerNavbar } from '@/components/DealerNavbar';
 
 const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE1NjI2MzEsImV4cCI6MjA5NzEzODYzMX0.ymAvXzEXu1Tz8gEec9RBmM3VtYQ9NdzQ0BCPvtb9jKQ';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
 
 interface WatchDetail {
   id: string;
@@ -43,8 +43,8 @@ export default function FlashSaleDetail() {
         // Direct Supabase query
         const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${encodeURIComponent(id)}&select=*`, {
           headers: {
-            'apikey': SUPABASE_ANON_KEY,
-            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
             'Content-Type': 'application/json',
           },
         });
