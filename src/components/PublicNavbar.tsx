@@ -45,7 +45,7 @@ export function PublicNavbar() {
           Hire Fi
         </a>
         <Link
-          to="/admin"
+          to="/trading"
           className="ml-2 px-5 py-2 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-[11px] font-semibold rounded-full transition-colors uppercase tracking-[0.05em]"
         >
           Dealer Login

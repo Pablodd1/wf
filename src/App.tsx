@@ -14,6 +14,8 @@ import Home from '@/pages/Home';
 import ReportsPage from '@/pages/ReportsPage';
 import LoginPage from '@/pages/LoginPage';
 import SignUpPage from '@/pages/SignUpPage';
+import TradingFloor from '@/pages/TradingFloor';
+import FlashSaleDetail from '@/pages/FlashSaleDetail';
 import AdminPage from '@/pages/AdminPage';
 import SearchPage from '@/pages/SearchPage';
 import AnalyticsPage from '@/pages/AnalyticsPage';
@@ -55,6 +57,10 @@ export default function App() {
         {/* Auth routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
+
+        {/* Trading Floor — public dealer marketplace */}
+        <Route path="/trading" element={<TradingFloor />} />
+        <Route path="/flash-sales/:id" element={<FlashSaleDetail />} />
 
         {/* Admin dashboard — all routes under /admin/* (protected) */}
         <Route path="/admin/*" element={
