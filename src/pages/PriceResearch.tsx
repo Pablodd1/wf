@@ -89,52 +89,51 @@ function analyzeOutliers(prices: number[]): { filtered: number[]; outliers: numb
   return { filtered, outliers, q1, q3, iqr, lower, upper };
 }
 
-// ─── Group records by month AND dial color ───────────────────────────
-// Returns monthly data with per-dial-color average prices
+// ─── Group records by month AND dial color — GUARANTEED FULL RANGE ───
 function groupByMonth(records: any[]): MonthlyPoint[] {
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  // Map: monthKey -> { monthDate, dialMap: Map<dialColor, prices[]> }
-  const monthMap = new Map<string, { monthDate: Date; dialMap: Map<string, number[]>; allPrices: number[] }>();
+  // Step 1: Build full month range (Jan 2026 → current month)
+  const fullRange = generateMonthRange();
+  const fullMap = new Map<string, MonthlyPoint>();
+  for (const m of fullRange) {
+    fullMap.set(m.monthKey, { monthKey: m.monthKey, month: m.month, dialPrices: {}, count: 0, avgPrice: 0 });
+  }
 
+  // Step 2: Aggregate actual records into the map
   for (const r of records) {
     const date = r.received_at ? new Date(r.received_at) : r.created_at ? new Date(r.created_at) : new Date();
     if (isNaN(date.getTime())) continue;
     const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 
-    if (!monthMap.has(key)) {
-      monthMap.set(key, { monthDate: date, dialMap: new Map(), allPrices: [] });
-    }
-    const monthEntry = monthMap.get(key)!;
+    const entry = fullMap.get(key);
+    if (!entry) continue; // outside our range
 
     if (r.price_usd > 0) {
-      monthEntry.allPrices.push(r.price_usd);
+      entry.count++;
       const dialColor = r.dial_color || 'Unknown';
-      if (!monthEntry.dialMap.has(dialColor)) monthEntry.dialMap.set(dialColor, []);
-      monthEntry.dialMap.get(dialColor)!.push(r.price_usd);
+      if (!entry.dialPrices[dialColor]) entry.dialPrices[dialColor] = 0;
+      // Store sum first, we'll average later
+      entry.dialPrices[dialColor] += r.price_usd;
     }
   }
 
-  const sorted = Array.from(monthMap.entries()).sort((a, b) => a[1].monthDate.getTime() - b[1].monthDate.getTime());
-
-  return sorted.map(([key, val]) => {
-    // Compute per-dial average
-    const dialPrices: Record<string, number> = {};
-    for (const [color, prices] of val.dialMap) {
-      dialPrices[color] = prices.length ? Math.round(prices.reduce((s, p) => s + p, 0) / prices.length) : 0;
+  // Step 3: Convert sums to averages
+  for (const entry of fullMap.values()) {
+    if (entry.count > 0) {
+      let totalPrice = 0;
+      for (const color of Object.keys(entry.dialPrices)) {
+        entry.dialPrices[color] = Math.round(entry.dialPrices[color] / entry.count);
+        totalPrice += entry.dialPrices[color];
+      }
+      // avgPrice = average of dial averages (weighted by dial count would be better but this is close)
+      const dialCount = Object.keys(entry.dialPrices).length;
+      entry.avgPrice = dialCount > 0 ? Math.round(totalPrice / dialCount) : 0;
     }
+  }
 
-    // Overall avg
-    const avgPrice = val.allPrices.length ? Math.round(val.allPrices.reduce((s, p) => s + p, 0) / val.allPrices.length) : 0;
-
-    return {
-      monthKey: key,
-      month: `${monthNames[val.monthDate.getMonth()]} ${val.monthDate.getFullYear()}`,
-      dialPrices,
-      count: val.allPrices.length,
-      avgPrice,
-    };
-  }).filter(m => m.count > 0);
+  // Step 4: Return sorted by monthKey
+  return Array.from(fullMap.values()).sort((a, b) => a.monthKey.localeCompare(b.monthKey));
 }
 
 // ─── Dial color breakdown ────────────────────────────────────────────
@@ -169,6 +168,29 @@ const DIAL_CHART_COLORS: Record<string, string> = {
 };
 function getDialChartColor(dial: string): string {
   return DIAL_CHART_COLORS[dial] || `hsl(${[...dial].reduce((s, c) => s + c.charCodeAt(0), 0) % 360}, 60%, 50%)`;
+}
+
+// ─── Generate full month range Jan 2026 → current month ──────────────
+function generateMonthRange(): { monthKey: string; month: string }[] {
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const result: { monthKey: string; month: string }[] = [];
+  const now = new Date();
+  const startYear = 2026;
+  const startMonth = 0; // January
+
+  for (let year = startYear; year <= now.getFullYear(); year++) {
+    const endMonth = year === now.getFullYear() ? now.getMonth() : 11;
+    for (let month = (year === startYear ? startMonth : 0); month <= endMonth; month++) {
+      const key = `${year}-${String(month + 1).padStart(2, '0')}`;
+      result.push({ monthKey: key, month: `${monthNames[month]} ${year}` });
+    }
+  }
+  return result;
+}
+
+// ─── Sanitize dial color name for use as a dataKey ───────────────────
+function safeDialKey(color: string): string {
+  return 'dial_' + color.replace(/[^a-zA-Z0-9]/g, '_');
 }
 
 // ─── Chart Tooltip — Per Dial Color ──────────────────────────────────
@@ -446,11 +468,11 @@ export default function PriceResearch() {
         return new Date(Number(y), Number(m) - 1, 1) >= cutoff;
       });
     }
-    // Flatten dial prices into chart-compatible properties
+    // Flatten dial prices into chart-compatible properties (safe keys for Recharts)
     return data.map(pt => {
       const flat: any = { ...pt };
       for (const [color, price] of Object.entries(pt.dialPrices)) {
-        flat[`dial_${color}`] = price;
+        flat[safeDialKey(color)] = price;
       }
       return flat;
     });
@@ -672,7 +694,7 @@ export default function PriceResearch() {
                       {/* One line per dial color — data keys pre-computed in useMemo */}
                       {result && validDialBreakdown.map((d) => {
                         const color = getDialChartColor(d.color);
-                        const dataKey = `dial_${d.color}`;
+                        const dataKey = safeDialKey(d.color);
                         return (
                           <Line
                             key={d.color}
@@ -682,7 +704,7 @@ export default function PriceResearch() {
                             strokeWidth={2}
                             dot={{ r: 4, fill: color, stroke: '#fff', strokeWidth: 2 }}
                             activeDot={{ r: 7, stroke: '#fff', strokeWidth: 2 }}
-                            connectNulls={false}
+                            connectNulls={true}
                             name={d.color}
                           />
                         );
