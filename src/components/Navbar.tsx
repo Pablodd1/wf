@@ -6,9 +6,10 @@ import {
   Sparkles, Zap, Shield,
   Activity, FileSpreadsheet, Database,
   Download, ShieldCheck, Target,
+  Settings,
 } from 'lucide-react';
 
-// Admin tabs — 12 tabs: Search, Data, Demo, Review, Analytics, Reports, Health, Export, Quality, Verify, Admin, Clean
+// Admin tabs — 13 tabs: Search, Data, Demo, Review, Analytics, Reports, Health, Export, Quality, Verify, Admin, Clean, Settings
 // All public for now. Auth protection will be added in Phase 2.
 const NAV_ITEMS = [
   { label: 'Search', path: '/search', icon: Search },
@@ -23,6 +24,7 @@ const NAV_ITEMS = [
   { label: 'Verify', path: '/verification', icon: Target },
   { label: 'Admin', path: '/admin', icon: Shield },
   { label: 'Clean', path: '/clean', icon: Sparkles },
+  { label: 'Settings', path: '/settings', icon: Settings },
 ] as const;
 
 export function Navbar() {
