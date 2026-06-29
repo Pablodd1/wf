@@ -37,8 +37,8 @@ interface HealthStatus {
 // ─── Fetch exact count by verdict ────────────────────────────────────
 async function fetchVerdictCount(verdict: string): Promise<number> {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?verdict=eq.${verdict}&select=count`, {
-      method: 'HEAD', headers: REQ_HEAD,
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?verdict=eq.${verdict}&select=id&limit=1`, {
+      method: 'GET', headers: REQ_HEAD,
     });
     const range = res.headers.get('content-range') || '';
     return parseInt(range.split('/')[1] || '0');
@@ -47,8 +47,8 @@ async function fetchVerdictCount(verdict: string): Promise<number> {
 
 async function fetchTotalCount(): Promise<number> {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count`, {
-      method: 'HEAD', headers: REQ_HEAD,
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
+      method: 'GET', headers: REQ_HEAD,
     });
     const range = res.headers.get('content-range') || '';
     return parseInt(range.split('/')[1] || '0');
@@ -78,8 +78,8 @@ async function fetchActivityLog(): Promise<ActivityEntry[]> {
 async function testSupabaseHealth(): Promise<{ status: 'online' | 'offline'; latency: number; message: string }> {
   const start = Date.now();
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count&limit=1`, {
-      method: 'HEAD', headers: REQ,
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
+      method: 'GET', headers: REQ,
     });
     const latency = Date.now() - start;
     return { status: res.ok ? 'online' : 'offline', latency, message: `${latency}ms` };

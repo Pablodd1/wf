@@ -77,13 +77,13 @@ export default function DataBrowser() {
       setRecords(data || []);
 
       // Get total count with filters
-      let countUrl = `${SUPABASE_URL}/rest/v1/watch_records?select=count`;
+      let countUrl = `${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`;
       if (query) countUrl += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
       if (brandFilter !== 'All') countUrl += `&brand=eq.${encodeURIComponent(brandFilter)}`;
       if (verdictFilter !== 'All') countUrl += `&verdict=eq.${encodeURIComponent(verdictFilter)}`;
       if (confMin > 0) countUrl += `&confidence=gte.${confMin}`;
 
-      const countRes = await fetch(countUrl, { method: 'HEAD', headers: REQ_HEAD });
+      const countRes = await fetch(countUrl, { method: 'GET', headers: REQ_HEAD });
       const range = countRes.headers.get('content-range') || '';
       setTotal(parseInt(range.split('/')[1] || '0'));
     } catch (err) {

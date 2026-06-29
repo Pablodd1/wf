@@ -153,8 +153,8 @@ export default function DemandSignals() {
       setRecords(data || []);
 
       // Get total count
-      const countRes = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count`, {
-        method: 'HEAD', headers: { ...REQ, 'Prefer': 'count=exact' },
+      const countRes = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
+        method: 'GET', headers: { ...REQ, 'Prefer': 'count=exact' },
       });
       const range = countRes.headers.get('content-range') || '';
       setTotalCount(parseInt(range.split('/')[1] || '0'));

@@ -3,12 +3,12 @@ import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   Search, BarChart3, ClipboardCheck,
-  Sparkles, Zap, Shield, CheckCircle,
+  Sparkles, Zap, Shield,
   Activity, FileSpreadsheet, Database,
   Download, ShieldCheck, Target,
 } from 'lucide-react';
 
-// Admin tabs — 9 tabs: Search, Data, Demo, Review, Analytics, Reports, Health, Admin, Clean
+// Admin tabs — 12 tabs: Search, Data, Demo, Review, Analytics, Reports, Health, Export, Quality, Verify, Admin, Clean
 // All public for now. Auth protection will be added in Phase 2.
 const NAV_ITEMS = [
   { label: 'Search', path: '/search', icon: Search },
@@ -45,8 +45,8 @@ export function Navbar() {
   useEffect(() => {
     const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-    fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count`, {
-      method: 'HEAD',
+    fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
+      method: 'GET',
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'count=exact' },
     })
       .then(r => {
@@ -76,10 +76,11 @@ export function Navbar() {
       >
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2 group">
-          <span className="text-lg font-bold tracking-[0.12em] text-white">
-            WATCHFACTS
-          </span>
-          <CheckCircle size={14} className="text-[#D4AF37] group-hover:scale-110 transition-transform" />
+          <img
+            src="/watchfacts-logo.png"
+            alt="WatchFacts"
+            className="h-8 w-auto object-contain group-hover:opacity-90 transition-opacity"
+          />
         </Link>
 
         {/* Center Stats */}

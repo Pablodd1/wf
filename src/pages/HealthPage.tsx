@@ -9,7 +9,7 @@ import {
   Database, Wifi, WifiOff, AlertTriangle, RefreshCw, Loader2,
   Server, Cpu, MessageSquare, BookOpen, Bot, Clock,
   CheckCircle, XCircle, Activity, Zap, Signal,
-  Shield, TrendingDown, BarChart3, Percent,
+  Shield,
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
