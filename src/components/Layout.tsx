@@ -9,7 +9,8 @@ export function Layout({ children }: LayoutProps) {
   return (
     <div className="min-h-[100dvh] bg-[#0A0A0F] text-white">
       <Navbar />
-      <main className="relative">{children}</main>
+      {/* pb-20 on mobile accounts for the fixed bottom navigation bar + safe area */}
+      <main className="relative pb-20 md:pb-0">{children}</main>
     </div>
   );
 }
