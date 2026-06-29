@@ -89,16 +89,40 @@ function analyzeOutliers(prices: number[]): { filtered: number[]; outliers: numb
   return { filtered, outliers, q1, q3, iqr, lower, upper };
 }
 
+// ─── Generate full month range Jan 2026 → current month ──────────────
+function generateMonthRange(): { monthKey: string; month: string }[] {
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const result: { monthKey: string; month: string }[] = [];
+  const now = new Date();
+  const startYear = 2026;
+  const startMonth = 0; // January
+
+  for (let year = startYear; year <= now.getFullYear(); year++) {
+    const endMonth = year === now.getFullYear() ? now.getMonth() : 11;
+    for (let month = (year === startYear ? startMonth : 0); month <= endMonth; month++) {
+      const key = `${year}-${String(month + 1).padStart(2, '0')}`;
+      result.push({ monthKey: key, month: `${monthNames[month]} ${year}` });
+    }
+  }
+  return result;
+}
+
+// ─── Sanitize dial color name for use as a dataKey ───────────────────
+function safeDialKey(color: string): string {
+  return 'dial_' + color.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
 // ─── Group records by month AND dial color — GUARANTEED FULL RANGE ───
 function groupByMonth(records: any[]): MonthlyPoint[] {
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
   // Step 1: Build full month range (Jan 2026 → current month)
   const fullRange = generateMonthRange();
   const fullMap = new Map<string, MonthlyPoint>();
   for (const m of fullRange) {
     fullMap.set(m.monthKey, { monthKey: m.monthKey, month: m.month, dialPrices: {}, count: 0, avgPrice: 0 });
   }
+
+  // Track per-dial-color counts: monthKey → dialColor → count
+  const dialCounts = new Map<string, Map<string, number>>();
 
   // Step 2: Aggregate actual records into the map
   for (const r of records) {
@@ -115,18 +139,24 @@ function groupByMonth(records: any[]): MonthlyPoint[] {
       if (!entry.dialPrices[dialColor]) entry.dialPrices[dialColor] = 0;
       // Store sum first, we'll average later
       entry.dialPrices[dialColor] += r.price_usd;
+
+      // Track per-dial count for correct averaging
+      if (!dialCounts.has(key)) dialCounts.set(key, new Map());
+      const dc = dialCounts.get(key)!;
+      dc.set(dialColor, (dc.get(dialColor) || 0) + 1);
     }
   }
 
-  // Step 3: Convert sums to averages
+  // Step 3: Convert sums to averages using per-dial counts
   for (const entry of fullMap.values()) {
     if (entry.count > 0) {
       let totalPrice = 0;
       for (const color of Object.keys(entry.dialPrices)) {
-        entry.dialPrices[color] = Math.round(entry.dialPrices[color] / entry.count);
+        const perDialCount = dialCounts.get(entry.monthKey)?.get(color) || 1;
+        entry.dialPrices[color] = Math.round(entry.dialPrices[color] / perDialCount);
         totalPrice += entry.dialPrices[color];
       }
-      // avgPrice = average of dial averages (weighted by dial count would be better but this is close)
+      // avgPrice = average of dial averages
       const dialCount = Object.keys(entry.dialPrices).length;
       entry.avgPrice = dialCount > 0 ? Math.round(totalPrice / dialCount) : 0;
     }
@@ -168,29 +198,6 @@ const DIAL_CHART_COLORS: Record<string, string> = {
 };
 function getDialChartColor(dial: string): string {
   return DIAL_CHART_COLORS[dial] || `hsl(${[...dial].reduce((s, c) => s + c.charCodeAt(0), 0) % 360}, 60%, 50%)`;
-}
-
-// ─── Generate full month range Jan 2026 → current month ──────────────
-function generateMonthRange(): { monthKey: string; month: string }[] {
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const result: { monthKey: string; month: string }[] = [];
-  const now = new Date();
-  const startYear = 2026;
-  const startMonth = 0; // January
-
-  for (let year = startYear; year <= now.getFullYear(); year++) {
-    const endMonth = year === now.getFullYear() ? now.getMonth() : 11;
-    for (let month = (year === startYear ? startMonth : 0); month <= endMonth; month++) {
-      const key = `${year}-${String(month + 1).padStart(2, '0')}`;
-      result.push({ monthKey: key, month: `${monthNames[month]} ${year}` });
-    }
-  }
-  return result;
-}
-
-// ─── Sanitize dial color name for use as a dataKey ───────────────────
-function safeDialKey(color: string): string {
-  return 'dial_' + color.replace(/[^a-zA-Z0-9]/g, '_');
 }
 
 // ─── Chart Tooltip — Per Dial Color ──────────────────────────────────
