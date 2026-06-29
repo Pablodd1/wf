@@ -1,5 +1,5 @@
 /**
- * Trading Floor — watchfacts.com/buy/all replica
+ * Trading Floor -- watchfacts.com/buy/all replica
  * Enhanced UI: gold accents, better cards, stats bar, improved filters
  * INFINITE SCROLL: loads 100 at a time, auto-loads more on scroll
  */
@@ -46,6 +46,43 @@ const KNOWN_WATCH_BRANDS = [
   'Parmigiani', 'Piaget', 'Ulysse Nardin', 'Voutilainen', 'Laurent Ferrier',
   'Moser', 'Romain Gauthier', 'Greubel Forsey', 'Hautlence', 'HYT',
 ];
+
+// ─── Source-to-display-name mapping ──────────────────────────────────
+const SOURCE_DISPLAY_NAMES: Record<string, string> = {
+  'mysql_auction_watches': 'Auction House',
+  'production_db': 'Verified Dealer',
+  'whatsapp': 'WhatsApp Dealer',
+};
+
+// ─── Extract dealer name from raw message ────────────────────────────
+function extractDealerName(raw: string | null, source: string | null): string {
+  if (!raw) return SOURCE_DISPLAY_NAMES[source || ''] || source || 'Private Seller';
+
+  // Pattern: name after price followed by dash or newline
+  // e.g. "...USD 25,500 -- Gianluca Rizzo" or "...HKD 180K - John Smith"
+  const nameAfterPrice = raw.match(
+    /(?:USD|USDT|HKD|GBP|EUR)\s*[\d,.]+[KkMm]?\s*(?:[✅✔️✓])?\s*[-—]\s*([A-Z][a-zA-Z\s]{2,25})(?:\s*$|\s*\n)/
+  );
+  if (nameAfterPrice) return nameAfterPrice[1].trim();
+
+  // Pattern: "contact [Name]" or "DM [Name]"
+  const contactName = raw.match(
+    /(?:contact|dm|message|from)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/i
+  );
+  if (contactName) return contactName[1].trim();
+
+  // Pattern: WhatsApp forward header containing a name after timestamp
+  const forwardName = raw.match(
+    /\[?\d{1,2}:\d{2}\s*(?:AM|PM)?\s*,?\s*\d{1,2}\/\d{1,2}\/\d{4}\]?\s*\+?[\d\s:]+\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/
+  );
+  if (forwardName) return forwardName[1].trim();
+
+  // Pattern: name at very end of message after "--" or "-"
+  const nameAtEnd = raw.match(/[-—]\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s*$/m);
+  if (nameAtEnd) return nameAtEnd[1].trim();
+
+  return SOURCE_DISPLAY_NAMES[source || ''] || source || 'Verified Dealer';
+}
 
 // ─── Currency converter ──────────────────────────────────────────────
 function CurrencyConverter({ onClose }: { onClose: () => void }) {
@@ -110,7 +147,7 @@ function extractTitle(raw: string | null): { line1: string; line2: string } {
   };
 }
 
-// ─── Compute rating from data quality ────────────────────────────────────────
+// ─── Compute rating from data quality ────────────────────────────────
 function computeRating(listing: WatchListing): { hasRating: boolean; score: number; label: string } {
   let score = 0;
   if (listing.brand) score += 20;
@@ -130,14 +167,15 @@ const formatPrice = (p: number) => p >= 1000000 ? `$${(p/1000000).toFixed(1)}M` 
 const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
 // ─── Watch Card ──────────────────────────────────────────────────────
-function WatchCard({ listing }: { listing: WatchListing }) {
+function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: string }) {
   const navigate = useNavigate();
-  const imgUrl = resolveWatchImage(listing.reference || '', listing.brand || '');
+  const fallbackImg = resolveWatchImage(listing.reference || '', listing.brand || '');
+  const displayImg = imageUrl || fallbackImg;
   const title = extractTitle(listing.raw_message);
   const rating = computeRating(listing);
+  const dealerName = extractDealerName(listing.raw_message, listing.source);
   const region = listing.source?.toLowerCase().includes('asia') ? 'ASIA' :
                  listing.source?.toLowerCase().includes('eu') ? 'EUROPE' : 'NORTH AMERICA';
-  const sourceName = listing.source || 'Unknown';
 
   return (
     <motion.div
@@ -149,9 +187,9 @@ function WatchCard({ listing }: { listing: WatchListing }) {
     >
       {/* Image */}
       <div className={`relative aspect-square bg-gradient-to-br ${getBrandGradient(listing.brand || '')} flex items-center justify-center overflow-hidden`}>
-        {imgUrl ? (
+        {displayImg ? (
           <img
-            src={imgUrl}
+            src={displayImg}
             alt={`${listing.brand} ${listing.reference}`}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
@@ -177,6 +215,12 @@ function WatchCard({ listing }: { listing: WatchListing }) {
           <span className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-wider">{listing.brand}</span>
           <span className="text-[11px] text-gray-400">{listing.reference}</span>
         </div>
+        {/* Dealer name */}
+        <div className="flex items-center gap-1.5 mt-1 mb-1">
+          <User size={11} className="text-gray-400" />
+          <span className="text-[11px] text-gray-500 font-medium">{dealerName}</span>
+          <span className="text-[9px] text-[#3B5BFE]">✓</span>
+        </div>
         <p className="text-sm font-medium text-gray-900 line-clamp-1 leading-tight">{title.line1}</p>
         {title.line2 && <p className="text-sm text-gray-500 line-clamp-1 leading-tight">{title.line2}</p>}
         <div className="flex items-center gap-1.5 mt-2">
@@ -197,10 +241,6 @@ function WatchCard({ listing }: { listing: WatchListing }) {
           <span className="flex items-center gap-1 text-[10px] text-gray-500 uppercase tracking-wider">
             <Globe size={11} /> {region}
           </span>
-        </div>
-        <div className="flex items-center gap-2 mt-1.5 text-[11px] text-gray-500">
-          <User size={11} />
-          <span className="truncate">{sourceName}</span>
         </div>
         <p className="text-[10px] text-gray-400 mt-1">Posted: {formatDate(listing.created_at)}</p>
         <button className="mt-3 w-full py-2.5 border-2 border-[#3B5BFE] text-[#3B5BFE] text-[11px] font-semibold uppercase tracking-wider rounded-full hover:bg-[#3B5BFE] hover:text-white transition-all flex items-center justify-center gap-1.5 group/btn">
@@ -270,8 +310,33 @@ export default function TradingFloor() {
   const [pageSize, setPageSize] = useState(100);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [imageMap, setImageMap] = useState<Record<string, string>>({});
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFetchingRef = useRef(false);
+
+  // ─── Fetch real images from Supabase reference_images table ──────────
+  async function preloadImages(refs: string[]) {
+    const uniqueRefs = [...new Set(refs.filter(r => r))].slice(0, 100);
+    if (uniqueRefs.length === 0) return;
+
+    try {
+      const url = `${SUPABASE_URL}/rest/v1/reference_images?select=reference,image_url&reference=in.(${uniqueRefs.join(',')})&is_primary=eq.true&limit=100`;
+      const res = await fetch(url, {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const map: Record<string, string> = {};
+      for (const row of data) {
+        if (row.reference && row.image_url) {
+          map[row.reference] = row.image_url;
+        }
+      }
+      setImageMap(prev => ({ ...prev, ...map }));
+    } catch {
+      // silent fail -- images gracefully fall back to gradient
+    }
+  }
 
   const fetchListings = useCallback(async (append = false, customPageSize?: number) => {
     if (isFetchingRef.current) return;
@@ -315,6 +380,10 @@ export default function TradingFloor() {
         setPage(1);
       }
       setTotal(2392784);
+
+      // ─── Preload images for newly loaded references ──────────────────
+      const refs = processedData.map((l: WatchListing) => l.reference).filter(Boolean);
+      preloadImages(refs);
     } catch {
       // Keep existing listings on error
     }
@@ -388,7 +457,7 @@ export default function TradingFloor() {
             </div>
           </div>
 
-          <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2 flex-wrap">
               {[
                 { id: 'forsale' as const, label: 'FOR SALE', icon: DollarSign },
@@ -451,7 +520,13 @@ export default function TradingFloor() {
         {listings.length > 0 && (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              {listings.map(listing => <WatchCard key={listing.id} listing={listing} />)}
+              {listings.map(listing => (
+                <WatchCard
+                  key={listing.id}
+                  listing={listing}
+                  imageUrl={imageMap[listing.reference || '']}
+                />
+              ))}
             </div>
             {loadingMore && (
               <div className="flex items-center justify-center gap-2 mt-10 text-sm text-gray-500">
@@ -460,7 +535,7 @@ export default function TradingFloor() {
               </div>
             )}
             {!hasMore && !loadingMore && (
-              <div className="text-center mt-10 text-xs text-gray-400">— {listings.length.toLocaleString()} listings loaded —</div>
+              <div className="text-center mt-10 text-xs text-gray-400">-- {listings.length.toLocaleString()} listings loaded --</div>
             )}
           </>
         )}
