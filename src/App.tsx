@@ -40,6 +40,7 @@ import ReferenceCheck from '@/pages/ReferenceCheck';
 import ExportPage from '@/pages/ExportPage';
 import QualityPage from '@/pages/QualityPage';
 import VerificationPage from '@/pages/VerificationPage';
+import SettingsPage from '@/pages/SettingsPage';
 
 function AdminRoutes() {
   return (
@@ -56,6 +57,7 @@ function AdminRoutes() {
         <Route path="/quality" element={<QualityPage />} />
         <Route path="/verification" element={<VerificationPage />} />
         <Route path="/clean" element={<CleanPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/demo" element={<DemoPage />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
