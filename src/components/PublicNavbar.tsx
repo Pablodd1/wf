@@ -14,9 +14,9 @@ export function PublicNavbar() {
       {/* Logo */}
       <Link to="/" className="flex items-center">
         <img
-          src="/watchfacts-logo.png"
+          src="/watchfacts-logo-hd.png"
           alt="WatchFacts"
-          className="h-[28px] w-auto"
+          className="h-[36px] w-auto"
         />
       </Link>
 

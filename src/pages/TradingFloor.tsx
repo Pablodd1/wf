@@ -1,12 +1,11 @@
 /**
  * Trading Floor — watchfacts.com/buy/all replica
- * EXACT match to user screenshot: real images, NO RATING, source, region, CHECK AVAILABILITY
- * Optimized for speed: smaller page size, select only needed columns
+ * Enhanced UI: gold accents, better cards, stats bar, improved filters
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Filter, Info, User, CheckCircle, Globe, Loader2 } from 'lucide-react';
+import { Search, Filter, Info, User, CheckCircle, Globe, Loader2, TrendingUp, Shield, Award } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
 
@@ -39,10 +38,9 @@ const REGIONS = ['All', 'North America', 'Europe', 'Asia', 'Middle East'];
 function extractTitle(raw: string | null): { line1: string; line2: string } {
   if (!raw) return { line1: '', line2: '' };
   const cleaned = raw
-    .replace(/[📢🎅✨🍂🇭🇰🌹💋🎈🎁💞🍄🔵🔴🟢]/g, ' ')
+    .replace(/[📢✨🍂🇭🇰🌹💋🎈🎁💞🍄🔵🔴🟢🎅]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-  // Split into 2 lines at natural break
   const words = cleaned.split(' ');
   const mid = Math.min(Math.ceil(words.length / 2) + 2, 12);
   return {
@@ -66,15 +64,16 @@ function computeRating(listing: WatchListing): { hasRating: boolean; score: numb
   return { hasRating: false, score, label: 'NO RATING' };
 }
 
+// ─── Format helpers ──────────────────────────────────────────────────
+const formatPrice = (p: number) => p >= 1000000 ? `$${(p/1000000).toFixed(1)}M` : p >= 1000 ? `$${p.toLocaleString()}` : `$${p}`;
+const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
 // ─── Watch Card ──────────────────────────────────────────────────────
 function WatchCard({ listing }: { listing: WatchListing }) {
   const navigate = useNavigate();
   const imgUrl = resolveWatchImage(listing.reference || '', listing.brand || '');
   const title = extractTitle(listing.raw_message);
   const rating = computeRating(listing);
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const formatPrice = (p: number) => p >= 1000000 ? `$${(p/1000000).toFixed(1)}M` : p >= 1000 ? `$${p.toLocaleString()}` : `$${p}`;
-  // Region from source or default
   const region = listing.source?.toLowerCase().includes('asia') ? 'ASIA' : 
                  listing.source?.toLowerCase().includes('eu') ? 'EUROPE' : 'NORTH AMERICA';
   const sourceName = listing.source || 'Unknown';
@@ -82,7 +81,9 @@ function WatchCard({ listing }: { listing: WatchListing }) {
   return (
     <motion.div
       layout
-      className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg hover:border-gray-300 transition-all cursor-pointer group"
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-xl hover:border-gray-300 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer group"
       onClick={() => navigate(`/flash-sales/${listing.id}`)}
     >
       {/* Image */}
@@ -91,7 +92,7 @@ function WatchCard({ listing }: { listing: WatchListing }) {
           <img
             src={imgUrl}
             alt={`${listing.brand} ${listing.reference}`}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
             loading="lazy"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
@@ -101,56 +102,96 @@ function WatchCard({ listing }: { listing: WatchListing }) {
             <span className="text-[10px] text-gray-400 uppercase tracking-wider mt-2 block">{listing.brand}</span>
           </div>
         )}
+        {/* Subtle overlay on hover */}
+        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
+        {/* Condition badge */}
+        {listing.condition && (
+          <div className="absolute top-2 left-2 px-2 py-0.5 bg-white/90 backdrop-blur-sm rounded-full text-[10px] font-semibold text-gray-700 shadow-sm">
+            {listing.condition}
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div className="p-4">
+        {/* Reference + Brand */}
+        <div className="flex items-center gap-1.5 mb-1">
+          <span className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-wider">{listing.brand}</span>
+          <span className="text-[11px] text-gray-400">{listing.reference}</span>
+        </div>
+
         {/* Title */}
-        <p className="text-sm font-medium text-gray-900 line-clamp-1">{title.line1}</p>
-        {title.line2 && <p className="text-sm text-gray-600 line-clamp-1">{title.line2}</p>}
+        <p className="text-sm font-medium text-gray-900 line-clamp-1 leading-tight">{title.line1}</p>
+        {title.line2 && <p className="text-sm text-gray-500 line-clamp-1 leading-tight">{title.line2}</p>}
 
         {/* Rating */}
         <div className="flex items-center gap-1.5 mt-2">
           {rating.hasRating ? (
             <span className="flex items-center gap-1 text-xs text-green-600">
-              <CheckCircle size={14} className="text-green-500" />
+              <CheckCircle size={13} className="text-green-500" />
               <span className="font-semibold">{rating.label}</span>
             </span>
           ) : (
             <span className="flex items-center gap-1 text-xs text-gray-400">
-              <Info size={14} />
+              <Info size={13} />
               <span className="font-medium uppercase tracking-wider">{rating.label}</span>
             </span>
           )}
         </div>
 
         {/* Price + Region */}
-        <div className="flex items-center justify-between mt-2">
-          <span className="text-sm font-semibold text-gray-900">{listing.price_usd > 0 ? formatPrice(listing.price_usd) : 'Contact'}</span>
-          <span className="flex items-center gap-1 text-[11px] text-gray-500 uppercase">
-            <Globe size={12} /> {region}
+        <div className="flex items-center justify-between mt-2.5">
+          <span className="text-base font-bold text-gray-900">{listing.price_usd > 0 ? formatPrice(listing.price_usd) : 'Contact'}</span>
+          <span className="flex items-center gap-1 text-[10px] text-gray-500 uppercase tracking-wider">
+            <Globe size={11} /> {region}
           </span>
         </div>
 
-        {/* Source + Reviews */}
+        {/* Source */}
         <div className="flex items-center gap-2 mt-1.5 text-[11px] text-gray-500">
-          <User size={12} />
+          <User size={11} />
           <span className="truncate">{sourceName}</span>
         </div>
-        <div className="flex items-center gap-1 text-[11px] text-gray-400 mt-0.5">
-          <CheckCircle size={12} className="text-blue-500" />
-          <span>(0)</span>
-        </div>
 
-        {/* Posted */}
-        <p className="text-[11px] text-gray-400 mt-1.5">Posted: {formatDate(listing.created_at)}</p>
+        {/* Posted date */}
+        <p className="text-[10px] text-gray-400 mt-1">Posted: {formatDate(listing.created_at)}</p>
 
         {/* CTA */}
-        <button className="mt-3 w-full py-2.5 border-2 border-[#3B5BFE] text-[#3B5BFE] text-[11px] font-semibold uppercase tracking-wider rounded-full hover:bg-[#3B5BFE] hover:text-white transition-all flex items-center justify-center gap-1.5">
-          <Info size={12} /> Check Availability
+        <button className="mt-3 w-full py-2.5 border-2 border-[#3B5BFE] text-[#3B5BFE] text-[11px] font-semibold uppercase tracking-wider rounded-full hover:bg-[#3B5BFE] hover:text-white transition-all flex items-center justify-center gap-1.5 group/btn">
+          <Info size={11} className="group-hover/btn:rotate-12 transition-transform" /> Check Availability
         </button>
       </div>
     </motion.div>
+  );
+}
+
+// ─── Stats Bar ───────────────────────────────────────────────────────
+function StatsBar({ total, loaded }: { total: number; loaded: number }) {
+  return (
+    <div className="bg-white border-b border-gray-200">
+      <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-6 overflow-x-auto">
+        <div className="flex items-center gap-1.5 text-[11px] text-gray-600 whitespace-nowrap">
+          <Shield size={13} className="text-[#D4AF37]" />
+          <span className="font-semibold text-gray-900">{total.toLocaleString()}</span>
+          <span className="text-gray-500">Total Listings</span>
+        </div>
+        <div className="w-px h-4 bg-gray-200" />
+        <div className="flex items-center gap-1.5 text-[11px] text-gray-600 whitespace-nowrap">
+          <Award size={13} className="text-[#D4AF37]" />
+          <span className="font-semibold text-gray-900">29,512+</span>
+          <span className="text-gray-500">Global Dealers</span>
+        </div>
+        <div className="w-px h-4 bg-gray-200" />
+        <div className="flex items-center gap-1.5 text-[11px] text-gray-600 whitespace-nowrap">
+          <TrendingUp size={13} className="text-green-500" />
+          <span className="text-gray-500">Live Market Data</span>
+        </div>
+        <div className="flex-1" />
+        <div className="text-[11px] text-gray-400 whitespace-nowrap">
+          Showing <span className="font-semibold text-gray-700">{loaded}</span> per page
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -160,17 +201,16 @@ export default function TradingFloor() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [condition, setCondition] = useState('All');
+  const [region, setRegion] = useState('All');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(2392784);
-  const pageSize = 12; // Smaller for faster initial load
+  const pageSize = 12;
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Optimized fetch: select only needed columns, smaller page
   const fetchListings = useCallback(async () => {
     setLoading(true);
     try {
       const offset = (page - 1) * pageSize;
-      // OPTIMIZED: select only columns we need (no raw_message for list view? No, we need it for titles)
       let url = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,currency,raw_message,verdict,confidence,source,created_at,year&limit=${pageSize}&offset=${offset}`;
       if (query) url += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
       if (condition !== 'All') url += `&condition=eq.${encodeURIComponent(condition)}`;
@@ -186,33 +226,39 @@ export default function TradingFloor() {
     setLoading(false);
   }, [query, condition, page]);
 
-  // Debounced fetch
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(() => { setPage(1); fetchListings(); }, 300);
     return () => { if (searchTimeout.current) clearTimeout(searchTimeout.current); };
   }, [query, condition, fetchListings]);
 
-  // Page change fetch
   useEffect(() => {
     fetchListings();
   }, [page, fetchListings]);
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-gray-50">
       <DealerNavbar />
 
       {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white py-5 px-4">
-        <div className="max-w-7xl mx-auto">
-          <h1 className="text-xl md:text-2xl font-light">Welcome to the Trading Floor</h1>
-          <p className="text-blue-100 text-sm">29,512+ Global Dealers. Search by reference to get the most accurate results</p>
+      <div className="relative bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white py-6 px-4 overflow-hidden">
+        {/* Subtle pattern */}
+        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+        <div className="max-w-7xl mx-auto relative">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="w-1 h-6 bg-[#D4AF37] rounded-full" />
+            <h1 className="text-xl md:text-2xl font-light tracking-wide">Welcome to the Trading Floor</h1>
+          </div>
+          <p className="text-gray-400 text-sm ml-3">29,512+ Global Dealers. Search by reference to get the most accurate results</p>
         </div>
       </div>
 
-      {/* Search Bar */}
-      <div className="border-b border-gray-200 bg-white sticky top-[56px] z-40">
-        <div className="max-w-7xl mx-auto px-4 py-3 flex gap-2">
+      {/* Stats Bar */}
+      <StatsBar total={total} loaded={listings.length} />
+
+      {/* Search & Filters */}
+      <div className="bg-white border-b border-gray-200 sticky top-[56px] z-40 shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 py-3 flex flex-col sm:flex-row gap-2">
           <div className="flex-1 relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
@@ -220,61 +266,93 @@ export default function TradingFloor() {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search by reference, brand, or keywords..."
-              className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B5BFE]"
+              className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] focus:border-transparent bg-gray-50/50 transition-all"
             />
           </div>
-          <select value={condition} onChange={e => { setCondition(e.target.value); setPage(1); }} className="px-3 py-2 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none">
-            {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
+          <div className="flex gap-2">
+            <select 
+              value={condition} 
+              onChange={e => { setCondition(e.target.value); setPage(1); }} 
+              className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] bg-white"
+            >
+              {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+            <select 
+              value={region} 
+              onChange={e => setRegion(e.target.value)} 
+              className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] bg-white"
+            >
+              {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <button 
+              onClick={() => { setQuery(''); setCondition('All'); setRegion('All'); setPage(1); }}
+              className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 transition-colors flex items-center gap-1.5"
+            >
+              <Filter size={14} /> Reset
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Results */}
-      <div className="max-w-7xl mx-auto px-4 py-4">
-        <div className="text-sm text-gray-500 mb-4">
-          Showing <span className="font-semibold text-gray-900">{listings.length}</span> of{' '}
-          <span className="font-semibold text-gray-900">{total.toLocaleString()}</span> listings
-          {loading && <span className="ml-2"><Loader2 size={14} className="inline animate-spin" /></span>}
-        </div>
-
-        {listings.length === 0 && !loading && (
-          <div className="text-center py-20 text-gray-400">
-            <div className="text-5xl mb-3">⌚</div>
-            <p>No listings found</p>
-          </div>
-        )}
-
-        {/* Grid: 4 columns matching screenshot */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {listings.map((listing) => (
-            <WatchCard key={listing.id} listing={listing} />
-          ))}
-        </div>
-
+      <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Loading skeleton */}
         {loading && listings.length === 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="bg-gray-50 rounded-xl border border-gray-100 animate-pulse">
+              <div key={i} className="bg-white rounded-xl border border-gray-100 overflow-hidden animate-pulse">
                 <div className="aspect-square bg-gray-200" />
-                <div className="p-4 space-y-2">
+                <div className="p-4 space-y-3">
+                  <div className="h-3 bg-gray-200 rounded w-1/3" />
                   <div className="h-4 bg-gray-200 rounded w-3/4" />
                   <div className="h-3 bg-gray-200 rounded w-1/2" />
-                  <div className="h-3 bg-gray-200 rounded w-1/3" />
+                  <div className="h-8 bg-gray-200 rounded w-full mt-2" />
                 </div>
               </div>
             ))}
           </div>
         )}
 
-        {/* Pagination */}
-        <div className="flex items-center justify-center gap-3 mt-8">
-          <button onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}
-            className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-30">Previous</button>
-          <span className="text-sm text-gray-500 font-mono">Page {page}</span>
-          <button onClick={() => setPage(page + 1)} disabled={listings.length < pageSize}
-            className="px-4 py-2 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-30">Next</button>
-        </div>
+        {listings.length === 0 && !loading && (
+          <div className="text-center py-24 text-gray-400 bg-white rounded-xl border border-gray-100">
+            <div className="text-6xl mb-4 opacity-30">⌚</div>
+            <p className="text-lg font-medium text-gray-500">No listings found</p>
+            <p className="text-sm text-gray-400 mt-1">Try adjusting your search or filters</p>
+          </div>
+        )}
+
+        {/* Grid */}
+        {listings.length > 0 && (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              {listings.map((listing, idx) => (
+                <WatchCard key={listing.id} listing={listing} />
+              ))}
+            </div>
+
+            {/* Pagination */}
+            <div className="flex items-center justify-center gap-4 mt-10">
+              <button 
+                onClick={() => setPage(Math.max(1, page - 1))} 
+                disabled={page === 1}
+                className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm disabled:opacity-30 disabled:cursor-not-allowed transition-all bg-white"
+              >
+                Previous
+              </button>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-gray-500">Page</span>
+                <span className="text-sm font-bold text-gray-900 px-3 py-1 bg-white border border-gray-200 rounded-md">{page}</span>
+              </div>
+              <button 
+                onClick={() => setPage(page + 1)} 
+                disabled={listings.length < pageSize}
+                className="px-5 py-2.5 border border-gray-200 rounded-lg text-sm font-medium text-gray-600 hover:bg-white hover:shadow-sm disabled:opacity-30 disabled:cursor-not-allowed transition-all bg-white"
+              >
+                Next
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

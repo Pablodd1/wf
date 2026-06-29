@@ -23,7 +23,7 @@ export function DealerNavbar() {
     <header className="sticky top-0 z-50 h-[56px] bg-white border-b border-gray-200 flex items-center justify-between px-4 md:px-6">
       {/* Logo */}
       <Link to="/trading" className="flex items-center shrink-0">
-        <img src="/watchfacts-logo.png" alt="WatchFacts" className="h-[24px] w-auto" />
+        <img src="/watchfacts-logo-hd.png" alt="WatchFacts" className="h-[32px] w-auto" />
       </Link>
 
       {/* Navigation */}
