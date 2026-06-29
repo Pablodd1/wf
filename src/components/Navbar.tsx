@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
-  LayoutDashboard, Search, BarChart3, ClipboardCheck,
-  Sparkles, TrendingUp, Zap, Shield, CheckCircle
+  Search, BarChart3, ClipboardCheck,
+  Sparkles, Zap, Shield, CheckCircle
 } from 'lucide-react';
 
+// Admin tabs — exactly 6 as requested: Search, Demo, Review, Analytics, Admin, Clean
+// All public, no login required. Price Research is standalone at /price-research
 const NAV_ITEMS = [
-  { label: 'Home', path: '/', icon: LayoutDashboard },
-  { label: 'Price Research', path: '/price-research', icon: TrendingUp },
   { label: 'Search', path: '/search', icon: Search },
   { label: 'Demo', path: '/demo', icon: Zap },
   { label: 'Review', path: '/review', icon: ClipboardCheck },
