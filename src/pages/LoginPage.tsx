@@ -1,11 +1,11 @@
 /**
  * Login Page — Dealer Login
- * Supports: Email/Password, Google OAuth, Apple OAuth
+ * Supports: Email/Password, Google OAuth, Apple OAuth, Demo Skip
  */
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
-import { LogIn, Mail, Lock, Chrome, Apple } from 'lucide-react';
+import { LogIn, Mail, Lock, Chrome, Apple, Shield, BarChart3 } from 'lucide-react';
 
 function LightNavbar() {
   return (
@@ -136,6 +136,85 @@ export default function LoginPage() {
             Don't have an account?{' '}
             <Link to="/signup" className="text-[#3B5BFE] hover:underline font-medium">Sign up</Link>
           </p>
+
+          {/* Skip Login for Demo/Internal Use */}
+          <div className="mt-6 pt-6 border-t border-gray-100">
+            <button
+              onClick={() => {
+                sessionStorage.setItem('wf_skip_auth', 'true');
+                navigate('/admin');
+              }}
+              className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-sm font-medium transition-colors"
+            >
+              <Shield size={16} />
+              Skip Login — Enter Dashboard
+            </button>
+            <p className="text-center text-[11px] text-gray-400 mt-2">
+              Demo mode: read-only access. Sign in for full features.
+            </p>
+          </div>
+
+          {/* Catalog Match Confidence Protocol */}
+          <div className="mt-8 bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+            <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <BarChart3 size={16} className="text-[#3B5BFE]" />
+              Catalog Match Confidence Protocol
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                    <th className="pb-2 pr-4">Catalog Match</th>
+                    <th className="pb-2 pr-4">AI Intervention Needed</th>
+                    <th className="pb-2 pr-4">Confidence Score</th>
+                    <th className="pb-2">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="text-gray-600">
+                  <tr className="border-b border-gray-50">
+                    <td className="py-2.5 pr-4 font-medium text-green-600">Everything found in catalog</td>
+                    <td className="py-2.5 pr-4 text-gray-500">None</td>
+                    <td className="py-2.5 pr-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-mono font-semibold">100%</span>
+                    </td>
+                    <td className="py-2.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-green-50 text-green-700 font-medium">Auto-approve</span>
+                    </td>
+                  </tr>
+                  <tr className="border-b border-gray-50">
+                    <td className="py-2.5 pr-4 font-medium text-blue-600">1 thing missing (e.g., dial color)</td>
+                    <td className="py-2.5 pr-4 text-gray-500">AI fills 1 gap</td>
+                    <td className="py-2.5 pr-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-mono font-semibold">90%</span>
+                    </td>
+                    <td className="py-2.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 font-medium">Review suggested</span>
+                    </td>
+                  </tr>
+                  <tr className="border-b border-gray-50">
+                    <td className="py-2.5 pr-4 font-medium text-amber-600">2 things missing (e.g., ref + dial)</td>
+                    <td className="py-2.5 pr-4 text-gray-500">AI fills 2 gaps</td>
+                    <td className="py-2.5 pr-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-mono font-semibold">80%</span>
+                    </td>
+                    <td className="py-2.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 font-medium">Must review</span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 pr-4 font-medium text-red-600">3+ things missing or garbage</td>
+                    <td className="py-2.5 pr-4 text-gray-500">AI can&apos;t resolve</td>
+                    <td className="py-2.5 pr-4">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-mono font-semibold">&lt;80%</span>
+                    </td>
+                    <td className="py-2.5">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-red-50 text-red-700 font-medium">Manual intervention</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
     </div>
