@@ -8,7 +8,7 @@
  * 4. Data Pipeline (read-only stats + actions)
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   Settings, Sliders, Globe, Download,
@@ -113,21 +113,58 @@ export default function SettingsPage() {
   const [showConfirmReprocess, setShowConfirmReprocess] = useState(false);
   const [showConfirmClear, setShowConfirmClear] = useState(false);
 
+  // Fetch settings from API on mount
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(data => {
+        if (data.approve_threshold) setApproveThreshold(data.approve_threshold);
+        if (data.human_threshold) setHumanThreshold(data.human_threshold);
+        if (data.llm_provider) setLlmProvider(data.llm_provider);
+        if (data.llm_trigger_threshold) setLlmTrigger(data.llm_trigger_threshold);
+      })
+      .catch(() => {
+        // Fall back to localStorage on error
+        setApproveThreshold(loadInt(STORAGE_KEYS.APPROVE_THRESHOLD, DEFAULTS.APPROVE_THRESHOLD));
+        setHumanThreshold(loadInt(STORAGE_KEYS.HUMAN_THRESHOLD, DEFAULTS.HUMAN_THRESHOLD));
+      });
+  }, []);
+
   /* ── Persist helpers ───────────────────────────────── */
   const markSaved = (id: string) => {
     setSavedSection(id);
     setTimeout(() => setSavedSection(null), 2000);
   };
 
-  const saveThresholds = () => {
+  const saveThresholds = async () => {
     saveVal(STORAGE_KEYS.APPROVE_THRESHOLD, String(approveThreshold));
     saveVal(STORAGE_KEYS.HUMAN_THRESHOLD, String(humanThreshold));
+
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approve_threshold: approveThreshold, human_threshold: humanThreshold }),
+      });
+    } catch {
+      // API call failed, localStorage already saved
+    }
     markSaved('thresholds');
   };
 
-  const saveApiConfig = () => {
+  const saveApiConfig = async () => {
     saveVal(STORAGE_KEYS.LLM_PROVIDER, llmProvider);
     saveVal(STORAGE_KEYS.LLM_TRIGGER_THRESHOLD, String(llmTrigger));
+
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ llm_provider: llmProvider, llm_trigger_threshold: llmTrigger }),
+      });
+    } catch {
+      // API call failed, localStorage already saved
+    }
     markSaved('api');
   };
 
@@ -359,7 +396,7 @@ export default function SettingsPage() {
               }}
               className={inputClass}
             />
-            <div className="text-[10px] text-gray-600 mt-1">Min: 100 · Max: 50,000</div>
+            <div className="text-[10px] text-gray-600 mt-1">Min: 100 &middot; Max: 50,000</div>
           </div>
 
           {/* Toggles */}
@@ -540,7 +577,7 @@ export default function SettingsPage() {
         animate="visible"
         className="mt-6 text-center text-[10px] text-gray-600 pb-6"
       >
-        WatchFacts Settings · All changes are saved to localStorage
+        WatchFacts Settings &middot; Saved to API + localStorage
       </motion.div>
     </div>
   );
