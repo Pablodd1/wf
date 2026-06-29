@@ -1,10 +1,10 @@
 // @ts-nocheck
-import { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   CheckCircle, XCircle, AlertTriangle, RefreshCw,
   ChevronLeft, ChevronRight, Edit3, Save, X, Eye, Sparkles,
-  Copy, Calendar, Search, Tag
+  Copy, Calendar, Search, Tag, Keyboard
 } from 'lucide-react';
 import { AISuggestionPanel } from '@/components/AISuggestionPanel';
 import { resolveWatchImage } from '@/lib/imageResolver';
@@ -114,6 +114,9 @@ export default function ReviewPage() {
   const [total, setTotal] = useState(0);
   const [actionLog, setActionLog] = useState<string[]>([]);
   const [showCopied, setShowCopied] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ message: string; key: number } | null>(null);
+  const [showShortcuts, setShowShortcuts] = useState(false);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─── Fetch from Supabase directly ──────────────────────────────────
   const fetchRecords = useCallback(async () => {
@@ -245,6 +248,81 @@ export default function ReviewPage() {
     if (c >= 50) return '#F97316';
     return '#EF4444';
   };
+
+  // ─── Toast notification ────────────────────────────────────────────
+  const showToast = useCallback((message: string) => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ message, key: Date.now() });
+    toastTimerRef.current = setTimeout(() => setToast(null), 1500);
+  }, []);
+
+  // ─── Keyboard shortcuts ────────────────────────────────────────────
+  const handleKeyDown = useCallback((event: KeyboardEvent) => {
+    const tag = (event.target as HTMLElement)?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+      // Only allow Escape and Enter when in an input field
+      if (editingId && (event.key === 'Escape' || event.key === 'Enter')) {
+        event.preventDefault();
+        if (event.key === 'Escape') {
+          cancelEdit();
+          showToast('Edit cancelled');
+        } else {
+          saveEdit();
+          showToast('Changes saved');
+        }
+      }
+      return;
+    }
+
+    const currentRecord = records[0];
+    if (!currentRecord && !editingId) return;
+
+    switch (event.key.toUpperCase()) {
+      case 'A':
+        if (editingId) return;
+        if (!currentRecord) return;
+        event.preventDefault();
+        changeVerdict(currentRecord.id, 'APPROVED');
+        showToast(`Approved ${currentRecord.reference || 'record'}`);
+        break;
+      case 'R':
+        if (editingId) return;
+        if (!currentRecord) return;
+        event.preventDefault();
+        changeVerdict(currentRecord.id, 'RECYCLE');
+        showToast(`Recycled ${currentRecord.reference || 'record'}`);
+        break;
+      case 'E':
+        event.preventDefault();
+        if (editingId) {
+          cancelEdit();
+          showToast('Edit cancelled');
+        } else if (currentRecord) {
+          startEdit(currentRecord);
+          showToast(`Editing ${currentRecord.reference || 'record'}`);
+        }
+        break;
+      case 'N':
+      case 'S':
+        if (editingId) return;
+        event.preventDefault();
+        setPage(p => p + 1);
+        showToast('Skipped to next record');
+        break;
+      default:
+        if (event.key === 'Escape' && editingId) {
+          event.preventDefault();
+          cancelEdit();
+          showToast('Edit cancelled');
+        }
+        break;
+    }
+  }, [editingId, records, showToast, startEdit, cancelEdit, saveEdit, changeVerdict]);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
   return (
     <div className="min-h-[calc(100dvh-104px)] bg-[#0A0A0F] p-4">
@@ -587,7 +665,67 @@ export default function ReviewPage() {
             </div>
           </>
         )}
+
+        {/* ─── Keyboard Shortcuts Help Panel ─────────────────────────── */}
+        <div className="mt-6 border-t border-[#1E1E2E] pt-3">
+          <button
+            onClick={() => setShowShortcuts(v => !v)}
+            className="flex items-center gap-2 text-gray-500 hover:text-gray-300 transition-colors text-[11px] mb-2"
+          >
+            <Keyboard size={13} />
+            <span className="font-medium">Keyboard Shortcuts</span>
+            <span className="text-gray-600 ml-1">{showShortcuts ? '▲' : '▼'}</span>
+          </button>
+          <AnimatePresence>
+            {showShortcuts && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 text-[11px] text-gray-400 pb-2">
+                  {[
+                    { key: 'A', action: 'Approve current record' },
+                    { key: 'R', action: 'Recycle current record' },
+                    { key: 'E', action: 'Toggle edit mode' },
+                    { key: 'N / S', action: 'Skip to next record' },
+                    { key: 'Escape', action: 'Cancel edit' },
+                    { key: 'Enter', action: 'Save edit' },
+                  ].map(({ key, action }) => (
+                    <div key={key} className="flex items-center gap-2">
+                      <kbd className="px-1.5 py-0.5 bg-[#1A1A24] border border-[#2A2A3A] rounded text-[10px] font-mono text-gray-300 min-w-[28px] text-center">
+                        {key}
+                      </kbd>
+                      <span>{action}</span>
+                    </div>
+                  ))}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
+
+      {/* ─── Toast Notification ─────────────────────────────────────── */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            key={toast.key}
+            initial={{ opacity: 0, y: 20, x: 20 }}
+            animate={{ opacity: 1, y: 0, x: 0 }}
+            exit={{ opacity: 0, y: 20, x: 20 }}
+            transition={{ duration: 0.25 }}
+            className="fixed bottom-4 right-4 z-50"
+          >
+            <div className="bg-[#1A1A24] border border-[#D4AF37]/40 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg flex items-center gap-2">
+              <Sparkles size={13} className="text-[#D4AF37]" />
+              <span>{toast.message}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
