@@ -135,9 +135,12 @@ export default function AnalyticsPage() {
   const [catalogStats, setCatalogStats] = useState({ uniqueRefs: 0, catalogRefs: 6958, matchRate: 0 });
   const [sortKey, setSortKey] = useState<SortKey>('count');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [hasLoaded, setHasLoaded] = useState(false);
 
   // ─── Load ALL data via server-side aggregation ─────────────────────
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async (force = false) => {
+    // Skip if already loaded and not forced (e.g., Refresh button)
+    if (hasLoaded && !force) return;
     setLoading(true);
     try {
       const [total, brands, verdicts, conditions, dials, refs, prices, catalog] = await Promise.all([
@@ -158,13 +161,15 @@ export default function AnalyticsPage() {
       setTopRefs(refs);
       setPriceDist(prices);
       setCatalogStats(catalog);
+      setHasLoaded(true);
     } catch (err) {
       console.error('Analytics aggregation error:', err);
     }
     setLoading(false);
-  }, []);
+  }, [hasLoaded]);
 
-  useEffect(() => { loadAll(); }, [loadAll]);
+  // Auto-load once on first mount only
+  useEffect(() => { if (!hasLoaded) loadAll(); }, [hasLoaded, loadAll]);
 
   // ─── Sorting ────────────────────────────────────────────────────────
   const toggleSort = (key: SortKey) => {
@@ -232,7 +237,7 @@ export default function AnalyticsPage() {
           <button onClick={exportCSV} className="px-4 py-2 bg-amber-500 hover:bg-amber-400 text-black rounded-lg font-medium transition-colors flex items-center gap-2 text-sm">
             <Download size={16} /> Export
           </button>
-          <button onClick={loadAll} disabled={loading} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm disabled:opacity-50">
+          <button onClick={() => loadAll(true)} disabled={loading} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm disabled:opacity-50">
             {loading ? <Loader2 size={16} className="animate-spin" /> : <Clock size={16} />}
           </button>
         </div>
