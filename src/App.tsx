@@ -41,6 +41,7 @@ import ExportPage from '@/pages/ExportPage';
 import QualityPage from '@/pages/QualityPage';
 import VerificationPage from '@/pages/VerificationPage';
 import SettingsPage from '@/pages/SettingsPage';
+import BulkImportPage from '@/pages/BulkImportPage';
 
 function AdminRoutes() {
   return (
@@ -57,6 +58,7 @@ function AdminRoutes() {
         <Route path="/quality" element={<QualityPage />} />
         <Route path="/verification" element={<VerificationPage />} />
         <Route path="/clean" element={<CleanPage />} />
+        <Route path="/import" element={<BulkImportPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/demo" element={<DemoPage />} />
