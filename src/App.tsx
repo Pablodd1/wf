@@ -6,6 +6,7 @@
 
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/hooks/useAuth';
+import { CookieConsent } from '@/components/CookieConsent';
 import Home from '@/pages/Home';
 import ReportsPage from '@/pages/ReportsPage';
 import LoginPage from '@/pages/LoginPage';
@@ -21,6 +22,7 @@ import SellingProcess from '@/pages/SellingProcess';
 import Terms from '@/pages/Terms';
 import PrivacyPolicy from '@/pages/PrivacyPolicy';
 import Glossary from '@/pages/Glossary';
+import PricingPage from '@/pages/PricingPage';
 import { Layout } from '@/components/Layout';
 import AdminPage from '@/pages/AdminPage';
 import SearchPage from '@/pages/SearchPage';
@@ -74,16 +76,19 @@ export default function App() {
         <Route path="/price-research" element={<PriceResearch />} />
         <Route path="/insight" element={<InsightDetails />} />
 
+        {/* Pricing */}
+        <Route path="/pricing" element={<PricingPage />} />
+
         {/* Admin — 6 tabs: Search, Demo, Review, Analytics, Admin, Clean */}
         <Route path="/admin/*" element={<AdminRoutes />} />
 
         {/* Redirects */}
-        <Route path="/price-research" element={<Navigate to="/price-research" replace />} />
         <Route path="/search" element={<Navigate to="/admin/search" replace />} />
         <Route path="/review" element={<Navigate to="/admin/review" replace />} />
         <Route path="/analytics" element={<Navigate to="/admin/analytics" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <CookieConsent />
     </AuthProvider>
   );
 }

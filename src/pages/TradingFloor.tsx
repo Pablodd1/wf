@@ -7,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Search, Filter, ChevronDown, Globe, Calendar, ArrowUpDown, Tag, Watch } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
-import { getBrandPlaceholder, getBrandGradient } from '@/lib/imageResolver';
+import { resolveWatchImage, getBrandGradient, getBrandIcon } from '@/lib/imageResolver';
 
 interface WatchListing {
   id: string;
@@ -71,21 +71,25 @@ function WatchCard({ listing, index }: { listing: WatchListing; index: number })
       onClick={() => navigate(`/flash-sales/${listing.id}`)}
       className="bg-white rounded-lg border border-gray-200 hover:border-gray-300 hover:shadow-md transition-all cursor-pointer group"
     >
-      {/* Brand Image */}
+      {/* Watch Image — real catalog or brand placeholder */}
       <div className={`relative aspect-square bg-gradient-to-br ${getBrandGradient(listing.brand || '')} rounded-t-lg flex items-center justify-center overflow-hidden`}>
-        {getBrandPlaceholder(listing.brand || '') ? (
-          <img
-            src={getBrandPlaceholder(listing.brand || '')}
-            alt={listing.brand || 'Watch'}
-            className="w-full h-full object-cover opacity-80 group-hover:opacity-100 transition-opacity"
-            loading="lazy"
-          />
-        ) : (
-          <div className="text-center">
-            <div className="text-4xl mb-2 opacity-30">⌚</div>
-            <span className="text-[10px] text-gray-400 uppercase tracking-wider">{listing.brand}</span>
-          </div>
-        )}
+        {(() => {
+          const imgUrl = resolveWatchImage(listing.reference || '', listing.brand || '');
+          return imgUrl ? (
+            <img
+              src={imgUrl}
+              alt={`${listing.brand} ${listing.reference}`}
+              className="w-full h-full object-cover opacity-90 group-hover:opacity-100 transition-opacity"
+              loading="lazy"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+            />
+          ) : (
+            <div className="text-center">
+              <div className="text-4xl mb-2 opacity-30">{getBrandIcon(listing.brand || '')}</div>
+              <span className="text-[10px] text-gray-400 uppercase tracking-wider">{listing.brand}</span>
+            </div>
+          );
+        })()}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
       </div>
 

@@ -3,8 +3,10 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   CheckCircle, XCircle, AlertTriangle, RefreshCw,
-  ChevronLeft, ChevronRight, Edit3, Save, X, Eye
+  ChevronLeft, ChevronRight, Edit3, Save, X, Eye, Sparkles
 } from 'lucide-react';
+import { AISuggestionPanel } from '@/components/AISuggestionPanel';
+import { resolveWatchImage } from '@/lib/imageResolver';
 import WatchImage from '@/components/WatchImage';
 
 // ─── Direct Supabase connection ──────────────────────────────────────
@@ -277,7 +279,12 @@ export default function ReviewPage() {
                         animate={{ height: 'auto', opacity: 1 }}
                         className="border-t border-[#1E1E2E] bg-[#0A0A0F] p-3"
                       >
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                        {/* AI Suggestions for this record */}
+                        <AISuggestionPanel
+                          record={record}
+                          onApply={(field, value) => setEditForm((prev: any) => ({ ...prev, [field]: value }))}
+                        />
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 mt-3">
                           <div>
                             <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Brand</label>
                             <input
