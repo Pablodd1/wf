@@ -5,7 +5,7 @@ import {
   Search, BarChart3, ClipboardCheck,
   Sparkles, Zap, Shield, CheckCircle,
   Activity, FileSpreadsheet, Database,
-  Download, ShieldCheck,
+  Download, ShieldCheck, Target,
 } from 'lucide-react';
 
 // Admin tabs — 9 tabs: Search, Data, Demo, Review, Analytics, Reports, Health, Admin, Clean
@@ -20,6 +20,7 @@ const NAV_ITEMS = [
   { label: 'Health', path: '/health', icon: Activity },
   { label: 'Export', path: '/export', icon: Download },
   { label: 'Quality', path: '/quality', icon: ShieldCheck },
+  { label: 'Verify', path: '/verification', icon: Target },
   { label: 'Admin', path: '/admin', icon: Shield },
   { label: 'Clean', path: '/clean', icon: Sparkles },
 ] as const;

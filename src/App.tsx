@@ -37,6 +37,7 @@ import AdminReportsPage from '@/pages/AdminReportsPage';
 import ReferenceCheck from '@/pages/ReferenceCheck';
 import ExportPage from '@/pages/ExportPage';
 import QualityPage from '@/pages/QualityPage';
+import VerificationPage from '@/pages/VerificationPage';
 
 function AdminRoutes() {
   return (
@@ -51,6 +52,7 @@ function AdminRoutes() {
         <Route path="/health" element={<HealthPage />} />
         <Route path="/export" element={<ExportPage />} />
         <Route path="/quality" element={<QualityPage />} />
+        <Route path="/verification" element={<VerificationPage />} />
         <Route path="/clean" element={<CleanPage />} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/demo" element={<DemoPage />} />
