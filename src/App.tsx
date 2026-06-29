@@ -65,6 +65,9 @@ export default function App() {
         <Route path="/buy" element={<Navigate to="/trading" replace />} />
         <Route path="/buy/all" element={<Navigate to="/trading" replace />} />
 
+        {/* Price Research — standalone page */}
+        <Route path="/price-research" element={<PriceResearch />} />
+
         {/* Admin dashboard — 8 tabs, ALL PUBLIC */}
         <Route path="/admin/*" element={<AdminRoutes />} />
 
