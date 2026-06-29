@@ -6,7 +6,8 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "start": "node server.cjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "lint": "echo 'No lint configured — skipping'"
   },
   "dependencies": {
     "react": "^19.0.0",
