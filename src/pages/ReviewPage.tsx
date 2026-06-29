@@ -7,6 +7,11 @@ import {
 } from 'lucide-react';
 import WatchImage from '@/components/WatchImage';
 
+// ─── Direct Supabase connection ──────────────────────────────────────
+const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
+const REQ_HEADERS = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Content-Type': 'application/json' };
+
 type Verdict = 'APPROVED' | 'REVIEW' | 'HUMAN' | 'RECYCLE';
 
 const VERDICT_CONFIG: Record<Verdict, { label: string; color: string; bg: string }> = {
@@ -34,24 +39,29 @@ export default function ReviewPage() {
   const [total, setTotal] = useState(0);
   const [actionLog, setActionLog] = useState<string[]>([]);
 
+  // ─── Fetch from Supabase directly ──────────────────────────────────
   const fetchRecords = useCallback(async () => {
     setLoading(true);
     try {
-      const verdictParam = activeTab === 'ALL' ? '' : `&verdict=${activeTab}`;
-      const res = await fetch(`/api/listings?page=${page}&limit=20${verdictParam}`);
+      const offset = (page - 1) * 20;
+      const verdictFilter = activeTab === 'ALL' ? '' : `&verdict=eq.${activeTab}`;
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/watch_records?select=*&limit=20&offset=${offset}${verdictFilter}`,
+        { headers: REQ_HEADERS }
+      );
       const data = await res.json();
-      setRecords(data.rows || []);
-      setTotal(data.total || 0);
+      setRecords(data || []);
+
+      // Get count
+      const countRes = await fetch(
+        `${SUPABASE_URL}/rest/v1/watch_records?select=count${verdictFilter}`,
+        { method: 'HEAD', headers: { ...REQ_HEADERS, 'Prefer': 'count=exact' } }
+      );
+      const countRange = countRes.headers.get('content-range') || '';
+      setTotal(parseInt(countRange.split('/')[1] || '0') || (data?.length || 0));
     } catch {
-      // Demo data
-      setRecords([
-        { id: '1', brand: 'Rolex', reference: '126610LN', dialColor: 'Black', condition: 'New', year: 2024, price_usd: 14200, confidence: 55, verdict: 'HUMAN', raw_message: 'Rolex 126610LN black $14,200 N5 2024', source: 'whatsapp_group_1' },
-        { id: '2', brand: 'Patek Philippe', reference: '5711/1A', dialColor: null, condition: null, year: null, price_usd: 185000, confidence: 45, verdict: 'HUMAN', raw_message: 'PP 5711 blue $185k', source: 'whatsapp_group_2' },
-        { id: '3', brand: 'Audemars Piguet', reference: '15500ST', dialColor: 'Blue', condition: 'Used', year: 2022, price_usd: 32000, confidence: 58, verdict: 'HUMAN', raw_message: 'AP 15500ST blue used 2022 $32k', source: 'whatsapp_group_3' },
-        { id: '4', brand: 'Richard Mille', reference: 'RM11-03', dialColor: null, condition: 'New', year: 2024, price_usd: 385000, confidence: 40, verdict: 'RECYCLE', raw_message: 'WTB RM11-03 cheap', source: 'whatsapp_group_4' },
-        { id: '5', brand: 'Omega', reference: '310.30.42.50.01.001', dialColor: 'Black', condition: 'New', year: 2024, price_usd: 7800, confidence: 35, verdict: 'RECYCLE', raw_message: 'omega speedmaster new $7800', source: 'whatsapp_group_5' },
-      ]);
-      setTotal(5);
+      setRecords([]);
+      setTotal(0);
     }
     setLoading(false);
   }, [activeTab, page]);
@@ -70,19 +80,33 @@ export default function ReviewPage() {
 
   const saveEdit = async () => {
     try {
-      const res = await fetch('/api/update-record', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: editingId, ...editForm }),
-      });
-      const result = await res.json();
-      if (result.success) {
+      // Direct Supabase update
+      const updateBody: any = {};
+      if (editForm.brand !== undefined) updateBody.brand = editForm.brand;
+      if (editForm.reference !== undefined) updateBody.reference = editForm.reference;
+      if (editForm.dial_color !== undefined) updateBody.dial_color = editForm.dialColor;
+      if (editForm.condition !== undefined) updateBody.condition = editForm.condition;
+      if (editForm.year !== undefined) updateBody.year = editForm.year;
+      if (editForm.price_usd !== undefined) updateBody.price_usd = editForm.price_usd;
+      if (editForm.confidence !== undefined) updateBody.confidence = editForm.confidence;
+      if (editForm.verdict !== undefined) updateBody.verdict = editForm.verdict;
+      updateBody.human_edited = true;
+      updateBody.edit_source = 'review_page';
+
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/watch_records?id=eq.${editingId}`,
+        {
+          method: 'PATCH',
+          headers: REQ_HEADERS,
+          body: JSON.stringify(updateBody),
+        }
+      );
+      if (res.ok) {
         setActionLog(prev => [`Updated ${editForm.brand} ${editForm.reference} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
         setEditingId(null);
         fetchRecords();
       }
     } catch {
-      // Local update for demo
       setRecords(prev => prev.map(r => r.id === editingId ? { ...r, ...editForm } : r));
       setActionLog(prev => [`Updated ${editForm.brand} ${editForm.reference} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
       setEditingId(null);
@@ -91,11 +115,14 @@ export default function ReviewPage() {
 
   const changeVerdict = async (id: string, newVerdict: Verdict) => {
     try {
-      await fetch('/api/bulk-action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [id], action: newVerdict.toLowerCase() }),
-      });
+      await fetch(
+        `${SUPABASE_URL}/rest/v1/watch_records?id=eq.${id}`,
+        {
+          method: 'PATCH',
+          headers: REQ_HEADERS,
+          body: JSON.stringify({ verdict: newVerdict, human_edited: true, edit_source: 'review_verdict_change' }),
+        }
+      );
     } catch {}
     setRecords(prev => prev.map(r => r.id === id ? { ...r, verdict: newVerdict } : r));
     setActionLog(prev => [`Changed verdict to ${newVerdict} — ${new Date().toLocaleTimeString()}`, ...prev].slice(0, 20));
