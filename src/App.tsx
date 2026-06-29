@@ -1,11 +1,13 @@
 /**
  * WatchFacts — Application Router
  * ================================
- * ALL routes are public — no login required
+ * Public routes remain open
+ * /admin/* routes require authentication
  */
 
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/hooks/useAuth';
+import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { CookieConsent } from '@/components/CookieConsent';
 import Home from '@/pages/Home';
 import ReportsPage from '@/pages/ReportsPage';
@@ -93,8 +95,15 @@ export default function App() {
         {/* Pricing */}
         <Route path="/pricing" element={<PricingPage />} />
 
-        {/* Admin — 6 tabs: Search, Demo, Review, Analytics, Admin, Clean */}
-        <Route path="/admin/*" element={<AdminRoutes />} />
+        {/* Admin — protected, requires login */}
+        <Route
+          path="/admin/*"
+          element={
+            <ProtectedRoute>
+              <AdminRoutes />
+            </ProtectedRoute>
+          }
+        />
 
         {/* Redirects */}
         <Route path="/search" element={<Navigate to="/admin/search" replace />} />
