@@ -17,11 +17,22 @@
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════
 
+// Dynamic thresholds — can be overridden via env vars
+function getApproveThreshold() {
+  const env = process.env.APPROVE_THRESHOLD;
+  return env ? parseInt(env, 10) : 85;
+}
+
+function getHumanThreshold() {
+  const env = process.env.HUMAN_THRESHOLD;
+  return env ? parseInt(env, 10) : 70;
+}
+
 /** Threshold above which a parse is auto-approved. */
-const APPROVE_THRESHOLD = 85;
+const APPROVE_THRESHOLD = getApproveThreshold();
 
 /** Threshold above which a parse passes; below lands in human review. */
-const HUMAN_THRESHOLD = 70;
+const HUMAN_THRESHOLD = getHumanThreshold();
 
 /** Currency conversion rates → USD. */
 const RATES = {
@@ -621,6 +632,8 @@ function calculateConfidence(fields) {
  * Apply a business verdict based on parse confidence and field presence.
  */
 function verdict(parsed) {
+  const APPROVE_THRESHOLD = getApproveThreshold();
+  const HUMAN_THRESHOLD = getHumanThreshold();
   const c = parsed.confidence || 0;
 
   if (!parsed.brand || !parsed.reference) {
