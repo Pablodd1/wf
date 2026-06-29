@@ -16,15 +16,20 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
 
 interface ReportRecord {
+  id: string;
   brand: string;
+  model: string;
   reference: string;
+  dial_color: string;
+  condition: string;
   price_usd: number;
+  currency: string;
+  year: number;
   confidence: number;
   verdict: string;
-  condition: string;
-  dial_color: string;
   source: string;
   created_at: string;
+  received_at: string;
   raw_message: string;
 }
 

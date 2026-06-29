@@ -270,7 +270,7 @@ function DataInterpretation({ result }: { result: PriceResult }) {
           <span className="font-semibold text-gray-800">Price Trend:</span> {trendDesc} The filtered average of {fmtPrice(result.overallAvg)} represents the most reliable market valuation based on cleaned data.
         </p>
         <p>
-          <span className="font-semibold text-gray-800">Dial Color Variations:</span> {validDialBreakdown.length} different dial color{result.dialBreakdown.length !== 1 ? 's' : ''} identified in the dataset. 
+          <span className="font-semibold text-gray-800">Dial Color Variations:</span> {result.dialBreakdown.filter(d => d.count > 0).length} different dial color{result.dialBreakdown.filter(d => d.count > 0).length !== 1 ? 's' : ''} identified in the dataset. 
           The price trend chart above shows separate lines for each dial color — prices vary significantly by dial (e.g., White dial vs Blue dial). 
           Click on any dial color row below to see per-dial detailed analytics including individual listings.
         </p>
