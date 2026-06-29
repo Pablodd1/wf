@@ -35,6 +35,7 @@ import HealthPage from '@/pages/HealthPage';
 import DataBrowser from '@/pages/DataBrowser';
 import AdminReportsPage from '@/pages/AdminReportsPage';
 import ReferenceCheck from '@/pages/ReferenceCheck';
+import ExportPage from '@/pages/ExportPage';
 
 function AdminRoutes() {
   return (
@@ -47,6 +48,7 @@ function AdminRoutes() {
         <Route path="/review" element={<ReviewPage />} />
         <Route path="/reports" element={<AdminReportsPage />} />
         <Route path="/health" element={<HealthPage />} />
+        <Route path="/export" element={<ExportPage />} />
         <Route path="/clean" element={<CleanPage />} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/demo" element={<DemoPage />} />
