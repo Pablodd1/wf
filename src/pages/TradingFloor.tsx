@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Search, Filter, Info, User, CheckCircle, Globe, Loader2, TrendingUp, Shield, Award, DollarSign, Watch, Gem, X } from 'lucide-react';
+import { Search, Filter, Info, User, CheckCircle, Globe, Loader2, TrendingUp, Shield, Award, DollarSign, Watch, Gem, X, FileText, ClipboardList, AlertTriangle, ChevronRight, Upload } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
 
@@ -29,6 +29,22 @@ interface WatchListing {
   source: string | null;
   created_at: string;
   year: number | null;
+}
+
+interface ParsedListing {
+  raw: string;
+  brand: string | null;
+  reference: string | null;
+  dial: string | null;
+  year: number | null;
+  condition: string | null;
+  price: number | null;
+  price_usd: number | null;
+  currency: string | null;
+  confidence: number;
+  verdict: string;
+  error?: boolean;
+  errorMsg?: string;
 }
 
 const CONDITIONS = ['All', 'New', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9'];
@@ -292,6 +308,14 @@ export default function TradingFloor() {
   const pageSize = 24;
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // ─── Bulk Import State ──────────────────────────────────────────────
+  const [bulkMode, setBulkMode] = useState(false);
+  const [bulkText, setBulkText] = useState('');
+  const [bulkPreview, setBulkPreview] = useState<ParsedListing[]>([]);
+  const [bulkSubmitting, setBulkSubmitting] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState({ current: 0, total: 0, errors: 0 });
+  const [bulkResults, setBulkResults] = useState<{ success: number; errors: number } | null>(null);
+
   const fetchListings = useCallback(async () => {
     setLoading(true);
     try {
@@ -339,6 +363,89 @@ export default function TradingFloor() {
   useEffect(() => {
     fetchListings();
   }, [page, fetchListings]);
+
+  // ─── Bulk Import Functions ──────────────────────────────────────────
+  async function parseBulkText(text: string): Promise<ParsedListing[]> {
+    const lines = text.split('\n').filter(l => l.trim().length > 4);
+    // Filter out section headers (🚩ROLEX🚩, 🏆PP Ready, ⌚🇭🇰HK Ready, timestamp lines)
+    const sectionHeaders = /^(\s*[🚩🏆⏳⌚🔥💎⭐🌟🎯🚨⚡]+\s*\w+|\s*\[?\d{1,2}:\d{2}\s*(AM|PM)\]?.*|\s*--+.*|\s*==+.*|\s*\*+.*)$/i;
+    const cleanLines = lines.filter(l => !sectionHeaders.test(l.trim()));
+    if (cleanLines.length === 0) return [];
+
+    try {
+      const res = await fetch('/api/batch-parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: cleanLines }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return (data.results || []) as ParsedListing[];
+    } catch (err) {
+      console.error('[bulk-parse] error:', err);
+      return cleanLines.map(line => ({
+        raw: line,
+        brand: null, reference: null, dial: null, year: null,
+        condition: null, price: null, price_usd: null, currency: null,
+        confidence: 0, verdict: 'RECYCLE',
+        error: true, errorMsg: String(err),
+      }));
+    }
+  }
+
+  async function submitBulk(parsed: ParsedListing[]) {
+    setBulkSubmitting(true);
+    setBulkResults(null);
+    setBulkProgress({ current: 0, total: parsed.length, errors: 0 });
+
+    const batchSize = 50;
+    let success = 0, errors = 0;
+
+    for (let i = 0; i < parsed.length; i += batchSize) {
+      const batch = parsed.slice(i, i + batchSize);
+      const records = batch.map(p => ({
+        brand: p.brand || 'Unknown',
+        reference: p.reference || 'Unknown',
+        dial_color: p.dial,
+        condition: p.condition,
+        year: p.year,
+        price: p.price,
+        price_usd: p.price_usd,
+        currency: p.currency || 'USD',
+        raw_message: p.raw,
+        source: 'bulk_import',
+        confidence: p.confidence,
+        verdict: p.confidence > 85 ? 'APPROVED' : p.confidence > 70 ? 'REVIEW' : 'HUMAN',
+      }));
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records`, {
+          method: 'POST',
+          headers: { ...REQ, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+          body: JSON.stringify(records),
+        });
+        if (res.ok) {
+          success += batch.length;
+        } else {
+          errors += batch.length;
+        }
+      } catch {
+        errors += batch.length;
+      }
+
+      setBulkProgress({
+        current: Math.min(i + batchSize, parsed.length),
+        total: parsed.length,
+        errors,
+      });
+
+      // Small delay to prevent rate limiting
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    setBulkSubmitting(false);
+    setBulkResults({ success, errors });
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -420,6 +527,20 @@ export default function TradingFloor() {
               })}
             </div>
 
+            {/* Bulk Import Toggle */}
+            <div className="relative">
+              <button
+                onClick={() => { setBulkMode(!bulkMode); setBulkResults(null); }}
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider transition-all ${
+                  bulkMode
+                    ? 'bg-[#D4AF37] text-slate-900 shadow-md'
+                    : 'bg-white text-slate-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                <FileText size={13} /> {bulkMode ? 'Close Import' : 'Bulk Import'}
+              </button>
+            </div>
+
             {/* Currency Converter */}
             <div className="relative">
               <button
@@ -436,7 +557,228 @@ export default function TradingFloor() {
         </div>
       </div>
 
+      {/* ─── Bulk Import Panel ─────────────────────────────────────────── */}
+      {bulkMode && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="max-w-7xl mx-auto px-4 py-6"
+        >
+          {/* Header */}
+          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 rounded-xl p-6 mb-6 text-white">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="w-1 h-6 bg-[#D4AF37] rounded-full" />
+              <h2 className="text-lg font-semibold tracking-wide">Bulk Import</h2>
+              <ClipboardList size={18} className="text-[#D4AF37]" />
+            </div>
+            <p className="text-sm text-gray-400 ml-4">
+              Paste dealer messages below (one per line). The parser will extract brand, reference, dial, year, condition, and price automatically.
+            </p>
+          </div>
+
+          {/* Text Area */}
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-5 mb-6">
+            <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">
+              Dealer Messages
+            </label>
+            <textarea
+              value={bulkText}
+              onChange={e => setBulkText(e.target.value)}
+              rows={20}
+              className="w-full px-4 py-3 border border-gray-200 rounded-lg text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-[#D4AF37] focus:border-transparent bg-gray-50/50 resize-vertical transition-all"
+              placeholder={"Paste dealer messages here, one per line...\nExample:\n🇭🇰26240OR 2022 Full Set Used Green gold 50th HKD 865K\n🌟4910/1200A Green 5/2026 HKD 118K\n126234 Ombre Green 6/2026 hkd 120000\nRolex 126334 Datejust Blue Dial 2023 Box Papers $14500"}
+            />
+            <div className="flex items-center justify-between mt-3">
+              <span className="text-xs text-gray-400">
+                {bulkText.split('\n').filter(l => l.trim().length > 4).length} lines detected
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setBulkText('')}
+                  className="px-4 py-2 border border-gray-200 rounded-lg text-xs font-medium text-gray-500 hover:bg-gray-50 transition-colors"
+                >
+                  Clear
+                </button>
+                <button
+                  onClick={async () => {
+                    const parsed = await parseBulkText(bulkText);
+                    setBulkPreview(parsed);
+                    setBulkResults(null);
+                  }}
+                  disabled={!bulkText.trim() || bulkSubmitting}
+                  className="px-5 py-2 bg-[#D4AF37] text-slate-900 rounded-lg text-xs font-semibold uppercase tracking-wider hover:bg-[#c4a030] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-sm"
+                >
+                  <Search size={12} /> Parse Preview
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview Table */}
+          {bulkPreview.length > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden mb-6"
+            >
+              {/* Preview Header */}
+              <div className="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ClipboardList size={14} className="text-[#D4AF37]" />
+                  <span className="text-sm font-semibold text-gray-800">
+                    Preview: {bulkPreview.length} listings parsed
+                  </span>
+                  <span className="text-xs text-gray-400 ml-2">
+                    ({bulkPreview.filter(p => (p.confidence || 0) > 70).length} high confidence)
+                  </span>
+                </div>
+                <div className="flex gap-2">
+                  {!bulkSubmitting && !bulkResults && (
+                    <button
+                      onClick={() => submitBulk(bulkPreview)}
+                      disabled={bulkPreview.length === 0}
+                      className="px-5 py-2 bg-gradient-to-r from-slate-900 to-slate-800 text-white rounded-lg text-xs font-semibold uppercase tracking-wider hover:from-slate-800 hover:to-slate-700 disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-1.5 shadow-sm"
+                    >
+                      <Upload size={12} /> Submit All to Database
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Progress Bar */}
+              {bulkSubmitting && (
+                <div className="px-5 py-4 bg-amber-50/50 border-b border-gray-200">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-gray-700">
+                      Processing {bulkProgress.current}/{bulkProgress.total}...
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {bulkProgress.errors > 0 && (
+                        <span className="text-amber-600 font-medium">{bulkProgress.errors} errors</span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#D4AF37] to-amber-500 rounded-full transition-all duration-300"
+                      style={{ width: `${(bulkProgress.current / bulkProgress.total) * 100}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Results Summary */}
+              {bulkResults && (
+                <div className="px-5 py-4 bg-green-50 border-b border-green-200">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1.5 text-sm font-semibold text-green-700">
+                      <CheckCircle size={15} className="text-green-500" />
+                      <span>{bulkResults.success} inserted</span>
+                    </div>
+                    {bulkResults.errors > 0 && (
+                      <div className="flex items-center gap-1.5 text-sm font-semibold text-amber-700">
+                        <AlertTriangle size={15} className="text-amber-500" />
+                        <span>{bulkResults.errors} failed</span>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => { setBulkResults(null); setBulkPreview([]); setBulkText(''); }}
+                      className="ml-auto px-4 py-1.5 bg-white border border-gray-200 rounded-lg text-xs font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+                    >
+                      Import More
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Table */}
+              <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 bg-gray-50 z-10">
+                    <tr className="border-b border-gray-200">
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">#</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Brand</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Reference</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Dial</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Year</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Condition</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Price</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Currency</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Confidence</th>
+                      <th className="px-4 py-2.5 text-left text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {bulkPreview.map((item, idx) => (
+                      <tr
+                        key={idx}
+                        className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'} ${item.error ? 'bg-red-50/50' : ''} hover:bg-amber-50/30 transition-colors`}
+                      >
+                        <td className="px-4 py-2.5 text-[11px] text-gray-400 font-mono">{idx + 1}</td>
+                        <td className="px-4 py-2.5 text-[11px] font-semibold text-[#D4AF37]">{item.brand || '—'}</td>
+                        <td className="px-4 py-2.5 text-[11px] font-medium text-gray-700 font-mono">{item.reference || '—'}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-gray-600">{item.dial || '—'}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-gray-600">{item.year || '—'}</td>
+                        <td className="px-4 py-2.5 text-[11px] text-gray-600">{item.condition || '—'}</td>
+                        <td className="px-4 py-2.5 text-[11px] font-medium text-gray-900">
+                          {item.price ? item.price.toLocaleString() : '—'}
+                        </td>
+                        <td className="px-4 py-2.5 text-[11px] text-gray-500">{item.currency || '—'}</td>
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-1.5">
+                            <div className="w-12 h-1.5 bg-gray-200 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full ${
+                                  (item.confidence || 0) > 85 ? 'bg-green-500' : (item.confidence || 0) > 70 ? 'bg-amber-500' : 'bg-red-400'
+                                }`}
+                                style={{ width: `${Math.min(item.confidence || 0, 100)}%` }}
+                              />
+                            </div>
+                            <span className={`text-[10px] font-semibold ${
+                              (item.confidence || 0) > 85 ? 'text-green-600' : (item.confidence || 0) > 70 ? 'text-amber-600' : 'text-red-500'
+                            }`}>
+                              {item.confidence || 0}%
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5">
+                          {item.error ? (
+                            <span className="text-[10px] font-medium text-red-500 bg-red-50 px-2 py-0.5 rounded-full">ERROR</span>
+                          ) : (
+                            <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${
+                              (item.confidence || 0) > 85
+                                ? 'text-green-700 bg-green-50'
+                                : (item.confidence || 0) > 70
+                                  ? 'text-amber-700 bg-amber-50'
+                                  : 'text-gray-600 bg-gray-100'
+                            }`}>
+                              {(item.confidence || 0) > 85 ? 'APPROVED' : (item.confidence || 0) > 70 ? 'REVIEW' : 'HUMAN'}
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Empty state for bulk mode */}
+          {bulkPreview.length === 0 && !bulkSubmitting && !bulkResults && (
+            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
+              <div className="text-5xl mb-4 opacity-30">📋</div>
+              <p className="text-sm font-medium text-gray-500 mb-1">Paste dealer messages above and click &quot;Parse Preview&quot;</p>
+              <p className="text-xs text-gray-400">
+                Supports all major formats: Rolex, Patek Philippe, AP, Richard Mille, and more.
+              </p>
+            </div>
+          )}
+        </motion.div>
+      )}
+
       {/* Results — with client-side filtering for watches/other */}
+      {!bulkMode && (
       <div className="max-w-7xl mx-auto px-4 py-6">
         {(() => {
           // Apply client-side brand filtering
@@ -514,6 +856,7 @@ export default function TradingFloor() {
           </>
         )}
       </div>
+      )}
     </div>
   );
 }
