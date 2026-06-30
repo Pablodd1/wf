@@ -29,18 +29,44 @@
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
+  html {
+    scroll-behavior: smooth;
+  }
 }
 
-/* Scrollbar */
+/* ─── Scrollbar ─────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #0A0A0F; }
 ::-webkit-scrollbar-thumb { background: #2A2A3E; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #3A3A4E; }
+::-webkit-scrollbar-thumb:hover { background: #D4AF37; }
+::-webkit-scrollbar-corner { background: #0A0A0F; }
+
+/* Firefox scrollbar */
+* { scrollbar-width: thin; scrollbar-color: #2A2A3E #0A0A0F; }
 
 /* Hide scrollbar for nav */
 .hide-scrollbar::-webkit-scrollbar { display: none; }
 
-/* Custom animations */
+/* ─── Shimmer / Skeleton Animation ──────────────────────────────── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.shimmer {
+  background: linear-gradient(90deg, #E5E7EB 25%, #F3F4F6 50%, #E5E7EB 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.shimmer-dark {
+  background: linear-gradient(90deg, #1E1E2E 25%, #2A2A3E 50%, #1E1E2E 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ─── Gold Pulse Animation ──────────────────────────────────────── */
 @keyframes pulse-gold {
   0%, 100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); }
   50% { box-shadow: 0 0 0 8px rgba(212, 175, 55, 0); }
@@ -48,4 +74,149 @@
 
 .animate-pulse-gold {
   animation: pulse-gold 2s ease-in-out infinite;
+}
+
+/* ─── Card Hover Glow ───────────────────────────────────────────── */
+@keyframes card-glow {
+  0%, 100% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
+  50% { box-shadow: 0 8px 24px rgba(212, 175, 55, 0.12), 0 0 40px rgba(212, 175, 55, 0.06); }
+}
+
+/* ─── Spin Animation for Loading ────────────────────────────────── */
+@keyframes spin-gold {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.animate-spin-gold {
+  animation: spin-gold 1s linear infinite;
+  color: #D4AF37;
+}
+
+/* ─── Toast Notifications ───────────────────────────────────────── */
+@keyframes toast-slide-in {
+  0% { transform: translateX(120%); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes toast-slide-out {
+  0% { transform: translateX(0); opacity: 1; }
+  100% { transform: translateX(120%); opacity: 0; }
+}
+
+@keyframes toast-progress {
+  0% { width: 100%; }
+  100% { width: 0%; }
+}
+
+.toast-enter {
+  animation: toast-slide-in 0.3s ease-out forwards;
+}
+
+.toast-exit {
+  animation: toast-slide-out 0.3s ease-in forwards;
+}
+
+.toast-progress-bar {
+  animation: toast-progress 3s linear forwards;
+}
+
+/* ─── Staggered Entrance Animation Classes ──────────────────────── */
+@keyframes fade-in-up {
+  0% { opacity: 0; transform: translateY(16px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.4s ease-out forwards;
+}
+
+/* ─── Button Press Effect ───────────────────────────────────────── */
+.btn-press:active {
+  transform: scale(0.98);
+}
+
+/* ─── Price Tag Monospace ───────────────────────────────────────── */
+.price-mono {
+  font-family: 'Courier New', Courier, monospace;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── NEW Badge ─────────────────────────────────────────────────── */
+.new-badge {
+  background: linear-gradient(135deg, #D4AF37, #B8942E);
+  color: white;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.4);
+}
+
+/* ─── Empty State Pattern ───────────────────────────────────────── */
+.empty-state-pattern {
+  background-image: radial-gradient(circle at 1px 1px, rgba(212, 175, 55, 0.08) 1px, transparent 0);
+  background-size: 24px 24px;
+}
+
+/* ─── Tab Active Underline ──────────────────────────────────────── */
+.tab-active {
+  position: relative;
+  color: #D4AF37;
+}
+
+.tab-active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #D4AF37, #E5C158);
+  border-radius: 1px;
+}
+
+/* ─── Tooltip ───────────────────────────────────────────────────── */
+.tooltip {
+  position: relative;
+}
+
+.tooltip::before {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%) scale(0.95);
+  padding: 4px 10px;
+  background: #1A1A24;
+  color: #D4AF37;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid #2A2A3E;
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.15s ease-out;
+  z-index: 100;
+}
+
+.tooltip:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* ─── Reduced Motion Support ────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html {
+    scroll-behavior: auto;
+  }
 }
