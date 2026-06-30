@@ -1,6 +1,5 @@
 /**
  * Price Research — Reference validation added to filter bad data
- * P0 FIX: Brand dropdown deduplicated — prevents 300 duplicate "Rolex" entries
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -55,17 +54,16 @@ export default function PriceResearch() {
   const [dateRange, setDateRange] = useState('6M');
   const [validationNote, setValidationNote] = useState('');
 
-  // Fetch brands — FILTERED through validator + DEDUPLICATED (P0 FIX)
+  // Fetch brands — FILTERED through validator
   useEffect(() => {
     const fetchModels = async () => {
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=brand&limit=1000`, { headers: REQ_HEADERS });
         if (!res.ok) return;
         const data = await res.json();
-        // P0 FIX: Deduplicate brands — Array.from(new Set(...)) prevents 300 duplicate "Rolex" entries
-        const uniqueBrands = Array.from(new Set(filterValidBrands(data.map((r: any) => r.brand).filter(Boolean))));
-        setModels(uniqueBrands);
-        setValidationNote(uniqueBrands.length > 0 ? `${uniqueBrands.length} unique brands loaded` : '');
+        const brands = filterValidBrands(data.map((r: any) => r.brand));
+        setModels(brands);
+        setValidationNote(brands.length > 0 ? `${brands.length} brands loaded` : '');
       } catch { setModels([]); }
     };
     fetchModels();
@@ -81,15 +79,14 @@ export default function PriceResearch() {
         const data = await res.json();
         const rawRefs = data.map((r: any) => r.reference);
         const validRefs = filterValidReferences(rawRefs);
-        // P0 FIX: Deduplicate references too
-        const uniqueValidRefs = Array.from(new Set(validRefs));
-        const filteredCount = rawRefs.length - uniqueValidRefs.length;
+        // Show validation message if bad refs were filtered
+        const filteredCount = rawRefs.length - validRefs.length;
         if (filteredCount > 0) {
-          setValidationNote(`${uniqueValidRefs.length} valid references (filtered ${filteredCount} bad entries: years, prices)`);
+          setValidationNote(`${validRefs.length} valid references (filtered ${filteredCount} bad entries: years, prices)`);
         } else {
-          setValidationNote(`${uniqueValidRefs.length} references found`);
+          setValidationNote(`${validRefs.length} references found`);
         }
-        setReferences(uniqueValidRefs);
+        setReferences(validRefs);
       } catch { setReferences([]); }
     };
     fetchRefs();
