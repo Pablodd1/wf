@@ -31,18 +31,12 @@ const AuthContext = createContext<AuthContextType>({
   clearError: () => {},
 });
 
-/**
- * Auth Provider -- wraps the app with authentication state.
- * Integrates with Supabase Auth for session management.
- * Supports: Email/Password, Google OAuth, Apple OAuth.
- */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    // Check for existing session on mount
     supabase.auth.getSession().then(({ data }) => {
       if (data.session?.user) {
         setUser({
@@ -54,7 +48,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
-    // Listen for auth state changes (login, logout, token refresh)
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setUser({
@@ -75,23 +68,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     clearError();
     const { error: err } = await supabase.auth.signInWithPassword({ email, password });
-    if (err) {
-      setError(err.message);
-      throw err;
-    }
+    if (err) { setError(err.message); throw err; }
   };
 
   const signup = async (email: string, password: string, name?: string) => {
     clearError();
     const { error: err } = await supabase.auth.signUp({
-      email,
-      password,
+      email, password,
       options: { data: { name: name || '' } },
     });
-    if (err) {
-      setError(err.message);
-      throw err;
-    }
+    if (err) { setError(err.message); throw err; }
   };
 
   const logout = async () => {
@@ -106,10 +92,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       provider: 'google',
       options: { redirectTo: `${window.location.origin}/#/admin` },
     });
-    if (err) {
-      setError(err.message);
-      throw err;
-    }
+    if (err) { setError(err.message); throw err; }
   };
 
   const loginWithApple = async () => {
@@ -118,22 +101,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       provider: 'apple',
       options: { redirectTo: `${window.location.origin}/#/admin` },
     });
-    if (err) {
-      setError(err.message);
-      throw err;
-    }
+    if (err) { setError(err.message); throw err; }
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, error, login, signup, logout, loginWithGoogle, loginWithApple, clearError }}>
+    <AuthContext.Provider value={{
+      user, loading, error, login, signup, logout, loginWithGoogle, loginWithApple, clearError
+    }}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-/**
- * Hook to access auth context. Must be used inside AuthProvider.
- */
 export function useAuth() {
   return useContext(AuthContext);
 }
