@@ -58,10 +58,10 @@ export default function PriceResearch() {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=brand&limit=1000`, { headers: REQ_HEADERS });
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/mv_brand_dist?select=brand&order=brand`, { headers: REQ_HEADERS });
         if (!res.ok) return;
         const data = await res.json();
-        const brands = filterValidBrands(data.map((r: any) => r.brand));
+        const brands = [...new Set(data.map((r: any) => r.brand).filter(Boolean))].sort();
         setModels(brands);
         setValidationNote(brands.length > 0 ? `${brands.length} brands loaded` : '');
       } catch { setModels([]); }
@@ -77,10 +77,10 @@ export default function PriceResearch() {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=reference&brand=eq.${encodeURIComponent(selectedModel)}&limit=500`, { headers: REQ_HEADERS });
         if (!res.ok) return;
         const data = await res.json();
-        const rawRefs = data.map((r: any) => r.reference);
-        const validRefs = filterValidReferences(rawRefs);
+        const uniqueRefs = [...new Set(data.map((r: any) => r.reference).filter(Boolean))];
+        const validRefs = filterValidReferences(uniqueRefs);
         // Show validation message if bad refs were filtered
-        const filteredCount = rawRefs.length - validRefs.length;
+        const filteredCount = uniqueRefs.length - validRefs.length;
         if (filteredCount > 0) {
           setValidationNote(`${validRefs.length} valid references (filtered ${filteredCount} bad entries: years, prices)`);
         } else {
