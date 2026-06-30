@@ -122,10 +122,10 @@ export function Navbar() {
           <span className="text-[11px] font-mono text-gray-500">{time}</span>
           <div className="flex items-center gap-1 text-[11px] font-mono">
             <span className="text-gray-500 mr-1">TOTAL</span>
-            <span className="font-bold text-white">{total.toLocaleString()}</span>
+            <span className="font-bold text-white price-mono">{total.toLocaleString()}</span>
             <span className="text-gray-600 mx-1">|</span>
             <span className="text-[#D4AF37] mr-1">APPROVED</span>
-            <span className="font-bold text-[#D4AF37]">{approved.toLocaleString()}</span>
+            <span className="font-bold text-[#D4AF37] price-mono">{approved.toLocaleString()}</span>
           </div>
         </div>
 
@@ -138,22 +138,44 @@ export function Navbar() {
             </span>
             <span className="text-[10px] text-green-400 font-medium uppercase tracking-wider">System Online</span>
           </div>
-          <button onClick={() => navigate('/trading')} className="hidden sm:block px-3 py-1.5 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-[11px] font-medium rounded-md transition-colors">
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={() => navigate('/trading')}
+            className="hidden sm:block px-3 py-1.5 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-[11px] font-medium rounded-md transition-colors shadow-sm"
+          >
             TRADING FLOOR
-          </button>
-          <button onClick={() => setMobileMenuOpen(true)} className="md:hidden flex items-center justify-center w-10 h-10 rounded-md text-gray-300 hover:text-white hover:bg-[#1A1A24] transition-colors active:scale-95" aria-label="Open menu">
+          </motion.button>
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            onClick={() => setMobileMenuOpen(true)}
+            className="md:hidden flex items-center justify-center w-10 h-10 rounded-md text-gray-300 hover:text-white hover:bg-[#1A1A24] transition-colors"
+            aria-label="Open menu"
+          >
             <Menu size={22} />
-          </button>
+          </motion.button>
         </div>
       </motion.header>
 
       {/* ── Tab Bar ──────────────────────────────────────────── */}
-      <nav className="sticky top-14 z-40 h-9 bg-[#0A0A0F]/95 backdrop-blur border-b border-[#1E1E2E] flex items-center px-4 gap-0.5 overflow-x-auto">
+      <nav className="sticky top-14 z-40 h-9 bg-[#0A0A0F]/95 backdrop-blur border-b border-[#1E1E2E] flex items-center px-4 gap-0.5 overflow-x-auto hide-scrollbar">
         {NAV_ITEMS.map(({ label, path, icon: Icon }) => {
           const active = isActive(path);
           return (
             <Link key={path} to={path}
-              className={`flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-medium transition-all duration-200 whitespace-nowrap min-h-[36px] md:min-h-0 active:scale-95 ${active ? 'bg-[#D4AF37]/15 text-[#D4AF37]' : 'text-gray-400 hover:text-gray-200 hover:bg-[#1A1A24]'}`}>
+              className={`relative flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-medium transition-all duration-200 whitespace-nowrap min-h-[36px] md:min-h-0 ${
+                active
+                  ? 'text-[#D4AF37] bg-[#D4AF37]/10'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1A1A24]'
+              }`}
+            >
+              {active && (
+                <motion.div
+                  layoutId="activeTab"
+                  className="absolute bottom-0 left-1 right-1 h-0.5 bg-gradient-to-r from-[#D4AF37] to-[#E5C158] rounded-full"
+                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                />
+              )}
               <Icon size={11} />
               {label}
             </Link>
@@ -170,9 +192,14 @@ export function Navbar() {
               className="absolute right-0 top-0 bottom-0 w-[85vw] max-w-[360px] bg-[#0A0A0F]/98 backdrop-blur-lg border-l border-[#1E1E2E] flex flex-col">
               <div className="flex items-center justify-between px-5 h-14 border-b border-[#1E1E2E] flex-shrink-0">
                 <span className="text-sm font-semibold text-white tracking-wide">Menu</span>
-                <button onClick={() => setMobileMenuOpen(false)} className="flex items-center justify-center w-10 h-10 rounded-md text-gray-300 hover:text-white hover:bg-[#1A1A24] transition-colors active:scale-95" aria-label="Close menu">
+                <motion.button
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-center w-10 h-10 rounded-md text-gray-300 hover:text-white hover:bg-[#1A1A24] transition-colors"
+                  aria-label="Close menu"
+                >
                   <X size={22} />
-                </button>
+                </motion.button>
               </div>
               <div className="flex-1 overflow-y-auto px-5 py-4 space-y-6">
                 <div className="space-y-3">
@@ -189,25 +216,34 @@ export function Navbar() {
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-[#111118] border border-[#1E1E2E]">
                     <div className="flex-1 text-center">
                       <div className="text-[10px] text-gray-500 font-mono uppercase tracking-wider mb-1">Total</div>
-                      <div className="text-sm font-bold text-white">{total.toLocaleString()}</div>
+                      <div className="text-sm font-bold text-white price-mono">{total.toLocaleString()}</div>
                     </div>
                     <div className="w-px h-8 bg-[#1E1E2E]" />
                     <div className="flex-1 text-center">
                       <div className="text-[10px] text-[#D4AF37]/70 font-mono uppercase tracking-wider mb-1">Approved</div>
-                      <div className="text-sm font-bold text-[#D4AF37]">{approved.toLocaleString()}</div>
+                      <div className="text-sm font-bold text-[#D4AF37] price-mono">{approved.toLocaleString()}</div>
                     </div>
                   </div>
                 </div>
-                <button onClick={() => { setMobileMenuOpen(false); navigate('/trading'); }} className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-sm font-medium rounded-lg transition-colors active:scale-[0.98]">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => { setMobileMenuOpen(false); navigate('/trading'); }}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
+                >
                   <Zap size={16} /> TRADING FLOOR
-                </button>
+                </motion.button>
                 <div className="space-y-1">
                   <div className="text-[10px] text-gray-500 font-mono uppercase tracking-wider px-1 mb-2">Navigation</div>
                   {NAV_ITEMS.map(({ label, path, icon: Icon }) => {
                     const active = isActive(path);
                     return (
                       <Link key={path} to={path} onClick={() => setMobileMenuOpen(false)}
-                        className={`flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-all duration-200 min-h-[48px] active:scale-[0.98] ${active ? 'bg-[#D4AF37]/15 text-[#D4AF37]' : 'text-gray-300 hover:text-white hover:bg-[#1A1A24]'}`}>
+                        className={`flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-all duration-200 min-h-[48px] ${
+                          active
+                            ? 'bg-[#D4AF37]/15 text-[#D4AF37]'
+                            : 'text-gray-300 hover:text-white hover:bg-[#1A1A24]'
+                        }`}>
                         <Icon size={18} />
                         <span className="flex-1">{label}</span>
                         <ChevronRight size={14} className="text-gray-600" />
@@ -231,6 +267,12 @@ export function Navbar() {
                 className={`flex flex-col items-center justify-center gap-0.5 w-16 h-full rounded-lg transition-all duration-200 active:scale-90 ${active ? 'text-[#D4AF37]' : 'text-gray-500 hover:text-gray-300'}`}>
                 <Icon size={20} strokeWidth={active ? 2.5 : 1.5} />
                 <span className="text-[10px] font-medium">{label}</span>
+                {active && (
+                  <motion.div
+                    layoutId="bottomIndicator"
+                    className="absolute bottom-1 w-6 h-0.5 bg-[#D4AF37] rounded-full"
+                  />
+                )}
               </Link>
             );
           })}
