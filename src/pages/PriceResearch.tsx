@@ -1,5 +1,5 @@
 /**
- * Price Research — Reference validation added to filter bad data
+ * Price Research — Deduplicated brands & clean references
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage } from '@/lib/imageResolver';
-import { filterValidReferences, filterValidBrands } from '@/lib/referenceValidator';
+import { filterValidReferences } from '@/lib/referenceValidator';
 
 const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
@@ -40,7 +40,7 @@ const DCC: Record<string,string> = {'White':'#E5E7EB','Black':'#1F2937','Blue':'
 function gdc(d: string): string { return DCC[d]||`hsl($ {[...d].reduce((s,c)=>s+c.charCodeAt(0),0)%360},60%,50%)`; }
 function CustomTooltip({ active, payload }: any) { if (!active||!payload?.length) return null; const d = payload[0].payload; return <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-sm min-w-[220px]"><div className="font-semibold text-gray-900 mb-2 pb-2 border-b border-gray-100">{d.month}</div><div className="text-[11px] text-gray-500 mb-2">{d.count} listings</div>{Object.entries(d.dialPrices).sort(([,a],[,b])=>(b as number)-(a as number)).map(([c,p])=>(<div key={c} className="flex justify-between items-center py-0.5"><div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{backgroundColor:gdc(c)}}/><span className="text-gray-600">{c}</span></div><span className="font-mono font-semibold" style={{color:gdc(c)}}>{fmtPrice(p as number)}</span></div>))}<div className="mt-2 pt-2 border-t border-gray-100 flex justify-between"><span className="text-gray-500 font-medium">Overall Avg</span><span className="font-mono font-bold text-gray-900">{fmtPrice(d.avgPrice)}</span></div></div>; }
 function PriceRangeBar({ min, avg, max }: { min: number; avg: number; max: number }) { const r = max-min||1; const ap = ((avg-min)/r)*100; return <div className="w-full"><div className="relative h-16"><div className="absolute top-8 left-0 right-0 h-1 bg-gray-200 rounded-full" /><div className="absolute" style={{left:'0%',top:'18px'}}><div className="flex flex-col items-center"><span className="text-[9px] text-gray-400 uppercase tracking-wider mb-1">Min</span><div className="w-3.5 h-3.5 rounded-full bg-gray-400 border-2 border-white shadow-md"/><span className="text-xs text-gray-600 font-mono mt-1 font-medium">{fmtPrice(min)}</span></div></div><div className="absolute" style={{left:`${ap}%`,top:'12px',transform:'translateX(-50%)'}}><div className="flex flex-col items-center"><span className="text-[9px] text-blue-600 font-bold uppercase tracking-wider mb-1">Average</span><div className="w-7 h-7 rounded-full bg-[#3B5BFE] border-[3px] border-white shadow-lg"/><span className="text-sm text-[#3B5BFE] font-mono font-bold mt-1">{fmtPrice(avg)}</span></div></div><div className="absolute" style={{right:'0%',top:'18px'}}><div className="flex flex-col items-center"><span className="text-[9px] text-gray-400 uppercase tracking-wider mb-1">Max</span><div className="w-3.5 h-3.5 rounded-full bg-gray-400 border-2 border-white shadow-md"/><span className="text-xs text-gray-600 font-mono mt-1 font-medium">{fmtPrice(max)}</span></div></div></div></div>; }
-function DataInterpretation({ result }: { result: PriceResult }) { const od = result.outlierCount>0?`${result.outlierCount} outlier${result.outlierCount>1?'s were':' was'} detected and removed using the IQR method (Q1-1.5xIQR=${fmtPrice(result.iqrLower)}, Q3+1.5xIQR=${fmtPrice(result.iqrUpper)}). The removed outlier prices are: ${result.outlierPrices.map(p=>fmtPriceFull(p)).join(', ')}.`:'No outliers were detected using the IQR method. All data points fall within the expected range.'; const td = result.priceDrift>5?`Strong upward trend (+${result.priceDrift}%). Market demand increasing.`:result.priceDrift>0?`Slight upward trend (+${result.priceDrift}%). Prices stable with modest growth.`:result.priceDrift>-5?`Slight downward trend (${result.priceDrift}%). Minor correction or seasonal fluctuation.`: `Downward trend (${result.priceDrift}%). Possible market softening.`; return <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 border border-gray-200 rounded-xl p-6"><div className="flex items-center gap-2 mb-4"><Activity size={18} className="text-[#3B5BFE]"/><h3 className="text-sm font-semibold text-gray-900">Data Analysis & Interpretation</h3></div><div className="space-y-3 text-sm text-gray-600 leading-relaxed"><p><span className="font-semibold text-gray-800">Dataset Overview:</span> Analyzed {result.totalListings} listings for the {result.brand} {result.reference}.</p><p><span className="font-semibold text-gray-800">Outlier Detection:</span> {od}</p><p><span className="font-semibold text-gray-800">Price Trend:</span> {td}</p><p><span className="font-semibold text-gray-800">Dial Color Variations:</span> {result.dialBreakdown.filter(d=>d.count>0).length} different dial color(s) identified.</p></div></div>; }
+function DataInterpretation({ result }: { result: PriceResult }) { const od = result.outlierCount>0?`${result.outlierCount} outlier${result.outlierCount>1?'s were':' was'} detected and removed using the IQR method (Q1-1.5xIQR=${fmtPrice(result.iqrLower)}, Q3+1.5xIQR=${fmtPrice(result.iqrUpper)}). The removed outlier prices are: ${result.outlierPrices.map(p=>fmtPriceFull(p)).join(', ')}.`:'No outliers were detected using the IQR method. All data points fall within the expected range.'; const td = result.priceDrift>5?`Strong upward trend (+${result.priceDrift}%). Market demand increasing.`:result.priceDrift>0?`Slight upward trend (+${result.priceDrift}%). Prices stable with modest growth.`:result.priceDrift>-5?`Slight downward trend (${result.priceDrift}%). Minor correction or seasonal fluctuation.`: `Downward trend (${result.priceDrift}%). Possible market softening.`; return <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 border border-gray-200 rounded-xl p-6"><div className="flex items-center gap-2 mb-4"><Activity size={18} className="text-[#3B5BFE]"/><h3 className="text-sm font-semibold text-gray-900">Data Analysis &amp; Interpretation</h3></div><div className="space-y-3 text-sm text-gray-600 leading-relaxed"><p><span className="font-semibold text-gray-800">Dataset Overview:</span> Analyzed {result.totalListings} listings for the {result.brand} {result.reference}.</p><p><span className="font-semibold text-gray-800">Outlier Detection:</span> {od}</p><p><span className="font-semibold text-gray-800">Price Trend:</span> {td}</p><p><span className="font-semibold text-gray-800">Dial Color Variations:</span> {result.dialBreakdown.filter(d=>d.count>0).length} different dial color(s) identified.</p></div></div>; }
 function Footer() { return <footer className="bg-white border-t border-gray-200 pt-10 pb-6 px-6 mt-auto"><div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-sm mb-10"><div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Features</h4><ul className="space-y-2"><li><span className="text-gray-600">Trading Floor</span></li><li><span className="text-gray-600">ChronoMatch</span></li></ul></div><div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Tools</h4><ul className="space-y-2"><li><span className="text-gray-600">Glossary</span></li><li><span className="text-gray-600">Currency Converter</span></li></ul></div><div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Dealers</h4><ul className="space-y-2"><li><span className="text-gray-600">Dealer Directory</span></li><li><span className="text-gray-600">Do Not Trade List</span></li></ul></div><div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Company</h4><ul className="space-y-2"><li><span className="text-gray-600">About Us</span></li><li><span className="text-gray-600">About Simon</span></li><li><span className="text-gray-600">Contact</span></li><li><span className="text-gray-600">Terms</span></li><li><span className="text-gray-600">Privacy Policy</span></li></ul></div></div><div className="text-center text-[10px] text-gray-400 border-t border-gray-100 pt-4">&copy; 2026 Watchfacts Inc. All Rights Reserved.</div></footer>; }
 
 export default function PriceResearch() {
@@ -54,35 +54,44 @@ export default function PriceResearch() {
   const [dateRange, setDateRange] = useState('6M');
   const [validationNote, setValidationNote] = useState('');
 
-  // Fetch brands — FILTERED through validator
+  // Fetch brands — SERVER-SIDE distinct + client-side Set dedup
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/mv_brand_dist?select=brand&order=brand`, { headers: REQ_HEADERS });
+        const url = new URL(`${SUPABASE_URL}/rest/v1/watch_records`);
+        url.searchParams.set('select', 'distinct:brand!inner');
+        url.searchParams.set('order', 'brand');
+        url.searchParams.set('limit', '1000');
+        const res = await fetch(url.toString(), { headers: REQ_HEADERS });
         if (!res.ok) return;
-        const data = await res.json();
-        const brands = [...new Set(data.map((r: any) => r.brand).filter(Boolean))].sort();
-        setModels(brands);
-        setValidationNote(brands.length > 0 ? `${brands.length} brands loaded` : '');
+        const data = await res.json() as Array<{ brand: string }>;
+        // Double dedup: Supabase distinct + client-side Set
+        const uniqueBrands = [...new Set(data.map(r => r.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        setModels(uniqueBrands);
+        setValidationNote(uniqueBrands.length > 0 ? `${uniqueBrands.length} unique brands loaded` : '');
       } catch { setModels([]); }
     };
     fetchModels();
   }, []);
 
-  // Fetch references — FILTERED through validator
+  // Fetch references — dedup + filter bad data
   useEffect(() => {
     const fetchRefs = async () => {
       if (!selectedModel) { setReferences([]); return; }
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=reference&brand=eq.${encodeURIComponent(selectedModel)}&limit=500`, { headers: REQ_HEADERS });
+        const url = new URL(`${SUPABASE_URL}/rest/v1/watch_records`);
+        url.searchParams.set('select', 'reference');
+        url.searchParams.set('brand', 'eq.' + selectedModel);
+        url.searchParams.set('limit', '500');
+        const res = await fetch(url.toString(), { headers: REQ_HEADERS });
         if (!res.ok) return;
-        const data = await res.json();
-        const uniqueRefs = [...new Set(data.map((r: any) => r.reference).filter(Boolean))];
-        const validRefs = filterValidReferences(uniqueRefs);
-        // Show validation message if bad refs were filtered
-        const filteredCount = uniqueRefs.length - validRefs.length;
+        const data = await res.json() as Array<{ reference: string | null }>;
+        // Deduplicate + filter nulls + filter bad references
+        const uniqueRawRefs = [...new Set(data.map(r => r.reference).filter((r): r is string => !!r))];
+        const validRefs = filterValidReferences(uniqueRawRefs);
+        const filteredCount = uniqueRawRefs.length - validRefs.length;
         if (filteredCount > 0) {
-          setValidationNote(`${validRefs.length} valid references (filtered ${filteredCount} bad entries: years, prices)`);
+          setValidationNote(`${validRefs.length} valid references (filtered ${filteredCount} bad: years, prices)`);
         } else {
           setValidationNote(`${validRefs.length} references found`);
         }
@@ -182,7 +191,7 @@ export default function PriceResearch() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             {/* Watch Header */}
             <div className="flex flex-col sm:flex-row items-center gap-5 p-5 bg-gradient-to-r from-gray-50 to-blue-50/30 rounded-xl border border-gray-200">
-              {watchImage ? <img src={watchImage} alt={result.reference} className="w-28 h-28 object-contain rounded-lg bg-white shadow-sm" /> : <div className="w-28 h-28 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center shadow-sm"><span className="text-4xl opacity-20">⌚</span></div>}
+              {watchImage ? <img src={watchImage} alt={result.reference} className="w-28 h-28 object-contain rounded-lg bg-white shadow-sm" /> : <div className="w-28 h-28 bg-gradient-to-br from-gray-100 to-gray-200 rounded-lg flex items-center justify-center shadow-sm"><span className="text-4xl opacity-20">&#x231A;</span></div>}
               <div className="text-center sm:text-left">
                 <h2 className="text-xl font-semibold text-gray-900">{result.brand} {result.reference}</h2>
                 <p className="text-sm text-gray-500 mt-1">{result.totalListings} listings across {result.monthlyData.length} months</p>
