@@ -246,12 +246,7 @@ export default function HealthPage() {
 
   const fetchQualityMetrics = useCallback(async () => {
     try {
-      const [verdictRes, errorRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/mv_verdict_dist?select=verdict,count`, { headers: REQ }),
-        fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count&parser_error=not.is.null&limit=1`, {
-          method: 'GET', headers: { ...REQ, 'Prefer': 'count=exact' },
-        }),
-      ]);
+      const verdictRes = await fetch(`${SUPABASE_URL}/rest/v1/mv_verdict_dist?select=verdict,count`, { headers: REQ });
 
       let total = 0, approved = 0, review = 0, recycled = 0, wtb = 0, human = 0;
       if (verdictRes.ok) {
@@ -267,10 +262,18 @@ export default function HealthPage() {
         }
       }
 
+      // Use lightweight query for error check — just check existence, don't count 2.39M rows
       let withErrors = 0;
-      if (errorRes.ok) {
-        const range = errorRes.headers.get('content-range') || '';
-        withErrors = parseInt(range.split('/')[1] || '0');
+      try {
+        const errorRes = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&parser_error=not.is.null&limit=1`, {
+          method: 'GET', headers: REQ,
+        });
+        if (errorRes.ok) {
+          const errorData = await errorRes.json();
+          withErrors = errorData.length > 0 ? 1 : 0; // Just check if any exist, don't count all
+        }
+      } catch {
+        // Silently fail — error count is non-critical
       }
 
       setQualityMetrics({ total, approved, review, recycled, wtb, human, withErrors,
