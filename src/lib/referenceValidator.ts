@@ -1,124 +1,103 @@
 /**
- * Reference & Brand Validation Utility
- * Filters out bad data (years, prices, references-as-brands, colors, conditions) from dropdowns
+ * Reference Validator — Brand/ Reference validation utilities
+ * Filters junk entries from dropdowns: colors, conditions, prices,
+ * references masquerading as brands, etc.
  */
 
-// ─── Patterns for references ──────────────────────────────────────
-const YEAR_PATTERN = /^(19|20)\d{2}$/;  // 2018, 2023, 2025
-const PRICE_SUFFIX = /(USD|EUR|GBP|CHF|HKD)$/i;  // 95000HKD, 340000USD
-const EURO_PRICE = /^\d{1,3}\.\d{3}$/;  // 718.000 (European price format)
-const SHORT_NUM = /^\d{1,3}$/;  // Single/double/triple digit numbers
-const JUST_YEAR_LETTER = /^\d{4}[ymf]$/i;  // 2023y, 2025m
-
-// ─── Patterns for brands ──────────────────────────────────────────
-const REFERENCE_LIKE = /^(?:\d{1,2}[/-])?\d{2,6}[a-zA-Z]{0,4}(?:[/-]\d{2,6})?(?:\.[A-Z]{2,6})?$/;
-// Matches: 15510OR, 16613, 26470SO, 7118/1A, 6000V/110R, 505.CM.5970.RX, A3239011.BC34
-const PURE_NUMBER = /^\d+$/;
-const PRICE_TEXT = /^\d+\s*(?:million|mln|k|M|bn)$/i;  // "5 million"
-const WATCH_MODEL = /^(?:submariner|yachtmaster|gmt.master|daytona|datejust|day.date|aquanaut|nautilus|royal.oak|big.bang|serpenti|cellini|birkin|kelly|constance|diva.dream|speedmaster|moonwatch|president)$/i;
-const CONDITION = /^(?:bnib|ntq|ntpt|nos|new|used|unbranded|unknown|null|n\/a|brand.new|branded|naked|n1|n8|n9)$/i;
-const COLOR = /^(?:black|blue|green|red|white|silver|gold|grey|gray|pink|brown|purple|orange|yellow|ivory|champagne|rose|sundust|rootbeer)$/i;
-const NON_BRAND = /^(?:part|fin|man|mill|or|big|new|old|hulk|pepsi|snoopy|speedy|ln|st|sk|rx|ghost|factory)$/i;
-const TOO_SHORT = /^[a-zA-Z]$/;  // Single letter like "E", "H", "W"
-const MATERIAL = /^(?:ntpt|yg|rg|wg|pg|ss|tt|steel|ceramic|titanium|platinum)$/i;
+// ─── Patterns ────────────────────────────────────────────────────────
+const PURE_NUMBER    = /^\d+$/;
+const YEAR_PATTERN   = /^(19|20)\d{2}$/;
+const PRICE_SUFFIX   = /^\d+[KkMm]$/;
+const PRICE_TEXT     = /^(\d{1,3}(,\d{3})*|\d+)(\s*(USD|HKD|EUR|GBP|CHF))?$/i;
+const TOO_SHORT      = /^[A-Z]{1,2}$/i;
+const REFERENCE_LIKE = /^[A-Z0-9]+$/i;
+const WATCH_MODEL    = /\d{4,6}/;        // Contains 4-6 consecutive digits
+const CONDITION      = /^(new|used|mint|excellent|good|fair|poor|bnib|unworn|pre.?owned|nos)$/i;
+const COLOR          = /^(black|blue|white|green|silver|grey|gray|red|brown|orange|yellow|pink|purple|champagne|salmon|ivory|mother of pearl)$/i;
+const NON_BRAND      = /^(unknown|n\/a|na|none|other|various|assorted|mixed)$/i;
+const MATERIAL       = /^(gold|steel|rose gold|white gold|yellow gold|platinum|titanium|ceramic|carbon)$/i;
 
 /**
- * Check if a string looks like a valid watch reference
- */
-export function isValidReference(ref: string): boolean {
-  if (!ref || typeof ref !== 'string') return false;
-  const trimmed = ref.trim();
-  if (trimmed.length < 4) return false;  // Too short
-  if (trimmed.length > 25) return false;  // Too long
-  if (YEAR_PATTERN.test(trimmed)) return false;  // Is a year (2023)
-  if (PRICE_SUFFIX.test(trimmed)) return false;  // Has price suffix (95000HKD)
-  if (EURO_PRICE.test(trimmed)) return false;  // European price (718.000)
-  if (SHORT_NUM.test(trimmed)) return false;  // Just a small number
-  if (JUST_YEAR_LETTER.test(trimmed)) return false;  // Year+letter (2023y)
-  // Must contain some letters OR be a known numeric reference pattern (5-6 digits)
-  const hasLetters = /[a-zA-Z]/.test(trimmed);
-  const isNumericRef = /^\d{5,6}$/.test(trimmed);  // Rolex-style 5-6 digit refs
-  if (!hasLetters && !isNumericRef) return false;
-  return true;
-}
-
-/**
- * Filter an array of references, removing bad ones
- */
-export function filterValidReferences(refs: string[]): string[] {
-  return refs.filter(isValidReference).sort();
-}
-
-/**
- * Check if a string looks like a valid watch brand name
- * Filters out references, colors, conditions, prices stored as brands
+ * Check if a string looks like a valid watch brand name.
+ * Returns false for: pure numbers, years, prices, conditions, colors,
+ * references, materials, and other non-brand values.
  */
 export function isValidBrand(brand: string): boolean {
   if (!brand || typeof brand !== 'string') return false;
   const t = brand.trim();
-
-  // Must be at least 2 chars (but single letters like H, W are rejected below)
   if (t.length < 2) return false;
-
-  // Reject pure numbers
   if (PURE_NUMBER.test(t)) return false;
-
-  // Reject years
   if (YEAR_PATTERN.test(t)) return false;
-
-  // Reject price suffixes
   if (PRICE_SUFFIX.test(t)) return false;
-
-  // Reject price text like "5 million"
   if (PRICE_TEXT.test(t)) return false;
-
-  // Reject single letters (E, H, W)
   if (TOO_SHORT.test(t)) return false;
 
-  // Reject reference-like strings (15510OR, 16613, 26470SO, 7118/1A, etc.)
-  // But NOT legitimate brand names that happen to contain numbers
+  // Reference-like detection: e.g. "126301", "5712/1A", "RM11-03"
   if (REFERENCE_LIKE.test(t) && !/[&]/.test(t) && t.length < 20) {
-    // Extra check: if it has a slash and is short, it's likely a reference
     if (t.includes('/') || t.includes('.')) return false;
-    // If it's mostly digits with a few letters at end (like 15510OR)
     const digitCount = (t.match(/\d/g) || []).length;
     const letterCount = (t.match(/[a-zA-Z]/g) || []).length;
     if (digitCount >= 3 && letterCount <= 4 && t.length <= 12) return false;
   }
 
-  // Reject known watch models/nicknames used as brands
-  if (WATCH_MODEL.test(t)) return false;
+  if (WATCH_MODEL.test(t) && t.length <= 10) {
+    // Could be a model number like "126301" — reject if mostly digits
+    const digitCount = (t.match(/\d/g) || []).length;
+    if (digitCount >= 4) return false;
+  }
 
-  // Reject conditions
   if (CONDITION.test(t)) return false;
-
-  // Reject standalone colors
   if (COLOR.test(t)) return false;
-
-  // Reject known non-brand words
   if (NON_BRAND.test(t)) return false;
-
-  // Reject materials used as brands
   if (MATERIAL.test(t)) return false;
-
-  // Reject very long strings that look like descriptions, not brands
   if (t.length > 50) return false;
 
   return true;
 }
 
 /**
- * Filter an array of brand names, removing junk entries
- * Returns deduplicated, sorted list of valid brand names
+ * Filter an array of brand strings, keeping only valid brand names.
+ * Uses strict equality for guaranteed uniqueness.
  */
 export function filterValidBrands(brands: string[]): string[] {
-  const seen = new Set<string>();
-  const valid: string[] = [];
-  for (const b of brands) {
-    if (isValidBrand(b) && !seen.has(b)) {
-      seen.add(b);
-      valid.push(b);
-    }
+  const seen = new Map<string, boolean>();
+  const result: string[] = [];
+
+  for (const brand of brands) {
+    if (!brand || typeof brand !== 'string') continue;
+    const normalized = brand.trim();
+    if (!normalized) continue;
+    if (!isValidBrand(normalized)) continue;
+    if (seen.has(normalized)) continue;
+    seen.set(normalized, true);
+    result.push(normalized);
   }
-  return valid.sort((a, b) => a.localeCompare(b));
+
+  return result.sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * Quick check if a string looks like a reference number.
+ */
+export function isReferenceLike(value: string): boolean {
+  if (!value || typeof value !== 'string') return false;
+  const t = value.trim().toUpperCase();
+  if (t.length < 4 || t.length > 14) return false;
+
+  // Starts with RM → Richard Mille reference
+  if (t.startsWith('RM') && /^RM\d{2}[-\s]?\d{2}/i.test(t)) return true;
+
+  // Patek style: 5712/1A-001
+  if (/^\d{4,5}[A-Z]?\/\d[A-Z]{1,3}-\d{2,3}$/i.test(t)) return true;
+
+  // Rolex style: 5-6 digits with optional letters
+  if (/^\d{5,6}[A-Z]{0,3}$/i.test(t)) return true;
+
+  // AP style: 5 digits + 2 letters
+  if (/^\d{5}[A-Z]{2}\.?\d{0,2}$/i.test(t)) return true;
+
+  // Generic: 4-6 alphanumeric
+  if (/^[A-Z0-9]{4,10}$/i.test(t) && /\d/.test(t) && /[A-Z]/i.test(t)) return true;
+
+  return false;
 }
