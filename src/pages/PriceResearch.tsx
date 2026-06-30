@@ -54,18 +54,27 @@ export default function PriceResearch() {
   const [dateRange, setDateRange] = useState('6M');
   const [validationNote, setValidationNote] = useState('');
 
-  // Fetch brands — CORRECT PostgREST distinct syntax
+  // Fetch brands from mv_brand_dist (pre-aggregated, one row per brand)
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const url = `${SUPABASE_URL}/rest/v1/watch_records?select=brand&brand=not.is.null&distinct=on.brand&order=brand&limit=1000`;
-        const res = await fetch(url, { headers: REQ_HEADERS });
-        if (!res.ok) return;
-        const data = await res.json() as Array<{ brand: string }>;
-        const uniqueBrands = [...new Set(data.map(r => r.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/mv_brand_dist?select=brand,count&order=brand&limit=1000`, { headers: REQ_HEADERS });
+        if (!res.ok) { setValidationNote(`Brand API error: ${res.status}`); return; }
+        const data = await res.json() as Array<{ brand: string; count: number }>;
+        // Deduplicate via Map (in case view has duplicates) — keeps first occurrence
+        const brandMap = new Map<string, number>();
+        for (const row of data) {
+          if (row.brand && !brandMap.has(row.brand)) {
+            brandMap.set(row.brand, row.count || 0);
+          }
+        }
+        const uniqueBrands = Array.from(brandMap.keys()).sort((a, b) => a.localeCompare(b));
         setModels(uniqueBrands);
-        setValidationNote(uniqueBrands.length > 0 ? `${uniqueBrands.length} unique brands loaded` : '');
-      } catch { setModels([]); }
+        setValidationNote(uniqueBrands.length > 0 ? `${uniqueBrands.length} unique brands loaded` : 'No brands found');
+      } catch (err: any) {
+        setValidationNote(`Error: ${err?.message || 'Failed to load brands'}`);
+        setModels([]);
+      }
     };
     fetchModels();
   }, []);
@@ -75,20 +84,29 @@ export default function PriceResearch() {
     const fetchRefs = async () => {
       if (!selectedModel) { setReferences([]); return; }
       try {
-        const url = `${SUPABASE_URL}/rest/v1/watch_records?select=reference&brand=eq.${encodeURIComponent(selectedModel)}&reference=not.is.null&distinct=on.reference&order=reference&limit=500`;
-        const res = await fetch(url, { headers: REQ_HEADERS });
-        if (!res.ok) return;
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=reference&brand=eq.${encodeURIComponent(selectedModel)}&reference=not.is.null&limit=500`, { headers: REQ_HEADERS });
+        if (!res.ok) { setValidationNote(`Ref API error: ${res.status}`); return; }
         const data = await res.json() as Array<{ reference: string | null }>;
-        const uniqueRawRefs = [...new Set(data.map(r => r.reference).filter((r): r is string => !!r))];
+        // Deduplicate via Map to preserve order, then filter bad refs
+        const refMap = new Map<string, boolean>();
+        for (const row of data) {
+          if (row.reference && !refMap.has(row.reference)) {
+            refMap.set(row.reference, true);
+          }
+        }
+        const uniqueRawRefs = Array.from(refMap.keys());
         const validRefs = filterValidReferences(uniqueRawRefs);
         const filteredCount = uniqueRawRefs.length - validRefs.length;
         if (filteredCount > 0) {
-          setValidationNote(`${validRefs.length} valid references (filtered ${filteredCount} bad: years, prices)`);
+          setValidationNote(`${validRefs.length} valid refs (filtered ${filteredCount} bad: years, prices)`);
         } else {
           setValidationNote(`${validRefs.length} references found`);
         }
         setReferences(validRefs);
-      } catch { setReferences([]); }
+      } catch (err: any) {
+        setValidationNote(`Error: ${err?.message || 'Failed to load refs'}`);
+        setReferences([]);
+      }
     };
     fetchRefs();
   }, [selectedModel]);
@@ -169,7 +187,7 @@ export default function PriceResearch() {
         {/* Validation note */}
         {validationNote && (
           <div className="max-w-3xl mx-auto mb-8">
-            <p className="text-[11px] text-green-600 flex items-center gap-1.5">
+            <p className={`text-[11px] flex items-center gap-1.5 ${validationNote.includes('Error') || validationNote.includes('error') ? 'text-red-500' : 'text-green-600'}`}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1a5 5 0 100 10A5 5 0 006 1zm2.354 4.354l-2.5 2.5a.5.5 0 01-.708 0l-1.5-1.5a.5.5 0 11.708-.708L5.5 6.793l2.146-2.147a.5.5 0 01.708.708z" fill="currentColor"/></svg>
               {validationNote}
             </p>
