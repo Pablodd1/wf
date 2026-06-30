@@ -103,7 +103,9 @@ export function Navbar() {
         className="sticky top-0 z-50 h-14 bg-[#111118]/95 backdrop-blur-md border-b border-[#1E1E2E] flex items-center justify-between px-4 md:px-6"
       >
         <Link to="/" className="flex items-center gap-2 group">
-          <img src="/watchfacts-logo.png" alt="WatchFacts" className="h-8 w-auto object-contain group-hover:opacity-90 transition-opacity" />
+          <div className="h-9 px-2 rounded-lg bg-white/95 flex items-center justify-center shadow-sm border border-[#D4AF37]/20">
+            <img src="/watchfacts-logo.png" alt="WatchFacts" className="h-6 w-auto object-contain" />
+          </div>
         </Link>
 
         <div className="hidden lg:flex items-center gap-6">
