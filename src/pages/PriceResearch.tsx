@@ -54,18 +54,14 @@ export default function PriceResearch() {
   const [dateRange, setDateRange] = useState('6M');
   const [validationNote, setValidationNote] = useState('');
 
-  // Fetch brands — SERVER-SIDE distinct + client-side Set dedup
+  // Fetch brands — CORRECT PostgREST distinct syntax
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const url = new URL(`${SUPABASE_URL}/rest/v1/watch_records`);
-        url.searchParams.set('select', 'distinct:brand!inner');
-        url.searchParams.set('order', 'brand');
-        url.searchParams.set('limit', '1000');
-        const res = await fetch(url.toString(), { headers: REQ_HEADERS });
+        const url = `${SUPABASE_URL}/rest/v1/watch_records?select=brand&brand=not.is.null&distinct=on.brand&order=brand&limit=1000`;
+        const res = await fetch(url, { headers: REQ_HEADERS });
         if (!res.ok) return;
         const data = await res.json() as Array<{ brand: string }>;
-        // Double dedup: Supabase distinct + client-side Set
         const uniqueBrands = [...new Set(data.map(r => r.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b));
         setModels(uniqueBrands);
         setValidationNote(uniqueBrands.length > 0 ? `${uniqueBrands.length} unique brands loaded` : '');
@@ -79,14 +75,10 @@ export default function PriceResearch() {
     const fetchRefs = async () => {
       if (!selectedModel) { setReferences([]); return; }
       try {
-        const url = new URL(`${SUPABASE_URL}/rest/v1/watch_records`);
-        url.searchParams.set('select', 'reference');
-        url.searchParams.set('brand', 'eq.' + selectedModel);
-        url.searchParams.set('limit', '500');
-        const res = await fetch(url.toString(), { headers: REQ_HEADERS });
+        const url = `${SUPABASE_URL}/rest/v1/watch_records?select=reference&brand=eq.${encodeURIComponent(selectedModel)}&reference=not.is.null&distinct=on.reference&order=reference&limit=500`;
+        const res = await fetch(url, { headers: REQ_HEADERS });
         if (!res.ok) return;
         const data = await res.json() as Array<{ reference: string | null }>;
-        // Deduplicate + filter nulls + filter bad references
         const uniqueRawRefs = [...new Set(data.map(r => r.reference).filter((r): r is string => !!r))];
         const validRefs = filterValidReferences(uniqueRawRefs);
         const filteredCount = uniqueRawRefs.length - validRefs.length;
