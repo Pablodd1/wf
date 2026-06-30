@@ -1,15 +1,18 @@
 /**
  * POST /api/green-api-webhook
  * Receives WhatsApp messages from Green API (600 group chats)
- * Runs parser → catalog match → gap detection → saves to SUPABASE
+ * v4.0: Uses ContextTracker for context-aware multi-listing parsing
+ *
+ * Pipeline: segment → context-track → parse → catalog match → gap detection → save
  */
 const { parseFull } = require('./_lib/parser');
 const { routeByScheme } = require('./_lib/gap-detector');
 const { getClient } = require('./_lib/supabase');
+const { parseMessageWithContext } = require('./_lib/context-tracker');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  
+
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
@@ -20,7 +23,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const body = req.body;
-    
+
     // Extract message
     let rawMessage = '';
     let senderId = '';
@@ -43,13 +46,17 @@ module.exports = async function handler(req, res) {
 
     if (!rawMessage) return res.status(400).json({ error: 'No message text found' });
 
-    // Step 1: Parse
-    const parsed = parseFull(rawMessage);
-    
+    // Step 1: Context-aware parse (handles multi-listing messages)
+    const parsedListings = parseMessageWithContext(rawMessage, parseFull);
+
+    // Process each listing
+    const savedRecords = [];
+    for (const parsed of parsedListings) {
+
     // Step 2: Catalog lookup
     let catalogResult = { tier: 5, match: 'unmatched' };
-    if (parsed.reference) {
-      const { data } = await getClient().from('catalog').select('*').ilike('reference', `%${parsed.reference}%`).limit(1);
+    if (parsed.ref) {
+      const { data } = await getClient().from('catalog').select('*').ilike('reference', `%${parsed.ref}%`).limit(1);
       if (data?.[0]) catalogResult = { tier: 1, data: data[0], match: 'exact' };
     }
 
@@ -59,14 +66,14 @@ module.exports = async function handler(req, res) {
     // Step 4: Save to Supabase
     const { data: saved, error } = await getClient().from('watch_records').insert({
       brand: parsed.brand,
-      reference: parsed.reference,
-      dial_color: routing.filled.dialColor || parsed.dialColor,
+      reference: parsed.ref,
+      dial_color: routing.filled.dialColor || parsed.dial,
       condition: routing.filled.condition || parsed.condition,
       year: routing.filled.year || parsed.year,
       price: parsed.price,
       currency: parsed.currency,
-      price_usd: parsed.priceUSD,
-      box_papers: parsed.boxPapers,
+      price_usd: parsed.priceUSD || parsed.price,
+      box_papers: parsed.accessories?.note || null,
       confidence: routing.confidence,
       verdict: routing.verdict,
       catalog_match: catalogResult.match,
@@ -75,16 +82,30 @@ module.exports = async function handler(req, res) {
       sender_id: senderId,
       received_at: new Date(timestamp).toISOString(),
       ai_notes: JSON.stringify(routing.aiNotes),
-      parser_version: 'v2.1',
+      parser_version: 'v4.0-ctx',
+      context_brand: parsed.brandSource === 'context' ? 'inherited' : null,
+      context_currency: parsed.priceCorrected ? parsed.detectedCurrency : null,
+      context_condition: parsed.conditionSource === 'context' ? 'inherited' : null,
     }).select();
 
-    if (error) throw error;
+      if (error) throw error;
+      if (saved?.[0]) savedRecords.push(saved[0]);
+    } // end for each listing
 
     res.status(200).json({
       success: true,
-      id: saved?.[0]?.id,
-      parsed: { brand: parsed.brand, reference: parsed.reference, price: parsed.priceUSD, confidence: routing.confidence, verdict: routing.verdict },
-      routing: { catalogMatch: catalogResult.match, gaps: routing.gaps, aiFilled: routing.aiNeeded, action: routing.action },
+      count: savedRecords.length,
+      ids: savedRecords.map(r => r.id),
+      listings: parsedListings.map(p => ({
+        brand: p.brand,
+        reference: p.ref,
+        price: p.price,
+        currency: p.currency,
+        confidence: p.confidence,
+        verdict: p.listingType,
+        contextBrand: p.brandSource === 'context',
+        priceCorrected: p.priceCorrected || false,
+      })),
     });
 
   } catch (err) {
