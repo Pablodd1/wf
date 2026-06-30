@@ -77,6 +77,64 @@ export function filterValidBrands(brands: string[]): string[] {
 }
 
 /**
+ * Check if a string looks like a valid watch reference number.
+ * Filters out years, prices, conditions, colors, and other non-reference values.
+ */
+export function isValidReference(ref: string): boolean {
+  if (!ref || typeof ref !== 'string') return false;
+  const t = ref.trim();
+  if (t.length < 4) return false;
+  if (t.length > 25) return false;
+
+  // NOT a year
+  if (YEAR_PATTERN.test(t)) return false;
+
+  // NOT a pure price
+  if (PURE_NUMBER.test(t) && t.length >= 5) return false;
+
+  // NOT a price with currency
+  if (PRICE_TEXT.test(t)) return false;
+
+  // NOT a condition
+  if (CONDITION.test(t)) return false;
+
+  // NOT a color
+  if (COLOR.test(t)) return false;
+
+  // NOT a material
+  if (MATERIAL.test(t)) return false;
+
+  // NOT generic
+  if (NON_BRAND.test(t)) return false;
+
+  // Must contain at least one digit (all refs have numbers)
+  if (!/\d/.test(t)) return false;
+
+  return true;
+}
+
+/**
+ * Filter an array of reference strings, keeping only valid references.
+ * Uses strict equality for guaranteed uniqueness.
+ */
+export function filterValidReferences(refs: string[]): string[] {
+  const seen = new Map<string, boolean>();
+  const result: string[] = [];
+
+  for (const ref of refs) {
+    if (!ref || typeof ref !== 'string') continue;
+    const normalized = ref.trim();
+    if (!normalized) continue;
+    if (!isValidReference(normalized)) continue;
+    if (seen.has(normalized)) continue;
+    seen.set(normalized, true);
+    result.push(normalized);
+  }
+
+  return result.sort((a, b) => a.localeCompare(b));
+}
+
+/**
  * Quick check if a string looks like a reference number.
  */
 export function isReferenceLike(value: string): boolean {
