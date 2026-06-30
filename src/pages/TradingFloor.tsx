@@ -5,7 +5,7 @@
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Filter, Info, User, CheckCircle, Globe, Loader2, TrendingUp, Shield, Award, DollarSign, Watch, Gem, X, Zap } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
@@ -58,27 +58,22 @@ const SOURCE_DISPLAY_NAMES: Record<string, string> = {
 function extractDealerName(raw: string | null, source: string | null): string {
   if (!raw) return SOURCE_DISPLAY_NAMES[source || ''] || source || 'Private Seller';
 
-  // Pattern: name after price followed by dash or newline
-  // e.g. "...USD 25,500 -- Gianluca Rizzo" or "...HKD 180K - John Smith"
   const nameAfterPrice = raw.match(
-    /(?:USD|USDT|HKD|GBP|EUR)\s*[\d,.]+[KkMm]?\s*(?:[✅✔️✓])?\s*[-—]\s*([A-Z][a-zA-Z\s]{2,25})(?:\s*$|\s*\n)/
+    /(?:USD|USDT|HKD|GBP|EUR)\s*[\d,.]+[KkMm]?\s*(?:[\u2705\u2714\u2713])?\s*[-\u2014]\s*([A-Z][a-zA-Z\s]{2,25})(?:\s*$|\s*\n)/
   );
   if (nameAfterPrice) return nameAfterPrice[1].trim();
 
-  // Pattern: "contact [Name]" or "DM [Name]"
   const contactName = raw.match(
     /(?:contact|dm|message|from)\s+([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/i
   );
   if (contactName) return contactName[1].trim();
 
-  // Pattern: WhatsApp forward header containing a name after timestamp
   const forwardName = raw.match(
     /\[?\d{1,2}:\d{2}\s*(?:AM|PM)?\s*,?\s*\d{1,2}\/\d{1,2}\/\d{4}\]?\s*\+?[\d\s:]+\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)/
   );
   if (forwardName) return forwardName[1].trim();
 
-  // Pattern: name at very end of message after "--" or "-"
-  const nameAtEnd = raw.match(/[-—]\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s*$/m);
+  const nameAtEnd = raw.match(/[-\u2014]\s*([A-Z][a-z]+(?:\s[A-Z][a-z]+)?)\s*$/m);
   if (nameAtEnd) return nameAtEnd[1].trim();
 
   return SOURCE_DISPLAY_NAMES[source || ''] || source || 'Verified Dealer';
@@ -97,7 +92,7 @@ function CurrencyConverter({ onClose }: { onClose: () => void }) {
       className="absolute right-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-50">
       <div className="flex items-center justify-between mb-3">
         <h4 className="text-sm font-semibold text-gray-900">Currency Converter</h4>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={14} /></button>
+        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
       </div>
       <div className="space-y-3">
         <div>
@@ -123,7 +118,7 @@ function CurrencyConverter({ onClose }: { onClose: () => void }) {
         </div>
         {converted && (
           <div className="bg-gray-50 rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-[#3B5BFE]">{toCurr} {converted}</div>
+            <div className="text-lg font-bold text-[#3B5BFE] price-mono">{toCurr} {converted}</div>
             <div className="text-[10px] text-gray-500">{fromCurr} {amount} at estimated rate</div>
           </div>
         )}
@@ -136,7 +131,7 @@ function CurrencyConverter({ onClose }: { onClose: () => void }) {
 function extractTitle(raw: string | null): { line1: string; line2: string } {
   if (!raw) return { line1: '', line2: '' };
   const cleaned = raw
-    .replace(/[\ud83d\udce2\u2728\ud83c\udf42\ud83c\udded\ud83c\uddf0\ud83c\udf39\ud83d\udc8b\ud83c\udf88\ud83c\udf81\ud83d\udc9e\ud83c\udf44\ud83d\udd35\ud83d\udd34\ud83d\udfe2\ud83c\udf85]/g, ' ')
+    .replace(/[\u{1F4E2}\u{2728}\u{1F342}\u{1F1ED}\u{1F1F0}\u{1F339}\u{1F48B}\u{1F388}\u{1F381}\u{1F49E}\u{1F344}\u{1F535}\u{1F534}\u{1F7E2}\u{1F385}]/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   const words = cleaned.split(' ');
@@ -162,9 +157,31 @@ function computeRating(listing: WatchListing): { hasRating: boolean; score: numb
   return { hasRating: false, score, label: 'NO RATING' };
 }
 
+// ─── Check if listing is new (within 24h) ────────────────────────────
+function isNewListing(createdAt: string): boolean {
+  const created = new Date(createdAt);
+  const now = new Date();
+  const diffHours = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+  return diffHours <= 24;
+}
+
 // ─── Format helpers ──────────────────────────────────────────────────
 const formatPrice = (p: number) => p >= 1000000 ? `$${(p/1000000).toFixed(1)}M` : p >= 1000 ? `$${p.toLocaleString()}` : `$${p}`;
 const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+// ─── Staggered container & item variants ─────────────────────────────
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: {
+    opacity: 1,
+    transition: { staggerChildren: 0.04 }
+  }
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 20 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] } }
+};
 
 // ─── Watch Card ──────────────────────────────────────────────────────
 function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: string }) {
@@ -176,13 +193,16 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
   const dealerName = extractDealerName(listing.raw_message, listing.source);
   const region = listing.source?.toLowerCase().includes('asia') ? 'ASIA' :
                  listing.source?.toLowerCase().includes('eu') ? 'EUROPE' : 'NORTH AMERICA';
+  const isNew = isNewListing(listing.created_at);
 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-xl hover:border-gray-300 hover:-translate-y-0.5 transition-all duration-300 cursor-pointer group"
+      variants={cardVariants}
+      whileHover={{ scale: 1.02, y: -4 }}
+      whileTap={{ scale: 0.99 }}
+      transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="bg-white rounded-xl border border-gray-200 overflow-hidden cursor-pointer group shadow-sm hover:shadow-[0_20px_40px_rgba(0,0,0,0.12),0_0_20px_rgba(212,175,55,0.06)] hover:border-[#D4AF37]/30 transition-shadow duration-300"
       onClick={() => navigate(`/flash-sales/${listing.id}`)}
     >
       {/* Image */}
@@ -202,24 +222,42 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
           </div>
         )}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
+        {/* Condition Badge */}
         {listing.condition && (
           <div className="absolute top-2 left-2 px-2 py-0.5 bg-white/90 backdrop-blur-sm rounded-full text-[10px] font-semibold text-gray-700 shadow-sm">
             {listing.condition}
           </div>
         )}
+        {/* NEW Badge */}
+        <AnimatePresence>
+          {isNew && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.8 }}
+              className="absolute top-2 right-2 new-badge"
+            >
+              NEW
+            </motion.div>
+          )}
+        </AnimatePresence>
+        {/* Featured overlay on hover */}
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 h-16" />
       </div>
 
       {/* Content */}
       <div className="p-4">
         <div className="flex items-center gap-1.5 mb-1">
           <span className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-wider">{listing.brand}</span>
-          <span className="text-[11px] text-gray-400">{listing.reference}</span>
+          <span className="text-[11px] text-gray-400 font-mono">{listing.reference}</span>
         </div>
         {/* Dealer name */}
         <div className="flex items-center gap-1.5 mt-1 mb-1">
           <User size={11} className="text-gray-400" />
           <span className="text-[11px] text-gray-500 font-medium">{dealerName}</span>
-          <span className="text-[9px] text-[#3B5BFE]">✓</span>
+          <span className="text-[9px] text-[#3B5BFE] flex items-center gap-0.5" title="Verified Dealer">
+            <CheckCircle size={10} className="text-[#3B5BFE]" />
+          </span>
         </div>
         <p className="text-sm font-medium text-gray-900 line-clamp-1 leading-tight">{title.line1}</p>
         {title.line2 && <p className="text-sm text-gray-500 line-clamp-1 leading-tight">{title.line2}</p>}
@@ -237,15 +275,50 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
           )}
         </div>
         <div className="flex items-center justify-between mt-2.5">
-          <span className="text-base font-bold text-gray-900">{listing.price_usd > 0 ? formatPrice(listing.price_usd) : 'Contact'}</span>
+          <span className="text-base font-bold text-gray-900 price-mono">{listing.price_usd > 0 ? formatPrice(listing.price_usd) : 'Contact'}</span>
           <span className="flex items-center gap-1 text-[10px] text-gray-500 uppercase tracking-wider">
             <Globe size={11} /> {region}
           </span>
         </div>
         <p className="text-[10px] text-gray-400 mt-1">Posted: {formatDate(listing.created_at)}</p>
-        <button className="mt-3 w-full py-2.5 border-2 border-[#3B5BFE] text-[#3B5BFE] text-[11px] font-semibold uppercase tracking-wider rounded-full hover:bg-[#3B5BFE] hover:text-white transition-all flex items-center justify-center gap-1.5 group/btn">
-          <Info size={11} className="group-hover/btn:rotate-12 transition-transform" /> Check Availability
-        </button>
+        <motion.button
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="mt-3 w-full py-2.5 border-2 border-[#3B5BFE] text-[#3B5BFE] text-[11px] font-semibold uppercase tracking-wider rounded-full hover:bg-[#3B5BFE] hover:text-white transition-all duration-200 flex items-center justify-center gap-1.5 group/btn"
+        >
+          <Info size={11} className="group-hover/btn:rotate-12 transition-transform duration-200" /> Check Availability
+        </motion.button>
+      </div>
+    </motion.div>
+  );
+}
+
+// ─── Shimmer Skeleton Card ───────────────────────────────────────────
+function SkeletonCard({ index }: { index: number }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay: index * 0.05, duration: 0.3 }}
+      className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm"
+    >
+      <div className="aspect-square shimmer" />
+      <div className="p-4 space-y-3">
+        <div className="flex gap-2">
+          <div className="h-3 shimmer rounded w-1/4" />
+          <div className="h-3 shimmer rounded w-1/5" />
+        </div>
+        <div className="h-4 shimmer rounded w-3/4" />
+        <div className="h-3 shimmer rounded w-1/2" />
+        <div className="flex items-center gap-1.5">
+          <div className="h-3 shimmer rounded w-4 rounded-full" />
+          <div className="h-3 shimmer rounded w-1/3" />
+        </div>
+        <div className="flex items-center justify-between">
+          <div className="h-5 shimmer rounded w-1/3" />
+          <div className="h-3 shimmer rounded w-1/4" />
+        </div>
+        <div className="h-8 shimmer rounded w-full mt-2 rounded-full" />
       </div>
     </motion.div>
   );
@@ -254,7 +327,12 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
 // ─── Stats Bar ───────────────────────────────────────────────────────
 function StatsBar({ total, loaded, hasMore, loadAllMode, onLoadAll, onBackToPaginated }: { total: number; loaded: number; hasMore: boolean; loadAllMode: boolean; onLoadAll: () => void; onBackToPaginated: () => void }) {
   return (
-    <div className="bg-white border-b border-gray-200">
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      className="bg-white border-b border-gray-200"
+    >
       <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-6 overflow-x-auto">
         <div className="flex items-center gap-1.5 text-[11px] text-gray-600 whitespace-nowrap">
           <Shield size={13} className="text-[#D4AF37]" />
@@ -276,34 +354,38 @@ function StatsBar({ total, loaded, hasMore, loadAllMode, onLoadAll, onBackToPagi
         <div className="flex items-center gap-3">
           {loadAllMode ? (
             <>
-              <div className="text-[11px] text-[#D4AF37] font-semibold whitespace-nowrap">
+              <div className="text-[11px] text-[#D4AF37] font-semibold whitespace-nowrap price-mono">
                 {loaded.toLocaleString()} of {total.toLocaleString()} listings loaded
               </div>
-              <button
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
                 onClick={onBackToPaginated}
                 className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-semibold rounded-lg transition-colors whitespace-nowrap"
               >
                 Back to Paginated
-              </button>
+              </motion.button>
             </>
           ) : (
             <>
               <div className="text-[11px] text-gray-400 whitespace-nowrap">
-                Showing <span className="font-semibold text-gray-700">{loaded}</span> loaded
+                Showing <span className="font-semibold text-gray-700 price-mono">{loaded}</span> loaded
               </div>
               {hasMore && (
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.03 }}
+                  whileTap={{ scale: 0.97 }}
                   onClick={onLoadAll}
-                  className="px-4 py-2 bg-[#D4AF37] hover:bg-[#C4A030] text-black text-xs font-semibold rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap"
+                  className="px-4 py-2 bg-[#D4AF37] hover:bg-[#C4A030] text-black text-xs font-semibold rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap shadow-sm hover:shadow-md"
                 >
                   <Zap size={14} /> Load All Listings
-                </button>
+                </motion.button>
               )}
             </>
           )}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
@@ -477,27 +559,35 @@ export default function TradingFloor() {
               <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input type="text" value={query} onChange={e => setQuery(e.target.value)}
                 placeholder="Search by reference, brand, or keywords..."
-                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] bg-gray-50/50" />
+                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] bg-gray-50/50 transition-all duration-200 focus:bg-white" />
             </div>
             <div className="flex gap-2">
               <select value={condition} onChange={e => { setCondition(e.target.value); setPage(1); }}
-                className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 bg-white">
+                className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 bg-white hover:border-gray-300 transition-colors cursor-pointer">
                 {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
-              <button onClick={() => { setQuery(''); setCondition('All'); setListingType('forsale'); setPage(1); }}
-                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-gray-50 flex items-center gap-1.5">
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={() => { setQuery(''); setCondition('All'); setListingType('forsale'); setPage(1); }}
+                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 flex items-center gap-1.5 transition-all"
+              >
                 <Filter size={14} /> Reset
-              </button>
+              </motion.button>
             </div>
           </div>
 
           {loadAllMode && (
-            <div className="mb-3 px-3 py-2 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-lg flex items-center gap-2">
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="mb-3 px-3 py-2 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-lg flex items-center gap-2"
+            >
               <Zap size={14} className="text-[#D4AF37]" />
               <span className="text-xs font-semibold text-[#B8960C]">
                 Load All Mode Active — {listings.length.toLocaleString()} of {total.toLocaleString()} listings loaded. Search and filters work client-side on loaded data.
               </span>
-            </div>
+            </motion.div>
           )}
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2 flex-wrap">
@@ -510,24 +600,44 @@ export default function TradingFloor() {
                 const Icon = item.icon;
                 const isActive = listingType === item.id;
                 return (
-                  <button key={item.id} onClick={() => { setListingType(isActive ? 'all' : item.id); setPage(1); }}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider transition-all ${
+                  <motion.button
+                    key={item.id}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => { setListingType(isActive ? 'all' : item.id); setPage(1); }}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider transition-all duration-200 ${
                       isActive ? 'bg-[#3B5BFE] text-white shadow-md' : 'bg-white text-[#3B5BFE] border border-[#3B5BFE] hover:bg-blue-50'
-                    }`}>
+                    }`}
+                  >
                     <Icon size={13} /> {item.label}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
 
             <div className="relative">
-              <button onClick={() => setShowConverter(!showConverter)}
+              <motion.button
+                whileHover={{ scale: 1.03 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => setShowConverter(!showConverter)}
                 className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider transition-all ${
                   showConverter ? 'bg-[#3B5BFE] text-white' : 'bg-[#3B5BFE] text-white hover:bg-[#2a4ad9] shadow-md'
-                }`}>
+                }`}
+              >
                 <DollarSign size={13} /> CONVERTER
-              </button>
-              {showConverter && <CurrencyConverter onClose={() => setShowConverter(false)} />}
+              </motion.button>
+              <AnimatePresence>
+                {showConverter && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    <CurrencyConverter onClose={() => setShowConverter(false)} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
         </div>
@@ -538,50 +648,73 @@ export default function TradingFloor() {
         {loading && listings.length === 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="bg-white rounded-xl border border-gray-100 overflow-hidden animate-pulse">
-                <div className="aspect-square bg-gray-200" />
-                <div className="p-4 space-y-3">
-                  <div className="h-3 bg-gray-200 rounded w-1/3" />
-                  <div className="h-4 bg-gray-200 rounded w-3/4" />
-                  <div className="h-3 bg-gray-200 rounded w-1/2" />
-                  <div className="h-8 bg-gray-200 rounded w-full mt-2" />
-                </div>
-              </div>
+              <SkeletonCard key={i} index={i} />
             ))}
           </div>
         )}
 
         {listings.length === 0 && !loading && (
-          <div className="text-center py-24 text-gray-400 bg-white rounded-xl border border-gray-100">
-            <div className="text-6xl mb-4 opacity-30">⌚</div>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="text-center py-24 text-gray-400 bg-white rounded-xl border border-gray-100 empty-state-pattern"
+          >
+            <motion.div
+              animate={{ rotate: [0, 5, -5, 0] }}
+              transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+              className="text-6xl mb-4 opacity-30 inline-block"
+            >
+              ⌚
+            </motion.div>
             <p className="text-lg font-medium text-gray-500">No listings found</p>
-            <p className="text-sm text-gray-400 mt-1">Try adjusting your search or filters</p>
-          </div>
+            <p className="text-sm text-gray-400 mt-1 mb-6">Try adjusting your search or filters</p>
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              onClick={() => { setQuery(''); setCondition('All'); setListingType('forsale'); setPage(1); }}
+              className="px-6 py-2.5 bg-[#3B5BFE] hover:bg-[#2a4ad9] text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              Clear All Filters
+            </motion.button>
+          </motion.div>
         )}
 
         {listings.length > 0 && (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              {listings.map(listing => (
+            <motion.div
+              variants={containerVariants}
+              initial="hidden"
+              animate="show"
+              className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5"
+            >
+              {listings.map((listing) => (
                 <WatchCard
                   key={listing.id}
                   listing={listing}
                   imageUrl={imageMap[listing.reference || '']}
                 />
               ))}
-            </div>
+            </motion.div>
             {loadingMore && (
-              <div className="flex items-center justify-center gap-2 mt-10 text-sm text-gray-500">
-                <Loader2 size={16} className="animate-spin text-[#3B5BFE]" />
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="flex items-center justify-center gap-2 mt-10 text-sm text-gray-500"
+              >
+                <Loader2 size={16} className="animate-spin text-[#D4AF37]" />
                 <span>Loading more listings...</span>
-              </div>
+              </motion.div>
             )}
             {!hasMore && !loadingMore && (
-              <div className="text-center mt-10 text-xs text-gray-400">
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                className="text-center mt-10 text-xs text-gray-400"
+              >
                 {loadAllMode
                   ? `-- Showing first ${listings.length.toLocaleString()} listings of ${total.toLocaleString()} total --`
                   : `-- ${listings.length.toLocaleString()} listings loaded --`}
-              </div>
+              </motion.div>
             )}
           </>
         )}
