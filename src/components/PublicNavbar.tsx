@@ -11,13 +11,15 @@ export function PublicNavbar() {
 
   return (
     <header className={`fixed top-0 left-0 right-0 z-50 h-[60px] flex items-center justify-between px-6 md:px-10 transition-colors ${isLight ? 'bg-white border-b border-gray-100' : 'bg-[#1A1A1A]/90 backdrop-blur-sm'}`}>
-      {/* Logo */}
+      {/* Logo with light background for visibility on dark */}
       <Link to="/" className="flex items-center">
-        <img
-          src="/watchfacts-logo-hd.png"
-          alt="WatchFacts"
-          className="h-[36px] w-auto"
-        />
+        <div className={`h-[40px] px-2 rounded-lg flex items-center justify-center transition-colors ${isLight ? '' : 'bg-white/95 shadow-sm'}`}>
+          <img
+            src="/watchfacts-logo-hd.png"
+            alt="WatchFacts"
+            className="h-[30px] w-auto"
+          />
+        </div>
       </Link>
 
       {/* Navigation */}
