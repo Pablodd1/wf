@@ -88,6 +88,17 @@ async function testSupabaseHealth(): Promise<{ status: 'online' | 'offline'; lat
   }
 }
 
+// ─── Staggered animation variants ────────────────────────────────────
+const containerVariants = {
+  hidden: { opacity: 0 },
+  show: { opacity: 1, transition: { staggerChildren: 0.06 } }
+};
+
+const itemVariants = {
+  hidden: { opacity: 0, y: 16 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] } }
+};
+
 export default function AdminPage() {
   const [health, setHealth] = useState<HealthStatus[]>([]);
   const [stats, setStats] = useState({
@@ -195,13 +206,24 @@ export default function AdminPage() {
           )}
         </div>
         <div className="flex gap-2">
-          <button onClick={exportStats} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm">
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={exportStats}
+            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm"
+          >
             <Download size={16} /> Export Stats
-          </button>
-          <button onClick={loadAll} disabled={testing} className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm disabled:opacity-50">
+          </motion.button>
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={loadAll}
+            disabled={testing}
+            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm disabled:opacity-50"
+          >
             {testing ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
             {testing ? 'Testing...' : 'Refresh'}
-          </button>
+          </motion.button>
         </div>
       </div>
 
@@ -212,12 +234,22 @@ export default function AdminPage() {
       ) : (
         <>
           {/* Health Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-            {health.map((card, i) => {
+          <motion.div
+            variants={containerVariants}
+            initial="hidden"
+            animate="show"
+            className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6"
+          >
+            {health.map((card) => {
               const Icon = card.icon;
               return (
-                <motion.div key={card.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
-                  className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+                <motion.div
+                  key={card.label}
+                  variants={itemVariants}
+                  whileHover={{ scale: 1.02, y: -2 }}
+                  transition={{ duration: 0.2 }}
+                  className="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:border-gray-700 hover:shadow-lg hover:shadow-black/20 transition-all duration-200 cursor-default"
+                >
                   <div className="flex items-center gap-2 mb-2">
                     <Icon size={16} className={card.status === 'online' ? 'text-green-400' : card.status === 'warning' ? 'text-yellow-400' : 'text-red-400'} />
                     <span className="text-[10px] text-gray-500 uppercase tracking-wider">{card.label}</span>
@@ -226,17 +258,22 @@ export default function AdminPage() {
                     {card.status === 'online' && <Wifi size={14} className="text-green-400" />}
                     {card.status === 'offline' && <WifiOff size={14} className="text-red-400" />}
                     {card.status === 'warning' && <AlertTriangle size={14} className="text-yellow-400" />}
-                    {card.value}
+                    <span className="price-mono">{card.value}</span>
                   </div>
                 </motion.div>
               );
             })}
-          </div>
+          </motion.div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
             {/* Data Quality — Real Verdict Distribution */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-              className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2, duration: 0.4 }}
+              whileHover={{ borderColor: 'rgba(212, 175, 55, 0.2)' }}
+              className="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:shadow-lg hover:shadow-black/20 transition-all duration-300"
+            >
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <Shield size={14} /> Verdict Distribution
               </h3>
@@ -244,17 +281,24 @@ export default function AdminPage() {
                 <>
                   <div className="flex h-8 rounded-full overflow-hidden mb-3">
                     {Object.entries({ APPROVED: stats.approved, REVIEW: stats.review, HUMAN: stats.human, RECYCLE: stats.recycle }).map(([verdict, count]) => (
-                      <div key={verdict} className="flex items-center justify-center text-[10px] font-bold text-black transition-all"
-                        style={{ width: `${(count / totalVerdicts) * 100}%`, backgroundColor: verdictColors[verdict] }} title={`${verdict}: ${count.toLocaleString()}`}>
+                      <motion.div
+                        key={verdict}
+                        initial={{ width: 0 }}
+                        animate={{ width: `${(count / totalVerdicts) * 100}%` }}
+                        transition={{ duration: 0.8, ease: 'easeOut' }}
+                        className="flex items-center justify-center text-[10px] font-bold text-black transition-all"
+                        style={{ backgroundColor: verdictColors[verdict] }}
+                        title={`${verdict}: ${count.toLocaleString()}`}
+                      >
                         {count > totalVerdicts * 0.05 ? count.toLocaleString() : ''}
-                      </div>
+                      </motion.div>
                     ))}
                   </div>
                   <div className="flex gap-3 flex-wrap">
                     {Object.entries(verdictColors).map(([verdict, color]) => (
                       <div key={verdict} className="flex items-center gap-1">
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                        <span className="text-[10px] text-gray-400">{verdict}: {stats[verdict.toLowerCase() as keyof typeof stats].toLocaleString()}</span>
+                        <span className="text-[10px] text-gray-400">{verdict}: <span className="price-mono">{stats[verdict.toLowerCase() as keyof typeof stats].toLocaleString()}</span></span>
                       </div>
                     ))}
                   </div>
@@ -263,28 +307,45 @@ export default function AdminPage() {
 
               {/* Processing Stats */}
               <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-800">
-                <div className="bg-gray-950 rounded-lg p-3">
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  className="bg-gray-950 rounded-lg p-3 hover:bg-[#111118] transition-colors"
+                >
                   <div className="text-[10px] text-gray-500 uppercase mb-1">Total Records</div>
-                  <div className="text-2xl font-bold font-mono text-white">{stats.total.toLocaleString()}</div>
-                </div>
-                <div className="bg-gray-950 rounded-lg p-3">
+                  <div className="text-2xl font-bold font-mono text-white price-mono">{stats.total.toLocaleString()}</div>
+                </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  className="bg-gray-950 rounded-lg p-3 hover:bg-[#111118] transition-colors"
+                >
                   <div className="text-[10px] text-gray-500 uppercase mb-1">Approval Rate</div>
-                  <div className="text-2xl font-bold font-mono text-green-400">{stats.successRate}%</div>
-                </div>
-                <div className="bg-gray-950 rounded-lg p-3">
+                  <div className="text-2xl font-bold font-mono text-green-400 price-mono">{stats.successRate}%</div>
+                </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  className="bg-gray-950 rounded-lg p-3 hover:bg-[#111118] transition-colors"
+                >
                   <div className="text-[10px] text-gray-500 uppercase mb-1">Parser Version</div>
-                  <div className="text-2xl font-bold font-mono text-amber-400">{stats.parserVersion}</div>
-                </div>
-                <div className="bg-gray-950 rounded-lg p-3">
+                  <div className="text-2xl font-bold font-mono text-amber-400 price-mono">{stats.parserVersion}</div>
+                </motion.div>
+                <motion.div
+                  whileHover={{ scale: 1.02 }}
+                  className="bg-gray-950 rounded-lg p-3 hover:bg-[#111118] transition-colors"
+                >
                   <div className="text-[10px] text-gray-500 uppercase mb-1">HUMAN Queue</div>
-                  <div className="text-2xl font-bold font-mono text-blue-400">{stats.human.toLocaleString()}</div>
-                </div>
+                  <div className="text-2xl font-bold font-mono text-blue-400 price-mono">{stats.human.toLocaleString()}</div>
+                </motion.div>
               </div>
             </motion.div>
 
             {/* Quick Stats Summary */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}
-              className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25, duration: 0.4 }}
+              whileHover={{ borderColor: 'rgba(212, 175, 55, 0.2)' }}
+              className="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:shadow-lg hover:shadow-black/20 transition-all duration-300"
+            >
               <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
                 <Server size={14} /> System Overview
               </h3>
@@ -295,7 +356,12 @@ export default function AdminPage() {
                   { label: 'HUMAN', count: stats.human, color: '#F97316', desc: 'Manual intervention' },
                   { label: 'RECYCLE', count: stats.recycle, color: '#EF4444', desc: 'Discarded' },
                 ].map(item => (
-                  <div key={item.label} className="flex items-center justify-between p-3 bg-gray-950 rounded-lg">
+                  <motion.div
+                    key={item.label}
+                    whileHover={{ scale: 1.01, x: 2 }}
+                    transition={{ duration: 0.15 }}
+                    className="flex items-center justify-between p-3 bg-gray-950 rounded-lg hover:bg-[#111118] transition-colors cursor-default"
+                  >
                     <div className="flex items-center gap-2">
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
                       <div>
@@ -304,18 +370,22 @@ export default function AdminPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold font-mono text-white">{item.count.toLocaleString()}</div>
+                      <div className="text-lg font-bold font-mono text-white price-mono">{item.count.toLocaleString()}</div>
                       <div className="text-[10px] text-gray-500">{stats.total > 0 ? ((item.count / stats.total) * 100).toFixed(1) : 0}%</div>
                     </div>
-                  </div>
+                  </motion.div>
                 ))}
               </div>
             </motion.div>
           </div>
 
           {/* Action Buttons */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
-            className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.4 }}
+            className="bg-gray-900 border border-gray-800 rounded-lg p-4 mb-6"
+          >
             <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Zap size={14} /> Actions
             </h3>
@@ -327,20 +397,29 @@ export default function AdminPage() {
               ].map((item) => {
                 const Icon = item.icon;
                 return (
-                  <button key={item.label} onClick={() => { item.action(); handleAction(item.label); }}
+                  <motion.button
+                    key={item.label}
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => { item.action(); handleAction(item.label); }}
                     disabled={!!actionLoading}
-                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 ${item.color} ${actionLoading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                    className={`px-4 py-2 rounded-lg font-medium text-sm transition-colors flex items-center gap-2 ${item.color} ${actionLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  >
                     {actionLoading === item.label ? <Loader2 size={14} className="animate-spin" /> : <Icon size={14} />}
                     {item.label}
-                  </button>
+                  </motion.button>
                 );
               })}
             </div>
           </motion.div>
 
           {/* Activity Log — Real Data */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}
-            className="bg-gray-900 border border-gray-800 rounded-lg p-4">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.35, duration: 0.4 }}
+            className="bg-gray-900 border border-gray-800 rounded-lg p-4"
+          >
             <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Activity size={14} /> Recent Activity
               <span className="text-[10px] text-gray-600 ml-2">(last 20 human-edited records)</span>
@@ -360,8 +439,14 @@ export default function AdminPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {log.map((entry) => (
-                      <tr key={entry.id} className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors">
+                    {log.map((entry, idx) => (
+                      <motion.tr
+                        key={entry.id}
+                        initial={{ opacity: 0, x: -8 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.02, duration: 0.25 }}
+                        className="border-b border-gray-800 hover:bg-gray-800/50 transition-colors"
+                      >
                         <td className="py-2.5 px-3 font-medium text-white">{entry.action}</td>
                         <td className="py-2.5 px-3 text-gray-400 font-mono text-xs">{entry.target}</td>
                         <td className="py-2.5 px-3">
@@ -372,7 +457,7 @@ export default function AdminPage() {
                         <td className="py-2.5 px-3 text-right text-gray-500 text-xs font-mono">
                           {new Date(entry.timestamp).toLocaleTimeString()}
                         </td>
-                      </tr>
+                      </motion.tr>
                     ))}
                   </tbody>
                 </table>
