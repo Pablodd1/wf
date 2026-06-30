@@ -6,11 +6,10 @@ import {
   Sparkles, Zap, Shield,
   Activity, FileSpreadsheet, Database,
   Download, ShieldCheck, Target,
-  Settings, Upload,
+  Settings, Upload, BookOpen,
   Menu, X, ChevronRight,
 } from 'lucide-react';
 
-// Admin tabs — 14 tabs: Search, Data, Demo, Review, Analytics, Reports, Health, Export, Quality, Verify, Admin, Clean, Import, Settings
 const NAV_ITEMS = [
   { label: 'Search', path: '/search', icon: Search },
   { label: 'Data', path: '/data', icon: Database },
@@ -25,10 +24,10 @@ const NAV_ITEMS = [
   { label: 'Admin', path: '/admin', icon: Shield },
   { label: 'Clean', path: '/clean', icon: Sparkles },
   { label: 'Import', path: '/import', icon: Upload },
+  { label: 'Blog', path: '/blog', icon: BookOpen },
   { label: 'Settings', path: '/settings', icon: Settings },
 ] as const;
 
-// Bottom bar items — 4 most important tabs for quick mobile access
 const BOTTOM_BAR_ITEMS = [
   { label: 'Search', path: '/search', icon: Search },
   { label: 'Review', path: '/review', icon: ClipboardCheck },
@@ -54,13 +53,12 @@ export function Navbar() {
     return () => clearInterval(i);
   }, []);
 
-  // Fetch real stats from Supabase directly
   useEffect(() => {
     const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
     fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
       method: 'GET',
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'count=exact' },
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'count:exact' },
     })
       .then(r => {
         const range = r.headers.get('content-range') || '';
@@ -70,24 +68,17 @@ export function Navbar() {
       .catch(() => {});
   }, []);
 
-  // Close menu on Escape key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && mobileMenuOpen) {
-        setMobileMenuOpen(false);
-      }
+      if (e.key === 'Escape' && mobileMenuOpen) setMobileMenuOpen(false);
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [mobileMenuOpen]);
 
-  // Lock body scroll when menu is open
   useEffect(() => {
-    if (mobileMenuOpen) {
-      document.body.style.overflow = 'hidden';
-    } else {
-      document.body.style.overflow = '';
-    }
+    if (mobileMenuOpen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = '';
     return () => { document.body.style.overflow = ''; };
   }, [mobileMenuOpen]);
 
@@ -105,19 +96,16 @@ export function Navbar() {
 
   return (
     <>
-      {/* ── Top Bar ──────────────────────────────────────────── */}
       <motion.header
         initial={{ y: -56 }}
         animate={{ y: 0 }}
         transition={{ duration: 0.4 }}
         className="sticky top-0 z-50 h-14 bg-[#111118]/95 backdrop-blur-md border-b border-[#1E1E2E] flex items-center justify-between px-4 md:px-6"
       >
-        {/* Logo */}
         <Link to="/" className="flex items-center gap-2 group">
           <img src="/watchfacts-logo.png" alt="WatchFacts" className="h-8 w-auto object-contain group-hover:opacity-90 transition-opacity" />
         </Link>
 
-        {/* Center Stats — hidden on small screens, visible lg+ */}
         <div className="hidden lg:flex items-center gap-6">
           <span className="text-[11px] font-mono text-gray-500">{time}</span>
           <div className="flex items-center gap-1 text-[11px] font-mono">
@@ -129,7 +117,6 @@ export function Navbar() {
           </div>
         </div>
 
-        {/* Right */}
         <div className="flex items-center gap-2 md:gap-3">
           <div className="hidden md:flex items-center gap-1.5">
             <span className="relative flex h-2 w-2">
@@ -157,24 +144,17 @@ export function Navbar() {
         </div>
       </motion.header>
 
-      {/* ── Tab Bar ──────────────────────────────────────────── */}
       <nav className="sticky top-14 z-40 h-9 bg-[#0A0A0F]/95 backdrop-blur border-b border-[#1E1E2E] flex items-center px-4 gap-0.5 overflow-x-auto hide-scrollbar">
         {NAV_ITEMS.map(({ label, path, icon: Icon }) => {
           const active = isActive(path);
           return (
             <Link key={path} to={path}
               className={`relative flex items-center gap-1.5 px-3 py-1 rounded text-[11px] font-medium transition-all duration-200 whitespace-nowrap min-h-[36px] md:min-h-0 ${
-                active
-                  ? 'text-[#D4AF37] bg-[#D4AF37]/10'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-[#1A1A24]'
+                active ? 'text-[#D4AF37] bg-[#D4AF37]/10' : 'text-gray-400 hover:text-gray-200 hover:bg-[#1A1A24]'
               }`}
             >
               {active && (
-                <motion.div
-                  layoutId="activeTab"
-                  className="absolute bottom-0 left-1 right-1 h-0.5 bg-gradient-to-r from-[#D4AF37] to-[#E5C158] rounded-full"
-                  transition={{ type: 'spring', stiffness: 400, damping: 30 }}
-                />
+                <motion.div layoutId="activeTab" className="absolute bottom-0 left-1 right-1 h-0.5 bg-gradient-to-r from-[#D4AF37] to-[#E5C158] rounded-full" transition={{ type: 'spring', stiffness: 400, damping: 30 }} />
               )}
               <Icon size={11} />
               {label}
@@ -183,7 +163,6 @@ export function Navbar() {
         })}
       </nav>
 
-      {/* ── Mobile Menu Overlay ──────────────────────────────── */}
       <AnimatePresence>
         {mobileMenuOpen && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }} onClick={handleBackdropClick}
@@ -192,12 +171,8 @@ export function Navbar() {
               className="absolute right-0 top-0 bottom-0 w-[85vw] max-w-[360px] bg-[#0A0A0F]/98 backdrop-blur-lg border-l border-[#1E1E2E] flex flex-col">
               <div className="flex items-center justify-between px-5 h-14 border-b border-[#1E1E2E] flex-shrink-0">
                 <span className="text-sm font-semibold text-white tracking-wide">Menu</span>
-                <motion.button
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center justify-center w-10 h-10 rounded-md text-gray-300 hover:text-white hover:bg-[#1A1A24] transition-colors"
-                  aria-label="Close menu"
-                >
+                <motion.button whileTap={{ scale: 0.95 }} onClick={() => setMobileMenuOpen(false)}
+                  className="flex items-center justify-center w-10 h-10 rounded-md text-gray-300 hover:text-white hover:bg-[#1A1A24] transition-colors" aria-label="Close menu">
                   <X size={22} />
                 </motion.button>
               </div>
@@ -225,12 +200,9 @@ export function Navbar() {
                     </div>
                   </div>
                 </div>
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
                   onClick={() => { setMobileMenuOpen(false); navigate('/trading'); }}
-                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-sm font-medium rounded-lg transition-colors shadow-sm"
-                >
+                  className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-[#3B5BFE] hover:bg-[#4A6AFF] text-white text-sm font-medium rounded-lg transition-colors shadow-sm">
                   <Zap size={16} /> TRADING FLOOR
                 </motion.button>
                 <div className="space-y-1">
@@ -240,9 +212,7 @@ export function Navbar() {
                     return (
                       <Link key={path} to={path} onClick={() => setMobileMenuOpen(false)}
                         className={`flex items-center gap-3 px-3 py-3 rounded-lg text-base font-medium transition-all duration-200 min-h-[48px] ${
-                          active
-                            ? 'bg-[#D4AF37]/15 text-[#D4AF37]'
-                            : 'text-gray-300 hover:text-white hover:bg-[#1A1A24]'
+                          active ? 'bg-[#D4AF37]/15 text-[#D4AF37]' : 'text-gray-300 hover:text-white hover:bg-[#1A1A24]'
                         }`}>
                         <Icon size={18} />
                         <span className="flex-1">{label}</span>
@@ -257,7 +227,6 @@ export function Navbar() {
         )}
       </AnimatePresence>
 
-      {/* ── Mobile Bottom Bar ────────────────────────────────── */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#111118]/95 backdrop-blur-md border-t border-[#1E1E2E] h-16 pb-[env(safe-area-inset-bottom)]">
         <div className="flex items-center justify-around h-full px-2">
           {BOTTOM_BAR_ITEMS.map(({ label, path, icon: Icon }) => {
@@ -267,12 +236,7 @@ export function Navbar() {
                 className={`flex flex-col items-center justify-center gap-0.5 w-16 h-full rounded-lg transition-all duration-200 active:scale-90 ${active ? 'text-[#D4AF37]' : 'text-gray-500 hover:text-gray-300'}`}>
                 <Icon size={20} strokeWidth={active ? 2.5 : 1.5} />
                 <span className="text-[10px] font-medium">{label}</span>
-                {active && (
-                  <motion.div
-                    layoutId="bottomIndicator"
-                    className="absolute bottom-1 w-6 h-0.5 bg-[#D4AF37] rounded-full"
-                  />
-                )}
+                {active && <motion.div layoutId="bottomIndicator" className="absolute bottom-1 w-6 h-0.5 bg-[#D4AF37] rounded-full" />}
               </Link>
             );
           })}
