@@ -39,7 +39,7 @@ function getDialBreakdown(records: any[]): DialBreakdown[] { const m = new Map<s
 const DCC: Record<string,string> = {'White':'#E5E7EB','Black':'#1F2937','Blue':'#3B5BFE','Green':'#10B981','Silver':'#9CA3AF','Champagne':'#D4AF37','Grey':'#6B7280','Gray':'#6B7280','Red':'#EF4444','Brown':'#92400E','Purple':'#8B5CF6','Orange':'#F97316','Yellow':'#F59E0B','Pink':'#EC4899','Ivory':'#FEF3C7','Mother of Pearl':'#E0E7FF','Unknown':'#D1D5DB'};
 function gdc(d: string): string { return DCC[d]||`hsl($ {[...d].reduce((s,c)=>s+c.charCodeAt(0),0)%360},60%,50%)`; }
 function CustomTooltip({ active, payload }: any) { if (!active||!payload?.length) return null; const d = payload[0].payload; return <div className="bg-white border border-gray-200 rounded-xl shadow-xl p-4 text-sm min-w-[220px]"><div className="font-semibold text-gray-900 mb-2 pb-2 border-b border-gray-100">{d.month}</div><div className="text-[11px] text-gray-500 mb-2">{d.count} listings</div>{Object.entries(d.dialPrices).sort(([,a],[,b])=>(b as number)-(a as number)).map(([c,p])=>(<div key={c} className="flex justify-between items-center py-0.5"><div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{backgroundColor:gdc(c)}}/><span className="text-gray-600">{c}</span></div><span className="font-mono font-semibold" style={{color:gdc(c)}}>{fmtPrice(p as number)}</span></div>))}<div className="mt-2 pt-2 border-t border-gray-100 flex justify-between"><span className="text-gray-500 font-medium">Overall Avg</span><span className="font-mono font-bold text-gray-900">{fmtPrice(d.avgPrice)}</span></div></div>; }
-function PriceRangeBar({ min, avg, max }: { min: number; avg: number; max: number }) { const r = max-min||1; const ap = ((avg-min)/r)*100; return <div className="w-full"><div className="relative h-16"><div className="absolute top-8 left-0 right-0 h-1 bg-gray-200 rounded-full" /><div className="absolute" style={{left:'0%',top:'18px'}}><div className="flex flex-col items-center"><span className="text-[9px] text-gray-400 uppercase tracking-wider mb-1">Min</span><div className="w-3.5 h-3.5 rounded-full bg-gray-400 border-2 border-white shadow-md"/><span className="text-xs text-gray-600 font-mono mt-1 font-medium">{fmtPrice(min)}</span></div></div><div className="absolute" style={{left:`${ap}%`,top:'12px',transform:'translateX(-50%)'}}><div className="flex flex-col items-center"><span className="text-[9px] text-blue-600 font-bold uppercase tracking-wider mb-1">Average</span><div className="w-7 h-7 rounded-full bg-[#3B5BFE] border-[3px] border-white shadow-lg"/><span className="text-sm text-[#3B5BFE] font-mono font-bold mt-1">{fmtPrice(avg)}</span></div></div><div className="absolute" style={{right:'0%',top:'18px'}}><div className="flex flex-col items-center"><span className="text-[9px] text-gray-400 uppercase tracking-wider mb-1">Max</span><div className="w-3.5 h-3.5 rounded-full bg-gray-400 border-2 border-white shadow-md"/><span className="text-xs text-gray-600 font-mono mt-1 font-medium">{fmtPrice(max)}</span></div></div></div></div>; }
+function PriceRangeBar({ min, avg, max }: { min: number; avg: number; max: number }) { const r = max-min||1; const ap = ((avg-min)/r)*100; return <div className="w-full"><div className="relative h-16"><div className="absolute top-8 left-0 right-0 h-1 bg-gray-200 rounded-full" /><div className="absolute" style={{left:'0%',top:'18px'}}><div className="flex flex-col items-center"><span className="text-[9px] text-gray-400 uppercase tracking-wider mb-1">Min</span><div className="w-3.5 h-3.5 rounded-full bg-gray-400 border-2 border-white shadow-md"/><span className="text-xs text-gray-600 font-mono mt-1 font-medium">{fmtPrice(min)}</span></div></div><div class="absolute" style={{left:`${ap}%`,top:'12px',transform:'translateX(-50%)'}}><div className="flex flex-col items-center"><span className="text-[9px] text-blue-600 font-bold uppercase tracking-wider mb-1">Average</span><div className="w-7 h-7 rounded-full bg-[#3B5BFE] border-[3px] border-white shadow-lg"/><span className="text-sm text-[#3B5BFE] font-mono font-bold mt-1">{fmtPrice(avg)}</span></div></div><div className="absolute" style={{right:'0%',top:'18px'}}><div className="flex flex-col items-center"><span className="text-[9px] text-gray-400 uppercase tracking-wider mb-1">Max</span><div className="w-3.5 h-3.5 rounded-full bg-gray-400 border-2 border-white shadow-md"/><span className="text-xs text-gray-600 font-mono mt-1 font-medium">{fmtPrice(max)}</span></div></div></div></div>; }
 function DataInterpretation({ result }: { result: PriceResult }) { const od = result.outlierCount>0?`${result.outlierCount} outlier${result.outlierCount>1?'s were':' was'} detected and removed using the IQR method (Q1-1.5xIQR=${fmtPrice(result.iqrLower)}, Q3+1.5xIQR=${fmtPrice(result.iqrUpper)}). The removed outlier prices are: ${result.outlierPrices.map(p=>fmtPriceFull(p)).join(', ')}.`:'No outliers were detected using the IQR method. All data points fall within the expected range.'; const td = result.priceDrift>5?`Strong upward trend (+${result.priceDrift}%). Market demand increasing.`:result.priceDrift>0?`Slight upward trend (+${result.priceDrift}%). Prices stable with modest growth.`:result.priceDrift>-5?`Slight downward trend (${result.priceDrift}%). Minor correction or seasonal fluctuation.`: `Downward trend (${result.priceDrift}%). Possible market softening.`; return <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 border border-gray-200 rounded-xl p-6"><div className="flex items-center gap-2 mb-4"><Activity size={18} className="text-[#3B5BFE]"/><h3 className="text-sm font-semibold text-gray-900">Data Analysis &amp; Interpretation</h3></div><div className="space-y-3 text-sm text-gray-600 leading-relaxed"><p><span className="font-semibold text-gray-800">Dataset Overview:</span> Analyzed {result.totalListings} listings for the {result.brand} {result.reference}.</p><p><span className="font-semibold text-gray-800">Outlier Detection:</span> {od}</p><p><span className="font-semibold text-gray-800">Price Trend:</span> {td}</p><p><span className="font-semibold text-gray-800">Dial Color Variations:</span> {result.dialBreakdown.filter(d=>d.count>0).length} different dial color(s) identified.</p></div></div>; }
 function Footer() { return <footer className="bg-white border-t border-gray-200 pt-10 pb-6 px-6 mt-auto"><div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-sm mb-10"><div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Features</h4><ul className="space-y-2"><li><span className="text-gray-600">Trading Floor</span></li><li><span className="text-gray-600">ChronoMatch</span></li></ul></div><div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Tools</h4><ul className="space-y-2"><li><span className="text-gray-600">Glossary</span></li><li><span className="text-gray-600">Currency Converter</span></li></ul></div><div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Dealers</h4><ul className="space-y-2"><li><span className="text-gray-600">Dealer Directory</span></li><li><span className="text-gray-600">Do Not Trade List</span></li></ul></div><div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Company</h4><ul className="space-y-2"><li><span className="text-gray-600">About Us</span></li><li><span className="text-gray-600">About Simon</span></li><li><span className="text-gray-600">Contact</span></li><li><span className="text-gray-600">Terms</span></li><li><span className="text-gray-600">Privacy Policy</span></li></ul></div></div><div className="text-center text-[10px] text-gray-400 border-t border-gray-100 pt-4">&copy; 2026 Watchfacts Inc. All Rights Reserved.</div></footer>; }
 
@@ -54,25 +54,25 @@ export default function PriceResearch() {
   const [dateRange, setDateRange] = useState('6M');
   const [validationNote, setValidationNote] = useState('');
 
-  // Fetch brands from mv_brand_dist (pre-aggregated, one row per brand)
+  // Fetch brands — query watch_records directly + Map dedup
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/mv_brand_dist?select=brand,count&order=brand&limit=1000`, { headers: REQ_HEADERS });
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=brand&limit=1000`, { headers: REQ_HEADERS });
         if (!res.ok) { setValidationNote(`Brand API error: ${res.status}`); return; }
-        const data = await res.json() as Array<{ brand: string; count: number }>;
-        // Deduplicate via Map (in case view has duplicates) — keeps first occurrence
-        const brandMap = new Map<string, number>();
+        const data = await res.json() as Array<{ brand: string | null }>;
+        // Robust dedup: Map guarantees uniqueness via strict equality
+        const brandMap = new Map<string, boolean>();
         for (const row of data) {
-          if (row.brand && !brandMap.has(row.brand)) {
-            brandMap.set(row.brand, row.count || 0);
+          if (row.brand && row.brand.trim().length > 1 && !brandMap.has(row.brand)) {
+            brandMap.set(row.brand, true);
           }
         }
         const uniqueBrands = Array.from(brandMap.keys()).sort((a, b) => a.localeCompare(b));
         setModels(uniqueBrands);
         setValidationNote(uniqueBrands.length > 0 ? `${uniqueBrands.length} unique brands loaded` : 'No brands found');
       } catch (err: any) {
-        setValidationNote(`Error: ${err?.message || 'Failed to load brands'}`);
+        setValidationNote(`Brand error: ${err?.message || 'Failed'}`);
         setModels([]);
       }
     };
@@ -84,10 +84,10 @@ export default function PriceResearch() {
     const fetchRefs = async () => {
       if (!selectedModel) { setReferences([]); return; }
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=reference&brand=eq.${encodeURIComponent(selectedModel)}&reference=not.is.null&limit=500`, { headers: REQ_HEADERS });
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=reference&brand=eq.${encodeURIComponent(selectedModel)}&limit=500`, { headers: REQ_HEADERS });
         if (!res.ok) { setValidationNote(`Ref API error: ${res.status}`); return; }
         const data = await res.json() as Array<{ reference: string | null }>;
-        // Deduplicate via Map to preserve order, then filter bad refs
+        // Robust dedup via Map
         const refMap = new Map<string, boolean>();
         for (const row of data) {
           if (row.reference && !refMap.has(row.reference)) {
@@ -104,7 +104,7 @@ export default function PriceResearch() {
         }
         setReferences(validRefs);
       } catch (err: any) {
-        setValidationNote(`Error: ${err?.message || 'Failed to load refs'}`);
+        setValidationNote(`Ref error: ${err?.message || 'Failed'}`);
         setReferences([]);
       }
     };
@@ -187,7 +187,7 @@ export default function PriceResearch() {
         {/* Validation note */}
         {validationNote && (
           <div className="max-w-3xl mx-auto mb-8">
-            <p className={`text-[11px] flex items-center gap-1.5 ${validationNote.includes('Error') || validationNote.includes('error') ? 'text-red-500' : 'text-green-600'}`}>
+            <p className={`text-[11px] flex items-center gap-1.5 ${validationNote.includes('error') || validationNote.includes('Error') || validationNote.includes('No brands') ? 'text-red-500' : 'text-green-600'}`}>
               <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1a5 5 0 100 10A5 5 0 006 1zm2.354 4.354l-2.5 2.5a.5.5 0 01-.708 0l-1.5-1.5a.5.5 0 11.708-.708L5.5 6.793l2.146-2.147a.5.5 0 01.708.708z" fill="currentColor"/></svg>
               {validationNote}
             </p>
