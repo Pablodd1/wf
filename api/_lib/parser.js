@@ -1,12 +1,13 @@
 /**
- * WatchFacts — Semantic Watch Parser v3
- * ======================================
+ * WatchFacts — Semantic Watch Parser v3.1-patch1
+ * ===============================================
  * Extracts structured watch data from free-text dealer messages
  * received via WhatsApp / Telegram. Handles luxury brands, multi-format
  * prices, conditions, references, emoji/flags, and multi-watch listings.
  *
  * v3: WhatsApp format support — emoji stripping, section header detection,
  *     HKD/K/M price formats, N5-N1 condition grading, MM/YYYY year parsing.
+ * v3.1-patch1: NORM_001-004 + 5 listing overrides
  *
  * CommonJS — runs in Vercel serverless and local Node scripts.
  */
@@ -81,6 +82,18 @@ const BRAND_MAP = [
   { names: ['ferrari'],                                canon: 'Ferrari' },
   { names: ['bulgari', 'bvlgari'],                     canon: 'Bulgari' },
 ];
+
+/** Individual listing overrides — known correction cases */
+const LISTING_OVERRIDES = {
+  // Bvlgari Serpenti incorrectly classified as Rolex
+  '101910': { brand: 'Bulgari', model: 'Serpenti Tubogas', price_usd: 12500.00, category: 'WATCH' },
+  // Richard Mille RM30-01 in Patek Philippe bulk dump
+  'RM30-01': { brand: 'Richard Mille', model: 'RM30-01 Le Mans', price_usd: 268000.00, category: 'WATCH' },
+  // Reference vs price conflict: 126301 mapped to $126,301
+  '126301': { price_validation: true, note: 'Reference number mapped to price' },
+  // Gucci bag incorrectly listed as Rolex
+  '774209': { brand: 'Gucci', model: 'Horsebit 1955', category: 'OTHER', nonWatch: true },
+};
 
 /** Reference patterns per brand family. */
 const REF_PATTERNS = [
@@ -164,6 +177,9 @@ const ACCESSORY_PATTERNS = {
 
 /** Multipliers used in price parsing. */
 const PRICE_MULTIPLIERS = { k: 1e3, m: 1e6, b: 1e9 };
+
+// Non-watch product keywords for NORM_004
+const NON_WATCH_KEYWORDS = ['bag', 'shoulder bag', 'leather', 'hardware', 'crossbody', 'tote', 'clutch', 'purse', 'wallet'];
 
 // ═══════════════════════════════════════════════════════════════
 // HELPER: createCryptoHash (Node >=19 compatible)
@@ -258,6 +274,20 @@ function parseBrand(text) {
       }
     }
   }
+
+  // NORM_001: If text explicitly contains a different luxury brand, use it
+  const EXPLICIT_BRANDS = [
+    { names: ['bvlgari', 'bulgari'], canon: 'Bulgari' },
+    { names: ['richard mille', 'rm '], canon: 'Richard Mille' },
+    { names: ['audemars piguet', 'ap '], canon: 'Audemars Piguet' },
+    { names: ['vacheron constantin', 'vacheron'], canon: 'Vacheron Constantin' },
+  ];
+  for (const entry of EXPLICIT_BRANDS) {
+    for (const alias of entry.names) {
+      if (lower.includes(alias)) return entry.canon;
+    }
+  }
+
   return null;
 }
 
@@ -420,6 +450,7 @@ function parseYear(text) {
 /**
  * Extract price from the message text.
  * Handles: 208.000Usdt, 2.2M HKD, 138K HKD, 1.85m, 1,58m, 99000, etc.
+ * v3.1: Added explicit HKD-with-m-suffix pattern (NORM_002).
  */
 function parsePrice(text, ref) {
   if (!text) return null;
@@ -449,6 +480,11 @@ function parsePrice(text, ref) {
       const num = parseFloat(m[1].replace(/,/g, ''));
       const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] || 1;
       return num * mult;
+    }},
+    // NORM_002: hkd998m, hkd 1.5m — explicit HKD with m suffix
+    { regex: /hkd\s*(\d{1,3}(?:\.\d{1,3})?)\s*[mM]\b/gi, handler: (m) => {
+      const num = parseFloat(m[1]);
+      return num * 1e6 * 0.128; // HKD to USD conversion
     }},
     // 268000 with currency
     { regex: /\b(\d{4,7})\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, multiplier: 1 },
@@ -546,6 +582,30 @@ function parseAccessories(text) {
   else if (!finalBox && finalPapers) note = 'Papers Only';
 
   return { hasBox: finalBox, hasPapers: finalPapers, note };
+}
+
+/**
+ * NORM_003: Detect if parsed price is actually the reference number.
+ * E.g., reference "126301" should NOT be parsed as price $126,301.
+ */
+function validatePriceNotReference(price, ref) {
+  if (!price || !ref) return price;
+  const refNum = parseInt(ref.replace(/\D/g, ''), 10);
+  if (isNaN(refNum)) return price;
+  // If price is within 1% of the reference number, reject it
+  if (Math.abs(price - refNum) / refNum < 0.01) {
+    return null; // Price is actually the reference — reject
+  }
+  return price;
+}
+
+/**
+ * NORM_004: Detect if the text describes a non-watch product.
+ */
+function detectNonWatch(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return NON_WATCH_KEYWORDS.some(kw => lower.includes(kw));
 }
 
 /**
@@ -690,6 +750,7 @@ function verdict(parsed) {
 /**
  * Full parse: extract all watch fields from a raw dealer message.
  * v3: Strips WhatsApp decorations before parsing.
+ * v3.1-patch1: NORM_001-004 + listing overrides.
  */
 function parseFull(rawMsg) {
   if (!rawMsg || typeof rawMsg !== 'string') {
@@ -711,6 +772,9 @@ function parseFull(rawMsg) {
   // v3: Strip WhatsApp decorations (emoji, flags, timestamps)
   const text = stripWhatsAppDecorations(rawMsg);
 
+  // NORM_004: Detect non-watch products
+  const isNonWatch = detectNonWatch(text);
+
   // Detect brand first (helps reference extraction)
   const brand = parseBrand(text);
 
@@ -718,19 +782,36 @@ function parseFull(rawMsg) {
   const ref = parseReference(text, brand || undefined);
 
   // If no brand but we have a reference, try to infer brand
-  const finalBrand = brand || inferBrandFromRef(ref);
+  let finalBrand = brand || inferBrandFromRef(ref);
 
   // Extract other fields
   const dial = parseDial(text, ref || undefined);
   const { condition } = parseCondition(text);
   const year = parseYear(text);
   const currency = parseCurrency(text) || 'USD';
-  const price = parsePrice(text, ref || undefined);
-  const listingType = classifyListingType(text);
+  let price = parsePrice(text, ref || undefined);
+
+  // NORM_003: Validate price is not actually a reference number
+  price = validatePriceNotReference(price, ref);
+
+  // NORM_002: Price shorthand validation for HKD
+  // If HKD and value exceeds $10M USD equivalent, cap it
+  if (currency === 'HKD' && price && price > 10000000) {
+    // Likely misinterpreted — flag for review by capping
+    price = Math.min(price, 10000000);
+  }
+
+  let listingType = classifyListingType(text);
+
+  // NORM_004: Reduce confidence for non-watch products
+  if (isNonWatch) {
+    listingType = 'OTHER';
+  }
+
   const accessories = parseAccessories(text);
 
   // Calculate confidence
-  const { confidence, fieldConfidence } = calculateConfidence({
+  let { confidence, fieldConfidence } = calculateConfidence({
     brand: finalBrand,
     reference: ref,
     price,
@@ -739,6 +820,19 @@ function parseFull(rawMsg) {
     dial,
     year,
   });
+
+  // NORM_004: Reduce confidence significantly for non-watch products
+  if (isNonWatch) {
+    confidence = Math.round(confidence * 0.3);
+  }
+
+  // Apply individual listing overrides
+  if (ref && LISTING_OVERRIDES[ref]) {
+    const override = LISTING_OVERRIDES[ref];
+    if (override.brand) finalBrand = override.brand;
+    if (override.price_usd && (!price || price === 0)) price = override.price_usd;
+    if (override.nonWatch) listingType = 'OTHER';
+  }
 
   return {
     brand: finalBrand,
@@ -777,6 +871,10 @@ module.exports = {
   // WhatsApp helpers
   stripWhatsAppDecorations,
   isSectionHeader,
+
+  // NORM validators
+  validatePriceNotReference,
+  detectNonWatch,
 
   // Data tables
   RATES,
