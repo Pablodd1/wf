@@ -263,12 +263,19 @@ function parseBrand(text) {
 
 /**
  * Extract a watch reference number from the message.
+ * v3.1: Stronger guards against years (2023) and prices (95000HKD, 718.000)
  */
 function parseReference(text, brandHint) {
   if (!text) return null;
   const clean = text
     .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
     .replace(/\n/g, ' ');
+
+  // Remove price-context and years BEFORE searching for references
+  const priceStripped = clean
+    .replace(/\b\d{3,7}\s*(?:USD|USDT|HKD|EUR|GBP|CHF)\b/gi, ' ')
+    .replace(/\b\d{1,3}\.\d{3}\b/g, ' ')
+    .replace(/\b(19|20)\d{2}\b/g, ' ');
 
   const ordered = [...REF_PATTERNS].sort((a, b) => {
     if (a.brandHint && a.brandHint === brandHint) return -1;
@@ -277,22 +284,30 @@ function parseReference(text, brandHint) {
   });
 
   for (const pat of ordered) {
-    const m = clean.match(pat.regex);
+    const m = priceStripped.match(pat.regex);
     if (m) {
       let ref = m[1].replace(/\s+/g, '').toUpperCase()
         .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD)/, '$1');
-      // Filter out obviously wrong matches
-      if (/^\d{4}$/.test(ref) && (ref.startsWith('19') || ref.startsWith('20'))) continue;
-      // Filter out price fragments: 080.000, 0.185, etc.
-      if (/^0[\d.]/.test(ref)) continue;
-      // Filter out pure numbers with exactly 3 digits after dot (European price)
-      if (/^\d+\.\d{3}$/.test(ref)) continue;
-      if (/^\d{5,6}$/.test(ref)) {
-        const after = clean.slice(m.index + m[0].length, m.index + m[0].length + 6).toLowerCase();
-        if (/\b(usd|hkd|eur|k|m)\b/.test(after)) {
-          continue;
-        }
+
+      // STRICT validation — reject obvious non-references
+      if (/^\d{4}$/.test(ref) && (ref.startsWith('19') || ref.startsWith('20'))) continue;  // Year
+      if (/^0[\d.]/.test(ref)) continue;  // Starts with 0
+      if (/^\d+\.\d{3}$/.test(ref)) continue;  // European price
+      if (/^\d{1,3}$/.test(ref)) continue;  // Too short
+      if (/\d{4,7}\s*(?:USD|USDT|HKD|EUR|GBP|CHF)/i.test(ref)) continue;  // Price with currency
+      if (/^\d{4,7}[KM]$/i.test(ref)) continue;  // Price with K/M suffix
+
+      // Must contain letters OR be 5-6 digit numeric (Rolex style)
+      const hasLetters = /[A-Z]/.test(ref);
+      const isNumericRef = /^\d{5,6}$/.test(ref);
+      if (!hasLetters && !isNumericRef) continue;
+
+      // For numeric-only refs, verify not followed by currency
+      if (isNumericRef) {
+        const after = priceStripped.slice(m.index + m[0].length, m.index + m[0].length + 10).toLowerCase();
+        if (/\b(usd|hkd|eur|gbp|k\b|m\b)/.test(after)) continue;
       }
+
       return ref;
     }
   }
