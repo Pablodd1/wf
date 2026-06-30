@@ -39,19 +39,29 @@ interface AlertEvent {
 
 // ─── Check functions ─────────────────────────────────────────────────
 
-/** Check 1: Supabase Database */
+/** Check 1: Supabase Database — uses lightweight query to avoid count timeout on 2.39M rows */
 async function checkSupabase(): Promise<{ status: 'online' | 'offline'; latency: number; message: string }> {
   const start = performance.now();
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count&limit=1`, {
+    // Use a lightweight query — just check connectivity, not count 2.39M rows
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/reference_images?select=id&limit=1`, {
       method: 'GET',
-      headers: { ...REQ, 'Prefer': 'count=exact' },
+      headers: REQ,
     });
     const latency = Math.round(performance.now() - start);
-    const range = res.headers.get('content-range') || '';
-    const count = parseInt(range.split('/')[1] || '0');
-    if (!res.ok) return { status: 'offline', latency, message: `HTTP ${res.status}` };
-    return { status: 'online', latency, message: `${latency}ms • ${count.toLocaleString()} records` };
+    if (!res.ok) {
+      // Try fallback: simple RPC call
+      const fallbackRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/check_health`, {
+        method: 'POST',
+        headers: REQ,
+        body: JSON.stringify({}),
+      });
+      if (fallbackRes.ok) {
+        return { status: 'online', latency, message: `${latency}ms • Connected via RPC` };
+      }
+      return { status: 'offline', latency, message: `HTTP ${res.status} • API error` };
+    }
+    return { status: 'online', latency, message: `${latency}ms • Connected` };
   } catch (e: any) {
     return { status: 'offline', latency: Math.round(performance.now() - start), message: e?.message || 'Connection failed' };
   }
