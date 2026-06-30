@@ -120,7 +120,7 @@ async function processMessage(body) {
 }
 
 // ─── MAIN HANDLER ──────────────────────────────────────────────────────────
-module.exports = async function handler(req, res) {
+const handler = async function handler(req, res) {
   setCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
 
