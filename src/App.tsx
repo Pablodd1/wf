@@ -1,14 +1,12 @@
 /**
  * WatchFacts — Application Router
- * ================================
- * Public routes remain open
- * /admin/* routes require authentication
  */
 
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { CookieConsent } from '@/components/CookieConsent';
+import { Footer } from '@/components/Footer';
 import Home from '@/pages/Home';
 import ReportsPage from '@/pages/ReportsPage';
 import LoginPage from '@/pages/LoginPage';
@@ -42,6 +40,8 @@ import QualityPage from '@/pages/QualityPage';
 import VerificationPage from '@/pages/VerificationPage';
 import SettingsPage from '@/pages/SettingsPage';
 import BulkImportPage from '@/pages/BulkImportPage';
+import BlogPage from '@/pages/BlogPage';
+import ReprocessPage from '@/pages/ReprocessPage';
 
 function AdminRoutes() {
   return (
@@ -62,8 +62,10 @@ function AdminRoutes() {
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/demo" element={<DemoPage />} />
+        <Route path="/reprocess" element={<ReprocessPage />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
+      <Footer />
     </Layout>
   );
 }
@@ -73,41 +75,35 @@ export default function App() {
     <AuthProvider>
       <Routes>
         {/* Public site */}
-        <Route path="/" element={<Home />} />
-        <Route path="/reports" element={<ReportsPage />} />
-        <Route path="/about-us" element={<AboutUs />} />
-        <Route path="/about-simon" element={<AboutSimon />} />
-        <Route path="/buying-process" element={<BuyingProcess />} />
-        <Route path="/selling-process" element={<SellingProcess />} />
-        <Route path="/terms" element={<Terms />} />
-        <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-        <Route path="/glossary" element={<Glossary />} />
+        <Route path="/" element={<><Home /><Footer /></>} />
+        <Route path="/reports" element={<><ReportsPage /><Footer /></>} />
+        <Route path="/about-us" element={<><AboutUs /><Footer /></>} />
+        <Route path="/about-simon" element={<><AboutSimon /><Footer /></>} />
+        <Route path="/buying-process" element={<><BuyingProcess /><Footer /></>} />
+        <Route path="/selling-process" element={<><SellingProcess /><Footer /></>} />
+        <Route path="/terms" element={<><Terms /><Footer /></>} />
+        <Route path="/privacy-policy" element={<><PrivacyPolicy /><Footer /></>} />
+        <Route path="/glossary" element={<><Glossary /><Footer /></>} />
+        <Route path="/blog" element={<><BlogPage /><Footer /></>} />
 
         {/* Auth */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
 
         {/* Trading */}
-        <Route path="/trading" element={<TradingFloor />} />
+        <Route path="/trading" element={<><TradingFloor /><Footer /></>} />
         <Route path="/flash-sales/:id" element={<FlashSaleDetail />} />
         <Route path="/buy" element={<Navigate to="/trading" replace />} />
         <Route path="/buy/all" element={<Navigate to="/trading" replace />} />
-        <Route path="/price-research" element={<PriceResearch />} />
+        <Route path="/price-research" element={<><PriceResearch /><Footer /></>} />
         <Route path="/reference-check" element={<ReferenceCheck />} />
         <Route path="/insight" element={<InsightDetails />} />
 
         {/* Pricing */}
-        <Route path="/pricing" element={<PricingPage />} />
+        <Route path="/pricing" element={<><PricingPage /><Footer /></>} />
 
-        {/* Admin — protected, requires login */}
-        <Route
-          path="/admin/*"
-          element={
-            <ProtectedRoute>
-              <AdminRoutes />
-            </ProtectedRoute>
-          }
-        />
+        {/* Admin — protected */}
+        <Route path="/admin/*" element={<ProtectedRoute><AdminRoutes /></ProtectedRoute>} />
 
         {/* Redirects */}
         <Route path="/search" element={<Navigate to="/admin/search" replace />} />
