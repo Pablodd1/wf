@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage } from '@/lib/imageResolver';
-import { filterValidReferences } from '@/lib/referenceValidator';
+import { filterValidReferences, filterValidBrands } from '@/lib/referenceValidator';
 
 const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
@@ -54,23 +54,18 @@ export default function PriceResearch() {
   const [dateRange, setDateRange] = useState('6M');
   const [validationNote, setValidationNote] = useState('');
 
-  // Fetch brands — query watch_records directly + Map dedup
+  // Fetch brands — dedup + validate to filter references/colors/conditions
   useEffect(() => {
     const fetchModels = async () => {
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=brand&limit=1000`, { headers: REQ_HEADERS });
         if (!res.ok) { setValidationNote(`Brand API error: ${res.status}`); return; }
         const data = await res.json() as Array<{ brand: string | null }>;
-        // Robust dedup: Map guarantees uniqueness via strict equality
-        const brandMap = new Map<string, boolean>();
-        for (const row of data) {
-          if (row.brand && row.brand.trim().length > 1 && !brandMap.has(row.brand)) {
-            brandMap.set(row.brand, true);
-          }
-        }
-        const uniqueBrands = Array.from(brandMap.keys()).sort((a, b) => a.localeCompare(b));
-        setModels(uniqueBrands);
-        setValidationNote(uniqueBrands.length > 0 ? `${uniqueBrands.length} unique brands loaded` : 'No brands found');
+        const rawBrands = data.map(r => r.brand).filter((b): b is string => !!b);
+        const validBrands = filterValidBrands(rawBrands);
+        const filteredCount = rawBrands.length - validBrands.length;
+        setModels(validBrands);
+        setValidationNote(validBrands.length > 0 ? `${validBrands.length} brands (filtered ${filteredCount} junk refs/colors/conditions)` : 'No brands found');
       } catch (err: any) {
         setValidationNote(`Brand error: ${err?.message || 'Failed'}`);
         setModels([]);
