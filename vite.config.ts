@@ -12,6 +12,15 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-charts': ['recharts'],
+          'vendor-export': ['xlsx', 'jspdf', 'html2canvas'],
+          'vendor-virtuoso': ['react-virtuoso'],
+        },
+      },
+    },
   },
   server: {
     port: 3000,

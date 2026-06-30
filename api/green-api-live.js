@@ -18,6 +18,7 @@
 'use strict';
 
 const { parseFull, verdict, toUSD, classifyListingType } = require('./_lib/parser');
+const { withRateLimit } = require('./_lib/rate-limiter');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -174,4 +175,6 @@ module.exports = async function handler(req, res) {
     console.error('[green-api-live] Error:', e.message);
     return res.status(500).json({ ok: false, error: e.message });
   }
-};
+}
+
+module.exports = withRateLimit('/api/green-api-live', handler);

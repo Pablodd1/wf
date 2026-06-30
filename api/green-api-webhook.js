@@ -9,8 +9,9 @@ const { parseFull } = require('./_lib/parser');
 const { routeByScheme } = require('./_lib/gap-detector');
 const { getClient } = require('./_lib/supabase');
 const { parseMessageWithContext } = require('./_lib/context-tracker');
+const { withRateLimit } = require('./_lib/rate-limiter');
 
-module.exports = async function handler(req, res) {
+module.exports = withRateLimit('/api/green-api-webhook', async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -112,4 +113,4 @@ module.exports = async function handler(req, res) {
     console.error('Green API webhook error:', err.message);
     res.status(500).json({ error: err.message });
   }
-};
+});
