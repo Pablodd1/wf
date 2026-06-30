@@ -1,13 +1,12 @@
 /**
- * WatchFacts — Semantic Watch Parser v3.1
- * ========================================
+ * WatchFacts — Semantic Watch Parser v3
+ * ======================================
  * Extracts structured watch data from free-text dealer messages
  * received via WhatsApp / Telegram. Handles luxury brands, multi-format
  * prices, conditions, references, emoji/flags, and multi-watch listings.
  *
- * v3.1: Price-stripping before reference matching (prevents years/prices
- *        from being extracted as references). No brand inference fallback.
- *        USD conversion with $50M ceiling.
+ * v3: WhatsApp format support — emoji stripping, section header detection,
+ *     HKD/K/M price formats, N5-N1 condition grading, MM/YYYY year parsing.
  *
  * CommonJS — runs in Vercel serverless and local Node scripts.
  */
@@ -34,9 +33,6 @@ const APPROVE_THRESHOLD = getApproveThreshold();
 
 /** Threshold above which a parse passes; below lands in human review. */
 const HUMAN_THRESHOLD = getHumanThreshold();
-
-/** Maximum reasonable watch price in USD (prevents billion-dollar outliers). */
-const MAX_REASONABLE_PRICE_USD = 50_000_000;
 
 /** Currency conversion rates → USD. */
 const RATES = {
@@ -360,10 +356,6 @@ function inferDialFromRef(ref) {
 
 /**
  * Infer brand from a known reference number pattern.
- * NOTE: This is used ONLY for reference-pattern sorting priority,
- * NOT for assigning brand when brand is not found in text.
- * The inferBrandFromRef fallback has been removed from parseFull()
- * to prevent false "Rolex" assignments.
  */
 function inferBrandFromRef(ref) {
   if (!ref) return null;
@@ -518,15 +510,11 @@ function parseCurrency(text) {
 
 /**
  * Convert an amount from any supported currency to USD.
- * P0 FIX: Added $50M ceiling to prevent billion-dollar outliers from corrupting data.
- * A legitimate watch transaction never exceeds $50M USD.
  */
 function toUSD(amount, currency) {
   if (!amount || amount <= 0) return 0;
   const rate = RATES[(currency || 'USD').toUpperCase()] || 1.0;
-  const usd = Math.round(amount * rate);
-  // Reject unreasonable values — prevents $1.4B price bug
-  return usd > MAX_REASONABLE_PRICE_USD ? 0 : usd;
+  return Math.round(amount * rate);
 }
 
 /**
@@ -701,9 +689,7 @@ function verdict(parsed) {
 
 /**
  * Full parse: extract all watch fields from a raw dealer message.
- * v3.1: Strips WhatsApp decorations before parsing.
- * P0 FIX: Removed inferBrandFromRef fallback — brand MUST be found in text.
- *         Prevents false "Rolex" assignments when brand is not mentioned.
+ * v3: Strips WhatsApp decorations before parsing.
  */
 function parseFull(rawMsg) {
   if (!rawMsg || typeof rawMsg !== 'string') {
@@ -725,16 +711,14 @@ function parseFull(rawMsg) {
   // v3: Strip WhatsApp decorations (emoji, flags, timestamps)
   const text = stripWhatsAppDecorations(rawMsg);
 
-  // Detect brand first (helps reference extraction priority)
+  // Detect brand first (helps reference extraction)
   const brand = parseBrand(text);
 
-  // Extract reference (uses brand hint for pattern ordering only)
+  // Extract reference
   const ref = parseReference(text, brand || undefined);
 
-  // P0 FIX: Brand must be explicitly found in text — NO inference from reference.
-  // Previously: const finalBrand = brand || inferBrandFromRef(ref);
-  // This caused false "Rolex" assignments for any 6-digit numeric reference.
-  const finalBrand = brand;
+  // If no brand but we have a reference, try to infer brand
+  const finalBrand = brand || inferBrandFromRef(ref);
 
   // Extract other fields
   const dial = parseDial(text, ref || undefined);
@@ -798,7 +782,6 @@ module.exports = {
   RATES,
   APPROVE_THRESHOLD,
   HUMAN_THRESHOLD,
-  MAX_REASONABLE_PRICE_USD,
 
   // Internal helpers for testing
   parseBrand,
