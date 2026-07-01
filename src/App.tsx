@@ -48,6 +48,7 @@ import UnifiedReports from '@/pages/UnifiedReports';
 
 import PipelineDashboard from '@/pages/PipelineDashboard';
 import LiveQueue from '@/pages/LiveQueue';
+import DemoPage from '@/pages/DemoPage';
 
 function AdminRoutes() {
   return (
@@ -72,7 +73,7 @@ function AdminRoutes() {
         <Route path="/clean" element={<Navigate to="/admin/reports" replace />} />
         <Route path="/reprocess" element={<Navigate to="/admin" replace />} />
         <Route path="/demand" element={<Navigate to="/admin/analytics" replace />} />
-        <Route path="/demo" element={<Navigate to="/admin" replace />} />
+        <Route path="/demo" element={<DemoPage />} />
 
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
