@@ -107,7 +107,7 @@ export default function App() {
         <Route path="/flash-sales/:id" element={<FlashSaleDetail />} />
         <Route path="/buy" element={<Navigate to="/trading" replace />} />
         <Route path="/buy/all" element={<Navigate to="/trading" replace />} />
-        <Route path="/price-research" element={<><PriceResearch /><Footer /></>} />
+        <Route path="/price-research" element={<PriceResearch />} />
         <Route path="/reference-check" element={<ReferenceCheck />} />
         <Route path="/insight" element={<InsightDetails />} />
 

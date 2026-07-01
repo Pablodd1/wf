@@ -56,7 +56,8 @@ export default function PriceResearch() {
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=brand&limit=1000`, { headers: REQ_HEADERS });
+        // Get ALL distinct brands, not just 1000 rows
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=brand&limit=50000`, { headers: REQ_HEADERS });
         if (!res.ok) { setValidationNote(`Brand API error: ${res.status}`); return; }
         const data = await res.json() as Array<{ brand: string | null }>;
         const rawBrands = data.map(r => r.brand).filter((b): b is string => !!b);
@@ -77,7 +78,16 @@ export default function PriceResearch() {
     const fetchRefs = async () => {
       if (!selectedModel) { setReferences([]); return; }
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=reference&brand=eq.${encodeURIComponent(selectedModel)}&limit=500`, { headers: REQ_HEADERS });
+        // Fetch up to 5000 references, exclude years at DB level
+        const res = await fetch(
+          `${SUPABASE_URL}/rest/v1/watch_records` +
+          `?select=reference` +
+          `&brand=eq.${encodeURIComponent(selectedModel)}` +
+          `&reference=not.iregex.^(19|20)\d{2}$` +  // exclude year-only values
+          `&reference=not.iregex.^\d{5,}$` +         // exclude pure 5+ digit numbers (prices)
+          `&limit=5000`,
+          { headers: REQ_HEADERS }
+        );
         if (!res.ok) { setValidationNote(`Ref API error: ${res.status}`); return; }
         const data = await res.json() as Array<{ reference: string | null }>;
         // Robust dedup via Map
