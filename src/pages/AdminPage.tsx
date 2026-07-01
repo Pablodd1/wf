@@ -41,10 +41,13 @@ const ONE_YEAR_AGO = (() => {
 
 // ─── Fetch exact count by verdict (1-year filtered) ────────────────
 async function fetchVerdictCount(verdict: string): Promise<number> {
+  // NOTE: intentionally unused for live counts now — see fetchStatsFromApi().
+  // Kept as a fallback for callers that still import it directly.
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?verdict=eq.${verdict}&created_at=gte.${encodeURIComponent(ONE_YEAR_AGO)}&select=id&limit=1`, {
       method: 'GET', headers: REQ_HEAD,
     });
+    if (!res.ok) return 0;
     const range = res.headers.get('content-range') || '';
     return parseInt(range.split('/')[1] || '0');
   } catch { return 0; }
@@ -55,9 +58,29 @@ async function fetchTotalCount(): Promise<number> {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?created_at=gte.${encodeURIComponent(ONE_YEAR_AGO)}&select=id&limit=1`, {
       method: 'GET', headers: REQ_HEAD,
     });
+    if (!res.ok) return 0;
     const range = res.headers.get('content-range') || '';
     return parseInt(range.split('/')[1] || '0');
   } catch { return 0; }
+}
+
+// Fast path: precomputed stats (mv_verdict_dist) instead of 5 separate
+// count=exact queries that each risk a Supabase statement timeout (57014)
+// on the full 2.39M row table.
+async function fetchStatsFromApi(): Promise<{ total: number; approved: number; review: number; human: number; recycle: number } | null> {
+  try {
+    const res = await fetch('/api/confidence-stats');
+    if (!res.ok) return null;
+    const data = await res.json();
+    const vc = data.verdictCounts || {};
+    return {
+      total: data.total || data.totalRecords || 0,
+      approved: vc.APPROVED || 0,
+      review: vc.REVIEW || 0,
+      human: vc.HUMAN || 0,
+      recycle: vc.RECYCLE || 0,
+    };
+  } catch { return null; }
 }
 
 // ─── Fetch recent human-edited activity ──────────────────────────────
@@ -120,16 +143,27 @@ export default function AdminPage() {
     setTesting(true);
     setLoading(true);
 
-    // Parallel fetches
-    const [dbHealth, total, approved, review, human, recycle, activity] = await Promise.all([
+    // Parallel fetches — stats come from the fast precomputed API to avoid
+    // Supabase statement timeouts on 2.39M-row count=exact queries.
+    const [dbHealth, fastStats, activity] = await Promise.all([
       testSupabaseHealth(),
-      fetchTotalCount(),
-      fetchVerdictCount('APPROVED'),
-      fetchVerdictCount('REVIEW'),
-      fetchVerdictCount('HUMAN'),
-      fetchVerdictCount('RECYCLE'),
+      fetchStatsFromApi(),
       fetchActivityLog(),
     ]);
+
+    let total: number, approved: number, review: number, human: number, recycle: number;
+    if (fastStats) {
+      ({ total, approved, review, human, recycle } = fastStats);
+    } else {
+      // Fallback to direct (slower, timeout-prone) queries if the API is down
+      [total, approved, review, human, recycle] = await Promise.all([
+        fetchTotalCount(),
+        fetchVerdictCount('APPROVED'),
+        fetchVerdictCount('REVIEW'),
+        fetchVerdictCount('HUMAN'),
+        fetchVerdictCount('RECYCLE'),
+      ]);
+    }
 
     setStats({
       total,

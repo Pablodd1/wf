@@ -200,14 +200,29 @@ export default function UnifiedReports() {
       }
       query += `&order=${sortBy}.${sortDir}`;
       const from = page * PAGE_SIZE;
-      query += `&range=${from}-${from + PAGE_SIZE - 1}`;
+      query += `&limit=${PAGE_SIZE}&offset=${from}`;
 
-      const res = await fetch(query, { headers: REQ_HEAD });
+      // IMPORTANT: do NOT use count=exact (REQ_HEAD) here — on the full 2.39M
+      // table with created_at/verdict filters it triggers Supabase's statement
+      // timeout (57014) and silently returns an error object instead of rows.
+      // Use REQ_HEADERS (no count) for the data fetch, and get the total
+      // separately from the fast precomputed stats endpoint.
+      const res = await fetch(query, { headers: REQ_HEADERS });
       const data = await res.json();
-      const range = res.headers.get('content-range') || '';
-      setTotal(parseInt(range.split('/')[1] || '0'));
-      // Guard: ensure data is an array (Supabase may return error object)
       setRecords(Array.isArray(data) ? data : []);
+
+      // Total count: use fast stats API instead of expensive count=exact
+      try {
+        const statsRes = await fetch('/api/confidence-stats');
+        const stats = await statsRes.json();
+        if (activeTab !== 'ALL' && stats.verdictCounts?.[activeTab] != null) {
+          setTotal(stats.verdictCounts[activeTab]);
+        } else if (activeTab === 'ALL') {
+          setTotal(stats.total || stats.totalRecords || 0);
+        }
+      } catch {
+        // Total stays at previous value if stats fetch fails
+      }
     } catch {
       setRecords([]);
     } finally {

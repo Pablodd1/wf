@@ -913,6 +913,7 @@ function parseFull(rawMsg) {
 
   return {
     brand: finalBrand,
+    brandExplicit: !!brand,  // true if brand was found in text, false if inferred from ref pattern
     ref,
     dial,
     condition,

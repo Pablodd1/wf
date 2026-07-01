@@ -77,11 +77,12 @@ export default function DemoPage() {
 
       setSamples(listings);
 
+      const totalRecords = apiData.total || apiData.totalRecords || 2392784;
       setStats({
-        total: 2392784,
+        total: totalRecords,
         avgConfidence: 85,
-        autoRate: Math.round(((apiData.verdictCounts?.APPROVED || 1084269) / (apiData.total || 1)) * 100),
-        reviewRate: Math.round(((apiData.verdictCounts?.REVIEW || 769921) / (apiData.total || 1)) * 100),
+        autoRate: Math.round(((apiData.verdictCounts?.APPROVED || 1084269) / totalRecords) * 100),
+        reviewRate: Math.round(((apiData.verdictCounts?.REVIEW || 769921) / totalRecords) * 100),
         verdicts: apiData.verdictCounts || { APPROVED: 1084269, REVIEW: 769921, HUMAN: 267215, RECYCLE: 271379 },
       });
 
@@ -163,6 +164,12 @@ export default function DemoPage() {
           </div>
 
           <div className="space-y-4">
+            {samples.length === 0 && (
+              <div className="text-center py-10 text-gray-500 text-sm">
+                <Database size={24} className="mx-auto mb-2 opacity-40" />
+                Loading live samples — data export in progress, check back shortly.
+              </div>
+            )}
             {samples.map((item, i) => (
               <motion.div
                 key={i}

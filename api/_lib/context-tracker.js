@@ -358,11 +358,11 @@ class ContextTracker {
   _isHeaderLine(line) {
     const t = line.trim();
     if (t.length > 200) return false;      // Headers are short
-    if (t.length < 3) return false;
+    if (t.length < 2) return false;        // "pp"/"ap" are 2 chars — allow them
     const hasPrice = /\d{4,}|\d+\s*(?:usd|hkd|eur|gbp)/i.test(t);
     const hasRef = /\b\d{4,6}[A-Z]/i.test(t);
-    const hasEmoji = /[\u{1F300}-\u{1F9FF}]/u.test(t);
-    const hasBrandWord = /patek|rolex|audemars|richard|omega|hublot|vacheron|cartier|AP\b|PP\b|RM\b/i.test(t);
+    const hasEmoji = /[\u{1F300}-\u{1F9FF}\u{1F1E6}-\u{1F1FF}]/u.test(t);
+    const hasBrandWord = /patek|rolex|audemars|richard|omega|hublot|vacheron|cartier|^ap$|^pp$|^rm$|^vc$/i.test(t);
     return (hasEmoji || hasBrandWord) && !hasPrice && !hasRef;
   }
 
@@ -538,10 +538,17 @@ function parseMessageWithContext(rawMessage, parseFn) {
     // Apply context overrides where the parser found nothing
     const enhanced = { ...parsed };
 
-    // BRAND: if parser found no brand but context has one
+    // BRAND: context wins if parser found no brand, OR if parser's brand was
+    // only inferred from ref pattern (not explicit in text) and context has
+    // a high-confidence active brand from a header line.
     if (!enhanced.brand && ctx.brand) {
       enhanced.brand = ctx.brand;
-      enhanced.brandSource = 'context';  // mark as inherited
+      enhanced.brandSource = 'context';
+    } else if (enhanced.brand && !enhanced.brandExplicit && ctx.brand && ctx.confidence.brand >= 85) {
+      // Parser guessed the brand from the ref number, but we have a strong
+      // context brand (e.g. "ap" header) — context wins.
+      enhanced.brand = ctx.brand;
+      enhanced.brandSource = 'context_override';
     }
 
     // CURRENCY: if parser found USD but context says HKD
