@@ -28,7 +28,12 @@ const EXCLUDED_BRANDS = new Set([
   'Brickell Watches','ChronoGrid','Depeche','Factory','FIN','BIG','PJ',
   'RX','UN','GOA','E','Used','Unbranded','Branded','037','16613',
   'McLaren','Nike','Kia','Jaguar','Jordan','null','Naked','New Mini',
-  'Green tag','Godfather','Diva Dream','ntpt','NTPT','Ntq','NTQ'
+  'Green tag','Godfather','Diva Dream','ntpt','NTPT','Ntq','NTQ',
+  'Prada','PCGS','Rolls','Royal Canadian Mint','Saint Laurent',
+  'Icebergad inc','Helead Watches','Bazel Aftermarket','Marco Bicego',
+  'Roberto Coin','Parma Giangi','Porsche Design','Meyer','Megasafe',
+  'Mavani And Co','Otsuka Lotec','KENIX SZE','Jack Panther',
+  'Jacques Estoier','Fabarge','Famulan','Countess','Croton'
 ]);
 
 /**
@@ -46,9 +51,9 @@ export function isValidBrand(brand: string): boolean {
   if (PRICE_TEXT.test(t)) return false;
   if (TOO_SHORT.test(t)) return false;
 
-  // Reference-like detection: e.g. "126301", "5712/1A", "RM11-03"
+  // Reference-like detection: e.g. "126301", "5712/1A", "RM11-03", "A3239011.BC34"
   if (REFERENCE_LIKE.test(t) && !/[&]/.test(t) && t.length < 20) {
-    if (t.includes('/') || t.includes('.')) return false;
+    if (t.includes('/') || t.includes('.') || t.includes('-')) return false;
     const digitCount = (t.match(/\d/g) || []).length;
     const letterCount = (t.match(/[a-zA-Z]/g) || []).length;
     if (digitCount >= 3 && letterCount <= 4 && t.length <= 12) return false;
@@ -58,6 +63,9 @@ export function isValidBrand(brand: string): boolean {
   if (/^(19|20)\d{2}\s/.test(t)) return false;  // "2019 batgirl"
   if (/^M\d{5,6}/.test(t)) return false;        // "M79360N-0024" Tudor refs
   if (/^\d{2}-\d{2}[a-z]{0,2}$/i.test(t)) return false; // "72-01ti"
+  if (/^[A-Z]\d{4,8}\./i.test(t)) return false; // "A3239011.BC34" Breitling refs
+  if (/^DJ\d{2}$/i.test(t)) return false;        // "DJ36" Datejust abbreviation
+  if (/^MAD\d$/i.test(t)) return false;          // "MAD1" model name
 
   if (WATCH_MODEL.test(t) && t.length <= 10) {
     // Could be a model number like "126301" — reject if mostly digits
