@@ -77,7 +77,7 @@ async function getListings({ page = 1, limit = 50, brand = null, reference = nul
   }
   
   const { data, error, count } = await q
-    .order('received_at', { ascending: false })
+    .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
   
   if (error) throw error;
@@ -231,18 +231,18 @@ async function getMonthlyPrices(reference, months = 6) {
   
   const { data, error } = await getClient()
     .from('watch_records')
-    .select('price_usd, received_at')
+    .select('price_usd, created_at')
     .eq('reference', reference)
     .gt('price_usd', 0)
-    .gte('received_at', cutoff.toISOString())
-    .order('received_at');
+    .gte('created_at', cutoff.toISOString())
+    .order('created_at');
   
   if (error || !data) return [];
   
   // Group by month
   const monthly = {};
   for (const r of data) {
-    const month = r.received_at?.slice(0, 7); // YYYY-MM
+    const month = r.created_at?.slice(0, 7); // YYYY-MM
     if (!month) continue;
     if (!monthly[month]) monthly[month] = { prices: [] };
     monthly[month].prices.push(r.price_usd);
@@ -263,7 +263,7 @@ async function getListingsByMonth(reference, month) {
     .from('watch_records')
     .select('*')
     .eq('reference', reference)
-    .ilike('received_at', `${month}%`)
+    .ilike('created_at', `${month}%`)
     .gt('price_usd', 0)
     .order('price_usd');
   
