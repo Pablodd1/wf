@@ -17,6 +17,18 @@ const COLOR          = /^(black|blue|white|green|silver|grey|gray|red|brown|oran
 const NON_BRAND      = /^(unknown|n\/a|na|none|other|various|assorted|mixed)$/i;
 const MATERIAL       = /^(gold|steel|rose gold|white gold|yellow gold|platinum|titanium|ceramic|carbon)$/i;
 
+// Known non-watch brands to exclude from dropdowns
+const EXCLUDED_BRANDS = new Set([
+  'Ferrari','Apple','Mercedes-Benz','Ducati','Coca-Cola','ASICS','Garmin',
+  'Fear of God','Birkin','Christian Dior','Dior','Chanel','Gucci','Fendi',
+  'Burberry','Bottega Veneta','Chrome Hearts','David Yurman','Fred',
+  'FRED','Glenn Spiro','Grassotti','Angela Cummings','Constance',
+  'Australian Kangaroo','Czech Leopard','Granat','Bluecroft','Baltic',
+  'Beaubleu','Boneta Inc.','BonetaWholesale.com','BT Watches','Buchira',
+  'Brickell Watches','ChronoGrid','Depeche','Factory','FIN','BIG','PJ',
+  'RX','UN','GOA','E','Used','Unbranded','Branded','037','16613'
+]);
+
 /**
  * Check if a string looks like a valid watch brand name.
  * Returns false for: pure numbers, years, prices, conditions, colors,
@@ -50,6 +62,7 @@ export function isValidBrand(brand: string): boolean {
   if (COLOR.test(t)) return false;
   if (NON_BRAND.test(t)) return false;
   if (MATERIAL.test(t)) return false;
+  if (EXCLUDED_BRANDS.has(t)) return false;
   if (t.length > 50) return false;
 
   return true;
@@ -88,6 +101,15 @@ export function isValidReference(ref: string): boolean {
 
   // NOT a year
   if (YEAR_PATTERN.test(t)) return false;
+
+  // NOT zero-padded numbers (0002, 0011, 0585)
+  if (/^0\d+$/.test(t)) return false;
+
+  // NOT currency/price fragments
+  if (/\b(HKD|AED|USD|EUR|GBP|CHF|JPY|CNY|GREY|MSRP|WANT|ONLY|BEST|BOX|PAPERS|FULL|SET|BNIB|B&P)\b/i.test(t)) return false;
+
+  // NOT 1-3 digit pure numbers
+  if (/^\d{1,3}$/.test(t)) return false;
 
   // NOT a pure price
   if (PURE_NUMBER.test(t) && t.length >= 5) return false;

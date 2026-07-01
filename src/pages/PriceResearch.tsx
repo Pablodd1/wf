@@ -67,7 +67,8 @@ export default function PriceResearch() {
           const contentType = res.headers.get('content-type') || '';
           if (contentType.includes('json')) {
             const brandIndex = await res.json();
-            const brands = Object.keys(brandIndex).sort((a, b) => a.localeCompare(b));
+            let brands = Object.keys(brandIndex).sort((a, b) => a.localeCompare(b));
+            brands = filterValidBrands(brands);
             if (brands.length > 0) {
               setModels(brands);
               setValidationNote(`${brands.length} brands found`);
@@ -112,11 +113,7 @@ export default function PriceResearch() {
             const brandIndex = await res.json();
             const refs: string[] = brandIndex[selectedModel] || [];
             if (refs.length > 0) {
-              const validRefs = refs.filter((r: string) => {
-                if (/^(19|20)\d{2}$/.test(r)) return false;
-                if (/^\d{5,}$/.test(r)) return false;
-                return r.length >= 4 && r.length <= 25;
-              });
+              const validRefs = filterValidReferences(refs);
               setReferences(validRefs);
               setValidationNote(`${validRefs.length} references found`);
               return;
@@ -136,11 +133,15 @@ export default function PriceResearch() {
           if (row.reference && !refMap.has(row.reference)) {
             if (/^(19|20)\d{2}$/.test(row.reference)) continue;
             if (/^\d{5,}$/.test(row.reference)) continue;
+            if (/^0\d+$/.test(row.reference)) continue;
+            if (/\b(HKD|AED|USD|EUR|GBP|CHF|JPY|CNY)\b/i.test(row.reference)) continue;
+            if (/\b(GREY|MSRP|WANT|ONLY|BEST|BOX|PAPERS|FULL|SET|BNIB|B&P)\b/i.test(row.reference)) continue;
+            if (/^\d{1,3}$/.test(row.reference)) continue;
             if (row.reference.length < 4 || row.reference.length > 25) continue;
             refMap.set(row.reference, true);
           }
         }
-        const validRefs = Array.from(refMap.keys()).sort((a, b) => a.localeCompare(b));
+        const validRefs = filterValidReferences(Array.from(refMap.keys()));
         setReferences(validRefs);
         setValidationNote(validRefs.length > 0 ? `${validRefs.length} references found (live fallback)` : 'No references found');
       } catch (err: any) {
