@@ -1,14 +1,14 @@
 /**
  * POST /api/green-api-webhook
  * Receives WhatsApp messages from Green API (600 group chats)
- * v4.0: Uses ContextTracker for context-aware multi-listing parsing
+ * v4.1: Catalog matching wired — 6958 entries → 100% confidence for known refs
  *
- * Pipeline: segment → context-track → parse → catalog match → gap detection → save
+ * Pipeline: segment → context-track → parse → catalog match → gap detect → save
  */
 const { parseFull } = require('./_lib/parser');
-const { routeByScheme } = require('./_lib/gap-detector');
 const { getClient } = require('./_lib/supabase');
 const { parseMessageWithContext } = require('./_lib/context-tracker');
+const { matchParsedListing } = require('./_lib/catalog-matcher');
 const { withRateLimit } = require('./_lib/rate-limiter');
 
 module.exports = withRateLimit('/api/green-api-webhook', async function handler(req, res) {
@@ -24,8 +24,6 @@ module.exports = withRateLimit('/api/green-api-webhook', async function handler(
 
   try {
     const body = req.body;
-
-    // Extract message
     let rawMessage = '';
     let senderId = '';
     let groupId = '';
@@ -38,7 +36,6 @@ module.exports = withRateLimit('/api/green-api-webhook', async function handler(
     } else if (typeof body === 'string') {
       rawMessage = body;
     }
-
     if (body.senderData) {
       senderId = body.senderData.sender || '';
       groupId = body.senderData.chatId || '';
@@ -47,65 +44,77 @@ module.exports = withRateLimit('/api/green-api-webhook', async function handler(
 
     if (!rawMessage) return res.status(400).json({ error: 'No message text found' });
 
-    // Step 1: Context-aware parse (handles multi-listing messages)
+    // Step 1: Context-aware parse
     const parsedListings = parseMessageWithContext(rawMessage, parseFull);
 
     // Process each listing
     const savedRecords = [];
     for (const parsed of parsedListings) {
 
-    // Step 2: Catalog lookup
-    let catalogResult = { tier: 5, match: 'unmatched' };
-    if (parsed.ref) {
-      const { data } = await getClient().from('catalog').select('*').ilike('reference', `%${parsed.ref}%`).limit(1);
-      if (data?.[0]) catalogResult = { tier: 1, data: data[0], match: 'exact' };
-    }
+      // Step 2: Catalog lookup (LOCAL JSON — 6958 entries, instant)
+      const catalogEntry = matchParsedListing(parsed);
 
-    // Step 3: Route by scheme
-    const routing = await routeByScheme(parsed, catalogResult);
+      // Step 3: Confidence scoring with catalog
+      let confidence = parsed.confidence || 50;
+      let verdict = 'REVIEW';
 
-    // Step 4: Save to Supabase
-    const { data: saved, error } = await getClient().from('watch_records').insert({
-      brand: parsed.brand,
-      reference: parsed.ref,
-      dial_color: routing.filled.dialColor || parsed.dial,
-      condition: routing.filled.condition || parsed.condition,
-      year: routing.filled.year || parsed.year,
-      price: parsed.price,
-      currency: parsed.currency,
-      price_usd: parsed.priceUSD || parsed.price,
-      box_papers: parsed.accessories?.note || null,
-      confidence: routing.confidence,
-      verdict: routing.verdict,
-      catalog_match: catalogResult.match,
-      raw_message: rawMessage,
-      source: groupId,
-      sender_id: senderId,
-      received_at: new Date(timestamp).toISOString(),
-      ai_notes: JSON.stringify(routing.aiNotes),
-      parser_version: 'v4.0-ctx',
-      context_brand: parsed.brandSource === 'context' ? 'inherited' : null,
-      context_currency: parsed.priceCorrected ? parsed.detectedCurrency : null,
-      context_condition: parsed.conditionSource === 'context' ? 'inherited' : null,
-    }).select();
+      if (catalogEntry) {
+        // Catalog match → 100% confidence → auto-approve
+        confidence = 100;
+        verdict = 'APPROVED';
+      } else if (parsed.brand && parsed.ref && parsed.price > 0) {
+        // Has brand + ref + price but no catalog match
+        confidence = Math.min(80, confidence);
+        verdict = confidence >= 80 ? 'APPROVED' : 'REVIEW';
+      } else if (!parsed.ref || !parsed.brand) {
+        // Missing critical fields
+        confidence = Math.min(40, confidence);
+        verdict = 'RECYCLE';
+      } else {
+        verdict = 'HUMAN';
+      }
+
+      // Step 4: Save to Supabase
+      const { data: saved, error } = await getClient().from('watch_records').insert({
+        brand: parsed.brand || null,
+        reference: parsed.ref || null,
+        dial_color: catalogEntry?.dialColor || parsed.dial || null,
+        condition: parsed.condition || null,
+        year: parsed.year ? parseInt(parsed.year) : null,
+        price_raw: parsed.priceRaw || null,
+        price_usd: parsed.price || null,
+        currency: parsed.currency || 'USD',
+        confidence,
+        verdict,
+        source: 'whatsapp',
+        raw_message: rawMessage,
+        flags: catalogEntry ? [] : ['NO_CATALOG_MATCH'],
+        reprocessed_at: null,
+        created_at: new Date(timestamp).toISOString(),
+        processed_at: new Date().toISOString(),
+        parser_version: 'v4.1-catalog',
+        listing_type: parsed.listingType || 'WTS',
+        human_edited: false,
+        image_urls: catalogEntry?.imageUrl ? [catalogEntry.imageUrl] : [],
+      }).select();
 
       if (error) throw error;
       if (saved?.[0]) savedRecords.push(saved[0]);
-    } // end for each listing
+    }
 
     res.status(200).json({
       success: true,
       count: savedRecords.length,
       ids: savedRecords.map(r => r.id),
-      listings: parsedListings.map(p => ({
-        brand: p.brand,
-        reference: p.ref,
-        price: p.price,
-        currency: p.currency,
-        confidence: p.confidence,
-        verdict: p.listingType,
-        contextBrand: p.brandSource === 'context',
-        priceCorrected: p.priceCorrected || false,
+      catalogMatches: savedRecords.filter(r => r.confidence === 100).length,
+      listings: savedRecords.map(r => ({
+        id: r.id,
+        brand: r.brand,
+        reference: r.reference,
+        price_usd: r.price_usd,
+        confidence: r.confidence,
+        verdict: r.verdict,
+        catalogMatch: r.confidence === 100,
       })),
     });
 

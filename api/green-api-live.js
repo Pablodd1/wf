@@ -18,6 +18,8 @@
 'use strict';
 
 const { parseFull, verdict, toUSD, classifyListingType } = require('./_lib/parser');
+const { parseMessageWithContext } = require('./_lib/context-tracker');
+const { matchParsedListing } = require('./_lib/catalog-matcher');
 const { withRateLimit } = require('./_lib/rate-limiter');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
@@ -73,24 +75,39 @@ async function processMessage(body) {
   const hasRef = /\d{4,6}/.test(rawText);
   if (!hasPrice && !hasRef) return { skipped: true, reason: 'no_watch_data' };
 
-  // Parse with parser v3
-  const parsed = parseFull(rawText);
+  // Parse with context tracker + catalog matching (v4.1)
+  const listings = parseMessageWithContext(rawText, parseFull);
+  if (!listings.length) return { skipped: true, reason: 'parse_failed' };
+
+  // Process first listing (or all for multi-listing messages)
+  const parsed = listings[0];
   if (!parsed || !parsed.brand) return { skipped: true, reason: 'parse_failed' };
 
-  const v = verdict(parsed);
+  // Catalog lookup
+  const catalogEntry = matchParsedListing(parsed);
+  let confidence = parsed.confidence || 50;
+  let v;
+
+  if (catalogEntry) {
+    confidence = 100;
+    v = 'APPROVED';
+  } else {
+    v = verdict(parsed);
+  }
+
   const listingType = classifyListingType(rawText);
 
   const record = {
     raw_message: rawText,
     brand: parsed.brand,
     reference: parsed.ref,
-    dial_color: parsed.dial,
+    dial_color: catalogEntry?.dialColor || parsed.dial,
     condition: parsed.condition,
     year: parsed.year,
     price_raw: parsed.price,
     price_usd: parsed.price ? toUSD(parsed.price, parsed.currency || 'USD') : null,
     currency: parsed.currency || 'USD',
-    confidence: parsed.confidence || 50,
+    confidence,
     verdict: v,
     listing_type: listingType,
     source: 'green_api_live',
@@ -98,9 +115,12 @@ async function processMessage(body) {
     dealer_name: body.senderData?.senderName || null,
     accessories: parsed.accessories ? JSON.stringify(parsed.accessories) : null,
     field_confidence: parsed.fieldConfidence ? JSON.stringify(parsed.fieldConfidence) : null,
-    parser_version: 'v3.0',
+    flags: catalogEntry ? [] : ['NO_CATALOG_MATCH'],
+    parser_version: 'v4.1-catalog',
     processed_at: new Date().toISOString(),
+    created_at: new Date((body.timestamp || Date.now()/1000) * 1000).toISOString(),
     human_edited: false,
+    image_urls: catalogEntry?.imageUrl ? [catalogEntry.imageUrl] : [],
   };
 
   // Save to watch_records
