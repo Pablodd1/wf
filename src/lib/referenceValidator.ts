@@ -9,7 +9,7 @@ const PURE_NUMBER    = /^\d+$/;
 const YEAR_PATTERN   = /^(19|20)\d{2}$/;
 const PRICE_SUFFIX   = /^\d+[KkMm]$/;
 const PRICE_TEXT     = /^(\d{1,3}(,\d{3})*|\d+)(\s*(USD|HKD|EUR|GBP|CHF))?$/i;
-const TOO_SHORT      = /^[A-Z]{1,2}$/i;
+const TOO_SHORT      = /^[A-Z]{1,3}$/i;           // 1-3 letter abbreviations rarely real brands
 const REFERENCE_LIKE = /^[A-Z0-9]+$/i;
 const WATCH_MODEL    = /\d{4,6}/;        // Contains 4-6 consecutive digits
 const CONDITION      = /^(new|used|mint|excellent|good|fair|poor|bnib|unworn|pre.?owned|nos)$/i;
@@ -26,7 +26,9 @@ const EXCLUDED_BRANDS = new Set([
   'Australian Kangaroo','Czech Leopard','Granat','Bluecroft','Baltic',
   'Beaubleu','Boneta Inc.','BonetaWholesale.com','BT Watches','Buchira',
   'Brickell Watches','ChronoGrid','Depeche','Factory','FIN','BIG','PJ',
-  'RX','UN','GOA','E','Used','Unbranded','Branded','037','16613'
+  'RX','UN','GOA','E','Used','Unbranded','Branded','037','16613',
+  'McLaren','Nike','Kia','Jaguar','Jordan','null','Naked','New Mini',
+  'Green tag','Godfather','Diva Dream','ntpt','NTPT','Ntq','NTQ'
 ]);
 
 /**
@@ -51,6 +53,11 @@ export function isValidBrand(brand: string): boolean {
     const letterCount = (t.match(/[a-zA-Z]/g) || []).length;
     if (digitCount >= 3 && letterCount <= 4 && t.length <= 12) return false;
   }
+
+  // Model-name-as-brand: contains year + word, or starts with M + reference pattern
+  if (/^(19|20)\d{2}\s/.test(t)) return false;  // "2019 batgirl"
+  if (/^M\d{5,6}/.test(t)) return false;        // "M79360N-0024" Tudor refs
+  if (/^\d{2}-\d{2}[a-z]{0,2}$/i.test(t)) return false; // "72-01ti"
 
   if (WATCH_MODEL.test(t) && t.length <= 10) {
     // Could be a model number like "126301" — reject if mostly digits
