@@ -46,6 +46,8 @@ import BlogPage from '@/pages/BlogPage';
 import ReferenceCheck from '@/pages/ReferenceCheck';
 import UnifiedReports from '@/pages/UnifiedReports';
 
+import PipelineDashboard from '@/pages/PipelineDashboard';
+
 function AdminRoutes() {
   return (
     <Layout>
@@ -57,6 +59,7 @@ function AdminRoutes() {
         <Route path="/health" element={<HealthPage />} />
         <Route path="/import" element={<BulkImportPage />} />
         <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/pipeline" element={<PipelineDashboard />} />
 
         {/* Legacy redirects — old tabs now point to UnifiedReports */}
         <Route path="/data" element={<Navigate to="/admin/reports" replace />} />
