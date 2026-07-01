@@ -406,7 +406,7 @@ export default function TradingFloor() {
   const [showConverter, setShowConverter] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(2392784);
-  const [pageSize, setPageSize] = useState(100);
+  const [pageSize, setPageSize] = useState(200); // Show more by default for client demo
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [imageMap, setImageMap] = useState<Record<string, string>>({});
