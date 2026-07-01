@@ -1,0 +1,10 @@
+{
+  "exportDate": "2026-07-01T18:32:21.966Z",
+  "totalRecords": 2392784,
+  "verdictCounts": {
+    "APPROVED": 1084269,
+    "REVIEW": 769921,
+    "RECYCLE": 271379,
+    "HUMAN": 267215
+  }
+}

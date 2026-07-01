@@ -52,19 +52,21 @@ export default function PriceResearch() {
   const [dateRange, setDateRange] = useState('6M');
   const [validationNote, setValidationNote] = useState('');
 
-  // Fetch brands — dedup + validate to filter references/colors/conditions
+  // Fetch brands — from server API
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        // Get ALL distinct brands, not just 1000 rows
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=brand&limit=50000`, { headers: REQ_HEADERS });
+        const res = await fetch('/api/listings?limit=50000');
         if (!res.ok) { setValidationNote(`Brand API error: ${res.status}`); return; }
-        const data = await res.json() as Array<{ brand: string | null }>;
-        const rawBrands = data.map(r => r.brand).filter((b): b is string => !!b);
-        const validBrands = filterValidBrands(rawBrands);
-        const filteredCount = rawBrands.length - validBrands.length;
-        setModels(validBrands);
-        setValidationNote(validBrands.length > 0 ? `${validBrands.length} brands (filtered ${filteredCount} junk refs/colors/conditions)` : 'No brands found');
+        const result = await res.json();
+        const rows = result.rows || [];
+        const brandMap = new Map<string, boolean>();
+        for (const row of rows) {
+          if (row.brand && !brandMap.has(row.brand)) brandMap.set(row.brand, true);
+        }
+        const brands = Array.from(brandMap.keys()).sort((a, b) => a.localeCompare(b));
+        setModels(brands);
+        setValidationNote(`${brands.length} brands found`);
       } catch (err: any) {
         setValidationNote(`Brand error: ${err?.message || 'Failed'}`);
         setModels([]);
@@ -73,39 +75,30 @@ export default function PriceResearch() {
     fetchModels();
   }, []);
 
-  // Fetch references — dedup + filter bad data
+  // Fetch references — from server API (avoids anon key + regex issues)
   useEffect(() => {
     const fetchRefs = async () => {
       if (!selectedModel) { setReferences([]); return; }
       try {
-        // Fetch up to 5000 references, exclude years at DB level
         const res = await fetch(
-          `${SUPABASE_URL}/rest/v1/watch_records` +
-          `?select=reference` +
-          `&brand=eq.${encodeURIComponent(selectedModel)}` +
-          `&reference=not.iregex.^(19|20)\d{2}$` +  // exclude year-only values
-          `&reference=not.iregex.^\d{5,}$` +         // exclude pure 5+ digit numbers (prices)
-          `&limit=5000`,
-          { headers: REQ_HEADERS }
+          `/api/listings?brand=${encodeURIComponent(selectedModel)}&limit=5000`,
         );
         if (!res.ok) { setValidationNote(`Ref API error: ${res.status}`); return; }
-        const data = await res.json() as Array<{ reference: string | null }>;
-        // Robust dedup via Map
+        const result = await res.json();
+        const rows = result.rows || [];
         const refMap = new Map<string, boolean>();
-        for (const row of data) {
+        for (const row of rows) {
           if (row.reference && !refMap.has(row.reference)) {
+            // Filter years on frontend (fast with small dataset from API)
+            if (/^(19|20)\d{2}$/.test(row.reference)) continue;
+            if (/^\d{5,}$/.test(row.reference)) continue;
+            if (row.reference.length < 4 || row.reference.length > 25) continue;
             refMap.set(row.reference, true);
           }
         }
-        const uniqueRawRefs = Array.from(refMap.keys());
-        const validRefs = filterValidReferences(uniqueRawRefs);
-        const filteredCount = uniqueRawRefs.length - validRefs.length;
-        if (filteredCount > 0) {
-          setValidationNote(`${validRefs.length} valid refs (filtered ${filteredCount} bad: years, prices)`);
-        } else {
-          setValidationNote(`${validRefs.length} references found`);
-        }
+        const validRefs = Array.from(refMap.keys()).sort((a, b) => a.localeCompare(b));
         setReferences(validRefs);
+        setValidationNote(`${validRefs.length} references found`);
       } catch (err: any) {
         setValidationNote(`Ref error: ${err?.message || 'Failed'}`);
         setReferences([]);
@@ -118,7 +111,7 @@ export default function PriceResearch() {
     if (!ref) return;
     setLoading(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=*&reference=eq.${encodeURIComponent(ref)}&limit=1000`, { headers: REQ_HEADERS });
+      const res = await fetch(`/api/listings?reference=${encodeURIComponent(ref)}&limit=1000`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const records = await res.json();
       if (!records?.length) { setResult(null); setLoading(false); return; }
