@@ -1,0 +1,15 @@
+{
+  "startedAt": "2026-07-01T22:36:19.209Z",
+  "mode": "dry-run",
+  "batchSize": 50,
+  "maxRecords": 100,
+  "parserVersion": "v3.2",
+  "changes": [],
+  "stats": {
+    "totalProcessed": 100,
+    "totalCandidates": 0,
+    "totalUpdated": 0,
+    "totalErrors": 0,
+    "finishedAt": "2026-07-01T22:36:20.898Z"
+  }
+}

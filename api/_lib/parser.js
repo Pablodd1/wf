@@ -52,6 +52,8 @@ const RATES = {
 };
 
 /** Brands we know how to detect, with aliases and extraction rules. */
+const { validateReference } = require('./reference-catalog.js');
+
 const BRAND_MAP = [
   { names: ['patek philippe', 'patek', 'pp', '百达翡丽', '百達翡麗'], canon: 'Patek Philippe' },
   { names: ['rolex', '劳力士', '勞力士'],                  canon: 'Rolex' },
@@ -919,6 +921,27 @@ function parseFull(rawMsg) {
     if (override.nonWatch) listingType = 'OTHER';
   }
 
+  // REF-CATALOG: Validate (brand, reference) against legacy taxonomy
+  const flags = {};
+  let validationFlags = [];
+  if (finalBrand && ref) {
+    const catalogCheck = validateReference(finalBrand, ref);
+    if (!catalogCheck.matched) {
+      flags.reference_unverified = true;
+      validationFlags.push('REFERENCE_UNVERIFIED');
+      // Lower confidence if reference not in catalog
+      confidence = Math.round(confidence * 0.85);
+    }
+    if (!catalogCheck.brandKnown) {
+      flags.brand_unknown = true;
+      validationFlags.push('BRAND_UNKNOWN');
+      confidence = Math.round(confidence * 0.90);
+    }
+  } else if (finalBrand && !ref) {
+    // No reference to validate — mild penalty
+    confidence = Math.round(confidence * 0.95);
+  }
+
   return {
     brand: finalBrand,
     brandExplicit: !!brand,  // true if brand was found in text, false if inferred from ref pattern
@@ -932,11 +955,12 @@ function parseFull(rawMsg) {
     fieldConfidence,
     listingType,
     accessories,
+    flags,
     // 4-tier confidence protocol
     confidenceTier: confidenceTier(
       { brand: finalBrand, ref, dial, condition, year, price, currency },
       null, // catalogEntry — lookup is done by caller
-      []    // validationFlags — populated by caller
+      validationFlags
     ),
   };
 }
