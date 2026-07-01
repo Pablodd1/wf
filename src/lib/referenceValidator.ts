@@ -33,7 +33,8 @@ const EXCLUDED_BRANDS = new Set([
   'Icebergad inc','Helead Watches','Bazel Aftermarket','Marco Bicego',
   'Roberto Coin','Parma Giangi','Porsche Design','Meyer','Megasafe',
   'Mavani And Co','Otsuka Lotec','KENIX SZE','Jack Panther',
-  'Jacques Estoier','Fabarge','Famulan','Countess','Croton'
+  'Jacques Estoier','Fabarge','Famulan','Countess','Croton',
+  'SNOOPY','Tether','Tahe','Throwin Salt Co.','TraxNYC','Saucony'
 ]);
 
 /**
