@@ -39,7 +39,10 @@ module.exports = async function handler(req, res) {
     query += `&order=created_at.desc&limit=${limitNum}&offset=${offset}`;
 
     const resp = await fetch(query, {
-      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+      },
     });
 
     if (!resp.ok) {
