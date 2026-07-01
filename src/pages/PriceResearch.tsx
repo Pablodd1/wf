@@ -12,13 +12,11 @@ import {
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage } from '@/lib/imageResolver';
 import { filterValidReferences, filterValidBrands } from '@/lib/referenceValidator';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ_HEADERS = {
-  'apikey': SUPABASE_KEY,
-  'Authorization': `Bearer ${SUPABASE_KEY}`,
-  'Content-Type': 'application/json',
+const PRICE_REQ = {
+  ...REQ_HEADERS,
+  'Prefer': 'count=exact',
 };
 
 interface MonthlyPoint { month: string; monthKey: string; dialPrices: Record<string, number>; count: number; avgPrice: number; }

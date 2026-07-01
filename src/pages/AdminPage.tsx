@@ -12,11 +12,8 @@ import {
   MessageSquare, Hash,
 } from 'lucide-react';
 import { ConfidenceStatsPanel } from '@/components/ConfidenceStatsPanel';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
-const REQ_HEAD = { ...REQ, 'Prefer': 'count=exact' };
 
 interface ActivityEntry {
   id: string;
@@ -68,7 +65,7 @@ async function fetchActivityLog(): Promise<ActivityEntry[]> {
   try {
     const res = await fetch(
       `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,verdict,human_edited,created_at,price_usd&human_edited=eq.true&order=created_at.desc&limit=20`,
-      { headers: REQ }
+      { headers: REQ_HEADERS }
     );
     const data = await res.json();
     return (data || []).map((r: any, i: number) => ({
@@ -87,7 +84,7 @@ async function testSupabaseHealth(): Promise<{ status: 'online' | 'offline'; lat
   const start = Date.now();
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
-      method: 'GET', headers: REQ,
+      method: 'GET', headers: REQ_HEADERS,
     });
     const latency = Date.now() - start;
     return { status: res.ok ? 'online' : 'offline', latency, message: `${latency}ms` };

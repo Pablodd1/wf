@@ -8,10 +8,8 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Info, CheckCircle, Globe, User, Package, FileText } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
 
 // ─── Compute rating ──────────────────────────────────────────────────
 function computeRating(listing: any): { hasRating: boolean; label: string } {
@@ -47,7 +45,7 @@ export default function FlashSaleDetail() {
     const fetchDetail = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${encodeURIComponent(id)}&select=*`, { headers: REQ });
+        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${encodeURIComponent(id)}&select=*`, { headers: REQ_HEADERS });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (data?.[0]) setListing(data[0]);

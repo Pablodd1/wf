@@ -10,11 +10,8 @@ import {
   ArrowUpDown, X,
 } from 'lucide-react';
 import { resolveWatchImage, getBrandGradient, getBrandIcon } from '@/lib/imageResolver';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
-const REQ_HEAD = { ...REQ, 'Prefer': 'count=exact' };
 
 interface DBRecord {
   id: string;
@@ -71,7 +68,7 @@ export default function DataBrowser() {
       if (confMin > 0) url += `&confidence=gte.${confMin}`;
       url += `&order=${sortField}.${sortDir}`;
 
-      const res = await fetch(url, { headers: REQ });
+      const res = await fetch(url, { headers: REQ_HEADERS });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setRecords(data || []);
@@ -125,7 +122,7 @@ export default function DataBrowser() {
     try {
       for (const id of ids) {
         await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${id}`, {
-          method: 'PATCH', headers: { ...REQ, 'Content-Type': 'application/json' },
+          method: 'PATCH', headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' },
           body: JSON.stringify({ verdict: newVerdict, human_edited: true }),
         });
       }

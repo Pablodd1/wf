@@ -6,11 +6,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Upload, Play, CheckCircle, AlertTriangle, FileText, Loader } from 'lucide-react';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const REQ: Record<string, string> = {
-  'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU',
-  'Authorization': 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU',
+const BULK_HEADERS = {
+  ...REQ_HEADERS,
+  'Prefer': 'return=representation',
 };
 
 function isSectionHeader(line: string): boolean {
@@ -104,7 +104,7 @@ export default function BulkImportPage() {
       try {
         const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records`, {
           method: 'POST',
-          headers: { ...REQ, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
+          headers: { ...REQ_HEADERS, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
           body: JSON.stringify(records),
         });
         if (res.ok) success += records.length;

@@ -11,10 +11,8 @@ import {
   CheckCircle, XCircle, Activity, Zap, Signal,
   Shield, Code2,
 } from 'lucide-react';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
 
 interface ServiceCheck {
   id: string;
@@ -46,14 +44,14 @@ async function checkSupabase(): Promise<{ status: 'online' | 'offline'; latency:
     // Use a lightweight query — just check connectivity, not count 2.39M rows
     const res = await fetch(`${SUPABASE_URL}/rest/v1/reference_images?select=id&limit=1`, {
       method: 'GET',
-      headers: REQ,
+      headers: REQ_HEADERS,
     });
     const latency = Math.round(performance.now() - start);
     if (!res.ok) {
       // Try fallback: simple RPC call
       const fallbackRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/check_health`, {
         method: 'POST',
-        headers: REQ,
+        headers: REQ_HEADERS,
         body: JSON.stringify({}),
       });
       if (fallbackRes.ok) {
@@ -136,7 +134,7 @@ async function checkCatalog(): Promise<{ status: 'online' | 'offline' | 'warning
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/reference_images?select=count&limit=1`, {
       method: 'GET',
-      headers: { ...REQ, 'Prefer': 'count=exact' },
+      headers: { ...REQ_HEADERS, 'Prefer': 'count=exact' },
     });
     const latency = Math.round(performance.now() - start);
     const range = res.headers.get('content-range') || '';
@@ -246,7 +244,7 @@ export default function HealthPage() {
 
   const fetchQualityMetrics = useCallback(async () => {
     try {
-      const verdictRes = await fetch(`${SUPABASE_URL}/rest/v1/mv_verdict_dist?select=verdict,count`, { headers: REQ });
+      const verdictRes = await fetch(`${SUPABASE_URL}/rest/v1/mv_verdict_dist?select=verdict,count`, { headers: REQ_HEADERS });
 
       let total = 0, approved = 0, review = 0, recycled = 0, wtb = 0, human = 0;
       if (verdictRes.ok) {
@@ -266,7 +264,7 @@ export default function HealthPage() {
       let withErrors = 0;
       try {
         const errorRes = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&parser_error=not.is.null&limit=1`, {
-          method: 'GET', headers: REQ,
+          method: 'GET', headers: REQ_HEADERS,
         });
         if (errorRes.ok) {
           const errorData = await errorRes.json();

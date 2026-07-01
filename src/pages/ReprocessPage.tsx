@@ -6,15 +6,14 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Cpu, Play, Pause, Square, Loader2, RefreshCw,
+Cpu, Play, Pause, Square, Loader2, RefreshCw,
   CheckCircle, AlertTriangle, Clock, Zap, Database,
   TrendingUp, ArrowRight, FileText,
   Download, ArrowRightLeft, PieChart, Tag, Percent,
 } from 'lucide-react';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
+
 
 interface Progress {
   total_records: number;
@@ -84,9 +83,9 @@ export default function ReprocessPage() {
   const fetchProgress = useCallback(async () => {
     try {
       const [progressRes, queueRes, logsRes] = await Promise.all([
-        fetch(`${SUPABASE_URL}/rest/v1/reprocessing_progress?id=eq.1`, { headers: REQ }),
-        fetch(`${SUPABASE_URL}/rest/v1/reprocessing_queue?select=status,count(*)&group=status`, { headers: REQ }),
-        fetch(`${SUPABASE_URL}/rest/v1/reprocessing_queue?select=batch_number,status,records_processed,records_updated,completed_at&status=eq.completed&order=batch_number.desc&limit=20`, { headers: REQ }),
+        fetch(`${SUPABASE_URL}/rest/v1/reprocessing_progress?id=eq.1`, { headers: REQ_HEADERS }),
+        fetch(`${SUPABASE_URL}/rest/v1/reprocessing_queue?select=status,count(*)&group=status`, { headers: REQ_HEADERS }),
+        fetch(`${SUPABASE_URL}/rest/v1/reprocessing_queue?select=batch_number,status,records_processed,records_updated,completed_at&status=eq.completed&order=batch_number.desc&limit=20`, { headers: REQ_HEADERS }),
       ]);
 
       if (progressRes.ok) {

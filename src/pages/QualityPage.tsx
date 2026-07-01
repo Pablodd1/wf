@@ -8,16 +8,15 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Shield, AlertTriangle, CheckCircle, XCircle,
+Shield, AlertTriangle, CheckCircle, XCircle,
   TrendingUp, TrendingDown, Database, Target,
   Percent, Hash, DollarSign, Calendar, Search,
   AlertOctagon, Info, ChevronDown, ChevronUp,
   RefreshCw, FileWarning, BarChart3, Layers,
 } from 'lucide-react';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
+
 
 /* ── Types ─────────────────────────────────────────────── */
 interface QualityStats {
@@ -89,14 +88,14 @@ export default function QualityPage() {
         /* 1. Core stats via materialized view */
         const statsRes = await fetch(
           `${SUPABASE_URL}/rest/v1/mv_stats_summary?select=*`,
-          { headers: REQ }
+          { headers: REQ_HEADERS }
         );
         const statsData = await statsRes.json();
 
         /* 2. Verdict distribution via materialized view */
         const verdictRes = await fetch(
           `${SUPABASE_URL}/rest/v1/mv_verdict_dist?select=verdict,count&order=count.desc`,
-          { headers: REQ }
+          { headers: REQ_HEADERS }
         );
         const verdictData = await verdictRes.json();
 
@@ -105,14 +104,14 @@ export default function QualityPage() {
           `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,price_usd,year,raw_message,verdict` +
           `&or=(price_usd.gt.5000000,price_usd.lt.100,and(year.lt.1900,year.not.is.null),and(year.gt.2030,year.not.is.null))` +
           `&limit=50&order=id.desc`,
-          { headers: REQ }
+          { headers: REQ_HEADERS }
         );
         const outliersData = await outliersRes.json();
 
         /* 4. Field presence counts */
         const presenceRes = await fetch(
           `${SUPABASE_URL}/rest/v1/rpc/get_field_presence`,
-          { method: 'POST', headers: { ...REQ, 'Content-Type': 'application/json' } }
+          { method: 'POST', headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' } }
         );
         let presenceData: any = {};
         try {

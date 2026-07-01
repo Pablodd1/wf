@@ -21,11 +21,8 @@ import {
   AlertTriangle, Clock, FileSpreadsheet, Layers,
 } from 'lucide-react';
 import { ConfidenceTierBadge } from '@/components/ui/ConfidenceTierBadge';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
-const REQ_HEAD = { ...REQ, 'Prefer': 'count=exact' };
 
 type Verdict = 'APPROVED' | 'REVIEW' | 'HUMAN' | 'RECYCLE' | 'TRASH' | 'WTB';
 
@@ -162,7 +159,7 @@ export default function UnifiedReports() {
     const ids = Array.from(selected);
     const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=in.(${ids.join(',')})`, {
       method: 'PATCH',
-      headers: { ...REQ, 'Content-Type': 'application/json' },
+      headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' },
       body: JSON.stringify({ verdict: action }),
     });
     if (res.ok) {

@@ -11,15 +11,14 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
-  CheckCircle, XCircle, AlertTriangle, Target,
+CheckCircle, XCircle, AlertTriangle, Target,
   Shield, TrendingUp, Zap, ChevronRight,
   BarChart3, Database, Cpu, Search, FileSpreadsheet,
   Activity, Download, ShieldCheck, RefreshCw,
 } from 'lucide-react';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
+
 
 /* ── Phase Data ─────────────────────────────────────────── */
 const PHASES = [
@@ -79,8 +78,8 @@ export default function VerificationPage() {
     async function load() {
       try {
         const [statsRes, verdictRes] = await Promise.all([
-          fetch(`${SUPABASE_URL}/rest/v1/mv_stats_summary?select=*`, { headers: REQ }),
-          fetch(`${SUPABASE_URL}/rest/v1/mv_verdict_dist?select=verdict,count`, { headers: REQ }),
+          fetch(`${SUPABASE_URL}/rest/v1/mv_stats_summary?select=*`, { headers: REQ_HEADERS }),
+          fetch(`${SUPABASE_URL}/rest/v1/mv_verdict_dist?select=verdict,count`, { headers: REQ_HEADERS }),
         ]);
         const stats = await statsRes.json();
         const verdicts = await verdictRes.json();

@@ -11,10 +11,8 @@ import {
   CheckCircle, AlertTriangle, X, ArrowRight, FileText, CircleOff,
   Timer, Package,
 } from 'lucide-react';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
 
 const BATCH_SIZE = 1000;
 const TOTAL_RECORDS = 2390143; // Total records in the database
@@ -163,7 +161,7 @@ export default function ExportPage() {
     while (hasMore && !abortRef.current && offset < maxRecords) {
       const batchSize = Math.min(BATCH_SIZE, maxRecords - offset);
       try {
-        const res = await fetch(buildQueryUrl(offset, batchSize), { headers: REQ });
+        const res = await fetch(buildQueryUrl(offset, batchSize), { headers: REQ_HEADERS });
         if (!res.ok) {
           addLog(`Error: HTTP ${res.status} at offset ${offset}`);
           break;
@@ -242,7 +240,7 @@ export default function ExportPage() {
     while (hasMore && !abortRef.current) {
       batchCount++;
       try {
-        const res = await fetch(buildQueryUrl(offset, BATCH_SIZE), { headers: REQ });
+        const res = await fetch(buildQueryUrl(offset, BATCH_SIZE), { headers: REQ_HEADERS });
         if (!res.ok) {
           addLog(`Error: HTTP ${res.status} at offset ${offset}`);
           break;

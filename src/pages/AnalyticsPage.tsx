@@ -14,10 +14,8 @@ import {
   BarChart3, Download, Loader2, ArrowUpDown, Database, Shield,
   TrendingUp, Clock, RefreshCw, AlertTriangle, Zap,
 } from 'lucide-react';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
 
 const CHART_COLORS = ['#C9A96E', '#3B82F6', '#22C55E', '#F59E0B', '#EF4444', '#8B5CF6', '#14B8A6', '#F97316', '#EC4899', '#06B6D4'];
 
@@ -41,7 +39,7 @@ type SortKey = 'reference' | 'brand' | 'count' | 'avgPrice';
 
 // ─── Data fetchers (query materialized views, not raw table) ─────────
 const fetcher = async (view: string): Promise<any[]> => {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${view}?select=*&limit=100`, { headers: REQ });
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${view}?select=*&limit=100`, { headers: REQ_HEADERS });
   if (!res.ok) throw new Error(`${view}: HTTP ${res.status}`);
   return res.json();
 };

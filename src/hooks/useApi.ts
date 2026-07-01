@@ -4,11 +4,8 @@
  * All data comes from Supabase in real-time. No backend server needed.
  */
 import { useState, useEffect, useCallback } from 'react';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
-const REQ_HEAD = { ...REQ, 'Prefer': 'count=exact' };
 
 /**
  * Generic Supabase query hook.
@@ -43,7 +40,7 @@ export function useSupabase<T = any>(
         }
       }
 
-      const res = await fetch(url, { headers: REQ });
+      const res = await fetch(url, { headers: REQ_HEADERS });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
       setData(json);
@@ -89,7 +86,7 @@ export async function supabaseQuery<T = any>(
   queryString: string = ''
 ): Promise<T[]> {
   const url = `${SUPABASE_URL}/rest/v1/${table}${queryString ? '?' + queryString : ''}`;
-  const res = await fetch(url, { headers: REQ });
+  const res = await fetch(url, { headers: REQ_HEADERS });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -100,7 +97,7 @@ export async function supabaseQuery<T = any>(
 export async function supabasePatch(table: string, id: string, data: Record<string, any>): Promise<void> {
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?id=eq.${encodeURIComponent(id)}`, {
     method: 'PATCH',
-    headers: { ...REQ, 'Content-Type': 'application/json' },
+    headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);

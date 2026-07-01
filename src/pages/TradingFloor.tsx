@@ -9,11 +9,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Filter, Info, User, CheckCircle, Globe, Loader2, TrendingUp, Shield, Award, DollarSign, Watch, Gem, X, Zap } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
+import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
 // ─── Supabase direct ─────────────────────────────────────────────────
-const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
-const REQ = { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` };
 
 // ─── Types ───────────────────────────────────────────────────────────
 interface WatchListing {
@@ -419,7 +417,7 @@ export default function TradingFloor() {
   // ─── Fetch real-time total count from Supabase ───────────────────────
   useEffect(() => {
     fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count&limit=1`, {
-      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}`, 'Prefer': 'count=exact' }
+      headers: { 'apikey': REQ_HEADERS.apikey, 'Authorization': REQ_HEADERS.Authorization, 'Prefer': 'count=exact' }
     })
     .then(r => {
       const range = r.headers.get('content-range') || '';
@@ -448,7 +446,7 @@ export default function TradingFloor() {
         url += `&or=(${wtbTerms.map(t => `raw_message.ilike.*${encodeURIComponent(t)}*`).join(',')})`;
       }
 
-      const res = await fetch(url, { headers: REQ });
+      const res = await fetch(url, { headers: REQ_HEADERS });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       let processedData = data || [];
@@ -470,7 +468,7 @@ export default function TradingFloor() {
       if (uniqueRefs.length > 0) {
         try {
           const imgUrl = `${SUPABASE_URL}/rest/v1/reference_images?select=reference,image_url&reference=in.(${uniqueRefs.join(',')})&is_primary=eq.true&limit=100`;
-          const imgRes = await fetch(imgUrl, { headers: REQ });
+          const imgRes = await fetch(imgUrl, { headers: REQ_HEADERS });
           if (imgRes.ok) {
             const imgData = await imgRes.json();
             for (const row of imgData) {
