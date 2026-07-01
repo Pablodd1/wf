@@ -492,7 +492,8 @@ function parsePrice(text, ref) {
       return num * mult;
     }},
     // NORM_002: hkd998m, hkd 1.5m — explicit HKD with m suffix
-    { regex: /hkd\s*(\d{1,3}(?:\.\d{1,3})?)\s*[mM]\b/gi, handler: (m) => {
+    // Also matches typo "hkf" (common in WhatsApp from non-native typists)
+    { regex: /hk[df]?\s*(\d{1,3}(?:\.\d{1,3})?)\s*[mM]\b/gi, handler: (m) => {
       const num = parseFloat(m[1]);
       return num * 1e6 * 0.128; // HKD to USD conversion
     }},

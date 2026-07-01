@@ -37,19 +37,22 @@ const BRAND_HEADERS = [
   { brand: 'Patek Philippe', patterns: [
     /🍉/u, /🫒/u,
     /\bPP\s+(?:used|new|ready|available|fresh)/i,
+    /^PP\s*$/i,                               // standalone "PP" header
+    /^PP$/i,                                   // exact match "PP" on own line
     /\bpatek\b/i, /\bnautilus\b/i, /\baquanut\b/i,
     /🍍.*pp/i, /PP\s*🍍/i,
   ]},
-  // Rolex — 🏆 (trophy), ⭐ (star)
+  // Rolex — 🏆 (trophy), ⭐ (star), 🇭🇰 flag + rolex
   { brand: 'Rolex', patterns: [
-    /🏆/u, /⭐/u, /🌟/u,
+    /🏆/u, /⭐/u, /🌟/u, /🇭🇰/u,
     /\brolex\s+(?:used|new|ready|available|fresh)/i,
-    /🚩.*rolex/i, /rolex.*🚩/i,
+    /🇭🇰.*rolex/i, /rolex.*🇭🇰/i,
   ]},
   // Audemars Piguet — AP
   { brand: 'Audemars Piguet', patterns: [
     /⭐.*AP/i, /AP\s*⭐/i,
     /\bAP\s+(?:used|new|ready|available|fresh)/i,
+    /^AP\s*$/i,                                // standalone "AP" header
     /\baudemars\b/i, /\broyal\s*oak\b/i,
   ]},
   // Richard Mille — 💎 (diamond), RM
@@ -423,20 +426,34 @@ function segmentMessage(rawMessage) {
   // Step 1: Split on double newlines (paragraph breaks)
   let segments = text.split(/\n\s*\n+/);
 
-  // Step 2: Within each segment, split on emoji-on-own-line markers
+  // Step 2: Within each segment, split on brand-only header lines
+  // These are short lines that are ONLY a brand indicator: "pp", "ap", "🇭🇰 rolex"
+  const BRAND_ONLY = /^(🍉|🫒|🏆|⭐|🌟|💎|🇭🇰|pp|ap|vc|rm)\s*(rolex|patek|audemars|richard|vacheron|omega|hublot|cartier)?\s*$/i;
+  
   const result = [];
   for (const seg of segments) {
     const trimmed = seg.trim();
     if (!trimmed) continue;
 
-    // Split where an emoji sits on its own line between listings
-    const emojiRegex = new RegExp('\\n\\s*' + EMOJI + '\\s*\\n?', 'u');
-    const emojiSplit = trimmed.split(emojiRegex);
-
-    if (emojiSplit.length > 1) {
-      result.push(...emojiSplit.map(s => s.trim()).filter(s => s.length > 0));
-    } else {
-      result.push(trimmed);
+    // Split this segment on brand-only header lines
+    const lines = trimmed.split(/\n/);
+    let currentBlock = [];
+    
+    for (const line of lines) {
+      if (BRAND_ONLY.test(line.trim())) {
+        // Flush current block
+        if (currentBlock.length > 0) {
+          result.push(currentBlock.join('\n').trim());
+          currentBlock = [];
+        }
+        // The brand header becomes its own segment
+        result.push(line.trim());
+      } else {
+        currentBlock.push(line);
+      }
+    }
+    if (currentBlock.length > 0) {
+      result.push(currentBlock.join('\n').trim());
     }
   }
 
