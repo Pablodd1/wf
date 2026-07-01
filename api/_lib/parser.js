@@ -109,11 +109,14 @@ const REF_PATTERNS = [
   // Richard Mille — e.g. RM07-01, RM11-03, RM35-02
   { regex: /\b(RM\s?\d{2}[\-–]?\d{2})(?:\s|$|[A-Z]?\b)/i, brandHint: 'Richard Mille' },
   // Vacheron — e.g. 4300V/220R, 6000V, 85180
-  { regex: /\b(\d{4,5}[Vv]?\/?\d{0,3}[A-Za-z]{0,3})\b/i, brandHint: 'Vacheron Constantin' },
+  // Must contain V or / to avoid matching years like 2019Y
+  { regex: /\b(\d{4,5}[Vv]\/?\d{0,3}[A-Za-z]{0,3})\b/i, brandHint: 'Vacheron Constantin' },
   // F.P. Journe — CS (Chronometre Souveau), RS, CE, LB, etc.
   { regex: /\b(CS|RS|CE|LB|LC)\b/i, brandHint: 'F.P. Journe' },
   // Omega — e.g. 145.022-69, 311.30.42, 210.30.42
-  { regex: /\b(\d{3}\.\d{3}[\-–]?\d{0,2})\b/i, brandHint: 'Omega' },
+  // Also multi-segment: 123.10.35.20.01.001
+  { regex: /\b(\d{3}\.\d{3}[\-–]?\d{0,2})\b/, brandHint: 'Omega' },
+  { regex: /\b(\d{3}(?:\.\d{2,3})+)\b/, brandHint: 'Omega' },
   // JLC — e.g. Q397846J, Q4102520
   { regex: /\b(Q\d{6,7}[A-Z]?)\b/i, brandHint: 'Jaeger-LeCoultre' },
   // Generic fallback — NNNNN or NNNN/XX format
@@ -314,8 +317,11 @@ function parseReference(text, brandHint) {
   // Remove price-context and years BEFORE searching for references
   // Use [ \t]+ (NOT \s) to avoid matching across newlines
   const priceStripped = clean
-    .replace(/\b\d{3,7}[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF)\b/gi, ' ')
-    .replace(/\b\d{1,3}\.\d{3}[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF)\b/gi, ' ')
+    .replace(/\b\d{1,3}(?:,\d{3})*[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)\b/gi, ' ')
+    .replace(/\b\d{1,3}\.\d{3}[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)\b/gi, ' ')
+    .replace(/\b\d{3,7}[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)\b/gi, ' ')
+    .replace(/(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)\s*\d+/gi, ' ')
+    .replace(/\d+(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)/gi, ' ')
     .replace(/\b(19|20)\d{2}\b/g, ' ');
 
   const ordered = [...REF_PATTERNS].sort((a, b) => {
@@ -328,11 +334,13 @@ function parseReference(text, brandHint) {
     const m = priceStripped.match(pat.regex);
     if (m) {
       let ref = m[1].replace(/\s+/g, '').toUpperCase()
-        .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD)/, '$1');
+        .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD)/, '$1')
+        .replace(/[\-\/]$/, '');  // Strip trailing dash/slash
 
       // Strip common dealer/status suffixes that get concatenated
       // NOTE: OR = rose gold, AS = steel — do NOT strip valid material codes
-      ref = ref.replace(/(NEED|SOLD|TYIA|WHO|PLZ|DM|NIB|PM|PRE|CARD|NO|THKS|THANK|ROSE|HK|REF)$/i, '');
+      // Strip BEFORE length validation
+      ref = ref.replace(/(NEED|SOLD|TYIA|WHO|PLZ|DM|NIB|PM|PRE|CARD|NO|THKS|THANK|ROSE|HK|REF|BNIB|TIA)$/i, '');
       // Re-validate after stripping
       if (!ref || ref.length < 4) continue;
 
@@ -345,10 +353,10 @@ function parseReference(text, brandHint) {
       if (/^\d{4,7}[KM]$/i.test(ref)) continue;  // Price with K/M suffix
 
       // Must contain letters OR be 4-6 digit numeric (Patek 5711, Rolex 116500)
-      // OR be a dotted reference like Omega 145.022-69
+      // OR be a dotted reference like Omega 145.022-69 or 123.10.35.20.01.001
       const hasLetters = /[A-Z]/.test(ref);
       const isNumericRef = /^\d{4,6}$/.test(ref);
-      const isDottedRef = /^\d{3}\.\d{3}/.test(ref);
+      const isDottedRef = /^\d{3}\.\d{2,3}/.test(ref);
       if (!hasLetters && !isNumericRef && !isDottedRef) continue;
 
       // For numeric-only refs, verify not followed by currency
@@ -411,6 +419,7 @@ function inferBrandFromRef(ref) {
   if (!ref) return null;
   const r = ref.toUpperCase();
   if (r.startsWith('RM')) return 'Richard Mille';
+  if (r.startsWith('PAM')) return 'Panerai';
   if (r.startsWith('5') || r.startsWith('4') || r.startsWith('6') || r.startsWith('3') || r.startsWith('7')) {
     if (/^\d{4,5}[\/\-]?/.test(r)) return 'Patek Philippe';
   }
