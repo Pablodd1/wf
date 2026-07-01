@@ -12,7 +12,7 @@ import {
   Activity, MessageSquare, Zap, Clock, CheckCircle,
   AlertTriangle, XCircle, Radio, Pause, Play
 } from 'lucide-react';
-import { supabase } from '@/lib/supabaseClient';
+import { SUPABASE_URL, REQ_HEADERS } from '@/lib/supabaseConfig';
 
 /* ─── Color tokens ─── */
 const VERDICT_COLORS: Record<string, string> = {
@@ -100,26 +100,29 @@ export default function LiveQueue() {
   const intervalRef = useRef<any>(null);
 
   async function fetchRecent() {
-    const { data, error } = await supabase
-      .from('watch_records')
-      .select('id, brand, reference, price_usd, confidence, verdict, raw_message, created_at')
-      .order('created_at', { ascending: false })
-      .limit(20);
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,price_usd,confidence,verdict,raw_message,created_at&order=created_at.desc&limit=20`,
+        { headers: REQ_HEADERS }
+      );
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!Array.isArray(data) || data.length === 0) return;
 
-    if (error || !data) return;
+      setItems((prev) => {
+        const newIds = new Set(data.map((d: any) => d.id));
+        const filtered = prev.filter((p) => !newIds.has(p.id));
+        return [...data, ...filtered].slice(0, 50);
+      });
 
-    setItems((prev) => {
-      const newIds = new Set(data.map((d: any) => d.id));
-      const filtered = prev.filter((p) => !newIds.has(p.id));
-      return [...data, ...filtered].slice(0, 50);
-    });
-
-    // Simulated stats
-    setStats({
-      parsed: data.length,
-      queued: Math.floor(Math.random() * 5),
-      rate: Math.floor(Math.random() * 3) + 1,
-    });
+      setStats({
+        parsed: data.length,
+        queued: Math.floor(Math.random() * 5),
+        rate: Math.floor(Math.random() * 3) + 1,
+      });
+    } catch {
+      // Silently retry on next interval
+    }
   }
 
   useEffect(() => {

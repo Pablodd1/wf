@@ -11,8 +11,6 @@ const NAV_ITEMS = [
   { label: 'Trading', path: '/trading' },
   { label: 'Price Research', path: '/price-research' },
   { label: 'Reference Check', path: '/reference-check' },
-  { label: 'Dealer Directory', path: '#' },
-  { label: 'Escrow', path: '#' },
   { label: 'Hire Fi', path: 'https://watchfacts.com/lux-fi', external: true },
 ];
 

@@ -206,7 +206,8 @@ export default function UnifiedReports() {
       const data = await res.json();
       const range = res.headers.get('content-range') || '';
       setTotal(parseInt(range.split('/')[1] || '0'));
-      setRecords(data || []);
+      // Guard: ensure data is an array (Supabase may return error object)
+      setRecords(Array.isArray(data) ? data : []);
     } catch {
       setRecords([]);
     } finally {

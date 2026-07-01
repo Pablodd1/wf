@@ -97,6 +97,7 @@ export default function App() {
         <Route path="/privacy-policy" element={<><PrivacyPolicy /><Footer /></>} />
         <Route path="/glossary" element={<><Glossary /><Footer /></>} />
         <Route path="/blog" element={<><BlogPage /><Footer /></>} />
+        <Route path="/demo" element={<DemoPage />} />
 
         {/* Auth */}
         <Route path="/login" element={<LoginPage />} />
