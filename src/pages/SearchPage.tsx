@@ -86,19 +86,19 @@ export default function SearchPage() {
       {showFilters && (
         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-[#1A1A24] border border-[#2A2A3E] rounded-lg">
           <div>
-            <label className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 block">Brand</label>
+            <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Brand</label>
             <select value={brandFilter} onChange={e => { setBrandFilter(e.target.value); setPage(0); }} className="w-full px-3 py-2 bg-[#16161F] border border-[#1E1E2E] rounded text-sm text-white">
               {BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 block">Condition</label>
+            <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Condition</label>
             <select value={conditionFilter} onChange={e => { setConditionFilter(e.target.value); setPage(0); }} className="w-full px-3 py-2 bg-[#16161F] border border-[#1E1E2E] rounded text-sm text-white">
               {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 block">Min Confidence</label>
+            <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Min Confidence</label>
             <input type="range" min="0" max="100" value={confMin} onChange={e => { setConfMin(Number(e.target.value)); setPage(0); }} className="w-full accent-[#D4AF37]" />
             <span className="text-xs text-gray-400">{confMin}%</span>
           </div>
@@ -120,13 +120,13 @@ export default function SearchPage() {
               <div className="p-3">
                 <div className="flex items-center justify-between mb-1">
                   <span className="text-xs font-medium text-white">{r.brand}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded ${r.verdict === 'APPROVED' ? 'bg-green-500/20 text-green-400' : r.verdict === 'HUMAN' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>{r.verdict}</span>
+                  <span className={`text-xs px-1.5 py-0.5 rounded ${r.verdict === 'APPROVED' ? 'bg-green-500/20 text-green-400' : r.verdict === 'HUMAN' ? 'bg-yellow-500/20 text-yellow-400' : 'bg-red-500/20 text-red-400'}`}>{r.verdict}</span>
                 </div>
                 <div className="text-sm font-semibold text-[#D4AF37]">{r.reference}</div>
                 <div className="text-xs text-gray-400 mt-1">{r.dial_color} • {r.condition}</div>
                 <div className="flex items-center justify-between mt-2">
                   <span className="text-sm font-mono text-white">${r.price_usd?.toLocaleString() || 'N/A'}</span>
-                  <span className="text-[10px] text-gray-500">{r.confidence}%</span>
+                  <span className="text-xs text-gray-500">{r.confidence}%</span>
                 </div>
               </div>
             </motion.div>

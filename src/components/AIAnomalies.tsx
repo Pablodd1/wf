@@ -64,12 +64,12 @@ export function AIAnomalies({ records, onSelect }: AIAnomaliesProps) {
           </h4>
         </div>
         {criticalCount > 0 && (
-          <span className="text-[10px] font-bold text-danger bg-danger-dim rounded-full px-2 py-0.5">
+          <span className="text-xs font-bold text-danger bg-danger-dim rounded-full px-2 py-0.5">
             {criticalCount} critical
           </span>
         )}
       </div>
-      <p className="text-[10px] text-text-muted mb-3">
+      <p className="text-xs text-text-muted mb-3">
         XGBoost outlier detection — flags records with significant price deviations
       </p>
 
@@ -99,11 +99,11 @@ export function AIAnomalies({ records, onSelect }: AIAnomaliesProps) {
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <BrandBadge brand={a.record.brand} />
-                    <span className="font-mono text-[10px] text-text-primary truncate">
+                    <span className="font-mono text-xs text-text-primary truncate">
                       {a.record.reference}
                     </span>
                   </div>
-                  <p className="text-[10px] text-text-secondary mt-0.5 leading-relaxed">
+                  <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">
                     {a.message}
                   </p>
                 </div>

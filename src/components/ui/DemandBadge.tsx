@@ -23,7 +23,7 @@ export function DemandBadge({ forecast, className }: DemandBadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-1 text-[10px] font-bold',
+        'inline-flex items-center gap-1 text-xs font-bold',
         config.color,
         className
       )}

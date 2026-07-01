@@ -160,7 +160,7 @@ export function ExportButtons({
 
       {/* Record count badge (compact only) */}
       {variant === 'compact' && hasRecords && (
-        <span className="absolute -top-1.5 -right-1.5 bg-info text-white text-[9px] font-bold px-1 py-0.5 rounded-full min-w-[16px] text-center">
+        <span className="absolute -top-1.5 -right-1.5 bg-info text-white text-xs font-bold px-1 py-0.5 rounded-full min-w-[16px] text-center">
           {recordCount > 999 ? '999+' : recordCount}
         </span>
       )}
@@ -181,10 +181,10 @@ export function ExportButtons({
           >
             {/* Header */}
             <div className="px-4 py-2 border-b border-border-default mb-1">
-              <span className="text-[10px] text-text-muted uppercase tracking-wider font-semibold">
+              <span className="text-xs text-text-muted uppercase tracking-wider font-semibold">
                 Export Options
               </span>
-              <span className="block text-[10px] text-text-muted mt-0.5">
+              <span className="block text-xs text-text-muted mt-0.5">
                 {recordCount.toLocaleString()} record{recordCount !== 1 ? 's' : ''}
               </span>
             </div>
@@ -218,7 +218,7 @@ export function ExportButtons({
                     <div className="text-sm font-medium text-text-primary">
                       {isActive ? 'Generating...' : item.label}
                     </div>
-                    <div className="text-[10px] text-text-muted truncate">
+                    <div className="text-xs text-text-muted truncate">
                       {item.description}
                     </div>
                   </div>

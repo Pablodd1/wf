@@ -257,7 +257,7 @@ export default function AdminPage() {
                 >
                   <div className="flex items-center gap-2 mb-2">
                     <Icon size={16} className={card.status === 'online' ? 'text-green-400' : card.status === 'warning' ? 'text-yellow-400' : 'text-red-400'} />
-                    <span className="text-[10px] text-gray-500 uppercase tracking-wider">{card.label}</span>
+                    <span className="text-xs text-gray-500 uppercase tracking-wider">{card.label}</span>
                   </div>
                   <div className="text-sm font-bold text-white flex items-center gap-2">
                     {card.status === 'online' && <Wifi size={14} className="text-green-400" />}
@@ -291,7 +291,7 @@ export default function AdminPage() {
                         initial={{ width: 0 }}
                         animate={{ width: `${(count / totalVerdicts) * 100}%` }}
                         transition={{ duration: 0.8, ease: 'easeOut' }}
-                        className="flex items-center justify-center text-[10px] font-bold text-black transition-all"
+                        className="flex items-center justify-center text-xs font-bold text-black transition-all"
                         style={{ backgroundColor: verdictColors[verdict] }}
                         title={`${verdict}: ${count.toLocaleString()}`}
                       >
@@ -303,7 +303,7 @@ export default function AdminPage() {
                     {Object.entries(verdictColors).map(([verdict, color]) => (
                       <div key={verdict} className="flex items-center gap-1">
                         <div className="w-2 h-2 rounded-full" style={{ backgroundColor: color }} />
-                        <span className="text-[10px] text-gray-400">{verdict}: <span className="price-mono">{stats[verdict.toLowerCase() as keyof typeof stats].toLocaleString()}</span></span>
+                        <span className="text-xs text-gray-400">{verdict}: <span className="price-mono">{stats[verdict.toLowerCase() as keyof typeof stats].toLocaleString()}</span></span>
                       </div>
                     ))}
                   </div>
@@ -316,28 +316,28 @@ export default function AdminPage() {
                   whileHover={{ scale: 1.02 }}
                   className="bg-gray-950 rounded-lg p-3 hover:bg-[#111118] transition-colors"
                 >
-                  <div className="text-[10px] text-gray-500 uppercase mb-1">Total Records</div>
+                  <div className="text-xs text-gray-500 uppercase mb-1">Total Records</div>
                   <div className="text-2xl font-bold font-mono text-white price-mono">{stats.total.toLocaleString()}</div>
                 </motion.div>
                 <motion.div
                   whileHover={{ scale: 1.02 }}
                   className="bg-gray-950 rounded-lg p-3 hover:bg-[#111118] transition-colors"
                 >
-                  <div className="text-[10px] text-gray-500 uppercase mb-1">Approval Rate</div>
+                  <div className="text-xs text-gray-500 uppercase mb-1">Approval Rate</div>
                   <div className="text-2xl font-bold font-mono text-green-400 price-mono">{stats.successRate}%</div>
                 </motion.div>
                 <motion.div
                   whileHover={{ scale: 1.02 }}
                   className="bg-gray-950 rounded-lg p-3 hover:bg-[#111118] transition-colors"
                 >
-                  <div className="text-[10px] text-gray-500 uppercase mb-1">Parser Version</div>
+                  <div className="text-xs text-gray-500 uppercase mb-1">Parser Version</div>
                   <div className="text-2xl font-bold font-mono text-amber-400 price-mono">{stats.parserVersion}</div>
                 </motion.div>
                 <motion.div
                   whileHover={{ scale: 1.02 }}
                   className="bg-gray-950 rounded-lg p-3 hover:bg-[#111118] transition-colors"
                 >
-                  <div className="text-[10px] text-gray-500 uppercase mb-1">HUMAN Queue</div>
+                  <div className="text-xs text-gray-500 uppercase mb-1">HUMAN Queue</div>
                   <div className="text-2xl font-bold font-mono text-blue-400 price-mono">{stats.human.toLocaleString()}</div>
                 </motion.div>
               </div>
@@ -385,12 +385,12 @@ export default function AdminPage() {
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
                       <div>
                         <div className="text-sm font-medium text-white">{item.label}</div>
-                        <div className="text-[10px] text-gray-500">{item.desc}</div>
+                        <div className="text-xs text-gray-500">{item.desc}</div>
                       </div>
                     </div>
                     <div className="text-right">
                       <div className="text-lg font-bold font-mono text-white price-mono">{item.count.toLocaleString()}</div>
-                      <div className="text-[10px] text-gray-500">{stats.total > 0 ? ((item.count / stats.total) * 100).toFixed(1) : 0}%</div>
+                      <div className="text-xs text-gray-500">{stats.total > 0 ? ((item.count / stats.total) * 100).toFixed(1) : 0}%</div>
                     </div>
                   </motion.div>
                 ))}
@@ -441,7 +441,7 @@ export default function AdminPage() {
           >
             <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
               <Activity size={14} /> Recent Activity
-              <span className="text-[10px] text-gray-600 ml-2">(last 20 human-edited records)</span>
+              <span className="text-xs text-gray-600 ml-2">(last 20 human-edited records)</span>
             </h3>
             {log.length === 0 ? (
               <div className="text-center py-8 text-gray-500 text-sm">No human-edited activity found</div>

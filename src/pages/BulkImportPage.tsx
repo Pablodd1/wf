@@ -267,9 +267,9 @@ export default function BulkImportPage() {
                     </td>
                     <td className="px-4 py-3">
                       {p.error ? (
-                        <span className="px-2 py-0.5 rounded-full text-red-400 bg-red-400/10 text-[10px] font-medium">ERROR</span>
+                        <span className="px-2 py-0.5 rounded-full text-red-400 bg-red-400/10 text-xs font-medium">ERROR</span>
                       ) : (
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${getVerdictColor(p.verdict)}`}>
+                        <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${getVerdictColor(p.verdict)}`}>
                           {p.verdict}
                         </span>
                       )}

@@ -259,7 +259,7 @@ export default function SettingsPage() {
               onChange={(e) => setApproveThreshold(parseInt(e.target.value))}
               className={sliderClass}
             />
-            <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+            <div className="flex justify-between text-xs text-gray-600 mt-1">
               <span>70%</span>
               <span>100%</span>
             </div>
@@ -279,7 +279,7 @@ export default function SettingsPage() {
               onChange={(e) => setHumanThreshold(parseInt(e.target.value))}
               className={sliderClass}
             />
-            <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+            <div className="flex justify-between text-xs text-gray-600 mt-1">
               <span>50%</span>
               <span>90%</span>
             </div>
@@ -339,7 +339,7 @@ export default function SettingsPage() {
               onChange={(e) => setLlmTrigger(parseInt(e.target.value))}
               className={sliderClass}
             />
-            <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+            <div className="flex justify-between text-xs text-gray-600 mt-1">
               <span>40%</span>
               <span>80%</span>
             </div>
@@ -396,7 +396,7 @@ export default function SettingsPage() {
               }}
               className={inputClass}
             />
-            <div className="text-[10px] text-gray-600 mt-1">Min: 100 &middot; Max: 50,000</div>
+            <div className="text-xs text-gray-600 mt-1">Min: 100 &middot; Max: 50,000</div>
           </div>
 
           {/* Toggles */}
@@ -455,31 +455,31 @@ export default function SettingsPage() {
           {/* Stats Grid */}
           <div className="grid grid-cols-2 gap-3 mb-5">
             <div className="bg-[#1A1A24] rounded-lg p-3 border border-[#1E1E2E]">
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Total Records</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Records</div>
               <div className="text-lg font-bold text-white font-mono">2,390,143</div>
             </div>
             <div className="bg-[#1A1A24] rounded-lg p-3 border border-green-500/20">
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Auto-Approved</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Auto-Approved</div>
               <div className="text-lg font-bold text-green-400 font-mono">805,872</div>
-              <div className="text-[10px] text-gray-600">33.7%</div>
+              <div className="text-xs text-gray-600">33.7%</div>
             </div>
             <div className="bg-[#1A1A24] rounded-lg p-3 border border-blue-500/20">
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">In Review</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">In Review</div>
               <div className="text-lg font-bold text-blue-400 font-mono">311,890</div>
-              <div className="text-[10px] text-gray-600">13.1%</div>
+              <div className="text-xs text-gray-600">13.1%</div>
             </div>
             <div className="bg-[#1A1A24] rounded-lg p-3 border border-amber-500/20">
-              <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Human Review</div>
+              <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Human Review</div>
               <div className="text-lg font-bold text-amber-400 font-mono">201,811</div>
-              <div className="text-[10px] text-gray-600">8.4%</div>
+              <div className="text-xs text-gray-600">8.4%</div>
             </div>
             <div className="bg-[#1A1A24] rounded-lg p-3 border border-red-500/20 col-span-2">
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">Recycled</div>
+                  <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">Recycled</div>
                   <div className="text-lg font-bold text-red-400 font-mono">1,070,570</div>
                 </div>
-                <div className="text-[10px] text-gray-600">44.8%</div>
+                <div className="text-xs text-gray-600">44.8%</div>
               </div>
             </div>
           </div>
@@ -575,7 +575,7 @@ export default function SettingsPage() {
         variants={sectionVariant}
         initial="hidden"
         animate="visible"
-        className="mt-6 text-center text-[10px] text-gray-600 pb-6"
+        className="mt-6 text-center text-xs text-gray-600 pb-6"
       >
         WatchFacts Settings &middot; Saved to API + localStorage
       </motion.div>

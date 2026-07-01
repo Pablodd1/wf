@@ -163,8 +163,8 @@ export default function VerificationPage() {
                     {isActive && <RefreshCw size={14} className="text-[#D4AF37] animate-spin" />}
                   </div>
                   <div className="text-xs font-semibold text-gray-200">{phase.title}</div>
-                  <div className="text-[10px] text-gray-500 mt-1">{phase.desc}</div>
-                  <div className={`text-[10px] mt-2 ${isComplete ? 'text-green-400' : 'text-amber-400'}`}>
+                  <div className="text-xs text-gray-500 mt-1">{phase.desc}</div>
+                  <div className={`text-xs mt-2 ${isComplete ? 'text-green-400' : 'text-amber-400'}`}>
                     {phase.impact}
                   </div>
                 </motion.div>
@@ -183,7 +183,7 @@ export default function VerificationPage() {
               { label: 'Recycled', value: metrics.recycle.toLocaleString(), color: 'text-red-400' },
             ].map(({ label, value, color }) => (
               <div key={label} className="bg-[#111118] border border-[#1E1E2E] rounded-lg p-4">
-                <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1">{label}</div>
+                <div className="text-xs text-gray-500 uppercase tracking-wider mb-1">{label}</div>
                 <div className={`text-xl font-bold ${color}`}>{value}</div>
               </div>
             ))}
@@ -208,11 +208,11 @@ export default function VerificationPage() {
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-300 font-medium">{field}</span>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${gap > 30 ? 'bg-red-400/10 text-red-400' : gap > 15 ? 'bg-amber-400/10 text-amber-400' : 'bg-green-400/10 text-green-400'}`}>
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-mono ${gap > 30 ? 'bg-red-400/10 text-red-400' : gap > 15 ? 'bg-amber-400/10 text-amber-400' : 'bg-green-400/10 text-green-400'}`}>
                         +{gap.toFixed(1)}% needed
                       </span>
                     </div>
-                    <span className="text-[10px] text-gray-500">{phase}</span>
+                    <span className="text-xs text-gray-500">{phase}</span>
                   </div>
                   <div className="flex items-center gap-3">
                     <div className="flex-1 h-5 bg-[#1E1E2E] rounded-full overflow-hidden relative">
@@ -225,7 +225,7 @@ export default function VerificationPage() {
                         transition={{ duration: 0.8, delay: i * 0.05 }}
                         className={`h-full rounded-full ${current >= 80 ? 'bg-green-500/60' : current >= 50 ? 'bg-amber-500/60' : 'bg-red-500/60'}`}
                       />
-                      <span className="absolute inset-0 flex items-center justify-end pr-2 text-[9px] font-mono text-gray-400">
+                      <span className="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono text-gray-400">
                         {current.toFixed(1)}% → {target}%
                       </span>
                     </div>
@@ -284,7 +284,7 @@ export default function VerificationPage() {
                 className="flex gap-3 p-3 bg-[#1A1A24] rounded-lg border border-[#1E1E2E]"
               >
                 <div className="flex-shrink-0">
-                  <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded ${action.priority === 'P0' ? 'bg-red-400/20 text-red-400' : action.priority === 'P1' ? 'bg-amber-400/20 text-amber-400' : 'bg-blue-400/20 text-blue-400'}`}>
+                  <span className={`text-xs font-mono px-1.5 py-0.5 rounded ${action.priority === 'P0' ? 'bg-red-400/20 text-red-400' : action.priority === 'P1' ? 'bg-amber-400/20 text-amber-400' : 'bg-blue-400/20 text-blue-400'}`}>
                     {action.priority}
                   </span>
                 </div>
@@ -292,8 +292,8 @@ export default function VerificationPage() {
                   <h3 className="text-sm font-semibold text-gray-200">{action.title}</h3>
                   <p className="text-[11px] text-gray-400 mt-1 leading-relaxed">{action.desc}</p>
                   <div className="flex gap-2 mt-2">
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-gray-800 text-gray-400">Effort: {action.effort}</span>
-                    <span className={`text-[10px] px-2 py-0.5 rounded ${action.impact === 'Critical' ? 'bg-red-400/10 text-red-400' : action.impact === 'High' ? 'bg-green-400/10 text-green-400' : 'bg-amber-400/10 text-amber-400'}`}>
+                    <span className="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400">Effort: {action.effort}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded ${action.impact === 'Critical' ? 'bg-red-400/10 text-red-400' : action.impact === 'High' ? 'bg-green-400/10 text-green-400' : 'bg-amber-400/10 text-amber-400'}`}>
                       Impact: {action.impact}
                     </span>
                   </div>
@@ -332,7 +332,7 @@ export default function VerificationPage() {
         </div>
 
         {/* Footer */}
-        <div className="text-center text-[10px] text-gray-600 pb-6">
+        <div className="text-center text-xs text-gray-600 pb-6">
           WatchFacts Quality Engine — 7-Phase Plan Complete • All phases implemented
         </div>
       </div>

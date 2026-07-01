@@ -71,7 +71,7 @@ export default function WatchImage({ brand, reference, src, alt, className = '' 
           <line x1="12" y1="8" x2="12" y2="11"/>
           <line x1="12" y1="12" x2="14" y2="13"/>
         </svg>
-        <span className="text-[9px] text-gray-600 mt-1 uppercase tracking-wider">{brand || 'Watch'}</span>
+        <span className="text-xs text-gray-600 mt-1 uppercase tracking-wider">{brand || 'Watch'}</span>
       </div>
     );
   }

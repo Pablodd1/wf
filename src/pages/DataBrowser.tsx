@@ -200,21 +200,21 @@ export default function DataBrowser() {
         {showFilters && (
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-[#1A1A24] border border-[#2A2A3E] rounded-lg mb-3">
             <div>
-              <label className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 block">Brand</label>
+              <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Brand</label>
               <select value={brandFilter} onChange={e => { setBrandFilter(e.target.value); setPage(0); }}
                 className="w-full px-3 py-2 bg-[#16161F] border border-[#1E1E2E] rounded text-sm text-white">
                 {BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 block">Verdict</label>
+              <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Verdict</label>
               <select value={verdictFilter} onChange={e => { setVerdictFilter(e.target.value); setPage(0); }}
                 className="w-full px-3 py-2 bg-[#16161F] border border-[#1E1E2E] rounded text-sm text-white">
                 {VERDICTS.map(v => <option key={v} value={v}>{v}</option>)}
               </select>
             </div>
             <div>
-              <label className="text-[10px] text-gray-400 uppercase tracking-wider mb-1 block">Min Confidence: {confMin}%</label>
+              <label className="text-xs text-gray-400 uppercase tracking-wider mb-1 block">Min Confidence: {confMin}%</label>
               <input type="range" min="0" max="100" value={confMin} onChange={e => { setConfMin(Number(e.target.value)); setPage(0); }}
                 className="w-full accent-amber-400" />
             </div>
@@ -295,7 +295,7 @@ export default function DataBrowser() {
                         </span>
                       </td>
                       <td className="py-2 px-3">
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${verdictColor(r.verdict)}`}>{r.verdict}</span>
+                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${verdictColor(r.verdict)}`}>{r.verdict}</span>
                       </td>
                       <td className="py-2 px-3 text-gray-400">{r.condition}</td>
                       <td className="py-2 px-3 text-gray-500 text-xs font-mono">{r.created_at?.slice(0, 10)}</td>

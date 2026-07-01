@@ -222,12 +222,12 @@ export default function CleanPage() {
                 {mappings.map((m, i) => (
                   <div key={m.source} className="flex items-center gap-3 bg-gray-950 rounded-lg p-3 border border-gray-800">
                     <div className="flex-1">
-                      <div className="text-[10px] text-gray-500 uppercase">Source Column</div>
+                      <div className="text-xs text-gray-500 uppercase">Source Column</div>
                       <div className="text-sm font-mono text-white">{m.source}</div>
                     </div>
                     <ArrowRight size={16} className="text-gray-600" />
                     <div className="flex-1">
-                      <div className="text-[10px] text-gray-500 uppercase">Target Field</div>
+                      <div className="text-xs text-gray-500 uppercase">Target Field</div>
                       <select
                         value={m.target}
                         onChange={(e) => {
@@ -241,7 +241,7 @@ export default function CleanPage() {
                       </select>
                     </div>
                     <div className="w-16 text-right">
-                      <div className="text-[10px] text-gray-500 uppercase">Match</div>
+                      <div className="text-xs text-gray-500 uppercase">Match</div>
                       <div className={`text-sm font-mono ${m.confidence >= 85 ? 'text-green-400' : m.confidence > 0 ? 'text-yellow-400' : 'text-gray-500'}`}>
                         {m.confidence}%
                       </div>

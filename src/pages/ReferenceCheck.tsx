@@ -285,7 +285,7 @@ export default function ReferenceCheck() {
                 <div className="p-4 text-center">
                   <div className="text-3xl font-bold text-gray-700">{stats.outlierCount}</div>
                   <div className="text-xs text-gray-500 uppercase mt-1">IQR Method</div>
-                  <div className="text-[10px] text-gray-400 mt-1">Q1={fmtShort(stats.q1)} Q3={fmtShort(stats.q3)}</div>
+                  <div className="text-xs text-gray-400 mt-1">Q1={fmtShort(stats.q1)} Q3={fmtShort(stats.q3)}</div>
                 </div>
               </div>
             </div>
@@ -303,7 +303,7 @@ export default function ReferenceCheck() {
               </div>
               <table className="w-full text-sm">
                 <thead className="bg-gray-50">
-                  <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider">
+                  <tr className="text-left text-xs text-gray-500 uppercase tracking-wider">
                     <th className="px-5 py-2.5">Dial Color</th>
                     <th className="px-4 py-2.5 text-right">Listings</th>
                     <th className="px-4 py-2.5 text-right">Min</th>
@@ -366,7 +366,7 @@ export default function ReferenceCheck() {
                           <span>{listing.dial_color || 'Unknown'} dial</span>
                           {listing.condition && <><span>•</span><span>{listing.condition}</span></>}
                         </div>
-                        <p className="text-[10px] text-gray-400 mt-1">Posted: {listing.created_at?.slice(0, 10)}</p>
+                        <p className="text-xs text-gray-400 mt-1">Posted: {listing.created_at?.slice(0, 10)}</p>
                       </div>
                       <div className="flex-shrink-0 flex items-center">
                         <span className="inline-flex items-center gap-1 px-3 py-1.5 border border-[#3B5BFE] text-[#3B5BFE] text-[11px] font-semibold rounded-full hover:bg-[#3B5BFE] hover:text-white transition-colors">

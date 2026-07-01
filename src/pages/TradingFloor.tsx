@@ -94,20 +94,20 @@ function CurrencyConverter({ onClose }: { onClose: () => void }) {
       </div>
       <div className="space-y-3">
         <div>
-          <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Amount</label>
+          <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Amount</label>
           <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B5BFE]" placeholder="10000" />
         </div>
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">From</label>
+            <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">From</label>
             <select value={fromCurr} onChange={e => setFromCurr(e.target.value)}
               className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm">
               {Object.keys(rates).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">To</label>
+            <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">To</label>
             <select value={toCurr} onChange={e => setToCurr(e.target.value)}
               className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm">
               {Object.keys(rates).map(c => <option key={c} value={c}>{c}</option>)}
@@ -117,7 +117,7 @@ function CurrencyConverter({ onClose }: { onClose: () => void }) {
         {converted && (
           <div className="bg-gray-50 rounded-lg p-3 text-center">
             <div className="text-lg font-bold text-[#3B5BFE] price-mono">{toCurr} {converted}</div>
-            <div className="text-[10px] text-gray-500">{fromCurr} {amount} at estimated rate</div>
+            <div className="text-xs text-gray-500">{fromCurr} {amount} at estimated rate</div>
           </div>
         )}
       </div>
@@ -216,13 +216,13 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
         ) : (
           <div className="text-center">
             <div className="text-5xl opacity-20">⌚</div>
-            <span className="text-[10px] text-gray-400 uppercase tracking-wider mt-2 block">{listing.brand}</span>
+            <span className="text-xs text-gray-400 uppercase tracking-wider mt-2 block">{listing.brand}</span>
           </div>
         )}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
         {/* Condition Badge */}
         {listing.condition && (
-          <div className="absolute top-2 left-2 px-2 py-0.5 bg-white/90 backdrop-blur-sm rounded-full text-[10px] font-semibold text-gray-700 shadow-sm">
+          <div className="absolute top-2 left-2 px-2 py-0.5 bg-white/90 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm">
             {listing.condition}
           </div>
         )}
@@ -253,7 +253,7 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
         <div className="flex items-center gap-1.5 mt-1 mb-1">
           <User size={11} className="text-gray-400" />
           <span className="text-[11px] text-gray-500 font-medium">{dealerName}</span>
-          <span className="text-[9px] text-[#3B5BFE] flex items-center gap-0.5" title="Verified Dealer">
+          <span className="text-xs text-[#3B5BFE] flex items-center gap-0.5" title="Verified Dealer">
             <CheckCircle size={10} className="text-[#3B5BFE]" />
           </span>
         </div>
@@ -274,11 +274,11 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
         </div>
         <div className="flex items-center justify-between mt-2.5">
           <span className="text-base font-bold text-gray-900 price-mono">{listing.price_usd > 0 ? formatPrice(listing.price_usd) : 'Contact'}</span>
-          <span className="flex items-center gap-1 text-[10px] text-gray-500 uppercase tracking-wider">
+          <span className="flex items-center gap-1 text-xs text-gray-500 uppercase tracking-wider">
             <Globe size={11} /> {region}
           </span>
         </div>
-        <p className="text-[10px] text-gray-400 mt-1">Posted: {formatDate(listing.created_at)}</p>
+        <p className="text-xs text-gray-400 mt-1">Posted: {formatDate(listing.created_at)}</p>
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}

@@ -294,10 +294,10 @@ export default function DemoPage() {
                 <Package size={14} /> Raw Input
               </h2>
               <div className="flex gap-1">
-                <button onClick={loadSample} className="text-[10px] px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded text-gray-300 transition-colors">
+                <button onClick={loadSample} className="text-xs px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded text-gray-300 transition-colors">
                   Load Sample
                 </button>
-                <button onClick={copySample} className="text-[10px] px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded text-gray-300 transition-colors">
+                <button onClick={copySample} className="text-xs px-2 py-1 bg-gray-800 hover:bg-gray-700 rounded text-gray-300 transition-colors">
                   <Copy size={10} />
                 </button>
               </div>
@@ -361,7 +361,7 @@ export default function DemoPage() {
                           <div className={`text-sm font-bold ${isComplete ? 'text-green-400' : isActive ? 'text-amber-400' : 'text-gray-500'}`}>
                             {stage.label}
                           </div>
-                          <div className={`text-[10px] ${isComplete ? 'text-green-400/70' : isActive ? 'text-amber-400/70' : 'text-gray-600'}`}>
+                          <div className={`text-xs ${isComplete ? 'text-green-400/70' : isActive ? 'text-amber-400/70' : 'text-gray-600'}`}>
                             {stage.description}
                           </div>
                         </div>
@@ -389,19 +389,19 @@ export default function DemoPage() {
                 >
                   <div className="text-center">
                     <div className="text-lg font-bold font-mono text-white">{results.length}</div>
-                    <div className="text-[9px] text-gray-500 uppercase">Parsed</div>
+                    <div className="text-xs text-gray-500 uppercase">Parsed</div>
                   </div>
                   <div className="text-center">
                     <div className="text-lg font-bold font-mono text-green-400">
                       {results.filter(r => r.verdict === 'APPROVED').length}
                     </div>
-                    <div className="text-[9px] text-gray-500 uppercase">Approved</div>
+                    <div className="text-xs text-gray-500 uppercase">Approved</div>
                   </div>
                   <div className="text-center">
                     <div className="text-lg font-bold font-mono text-red-400">
                       {results.filter(r => r.verdict === 'RECYCLE').length}
                     </div>
-                    <div className="text-[9px] text-gray-500 uppercase">Recycled</div>
+                    <div className="text-xs text-gray-500 uppercase">Recycled</div>
                   </div>
                 </motion.div>
               )}
@@ -415,7 +415,7 @@ export default function DemoPage() {
                 <CheckCircle2 size={14} /> Results
               </h2>
               {results.length > 0 && (
-                <span className="text-[10px] text-gray-500 font-mono">{results.length} items</span>
+                <span className="text-xs text-gray-500 font-mono">{results.length} items</span>
               )}
             </div>
             <div className="flex-1 overflow-y-auto p-3 space-y-3">
@@ -452,13 +452,13 @@ export default function DemoPage() {
                       {result.reference}
                     </div>
                     {result.family && (
-                      <div className="text-[10px] text-amber-400/70 uppercase tracking-wider mb-2">{result.family}</div>
+                      <div className="text-xs text-amber-400/70 uppercase tracking-wider mb-2">{result.family}</div>
                     )}
 
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-amber-400 font-mono font-bold">{formatPrice(result.price)}</span>
                       <span
-                        className="text-[10px] font-bold px-2 py-0.5 rounded uppercase"
+                        className="text-xs font-bold px-2 py-0.5 rounded uppercase"
                         style={{
                           color: confidenceColor(result.confidence),
                           backgroundColor: `${confidenceColor(result.confidence)}20`,
@@ -468,13 +468,13 @@ export default function DemoPage() {
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-3 text-[10px] text-gray-500">
+                    <div className="flex items-center gap-3 text-xs text-gray-500">
                       {result.year > 0 && <span>Year: {result.year}</span>}
                       {result.dialColor && <span>Dial: {result.dialColor}</span>}
                     </div>
 
                     <div className="mt-2 pt-2 border-t border-gray-800">
-                      <p className="text-[10px] text-gray-500 line-clamp-2">{result.description}</p>
+                      <p className="text-xs text-gray-500 line-clamp-2">{result.description}</p>
                     </div>
 
                     {/* Verdict indicators */}
@@ -503,7 +503,7 @@ export default function DemoPage() {
                       ].map((field) => (
                         <div
                           key={field.label}
-                          className={`flex-1 text-center py-0.5 rounded text-[9px] font-medium ${
+                          className={`flex-1 text-center py-0.5 rounded text-xs font-medium ${
                             field.found ? 'bg-green-400/10 text-green-400' : 'bg-red-400/10 text-red-400'
                           }`}
                           title={field.found ? `${field.label}: found` : `${field.label}: missing`}
@@ -528,7 +528,7 @@ export default function DemoPage() {
           <div className="overflow-x-auto p-4">
             <table className="w-full text-xs">
               <thead>
-                <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider border-b border-gray-800">
+                <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-800">
                   <th className="pb-3 pr-4">Catalog Match</th>
                   <th className="pb-3 pr-4">AI Intervention Needed</th>
                   <th className="pb-3 pr-4">Confidence Score</th>

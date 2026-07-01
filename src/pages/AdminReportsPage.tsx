@@ -508,7 +508,7 @@ export default function AdminReportsPage() {
               { label: 'Price Range', value: `${fmtPrice(stats.min_price || 0)} — ${fmtPrice(stats.max_price || 0)}`, color: 'text-[#D4AF37]' },
             ].map(card => (
               <div key={card.label} className="bg-[#111118] border border-[#1E1E2E] rounded-lg p-4 print:bg-white print:border-gray-300 print:p-2">
-                <div className="text-[10px] text-gray-500 uppercase mb-1 print:text-gray-600">{card.label}</div>
+                <div className="text-xs text-gray-500 uppercase mb-1 print:text-gray-600">{card.label}</div>
                 <div className={`text-lg font-bold font-mono ${card.color} print:text-black`}>{card.value}</div>
               </div>
             ))}
@@ -698,19 +698,19 @@ export default function AdminReportsPage() {
                   {/* Mini stat cards for brand context */}
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div className="bg-[#111118] border border-[#1E1E2E] rounded-lg p-4 print:bg-white print:border-gray-300">
-                      <div className="text-[10px] text-gray-500 uppercase mb-2 print:text-gray-600">Brands Represented</div>
+                      <div className="text-xs text-gray-500 uppercase mb-2 print:text-gray-600">Brands Represented</div>
                       <div className="text-2xl font-bold text-white print:text-black">{fmtNumber(stats.unique_brands || 0)}</div>
                       <div className="text-xs text-gray-500 mt-1">Across {fmtNumber(totalRecords)} listings</div>
                     </div>
                     <div className="bg-[#111118] border border-[#1E1E2E] rounded-lg p-4 print:bg-white print:border-gray-300">
-                      <div className="text-[10px] text-gray-500 uppercase mb-2 print:text-gray-600">Top Brand Market Share</div>
+                      <div className="text-xs text-gray-500 uppercase mb-2 print:text-gray-600">Top Brand Market Share</div>
                       <div className="text-2xl font-bold text-[#D4AF37] print:text-black">
                         {top10Brands[0] ? fmtPct(top10Brands[0].count, totalRecords) : 'N/A'}
                       </div>
                       <div className="text-xs text-gray-500 mt-1">{top10Brands[0]?.brand || ''}</div>
                     </div>
                     <div className="bg-[#111118] border border-[#1E1E2E] rounded-lg p-4 print:bg-white print:border-gray-300">
-                      <div className="text-[10px] text-gray-500 uppercase mb-2 print:text-gray-600">Avg Price (Top Brand)</div>
+                      <div className="text-xs text-gray-500 uppercase mb-2 print:text-gray-600">Avg Price (Top Brand)</div>
                       <div className="text-2xl font-bold text-green-400 print:text-black">
                         {fmtPrice(brandAvgPrices[top10Brands[0]?.brand] || 0)}
                       </div>
@@ -792,7 +792,7 @@ export default function AdminReportsPage() {
                       { label: 'Maximum', value: fmtPrice(priceStats?.max || 0), color: 'text-blue-400' },
                     ].map(s => (
                       <div key={s.label} className="bg-[#111118] border border-[#1E1E2E] rounded-lg p-4 print:bg-white print:border-gray-300">
-                        <div className="text-[10px] text-gray-500 uppercase mb-1 print:text-gray-600">{s.label}</div>
+                        <div className="text-xs text-gray-500 uppercase mb-1 print:text-gray-600">{s.label}</div>
                         <div className={`text-xl font-bold font-mono ${s.color} print:text-black`}>{s.value}</div>
                       </div>
                     ))}
@@ -805,7 +805,7 @@ export default function AdminReportsPage() {
                     </h3>
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                       <div>
-                        <div className="text-[10px] text-gray-500 uppercase mb-1 print:text-gray-600">IQR Method</div>
+                        <div className="text-xs text-gray-500 uppercase mb-1 print:text-gray-600">IQR Method</div>
                         <div className="text-sm text-gray-300 print:text-gray-700">
                           Q1: {fmtPrice(priceStats?.q1 || 0)}<br />
                           Q3: {fmtPrice(priceStats?.q3 || 0)}<br />
@@ -813,12 +813,12 @@ export default function AdminReportsPage() {
                         </div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-gray-500 uppercase mb-1 print:text-gray-600">Outlier Threshold (High)</div>
+                        <div className="text-xs text-gray-500 uppercase mb-1 print:text-gray-600">Outlier Threshold (High)</div>
                         <div className="text-xl font-bold text-red-400 print:text-black">{fmtPrice(priceStats?.outlierHigh || 0)}</div>
                         <div className="text-xs text-gray-500 mt-1">Above this = outlier</div>
                       </div>
                       <div>
-                        <div className="text-[10px] text-gray-500 uppercase mb-1 print:text-gray-600">Estimated Outliers</div>
+                        <div className="text-xs text-gray-500 uppercase mb-1 print:text-gray-600">Estimated Outliers</div>
                         <div className="text-xl font-bold text-red-400 print:text-black">{fmtNumber(priceStats?.outlierCount || 0)}</div>
                         <div className="text-xs text-gray-500 mt-1">{fmtPct(priceStats?.outlierCount || 0, totalRecords)} of dataset</div>
                       </div>

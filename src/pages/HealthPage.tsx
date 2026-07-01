@@ -194,13 +194,13 @@ function ServiceCard({ service, onCheck }: { service: ServiceCheck; onCheck: () 
       </div>
       <StatusBadge status={service.status} />
       <div className="text-xs text-gray-500 mt-2">{service.message}</div>
-      <div className="flex items-center gap-3 mt-3 text-[10px] text-gray-600">
+      <div className="flex items-center gap-3 mt-3 text-xs text-gray-600">
         <span className="font-mono">{service.latency}ms</span>
         <span>•</span>
         <span>Checks: {service.checks}</span>
         {service.fails > 0 && <><span>•</span><span className="text-red-400">Fails: {service.fails}</span></>}
       </div>
-      <div className="text-[10px] text-gray-600 mt-1">
+      <div className="text-xs text-gray-600 mt-1">
         Last check: {new Date(service.lastChecked).toLocaleTimeString()}
       </div>
       {/* Uptime bar */}
@@ -212,7 +212,7 @@ function ServiceCard({ service, onCheck }: { service: ServiceCheck; onCheck: () 
               backgroundColor: service.status === 'online' ? '#22C55E' : service.status === 'warning' ? '#F59E0B' : '#EF4444',
             }} />
           </div>
-          <div className="text-[9px] text-gray-600 mt-1 text-right">
+          <div className="text-xs text-gray-600 mt-1 text-right">
             {((service.checks - service.fails) / service.checks * 100).toFixed(1)}% uptime
           </div>
         </div>
@@ -402,28 +402,28 @@ export default function HealthPage() {
         <div className="bg-gray-900 border border-green-500/30 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
             <Signal size={14} className="text-green-400" />
-            <span className="text-[10px] text-gray-500 uppercase">Online</span>
+            <span className="text-xs text-gray-500 uppercase">Online</span>
           </div>
           <div className="text-2xl font-bold text-green-400">{onlineCount}<span className="text-sm text-gray-500">/{services.length}</span></div>
         </div>
         <div className="bg-gray-900 border border-yellow-500/30 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
             <AlertTriangle size={14} className="text-yellow-400" />
-            <span className="text-[10px] text-gray-500 uppercase">Warning</span>
+            <span className="text-xs text-gray-500 uppercase">Warning</span>
           </div>
           <div className="text-2xl font-bold text-yellow-400">{warningCount}</div>
         </div>
         <div className="bg-gray-900 border border-red-500/30 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
             <WifiOff size={14} className="text-red-400" />
-            <span className="text-[10px] text-gray-500 uppercase">Offline</span>
+            <span className="text-xs text-gray-500 uppercase">Offline</span>
           </div>
           <div className="text-2xl font-bold text-red-400">{offlineCount}</div>
         </div>
         <div className="bg-gray-900 border border-gray-700 rounded-lg p-4">
           <div className="flex items-center gap-2 mb-1">
             <Zap size={14} className="text-amber-400" />
-            <span className="text-[10px] text-gray-500 uppercase">Alerts</span>
+            <span className="text-xs text-gray-500 uppercase">Alerts</span>
           </div>
           <div className="text-2xl font-bold text-amber-400">{unresolvedAlerts.length}</div>
         </div>
@@ -449,70 +449,70 @@ export default function HealthPage() {
           <>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
               <div className="bg-gray-950 rounded-lg p-3 border border-green-500/20">
-                <div className="text-[10px] text-gray-500 uppercase mb-1">Approval Rate</div>
+                <div className="text-xs text-gray-500 uppercase mb-1">Approval Rate</div>
                 <div className={`text-lg font-bold ${qualityMetrics.approvalRate >= 30 ? 'text-green-400' : 'text-amber-400'}`}>
                   {qualityMetrics.approvalRate.toFixed(1)}%
                 </div>
-                <div className="text-[10px] text-gray-600">{qualityMetrics.approved.toLocaleString()} approved</div>
+                <div className="text-xs text-gray-600">{qualityMetrics.approved.toLocaleString()} approved</div>
               </div>
               <div className="bg-gray-950 rounded-lg p-3 border border-red-500/20">
-                <div className="text-[10px] text-gray-500 uppercase mb-1">Recycle Rate</div>
+                <div className="text-xs text-gray-500 uppercase mb-1">Recycle Rate</div>
                 <div className={`text-lg font-bold ${qualityMetrics.recycleRate < 5 ? 'text-green-400' : qualityMetrics.recycleRate < 15 ? 'text-amber-400' : 'text-red-400'}`}>
                   {qualityMetrics.recycleRate.toFixed(1)}%
                 </div>
-                <div className="text-[10px] text-gray-600">{qualityMetrics.recycled.toLocaleString()} recycled</div>
+                <div className="text-xs text-gray-600">{qualityMetrics.recycled.toLocaleString()} recycled</div>
               </div>
               <div className="bg-gray-950 rounded-lg p-3 border border-blue-500/20">
-                <div className="text-[10px] text-gray-500 uppercase mb-1">WTB Signals</div>
+                <div className="text-xs text-gray-500 uppercase mb-1">WTB Signals</div>
                 <div className="text-lg font-bold text-blue-400">{qualityMetrics.wtb.toLocaleString()}</div>
-                <div className="text-[10px] text-gray-600">{((qualityMetrics.wtb / qualityMetrics.total) * 100).toFixed(1)}% of total</div>
+                <div className="text-xs text-gray-600">{((qualityMetrics.wtb / qualityMetrics.total) * 100).toFixed(1)}% of total</div>
               </div>
               <div className="bg-gray-950 rounded-lg p-3 border border-yellow-500/20">
-                <div className="text-[10px] text-gray-500 uppercase mb-1">Validation Errors</div>
+                <div className="text-xs text-gray-500 uppercase mb-1">Validation Errors</div>
                 <div className={`text-lg font-bold ${qualityMetrics.withErrors === 0 ? 'text-green-400' : 'text-yellow-400'}`}>
                   {qualityMetrics.withErrors.toLocaleString()}
                 </div>
-                <div className="text-[10px] text-gray-600">Parser rejections</div>
+                <div className="text-xs text-gray-600">Parser rejections</div>
               </div>
             </div>
 
             {/* Verdict distribution bar */}
             {qualityMetrics.total > 0 && (
               <div>
-                <div className="text-[10px] text-gray-500 uppercase mb-2">Verdict Distribution</div>
+                <div className="text-xs text-gray-500 uppercase mb-2">Verdict Distribution</div>
                 <div className="w-full h-4 flex rounded-full overflow-hidden bg-gray-800">
                   {qualityMetrics.approved > 0 && (
-                    <div className="h-full bg-green-500/70 flex items-center justify-center text-[9px] text-white font-medium"
+                    <div className="h-full bg-green-500/70 flex items-center justify-center text-xs text-white font-medium"
                       style={{ width: `${(qualityMetrics.approved / qualityMetrics.total) * 100}%` }} title={`APPROVED: ${qualityMetrics.approved.toLocaleString()}`}>
                       {(qualityMetrics.approved / qualityMetrics.total * 100) > 8 && 'A'}
                     </div>
                   )}
                   {qualityMetrics.review > 0 && (
-                    <div className="h-full bg-blue-500/70 flex items-center justify-center text-[9px] text-white font-medium"
+                    <div className="h-full bg-blue-500/70 flex items-center justify-center text-xs text-white font-medium"
                       style={{ width: `${(qualityMetrics.review / qualityMetrics.total) * 100}%` }} title={`REVIEW: ${qualityMetrics.review.toLocaleString()}`}>
                       {(qualityMetrics.review / qualityMetrics.total * 100) > 8 && 'R'}
                     </div>
                   )}
                   {qualityMetrics.human > 0 && (
-                    <div className="h-full bg-yellow-500/70 flex items-center justify-center text-[9px] text-white font-medium"
+                    <div className="h-full bg-yellow-500/70 flex items-center justify-center text-xs text-white font-medium"
                       style={{ width: `${(qualityMetrics.human / qualityMetrics.total) * 100}%` }} title={`HUMAN: ${qualityMetrics.human.toLocaleString()}`}>
                       {(qualityMetrics.human / qualityMetrics.total * 100) > 8 && 'H'}
                     </div>
                   )}
                   {qualityMetrics.wtb > 0 && (
-                    <div className="h-full bg-purple-500/70 flex items-center justify-center text-[9px] text-white font-medium"
+                    <div className="h-full bg-purple-500/70 flex items-center justify-center text-xs text-white font-medium"
                       style={{ width: `${(qualityMetrics.wtb / qualityMetrics.total) * 100}%` }} title={`WTB: ${qualityMetrics.wtb.toLocaleString()}`}>
                       {(qualityMetrics.wtb / qualityMetrics.total * 100) > 8 && 'W'}
                     </div>
                   )}
                   {qualityMetrics.recycled > 0 && (
-                    <div className="h-full bg-red-500/70 flex items-center justify-center text-[9px] text-white font-medium"
+                    <div className="h-full bg-red-500/70 flex items-center justify-center text-xs text-white font-medium"
                       style={{ width: `${(qualityMetrics.recycled / qualityMetrics.total) * 100}%` }} title={`RECYCLE: ${qualityMetrics.recycled.toLocaleString()}`}>
                       {(qualityMetrics.recycled / qualityMetrics.total * 100) > 8 && 'C'}
                     </div>
                   )}
                 </div>
-                <div className="flex gap-4 mt-2 text-[10px] text-gray-500">
+                <div className="flex gap-4 mt-2 text-xs text-gray-500">
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500/70 inline-block" /> Approved</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500/70 inline-block" /> Review</span>
                   <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500/70 inline-block" /> Human</span>
@@ -550,9 +550,9 @@ export default function HealthPage() {
                   <div className="text-xs text-gray-400">{alert.message}</div>
                 </div>
                 <div className="flex-shrink-0 text-right">
-                  <div className="text-[10px] text-gray-500 font-mono">{new Date(alert.timestamp).toLocaleTimeString()}</div>
+                  <div className="text-xs text-gray-500 font-mono">{new Date(alert.timestamp).toLocaleTimeString()}</div>
                   {!alert.resolved && (
-                    <button onClick={() => resolveAlert(alert.id)} className="text-[10px] text-green-400 hover:text-green-300 mt-1">
+                    <button onClick={() => resolveAlert(alert.id)} className="text-xs text-green-400 hover:text-green-300 mt-1">
                       Resolve
                     </button>
                   )}

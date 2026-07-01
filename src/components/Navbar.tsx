@@ -115,7 +115,7 @@ export function Navbar() {
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
             </span>
-            <span className="text-[10px] text-green-400 font-medium uppercase tracking-wider">System Online</span>
+            <span className="text-xs text-green-400 font-medium uppercase tracking-wider">System Online</span>
           </div>
           <motion.button
             whileHover={{ scale: 1.03 }}
@@ -177,17 +177,17 @@ export function Navbar() {
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                         <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                       </span>
-                      <span className="text-[10px] text-green-400 font-medium uppercase tracking-wider">System Online</span>
+                      <span className="text-xs text-green-400 font-medium uppercase tracking-wider">System Online</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 p-3 rounded-lg bg-[#111118] border border-[#1E1E2E]">
                     <div className="flex-1 text-center">
-                      <div className="text-[10px] text-gray-500 font-mono uppercase tracking-wider mb-1">Total</div>
+                      <div className="text-xs text-gray-500 font-mono uppercase tracking-wider mb-1">Total</div>
                       <div className="text-sm font-bold text-white price-mono">{total.toLocaleString()}</div>
                     </div>
                     <div className="w-px h-8 bg-[#1E1E2E]" />
                     <div className="flex-1 text-center">
-                      <div className="text-[10px] text-[#D4AF37]/70 font-mono uppercase tracking-wider mb-1">Approved</div>
+                      <div className="text-xs text-[#D4AF37]/70 font-mono uppercase tracking-wider mb-1">Approved</div>
                       <div className="text-sm font-bold text-[#D4AF37] price-mono">{approved.toLocaleString()}</div>
                     </div>
                   </div>
@@ -198,7 +198,7 @@ export function Navbar() {
                   <Zap size={16} /> TRADING FLOOR
                 </motion.button>
                 <div className="space-y-1">
-                  <div className="text-[10px] text-gray-500 font-mono uppercase tracking-wider px-1 mb-2">Navigation</div>
+                  <div className="text-xs text-gray-500 font-mono uppercase tracking-wider px-1 mb-2">Navigation</div>
                   {NAV_ITEMS.map(({ label, path, icon: Icon }) => {
                     const active = isActive(path);
                     return (
@@ -227,7 +227,7 @@ export function Navbar() {
               <Link key={path} to={path}
                 className={`flex flex-col items-center justify-center gap-0.5 w-16 h-full rounded-lg transition-all duration-200 active:scale-90 ${active ? 'text-[#D4AF37]' : 'text-gray-500 hover:text-gray-300'}`}>
                 <Icon size={20} strokeWidth={active ? 2.5 : 1.5} />
-                <span className="text-[10px] font-medium">{label}</span>
+                <span className="text-xs font-medium">{label}</span>
                 {active && <motion.div layoutId="bottomIndicator" className="absolute bottom-1 w-6 h-0.5 bg-[#D4AF37] rounded-full" />}
               </Link>
             );

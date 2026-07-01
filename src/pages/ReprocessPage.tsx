@@ -233,36 +233,36 @@ export default function ReprocessPage() {
             whileHover={{ scale: 1.02, y: -2 }}
             className="bg-[#0A0A0F] rounded-lg p-4 border border-green-500/20 hover:border-green-500/40 hover:shadow-lg hover:shadow-green-500/5 transition-all duration-200 cursor-default"
           >
-            <div className="text-[10px] text-green-400 uppercase mb-1">Completed</div>
+            <div className="text-xs text-green-400 uppercase mb-1">Completed</div>
             <div className="text-2xl font-bold text-green-400 price-mono">{progress?.batches_completed || 0}</div>
-            <div className="text-[10px] text-gray-600">batches</div>
+            <div className="text-xs text-gray-600">batches</div>
           </motion.div>
           <motion.div
             variants={itemVariants}
             whileHover={{ scale: 1.02, y: -2 }}
             className="bg-[#0A0A0F] rounded-lg p-4 border border-yellow-500/20 hover:border-yellow-500/40 hover:shadow-lg hover:shadow-yellow-500/5 transition-all duration-200 cursor-default"
           >
-            <div className="text-[10px] text-yellow-400 uppercase mb-1">Pending</div>
+            <div className="text-xs text-yellow-400 uppercase mb-1">Pending</div>
             <div className="text-2xl font-bold text-yellow-400 price-mono">{progress?.batches_pending || 0}</div>
-            <div className="text-[10px] text-gray-600">batches</div>
+            <div className="text-xs text-gray-600">batches</div>
           </motion.div>
           <motion.div
             variants={itemVariants}
             whileHover={{ scale: 1.02, y: -2 }}
             className="bg-[#0A0A0F] rounded-lg p-4 border border-blue-500/20 hover:border-blue-500/40 hover:shadow-lg hover:shadow-blue-500/5 transition-all duration-200 cursor-default"
           >
-            <div className="text-[10px] text-blue-400 uppercase mb-1">Processing</div>
+            <div className="text-xs text-blue-400 uppercase mb-1">Processing</div>
             <div className="text-2xl font-bold text-blue-400 price-mono">{progress?.batches_processing || 0}</div>
-            <div className="text-[10px] text-gray-600">right now</div>
+            <div className="text-xs text-gray-600">right now</div>
           </motion.div>
           <motion.div
             variants={itemVariants}
             whileHover={{ scale: 1.02, y: -2 }}
             className="bg-[#0A0A0F] rounded-lg p-4 border border-red-500/20 hover:border-red-500/40 hover:shadow-lg hover:shadow-red-500/5 transition-all duration-200 cursor-default"
           >
-            <div className="text-[10px] text-red-400 uppercase mb-1">Failed</div>
+            <div className="text-xs text-red-400 uppercase mb-1">Failed</div>
             <div className="text-2xl font-bold text-red-400 price-mono">{progress?.batches_failed || 0}</div>
-            <div className="text-[10px] text-gray-600">batches</div>
+            <div className="text-xs text-gray-600">batches</div>
           </motion.div>
         </motion.div>
 
@@ -420,7 +420,7 @@ export default function ReprocessPage() {
                       >
                         <td className="px-4 py-3 text-white font-mono price-mono">#{log.batch_number}</td>
                         <td className="px-4 py-3">
-                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                             log.status === 'completed' ? 'text-green-400 bg-green-400/10' :
                             log.status === 'failed' ? 'text-red-400 bg-red-400/10' :
                             'text-yellow-400 bg-yellow-400/10'
@@ -523,7 +523,7 @@ export default function ReprocessPage() {
                       <div className="text-[11px] text-gray-500 mb-1">Before v3</div>
                       <div className="flex items-end gap-2">
                         <span className="text-xl font-bold text-gray-400 price-mono">{report.references.pre_rate}%</span>
-                        <span className="text-[10px] text-gray-600 mb-1">({report.references.pre_with_ref.toLocaleString()} / {report.pre_v3.toLocaleString()})</span>
+                        <span className="text-xs text-gray-600 mb-1">({report.references.pre_with_ref.toLocaleString()} / {report.pre_v3.toLocaleString()})</span>
                       </div>
                       <div className="h-2 bg-[#1E1E2E] rounded-full mt-1">
                         <motion.div
@@ -538,7 +538,7 @@ export default function ReprocessPage() {
                       <div className="text-[11px] text-[#D4AF37] mb-1">After v3</div>
                       <div className="flex items-end gap-2">
                         <span className="text-xl font-bold text-[#D4AF37] price-mono">{report.references.post_rate}%</span>
-                        <span className="text-[10px] text-gray-600 mb-1">({report.references.post_with_ref.toLocaleString()} / {report.v3_processed.toLocaleString()})</span>
+                        <span className="text-xs text-gray-600 mb-1">({report.references.post_with_ref.toLocaleString()} / {report.v3_processed.toLocaleString()})</span>
                       </div>
                       <div className="h-2 bg-[#1E1E2E] rounded-full mt-1">
                         <motion.div
@@ -585,7 +585,7 @@ export default function ReprocessPage() {
                                 initial={{ width: 0 }}
                                 animate={{ width: `${Math.max(prePct, 8)}%` }}
                                 transition={{ duration: 0.6 }}
-                                className={`h-full ${v === 'APPROVED' ? 'bg-green-400/20' : v === 'REVIEW' ? 'bg-yellow-400/20' : v === 'HUMAN' ? 'bg-orange-400/20' : v === 'RECYCLE' ? 'bg-red-400/20' : 'bg-blue-400/20'} flex items-center justify-center text-[9px] font-mono price-mono`}
+                                className={`h-full ${v === 'APPROVED' ? 'bg-green-400/20' : v === 'REVIEW' ? 'bg-yellow-400/20' : v === 'HUMAN' ? 'bg-orange-400/20' : v === 'RECYCLE' ? 'bg-red-400/20' : 'bg-blue-400/20'} flex items-center justify-center text-xs font-mono price-mono`}
                               >
                                 {prePct > 0 ? `${prePct}%` : ''}
                               </motion.div>
@@ -596,7 +596,7 @@ export default function ReprocessPage() {
                                 initial={{ width: 0 }}
                                 animate={{ width: `${Math.max(postPct, 8)}%` }}
                                 transition={{ duration: 0.6 }}
-                                className={`h-full ${v === 'APPROVED' ? 'bg-green-400/20' : v === 'REVIEW' ? 'bg-yellow-400/20' : v === 'HUMAN' ? 'bg-orange-400/20' : v === 'RECYCLE' ? 'bg-red-400/20' : 'bg-blue-400/20'} flex items-center justify-center text-[9px] font-mono price-mono`}
+                                className={`h-full ${v === 'APPROVED' ? 'bg-green-400/20' : v === 'REVIEW' ? 'bg-yellow-400/20' : v === 'HUMAN' ? 'bg-orange-400/20' : v === 'RECYCLE' ? 'bg-red-400/20' : 'bg-blue-400/20'} flex items-center justify-center text-xs font-mono price-mono`}
                               >
                                 {postPct > 0 ? `${postPct}%` : ''}
                               </motion.div>
@@ -653,7 +653,7 @@ export default function ReprocessPage() {
                 <motion.div
                   initial={{ opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  className="text-center text-[10px] text-gray-600"
+                  className="text-center text-xs text-gray-600"
                 >
                   Report generated: {new Date(report.generated_at).toLocaleString()}
                 </motion.div>
@@ -689,7 +689,7 @@ export default function ReprocessPage() {
                 'bg-gray-800/50 border-gray-700 hover:border-gray-600'
               }`}
             >
-              <div className="text-[10px] text-gray-500 uppercase mb-1">{qs.status}</div>
+              <div className="text-xs text-gray-500 uppercase mb-1">{qs.status}</div>
               <div className="text-xl font-bold text-white price-mono">{qs.count?.toLocaleString()}</div>
             </motion.div>
           ))}
@@ -711,7 +711,7 @@ function ReportCard({ icon: Icon, label, value, color, bg }: {
     >
       <div className="flex items-center gap-2 mb-1">
         <div className={`w-7 h-7 rounded ${bg} flex items-center justify-center`}><Icon size={14} className={color} /></div>
-        <span className="text-[10px] text-gray-500">{label}</span>
+        <span className="text-xs text-gray-500">{label}</span>
       </div>
       <div className="text-lg font-bold text-white price-mono">{value}</div>
     </motion.div>

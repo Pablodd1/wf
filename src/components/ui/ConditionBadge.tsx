@@ -16,7 +16,7 @@ export function ConditionBadge({ condition, className }: ConditionBadgeProps) {
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded px-2 py-0.5 text-[10px] font-semibold uppercase leading-none',
+        'inline-flex items-center rounded px-2 py-0.5 text-xs font-semibold uppercase leading-none',
         conditionStyles[condition] || 'bg-bg-elevated text-text-muted',
         className
       )}

@@ -207,10 +207,10 @@ export default function UnifiedReports() {
             {selected.size > 0 && (
               <>
                 <span className="text-xs text-gold-primary font-mono">{selected.size} selected</span>
-                <button onClick={() => bulkAction('APPROVED')} className="px-2 py-1 text-[10px] bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 transition-colors">Approve</button>
-                <button onClick={() => bulkAction('REVIEW')} className="px-2 py-1 text-[10px] bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors">Review</button>
-                <button onClick={() => bulkAction('RECYCLE')} className="px-2 py-1 text-[10px] bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition-colors">Recycle</button>
-                <button onClick={exportSelected} className="px-2 py-1 text-[10px] bg-gold-primary/20 text-gold-primary rounded hover:bg-gold-primary/30 transition-colors flex items-center gap-1">
+                <button onClick={() => bulkAction('APPROVED')} className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30 transition-colors">Approve</button>
+                <button onClick={() => bulkAction('REVIEW')} className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30 transition-colors">Review</button>
+                <button onClick={() => bulkAction('RECYCLE')} className="px-2 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition-colors">Recycle</button>
+                <button onClick={exportSelected} className="px-2 py-1 text-xs bg-gold-primary/20 text-gold-primary rounded hover:bg-gold-primary/30 transition-colors flex items-center gap-1">
                   <Download size={10} /> CSV
                 </button>
               </>
@@ -360,7 +360,7 @@ export default function UnifiedReports() {
                       </td>
                       <td className="py-2 px-2">
                         <span
-                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border ${vcfg.bg} ${vcfg.border}`}
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-bold border ${vcfg.bg} ${vcfg.border}`}
                           style={{ color: vcfg.color }}
                         >
                           <VIcon size={10} />
@@ -380,8 +380,8 @@ export default function UnifiedReports() {
                       <td className="py-2 px-2 text-center">
                         <ConfidenceTierBadge score={r.confidence || 0} />
                       </td>
-                      <td className="py-2 px-2 text-gray-500 text-[10px]">{r.source || '—'}</td>
-                      <td className="py-2 px-2 text-gray-500 text-[10px]">
+                      <td className="py-2 px-2 text-gray-500 text-xs">{r.source || '—'}</td>
+                      <td className="py-2 px-2 text-gray-500 text-xs">
                         {new Date(r.created_at).toLocaleDateString()}
                       </td>
                     </tr>
@@ -396,7 +396,7 @@ export default function UnifiedReports() {
       {/* Pagination */}
       {totalPages > 1 && (
         <div className="px-6 py-3 flex items-center justify-between border-t border-gray-800">
-          <span className="text-[10px] text-gray-500">
+          <span className="text-xs text-gray-500">
             Page {page + 1} of {totalPages} · {total.toLocaleString()} total
           </span>
           <div className="flex items-center gap-1">

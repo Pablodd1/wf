@@ -70,7 +70,7 @@ export function StatsBar({ totalProcessed, autoApproveRate, mlAvgTime, residueRa
             >
               <div className="flex items-center gap-2">
                 <Icon size={18} className={stat.iconColor} />
-                <span className="text-[10px] text-muted uppercase tracking-[0.06em]">
+                <span className="text-xs text-muted uppercase tracking-[0.06em]">
                   {stat.label}
                 </span>
               </div>
@@ -78,7 +78,7 @@ export function StatsBar({ totalProcessed, autoApproveRate, mlAvgTime, residueRa
                 {stat.value}
               </span>
               {stat.subtitle && (
-                <span className="text-[9px] text-muted mt-0.5 leading-tight" title={stat.subtitle}>
+                <span className="text-xs text-muted mt-0.5 leading-tight" title={stat.subtitle}>
                   {stat.subtitle}
                 </span>
               )}

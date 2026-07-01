@@ -291,7 +291,7 @@ export default function QualityPage() {
                         transition={{ duration: 0.8, ease: 'easeOut' }}
                         className={`h-full rounded-full ${pct >= 70 ? 'bg-green-500/60' : pct >= 40 ? 'bg-amber-500/60' : 'bg-red-500/60'}`}
                       />
-                      <span className="absolute inset-0 flex items-center justify-end pr-2 text-[10px] font-mono text-gray-400">
+                      <span className="absolute inset-0 flex items-center justify-end pr-2 text-xs font-mono text-gray-400">
                         {fmt(count)} / {fmt(total)}
                       </span>
                     </div>
@@ -354,7 +354,7 @@ export default function QualityPage() {
                         <span className="text-xs font-mono">{pct.toFixed(1)}%</span>
                       </div>
                       <div className="text-lg font-bold">{fmt(count)}</div>
-                      <div className="text-[10px] opacity-70">{tier.label}</div>
+                      <div className="text-xs opacity-70">{tier.label}</div>
                     </div>
                   );
                 })}
@@ -380,7 +380,7 @@ export default function QualityPage() {
             </div>
             <div className="flex items-center gap-2">
               {outliers.length > 0 && (
-                <span className="px-2 py-0.5 bg-red-400/10 text-red-400 text-[10px] rounded-full font-mono">
+                <span className="px-2 py-0.5 bg-red-400/10 text-red-400 text-xs rounded-full font-mono">
                   {outliers.length} issues
                 </span>
               )}
@@ -400,18 +400,18 @@ export default function QualityPage() {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="border-b border-[#1E1E2E]">
-                        <th className="px-4 py-3 text-[10px] text-gray-500 uppercase tracking-wider">Severity</th>
-                        <th className="px-4 py-3 text-[10px] text-gray-500 uppercase tracking-wider">Issue</th>
-                        <th className="px-4 py-3 text-[10px] text-gray-500 uppercase tracking-wider">Brand</th>
-                        <th className="px-4 py-3 text-[10px] text-gray-500 uppercase tracking-wider">Reference</th>
-                        <th className="px-4 py-3 text-[10px] text-gray-500 uppercase tracking-wider">Raw Message</th>
+                        <th className="px-4 py-3 text-xs text-gray-500 uppercase tracking-wider">Severity</th>
+                        <th className="px-4 py-3 text-xs text-gray-500 uppercase tracking-wider">Issue</th>
+                        <th className="px-4 py-3 text-xs text-gray-500 uppercase tracking-wider">Brand</th>
+                        <th className="px-4 py-3 text-xs text-gray-500 uppercase tracking-wider">Reference</th>
+                        <th className="px-4 py-3 text-xs text-gray-500 uppercase tracking-wider">Raw Message</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#1E1E2E]">
                       {outliers.map((o, i) => (
                         <tr key={`${o.id}-${i}`} className="hover:bg-[#1A1A24]">
                           <td className="px-4 py-3">
-                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border ${severityColor(o.severity)}`}>
+                            <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${severityColor(o.severity)}`}>
                               {severityIcon(o.severity)}
                               {o.severity}
                             </span>
@@ -496,16 +496,16 @@ export default function QualityPage() {
               ].map((rec, i) => (
                 <div key={i} className="flex gap-4 p-3 bg-[#1A1A24] rounded-lg border border-[#1E1E2E]">
                   <div className="flex-shrink-0 w-20">
-                    <span className="text-[10px] font-mono text-[#D4AF37]">{rec.phase}</span>
+                    <span className="text-xs font-mono text-[#D4AF37]">{rec.phase}</span>
                   </div>
                   <div className="flex-1">
                     <h3 className="text-sm font-semibold text-gray-200 mb-1">{rec.title}</h3>
                     <p className="text-[11px] text-gray-400 leading-relaxed mb-2">{rec.desc}</p>
                     <div className="flex gap-3">
-                      <span className={`text-[10px] px-2 py-0.5 rounded ${rec.impact === 'High' ? 'bg-green-400/10 text-green-400' : 'bg-amber-400/10 text-amber-400'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded ${rec.impact === 'High' ? 'bg-green-400/10 text-green-400' : 'bg-amber-400/10 text-amber-400'}`}>
                         Impact: {rec.impact}
                       </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded ${rec.effort === 'Low' ? 'bg-blue-400/10 text-blue-400' : rec.effort === 'Medium' ? 'bg-amber-400/10 text-amber-400' : 'bg-red-400/10 text-red-400'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded ${rec.effort === 'Low' ? 'bg-blue-400/10 text-blue-400' : rec.effort === 'Medium' ? 'bg-amber-400/10 text-amber-400' : 'bg-red-400/10 text-red-400'}`}>
                         Effort: {rec.effort}
                       </span>
                     </div>
@@ -517,7 +517,7 @@ export default function QualityPage() {
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-between text-[10px] text-gray-600 pt-2 pb-6">
+        <div className="flex items-center justify-between text-xs text-gray-600 pt-2 pb-6">
           <span>Last refreshed: {lastRefresh ? new Date(lastRefresh).toLocaleString() : '—'}</span>
           <span>WatchFacts Quality Engine v3.0</span>
         </div>

@@ -18,7 +18,7 @@ export function StatusPill({ status = 'online', label, className }: StatusPillPr
   return (
     <span
       className={cn(
-        'inline-flex items-center gap-2 rounded-full px-3 py-1 text-[10px] font-medium uppercase tracking-wider',
+        'inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-medium uppercase tracking-wider',
         'bg-[rgba(34,197,94,0.15)] text-text-secondary',
         className
       )}

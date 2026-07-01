@@ -105,10 +105,10 @@ export default function BlogPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5">
-                      <span className="px-2 py-0.5 rounded bg-[#3B5BFE]/20 text-[#3B5BFE] text-[10px] font-semibold uppercase tracking-wider">
+                      <span className="px-2 py-0.5 rounded bg-[#3B5BFE]/20 text-[#3B5BFE] text-xs font-semibold uppercase tracking-wider">
                         {post.category}
                       </span>
-                      <span className="flex items-center gap-1 text-[10px] text-gray-600">
+                      <span className="flex items-center gap-1 text-xs text-gray-600">
                         <Clock size={10} /> {post.readTime} min read
                       </span>
                     </div>
@@ -119,7 +119,7 @@ export default function BlogPage() {
                       {post.excerpt}
                     </p>
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-gray-600">{post.date}</span>
+                      <span className="text-xs text-gray-600">{post.date}</span>
                       <span className="flex items-center gap-1 text-[11px] text-[#D4AF37] opacity-0 group-hover:opacity-100 transition-opacity">
                         Read <ArrowRight size={12} />
                       </span>

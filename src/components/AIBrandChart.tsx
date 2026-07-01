@@ -53,7 +53,7 @@ export function AIBrandChart({ records }: AIBrandChartProps) {
       <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-text-secondary mb-1">
         Brand Performance
       </h4>
-      <p className="text-[10px] text-text-muted mb-3">
+      <p className="text-xs text-text-muted mb-3">
         Inventory distribution by brand with avg confidence
       </p>
       <ResponsiveContainer width="100%" height={200}>

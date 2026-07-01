@@ -105,12 +105,12 @@ export function Footer() {
 
         {/* Bottom bar */}
         <div className="mt-10 pt-6 border-t border-[#1E1E2E] flex flex-col sm:flex-row items-center justify-between gap-4">
-          <p className="text-[10px] text-gray-600">
+          <p className="text-xs text-gray-600">
             © 2026 WatchFacts. All rights reserved. Own the Rare. Backed by Blockchain.
           </p>
           <div className="flex items-center gap-4">
-            <span className="text-[10px] text-gray-600">2,392,784 listings normalized</span>
-            <span className="text-[10px] text-[#D4AF37]">Parser v3.0</span>
+            <span className="text-xs text-gray-600">2,392,784 listings normalized</span>
+            <span className="text-xs text-[#D4AF37]">Parser v3.0</span>
           </div>
         </div>
       </div>

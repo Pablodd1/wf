@@ -101,7 +101,7 @@ function Footer() {
         <div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Dealers</h4><ul className="space-y-2"><li><span className="text-gray-600">Dealer Directory</span></li><li><span className="text-gray-600">Do Not Trade List</span></li></ul></div>
         <div><h4 className="text-[11px] font-semibold text-gray-900 uppercase tracking-wider mb-4">Company</h4><ul className="space-y-2"><li><span className="text-gray-600">About Us</span></li><li><span className="text-gray-600">About Simon</span></li><li><span className="text-gray-600">Contact</span></li><li><span className="text-gray-600">Terms</span></li><li><span className="text-gray-600">Privacy Policy</span></li></ul></div>
       </div>
-      <div className="text-center text-[10px] text-gray-400 border-t border-gray-100 pt-4">&copy; 2026 Watchfacts Inc. All Rights Reserved.</div>
+      <div className="text-center text-xs text-gray-400 border-t border-gray-100 pt-4">&copy; 2026 Watchfacts Inc. All Rights Reserved.</div>
     </footer>
   );
 }
@@ -136,11 +136,11 @@ function ListingCard({ listing, index }: { listing: Listing; index: number }) {
         ) : (
           <div className="text-center">
             <div className="text-5xl opacity-20">⌚</div>
-            <span className="text-[10px] text-gray-400 uppercase tracking-wider mt-2 block">{listing.brand}</span>
+            <span className="text-xs text-gray-400 uppercase tracking-wider mt-2 block">{listing.brand}</span>
           </div>
         )}
         {listing.condition && (
-          <div className="absolute top-2 left-2 px-2 py-0.5 bg-white/90 backdrop-blur-sm rounded-full text-[10px] font-semibold text-gray-700 shadow-sm">
+          <div className="absolute top-2 left-2 px-2 py-0.5 bg-white/90 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm">
             {listing.condition}
           </div>
         )}
@@ -170,7 +170,7 @@ function ListingCard({ listing, index }: { listing: Listing; index: number }) {
 
         <div className="flex items-center justify-between mt-2.5">
           <span className="text-base font-bold text-gray-900">{fmtPriceShort(listing.price_usd)}</span>
-          <span className="flex items-center gap-1 text-[10px] text-gray-500 uppercase tracking-wider">
+          <span className="flex items-center gap-1 text-xs text-gray-500 uppercase tracking-wider">
             <Globe size={11} /> {region}
           </span>
         </div>
@@ -179,7 +179,7 @@ function ListingCard({ listing, index }: { listing: Listing; index: number }) {
           <User size={11} />
           <span className="truncate">{listing.source || 'Unknown'}</span>
         </div>
-        <p className="text-[10px] text-gray-400 mt-1">Posted: {formatDate(listing.received_at || listing.created_at)}</p>
+        <p className="text-xs text-gray-400 mt-1">Posted: {formatDate(listing.received_at || listing.created_at)}</p>
 
         <button className="mt-3 w-full py-2 border-2 border-[#3B5BFE] text-[#3B5BFE] text-[11px] font-semibold uppercase tracking-wider rounded-full hover:bg-[#3B5BFE] hover:text-white transition-all flex items-center justify-center gap-1.5">
           <ExternalLink size={11} /> View Listing
@@ -388,7 +388,7 @@ export default function InsightDetails() {
                     <>
                       <div className="h-px bg-gray-100" />
                       <div>
-                        <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Removed Prices</div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1.5">Removed Prices</div>
                         <div className="flex flex-wrap gap-1">
                           {stats.dupPrices.slice(0, 8).map((p, i) => (
                             <span key={i} className="px-2 py-0.5 bg-gray-100 rounded text-[11px] font-mono text-gray-600">{fmtPriceShort(p)}</span>
@@ -417,7 +417,7 @@ export default function InsightDetails() {
                   <div className="flex justify-between"><span className="text-gray-500">Min:</span><span className="font-mono font-semibold">{fmtPrice(stats.filMin)}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Avg:</span><span className="font-mono font-semibold text-green-600">{fmtPrice(stats.filAvg)}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Max:</span><span className="font-mono font-semibold">{fmtPrice(stats.filMax)}</span></div>
-                  <div className="text-[10px] text-gray-400 pt-1">IQR Method (Q1={fmtPriceShort(stats.q1)}, Q3={fmtPriceShort(stats.q3)})</div>
+                  <div className="text-xs text-gray-400 pt-1">IQR Method (Q1={fmtPriceShort(stats.q1)}, Q3={fmtPriceShort(stats.q3)})</div>
                 </div>
               </div>
 
@@ -435,13 +435,13 @@ export default function InsightDetails() {
                     <>
                       <div className="h-px bg-gray-100" />
                       <div>
-                        <div className="text-[10px] text-gray-500 uppercase tracking-wider mb-1.5">Removed Prices</div>
+                        <div className="text-xs text-gray-500 uppercase tracking-wider mb-1.5">Removed Prices</div>
                         <div className="flex flex-wrap gap-1">
                           {stats.outlierPrices.map((p, i) => (
                             <span key={i} className="px-2 py-0.5 bg-red-50 rounded text-[11px] font-mono text-red-600">{fmtPrice(p)}</span>
                           ))}
                         </div>
-                        <div className="text-[10px] text-gray-400 mt-2">
+                        <div className="text-xs text-gray-400 mt-2">
                           Outside {fmtPrice(stats.lowerFence)} - {fmtPrice(stats.upperFence)}
                         </div>
                       </div>
@@ -459,27 +459,27 @@ export default function InsightDetails() {
               <div className="flex flex-col sm:flex-row items-center gap-2 text-sm">
                 <div className="px-4 py-2 bg-blue-50 rounded-lg text-center">
                   <div className="font-bold text-[#3B5BFE]">{stats.origCount}</div>
-                  <div className="text-[10px] text-gray-600">Original</div>
+                  <div className="text-xs text-gray-600">Original</div>
                 </div>
                 <ArrowLeft size={16} className="text-gray-300 rotate-180 sm:rotate-0" />
                 <div className="px-4 py-2 bg-gray-50 rounded-lg text-center">
                   <div className="font-bold text-gray-700">−{stats.dupCount}</div>
-                  <div className="text-[10px] text-gray-600">Duplicates</div>
+                  <div className="text-xs text-gray-600">Duplicates</div>
                 </div>
                 <ArrowLeft size={16} className="text-gray-300 rotate-180 sm:rotate-0" />
                 <div className="px-4 py-2 bg-gray-50 rounded-lg text-center">
                   <div className="font-bold text-gray-700">={stats.origCount - stats.dupCount}</div>
-                  <div className="text-[10px] text-gray-600">Unique</div>
+                  <div className="text-xs text-gray-600">Unique</div>
                 </div>
                 <ArrowLeft size={16} className="text-gray-300 rotate-180 sm:rotate-0" />
                 <div className="px-4 py-2 bg-red-50 rounded-lg text-center">
                   <div className="font-bold text-red-500">−{stats.outlierCount}</div>
-                  <div className="text-[10px] text-gray-600">Outliers</div>
+                  <div className="text-xs text-gray-600">Outliers</div>
                 </div>
                 <ArrowLeft size={16} className="text-gray-300 rotate-180 sm:rotate-0" />
                 <div className="px-4 py-2 bg-green-50 rounded-lg text-center">
                   <div className="font-bold text-green-600">={stats.filCount}</div>
-                  <div className="text-[10px] text-gray-600">Final</div>
+                  <div className="text-xs text-gray-600">Final</div>
                 </div>
               </div>
             </div>

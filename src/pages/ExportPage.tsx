@@ -328,7 +328,7 @@ export default function ExportPage() {
 
             <div className="space-y-3">
               <div>
-                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Brand</label>
+                <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Brand</label>
                 <select value={filters.brand} onChange={e => setFilters(f => ({ ...f, brand: e.target.value }))}
                   className="w-full px-3 py-2 bg-[#1A1A24] border border-[#1E1E2E] rounded text-sm text-white focus:border-amber-400 outline-none">
                   {BRANDS.map(b => <option key={b} value={b}>{b}</option>)}
@@ -336,7 +336,7 @@ export default function ExportPage() {
               </div>
 
               <div>
-                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Verdict</label>
+                <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Verdict</label>
                 <select value={filters.verdict} onChange={e => setFilters(f => ({ ...f, verdict: e.target.value }))}
                   className="w-full px-3 py-2 bg-[#1A1A24] border border-[#1E1E2E] rounded text-sm text-white focus:border-amber-400 outline-none">
                   {VERDICTS.map(v => <option key={v} value={v}>{v}</option>)}
@@ -345,12 +345,12 @@ export default function ExportPage() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Min Price</label>
+                  <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Min Price</label>
                   <input type="number" value={filters.minPrice} onChange={e => setFilters(f => ({ ...f, minPrice: e.target.value }))}
                     placeholder="0" className="w-full px-3 py-2 bg-[#1A1A24] border border-[#1E1E2E] rounded text-sm text-white font-mono focus:border-amber-400 outline-none" />
                 </div>
                 <div>
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Max Price</label>
+                  <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Max Price</label>
                   <input type="number" value={filters.maxPrice} onChange={e => setFilters(f => ({ ...f, maxPrice: e.target.value }))}
                     placeholder="∞" className="w-full px-3 py-2 bg-[#1A1A24] border border-[#1E1E2E] rounded text-sm text-white font-mono focus:border-amber-400 outline-none" />
                 </div>
@@ -358,19 +358,19 @@ export default function ExportPage() {
 
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">From Date</label>
+                  <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">From Date</label>
                   <input type="date" value={filters.dateFrom} onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
                     className="w-full px-3 py-2 bg-[#1A1A24] border border-[#1E1E2E] rounded text-sm text-white focus:border-amber-400 outline-none" />
                 </div>
                 <div>
-                  <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">To Date</label>
+                  <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">To Date</label>
                   <input type="date" value={filters.dateTo} onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
                     className="w-full px-3 py-2 bg-[#1A1A24] border border-[#1E1E2E] rounded text-sm text-white focus:border-amber-400 outline-none" />
                 </div>
               </div>
 
               <div>
-                <label className="text-[10px] text-gray-500 uppercase tracking-wider mb-1 block">Max Records</label>
+                <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Max Records</label>
                 <select value={filters.limit} onChange={e => setFilters(f => ({ ...f, limit: e.target.value }))}
                   className="w-full px-3 py-2 bg-[#1A1A24] border border-[#1E1E2E] rounded text-sm text-white focus:border-amber-400 outline-none">
                   <option value="1000">1,000</option>
@@ -416,7 +416,7 @@ export default function ExportPage() {
                 <FileSpreadsheet size={14} /> Excel (.xlsx)
               </button>
             </div>
-            <p className="text-[10px] text-gray-600 mt-2">
+            <p className="text-xs text-gray-600 mt-2">
               {exportFormat === 'excel'
                 ? 'Exports as styled Excel with gold headers & auto-sized columns'
                 : 'Exports as UTF-8 CSV with BOM -- opens directly in Excel'}
@@ -453,7 +453,7 @@ export default function ExportPage() {
                   <motion.div initial={{ width: 0 }} animate={{ width: `${progress.percent}%` }} className="h-full bg-amber-400 rounded-full" />
                 </div>
                 {progress.eta && (
-                  <div className="flex items-center gap-1 mt-1 text-[10px] text-gray-500">
+                  <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
                     <Timer size={10} /> ETA: {progress.eta}
                   </div>
                 )}
@@ -497,10 +497,10 @@ export default function ExportPage() {
                   <motion.div initial={{ width: 0 }} animate={{ width: `${progress.percent}%` }} className="h-full bg-amber-500 rounded-full" />
                 </div>
                 <div className="flex items-center justify-between mt-1">
-                  <div className="flex items-center gap-1 text-[10px] text-gray-500">
+                  <div className="flex items-center gap-1 text-xs text-gray-500">
                     <Timer size={10} /> ETA: {progress.eta}
                   </div>
-                  <div className="text-[10px] text-gray-500">
+                  <div className="text-xs text-gray-500">
                     {exportFormat === 'excel' ? 'Building .xlsx file...' : 'Building CSV...'}
                   </div>
                 </div>
@@ -515,7 +515,7 @@ export default function ExportPage() {
             </h3>
             <div className="flex flex-wrap gap-2">
               {COLUMNS.map(col => (
-                <span key={col.key} className="px-2 py-1 bg-[#1A1A24] rounded text-[10px] text-gray-400 border border-[#1E1E2E]">
+                <span key={col.key} className="px-2 py-1 bg-[#1A1A24] rounded text-xs text-gray-400 border border-[#1E1E2E]">
                   {col.label}
                 </span>
               ))}

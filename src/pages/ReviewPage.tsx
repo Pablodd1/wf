@@ -351,10 +351,10 @@ export default function ReviewPage() {
         {/* Action Log */}
         {actionLog.length > 0 && (
           <div className="mb-4 bg-[#111118] border border-[#1E1E2E] rounded-lg p-3">
-            <h3 className="text-[10px] uppercase tracking-wider text-gray-500 mb-2">Recent Actions</h3>
+            <h3 className="text-xs uppercase tracking-wider text-gray-500 mb-2">Recent Actions</h3>
             <div className="space-y-1 max-h-24 overflow-y-auto">
               {actionLog.map((log, i) => (
-                <div key={i} className="text-[10px] text-gray-400 font-mono">{log}</div>
+                <div key={i} className="text-xs text-gray-400 font-mono">{log}</div>
               ))}
             </div>
           </div>
@@ -396,28 +396,28 @@ export default function ReviewPage() {
                           <span className="text-xs font-bold text-white">{record.brand}</span>
                           <span className="text-xs font-mono text-[#D4AF37]">{record.reference}</span>
                           <span
-                            className="text-[10px] px-1.5 py-0.5 rounded font-medium"
+                            className="text-xs px-1.5 py-0.5 rounded font-medium"
                             style={{ color: cfg.color, backgroundColor: cfg.color + '15' }}
                           >
                             {cfg.label}
                           </span>
                           {isWTB && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-purple-400/10 text-purple-400">
+                            <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-purple-400/10 text-purple-400">
                               WTB
                             </span>
                           )}
                           {bundle.isBundle && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-orange-400/10 text-orange-400" title={`${bundle.count} watches detected`}>
+                            <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-orange-400/10 text-orange-400" title={`${bundle.count} watches detected`}>
                               BUNDLE ({bundle.count})
                             </span>
                           )}
                           {detectedYear && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-blue-400/10 text-blue-400 flex items-center gap-1">
+                            <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-blue-400/10 text-blue-400 flex items-center gap-1">
                               <Calendar size={9} /> {detectedYear}
                             </span>
                           )}
                         </div>
-                        <div className="text-[10px] text-gray-500 mt-0.5 truncate">
+                        <div className="text-xs text-gray-500 mt-0.5 truncate">
                           {record.raw_message}
                         </div>
                       </div>
@@ -454,7 +454,7 @@ export default function ReviewPage() {
                         >
                           <Copy size={14} />
                           {showCopied === record.id && (
-                            <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-[9px] bg-green-500 text-white px-1.5 py-0.5 rounded whitespace-nowrap">
+                            <span className="absolute -top-6 left-1/2 -translate-x-1/2 text-xs bg-green-500 text-white px-1.5 py-0.5 rounded whitespace-nowrap">
                               Copied!
                             </span>
                           )}
@@ -504,17 +504,17 @@ export default function ReviewPage() {
                         {(detectedYear || isWTB || bundle.isBundle) && (
                           <div className="mb-3 mt-3 flex gap-2 flex-wrap">
                             {detectedYear && (
-                              <span className="text-[10px] px-2 py-1 bg-blue-400/10 text-blue-400 rounded flex items-center gap-1">
+                              <span className="text-xs px-2 py-1 bg-blue-400/10 text-blue-400 rounded flex items-center gap-1">
                                 <Calendar size={10} /> Year detected: {detectedYear}
                               </span>
                             )}
                             {isWTB && (
-                              <span className="text-[10px] px-2 py-1 bg-purple-400/10 text-purple-400 rounded flex items-center gap-1">
+                              <span className="text-xs px-2 py-1 bg-purple-400/10 text-purple-400 rounded flex items-center gap-1">
                                 <Tag size={10} /> WTB detected
                               </span>
                             )}
                             {bundle.isBundle && (
-                              <span className="text-[10px] px-2 py-1 bg-orange-400/10 text-orange-400 rounded flex items-center gap-1">
+                              <span className="text-xs px-2 py-1 bg-orange-400/10 text-orange-400 rounded flex items-center gap-1">
                                 <Copy size={10} /> Bundle: {bundle.count} watches
                               </span>
                             )}
@@ -523,7 +523,7 @@ export default function ReviewPage() {
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3 mt-3">
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Brand</label>
+                            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1">Brand</label>
                             <input
                               value={editForm.brand || ''}
                               onChange={e => setEditForm({ ...editForm, brand: e.target.value })}
@@ -531,7 +531,7 @@ export default function ReviewPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Reference</label>
+                            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1">Reference</label>
                             <input
                               value={editForm.reference || ''}
                               onChange={e => setEditForm({ ...editForm, reference: e.target.value })}
@@ -539,7 +539,7 @@ export default function ReviewPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Dial Color</label>
+                            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1">Dial Color</label>
                             <input
                               value={editForm.dial_color || editForm.dialColor || ''}
                               onChange={e => setEditForm({ ...editForm, dial_color: e.target.value })}
@@ -547,7 +547,7 @@ export default function ReviewPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Condition</label>
+                            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1">Condition</label>
                             <select
                               value={editForm.condition || ''}
                               onChange={e => setEditForm({ ...editForm, condition: e.target.value })}
@@ -569,7 +569,7 @@ export default function ReviewPage() {
                             </select>
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">
+                            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1">
                               Year {detectedYear && !editForm.year && (
                                 <button onClick={() => setEditForm({ ...editForm, year: detectedYear })}
                                   className="text-blue-400 hover:text-blue-300 ml-1">[Auto: {detectedYear}]</button>
@@ -583,7 +583,7 @@ export default function ReviewPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Price USD</label>
+                            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1">Price USD</label>
                             <input
                               type="number"
                               value={editForm.price_usd || ''}
@@ -592,7 +592,7 @@ export default function ReviewPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Confidence</label>
+                            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1">Confidence</label>
                             <input
                               type="number"
                               min="0" max="100"
@@ -602,7 +602,7 @@ export default function ReviewPage() {
                             />
                           </div>
                           <div>
-                            <label className="text-[10px] text-gray-500 uppercase tracking-wider block mb-1">Verdict</label>
+                            <label className="text-xs text-gray-500 uppercase tracking-wider block mb-1">Verdict</label>
                             <select
                               value={editForm.verdict || ''}
                               onChange={e => setEditForm({ ...editForm, verdict: e.target.value })}
@@ -617,7 +617,7 @@ export default function ReviewPage() {
                           </div>
                         </div>
                         <div className="flex justify-between items-center">
-                          <div className="text-[10px] text-gray-500 font-mono truncate max-w-md">
+                          <div className="text-xs text-gray-500 font-mono truncate max-w-md">
                             RAW: {editForm.raw_message}
                           </div>
                           <div className="flex gap-2">
@@ -693,7 +693,7 @@ export default function ReviewPage() {
                     { key: 'Enter', action: 'Save edit' },
                   ].map(({ key, action }) => (
                     <div key={key} className="flex items-center gap-2">
-                      <kbd className="px-1.5 py-0.5 bg-[#1A1A24] border border-[#2A2A3A] rounded text-[10px] font-mono text-gray-300 min-w-[28px] text-center">
+                      <kbd className="px-1.5 py-0.5 bg-[#1A1A24] border border-[#2A2A3A] rounded text-xs font-mono text-gray-300 min-w-[28px] text-center">
                         {key}
                       </kbd>
                       <span>{action}</span>

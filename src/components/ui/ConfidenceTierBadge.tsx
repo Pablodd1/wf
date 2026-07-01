@@ -14,10 +14,10 @@ interface ConfidenceTierBadgeProps {
 }
 
 const TIER_CONFIG = {
-  AUTO_APPROVE: { label: 'AUTO', color: '#22C55E', bg: 'rgba(34, 197, 94, 0.12)' },
-  REVIEW_SUGGESTED: { label: 'REVIEW', color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)' },
-  MUST_REVIEW: { label: 'MUST CHECK', color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)' },
-  MANUAL_INTERVENTION: { label: 'MANUAL', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' },
+  AUTO_APPROVE:      { label: 'AUTO',      color: '#22C55E', bg: 'rgba(34, 197, 94, 0.12)',  twText: 'text-emerald-400',  twBg: 'bg-emerald-500/10', twBorder: 'border-emerald-500/30' },
+  REVIEW_SUGGESTED:  { label: 'REVIEW',    color: '#EAB308', bg: 'rgba(234, 179, 8, 0.12)',  twText: 'text-yellow-400',   twBg: 'bg-yellow-500/10',  twBorder: 'border-yellow-500/30' },
+  MUST_REVIEW:       { label: 'MUST CHECK',color: '#F97316', bg: 'rgba(249, 115, 22, 0.12)', twText: 'text-orange-400',   twBg: 'bg-orange-500/10',  twBorder: 'border-orange-500/30' },
+  MANUAL_INTERVENTION:{ label: 'MANUAL',   color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)',  twText: 'text-red-400',      twBg: 'bg-red-500/10',     twBorder: 'border-red-500/30' },
 };
 
 function getTier(score: number) {
@@ -33,9 +33,9 @@ export function ConfidenceTierBadge({ score, action, gapCount, size = 'sm' }: Co
     : getTier(score);
 
   const sizeClasses = {
-    sm: 'text-[8px] px-1.5 py-0.5',
-    md: 'text-[10px] px-2 py-1',
-    lg: 'text-xs px-2.5 py-1.5',
+    sm: 'text-xs px-1.5 py-0.5',
+    md: 'text-xs px-2 py-1',
+    lg: 'text-sm px-2.5 py-1.5',
   };
 
   return (

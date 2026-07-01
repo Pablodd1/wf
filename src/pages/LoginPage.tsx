@@ -163,7 +163,7 @@ export default function LoginPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="text-left text-[10px] text-gray-500 uppercase tracking-wider border-b border-gray-100">
+                  <tr className="text-left text-xs text-gray-500 uppercase tracking-wider border-b border-gray-100">
                     <th className="pb-2 pr-4">Catalog Match</th>
                     <th className="pb-2 pr-4">AI Intervention Needed</th>
                     <th className="pb-2 pr-4">Confidence Score</th>

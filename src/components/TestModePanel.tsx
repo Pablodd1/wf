@@ -112,7 +112,7 @@ function AICopilot({
         )}
       </button>
       {hint && (
-        <pre className="mt-3 p-2 rounded text-[10px] font-mono overflow-x-auto whitespace-pre-wrap" style={{ backgroundColor: '#020617', color: '#a5b4fc' }}>
+        <pre className="mt-3 p-2 rounded text-xs font-mono overflow-x-auto whitespace-pre-wrap" style={{ backgroundColor: '#020617', color: '#a5b4fc' }}>
           {hint}
         </pre>
       )}
@@ -163,14 +163,14 @@ function EditFields({
         </div>
         <div className="flex gap-2">
           {aiSuggestion && (
-            <button onClick={applyAI} className="text-[10px] px-2 py-1 rounded font-semibold" style={{ backgroundColor: '#581c87', color: '#e9d5ff' }}>
+            <button onClick={applyAI} className="text-xs px-2 py-1 rounded font-semibold" style={{ backgroundColor: '#581c87', color: '#e9d5ff' }}>
               Apply AI Suggestion
             </button>
           )}
-          <button onClick={onCancel} className="text-[10px] px-2 py-1 rounded text-gray-400 hover:text-white">
+          <button onClick={onCancel} className="text-xs px-2 py-1 rounded text-gray-400 hover:text-white">
             Cancel
           </button>
-          <button onClick={() => onSave(edit)} className="text-[10px] px-2 py-1 rounded font-bold" style={{ backgroundColor: '#d4af37', color: '#050505' }}>
+          <button onClick={() => onSave(edit)} className="text-xs px-2 py-1 rounded font-bold" style={{ backgroundColor: '#d4af37', color: '#050505' }}>
             Save + Re-launch →
           </button>
         </div>
@@ -178,35 +178,35 @@ function EditFields({
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         <div>
-          <label className="text-[9px] uppercase tracking-wide text-gray-500">Brand</label>
+          <label className="text-xs uppercase tracking-wide text-gray-500">Brand</label>
           <input value={edit.brand} onChange={e => upd('brand', e.target.value)} className={fieldClass} style={fieldStyle} />
         </div>
         <div>
-          <label className="text-[9px] uppercase tracking-wide text-gray-500">Reference</label>
+          <label className="text-xs uppercase tracking-wide text-gray-500">Reference</label>
           <input value={edit.reference} onChange={e => upd('reference', e.target.value.toUpperCase())} className={fieldClass} style={fieldStyle} />
         </div>
         <div>
-          <label className="text-[9px] uppercase tracking-wide text-gray-500">Dial</label>
+          <label className="text-xs uppercase tracking-wide text-gray-500">Dial</label>
           <input value={edit.dialColor} onChange={e => upd('dialColor', e.target.value)} className={fieldClass} style={fieldStyle} />
         </div>
         <div>
-          <label className="text-[9px] uppercase tracking-wide text-gray-500">Condition</label>
+          <label className="text-xs uppercase tracking-wide text-gray-500">Condition</label>
           <input value={edit.condition} onChange={e => upd('condition', e.target.value)} className={fieldClass} style={fieldStyle} />
         </div>
         <div>
-          <label className="text-[9px] uppercase tracking-wide text-gray-500">Price</label>
+          <label className="text-xs uppercase tracking-wide text-gray-500">Price</label>
           <input type="number" value={edit.price} onChange={e => upd('price', Number(e.target.value))} className={fieldClass} style={fieldStyle} />
         </div>
         <div>
-          <label className="text-[9px] uppercase tracking-wide text-gray-500">Currency</label>
+          <label className="text-xs uppercase tracking-wide text-gray-500">Currency</label>
           <input value={edit.currency} onChange={e => upd('currency', e.target.value.toUpperCase())} className={fieldClass} style={fieldStyle} />
         </div>
         <div>
-          <label className="text-[9px] uppercase tracking-wide text-gray-500">Year</label>
+          <label className="text-xs uppercase tracking-wide text-gray-500">Year</label>
           <input type="number" value={edit.year || ''} onChange={e => upd('year', e.target.value ? Number(e.target.value) : null)} className={fieldClass} style={fieldStyle} />
         </div>
         <div>
-          <label className="text-[9px] uppercase tracking-wide text-gray-500">Notes</label>
+          <label className="text-xs uppercase tracking-wide text-gray-500">Notes</label>
           <input value={edit.notes || ''} onChange={e => upd('notes', e.target.value)} className={fieldClass} style={fieldStyle} placeholder="optional" />
         </div>
       </div>
@@ -257,19 +257,19 @@ function CatalogComparisonView({ catalogs }: { catalogs: CatalogComparison }) {
               <Icon className="w-4 h-4 shrink-0" style={{ color: r.color }} />
               <div className="flex-1 grid grid-cols-4 gap-2 text-[11px]">
                 <div>
-                  <div className="text-[9px] uppercase tracking-wide text-gray-500">Source</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">Source</div>
                   <div className="font-semibold" style={{ color: r.color }}>{r.name}</div>
                 </div>
                 <div>
-                  <div className="text-[9px] uppercase tracking-wide text-gray-500">Brand/Ref</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">Brand/Ref</div>
                   <div className="font-mono truncate" style={{ color: r.hit ? '#e8e8e8' : '#666' }}>{r.field1}</div>
                 </div>
                 <div>
-                  <div className="text-[9px] uppercase tracking-wide text-gray-500">Model</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">Model</div>
                   <div className="truncate" style={{ color: r.hit ? '#e8e8e8' : '#666' }}>{r.field2}</div>
                 </div>
                 <div>
-                  <div className="text-[9px] uppercase tracking-wide text-gray-500">Context</div>
+                  <div className="text-xs uppercase tracking-wide text-gray-500">Context</div>
                   <div className="truncate" style={{ color: '#888' }}>{r.field4}</div>
                 </div>
               </div>
@@ -299,9 +299,9 @@ function FeatureScoreGrid({ scores }: { scores: FeatureScores }) {
           const c = scoreColors(v);
           return (
             <div key={k} className="p-2 rounded text-center" style={{ backgroundColor: c.bg, border: `1px solid ${c.border}` }}>
-              <div className="text-[9px] uppercase tracking-wide truncate" style={{ color: '#aaa' }}>{FEATURE_LABELS[k]}</div>
+              <div className="text-xs uppercase tracking-wide truncate" style={{ color: '#aaa' }}>{FEATURE_LABELS[k]}</div>
               <div className="text-base font-bold font-mono" style={{ color: c.fg }}>{v}</div>
-              <div className="text-[8px]" style={{ color: c.fg }}>{c.label}</div>
+              <div className="text-xs" style={{ color: c.fg }}>{c.label}</div>
             </div>
           );
         })}
@@ -355,7 +355,7 @@ export default function TestModePanel(props: Props) {
     <div className="rounded-xl p-4 my-3" style={{ backgroundColor: '#050505', border: `1px solid ${verdictColor}66` }}>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <div className="px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider"
+          <div className="px-2 py-1 rounded text-xs font-bold uppercase tracking-wider"
             style={{ backgroundColor: `${verdictColor}22`, color: verdictColor, border: `1px solid ${verdictColor}66` }}>
             {verdictLabel}
           </div>
@@ -392,7 +392,7 @@ export default function TestModePanel(props: Props) {
                 style={{ backgroundColor: '#0f172a', color: '#60a5fa', border: '1px solid #1e3a5f' }}>
                 <RefreshCw className="w-3.5 h-3.5" /> Just Re-launch
               </button>
-              <div className="ml-auto text-[10px] text-gray-500 italic">
+              <div className="ml-auto text-xs text-gray-500 italic">
                 ↻ Loop back to initial pipeline after edits
               </div>
             </div>

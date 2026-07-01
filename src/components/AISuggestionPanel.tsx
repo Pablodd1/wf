@@ -122,7 +122,7 @@ export function AISuggestionPanel({ record, onApply }: Props) {
       <div className="flex items-center gap-2 mb-3">
         <Wand2 size={14} className="text-[#D4AF37]" />
         <span className="text-xs font-semibold text-[#D4AF37] uppercase tracking-wider">AI Suggestions</span>
-        <span className="text-[10px] text-gray-500 ml-auto">{suggestions.length} found</span>
+        <span className="text-xs text-gray-500 ml-auto">{suggestions.length} found</span>
       </div>
 
       <div className="space-y-2">
@@ -135,9 +135,9 @@ export function AISuggestionPanel({ record, onApply }: Props) {
           >
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-400 uppercase">{s.field}</span>
-                <span className="text-[10px] px-1 bg-[#D4AF37]/10 text-[#D4AF37] rounded">{s.source.replace('_', ' ')}</span>
-                <span className="text-[10px] text-gray-500">{s.confidence}%</span>
+                <span className="text-xs text-gray-400 uppercase">{s.field}</span>
+                <span className="text-xs px-1 bg-[#D4AF37]/10 text-[#D4AF37] rounded">{s.source.replace('_', ' ')}</span>
+                <span className="text-xs text-gray-500">{s.confidence}%</span>
               </div>
               <div className="text-xs mt-0.5">
                 <span className="text-gray-500 line-through mr-2">{s.current || 'empty'}</span>
@@ -146,7 +146,7 @@ export function AISuggestionPanel({ record, onApply }: Props) {
             </div>
             <button
               onClick={() => onApply(s.field, s.suggested)}
-              className="ml-2 px-3 py-1 bg-[#D4AF37]/20 hover:bg-[#D4AF37]/30 text-[#D4AF37] text-[10px] font-medium rounded transition-colors flex items-center gap-1"
+              className="ml-2 px-3 py-1 bg-[#D4AF37]/20 hover:bg-[#D4AF37]/30 text-[#D4AF37] text-xs font-medium rounded transition-colors flex items-center gap-1"
             >
               <Sparkles size={10} /> Apply
             </button>

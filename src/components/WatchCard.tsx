@@ -100,7 +100,7 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
         />
         {/* Image Confirmed badge */}
         {record.imageConfirmed && (
-          <span className="absolute top-2 left-2 bg-success/90 text-black text-[8px] font-bold px-1.5 py-0.5 rounded">
+          <span className="absolute top-2 left-2 bg-success/90 text-black text-xs font-bold px-1.5 py-0.5 rounded">
             IMG ✓
           </span>
         )}
@@ -121,7 +121,7 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
       </div>
 
       {/* Family badge */}
-      <div className="text-[10px] text-gold-muted uppercase tracking-[0.04em] font-semibold mb-3">
+      <div className="text-xs text-gold-muted uppercase tracking-[0.04em] font-semibold mb-3">
         {record.family}
       </div>
 
@@ -136,7 +136,7 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
           {displayPrice}
         </div>
         {showConversion && (
-          <div className="text-[10px] text-text-muted font-mono mt-0.5">
+          <div className="text-xs text-text-muted font-mono mt-0.5">
             {record.originalCurrency} {record.originalPrice.toLocaleString()} ≈ ${usdFromOriginal.toLocaleString()} USD
           </div>
         )}
@@ -144,7 +144,7 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
 
       {/* ML Predicted Price */}
       {(record.mlPredictedPrice ?? 0) > 0 && (
-        <div className="flex items-center justify-between text-[10px] text-text-muted mb-2 px-2 py-1 bg-bg-elevated rounded border border-border-default">
+        <div className="flex items-center justify-between text-xs text-text-muted mb-2 px-2 py-1 bg-bg-elevated rounded border border-border-default">
           <span>AI Est. Market Value</span>
           <span className="font-mono font-bold text-text-primary">
             ${(record.mlPredictedPrice ?? 0).toLocaleString()}
@@ -155,8 +155,8 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
       {/* Liquidity / Taxonomy Badge */}
       <div className="mb-3 p-2 bg-bg-elevated rounded border border-border-default">
         <div className="flex items-center justify-between mb-1">
-          <span className="text-[9px] text-text-muted uppercase tracking-wider">B/S Ratio</span>
-          <span className="text-[9px] font-mono font-bold text-info">
+          <span className="text-xs text-text-muted uppercase tracking-wider">B/S Ratio</span>
+          <span className="text-xs font-mono font-bold text-info">
             {record.buyerSellerRatio?.toFixed(2) || 'N/A'}
           </span>
         </div>
@@ -171,11 +171,11 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
           />
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-[8px] text-text-muted">
+          <span className="text-xs text-text-muted">
             B:{record.buyerCount || 0} S:{record.sellerCount || 0}
           </span>
           <span
-            className="text-[8px] font-bold px-1 rounded"
+            className="text-xs font-bold px-1 rounded"
             style={{
               color: (record.liquidityScore || 0) >= 80 ? '#22C55E' : (record.liquidityScore || 0) >= 50 ? '#F59E0B' : '#6B7280',
               background: `${(record.liquidityScore || 0) >= 80 ? '#22C55E' : (record.liquidityScore || 0) >= 50 ? '#F59E0B' : '#6B7280'}15`,
@@ -187,7 +187,7 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
       </div>
 
       {/* Details row: Year, Box/Papers, Seller Rating */}
-      <div className="flex items-center gap-4 flex-wrap text-[10px] text-text-secondary mb-3">
+      <div className="flex items-center gap-4 flex-wrap text-xs text-text-secondary mb-3">
         {record.year && (
           <span className="flex items-center gap-1">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -228,7 +228,7 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
       <div className="mb-2 flex items-center gap-2">
         <ConfidenceTierBadge score={confidencePct} />
         {confidencePct < 95 && (
-          <span className="text-[9px] text-text-muted">
+          <span className="text-xs text-text-muted">
             {confidencePct >= 85 ? '1 gap' : confidencePct >= 70 ? '2 gaps' : `${Math.ceil((100 - confidencePct) / 20)} gaps`}
           </span>
         )}
@@ -240,7 +240,7 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
       {/* Bottom row: DemandBadge left, View link right */}
       <div className="flex items-center justify-between pt-3 mt-auto">
         <DemandBadge forecast={record.demandForecast} />
-        <span className="flex items-center gap-1 text-[10px] text-gold-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+        <span className="flex items-center gap-1 text-xs text-gold-primary font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300">
           View <ArrowRight size={12} />
         </span>
       </div>

@@ -231,15 +231,15 @@ export default function DemandSignals() {
               <div className="grid grid-cols-3 gap-6 text-center">
                 <div>
                   <div className="text-2xl font-bold font-mono text-green-400">{signals.filter(s => s.trend === 'up').length}</div>
-                  <div className="text-[10px] text-gray-500 uppercase">Rising</div>
+                  <div className="text-xs text-gray-500 uppercase">Rising</div>
                 </div>
                 <div>
                   <div className="text-2xl font-bold font-mono text-gray-400">{signals.filter(s => s.trend === 'stable').length}</div>
-                  <div className="text-[10px] text-gray-500 uppercase">Stable</div>
+                  <div className="text-xs text-gray-500 uppercase">Stable</div>
                 </div>
                 <div>
                   <div className="text-2xl font-bold font-mono text-red-400">{signals.filter(s => s.trend === 'down').length}</div>
-                  <div className="text-[10px] text-gray-500 uppercase">Falling</div>
+                  <div className="text-xs text-gray-500 uppercase">Falling</div>
                 </div>
               </div>
             </div>

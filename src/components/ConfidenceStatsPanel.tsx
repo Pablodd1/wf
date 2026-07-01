@@ -53,7 +53,7 @@ export function ConfidenceStatsPanel() {
           Confidence Protocol
         </h3>
         {data.demo && (
-          <span className="text-[9px] text-text-muted bg-bg-elevated px-2 py-0.5 rounded">DEMO DATA</span>
+          <span className="text-xs text-text-muted bg-bg-elevated px-2 py-0.5 rounded">DEMO DATA</span>
         )}
       </div>
 
@@ -63,7 +63,7 @@ export function ConfidenceStatsPanel() {
           const dist = data.distribution[key] || { count: 0, percentage: 0 };
           return (
             <div key={key} className="flex items-center gap-3">
-              <div className="w-28 text-[10px] font-medium text-text-secondary flex-shrink-0">
+              <div className="w-28 text-xs font-medium text-text-secondary flex-shrink-0">
                 {meta.label}
               </div>
               <div className="flex-1 h-6 bg-bg-elevated rounded overflow-hidden relative">
@@ -75,11 +75,11 @@ export function ConfidenceStatsPanel() {
                     opacity: 0.85,
                   }}
                 />
-                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-mono font-bold text-text-primary">
+                <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-text-primary">
                   {dist.percentage}%
                 </span>
               </div>
-              <div className="w-20 text-right text-[9px] text-text-muted font-mono">
+              <div className="w-20 text-right text-xs text-text-muted font-mono">
                 {dist.count.toLocaleString()}
               </div>
             </div>
@@ -90,12 +90,12 @@ export function ConfidenceStatsPanel() {
       {/* Brand-level confidence */}
       {data.brandStats && data.brandStats.length > 0 && (
         <div className="mt-4 pt-4 border-t border-border-default">
-          <h4 className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2">
+          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
             Brand Confidence
           </h4>
           <div className="space-y-1">
             {data.brandStats.slice(0, 6).map((brand) => (
-              <div key={brand.brand} className="flex items-center justify-between text-[10px]">
+              <div key={brand.brand} className="flex items-center justify-between text-xs">
                 <span className="text-text-secondary">{brand.brand}</span>
                 <div className="flex items-center gap-2">
                   <span className="text-text-muted">{brand.count.toLocaleString()} records</span>
@@ -116,7 +116,7 @@ export function ConfidenceStatsPanel() {
 
       {/* Total records */}
       <div className="mt-3 pt-3 border-t border-border-default flex items-center justify-between">
-        <span className="text-[10px] text-text-muted">Total Records</span>
+        <span className="text-xs text-text-muted">Total Records</span>
         <span className="text-sm font-mono font-bold text-gold-primary">
           {data.total.toLocaleString()}
         </span>

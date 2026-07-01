@@ -178,7 +178,7 @@ export default function AnalyticsPage() {
               { label: 'Price Range', value: `${fmtPrice(stats.min_price || 0)} - ${fmtPrice(stats.max_price || 0)}`, color: 'text-amber-400' },
             ].map(card => (
               <div key={card.label} className="bg-gray-900 border border-gray-800 rounded-lg p-4">
-                <div className="text-[10px] text-gray-500 uppercase mb-1">{card.label}</div>
+                <div className="text-xs text-gray-500 uppercase mb-1">{card.label}</div>
                 <div className={`text-lg font-bold font-mono ${card.color}`}>{card.value}</div>
               </div>
             ))}
@@ -284,15 +284,15 @@ export default function AnalyticsPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-gray-950 rounded-lg p-3">
-                    <div className="text-[10px] text-gray-500 uppercase mb-1">Min Price</div>
+                    <div className="text-xs text-gray-500 uppercase mb-1">Min Price</div>
                     <div className="text-xl font-bold font-mono text-white">{fmtPrice(stats.min_price || 0)}</div>
                   </div>
                   <div className="bg-gray-950 rounded-lg p-3">
-                    <div className="text-[10px] text-gray-500 uppercase mb-1">Max Price</div>
+                    <div className="text-xs text-gray-500 uppercase mb-1">Max Price</div>
                     <div className="text-xl font-bold font-mono text-white">{fmtPrice(stats.max_price || 0)}</div>
                   </div>
                 </div>
-                <div className="text-[10px] text-gray-600 flex items-center gap-1">
+                <div className="text-xs text-gray-600 flex items-center gap-1">
                   <RefreshCw size={10} /> Auto-refreshes every 15 min via Cron
                 </div>
               </div>

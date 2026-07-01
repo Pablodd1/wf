@@ -193,7 +193,7 @@ export default function Home() {
         <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 mb-10">
           {Object.entries(FOOTER).map(([title, links]) => (
             <div key={title}>
-              <h4 className="text-[10px] uppercase tracking-[0.15em] text-[#999] font-medium mb-4">
+              <h4 className="text-xs uppercase tracking-[0.15em] text-[#999] font-medium mb-4">
                 {title}
               </h4>
               <ul className="space-y-2.5">
@@ -214,7 +214,7 @@ export default function Home() {
           ))}
         </div>
         <div className="text-center border-t border-[#E0E0E0] pt-5">
-          <p className="text-[10px] text-[#999]">
+          <p className="text-xs text-[#999]">
             &copy; 2026 Watchfacts Inc. All Rights Reserved.
           </p>
         </div>

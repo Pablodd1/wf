@@ -41,7 +41,7 @@ export function WorkflowSidebar({ totalRecords, normalizedCount, residueCount, o
 
   const QuickActions = () => (
     <div className="mt-6 pt-4 border-t border-border-default">
-      <h3 className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-muted mb-2">
+      <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-text-muted mb-2">
         Quick Actions
       </h3>
       <div className="relative">
@@ -59,14 +59,14 @@ export function WorkflowSidebar({ totalRecords, normalizedCount, residueCount, o
               className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-bg-elevated hover:bg-bg-card rounded border border-border-default transition-colors"
               title="Download as CSV"
             >
-              <span className="text-[9px] text-text-muted">CSV</span>
+              <span className="text-xs text-text-muted">CSV</span>
             </button>
             <button
               onClick={onExportReport}
               className="flex-1 flex items-center justify-center gap-1 px-2 py-1.5 bg-bg-elevated hover:bg-bg-card rounded border border-border-default transition-colors"
               title="Styled PDF-ready report"
             >
-              <span className="text-[9px] text-text-muted">Styled</span>
+              <span className="text-xs text-text-muted">Styled</span>
             </button>
           </div>
         )}
@@ -112,7 +112,7 @@ export function WorkflowSidebar({ totalRecords, normalizedCount, residueCount, o
             <Icon size={12} className={colors.text} />
             <span className={`text-[11px] flex-1 ${colors.text}`}>{step.label}</span>
             {step.count !== undefined && step.count > 0 && (
-              <span className={`text-[9px] font-mono px-1 rounded ${step.status === 'active' ? 'bg-warning text-black' : 'bg-bg-elevated'}`}>
+              <span className={`text-xs font-mono px-1 rounded ${step.status === 'active' ? 'bg-warning text-black' : 'bg-bg-elevated'}`}>
                 {step.count}
               </span>
             )}
@@ -127,11 +127,11 @@ export function WorkflowSidebar({ totalRecords, normalizedCount, residueCount, o
       <div className="grid grid-cols-2 gap-2">
         <div className="text-center">
           <div className="text-sm font-bold font-mono text-success">{normalizedCount}</div>
-          <div className="text-[8px] text-text-muted uppercase">Normalized</div>
+          <div className="text-xs text-text-muted uppercase">Normalized</div>
         </div>
         <div className="text-center">
           <div className="text-sm font-bold font-mono text-warning">{residueCount}</div>
-          <div className="text-[8px] text-text-muted uppercase">Residue</div>
+          <div className="text-xs text-text-muted uppercase">Residue</div>
         </div>
       </div>
     </div>
@@ -206,7 +206,7 @@ export function WorkflowSidebar({ totalRecords, normalizedCount, residueCount, o
             className="fixed left-0 top-14 bottom-0 w-[200px] bg-bg-card border-r border-border-default z-30 overflow-y-auto hidden md:block"
           >
             <div className="p-3">
-              <h3 className="text-[10px] font-bold uppercase tracking-[0.1em] text-gold-primary mb-3">
+              <h3 className="text-xs font-bold uppercase tracking-[0.1em] text-gold-primary mb-3">
                 Pipeline Steps
               </h3>
               <PipelineSteps />

@@ -35,7 +35,7 @@ export function AIOpportunities({ records, onSelect }: AIOpportunitiesProps) {
           Dynamic Market Insights
         </h4>
       </div>
-      <p className="text-[10px] text-text-muted mb-3">
+      <p className="text-xs text-text-muted mb-3">
         Real-time insights derived from live streaming data
       </p>
       
@@ -50,7 +50,7 @@ export function AIOpportunities({ records, onSelect }: AIOpportunitiesProps) {
             <AlertTriangle size={16} className="text-warning shrink-0 mt-0.5" />
             <div>
               <h5 className="text-[11px] font-bold text-text-primary">Parser Bottleneck: Rolex Datejust</h5>
-              <p className="text-[10px] text-text-muted mt-1 leading-tight">
+              <p className="text-xs text-text-muted mt-1 leading-tight">
                 Datejust models are consistently scoring ~{stats.datejust_stats.avg_confidence}% confidence. 
                 Currently, {stats.datejust_stats.manual_review_rate} require manual review due to complex dial permutations.
               </p>
@@ -69,7 +69,7 @@ export function AIOpportunities({ records, onSelect }: AIOpportunitiesProps) {
             <Activity size={16} className="text-danger shrink-0 mt-0.5" />
             <div>
               <h5 className="text-[11px] font-bold text-text-primary">Heavy Influx: Richard Mille</h5>
-              <p className="text-[10px] text-text-muted mt-1 leading-tight">
+              <p className="text-xs text-text-muted mt-1 leading-tight">
                 Detected coordinated dumping of RM07-01 and RM30-01 in dealer chats. 
                 This signals aggressive liquidation of hype pieces.
               </p>
@@ -94,7 +94,7 @@ export function AIOpportunities({ records, onSelect }: AIOpportunitiesProps) {
                     <BrandBadge brand={leader.name.split(' ')[0]} />
                     <span className="font-mono text-[11px] text-text-secondary">{leader.reference}</span>
                   </div>
-                  <span className="text-[10px] text-success font-mono">{leader.points} pts</span>
+                  <span className="text-xs text-success font-mono">{leader.points} pts</span>
                 </div>
               ))}
             </div>

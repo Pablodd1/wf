@@ -26,7 +26,7 @@ export function DialColorSwatch({ color, size = 12, showTooltip = true, classNam
         title={showTooltip ? color : undefined}
       />
       {showTooltip && (
-        <span className="text-[10px] text-text-secondary uppercase">{color}</span>
+        <span className="text-xs text-text-secondary uppercase">{color}</span>
       )}
     </span>
   );
