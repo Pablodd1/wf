@@ -142,15 +142,33 @@ async function main() {
       try {
         const parsed = parseFull(record.raw_message);
 
+        // Currency conversion: preserve existing price_usd if parser
+        // extracts a non-USD price (HKD, EUR, etc). Only overwrite
+        // price_usd if parser found a USD price or if DB has no price.
+        let finalPriceUsd = record.price_usd;
+        if (parsed.currency === 'USD' && parsed.price) {
+          finalPriceUsd = parsed.price;
+        } else if (!record.price_usd && parsed.price) {
+          // No existing USD price — use parsed price as-is (may be HKD etc)
+          finalPriceUsd = parsed.price;
+        }
+
+        // Confidence: only update if v3.1 improves it or if no existing confidence.
+        // v2.0 confidence formula is unknown (stored in DB) — don't regress.
+        let finalConfidence = record.confidence || 0;
+        if (parsed.confidence > finalConfidence || !record.confidence) {
+          finalConfidence = parsed.confidence;
+        }
+
         // Build update object
         const update = {
           brand: parsed.brand || record.brand,
           reference: parsed.ref || record.reference,
           dial_color: parsed.dial || record.dial_color,
           condition: parsed.condition || record.condition,
-          price_usd: parsed.price || record.price_usd,
-          confidence: parsed.confidence || 0,
-          verdict: parsed.verdict || record.verdict,
+          price_usd: finalPriceUsd,
+          confidence: finalConfidence,
+          verdict: record.verdict, // Don't change verdict during normalization
           year: parsed.year || record.year,
           parser_version: PARSER_VERSION,
           reprocessed_at: new Date().toISOString(),
