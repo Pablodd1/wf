@@ -118,17 +118,17 @@ export function isValidReference(ref: string): boolean {
   // NOT a year
   if (YEAR_PATTERN.test(t)) return false;
 
-  // NOT zero-padded numbers (0002, 0011, 0585)
-  if (/^0\d+$/.test(t)) return false;
+  // NOT zero-padded numbers or mixed starting with 0 (0002, 0Z522, 0585)
+  if (/^0/.test(t)) return false;
 
-  // NOT currency/price fragments
-  if (/\b(HKD|AED|USD|EUR|GBP|CHF|JPY|CNY|GREY|MSRP|WANT|ONLY|BEST|BOX|PAPERS|FULL|SET|BNIB|B&P)\b/i.test(t)) return false;
+  // NOT currency/price fragments (with or without word boundaries)
+  if (/(HKD|AED|USD|EUR|GBP|CHF|JPY|CNY|GREY|MSRP|WANT|ONLY|BEST|BOX|PAPERS|FULL|SET|BNIB|B&P|REF|AS|OR)/i.test(t)) return false;
 
   // NOT 1-3 digit pure numbers
   if (/^\d{1,3}$/.test(t)) return false;
 
-  // NOT a pure price
-  if (PURE_NUMBER.test(t) && t.length >= 5) return false;
+  // NOT a pure price (8+ digit pure number = likely price, not ref)
+  if (PURE_NUMBER.test(t) && t.length >= 8) return false;
 
   // NOT a price with currency
   if (PRICE_TEXT.test(t)) return false;
