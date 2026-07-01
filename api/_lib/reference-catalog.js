@@ -49,7 +49,7 @@ function normaliseBrand(brand) {
  */
 function normaliseRef(ref) {
   if (!ref) return null;
-  return ref.toUpperCase().replace(/\s+/g, '');
+  return ref.toUpperCase().replace(/[\s\-\/]+/g, '');
 }
 
 /**
