@@ -71,18 +71,39 @@ export default function DataBrowser() {
       const res = await fetch(url, { headers: REQ_HEADERS });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      setRecords(data || []);
+      // Guard: ensure data is an array (Supabase may return an error object,
+      // e.g. on statement timeout) — prevents "X is not iterable" crashes.
+      setRecords(Array.isArray(data) ? data : []);
 
-      // Get total count with filters
-      let countUrl = `${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`;
-      if (query) countUrl += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
-      if (brandFilter !== 'All') countUrl += `&brand=eq.${encodeURIComponent(brandFilter)}`;
-      if (verdictFilter !== 'All') countUrl += `&verdict=eq.${encodeURIComponent(verdictFilter)}`;
-      if (confMin > 0) countUrl += `&confidence=gte.${confMin}`;
+      // Get total count with filters — skip count=exact when no filters are
+      // active (full-table count on 2.39M rows risks a Supabase statement
+      // timeout). Use the fast precomputed stats API for the unfiltered case.
+      const hasFilters = !!query || brandFilter !== 'All' || verdictFilter !== 'All' || confMin > 0;
+      if (!hasFilters) {
+        try {
+          const statsRes = await fetch('/api/confidence-stats');
+          const stats = await statsRes.json();
+          setTotal(stats.total || stats.totalRecords || 0);
+        } catch {
+          // leave total as previous value
+        }
+      } else {
+        let countUrl = `${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`;
+        if (query) countUrl += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
+        if (brandFilter !== 'All') countUrl += `&brand=eq.${encodeURIComponent(brandFilter)}`;
+        if (verdictFilter !== 'All') countUrl += `&verdict=eq.${encodeURIComponent(verdictFilter)}`;
+        if (confMin > 0) countUrl += `&confidence=gte.${confMin}`;
 
-      const countRes = await fetch(countUrl, { method: 'GET', headers: REQ_HEAD });
-      const range = countRes.headers.get('content-range') || '';
-      setTotal(parseInt(range.split('/')[1] || '0'));
+        try {
+          const countRes = await fetch(countUrl, { method: 'GET', headers: REQ_HEAD });
+          if (countRes.ok) {
+            const range = countRes.headers.get('content-range') || '';
+            setTotal(parseInt(range.split('/')[1] || '0'));
+          }
+        } catch {
+          // leave total as previous value — filtered counts are best-effort
+        }
+      }
     } catch (err) {
       console.error('Data browser error:', err);
     }

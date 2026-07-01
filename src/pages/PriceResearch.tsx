@@ -52,13 +52,25 @@ export default function PriceResearch() {
   const [dateRange, setDateRange] = useState('6M');
   const [validationNote, setValidationNote] = useState('');
 
-  // Fetch brands — from server API
+  // Fetch brands — from the precomputed brand index (instant, git-safe,
+  // built by scripts/build-price-index.js). Falls back to a live API call
+  // if the index file isn't deployed yet.
   useEffect(() => {
     const fetchModels = async () => {
       try {
-        const res = await fetch('/api/listings?limit=50000');
-        if (!res.ok) { setValidationNote(`Brand API error: ${res.status}`); return; }
-        const result = await res.json();
+        const res = await fetch('/watchfacts-brand-index.json');
+        if (res.ok) {
+          const brandIndex = await res.json();
+          const brands = Object.keys(brandIndex).sort((a, b) => a.localeCompare(b));
+          if (brands.length > 0) {
+            setModels(brands);
+            setValidationNote(`${brands.length} brands found`);
+            return;
+          }
+        }
+        // Fallback: live API (works but capped, slower)
+        const liveRes = await fetch('/api/listings?limit=5000');
+        const result = await liveRes.json();
         const rows = result.rows || [];
         const brandMap = new Map<string, boolean>();
         for (const row of rows) {
@@ -66,7 +78,7 @@ export default function PriceResearch() {
         }
         const brands = Array.from(brandMap.keys()).sort((a, b) => a.localeCompare(b));
         setModels(brands);
-        setValidationNote(`${brands.length} brands found`);
+        setValidationNote(brands.length > 0 ? `${brands.length} brands found (live fallback)` : 'Brand index still building — check back shortly');
       } catch (err: any) {
         setValidationNote(`Brand error: ${err?.message || 'Failed'}`);
         setModels([]);
@@ -75,21 +87,34 @@ export default function PriceResearch() {
     fetchModels();
   }, []);
 
-  // Fetch references — from server API (avoids anon key + regex issues)
+  // Fetch references — from the precomputed brand index (already grouped
+  // by brand, so this is an instant in-memory lookup, no network call).
   useEffect(() => {
     const fetchRefs = async () => {
       if (!selectedModel) { setReferences([]); return; }
       try {
-        const res = await fetch(
-          `/api/listings?brand=${encodeURIComponent(selectedModel)}&limit=5000`,
-        );
-        if (!res.ok) { setValidationNote(`Ref API error: ${res.status}`); return; }
-        const result = await res.json();
+        const res = await fetch('/watchfacts-brand-index.json');
+        if (res.ok) {
+          const brandIndex = await res.json();
+          const refs: string[] = brandIndex[selectedModel] || [];
+          if (refs.length > 0) {
+            const validRefs = refs.filter((r: string) => {
+              if (/^(19|20)\d{2}$/.test(r)) return false;
+              if (/^\d{5,}$/.test(r)) return false;
+              return r.length >= 4 && r.length <= 25;
+            });
+            setReferences(validRefs);
+            setValidationNote(`${validRefs.length} references found`);
+            return;
+          }
+        }
+        // Fallback: live API
+        const liveRes = await fetch(`/api/listings?brand=${encodeURIComponent(selectedModel)}&limit=5000`);
+        const result = await liveRes.json();
         const rows = result.rows || [];
         const refMap = new Map<string, boolean>();
         for (const row of rows) {
           if (row.reference && !refMap.has(row.reference)) {
-            // Filter years on frontend (fast with small dataset from API)
             if (/^(19|20)\d{2}$/.test(row.reference)) continue;
             if (/^\d{5,}$/.test(row.reference)) continue;
             if (row.reference.length < 4 || row.reference.length > 25) continue;
@@ -98,7 +123,7 @@ export default function PriceResearch() {
         }
         const validRefs = Array.from(refMap.keys()).sort((a, b) => a.localeCompare(b));
         setReferences(validRefs);
-        setValidationNote(`${validRefs.length} references found`);
+        setValidationNote(validRefs.length > 0 ? `${validRefs.length} references found (live fallback)` : 'No references found');
       } catch (err: any) {
         setValidationNote(`Ref error: ${err?.message || 'Failed'}`);
         setReferences([]);
