@@ -16,7 +16,6 @@ export default defineConfig({
       output: {
         manualChunks: {
           'vendor-charts': ['recharts'],
-          'vendor-export': ['xlsx', 'jspdf', 'html2canvas'],
           'vendor-virtuoso': ['react-virtuoso'],
         },
       },
