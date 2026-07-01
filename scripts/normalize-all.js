@@ -4,27 +4,22 @@
  * Batch re-parser for all 2.39M watch_records.
  * Runs locally (not Vercel — 60s timeout would kill it).
  *
- * Strategy:
- *   1. Fetch records in batches of 1000 (by id cursor, not offset)
- *   2. Run parseFull() on raw_message
- *   3. Update brand, reference, dial_color, condition, price_usd,
- *      confidence, verdict, year, parser_version, reprocessed_at
- *   4. Skip records where human_edited = true (user reviewed them)
- *   5. Log progress every batch
+ * FAST STRATEGY (v2):
+ *   1. Fetch records in batches of 1000 (cursor pagination)
+ *   2. Parse each raw_message with v3.1
+ *   3. Build update objects in memory
+ *   4. Write ALL updates in a single batch via upsert (onConflict: id)
+ *   5. Skip human_edited records
  *
  * Usage:
- *   node scripts/normalize-all.js              # Full re-parse (all records)
- *   node scripts/normalize-all.js --inspect    # Parse only, no DB writes (dry run)
- *   node scripts/normalize-all.js --reviewed   # Only re-parse human_edited records
- *   node scripts/normalize-all.js --limit 100  # Process only 100 batches
- *
- * Requirements:
- *   - SUPABASE_SERVICE_ROLE_KEY in env or .env.local
- *   - parser.js at api/_lib/parser.js
+ *   node scripts/normalize-all.js              # Full re-parse
+ *   node scripts/normalize-all.js --inspect    # Dry run (no DB writes)
+ *   node scripts/normalize-all.js --reviewed   # Only human_edited records
+ *   node scripts/normalize-all.js --limit 100  # Test 100 batches
  */
 
 const { createClient } = require('@supabase/supabase-js');
-const { parseFull, confidenceTier } = require('../api/_lib/parser');
+const { parseFull } = require('../api/_lib/parser');
 
 // ─── Config ─────────────────────────────────────────────────────────
 const SUPABASE_URL = process.env.SUPABASE_URL || 'https://bptrvfncppbjnchsaxtb.supabase.co';
@@ -55,7 +50,6 @@ const stats = {
   skippedNoRaw: 0,
   updated: 0,
   errors: 0,
-  verdictChanges: { APPROVED: 0, REVIEW: 0, HUMAN: 0, RECYCLE: 0 },
   brandFixes: 0,
   refFixes: 0,
   priceFixes: 0,
@@ -67,7 +61,7 @@ const stats = {
 // ─── Main ───────────────────────────────────────────────────────────
 async function main() {
   console.log('═══════════════════════════════════════════════════════════════');
-  console.log('  WatchFacts Normalization — Parser v3.1');
+  console.log('  WatchFacts Normalization — Parser v3.1 (Fast Batch Mode)');
   console.log('═══════════════════════════════════════════════════════════════');
   console.log(`  Mode: ${INSPECT ? 'INSPECT (dry run)' : 'LIVE (DB writes)'}`);
   console.log(`  Filter: ${REVIEWED_ONLY ? 'human_edited only' : 'all records'}`);
@@ -75,32 +69,19 @@ async function main() {
   console.log(`  Max batches: ${MAX_BATCHES === Infinity ? 'unlimited' : MAX_BATCHES}`);
   console.log('');
 
-  // Get total count
-  const { data: countData } = await supabase
-    .from('watch_records')
-    .select('id')
-    .limit(1);
-  console.log(`  Connected to Supabase. Sample record: ${countData?.[0]?.id || 'none'}`);
-  console.log('');
-
   let lastId = null;
   let batchNum = 0;
 
   while (batchNum < MAX_BATCHES) {
-    // ─── Fetch batch by cursor (id > lastId) ───
+    // ─── Fetch batch ───
     let query = supabase
       .from('watch_records')
       .select('id, raw_message, brand, reference, dial_color, condition, price_usd, confidence, verdict, year, parser_version, human_edited')
       .order('id', { ascending: true })
       .limit(BATCH_SIZE);
 
-    if (lastId) {
-      query = query.gt('id', lastId);
-    }
-
-    if (REVIEWED_ONLY) {
-      query = query.eq('human_edited', true);
-    }
+    if (lastId) query = query.gt('id', lastId);
+    if (REVIEWED_ONLY) query = query.eq('human_edited', true);
 
     const { data: batch, error } = await query;
 
@@ -118,77 +99,63 @@ async function main() {
     lastId = batch[batch.length - 1].id;
     batchNum++;
 
-    // ─── Process each record ───
+    // ─── Parse all records in batch ───
     const updates = [];
 
     for (const record of batch) {
       stats.total++;
 
-      // Skip human-edited records (user already reviewed them)
       if (record.human_edited && !REVIEWED_ONLY) {
         stats.skipped++;
         stats.skippedHumanEdited++;
         continue;
       }
 
-      // Skip records without raw_message
       if (!record.raw_message) {
         stats.skipped++;
         stats.skippedNoRaw++;
         continue;
       }
 
-      // Parse with v3.1
       try {
         const parsed = parseFull(record.raw_message);
 
-        // Currency conversion: preserve existing price_usd if parser
-        // extracts a non-USD price (HKD, EUR, etc). Only overwrite
-        // price_usd if parser found a USD price or if DB has no price.
+        // Preserve price_usd for non-USD currencies
         let finalPriceUsd = record.price_usd;
         if (parsed.currency === 'USD' && parsed.price) {
           finalPriceUsd = parsed.price;
         } else if (!record.price_usd && parsed.price) {
-          // No existing USD price — use parsed price as-is (may be HKD etc)
           finalPriceUsd = parsed.price;
         }
 
-        // Confidence: only update if v3.1 improves it or if no existing confidence.
-        // v2.0 confidence formula is unknown (stored in DB) — don't regress.
+        // Preserve confidence (don't regress)
         let finalConfidence = record.confidence || 0;
         if (parsed.confidence > finalConfidence || !record.confidence) {
           finalConfidence = parsed.confidence;
         }
 
-        // Build update object
         const update = {
+          id: record.id,
           brand: parsed.brand || record.brand,
           reference: parsed.ref || record.reference,
           dial_color: parsed.dial || record.dial_color,
           condition: parsed.condition || record.condition,
           price_usd: finalPriceUsd,
           confidence: finalConfidence,
-          verdict: record.verdict, // Don't change verdict during normalization
+          verdict: record.verdict,
           year: parsed.year || record.year,
           parser_version: PARSER_VERSION,
           reprocessed_at: new Date().toISOString(),
         };
 
-        // Track changes
         if (update.brand !== record.brand) stats.brandFixes++;
         if (update.reference !== record.reference) stats.refFixes++;
         if (update.price_usd !== record.price_usd) stats.priceFixes++;
         if (update.confidence > (record.confidence || 0)) stats.confidenceImproved++;
         if (update.confidence < (record.confidence || 0)) stats.confidenceWorsened++;
-        if (update.verdict !== record.verdict) {
-          stats.verdictChanges[update.verdict] = (stats.verdictChanges[update.verdict] || 0) + 1;
-        }
 
         stats.processed++;
-
-        if (!INSPECT) {
-          updates.push({ id: record.id, ...update });
-        }
+        updates.push(update);
       } catch (parseErr) {
         stats.errors++;
         if (stats.errors <= 5) {
@@ -197,27 +164,21 @@ async function main() {
       }
     }
 
-    // ─── Batch DB update (individual updates — Supabase doesn't support bulk-different-updates) ───
+    // ─── Bulk upsert (FAST: single HTTP call per batch) ───
     if (!INSPECT && updates.length > 0) {
-      for (const u of updates) {
-        const { id, ...updateData } = u;
-        const { error: updateErr } = await supabase
-          .from('watch_records')
-          .update(updateData)
-          .eq('id', id);
+      const { error: upsertErr } = await supabase
+        .from('watch_records')
+        .upsert(updates, { onConflict: 'id', ignoreDuplicates: false });
 
-        if (updateErr) {
-          stats.errors++;
-          if (stats.errors <= 10) {
-            console.error(`  Update error on ${id}: ${updateErr.message}`);
-          }
-        } else {
-          stats.updated++;
-        }
+      if (upsertErr) {
+        console.error(`  Batch ${batchNum}: UPSERT ERROR: ${upsertErr.message}`);
+        stats.errors++;
+      } else {
+        stats.updated += updates.length;
       }
     }
 
-    // ─── Progress log ───
+    // ─── Progress ───
     const elapsed = ((Date.now() - stats.startTime) / 1000).toFixed(1);
     const rate = (stats.total / elapsed).toFixed(0);
     const eta = ((2392784 - stats.total) / rate).toFixed(0);
@@ -229,7 +190,6 @@ async function main() {
       `Errors: ${stats.errors}`
     );
 
-    // Flush progress to a file for monitoring
     if (batchNum % 10 === 0) {
       const fs = require('fs');
       fs.writeFileSync('/tmp/normalize-progress.json', JSON.stringify({
@@ -265,16 +225,10 @@ async function main() {
   console.log(`    Improved:            ${stats.confidenceImproved.toLocaleString()}`);
   console.log(`    Worsened:            ${stats.confidenceWorsened.toLocaleString()}`);
   console.log('');
-  console.log('  Verdict Changes:');
-  for (const [v, c] of Object.entries(stats.verdictChanges)) {
-    if (c > 0) console.log(`    → ${v}: ${c.toLocaleString()}`);
-  }
-  console.log('');
   console.log(`  Time: ${totalElapsed}s`);
   console.log(`  Rate: ${(stats.total / totalElapsed).toFixed(0)} records/sec`);
   console.log('');
 
-  // Write final report
   const fs = require('fs');
   fs.writeFileSync('/tmp/normalize-final-report.json', JSON.stringify(stats, null, 2));
   console.log('  Report saved: /tmp/normalize-final-report.json');
