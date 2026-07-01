@@ -54,11 +54,21 @@ module.exports = withRateLimit('/api/green-api-webhook', async function handler(
       // Step 2: Catalog lookup (LOCAL JSON — 6958 entries, instant)
       const catalogEntry = matchParsedListing(parsed);
 
+      // Dense multi-listing detection: if parsed from a space-separated dump, recycle
+      const rawLen = rawMessage.length;
+      const dollarCount = (rawMessage.match(/\$/g) || []).length;
+      const refCount = (rawMessage.match(/\b\d{5,6}[A-Za-z]{0,6}\b/g) || []).length;
+      const isDenseDump = dollarCount >= 3 && refCount >= 4 && rawLen > 200;
+
       // Step 3: Confidence scoring with catalog
       let confidence = parsed.confidence || 50;
       let verdict = 'REVIEW';
 
-      if (catalogEntry) {
+      if (isDenseDump) {
+        // Dense multi-listing dumps go straight to recycle
+        confidence = 10;
+        verdict = 'RECYCLE';
+      } else if (catalogEntry) {
         // Catalog match → 100% confidence → auto-approve
         confidence = 100;
         verdict = 'APPROVED';
@@ -88,7 +98,7 @@ module.exports = withRateLimit('/api/green-api-webhook', async function handler(
         verdict,
         source: 'whatsapp',
         raw_message: rawMessage,
-        flags: catalogEntry ? [] : ['NO_CATALOG_MATCH'],
+        flags: isDenseDump ? ['DENSE_MULTI_LISTING'] : (catalogEntry ? [] : ['NO_CATALOG_MATCH']),
         reprocessed_at: null,
         created_at: new Date(timestamp).toISOString(),
         processed_at: new Date().toISOString(),

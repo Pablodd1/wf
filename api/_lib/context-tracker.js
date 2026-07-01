@@ -417,39 +417,96 @@ class ContextTracker {
 function segmentMessage(rawMessage) {
   if (!rawMessage || typeof rawMessage !== 'string') return [];
 
-  // Normalize line endings
   const text = rawMessage.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-  // Expanded emoji ranges (includes U+2B00-U+2BFF for ⭐ etc)
-  const EMOJI = '[\\u{1F1E6}-\\u{1F1FF}\\u{1F300}-\\u{1F9FF}\\u{2600}-\\u{26FF}\\u{2700}-\\u{27BF}\\u{2B00}-\\u{2BFF}]';
+  // Step 0: Split dense multi-listing lines BEFORE the rest
+  // Pattern: $price N-code -> boundary between listings
+  // Example: "279175 G purple$258000N4 278383g silver jub$181000N11"
+  // Should become: ["279175 G purple$258000", "278383g silver jub$181000"]
+  const rawLines = text.split(/\n/);
+  const expandedLines = [];
+  
+  for (const line of rawLines) {
+    const trimmed = line.trim();
+    if (!trimmed) { expandedLines.push(''); continue; }
 
-  // Step 1: Split on double newlines (paragraph breaks)
-  let segments = text.split(/\n\s*\n+/);
+    const dollarCount = (trimmed.match(/\$/g) || []).length;
+    const ncodeCount = (trimmed.match(/\bN\d{1,2}\b/gi) || []).length;
+
+    if (dollarCount >= 2 && ncodeCount >= 2) {
+      // Dense multi-listing: split on ref boundaries after $price N-code
+      const segments = [];
+      let current = '';
+      const parts = trimmed.split(/\s+/);
+      let refStarted = false;
+
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        const prevPart = parts[i - 1] || '';
+        const nextPart = parts[i + 1] || '';
+
+        const looksLikeRef = /^\d{5,6}[A-Za-z]{0,6}$/.test(part) &&
+                            !/^(19|20)\d{2}$/.test(part) &&
+                            part.length >= 5;
+
+        const prevIsPriceOrCode = /^\$[\d,\.]+[KkMm]?$/.test(prevPart) ||
+                                 /^N\d{1,2}$/i.test(prevPart) ||
+                                 /^\$[\d,\.]+[KkMm]?$/.test(prevPart.replace('$','$'));
+
+        // Check if previous or 2-back was an N-code (N4, N8, N11)
+        const twoBack = parts[i - 2] || '';
+        const nearPriceNCode = /^\$[\d,\.]+[KkMm]?$/.test(prevPart) ||
+                               /^N\d{1,2}$/i.test(prevPart) ||
+                               (/^N\d{1,2}$/i.test(twoBack) && /^\$[\d,\.]+[KkMm]?$/.test(prevPart));
+
+        if (looksLikeRef && refStarted && nearPriceNCode) {
+          if (current.trim()) segments.push(current.trim());
+          current = part;
+          refStarted = true;
+        } else if (looksLikeRef && !refStarted) {
+          current = part;
+          refStarted = true;
+        } else {
+          if (current) current += ' ' + part;
+          else current = part;
+        }
+      }
+      if (current.trim()) segments.push(current.trim());
+
+      if (segments.length >= 2) {
+        // Push each segment as a separate line for the double-newline split
+        expandedLines.push(...segments.map(s => s + '\n'));
+        continue;
+      }
+    }
+    expandedLines.push(trimmed);
+  }
+
+  const rejoined = expandedLines.join('\n');
+
+  // Step 1: Split on double newlines
+  let segments = rejoined.split(/\n\s*\n+/);
 
   // Step 2: Within each segment, split on brand-only header lines
-  // These are short lines that are ONLY a brand indicator: "pp", "ap", "🇭🇰 rolex"
-  const BRAND_ONLY = /^(🍉|🫒|🏆|⭐|🌟|💎|🇭🇰|pp|ap|vc|rm)\s*(rolex|patek|audemars|richard|vacheron|omega|hublot|cartier)?\s*$/i;
-  
+  const BRAND_ONLY = /^(pp|ap|vc|rm)\s*$/i;
+
   const result = [];
   for (const seg of segments) {
     const trimmed = seg.trim();
     if (!trimmed) continue;
 
-    // Split this segment on brand-only header lines
     const lines = trimmed.split(/\n/);
     let currentBlock = [];
-    
-    for (const line of lines) {
-      if (BRAND_ONLY.test(line.trim())) {
-        // Flush current block
+
+    for (const ll of lines) {
+      if (BRAND_ONLY.test(ll.trim())) {
         if (currentBlock.length > 0) {
           result.push(currentBlock.join('\n').trim());
           currentBlock = [];
         }
-        // The brand header becomes its own segment
-        result.push(line.trim());
+        result.push(ll.trim());
       } else {
-        currentBlock.push(line);
+        currentBlock.push(ll);
       }
     }
     if (currentBlock.length > 0) {
@@ -457,27 +514,8 @@ function segmentMessage(rawMessage) {
     }
   }
 
-  return result;
+  return result.filter(s => s.length > 0);
 }
-
-// ═══════════════════════════════════════════════════════════════
-// CONTEXT-AWARE FULL PARSE
-// ═════════════════════════====================================================
-
-/**
- * Parse a message WITH context tracking.
- * This is the v4.0 enhancement to parser.js's parseFull().
- *
- * Instead of parsing each line independently, this:
- *   1. Segments the message into individual listing lines
- *   2. Creates a ContextTracker
- *   3. Processes each line through the tracker
- *   4. Parses each line with its inherited context
- *
- * @param {string} rawMessage - Full WhatsApp message
- * @param {function} parseFn - The existing parseFull function from parser.js
- * @returns {object[]} Array of parsed listings with context metadata
- */
 function parseMessageWithContext(rawMessage, parseFn) {
   if (!rawMessage) return [];
 

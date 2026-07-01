@@ -130,7 +130,7 @@ export default function AdminReportsPage() {
       ]);
       setStats(s[0] || null);
       setBrandDist((b || []).filter((x: any) => x.count > 0));
-      setVerdictDist(v || []);
+      setVerdictDist((v || []).filter((x: any) => x.count > 0));
       setCondDist((c || []).filter((x: any) => x.count > 0));
       setDialDist((d || []).filter((x: any) => x.count > 0));
       setTopRefs((r || []).filter((x: any) => x.count > 0));
@@ -602,7 +602,7 @@ export default function AdminReportsPage() {
                             innerRadius={60}
                             outerRadius={100}
                             paddingAngle={4}
-                            label={({ verdict, count }: any) => `${VERDICT_LABELS[verdict] || verdict}: ${fmtPct(count, totalRecords)}`}
+                            label={({ verdict, count }: any) => verdict ? `${VERDICT_LABELS[verdict] || verdict}: ${fmtPct(count || 0, totalRecords)}` : ''}
                           >
                             {verdictDist.map((v, i) => (
                               <Cell key={i} fill={VERDICT_COLORS[v.verdict] || CHART_COLORS[i % CHART_COLORS.length]} />
@@ -611,6 +611,11 @@ export default function AdminReportsPage() {
                           <Legend
                             wrapperStyle={{ color: '#9CA3AF', fontSize: '12px' }}
                             formatter={(value: string) => VERDICT_LABELS[value] || value}
+                            payload={verdictDist.map(v => ({
+                              value: v.verdict,
+                              type: 'rect' as const,
+                              color: VERDICT_COLORS[v.verdict] || '#6B7280',
+                            }))}
                           />
                           <Tooltip
                             contentStyle={tooltipStyle}
@@ -957,7 +962,7 @@ export default function AdminReportsPage() {
                               cx="50%"
                               cy="50%"
                               outerRadius={85}
-                              label={({ dial_color, count }: any) => `${dial_color}: ${fmtNumber(count || 0)}`}
+                              label={({ dial_color, count }: any) => dial_color ? `${dial_color}: ${fmtNumber(count || 0)}` : ''}
                             >
                               {dialDist.slice(0, 10).map((_, i) => (
                                 <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
