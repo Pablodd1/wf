@@ -11,6 +11,7 @@ import {
   Download, XCircle, BarChart3, Layers, Eye, Cpu, Server,
   MessageSquare, Hash,
 } from 'lucide-react';
+import { ConfidenceStatsPanel } from '@/components/ConfidenceStatsPanel';
 
 const SUPABASE_URL = 'https://bptrvfncppbjnchsaxtb.supabase.co';
 const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJwdHJ2Zm5jcHBiam5jaHNheHRiIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc4MTU2MjYzMSwiZXhwIjoyMDk3MTM4NjMxfQ.x1KpnBCtgcn02hiBJfuNkm3FYq6elHv3Gnys62nu8SU';
@@ -336,6 +337,20 @@ export default function AdminPage() {
                   <div className="text-2xl font-bold font-mono text-blue-400 price-mono">{stats.human.toLocaleString()}</div>
                 </motion.div>
               </div>
+            </motion.div>
+
+            {/* Confidence Protocol Distribution */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.22, duration: 0.4 }}
+              whileHover={{ borderColor: 'rgba(212, 175, 55, 0.2)' }}
+              className="bg-gray-900 border border-gray-800 rounded-lg p-4 hover:shadow-lg hover:shadow-black/20 transition-all duration-300"
+            >
+              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4 flex items-center gap-2">
+                <Shield size={14} /> Confidence Protocol
+              </h3>
+              <ConfidenceStatsPanel />
             </motion.div>
 
             {/* Quick Stats Summary */}

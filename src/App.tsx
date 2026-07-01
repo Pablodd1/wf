@@ -1,5 +1,17 @@
 /**
- * WatchFacts — Application Router
+ * WatchFacts — Application Router (Consolidated)
+ *
+ * Admin routes reduced from 15 overlapping tabs to 7 focused sections:
+ *   /admin              — Dashboard (health, stats, confidence protocol)
+ *   /admin/reports      — Unified Reports (ALL listings, colored verdicts, dedup, bulk actions)
+ *   /admin/search       — Search
+ *   /admin/analytics    — Analytics
+ *   /admin/health       — System Health
+ *   /admin/import       — Bulk Import
+ *   /admin/settings     — Settings
+ *
+ * Old routes (data, review, export, quality, verification, clean, reprocess, demo, demand)
+ * redirect to /admin/reports — they are superseded by UnifiedReports.
  */
 
 import { Routes, Route, Navigate } from 'react-router-dom';
@@ -27,42 +39,36 @@ import { Layout } from '@/components/Layout';
 import AdminPage from '@/pages/AdminPage';
 import SearchPage from '@/pages/SearchPage';
 import AnalyticsPage from '@/pages/AnalyticsPage';
-import ReviewPage from '@/pages/ReviewPage';
-import CleanPage from '@/pages/CleanPage';
-import DemandSignals from '@/pages/DemandSignals';
-import DemoPage from '@/pages/DemoPage';
 import HealthPage from '@/pages/HealthPage';
-import DataBrowser from '@/pages/DataBrowser';
-import AdminReportsPage from '@/pages/AdminReportsPage';
-import ReferenceCheck from '@/pages/ReferenceCheck';
-import ExportPage from '@/pages/ExportPage';
-import QualityPage from '@/pages/QualityPage';
-import VerificationPage from '@/pages/VerificationPage';
 import SettingsPage from '@/pages/SettingsPage';
 import BulkImportPage from '@/pages/BulkImportPage';
 import BlogPage from '@/pages/BlogPage';
-import ReprocessPage from '@/pages/ReprocessPage';
+import ReferenceCheck from '@/pages/ReferenceCheck';
+import UnifiedReports from '@/pages/UnifiedReports';
 
 function AdminRoutes() {
   return (
     <Layout>
       <Routes>
         <Route path="/" element={<AdminPage />} />
+        <Route path="/reports" element={<UnifiedReports />} />
         <Route path="/search" element={<SearchPage />} />
-        <Route path="/data" element={<DataBrowser />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/review" element={<ReviewPage />} />
-        <Route path="/reports" element={<AdminReportsPage />} />
         <Route path="/health" element={<HealthPage />} />
-        <Route path="/export" element={<ExportPage />} />
-        <Route path="/quality" element={<QualityPage />} />
-        <Route path="/verification" element={<VerificationPage />} />
-        <Route path="/clean" element={<CleanPage />} />
         <Route path="/import" element={<BulkImportPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/demand" element={<DemandSignals />} />
-        <Route path="/demo" element={<DemoPage />} />
-        <Route path="/reprocess" element={<ReprocessPage />} />
+
+        {/* Legacy redirects — old tabs now point to UnifiedReports */}
+        <Route path="/data" element={<Navigate to="/admin/reports" replace />} />
+        <Route path="/review" element={<Navigate to="/admin/reports" replace />} />
+        <Route path="/export" element={<Navigate to="/admin/reports" replace />} />
+        <Route path="/quality" element={<Navigate to="/admin/reports" replace />} />
+        <Route path="/verification" element={<Navigate to="/admin/reports" replace />} />
+        <Route path="/clean" element={<Navigate to="/admin/reports" replace />} />
+        <Route path="/reprocess" element={<Navigate to="/admin" replace />} />
+        <Route path="/demand" element={<Navigate to="/admin/analytics" replace />} />
+        <Route path="/demo" element={<Navigate to="/admin" replace />} />
+
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
       <Footer />
@@ -105,10 +111,10 @@ export default function App() {
         {/* Admin — protected */}
         <Route path="/admin/*" element={<ProtectedRoute><AdminRoutes /></ProtectedRoute>} />
 
-        {/* Redirects */}
+        {/* Legacy redirects */}
         <Route path="/search" element={<Navigate to="/admin/search" replace />} />
-        <Route path="/data" element={<Navigate to="/admin/data" replace />} />
-        <Route path="/review" element={<Navigate to="/admin/review" replace />} />
+        <Route path="/data" element={<Navigate to="/admin/reports" replace />} />
+        <Route path="/review" element={<Navigate to="/admin/reports" replace />} />
         <Route path="/analytics" element={<Navigate to="/admin/analytics" replace />} />
         <Route path="/health" element={<Navigate to="/admin/health" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />

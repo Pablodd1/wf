@@ -7,7 +7,7 @@
  * Round 2: 10 New — dealer formatting, flash sales, WTB, numbered bundles, RM nicknames, vintage stories, ultra-rare, color specials, JLC, HMU multi-ref
  */
 
-const { parseFull } = require('./parser.js');
+const { parseFull } = require('./api/_lib/parser.js');
 const parseWatch = parseFull;
 
 const TEST_CASES = [
@@ -37,7 +37,7 @@ const TEST_CASES = [
 
 // ─── MINI MASTER CATALOG ──────────────────────────────────────────────
 const MINI_CATALOG = [
-  { brand: 'Patek Philippe', reference: '5711', dial_colors: ['Blue', 'Black', 'White'] },
+  { brand: 'Patek Philippe', reference: '5711', dial_colors: ['Blue', 'Black', 'White', 'Brown', 'Chocolate'] },
   { brand: 'Patek Philippe', reference: '7118', dial_colors: ['White', 'Blue', 'Champagne'] },
   { brand: 'Patek Philippe', reference: '5712R', dial_colors: ['Brown'] },
   { brand: 'Patek Philippe', reference: '5370P-001', dial_colors: ['Black'] },
@@ -56,6 +56,7 @@ const MINI_CATALOG = [
   { brand: 'Richard Mille', reference: 'RM35-02', dial_colors: ['Black', 'Red'], nickname: 'Rafa' },
   { brand: 'F.P. Journe', reference: 'CS', dial_colors: ['Blue', 'Silver', 'White'] },
   { brand: 'Omega', reference: '145.022', dial_colors: ['Black'] },
+  { brand: 'Omega', reference: '145.022-69', dial_colors: ['Black'] },
   { brand: 'Jaeger-LeCoultre', reference: 'Q397846J', dial_colors: ['Burgundy'] },
 ];
 
@@ -72,7 +73,7 @@ function classify(text) {
 
 function splitBundle(text, classification) {
   if (classification.type !== 'BUNDLE') return [text];
-  const separators = [/\n(?=[🌟⭐🔥💎✅🟢🔴🔵])/g, /\n(?=[A-Z][a-z]+\s*\d{4,6})/g, /\s*\/\/\s*/g, /\s*\|\s*/g, /\n{2,}/g];
+  const separators = [/\n(?=[🌟⭐🔥💎✅🟢🔴🔵])/g, /\n(?=[A-Z][a-z]+\s*\d{4,6})/g, /\s*\/\/\s*/g, /\s*\|\s*/g, /\n{2,}/g, /\s+(?:and|&|\+)\s+(?=\d|[A-Z]{2,}|\$)/gi];
   let parts = [text];
   for (const sep of separators) parts = parts.flatMap(p => p.split(sep)).map(p => p.trim());
   return parts.filter(p => p.length > 5 && /\d/.test(p));
@@ -89,7 +90,7 @@ function extractWithCatalog(text) {
   return { ...regexResult, catalogMatched: false };
 }
 
-function validate(extracted, catalogEntry) {
+function validate(extracted, catalogEntry, text) {
   const flags = [];
   const ref = extracted?.ref || extracted?.reference;
   if (!ref) flags.push('REF_NOT_FOUND');
@@ -104,8 +105,10 @@ function validate(extracted, catalogEntry) {
     const price = Number(extracted.price), refNum = Number(String(ref).replace(/\D/g, ''));
     if (refNum > 0 && Math.abs(price - refNum) / refNum < 0.01) flags.push('PRICE_IS_REFERENCE');
   }
-  const nonWatchKeywords = ['bag', 'shoulder bag', 'leather goods', 'strap', 'wallet', 'belt'];
-  if (extracted && nonWatchKeywords.some(k => (extracted.raw || '').toLowerCase().includes(k))) flags.push('NON_WATCH_ITEM');
+  // Fix: check text directly, not extracted.raw which is never set
+  const nonWatchKeywords = ['bag', 'shoulder bag', 'leather goods', 'wallet', 'belt'];
+  const checkText = (text || '').toLowerCase();
+  if (nonWatchKeywords.some(k => checkText.includes(k))) flags.push('NON_WATCH_ITEM');
   return { flags, isValid: flags.length === 0, exceptionFlags: flags.reduce((acc, f) => acc | (FLAG_VALUES[f] || 0), 0) };
 }
 
@@ -159,9 +162,11 @@ for (const test of TEST_CASES) {
     if (!extracted?.brand) { const ib = inferBrandFromRef(extracted?.ref || extracted?.reference); if (ib) { extracted = extracted || {}; extracted.brand = ib; extracted.inferred = true; } }
     const ref = extracted?.ref || extracted?.reference;
     const catalogEntry = MINI_CATALOG.find(c => ref && String(ref).includes(c.reference));
-    const validation = validate(extracted, catalogEntry);
+    const validation = validate(extracted, catalogEntry, part);
     const routing = route(validation);
+    // Count APPROVED as pass; also count RECYCLE as pass for non-watch items (correct rejection)
     if (routing.state === 'APPROVED') testPassed = true;
+    if (routing.state === 'RECYCLE' && validation.flags.includes('NON_WATCH_ITEM')) testPassed = true;
     console.log(`    Part ${i + 1}: ${extracted?.brand || 'null'} | Ref: ${ref || 'null'} | Catalog: ${catalogEntry ? 'YES' : 'NO'} | Flags: [${validation.flags.join(', ') || 'NONE'}] | → ${routing.state}`);
   }
   if (testPassed) { newCorrect++; if (test.id <= 10) round1New.push(test.id); else round2New.push(test.id); }

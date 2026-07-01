@@ -2,35 +2,26 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, BarChart3, ClipboardCheck,
-  Sparkles, Zap, Shield,
-  Activity, FileSpreadsheet, Database,
-  Download, ShieldCheck, Target,
-  Settings, Upload, BookOpen,
+  Search, BarChart3,
+  Zap, Shield,
+  Activity, FileSpreadsheet,
+  Settings, Upload,
   Menu, X, ChevronRight,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
-  { label: 'Search', path: '/search', icon: Search },
-  { label: 'Data', path: '/data', icon: Database },
-  { label: 'Demo', path: '/demo', icon: Zap },
-  { label: 'Review', path: '/review', icon: ClipboardCheck },
-  { label: 'Analytics', path: '/analytics', icon: BarChart3 },
-  { label: 'Reports', path: '/reports', icon: FileSpreadsheet },
-  { label: 'Health', path: '/health', icon: Activity },
-  { label: 'Export', path: '/export', icon: Download },
-  { label: 'Quality', path: '/quality', icon: ShieldCheck },
-  { label: 'Verify', path: '/verification', icon: Target },
-  { label: 'Admin', path: '/admin', icon: Shield },
-  { label: 'Clean', path: '/clean', icon: Sparkles },
-  { label: 'Import', path: '/import', icon: Upload },
-  { label: 'Blog', path: '/blog', icon: BookOpen },
-  { label: 'Settings', path: '/settings', icon: Settings },
+  { label: 'Dashboard', path: '/admin', icon: Shield },
+  { label: 'Reports', path: '/admin/reports', icon: FileSpreadsheet },
+  { label: 'Search', path: '/admin/search', icon: Search },
+  { label: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
+  { label: 'Health', path: '/admin/health', icon: Activity },
+  { label: 'Import', path: '/admin/import', icon: Upload },
+  { label: 'Settings', path: '/admin/settings', icon: Settings },
 ] as const;
 
 const BOTTOM_BAR_ITEMS = [
-  { label: 'Search', path: '/search', icon: Search },
-  { label: 'Review', path: '/review', icon: ClipboardCheck },
+  { label: 'Reports', path: '/admin/reports', icon: FileSpreadsheet },
+  { label: 'Search', path: '/admin/search', icon: Search },
   { label: 'Trading', path: '/trading', icon: Zap },
   { label: 'Admin', path: '/admin', icon: Shield },
 ] as const;

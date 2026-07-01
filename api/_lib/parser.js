@@ -53,30 +53,30 @@ const RATES = {
 
 /** Brands we know how to detect, with aliases and extraction rules. */
 const BRAND_MAP = [
-  { names: ['patek philippe', 'patek', 'pp'],        canon: 'Patek Philippe' },
-  { names: ['rolex'],                                  canon: 'Rolex' },
-  { names: ['audemars piguet', 'audemars', 'ap'],      canon: 'Audemars Piguet' },
-  { names: ['richard mille', 'rm', 'richardmille'],    canon: 'Richard Mille' },
-  { names: ['vacheron constantin', 'vacheron', 'vc'],  canon: 'Vacheron Constantin' },
-  { names: ['breitling'],                              canon: 'Breitling' },
-  { names: ['a. lange & sohne', 'a.lange', 'lange', 'alange'], canon: 'A. Lange & Sohne' },
+  { names: ['patek philippe', 'patek', 'pp', '百达翡丽', '百達翡麗'], canon: 'Patek Philippe' },
+  { names: ['rolex', '劳力士', '勞力士'],                  canon: 'Rolex' },
+  { names: ['audemars piguet', 'audemars', 'ap', '爱彼', '愛彼'], canon: 'Audemars Piguet' },
+  { names: ['richard mille', 'rm', 'richardmille', '理查德米勒', '理查德米爾'], canon: 'Richard Mille' },
+  { names: ['vacheron constantin', 'vacheron', 'vc', '江诗丹顿', '江詩丹頓'], canon: 'Vacheron Constantin' },
+  { names: ['breitling', '百年灵', '百年靈'],              canon: 'Breitling' },
+  { names: ['a. lange & sohne', 'a.lange', 'lange', 'alange', '朗格'], canon: 'A. Lange & Sohne' },
   { names: ['mb&f', 'mbf', 'max busser'],              canon: 'MB&F' },
-  { names: ['omega'],                                  canon: 'Omega' },
-  { names: ['cartier'],                                canon: 'Cartier' },
-  { names: ['iwc'],                                    canon: 'IWC' },
-  { names: ['jaeger-lecoultre', 'jaeger', 'jlc', 'jl'], canon: 'Jaeger-LeCoultre' },
-  { names: ['hublot'],                                 canon: 'Hublot' },
-  { names: ['tag heuer', 'tagheuer'],                  canon: 'TAG Heuer' },
-  { names: ['zenith'],                                 canon: 'Zenith' },
-  { names: ['blancpain'],                              canon: 'Blancpain' },
-  { names: ['breguet'],                                canon: 'Breguet' },
-  { names: ['tudor'],                                  canon: 'Tudor' },
-  { names: ['grand seiko', 'grandseiko', 'gs'],        canon: 'Grand Seiko' },
-  { names: ['seiko'],                                  canon: 'Seiko' },
-  { names: ['panerai'],                                canon: 'Panerai' },
-  { names: ['ulysse nardin', 'ulysse'],                canon: 'Ulysse Nardin' },
-  { names: ['girard-perregaux', 'girard perregaux'],   canon: 'Girard-Perregaux' },
-  { names: ['fp journe', 'f.p.journe', 'journe'],      canon: 'F.P. Journe' },
+  { names: ['omega', '欧米茄', '歐米茄'],                  canon: 'Omega' },
+  { names: ['cartier', '卡地亚', '卡地亞'],                canon: 'Cartier' },
+  { names: ['iwc', '万国', '萬國'],                        canon: 'IWC' },
+  { names: ['jaeger-lecoultre', 'jaeger', 'jlc', 'jl', '积家', '積家'], canon: 'Jaeger-LeCoultre' },
+  { names: ['hublot', '宇舶'],                           canon: 'Hublot' },
+  { names: ['tag heuer', 'tagheuer', '泰格豪雅'],         canon: 'TAG Heuer' },
+  { names: ['zenith', '真力时', '真力時'],                  canon: 'Zenith' },
+  { names: ['blancpain', '宝珀', '寶珀'],                  canon: 'Blancpain' },
+  { names: ['breguet', '宝玑', '寶璣'],                    canon: 'Breguet' },
+  { names: ['tudor', '帝舵'],                             canon: 'Tudor' },
+  { names: ['grand seiko', 'grandseiko', 'gs', '冠蓝狮', '冠藍獅'], canon: 'Grand Seiko' },
+  { names: ['seiko', '精工'],                            canon: 'Seiko' },
+  { names: ['panerai', '沛纳海', '沛納海'],                 canon: 'Panerai' },
+  { names: ['ulysse nardin', 'ulysse', '雅典'],           canon: 'Ulysse Nardin' },
+  { names: ['girard-perregaux', 'girard perregaux', '芝柏'], canon: 'Girard-Perregaux' },
+  { names: ['fp journe', 'f.p.journe', 'journe', 'fpj'], canon: 'F.P. Journe' },
   { names: ['de bethune', 'debethune'],                canon: 'De Bethune' },
   { names: ['greubel forsey', 'greubelforsey'],        canon: 'Greubel Forsey' },
   { names: ['ferrari'],                                canon: 'Ferrari' },
@@ -97,16 +97,22 @@ const LISTING_OVERRIDES = {
 
 /** Reference patterns per brand family. */
 const REF_PATTERNS = [
-  // Patek Philippe — e.g. 5712/1A-001, 5236P, 6300A, 7118, 7300
-  { regex: /\b([34567]\d{3}[A-Z]?[\/\-]?[0-9A-Z]{1,4}[\-–]?[0-9A-Z]{0,5})\b/i, brandHint: 'Patek Philippe' },
+  // Patek Philippe — e.g. 5712/1A-001, 5236P, 6300A, 7118, 7300, bare 5711
+  { regex: /\b([34567]\d{3}[A-Z]?[\/\-]?[0-9A-Z]{0,4}[\-–]?[0-9A-Z]{0,5})\b/i, brandHint: 'Patek Philippe' },
   // Rolex — e.g. 126529, 116500LN, 228238, 124060
-  { regex: /\b(\d{5,6}\s?[A-Z]{0,3})\b/i, brandHint: 'Rolex' },
+  { regex: /\b(\d{5,6}\s?[A-Z]{0,4})\b/i, brandHint: 'Rolex' },
   // AP Royal Oak / Offshore — e.g. 15210ST, 26420SO, 26240OR
   { regex: /\b(\d{5}[A-Z]{2,4}\.?\d{0,2})\b/i, brandHint: 'Audemars Piguet' },
   // Richard Mille — e.g. RM07-01, RM11-03, RM35-02
   { regex: /\b(RM\s?\d{2}[\-–]?\d{2})(?:\s|$|[A-Z]?\b)/i, brandHint: 'Richard Mille' },
   // Vacheron — e.g. 4300V/220R, 6000V, 85180
   { regex: /\b(\d{4,5}[Vv]?\/?\d{0,3}[A-Za-z]{0,3})\b/i, brandHint: 'Vacheron Constantin' },
+  // F.P. Journe — CS (Chronometre Souveau), RS, CE, LB, etc.
+  { regex: /\b(CS|RS|CE|LB|LC)\b/i, brandHint: 'F.P. Journe' },
+  // Omega — e.g. 145.022-69, 311.30.42, 210.30.42
+  { regex: /\b(\d{3}\.\d{3}[\-–]?\d{0,2})\b/i, brandHint: 'Omega' },
+  // JLC — e.g. Q397846J, Q4102520
+  { regex: /\b(Q\d{6,7}[A-Z]?)\b/i, brandHint: 'Jaeger-LeCoultre' },
   // Generic fallback — NNNNN or NNNN/XX format
   { regex: /\b([A-Z]*\d{4,6}[\/\-]?[A-Z0-9]{0,4})\b/i, brandHint: null },
 ];
@@ -122,7 +128,8 @@ const DIAL_KEYWORDS = {
   champagne:['champagne', 'champ', 'gold dial'],
   salmon:   ['salmon', 'copper', 'rose gold dial'],
   purple:   ['purple', 'violet', 'lilac'],
-  red:      ['red', 'rouge', 'rosso', 'burgundy'],
+  red:      ['red', 'rouge', 'rosso'],
+  burgundy: ['burgundy', 'wine', 'bordeaux'],
   orange:   ['orange'],
   yellow:   ['yellow', 'jaune', 'giallo'],
   silver:   ['silver', 'argent'],
@@ -251,7 +258,7 @@ function isSectionHeader(text) {
 function splitMultiWatch(text) {
   if (!text) return [''];
   const parts = text
-    .split(/(?:\s*\/\/\s*|\s*\|\s*|\s*\\\s*)/)
+    .split(/(?:\s*\/\/\s*|\s*\|\s*|\s*\\\s*|\s+(?:and|&|\+)\s+(?=\d|[A-Z]{2,}|\$))/i)
     .map(p => p.trim())
     .filter(p => p.length > 0);
   return parts.length > 0 ? parts : [text.trim()];
@@ -304,7 +311,7 @@ function parseReference(text, brandHint) {
   // Remove price-context and years BEFORE searching for references
   const priceStripped = clean
     .replace(/\b\d{3,7}\s*(?:USD|USDT|HKD|EUR|GBP|CHF)\b/gi, ' ')
-    .replace(/\b\d{1,3}\.\d{3}\b/g, ' ')
+    .replace(/\b\d{1,3}\.\d{3}\s*(?:USD|USDT|HKD|EUR|GBP|CHF)\b/gi, ' ')  // European price with currency only
     .replace(/\b(19|20)\d{2}\b/g, ' ');
 
   const ordered = [...REF_PATTERNS].sort((a, b) => {
@@ -327,10 +334,12 @@ function parseReference(text, brandHint) {
       if (/\d{4,7}\s*(?:USD|USDT|HKD|EUR|GBP|CHF)/i.test(ref)) continue;  // Price with currency
       if (/^\d{4,7}[KM]$/i.test(ref)) continue;  // Price with K/M suffix
 
-      // Must contain letters OR be 5-6 digit numeric (Rolex style)
+      // Must contain letters OR be 4-6 digit numeric (Patek 5711, Rolex 116500)
+      // OR be a dotted reference like Omega 145.022-69
       const hasLetters = /[A-Z]/.test(ref);
-      const isNumericRef = /^\d{5,6}$/.test(ref);
-      if (!hasLetters && !isNumericRef) continue;
+      const isNumericRef = /^\d{4,6}$/.test(ref);
+      const isDottedRef = /^\d{3}\.\d{3}/.test(ref);
+      if (!hasLetters && !isNumericRef && !isDottedRef) continue;
 
       // For numeric-only refs, verify not followed by currency
       if (isNumericRef) {
@@ -373,12 +382,13 @@ function parseDial(text, ref) {
  */
 function inferDialFromRef(ref) {
   if (!ref) return null;
-  const suffixMatch = ref.match(/[A-Za-z]+(?=\d*$|[\-\/]?\d*$)/g);
+  // Only infer dial from short suffixes (2-3 letters like BL, BK, GN)
+  // Skip long suffixes (4+ chars like SACO, RBOW, BLNR — these are Rolex model codes)
+  const suffixMatch = ref.match(/[A-Za-z]{2,3}(?=\d*$|[\-\/]?\d*$)/g);
   if (suffixMatch) {
     for (const sfx of suffixMatch) {
       const upper = sfx.toUpperCase();
       if (REF_DIAL_MAP[upper]) return REF_DIAL_MAP[upper];
-      if (upper.length >= 1 && REF_DIAL_MAP[upper[0]]) return REF_DIAL_MAP[upper[0]];
     }
   }
   return null;
@@ -666,6 +676,68 @@ function hashMessage(text) {
 }
 
 /**
+ * Confidence Protocol — 4-Tier Matrix (from Jasmel's protocol image)
+ *
+ * | Catalog Match          | AI Intervention    | Confidence | Action              |
+ * |------------------------|---------------------|------------|---------------------|
+ * | Everything in catalog  | None               | 100%       | Auto-approve        |
+ * | 1 thing missing        | AI fills 1 gap     | 90%        | Review suggested    |
+ * | 2 things missing       | AI fills 2 gaps    | 80%        | Must review         |
+ * | 3+ missing / garbage   | AI can't resolve   | <80%       | Manual intervention |
+ *
+ * Gaps counted: brand, reference, dial, price, condition, year
+ */
+function confidenceTier(extracted, catalogEntry, validationFlags) {
+  const gaps = [];
+
+  if (!extracted.brand) gaps.push({ field: 'brand', reason: 'Brand not detected' });
+  if (!extracted.ref && !extracted.reference) gaps.push({ field: 'reference', reason: 'Reference not found' });
+  if (!extracted.dial) gaps.push({ field: 'dial', reason: 'Dial color not detected' });
+  else if (validationFlags && validationFlags.includes('DIAL_MISMATCH')) gaps.push({ field: 'dial', reason: 'Dial does not match catalog' });
+  if (!extracted.price || extracted.price <= 0) gaps.push({ field: 'price', reason: 'Price not found' });
+  if (!extracted.condition) gaps.push({ field: 'condition', reason: 'Condition not specified' });
+  if (!extracted.year) gaps.push({ field: 'year', reason: 'Year not specified' });
+
+  const gapCount = gaps.length;
+  let score, action;
+  if (gapCount === 0) {
+    score = 100;
+    action = 'AUTO_APPROVE';
+  } else if (gapCount === 1) {
+    score = 90;
+    action = 'REVIEW_SUGGESTED';
+  } else if (gapCount === 2) {
+    score = 80;
+    action = 'MUST_REVIEW';
+  } else {
+    score = Math.max(0, 100 - gapCount * 20);
+    action = 'MANUAL_INTERVENTION';
+  }
+
+  // Boost score if brand + reference + price all matched (core data complete)
+  const coreFieldsPresent = !!extracted.brand && !!(extracted.ref || extracted.reference) && !!extracted.price;
+  if (coreFieldsPresent && gapCount <= 3 && action !== 'AUTO_APPROVE') {
+    score = Math.min(95, score + 10);
+  }
+
+  return {
+    score,
+    action,
+    gapCount,
+    gaps,
+    catalogMatched: !!catalogEntry,
+    fields: {
+      brand:     { matched: !!extracted.brand,     value: extracted.brand || null,     source: extracted.brand ? 'text' : null },
+      reference: { matched: !!(extracted.ref || extracted.reference), value: extracted.ref || extracted.reference || null, source: 'regex' },
+      dial:      { matched: !!extracted.dial && !(validationFlags || []).includes('DIAL_MISMATCH'), value: extracted.dial || null, source: extracted.dial ? 'keyword' : null },
+      price:     { matched: !!extracted.price,     value: extracted.price || null,     source: extracted.price ? 'regex' : null, currency: extracted.currency || null },
+      condition: { matched: !!extracted.condition, value: extracted.condition || null, source: extracted.condition ? 'keyword' : null },
+      year:      { matched: !!extracted.year,      value: extracted.year || null,      source: extracted.year ? 'regex' : null },
+    },
+  };
+}
+
+/**
  * Calculate field-level and overall confidence scores.
  */
 function calculateConfidence(fields) {
@@ -770,7 +842,11 @@ function parseFull(rawMsg) {
   }
 
   // v3: Strip WhatsApp decorations (emoji, flags, timestamps)
-  const text = stripWhatsAppDecorations(rawMsg);
+  let text = stripWhatsAppDecorations(rawMsg);
+
+  // Fix: Period-separated fields — "5711. Chocolate. Unworn." → "5711 Chocolate Unworn"
+  // Only replaces period+space, preserving decimal prices like 95.000
+  text = text.replace(/\.\s+/g, ' ').replace(/\.$/, '');
 
   // NORM_004: Detect non-watch products
   const isNonWatch = detectNonWatch(text);
@@ -846,6 +922,12 @@ function parseFull(rawMsg) {
     fieldConfidence,
     listingType,
     accessories,
+    // 4-tier confidence protocol
+    confidenceTier: confidenceTier(
+      { brand: finalBrand, ref, dial, condition, year, price, currency },
+      null, // catalogEntry — lookup is done by caller
+      []    // validationFlags — populated by caller
+    ),
   };
 }
 
@@ -889,6 +971,7 @@ module.exports = {
   parseYear,
   parseAccessories,
   calculateConfidence,
+  confidenceTier,
   inferBrandFromRef,
   inferDialFromRef,
 };

@@ -4,6 +4,7 @@ import type { WatchRecord } from '@/types';
 import { BrandBadge } from '@/components/ui/BrandBadge';
 import { ConditionBadge } from '@/components/ui/ConditionBadge';
 import { ConfidenceRing } from '@/components/ui/ConfidenceRing';
+import { ConfidenceTierBadge } from '@/components/ui/ConfidenceTierBadge';
 import { DialColorSwatch } from '@/components/ui/DialColorSwatch';
 import { DemandBadge } from '@/components/ui/DemandBadge';
 
@@ -221,6 +222,16 @@ export function WatchCard({ record, index, onSelect }: WatchCardProps) {
             />
           ))}
         </span>
+      </div>
+
+      {/* Confidence tier badge — 4-tier protocol */}
+      <div className="mb-2 flex items-center gap-2">
+        <ConfidenceTierBadge score={confidencePct} />
+        {confidencePct < 95 && (
+          <span className="text-[9px] text-text-muted">
+            {confidencePct >= 85 ? '1 gap' : confidencePct >= 70 ? '2 gaps' : `${Math.ceil((100 - confidencePct) / 20)} gaps`}
+          </span>
+        )}
       </div>
 
       {/* Divider */}
