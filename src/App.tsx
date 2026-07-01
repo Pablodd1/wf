@@ -87,7 +87,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         {/* Public site */}
-        <Route path="/" element={<><Home /><Footer /></>} />
+        <Route path="/" element={<Home />} />
         <Route path="/reports" element={<><ReportsPage /><Footer /></>} />
         <Route path="/about-us" element={<><AboutUs /><Footer /></>} />
         <Route path="/about-simon" element={<><AboutSimon /><Footer /></>} />
