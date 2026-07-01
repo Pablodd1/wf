@@ -47,6 +47,7 @@ import ReferenceCheck from '@/pages/ReferenceCheck';
 import UnifiedReports from '@/pages/UnifiedReports';
 
 import PipelineDashboard from '@/pages/PipelineDashboard';
+import LiveQueue from '@/pages/LiveQueue';
 
 function AdminRoutes() {
   return (
@@ -60,6 +61,7 @@ function AdminRoutes() {
         <Route path="/import" element={<BulkImportPage />} />
         <Route path="/settings" element={<SettingsPage />} />
         <Route path="/pipeline" element={<PipelineDashboard />} />
+        <Route path="/live" element={<LiveQueue />} />
 
         {/* Legacy redirects — old tabs now point to UnifiedReports */}
         <Route path="/data" element={<Navigate to="/admin/reports" replace />} />

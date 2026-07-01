@@ -6,7 +6,7 @@ import {
   Zap, Shield,
   Activity, FileSpreadsheet,
   Settings, Upload,
-  Menu, X, ChevronRight,
+  Menu, X, ChevronRight, Radio,
 } from 'lucide-react';
 import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
@@ -14,6 +14,7 @@ const NAV_ITEMS = [
   { label: 'Dashboard', path: '/admin', icon: Shield },
   { label: 'Reports', path: '/admin/reports', icon: FileSpreadsheet },
   { label: 'Pipeline', path: '/admin/pipeline', icon: Activity },
+  { label: 'Live', path: '/admin/live', icon: Radio },
   { label: 'Search', path: '/admin/search', icon: Search },
   { label: 'Analytics', path: '/admin/analytics', icon: BarChart3 },
   { label: 'Health', path: '/admin/health', icon: Activity },
