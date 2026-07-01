@@ -100,7 +100,8 @@ const REF_PATTERNS = [
   // Patek Philippe — e.g. 5712/1A-001, 5236P, 6300A, 7118, 7300, bare 5711
   { regex: /\b([34567]\d{3}[A-Z]?[\/\-]?[0-9A-Z]{0,4}[\-–]?[0-9A-Z]{0,5})\b/i, brandHint: 'Patek Philippe' },
   // Rolex — e.g. 126529, 116500LN, 228238, 124060
-  { regex: /\b(\d{5,6}\s?[A-Z]{0,4})\b/i, brandHint: 'Rolex' },
+  // Use [ \t] instead of \s to avoid matching across newlines
+  { regex: /\b(\d{5,6}[ \t]?[A-Z]{0,4})\b/i, brandHint: 'Rolex' },
   // AP Royal Oak / Offshore — e.g. 15210ST, 26420SO, 26240OR
   { regex: /\b(\d{5}[A-Z]{2,4}\.?\d{0,2})\b/i, brandHint: 'Audemars Piguet' },
   // Richard Mille — e.g. RM07-01, RM11-03, RM35-02
@@ -304,14 +305,15 @@ function parseBrand(text) {
  */
 function parseReference(text, brandHint) {
   if (!text) return null;
+  // Keep newlines as separators — they prevent word concatenation across lines
   const clean = text
-    .replace(/[\u200B\u200C\u200D\uFEFF]/g, '')
-    .replace(/\n/g, ' ');
+    .replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
 
   // Remove price-context and years BEFORE searching for references
+  // Use [ \t]+ (NOT \s) to avoid matching across newlines
   const priceStripped = clean
-    .replace(/\b\d{3,7}\s*(?:USD|USDT|HKD|EUR|GBP|CHF)\b/gi, ' ')
-    .replace(/\b\d{1,3}\.\d{3}\s*(?:USD|USDT|HKD|EUR|GBP|CHF)\b/gi, ' ')  // European price with currency only
+    .replace(/\b\d{3,7}[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF)\b/gi, ' ')
+    .replace(/\b\d{1,3}\.\d{3}[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF)\b/gi, ' ')
     .replace(/\b(19|20)\d{2}\b/g, ' ');
 
   const ordered = [...REF_PATTERNS].sort((a, b) => {
@@ -325,6 +327,12 @@ function parseReference(text, brandHint) {
     if (m) {
       let ref = m[1].replace(/\s+/g, '').toUpperCase()
         .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD)/, '$1');
+
+      // Strip common dealer/status suffixes that get concatenated
+      // NOTE: OR = rose gold, AS = steel — do NOT strip valid material codes
+      ref = ref.replace(/(NEED|SOLD|TYIA|WHO|PLZ|DM|NIB|PM|PRE|CARD|NO|THKS|THANK|ROSE|HK|REF)$/i, '');
+      // Re-validate after stripping
+      if (!ref || ref.length < 4) continue;
 
       // STRICT validation — reject obvious non-references
       if (/^\d{4}$/.test(ref) && (ref.startsWith('19') || ref.startsWith('20'))) continue;  // Year
