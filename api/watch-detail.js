@@ -25,14 +25,14 @@ module.exports = async function handler(req, res) {
   if (!id) return res.status(400).json({ error: 'Missing id parameter' });
 
   try {
-    const { data, error } = await getClient()
+    const { data, error, status } = await getClient()
       .from('watch_records')
       .select('*')
       .eq('id', id)
-      .single();
+      .maybeSingle();
 
-    if (error) throw error;
-    if (!data) return res.status(404).json({ error: 'Record not found' });
+    if (error && status !== 406) throw error;
+    if (!data) return res.status(404).json({ error: 'Record not found', id });
 
     // Build field-level breakdown using the 4-tier confidence protocol
     const extracted = {

@@ -4,11 +4,11 @@
   "projectName": "watchfacts-poc",
   "settings": {
     "createdAt": 1780357891950,
-    "framework": null,
-    "devCommand": "cd frontend && npm run dev",
-    "installCommand": null,
-    "buildCommand": "cd frontend && npm install && npm run build",
-    "outputDirectory": "frontend/dist",
+    "framework": "vite",
+    "devCommand": "npm run dev",
+    "installCommand": "npm install",
+    "buildCommand": "npm install && npm run build",
+    "outputDirectory": "dist",
     "rootDirectory": null,
     "directoryListing": false,
     "nodeVersion": "24.x"
