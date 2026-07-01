@@ -57,18 +57,29 @@ export default function PriceResearch() {
   // if the index file isn't deployed yet.
   useEffect(() => {
     const fetchModels = async () => {
+      // Try the precomputed index first — wrapped in its own try/catch so a
+      // parse failure (e.g. Vercel's SPA fallback returning index.html with
+      // HTTP 200 for a not-yet-deployed file) falls through to the live API
+      // instead of aborting entirely.
       try {
         const res = await fetch('/watchfacts-brand-index.json');
         if (res.ok) {
-          const brandIndex = await res.json();
-          const brands = Object.keys(brandIndex).sort((a, b) => a.localeCompare(b));
-          if (brands.length > 0) {
-            setModels(brands);
-            setValidationNote(`${brands.length} brands found`);
-            return;
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('json')) {
+            const brandIndex = await res.json();
+            const brands = Object.keys(brandIndex).sort((a, b) => a.localeCompare(b));
+            if (brands.length > 0) {
+              setModels(brands);
+              setValidationNote(`${brands.length} brands found`);
+              return;
+            }
           }
         }
-        // Fallback: live API (works but capped, slower)
+      } catch {
+        // Index not ready or invalid — fall through to live API below.
+      }
+
+      try {
         const liveRes = await fetch('/api/listings?limit=5000');
         const result = await liveRes.json();
         const rows = result.rows || [];
@@ -92,23 +103,31 @@ export default function PriceResearch() {
   useEffect(() => {
     const fetchRefs = async () => {
       if (!selectedModel) { setReferences([]); return; }
+
       try {
         const res = await fetch('/watchfacts-brand-index.json');
         if (res.ok) {
-          const brandIndex = await res.json();
-          const refs: string[] = brandIndex[selectedModel] || [];
-          if (refs.length > 0) {
-            const validRefs = refs.filter((r: string) => {
-              if (/^(19|20)\d{2}$/.test(r)) return false;
-              if (/^\d{5,}$/.test(r)) return false;
-              return r.length >= 4 && r.length <= 25;
-            });
-            setReferences(validRefs);
-            setValidationNote(`${validRefs.length} references found`);
-            return;
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('json')) {
+            const brandIndex = await res.json();
+            const refs: string[] = brandIndex[selectedModel] || [];
+            if (refs.length > 0) {
+              const validRefs = refs.filter((r: string) => {
+                if (/^(19|20)\d{2}$/.test(r)) return false;
+                if (/^\d{5,}$/.test(r)) return false;
+                return r.length >= 4 && r.length <= 25;
+              });
+              setReferences(validRefs);
+              setValidationNote(`${validRefs.length} references found`);
+              return;
+            }
           }
         }
-        // Fallback: live API
+      } catch {
+        // Index not ready or invalid — fall through to live API below.
+      }
+
+      try {
         const liveRes = await fetch(`/api/listings?brand=${encodeURIComponent(selectedModel)}&limit=5000`);
         const result = await liveRes.json();
         const rows = result.rows || [];
