@@ -35,10 +35,17 @@ interface HealthStatus {
   latency?: number;
 }
 
-// ─── Fetch exact count by verdict ────────────────────────────────────
+// ─── 1-year date filter ─────────────────────────────────────────────
+const ONE_YEAR_AGO = (() => {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() - 1);
+  return d.toISOString();
+})();
+
+// ─── Fetch exact count by verdict (1-year filtered) ────────────────
 async function fetchVerdictCount(verdict: string): Promise<number> {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?verdict=eq.${verdict}&select=id&limit=1`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?verdict=eq.${verdict}&created_at=gte.${encodeURIComponent(ONE_YEAR_AGO)}&select=id&limit=1`, {
       method: 'GET', headers: REQ_HEAD,
     });
     const range = res.headers.get('content-range') || '';
@@ -48,7 +55,7 @@ async function fetchVerdictCount(verdict: string): Promise<number> {
 
 async function fetchTotalCount(): Promise<number> {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?created_at=gte.${encodeURIComponent(ONE_YEAR_AGO)}&select=id&limit=1`, {
       method: 'GET', headers: REQ_HEAD,
     });
     const range = res.headers.get('content-range') || '';

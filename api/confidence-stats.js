@@ -2,13 +2,10 @@
  * GET /api/confidence-stats
  * Returns confidence tier distribution across all watch records.
  *
- * Groups records into the 4-tier protocol:
- *   AUTO_APPROVE   (score >= 95, all core fields present)
- *   REVIEW_SUGGESTED (score 85-94, 1 gap)
- *   MUST_REVIEW    (score 70-84, 2 gaps)
- *   MANUAL_INTERVENTION (score < 70, 3+ gaps)
+ * Uses mv_verdict_dist materialized view (4 rows, instant) instead of
+ * scanning 2.39M rows. Brand stats use a 5000-row sample with date filter.
  *
- * Also returns brand-level confidence breakdown.
+ * 1-year filter: only counts records from the last 365 days.
  */
 const { getClient } = require('./_lib/supabase');
 
@@ -20,35 +17,41 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    // Get verdict distribution
-    const { data: verdictData, error: vErr } = await getClient()
-      .from('watch_records')
-      .select('verdict')
-      .not('verdict', 'is', null);
+    const db = getClient();
+
+    // 1-year date filter
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const cutoff = oneYearAgo.toISOString();
+
+    // ─── Verdict distribution from materialized view (instant) ───
+    const { data: verdictData, error: vErr } = await db
+      .from('mv_verdict_dist')
+      .select('*');
 
     if (vErr) throw vErr;
 
     const verdictCounts = {};
+    let total = 0;
     for (const row of verdictData || []) {
-      const v = row.verdict || 'UNKNOWN';
-      verdictCounts[v] = (verdictCounts[v] || 0) + 1;
+      verdictCounts[row.verdict] = row.count;
+      total += row.count;
     }
-
-    const total = verdictData?.length || 0;
 
     // Map verdicts to confidence tiers
     const tiers = {
       AUTO_APPROVE: verdictCounts.APPROVED || 0,
-      REVIEW_SUGGESTED: (verdictCounts.REVIEW || 0),
-      MUST_REVIEW: (verdictCounts.HUMAN || 0),
-      MANUAL_INTERVENTION: (verdictCounts.RECYCLE || 0),
+      REVIEW_SUGGESTED: verdictCounts.REVIEW || 0,
+      MUST_REVIEW: verdictCounts.HUMAN || 0,
+      MANUAL_INTERVENTION: verdictCounts.RECYCLE || 0,
     };
 
-    // Get brand-level stats (top 10 brands by count)
-    const { data: brandData, error: bErr } = await getClient()
+    // ─── Brand-level stats (sampled, with 1-year filter) ───
+    const { data: brandData, error: bErr } = await db
       .from('watch_records')
       .select('brand, confidence')
       .not('brand', 'is', null)
+      .gte('created_at', cutoff)
       .limit(5000);
 
     if (bErr) throw bErr;
@@ -85,33 +88,10 @@ module.exports = async function handler(req, res) {
       distribution,
       brandStats,
       verdictCounts,
+      dateRange: { cutoff, note: '1-year filter applied to brand stats' },
     });
   } catch (err) {
     console.error('confidence-stats error:', err.message);
-    // Return demo data so UI doesn't break
-    res.status(200).json({
-      total: 2390143,
-      tiers: {
-        AUTO_APPROVE: 805872,
-        REVIEW_SUGGESTED: 0,
-        MUST_REVIEW: 929647,
-        MANUAL_INTERVENTION: 654624,
-      },
-      distribution: {
-        AUTO_APPROVE: { count: 805872, percentage: 34 },
-        REVIEW_SUGGESTED: { count: 0, percentage: 0 },
-        MUST_REVIEW: { count: 929647, percentage: 39 },
-        MANUAL_INTERVENTION: { count: 654624, percentage: 27 },
-      },
-      brandStats: [
-        { brand: 'Rolex', count: 847293, avgConfidence: 78 },
-        { brand: 'Patek Philippe', count: 612847, avgConfidence: 71 },
-        { brand: 'Audemars Piguet', count: 384921, avgConfidence: 74 },
-        { brand: 'Richard Mille', count: 298471, avgConfidence: 69 },
-      ],
-      verdictCounts: { APPROVED: 805872, HUMAN: 929647, RECYCLE: 654624 },
-      demo: true,
-      error: err.message,
-    });
+    res.status(500).json({ error: err.message });
   }
 };

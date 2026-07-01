@@ -76,10 +76,20 @@ export default function UnifiedReports() {
   const [sortBy, setSortBy] = useState<'created_at' | 'brand' | 'price_usd' | 'confidence'>('created_at');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
+  // 1-year date filter — only show records from last 365 days
+  const oneYearAgo = useMemo(() => {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString();
+  }, []);
+
   const fetchRecords = useCallback(async () => {
     setLoading(true);
     try {
       let query = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,confidence,verdict,source,created_at,raw_message`;
+      
+      // 1-year date filter
+      query += `&created_at=gte.${encodeURIComponent(oneYearAgo)}`;
       
       // Verdict filter
       if (activeTab !== 'ALL') {
@@ -114,7 +124,7 @@ export default function UnifiedReports() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, search, page, sortBy, sortDir]);
+  }, [activeTab, search, page, sortBy, sortDir, oneYearAgo]);
 
   useEffect(() => { fetchRecords(); }, [fetchRecords]);
 
