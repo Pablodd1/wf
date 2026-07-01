@@ -127,6 +127,10 @@ export function isValidReference(ref: string): boolean {
   // NOT 1-3 digit pure numbers
   if (/^\d{1,3}$/.test(t)) return false;
 
+  // NOT obvious price fragments (100000, 100182, 101787, etc. — overwhelmingly garbage in this dataset)
+  if (/^10\d{3,6}$/.test(t)) return false;
+  if (/^1{1,2}0{3,6}$/.test(t)) return false;  // 1000, 10000, 100000, 1000000
+
   // NOT a pure price (8+ digit pure number = likely price, not ref)
   if (PURE_NUMBER.test(t) && t.length >= 8) return false;
 
