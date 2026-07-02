@@ -1,159 +1,86 @@
-/**
- * /api/price-research.js
- *
- * Vercel serverless endpoint for monthly price aggregation.
- * Returns monthly aggregated price data for charts.
- *
- * GET /api/price-research?reference=52508&dial=White&months=6
- *   Returns: { data: [{ month, count, avg_price, min_price, max_price }] }
- *
- * Supports demo data mode for development when Supabase is not configured.
- */
-
-'use strict';
-
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-const HEADERS = {
-  'apikey': SUPABASE_KEY || '',
-  'Authorization': `Bearer ${SUPABASE_KEY || ''}`,
-  'Content-Type': 'application/json',
-};
-
-// ─── DEMO DATA ────────────────────────────────────────────────────────────────
-
-function generateDemoData(reference, dial, months) {
-  const data = [];
-  const now = new Date();
-  const monthCount = parseInt(months, 10) || 6;
-  const basePrice = reference.startsWith('5') ? 45000 :
-                     reference.startsWith('6') ? 350000 :
-                     reference.startsWith('RM') ? 180000 :
-                     reference.startsWith('152') || reference.startsWith('155') ? 35000 :
-                     25000;
-
-  for (let i = monthCount - 1; i >= 0; i--) {
-    const month = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const count = Math.floor(Math.random() * 20) + 5;
-    const seasonality = Math.sin((month.getMonth() / 12) * Math.PI * 2) * 0.05;
-    const trend = (monthCount - i) * basePrice * 0.005;
-    const avgPrice = Math.round(basePrice + trend + seasonality * basePrice + (Math.random() - 0.5) * basePrice * 0.1);
-    const minPrice = Math.round(avgPrice * (0.85 + Math.random() * 0.1));
-    const maxPrice = Math.round(avgPrice * (1.1 + Math.random() * 0.15));
-
-    data.push({
-      month: month.toISOString().slice(0, 7) + '-01T00:00:00Z',
-      count,
-      avg_price: avgPrice,
-      min_price: minPrice,
-      max_price: maxPrice,
-    });
-  }
-
-  return data;
-}
-
-// ─── CORS ─────────────────────────────────────────────────────────────────────
-
-function setCorsHeaders(res) {
-  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-}
-
-// ─── HANDLER ──────────────────────────────────────────────────────────────────
+const { getClient } = require('./_lib/supabase');
 
 module.exports = async function handler(req, res) {
-  setCorsHeaders(res);
+  res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'GET') return res.status(405).json({ error: 'GET only' });
 
-  const { reference, dial, months = '6' } = req.query;
-
-  if (!reference) {
-    return res.status(400).json({ error: 'Missing required param: reference' });
+  const { brand, reference } = req.query;
+  if (!brand || !reference) {
+    return res.status(400).json({ error: 'brand and reference required' });
   }
-
-  // Demo data mode: Supabase not configured
-  if (!SUPABASE_URL || !SUPABASE_KEY) {
-    console.warn('[price-research] Supabase not configured — returning demo data');
-    return res.status(200).json({
-      data: generateDemoData(reference, dial, months),
-      demo: true,
-    });
-  }
-
-  // Calculate date range
-  const now = new Date();
-  const startDate = new Date();
-  startDate.setMonth(now.getMonth() - parseInt(months, 10));
-  const startDateStr = startDate.toISOString();
 
   try {
-    // Build the query — use Supabase REST with ilike filters
-    // We fetch raw records and aggregate client-side to avoid RPC dependency
-    const dialFilter = dial ? `&dial_color=ilike.*${encodeURIComponent(dial)}*` : '';
-    const url = `${SUPABASE_URL}/rest/v1/watch_records?select=price_usd,received_at&reference=ilike.*${encodeURIComponent(reference)}*${dialFilter}&received_at=gte.${encodeURIComponent(startDateStr)}&price_usd=gt.0&order=received_at.asc`;
+    const client = getClient();
 
-    const response = await fetch(url, { headers: HEADERS });
+    // 1. Pull all APPROVED records for this brand+reference
+    const { data: rows, error } = await client
+      .from('watch_records')
+      .select('price_usd, created_at, condition, source')
+      .eq('brand', brand)
+      .eq('reference', reference)
+      .eq('verdict', 'APPROVED')
+      .order('created_at', { ascending: false });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error('[price-research] Supabase error:', response.status, errText);
-      return res.status(500).json({ error: 'Failed to fetch from database', detail: errText });
-    }
+    if (error) throw error;
 
-    const records = await response.json();
-
-    // ─── Monthly aggregation (client-side grouping) ────────────────────────────
-    const monthlyMap = new Map();
-
-    for (const record of records) {
-      if (!record.received_at || !record.price_usd || record.price_usd <= 0) continue;
-
-      const monthKey = record.received_at.slice(0, 7); // 'YYYY-MM'
-      if (!monthlyMap.has(monthKey)) {
-        monthlyMap.set(monthKey, {
-          month: monthKey + '-01T00:00:00Z',
-          prices: [],
-          count: 0,
-        });
-      }
-
-      const bucket = monthlyMap.get(monthKey);
-      bucket.prices.push(record.price_usd);
-      bucket.count++;
-    }
-
-    // Sort by month and compute stats
-    const sortedKeys = Array.from(monthlyMap.keys()).sort();
-    const data = sortedKeys.map(key => {
-      const bucket = monthlyMap.get(key);
-      const prices = bucket.prices;
-      const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-
-      return {
-        month: bucket.month,
-        count: bucket.count,
-        avg_price: Math.round(avg),
-        min_price: Math.min(...prices),
-        max_price: Math.max(...prices),
-      };
-    });
-
-    return res.status(200).json({
-      data,
-      meta: {
+    if (!rows || rows.length === 0) {
+      return res.status(200).json({
+        brand,
         reference,
-        dial: dial || null,
-        months: parseInt(months, 10),
-        total_records: records.length,
-      },
+        count: 0,
+        prices: [],
+        monthly: [],
+        stats: null,
+        message: 'No APPROVED records found'
+      });
+    }
+
+    // 2. Compute basic stats
+    const prices = rows.map(r => r.price_usd).filter(p => p != null);
+    const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const sorted = [...prices].sort((a, b) => a - b);
+    const median = sorted[Math.floor(sorted.length / 2)];
+
+    // 3. Monthly aggregation using created_at
+    const monthlyMap = {};
+    rows.forEach(r => {
+      if (!r.created_at || !r.price_usd) return;
+      const d = new Date(r.created_at);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!monthlyMap[key]) monthlyMap[key] = { month: key, count: 0, sum: 0, prices: [] };
+      monthlyMap[key].count++;
+      monthlyMap[key].sum += r.price_usd;
+      monthlyMap[key].prices.push(r.price_usd);
     });
 
+    const monthly = Object.values(monthlyMap)
+      .map(m => ({
+        month: m.month,
+        count: m.count,
+        avg_price: Math.round(m.sum / m.count),
+        min_price: Math.min(...m.prices),
+        max_price: Math.max(...m.prices)
+      }))
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    res.status(200).json({
+      brand,
+      reference,
+      count: rows.length,
+      prices,
+      monthly,
+      stats: {
+        avg: Math.round(avg),
+        median,
+        min,
+        max,
+        range: max - min
+      }
+    });
   } catch (err) {
-    console.error('[price-research] Fatal error:', err.message);
-    return res.status(500).json({ error: err.message });
+    console.error('Price research error:', err);
+    res.status(500).json({ error: 'Failed to fetch from database', detail: err.message });
   }
 };

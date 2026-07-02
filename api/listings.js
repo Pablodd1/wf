@@ -1,64 +1,52 @@
-/**
- * GET /api/listings
- * Queries Supabase directly with efficient, targeted filters.
- * IMPORTANT: never does count=exact or unfiltered created_at range scans
- * on the full 2.39M-row table — those trigger Supabase statement timeouts
- * (confirmed via direct testing: 8.3s -> error 57014). Always require at
- * least one selective filter (brand/reference/verdict) OR a small limit.
- *
- * Query params: page, limit, brand, reference, verdict, search
- */
-
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://bptrvfncppbjnchsaxtb.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const { getClient } = require('./_lib/supabase');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  if (!SUPABASE_KEY) {
-    return res.status(500).json({ rows: [], total: 0, error: 'SUPABASE_SERVICE_ROLE_KEY not configured', demo: true });
-  }
+  const {
+    brand,
+    reference,
+    verdict = 'APPROVED',
+    limit = 50,
+    page = 1,
+    search,
+    sort = 'created_at',
+    order = 'desc'
+  } = req.query;
 
   try {
-    const { page = '1', limit = '50', brand, reference, verdict, search } = req.query;
-    const pageNum = Math.max(1, parseInt(page) || 1);
-    // Cap limit — this is a live query, not a static file. Large limits
-    // (5000+) are fine for brand/reference-filtered queries since those
-    // hit an index; unfiltered large limits risk timeouts.
-    const limitNum = Math.min(5000, Math.max(1, parseInt(limit) || 50));
-    const offset = (pageNum - 1) * limitNum;
+    const client = getClient();
+    const pageSize = Math.min(parseInt(limit), 100);
+    const from = (parseInt(page) - 1) * pageSize;
 
-    let query = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,confidence,verdict,source,created_at,raw_message,human_edited`;
+    // Use a targeted query — NEVER count(*) on 2.39M rows
+    let query = client
+      .from('watch_records')
+      .select('*')
+      .eq('verdict', verdict)
+      .limit(pageSize);
 
-    // Default to APPROVED only for clean data
-    const effectiveVerdict = verdict || 'APPROVED';
-    query += `&verdict=eq.${encodeURIComponent(effectiveVerdict)}`;
-
-    if (brand) query += `&brand=eq.${encodeURIComponent(brand)}`;
-    if (reference) query += `&reference=eq.${encodeURIComponent(reference)}`;
+    if (brand) query = query.eq('brand', brand);
+    if (reference) query = query.eq('reference', reference);
     if (search) {
-      const s = encodeURIComponent(search);
-      query += `&or=(brand.ilike.*${s}*,reference.ilike.*${s}*,raw_message.ilike.*${s}*)`;
+      query = query.or(`brand.ilike.%${search}%,reference.ilike.%${search}%,raw_message.ilike.%${search}%`);
     }
 
-    query += `&order=created_at.desc&limit=${limitNum}&offset=${offset}`;
+    const { data, error } = await query
+      .order(sort, { ascending: order === 'asc' })
+      .range(from, from + pageSize - 1);
 
-    const resp = await fetch(query, {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`,
-      },
+    if (error) throw error;
+
+    res.status(200).json({
+      rows: data || [],
+      total: data?.length || 0,
+      page: parseInt(page),
+      limit: pageSize
     });
-
-    if (!resp.ok) {
-      const errBody = await resp.text();
-      return res.status(200).json({ rows: [], total: 0, error: `Supabase ${resp.status}: ${errBody.substring(0, 200)}`, demo: true });
-    }
-
-    const rows = await resp.json();
-    res.status(200).json({ rows: Array.isArray(rows) ? rows : [], total: Array.isArray(rows) ? rows.length : 0, page: pageNum, limit: limitNum });
   } catch (err) {
-    res.status(200).json({ rows: [], total: 0, error: err.message, demo: true });
+    console.error('Listings error:', err);
+    res.status(500).json({ error: err.message, demo: true });
   }
 };
