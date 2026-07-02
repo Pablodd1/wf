@@ -15,6 +15,11 @@
 'use strict';
 
 // ═══════════════════════════════════════════════════════════════
+// CATALOG MATCHER — wired in at module load time
+// ═══════════════════════════════════════════════════════════════
+const { lookupCatalog } = require('./catalog-matcher');
+
+// ═══════════════════════════════════════════════════════════════
 // CONSTANTS
 // ═══════════════════════════════════════════════════════════════
 
@@ -934,23 +939,50 @@ function parseFull(rawMsg) {
   // REF-CATALOG: Validate (brand, reference) against legacy taxonomy
   const flags = {};
   let validationFlags = [];
+  let catalogEntry = null;
+  let catalogMatched = false;
   if (finalBrand && ref) {
-    const catalogCheck = validateReference(finalBrand, ref);
-    if (!catalogCheck.matched) {
-      flags.reference_unverified = true;
-      validationFlags.push('REFERENCE_UNVERIFIED');
-      // Lower confidence if reference not in catalog
-      confidence = Math.round(confidence * 0.85);
-    }
-    if (!catalogCheck.brandKnown) {
-      flags.brand_unknown = true;
-      validationFlags.push('BRAND_UNKNOWN');
-      confidence = Math.round(confidence * 0.90);
+    catalogEntry = lookupCatalog(finalBrand, ref);
+    if (catalogEntry) {
+      catalogMatched = true;
+      flags.catalog_matched = true;
+      // If catalog has dial color, use it as fallback
+      if (!dial && catalogEntry.dialColor) {
+        // Don't override — just note it's available
+      }
+    } else {
+      const catalogCheck = validateReference(finalBrand, ref);
+      if (!catalogCheck.matched) {
+        flags.reference_unverified = true;
+        validationFlags.push('REFERENCE_UNVERIFIED');
+        // Lower confidence if reference not in catalog
+        confidence = Math.round(confidence * 0.85);
+      }
+      if (!catalogCheck.brandKnown) {
+        flags.brand_unknown = true;
+        validationFlags.push('BRAND_UNKNOWN');
+        confidence = Math.round(confidence * 0.90);
+      }
     }
   } else if (finalBrand && !ref) {
     // No reference to validate — mild penalty
     confidence = Math.round(confidence * 0.95);
   }
+
+  // CATALOG MATCH BOOST: if catalog matched, confidence = 100
+  if (catalogMatched) {
+    confidence = 100;
+    validationFlags.push('CATALOG_MATCHED');
+  }
+
+  // Determine final verdict using the verdict function
+  const finalVerdict = catalogMatched ? 'APPROVED' : verdict({
+    confidence,
+    brand: finalBrand,
+    reference: ref,
+    price,
+    listingType,
+  });
 
   return {
     brand: finalBrand,
@@ -966,10 +998,14 @@ function parseFull(rawMsg) {
     listingType,
     accessories,
     flags,
+    verdict: finalVerdict,
+    catalogMatched,
+    catalogEntry,
+    catalogImageUrl: catalogEntry?.imageUrl || catalogEntry?.image_url || null,
     // 4-tier confidence protocol
     confidenceTier: confidenceTier(
       { brand: finalBrand, ref, dial, condition, year, price, currency },
-      null, // catalogEntry — lookup is done by caller
+      catalogEntry,
       validationFlags
     ),
   };

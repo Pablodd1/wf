@@ -1,7 +1,7 @@
 /**
- * Image Resolver — Database-first strategy for watch images
- * 1. Supabase reference_images table (5,044 real catalog images)
- * 2. Brand CDN URLs (constructed from reference)
+ * Image Resolver — Catalog-first strategy for watch images
+ * 1. Catalog imageUrl (6,410 entries from catalog.json — loaded at build time)
+ * 2. Supabase reference_images table (5,044 real catalog images)
  * 3. Brand placeholder images
  * 4. Color-coded gradient fallback
  */
@@ -10,6 +10,9 @@ import { supabase } from './supabaseClient';
 
 // In-memory cache to avoid repeated DB queries
 const imageCache: Record<string, string | null> = {};
+
+// Catalog image map loaded from the public JSON at build time
+let catalogImageMap: Record<string, string> = {};
 
 const BRAND_PLACEHOLDER_MAP: Record<string, string> = {
   'Rolex': '/placeholders/rolex.jpg',
@@ -38,6 +41,40 @@ const BRAND_GRADIENTS: Record<string, string> = {
   'default': 'from-gray-800 via-gray-900 to-black',
 };
 
+/** Preload catalog images at startup */
+export async function preloadCatalogImages(): Promise<void> {
+  try {
+    const res = await fetch('/watchfacts-catalog-images.json');
+    if (res.ok) {
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('json')) {
+        catalogImageMap = await res.json();
+        // Populate cache
+        for (const [key, url] of Object.entries(catalogImageMap)) {
+          if (url) {
+            imageCache[`${key}_`] = url;
+            imageCache[`${key}_undefined`] = url;
+          }
+        }
+        console.log(`[imageResolver] Loaded ${Object.keys(catalogImageMap).length} catalog images`);
+      }
+    }
+  } catch {
+    // Non-fatal — fall back to Supabase
+  }
+}
+
+/** Get catalog image for a reference+brand combination */
+export function getCatalogImage(reference: string, brand?: string): string | null {
+  if (!reference) return null;
+  // Try brand+ref first, then ref alone
+  if (brand) {
+    const key = `${brand}|${reference}`;
+    if (catalogImageMap[key]) return catalogImageMap[key];
+  }
+  return catalogImageMap[reference] || null;
+}
+
 /** Query Supabase for reference image — async version */
 export async function fetchReferenceImage(reference: string, brand?: string): Promise<string | null> {
   if (!reference) return null;
@@ -46,6 +83,13 @@ export async function fetchReferenceImage(reference: string, brand?: string): Pr
   const cacheKey = `${reference}_${brand || ''}`;
   if (imageCache[cacheKey] !== undefined) {
     return imageCache[cacheKey];
+  }
+
+  // Check catalog first (faster, no network)
+  const catalogImg = getCatalogImage(reference, brand);
+  if (catalogImg) {
+    imageCache[cacheKey] = catalogImg;
+    return catalogImg;
   }
 
   try {
@@ -81,15 +125,19 @@ export function getCachedImage(reference: string, brand?: string): string | null
 
 /** Resolve watch image — synchronous with fallbacks */
 export function resolveWatchImage(reference: string, brand: string): string {
-  // Layer 1: Check cache (populated by async preload)
+  // Layer 1: Check cache (populated by preload)
   const cached = getCachedImage(reference, brand);
   if (cached) return cached;
 
-  // Layer 2: Brand placeholder
+  // Layer 2: Check catalog image map
+  const catalogImg = getCatalogImage(reference, brand);
+  if (catalogImg) return catalogImg;
+
+  // Layer 3: Brand placeholder
   const placeholder = BRAND_PLACEHOLDER_MAP[brand || ''];
   if (placeholder) return placeholder;
 
-  // Layer 3: Return empty (component will show gradient)
+  // Layer 4: Return empty (component will show gradient)
   return '';
 }
 
@@ -101,6 +149,8 @@ export function getBrandGradient(brand: string): string {
 /** Check if a reference has a real catalog image (async) */
 export async function hasCatalogImage(reference: string): Promise<boolean> {
   if (!reference) return false;
+  // Check catalog first
+  if (getCatalogImage(reference)) return true;
   const url = await fetchReferenceImage(reference);
   return !!url;
 }
@@ -123,11 +173,24 @@ export async function preloadReferenceImages(references: { reference: string; br
   const uniqueRefs = [...new Set(references.filter(r => r.reference).map(r => r.reference))];
   if (uniqueRefs.length === 0) return;
 
+  // First, match against catalog (no network call)
+  for (const ref of uniqueRefs) {
+    const catalogImg = getCatalogImage(ref);
+    if (catalogImg) {
+      imageCache[`${ref}_`] = catalogImg;
+      imageCache[`${ref}_undefined`] = catalogImg;
+    }
+  }
+
+  // Then batch-fetch from Supabase for any not in catalog
+  const missingRefs = uniqueRefs.filter(ref => !getCatalogImage(ref));
+  if (missingRefs.length === 0) return;
+
   try {
     const { data, error } = await supabase
       .from('reference_images')
       .select('reference, image_url')
-      .in('reference', uniqueRefs.slice(0, 100)) // Max 100 per query
+      .in('reference', missingRefs.slice(0, 100))
       .eq('is_primary', true);
 
     if (error) {
@@ -150,9 +213,3 @@ export async function preloadReferenceImages(references: { reference: string; br
 export function getImageCacheStats(): { cached: number; hits: number } {
   return { cached: Object.keys(imageCache).length, hits: 0 };
 }
-
-// Legacy stats for backward compatibility
-export const IMAGE_STATS = {
-  totalCatalog: 5044,
-  withImages: 5044,
-};
