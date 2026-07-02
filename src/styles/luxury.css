@@ -1,0 +1,733 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * WATCHFACTS LUXURY DESIGN SYSTEM — MAX-PRO EDITION
+ * Premium glassmorphism, gold accents, dark theme
+ * For watch connoisseurs and high-end dealers
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * Integration: Import in index.css or main.tsx
+ * All classes are additive — they enhance, never override base styles
+ */
+
+/* ─── Luxury Card — Max-Pro Glassmorphism ─────────────────────────── */
+.luxury-card {
+  background: rgba(17, 17, 24, 0.55);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  border: 1px solid rgba(212, 175, 55, 0.10);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  transition: all 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.luxury-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 20px;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(212, 175, 55, 0.15) 0%,
+    rgba(212, 175, 55, 0.03) 30%,
+    transparent 60%,
+    rgba(212, 175, 55, 0.08) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.luxury-card:hover {
+  border-color: rgba(212, 175, 55, 0.22);
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.45),
+    0 0 40px rgba(212, 175, 55, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transform: translateY(-4px);
+}
+
+.luxury-card::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(
+    circle at 30% 20%,
+    rgba(212, 175, 55, 0.03) 0%,
+    transparent 50%
+  );
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+}
+
+.luxury-card:hover::after {
+  opacity: 1;
+}
+
+/* ─── Trading Floor Price Card (extends luxury-card) ─────────────── */
+.luxury-price-card {
+  composes: luxury-card;
+  border-radius: 20px;
+}
+
+.luxury-price-card .price-glow {
+  position: relative;
+  display: inline-block;
+}
+
+.luxury-price-card .price-glow::after {
+  content: '';
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #D4AF37, transparent);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.luxury-price-card:hover .price-glow::after {
+  opacity: 0.6;
+}
+
+/* ─── Price Tag — Luxury Large ───────────────────────────────────── */
+.price-luxury {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 1.35rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #D4AF37, #E5C158);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  letter-spacing: -0.03em;
+  position: relative;
+  display: inline-block;
+}
+
+.price-luxury::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212,175,55,0.4), transparent);
+}
+
+/* ─── Dealer Verified Badge — Elevated ───────────────────────────── */
+.dealer-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.12), rgba(212, 175, 55, 0.04));
+  border: 1px solid rgba(212, 175, 55, 0.2);
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #D4AF37;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: all 0.3s ease;
+}
+
+.dealer-badge:hover {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.08));
+  border-color: rgba(212, 175, 55, 0.4);
+  box-shadow: 0 0 16px rgba(212, 175, 55, 0.1);
+}
+
+/* ─── Condition Filter Pills — Luxury ────────────────────────────── */
+.condition-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+  cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.condition-pill:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(212, 175, 55, 0.3);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.condition-pill.active {
+  background: linear-gradient(135deg, #D4AF37, #E5C158);
+  border-color: transparent;
+  color: #0A0A0F;
+  font-weight: 700;
+  box-shadow: 0 4px 16px rgba(212, 175, 55, 0.3);
+}
+
+/* ─── Gold Divider — Ornate ──────────────────────────────────────── */
+.gold-divider-ornate {
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(212, 175, 55, 0.05) 10%,
+    rgba(212, 175, 55, 0.3) 30%,
+    rgba(212, 175, 55, 0.5) 50%,
+    rgba(212, 175, 55, 0.3) 70%,
+    rgba(212, 175, 55, 0.05) 90%,
+    transparent 100%
+  );
+  margin: 1.5rem 0;
+}
+
+/* ─── Loading Skeleton — Premium Shimmer ─────────────────────────── */
+@keyframes shimmer-luxury {
+  0% { background-position: -300% 0; }
+  100% { background-position: 300% 0; }
+}
+
+.shimmer-luxury {
+  background: linear-gradient(
+    90deg,
+    rgba(30, 30, 46, 0.4) 20%,
+    rgba(212, 175, 55, 0.06) 40%,
+    rgba(30, 30, 46, 0.4) 60%
+  );
+  background-size: 300% 100%;
+  animation: shimmer-luxury 2s ease-in-out infinite;
+  border-radius: 8px;
+}
+
+/* ─── Gold Accent Border (Animated) ──────────────────────────────── */
+@keyframes gold-border-pulse {
+  0%, 100% { border-color: rgba(212, 175, 55, 0.1); }
+  50% { border-color: rgba(212, 175, 55, 0.3); }
+}
+
+.gold-border-animated {
+  animation: gold-border-pulse 3s ease-in-out infinite;
+}
+
+/* ─── Gold Dot Pattern (Subtle Background) ───────────────────────── */
+.gold-dot-pattern {
+  background-image: radial-gradient(
+    circle at 1px 1px,
+    rgba(212, 175, 55, 0.06) 1px,
+    transparent 0
+  );
+  background-size: 32px 32px;
+}
+
+/* ─── Stats Number — Count-Up Style ──────────────────────────────── */
+.stat-number-luxury {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 1.5rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #D4AF37 0%, #E5C158 50%, #D4AF37 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Section Heading — Premium ──────────────────────────────────── */
+.section-heading {
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+  letter-spacing: -0.01em;
+  position: relative;
+  display: inline-block;
+  padding-bottom: 0.5rem;
+}
+
+.section-heading::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 32px;
+  height: 2px;
+  background: linear-gradient(90deg, #D4AF37, transparent);
+  border-radius: 1px;
+}
+
+/* ─── Glass Dropdown — Luxury Research ───────────────────────────── */
+.luxury-dropdown {
+  background: rgba(17, 17, 24, 0.6) !important;
+  backdrop-filter: blur(16px) saturate(1.4) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(1.4) !important;
+  border: 1px solid rgba(212, 175, 55, 0.12) !important;
+  color: #FFFFFF !important;
+  border-radius: 16px !important;
+  padding: 14px 44px 14px 18px !important;
+  font-size: 14px !important;
+  font-weight: 500 !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23D4AF37' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 16px center !important;
+  cursor: pointer !important;
+  transition: all 0.35s cubic-bezier(0.22, 1, 0.36, 1) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2) !important;
+}
+
+.luxury-dropdown:hover {
+  border-color: rgba(212, 175, 55, 0.25) !important;
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.3), 0 0 16px rgba(212, 175, 55, 0.05) !important;
+}
+
+.luxury-dropdown:focus {
+  border-color: rgba(212, 175, 55, 0.35) !important;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1), 0 6px 28px rgba(0, 0, 0, 0.3) !important;
+  outline: none !important;
+}
+
+.luxury-dropdown option {
+  background: #1A1A24 !important;
+  color: #FFFFFF !important;
+  padding: 8px !important;
+}
+
+.luxury-dropdown:disabled {
+  opacity: 0.4 !important;
+  cursor: not-allowed !important;
+}
+
+/* ─── Icon Wrapper — Gold Container ──────────────────────────────── */
+.icon-gold-wrapper {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.12), rgba(212, 175, 55, 0.04));
+  border: 1px solid rgba(212, 175, 55, 0.15);
+  color: #D4AF37;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.icon-gold-wrapper:hover {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.08));
+  border-color: rgba(212, 175, 55, 0.3);
+  box-shadow: 0 0 16px rgba(212, 175, 55, 0.1);
+}
+
+/* ─── Stat Tiles — Price Research ────────────────────────────────── */
+.stat-tile-luxury {
+  background: rgba(17, 17, 24, 0.5);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(212, 175, 55, 0.08);
+  border-radius: 16px;
+  padding: 20px;
+  text-align: center;
+  transition: all 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+
+.stat-tile-luxury:hover {
+  border-color: rgba(212, 175, 55, 0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 0 0 20px rgba(212, 175, 55, 0.05);
+}
+
+.stat-tile-luxury .stat-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 4px;
+}
+
+.stat-tile-luxury .stat-value {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* ─── Data Interpretation Card ───────────────────────────────────── */
+.data-card-luxury {
+  background: linear-gradient(135deg, rgba(17, 17, 24, 0.6), rgba(26, 26, 36, 0.4));
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid rgba(212, 175, 55, 0.1);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.data-card-luxury h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #D4AF37;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.data-card-luxury p {
+  font-size: 13px;
+  line-height: 1.7;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.data-card-luxury p strong {
+  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+}
+
+/* ─── Luxury Table — Price Research Dial Breakdown ───────────────── */
+.luxury-table-dark {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.luxury-table-dark thead th {
+  background: rgba(17, 17, 24, 0.6);
+  color: #D4AF37;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.12);
+  text-align: left;
+}
+
+.luxury-table-dark tbody tr {
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.luxury-table-dark tbody tr:hover {
+  background: rgba(212, 175, 55, 0.04);
+}
+
+.luxury-table-dark tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(30, 30, 46, 0.4);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.luxury-table-dark tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* ─── Chart Container — Dark Glass ───────────────────────────────── */
+.chart-container-luxury {
+  background: rgba(17, 17, 24, 0.5);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border: 1px solid rgba(212, 175, 55, 0.08);
+  border-radius: 20px;
+  padding: 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+/* ─── Tooltip — Premium Dark ─────────────────────────────────────── */
+.tooltip-luxury {
+  background: rgba(17, 17, 24, 0.9) !important;
+  backdrop-filter: blur(24px) saturate(1.4) !important;
+  border: 1px solid rgba(212, 175, 55, 0.2) !important;
+  border-radius: 12px !important;
+  padding: 14px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), 0 0 20px rgba(212, 175, 55, 0.05) !important;
+  color: #fff !important;
+  font-size: 12px !important;
+}
+
+/* ─── Header Block — Price Research ───────────────────────────────── */
+.header-block-luxury {
+  background: linear-gradient(135deg, rgba(17, 17, 24, 0.7), rgba(26, 26, 36, 0.5));
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  border: 1px solid rgba(212, 175, 55, 0.12);
+  border-radius: 24px;
+  padding: 32px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.3);
+  text-align: center;
+}
+
+.header-block-luxury h1 {
+  font-size: 1.5rem;
+  font-weight: 300;
+  letter-spacing: -0.01em;
+  color: #FFFFFF;
+}
+
+.header-block-luxury h1 span {
+  font-weight: 600;
+  background: linear-gradient(135deg, #D4AF37, #E5C158);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Watch Result Header — Price Research ────────────────────────── */
+.watch-header-luxury {
+  background: linear-gradient(135deg, rgba(17, 17, 24, 0.6), rgba(26, 26, 36, 0.4));
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid rgba(212, 175, 55, 0.1);
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.watch-header-luxury img {
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.watch-header-luxury h2 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #FFFFFF;
+}
+
+@media (max-width: 640px) {
+  .watch-header-luxury {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+/* ─── Date Range Selector ─────────────────────────────────────────── */
+.date-range-luxury {
+  background: rgba(26, 26, 36, 0.6) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(212, 175, 55, 0.12) !important;
+  color: #FFFFFF !important;
+  border-radius: 10px !important;
+  padding: 8px 36px 8px 14px !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  appearance: none !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23D4AF37' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 10px center !important;
+  cursor: pointer !important;
+  transition: all 0.3s ease !important;
+}
+
+.date-range-luxury:focus {
+  border-color: rgba(212, 175, 55, 0.35) !important;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1) !important;
+  outline: none !important;
+}
+
+/* ─── Legend Item — Chart ──────────────────────────────────────────── */
+.legend-luxury {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.legend-luxury .legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* ─── Badge — Dial Color in Price Research ────────────────────────── */
+.dial-badge-luxury {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 0.3s ease;
+}
+
+.dial-badge-luxury:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(212, 175, 55, 0.2);
+}
+
+/* ─── No Data State ────────────────────────────────────────────────── */
+.no-data-luxury {
+  text-align: center;
+  padding: 3rem 1rem;
+  background: rgba(17, 17, 24, 0.4);
+  border-radius: 16px;
+  border: 1px solid rgba(212, 175, 55, 0.08);
+}
+
+.no-data-luxury svg {
+  color: rgba(212, 175, 55, 0.2);
+  margin: 0 auto 1rem;
+}
+
+.no-data-luxury p {
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 14px;
+}
+
+/* ─── Scroll Reveal (Entrance Animation) ───────────────────────────── */
+@keyframes reveal-up {
+  0% {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.reveal-up {
+  animation: reveal-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.reveal-up-delay-1 {
+  animation-delay: 0.1s;
+}
+
+.reveal-up-delay-2 {
+  animation-delay: 0.2s;
+}
+
+.reveal-up-delay-3 {
+  animation-delay: 0.3s;
+}
+
+.reveal-up-delay-4 {
+  animation-delay: 0.4s;
+}
+
+/* ─── Gold Glow Ring ──────────────────────────────────────────────── */
+@keyframes glow-ring {
+  0%, 100% {
+    box-shadow:
+      0 0 10px rgba(212, 175, 55, 0.1),
+      0 0 20px rgba(212, 175, 55, 0.05);
+  }
+  50% {
+    box-shadow:
+      0 0 15px rgba(212, 175, 55, 0.2),
+      0 0 30px rgba(212, 175, 55, 0.1),
+      0 0 45px rgba(212, 175, 55, 0.05);
+  }
+}
+
+.glow-ring {
+  animation: glow-ring 3s ease-in-out infinite;
+}
+
+/* ─── Pricing Range Bar ────────────────────────────────────────────── */
+.range-bar-luxury {
+  position: relative;
+  height: 60px;
+  margin: 8px 0;
+}
+
+.range-bar-luxury .range-track {
+  position: absolute;
+  top: 28px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(212, 175, 55, 0.15), rgba(212, 175, 55, 0.05));
+  border-radius: 1px;
+}
+
+.range-bar-luxury .range-marker {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.range-bar-luxury .range-marker .marker-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid rgba(212, 175, 55, 0.4);
+  background: #0A0A0F;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.range-bar-luxury .range-marker .marker-label {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 4px;
+}
+
+.range-bar-luxury .range-marker .marker-value {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 4px;
+}
+
+.range-bar-luxury .range-marker.avg .marker-dot {
+  width: 24px;
+  height: 24px;
+  background: linear-gradient(135deg, #D4AF37, #E5C158);
+  border-color: transparent;
+  box-shadow: 0 2px 12px rgba(212, 175, 55, 0.3);
+}
+
+.range-bar-luxury .range-marker.avg .marker-value {
+  font-size: 13px;
+  background: linear-gradient(135deg, #D4AF37, #E5C158);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Loading Spinner ──────────────────────────────────────────────── */
+@keyframes spin-luxury {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.spinner-luxury {
+  width: 32px;
+  height: 32px;
+  border: 2px solid rgba(212, 175, 55, 0.1);
+  border-top-color: #D4AF37;
+  border-radius: 50%;
+  animation: spin-luxury 0.8s linear infinite;
+}

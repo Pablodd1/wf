@@ -7,12 +7,15 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Search, Filter, Info, User, CheckCircle, Globe, Loader2,
-  TrendingUp, Shield, Award, DollarSign, Watch, Gem, X, Zap,
-  ChevronDown, Sparkles
+  Search, Filter, Info, Loader2,
+  TrendingUp, DollarSign, Watch, Gem, X, Zap,
+  Sparkles
 } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
-import { resolveWatchImage, getBrandGradient, preloadCatalogImages } from '@/lib/imageResolver';
+import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
+import { LuxuryPriceCard } from '@/components/ui/LuxuryPriceCard';
+import { LuxuryStatsBar } from '@/components/ui/LuxuryStatsBar';
+import { LuxurySkeletonCard } from '@/components/ui/LuxurySkeletonCard';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface WatchListing {
@@ -194,111 +197,17 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
   const isNew = isNewListing(listing.created_at);
 
   return (
-    <motion.div
-      layout
-      variants={cardVariants}
-      whileHover={{ scale: 1.015, y: -6 }}
-      whileTap={{ scale: 0.99 }}
-      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className="glass-card overflow-hidden cursor-pointer group"
+    <LuxuryPriceCard
+      listing={listing}
+      imageUrl={displayImg}
+      brandGradient={getBrandGradient(listing.brand || '')}
+      dealerName={dealerName}
+      region={region}
+      isNew={isNew}
+      rating={rating}
+      title={title}
       onClick={() => navigate(`/flash-sales/${listing.id}`)}
-    >
-      {/* Image */}
-      <div className={`relative aspect-square bg-gradient-to-br ${getBrandGradient(listing.brand || '')} flex items-center justify-center overflow-hidden`}>
-        {displayImg ? (
-          <img
-            src={displayImg}
-            alt={`${listing.brand} ${listing.reference}`}
-            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
-            loading="lazy"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-          />
-        ) : (
-          <div className="text-center">
-            <div className="text-5xl opacity-20">&#x231A;</div>
-            <span className="text-xs text-white/30 uppercase tracking-wider mt-2 block">{listing.brand}</span>
-          </div>
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0F]/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-        {/* Condition Badge */}
-        {listing.condition && (
-          <div className="absolute top-3 left-3 px-2.5 py-1 bg-[#0A0A0F]/70 backdrop-blur-md rounded-full text-[10px] font-semibold text-white/90 border border-white/10 shadow-lg">
-            {listing.condition}
-          </div>
-        )}
-
-        {/* NEW Badge */}
-        <AnimatePresence>
-          {isNew && (
-            <motion.div
-              initial={{ opacity: 0, scale: 0.8, x: 10 }}
-              animate={{ opacity: 1, scale: 1, x: 0 }}
-              exit={{ opacity: 0, scale: 0.8 }}
-              className="absolute top-3 right-3"
-            >
-              <span className="px-2.5 py-1 bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-[#0A0A0F] text-[9px] font-bold uppercase tracking-[0.1em] rounded-full shadow-lg shadow-[#D4AF37]/30">
-                NEW
-              </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Content */}
-      <div className="p-4">
-        <div className="flex items-center gap-2 mb-1.5">
-          <span className="text-[11px] font-bold text-[#D4AF37] uppercase tracking-[0.08em]">{listing.brand}</span>
-          <span className="text-[10px] text-white/30 font-mono">{listing.reference}</span>
-        </div>
-
-        {/* Dealer name */}
-        <div className="flex items-center gap-1.5 mt-1 mb-2">
-          <User size={11} className="text-white/30" />
-          <span className="text-[11px] text-white/50 font-medium">{dealerName}</span>
-          <span className="text-[10px] text-[#D4AF37] flex items-center gap-0.5" title="Verified Dealer">
-            <CheckCircle size={10} />
-          </span>
-        </div>
-
-        <p className="text-sm font-medium text-white/90 line-clamp-1 leading-tight">{title.line1}</p>
-        {title.line2 && <p className="text-sm text-white/40 line-clamp-1 leading-tight">{title.line2}</p>}
-
-        <div className="flex items-center gap-1.5 mt-2.5">
-          {rating.hasRating ? (
-            <span className="flex items-center gap-1 text-[11px] text-emerald-400">
-              <CheckCircle size={12} className="text-emerald-400" />
-              <span className="font-semibold">{rating.label}</span>
-            </span>
-          ) : (
-            <span className="flex items-center gap-1 text-[11px] text-white/30">
-              <Info size={12} />
-              <span className="font-medium uppercase tracking-wider">{rating.label}</span>
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center justify-between mt-3">
-          <span className="text-base font-bold text-white price-mono">
-            {listing.price_usd > 0 ? formatPrice(listing.price_usd) : 'Contact'}
-          </span>
-          <span className="flex items-center gap-1 text-[10px] text-white/30 uppercase tracking-wider">
-            <Globe size={10} /> {region}
-          </span>
-        </div>
-
-        <p className="text-[10px] text-white/20 mt-1.5">Posted: {formatDate(listing.created_at)}</p>
-
-        <motion.button
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="mt-4 w-full py-2.5 border border-[#D4AF37]/40 text-[#D4AF37] text-[10px] font-semibold uppercase tracking-[0.1em] rounded-full hover:bg-[#D4AF37]/10 hover:border-[#D4AF37]/60 transition-all duration-300 flex items-center justify-center gap-1.5 group/btn"
-        >
-          <Info size={11} className="group-hover/btn:rotate-12 transition-transform duration-200" />
-          Check Availability
-        </motion.button>
-      </div>
-    </motion.div>
+    />
   );
 }
 
@@ -333,91 +242,6 @@ function SkeletonCard({ index }: { index: number }) {
   );
 }
 
-// ─── Stats Bar ──────────────────────────────────────────────────────────────────────
-function StatsBar({
-  total, loaded, hasMore, loadAllMode, onLoadAll, onBackToPaginated
-}: {
-  total: number; loaded: number; hasMore: boolean; loadAllMode: boolean;
-  onLoadAll: () => void; onBackToPaginated: () => void;
-}) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: -8 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.1 }}
-      className="glass-nav border-b border-[#D4AF37]/10"
-    >
-      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-6 overflow-x-auto">
-        <div className="flex items-center gap-2 text-[11px] text-white/50 whitespace-nowrap">
-          <div className="w-7 h-7 rounded-lg bg-[#D4AF37]/10 flex items-center justify-center">
-            <Shield size={13} className="text-[#D4AF37]" />
-          </div>
-          <div>
-            <span className="font-bold text-white price-mono text-sm">{total.toLocaleString()}</span>
-            <span className="text-white/30 ml-1">Total Listings</span>
-          </div>
-        </div>
-
-        <div className="w-px h-6 bg-white/5" />
-
-        <div className="flex items-center gap-2 text-[11px] text-white/50 whitespace-nowrap">
-          <div className="w-7 h-7 rounded-lg bg-[#D4AF37]/10 flex items-center justify-center">
-            <Award size={13} className="text-[#D4AF37]" />
-          </div>
-          <div>
-            <span className="font-bold text-white price-mono text-sm">29,512+</span>
-            <span className="text-white/30 ml-1">Global Dealers</span>
-          </div>
-        </div>
-
-        <div className="w-px h-6 bg-white/5" />
-
-        <div className="flex items-center gap-2 text-[11px] text-white/50 whitespace-nowrap">
-          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
-            <TrendingUp size={13} className="text-emerald-400" />
-          </div>
-          <span className="text-emerald-400/70 font-medium">Live Market Data</span>
-        </div>
-
-        <div className="flex-1" />
-
-        <div className="flex items-center gap-3">
-          {loadAllMode ? (
-            <>
-              <div className="text-[11px] text-[#D4AF37] font-semibold whitespace-nowrap price-mono">
-                {loaded.toLocaleString()} of {total.toLocaleString()} loaded
-              </div>
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={onBackToPaginated}
-                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/60 text-[11px] font-semibold rounded-full transition-colors whitespace-nowrap border border-white/10"
-              >
-                Back to Paginated
-              </motion.button>
-            </>
-          ) : (
-            <>
-              <div className="text-[11px] text-white/30 whitespace-nowrap">
-                Showing <span className="font-semibold text-white/60 price-mono">{loaded}</span> loaded
-              </div>
-              {hasMore && (
-                <motion.button
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  onClick={onLoadAll}
-                  className="btn-luxury text-[11px] py-2 px-5"
-                >
-                  <Zap size={13} /> Load All
-                </motion.button>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
-}
 
 // ─── Throttle helper ──────────────────────────────────────────────────────────────────
 function throttle<T extends (...args: unknown[]) => void>(fn: T, wait: number): T {
@@ -595,7 +419,7 @@ export default function TradingFloor() {
         </div>
       </div>
 
-      <StatsBar
+      <LuxuryStatsBar
         total={total}
         loaded={listings.length}
         hasMore={hasMore}
