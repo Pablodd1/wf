@@ -12,7 +12,11 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   const { user, loading } = useAuth();
 
-  if (loading && !skipAuth) {
+  if (skipAuth) {
+    return <>{children}</>;
+  }
+
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0A0A0F]">
         <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
