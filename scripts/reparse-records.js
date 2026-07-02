@@ -114,11 +114,24 @@ async function fetchBatch(lastId, limit) {
 }
 
 async function updateBatch(updates) {
-  // Use POST with resolution=merge-duplicates for upsert-like batch update
+  // Supabase batch update requires all objects to have the same keys
+  // Ensure every update has the same set of keys
+  const allKeys = new Set();
+  for (const u of updates) {
+    Object.keys(u).forEach(k => allKeys.add(k));
+  }
+  const normalized = updates.map(u => {
+    const obj = {};
+    for (const k of allKeys) {
+      obj[k] = u[k] !== undefined ? u[k] : null;
+    }
+    return obj;
+  });
+
   const res = await fetch(`${SUPABASE_URL}/rest/v1/${TABLE}`, {
     method: 'POST',
     headers: { ...HEADERS, 'Prefer': 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify(updates),
+    body: JSON.stringify(normalized),
   });
   if (!res.ok) {
     const errText = await res.text();
