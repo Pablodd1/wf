@@ -1,19 +1,21 @@
 /**
- * Trading Floor -- watchfacts.com/buy/all replica
- * Enhanced UI: gold accents, better cards, stats bar, improved filters
+ * Trading Floor — Luxury Glassmorphism Design
+ * Enhanced UI: glassmorphism cards, gold accents, refined stats bar, polished filters
  * INFINITE SCROLL: loads 100 at a time, auto-loads more on scroll
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Search, Filter, Info, User, CheckCircle, Globe, Loader2, TrendingUp, Shield, Award, DollarSign, Watch, Gem, X, Zap } from 'lucide-react';
+import {
+  Search, Filter, Info, User, CheckCircle, Globe, Loader2,
+  TrendingUp, Shield, Award, DollarSign, Watch, Gem, X, Zap,
+  ChevronDown, Sparkles
+} from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
-import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
+import { SUPABASE_URL, REQ_HEADERS } from '@/lib/supabaseConfig';
 
-// ─── Supabase direct ─────────────────────────────────────────────────
-
-// ─── Types ───────────────────────────────────────────────────────────
+// ─── Types ──────────────────────────────────────────────────────────────────
 interface WatchListing {
   id: string;
   brand: string;
@@ -32,27 +34,14 @@ interface WatchListing {
 
 const CONDITIONS = ['All', 'New', 'N1', 'N2', 'N3', 'N4', 'N5', 'N6', 'N7', 'N8', 'N9'];
 
-// ─── Known watch brands for category filtering ───────────────────────
-const KNOWN_WATCH_BRANDS = [
-  'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin',
-  'Omega', 'Cartier', 'Breitling', 'IWC', 'Jaeger-LeCoultre', 'Panerai', 'Hublot',
-  'TAG Heuer', 'Zenith', 'Blancpain', 'Breguet', 'Chopard', 'Girard-Perregaux',
-  'A. Lange & Sohne', 'F.P. Journe', 'De Bethune', 'MB&F', 'Urwerk', 'Gronefeld',
-  'Seiko', 'Grand Seiko', 'Citizen', 'Casio', 'G-Shock', 'Tudor', 'Nomos',
-  'Longines', 'Rado', 'Hamilton', 'Oris', 'Sinn', 'Damasko', 'Fortis',
-  'Bulgari', 'Hermes', 'Louis Vuitton', 'Chanel', 'Dior', 'Frank Muller',
-  'Parmigiani', 'Piaget', 'Ulysse Nardin', 'Voutilainen', 'Laurent Ferrier',
-  'Moser', 'Romain Gauthier', 'Greubel Forsey', 'Hautlence', 'HYT',
-];
-
-// ─── Source-to-display-name mapping ──────────────────────────────────
+// ─── Source-to-display-name mapping ────────────────────────────────────────────
 const SOURCE_DISPLAY_NAMES: Record<string, string> = {
   'mysql_auction_watches': 'Auction House',
   'production_db': 'Verified Dealer',
   'whatsapp': 'WhatsApp Dealer',
 };
 
-// ─── Extract dealer name from raw message ────────────────────────────
+// ─── Extract dealer name from raw message ──────────────────────────────────────────
 function extractDealerName(raw: string | null, source: string | null): string {
   if (!raw) return SOURCE_DISPLAY_NAMES[source || ''] || source || 'Private Seller';
 
@@ -77,7 +66,7 @@ function extractDealerName(raw: string | null, source: string | null): string {
   return SOURCE_DISPLAY_NAMES[source || ''] || source || 'Verified Dealer';
 }
 
-// ─── Currency converter ──────────────────────────────────────────────
+// ─── Currency converter ─────────────────────────────────────────────────────────
 function CurrencyConverter({ onClose }: { onClose: () => void }) {
   const [amount, setAmount] = useState('');
   const [fromCurr, setFromCurr] = useState('USD');
@@ -86,38 +75,50 @@ function CurrencyConverter({ onClose }: { onClose: () => void }) {
   const converted = amount ? ((parseFloat(amount) || 0) * (rates[toCurr] / rates[fromCurr])).toFixed(2) : '';
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-      className="absolute right-0 top-full mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-xl p-4 z-50">
-      <div className="flex items-center justify-between mb-3">
-        <h4 className="text-sm font-semibold text-gray-900">Currency Converter</h4>
-        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors"><X size={14} /></button>
+    <motion.div
+      initial={{ opacity: 0, y: 10, scale: 0.97 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 10, scale: 0.97 }}
+      className="absolute right-0 top-full mt-3 w-80 glass-modal p-5 z-50"
+    >
+      <div className="flex items-center justify-between mb-4">
+        <h4 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Sparkles size={14} className="text-[#D4AF37]" />
+          Currency Converter
+        </h4>
+        <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
+          <X size={14} />
+        </button>
       </div>
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div>
-          <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">Amount</label>
-          <input type="number" value={amount} onChange={e => setAmount(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B5BFE]" placeholder="10000" />
+          <label className="text-[10px] text-[#D4AF37] uppercase tracking-[0.12em] font-semibold mb-1.5 block">Amount</label>
+          <input
+            type="number"
+            value={amount}
+            onChange={e => setAmount(e.target.value)}
+            className="glass-input w-full"
+            placeholder="10000"
+          />
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">From</label>
-            <select value={fromCurr} onChange={e => setFromCurr(e.target.value)}
-              className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm">
+            <label className="text-[10px] text-[#D4AF37] uppercase tracking-[0.12em] font-semibold mb-1.5 block">From</label>
+            <select value={fromCurr} onChange={e => setFromCurr(e.target.value)} className="luxury-select w-full">
               {Object.keys(rates).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
           <div>
-            <label className="text-xs text-gray-500 uppercase tracking-wider mb-1 block">To</label>
-            <select value={toCurr} onChange={e => setToCurr(e.target.value)}
-              className="w-full px-2 py-2 border border-gray-200 rounded-lg text-sm">
+            <label className="text-[10px] text-[#D4AF37] uppercase tracking-[0.12em] font-semibold mb-1.5 block">To</label>
+            <select value={toCurr} onChange={e => setToCurr(e.target.value)} className="luxury-select w-full">
               {Object.keys(rates).map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
         </div>
         {converted && (
-          <div className="bg-gray-50 rounded-lg p-3 text-center">
-            <div className="text-lg font-bold text-[#3B5BFE] price-mono">{toCurr} {converted}</div>
-            <div className="text-xs text-gray-500">{fromCurr} {amount} at estimated rate</div>
+          <div className="glass-card p-4 text-center border-[#D4AF37]/20">
+            <div className="text-xl font-bold text-[#D4AF37] price-mono">{toCurr} {converted}</div>
+            <div className="text-[11px] text-white/40 mt-1">{fromCurr} {amount} at estimated rate</div>
           </div>
         )}
       </div>
@@ -125,7 +126,7 @@ function CurrencyConverter({ onClose }: { onClose: () => void }) {
   );
 }
 
-// ─── Extract clean title from raw_message ────────────────────────────
+// ─── Extract clean title from raw_message ──────────────────────────────────────────
 function extractTitle(raw: string | null): { line1: string; line2: string } {
   if (!raw) return { line1: '', line2: '' };
   const cleaned = raw
@@ -140,7 +141,7 @@ function extractTitle(raw: string | null): { line1: string; line2: string } {
   };
 }
 
-// ─── Compute rating from data quality ────────────────────────────────
+// ─── Compute rating from data quality ────────────────────────────────────────────
 function computeRating(listing: WatchListing): { hasRating: boolean; score: number; label: string } {
   let score = 0;
   if (listing.brand) score += 20;
@@ -155,7 +156,7 @@ function computeRating(listing: WatchListing): { hasRating: boolean; score: numb
   return { hasRating: false, score, label: 'NO RATING' };
 }
 
-// ─── Check if listing is new (within 24h) ────────────────────────────
+// ─── Check if listing is new (within 24h) ──────────────────────────────────────────
 function isNewListing(createdAt: string): boolean {
   const created = new Date(createdAt);
   const now = new Date();
@@ -163,25 +164,25 @@ function isNewListing(createdAt: string): boolean {
   return diffHours <= 24;
 }
 
-// ─── Format helpers ──────────────────────────────────────────────────
+// ─── Format helpers ────────────────────────────────────────────────────────────────
 const formatPrice = (p: number) => p >= 1000000 ? `$${(p/1000000).toFixed(1)}M` : p >= 1000 ? `$${p.toLocaleString()}` : `$${p}`;
 const formatDate = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
-// ─── Staggered container & item variants ─────────────────────────────
+// ─── Staggered container & item variants ──────────────────────────────────────────
 const containerVariants = {
   hidden: { opacity: 0 },
   show: {
     opacity: 1,
-    transition: { staggerChildren: 0.04 }
+    transition: { staggerChildren: 0.05 }
   }
 };
 
 const cardVariants = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] } }
+  hidden: { opacity: 0, y: 24 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.45, ease: [0.25, 0.46, 0.45, 0.94] } }
 };
 
-// ─── Watch Card ──────────────────────────────────────────────────────
+// ─── Watch Card ──────────────────────────────────────────────────────────────────
 function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: string }) {
   const navigate = useNavigate();
   const fallbackImg = resolveWatchImage(listing.reference || '', listing.brand || '');
@@ -197,10 +198,10 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
     <motion.div
       layout
       variants={cardVariants}
-      whileHover={{ scale: 1.02, y: -4 }}
+      whileHover={{ scale: 1.015, y: -6 }}
       whileTap={{ scale: 0.99 }}
-      transition={{ duration: 0.25, ease: [0.25, 0.46, 0.45, 0.94] }}
-      className="bg-white rounded-xl border border-gray-200 overflow-hidden cursor-pointer group shadow-sm hover:shadow-[0_20px_40px_rgba(0,0,0,0.12),0_0_20px_rgba(212,175,55,0.06)] hover:border-[#D4AF37]/30 transition-shadow duration-300"
+      transition={{ duration: 0.3, ease: [0.25, 0.46, 0.45, 0.94] }}
+      className="glass-card overflow-hidden cursor-pointer group"
       onClick={() => navigate(`/flash-sales/${listing.id}`)}
     >
       {/* Image */}
@@ -209,174 +210,206 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
           <img
             src={displayImg}
             alt={`${listing.brand} ${listing.reference}`}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
             loading="lazy"
             onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
           />
         ) : (
           <div className="text-center">
-            <div className="text-5xl opacity-20">⌚</div>
-            <span className="text-xs text-gray-400 uppercase tracking-wider mt-2 block">{listing.brand}</span>
+            <div className="text-5xl opacity-20">&#x231A;</div>
+            <span className="text-xs text-white/30 uppercase tracking-wider mt-2 block">{listing.brand}</span>
           </div>
         )}
-        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/5 transition-colors duration-300" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#0A0A0F]/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+
         {/* Condition Badge */}
         {listing.condition && (
-          <div className="absolute top-2 left-2 px-2 py-0.5 bg-white/90 backdrop-blur-sm rounded-full text-xs font-semibold text-gray-700 shadow-sm">
+          <div className="absolute top-3 left-3 px-2.5 py-1 bg-[#0A0A0F]/70 backdrop-blur-md rounded-full text-[10px] font-semibold text-white/90 border border-white/10 shadow-lg">
             {listing.condition}
           </div>
         )}
+
         {/* NEW Badge */}
         <AnimatePresence>
           {isNew && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
+              initial={{ opacity: 0, scale: 0.8, x: 10 }}
+              animate={{ opacity: 1, scale: 1, x: 0 }}
               exit={{ opacity: 0, scale: 0.8 }}
-              className="absolute top-2 right-2 new-badge"
+              className="absolute top-3 right-3"
             >
-              NEW
+              <span className="px-2.5 py-1 bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-[#0A0A0F] text-[9px] font-bold uppercase tracking-[0.1em] rounded-full shadow-lg shadow-[#D4AF37]/30">
+                NEW
+              </span>
             </motion.div>
           )}
         </AnimatePresence>
-        {/* Featured overlay on hover */}
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 h-16" />
       </div>
 
       {/* Content */}
       <div className="p-4">
-        <div className="flex items-center gap-1.5 mb-1">
-          <span className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-wider">{listing.brand}</span>
-          <span className="text-[11px] text-gray-400 font-mono">{listing.reference}</span>
+        <div className="flex items-center gap-2 mb-1.5">
+          <span className="text-[11px] font-bold text-[#D4AF37] uppercase tracking-[0.08em]">{listing.brand}</span>
+          <span className="text-[10px] text-white/30 font-mono">{listing.reference}</span>
         </div>
+
         {/* Dealer name */}
-        <div className="flex items-center gap-1.5 mt-1 mb-1">
-          <User size={11} className="text-gray-400" />
-          <span className="text-[11px] text-gray-500 font-medium">{dealerName}</span>
-          <span className="text-xs text-[#3B5BFE] flex items-center gap-0.5" title="Verified Dealer">
-            <CheckCircle size={10} className="text-[#3B5BFE]" />
+        <div className="flex items-center gap-1.5 mt-1 mb-2">
+          <User size={11} className="text-white/30" />
+          <span className="text-[11px] text-white/50 font-medium">{dealerName}</span>
+          <span className="text-[10px] text-[#D4AF37] flex items-center gap-0.5" title="Verified Dealer">
+            <CheckCircle size={10} />
           </span>
         </div>
-        <p className="text-sm font-medium text-gray-900 line-clamp-1 leading-tight">{title.line1}</p>
-        {title.line2 && <p className="text-sm text-gray-500 line-clamp-1 leading-tight">{title.line2}</p>}
-        <div className="flex items-center gap-1.5 mt-2">
+
+        <p className="text-sm font-medium text-white/90 line-clamp-1 leading-tight">{title.line1}</p>
+        {title.line2 && <p className="text-sm text-white/40 line-clamp-1 leading-tight">{title.line2}</p>}
+
+        <div className="flex items-center gap-1.5 mt-2.5">
           {rating.hasRating ? (
-            <span className="flex items-center gap-1 text-xs text-green-600">
-              <CheckCircle size={13} className="text-green-500" />
+            <span className="flex items-center gap-1 text-[11px] text-emerald-400">
+              <CheckCircle size={12} className="text-emerald-400" />
               <span className="font-semibold">{rating.label}</span>
             </span>
           ) : (
-            <span className="flex items-center gap-1 text-xs text-gray-400">
-              <Info size={13} />
+            <span className="flex items-center gap-1 text-[11px] text-white/30">
+              <Info size={12} />
               <span className="font-medium uppercase tracking-wider">{rating.label}</span>
             </span>
           )}
         </div>
-        <div className="flex items-center justify-between mt-2.5">
-          <span className="text-base font-bold text-gray-900 price-mono">{listing.price_usd > 0 ? formatPrice(listing.price_usd) : 'Contact'}</span>
-          <span className="flex items-center gap-1 text-xs text-gray-500 uppercase tracking-wider">
-            <Globe size={11} /> {region}
+
+        <div className="flex items-center justify-between mt-3">
+          <span className="text-base font-bold text-white price-mono">
+            {listing.price_usd > 0 ? formatPrice(listing.price_usd) : 'Contact'}
+          </span>
+          <span className="flex items-center gap-1 text-[10px] text-white/30 uppercase tracking-wider">
+            <Globe size={10} /> {region}
           </span>
         </div>
-        <p className="text-xs text-gray-400 mt-1">Posted: {formatDate(listing.created_at)}</p>
+
+        <p className="text-[10px] text-white/20 mt-1.5">Posted: {formatDate(listing.created_at)}</p>
+
         <motion.button
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className="mt-3 w-full py-2.5 border-2 border-[#3B5BFE] text-[#3B5BFE] text-[11px] font-semibold uppercase tracking-wider rounded-full hover:bg-[#3B5BFE] hover:text-white transition-all duration-200 flex items-center justify-center gap-1.5 group/btn"
+          className="mt-4 w-full py-2.5 border border-[#D4AF37]/40 text-[#D4AF37] text-[10px] font-semibold uppercase tracking-[0.1em] rounded-full hover:bg-[#D4AF37]/10 hover:border-[#D4AF37]/60 transition-all duration-300 flex items-center justify-center gap-1.5 group/btn"
         >
-          <Info size={11} className="group-hover/btn:rotate-12 transition-transform duration-200" /> Check Availability
+          <Info size={11} className="group-hover/btn:rotate-12 transition-transform duration-200" />
+          Check Availability
         </motion.button>
       </div>
     </motion.div>
   );
 }
 
-// ─── Shimmer Skeleton Card ───────────────────────────────────────────
+// ─── Shimmer Skeleton Card ──────────────────────────────────────────────────────
 function SkeletonCard({ index }: { index: number }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.05, duration: 0.3 }}
-      className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm"
+      className="glass-card overflow-hidden"
     >
-      <div className="aspect-square shimmer" />
+      <div className="aspect-square shimmer-dark" />
       <div className="p-4 space-y-3">
         <div className="flex gap-2">
-          <div className="h-3 shimmer rounded w-1/4" />
-          <div className="h-3 shimmer rounded w-1/5" />
+          <div className="h-3 shimmer-dark rounded w-1/4" />
+          <div className="h-3 shimmer-dark rounded w-1/5" />
         </div>
-        <div className="h-4 shimmer rounded w-3/4" />
-        <div className="h-3 shimmer rounded w-1/2" />
+        <div className="h-4 shimmer-dark rounded w-3/4" />
+        <div className="h-3 shimmer-dark rounded w-1/2" />
         <div className="flex items-center gap-1.5">
-          <div className="h-3 shimmer rounded w-4 rounded-full" />
-          <div className="h-3 shimmer rounded w-1/3" />
+          <div className="h-3 shimmer-dark rounded w-4 rounded-full" />
+          <div className="h-3 shimmer-dark rounded w-1/3" />
         </div>
         <div className="flex items-center justify-between">
-          <div className="h-5 shimmer rounded w-1/3" />
-          <div className="h-3 shimmer rounded w-1/4" />
+          <div className="h-5 shimmer-dark rounded w-1/3" />
+          <div className="h-3 shimmer-dark rounded w-1/4" />
         </div>
-        <div className="h-8 shimmer rounded w-full mt-2 rounded-full" />
+        <div className="h-8 shimmer-dark rounded w-full mt-2 rounded-full" />
       </div>
     </motion.div>
   );
 }
 
-// ─── Stats Bar ───────────────────────────────────────────────────────
-function StatsBar({ total, loaded, hasMore, loadAllMode, onLoadAll, onBackToPaginated }: { total: number; loaded: number; hasMore: boolean; loadAllMode: boolean; onLoadAll: () => void; onBackToPaginated: () => void }) {
+// ─── Stats Bar ──────────────────────────────────────────────────────────────────────
+function StatsBar({
+  total, loaded, hasMore, loadAllMode, onLoadAll, onBackToPaginated
+}: {
+  total: number; loaded: number; hasMore: boolean; loadAllMode: boolean;
+  onLoadAll: () => void; onBackToPaginated: () => void;
+}) {
   return (
     <motion.div
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.35 }}
-      className="bg-white border-b border-gray-200"
+      transition={{ duration: 0.5, delay: 0.1 }}
+      className="glass-nav border-b border-[#D4AF37]/10"
     >
-      <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center gap-6 overflow-x-auto">
-        <div className="flex items-center gap-1.5 text-[11px] text-gray-600 whitespace-nowrap">
-          <Shield size={13} className="text-[#D4AF37]" />
-          <span className="font-semibold text-gray-900">{total.toLocaleString()}</span>
-          <span className="text-gray-500">Total Listings</span>
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center gap-6 overflow-x-auto">
+        <div className="flex items-center gap-2 text-[11px] text-white/50 whitespace-nowrap">
+          <div className="w-7 h-7 rounded-lg bg-[#D4AF37]/10 flex items-center justify-center">
+            <Shield size={13} className="text-[#D4AF37]" />
+          </div>
+          <div>
+            <span className="font-bold text-white price-mono text-sm">{total.toLocaleString()}</span>
+            <span className="text-white/30 ml-1">Total Listings</span>
+          </div>
         </div>
-        <div className="w-px h-4 bg-gray-200" />
-        <div className="flex items-center gap-1.5 text-[11px] text-gray-600 whitespace-nowrap">
-          <Award size={13} className="text-[#D4AF37]" />
-          <span className="font-semibold text-gray-900">29,512+</span>
-          <span className="text-gray-500">Global Dealers</span>
+
+        <div className="w-px h-6 bg-white/5" />
+
+        <div className="flex items-center gap-2 text-[11px] text-white/50 whitespace-nowrap">
+          <div className="w-7 h-7 rounded-lg bg-[#D4AF37]/10 flex items-center justify-center">
+            <Award size={13} className="text-[#D4AF37]" />
+          </div>
+          <div>
+            <span className="font-bold text-white price-mono text-sm">29,512+</span>
+            <span className="text-white/30 ml-1">Global Dealers</span>
+          </div>
         </div>
-        <div className="w-px h-4 bg-gray-200" />
-        <div className="flex items-center gap-1.5 text-[11px] text-gray-600 whitespace-nowrap">
-          <TrendingUp size={13} className="text-green-500" />
-          <span className="text-gray-500">Live Market Data</span>
+
+        <div className="w-px h-6 bg-white/5" />
+
+        <div className="flex items-center gap-2 text-[11px] text-white/50 whitespace-nowrap">
+          <div className="w-7 h-7 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+            <TrendingUp size={13} className="text-emerald-400" />
+          </div>
+          <span className="text-emerald-400/70 font-medium">Live Market Data</span>
         </div>
+
         <div className="flex-1" />
+
         <div className="flex items-center gap-3">
           {loadAllMode ? (
             <>
               <div className="text-[11px] text-[#D4AF37] font-semibold whitespace-nowrap price-mono">
-                {loaded.toLocaleString()} of {total.toLocaleString()} listings loaded
+                {loaded.toLocaleString()} of {total.toLocaleString()} loaded
               </div>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={onBackToPaginated}
-                className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-[11px] font-semibold rounded-lg transition-colors whitespace-nowrap"
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 text-white/60 text-[11px] font-semibold rounded-full transition-colors whitespace-nowrap border border-white/10"
               >
                 Back to Paginated
               </motion.button>
             </>
           ) : (
             <>
-              <div className="text-[11px] text-gray-400 whitespace-nowrap">
-                Showing <span className="font-semibold text-gray-700 price-mono">{loaded}</span> loaded
+              <div className="text-[11px] text-white/30 whitespace-nowrap">
+                Showing <span className="font-semibold text-white/60 price-mono">{loaded}</span> loaded
               </div>
               {hasMore && (
                 <motion.button
                   whileHover={{ scale: 1.03 }}
                   whileTap={{ scale: 0.97 }}
                   onClick={onLoadAll}
-                  className="px-4 py-2 bg-[#D4AF37] hover:bg-[#C4A030] text-black text-xs font-semibold rounded-lg transition-colors flex items-center gap-2 whitespace-nowrap shadow-sm hover:shadow-md"
+                  className="btn-luxury text-[11px] py-2 px-5"
                 >
-                  <Zap size={14} /> Load All Listings
+                  <Zap size={13} /> Load All
                 </motion.button>
               )}
             </>
@@ -387,7 +420,7 @@ function StatsBar({ total, loaded, hasMore, loadAllMode, onLoadAll, onBackToPagi
   );
 }
 
-// ─── Throttle helper ─────────────────────────────────────────────────
+// ─── Throttle helper ──────────────────────────────────────────────────────────────────
 function throttle<T extends (...args: unknown[]) => void>(fn: T, wait: number): T {
   let lastTime = 0;
   return ((...args: unknown[]) => {
@@ -396,7 +429,7 @@ function throttle<T extends (...args: unknown[]) => void>(fn: T, wait: number): 
   }) as T;
 }
 
-// ─── Main Component ──────────────────────────────────────────────────
+// ─── Main Component ──────────────────────────────────────────────────────────────────
 export default function TradingFloor() {
   const [listings, setListings] = useState<WatchListing[]>([]);
   const [loading, setLoading] = useState(true);
@@ -406,7 +439,7 @@ export default function TradingFloor() {
   const [showConverter, setShowConverter] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(2392784);
-  const [pageSize, setPageSize] = useState(200); // Show more by default for client demo
+  const [pageSize, setPageSize] = useState(200);
   const [hasMore, setHasMore] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [imageMap, setImageMap] = useState<Record<string, string>>({});
@@ -414,7 +447,7 @@ export default function TradingFloor() {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFetchingRef = useRef(false);
 
-  // ─── Fetch real-time total count from Supabase ───────────────────────
+  // Fetch real-time total count from Supabase
   useEffect(() => {
     fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count&limit=1`, {
       headers: { 'apikey': REQ_HEADERS.apikey, 'Authorization': REQ_HEADERS.Authorization, 'Prefer': 'count=exact' }
@@ -460,7 +493,7 @@ export default function TradingFloor() {
         });
       }
 
-      // ─── Preload images BEFORE setting state ─────────────────────────
+      // Preload images BEFORE setting state
       const refs = processedData.map((l: WatchListing) => l.reference).filter(Boolean);
       const uniqueRefs = [...new Set(refs)].slice(0, 100);
       let newImageMap: Record<string, string> = {};
@@ -476,7 +509,7 @@ export default function TradingFloor() {
             }
           }
         } catch {
-          // silent fail — images gracefully fall back to gradient
+          // silent fail
         }
       }
       setImageMap(prev => ({ ...prev, ...newImageMap }));
@@ -532,43 +565,76 @@ export default function TradingFloor() {
   }, [fetchListings]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-[#0A0A0F] relative">
+      {/* Subtle background gradient */}
+      <div className="fixed inset-0 bg-gradient-to-b from-[#0A0A0F] via-[#0D0D14] to-[#0A0A0F] pointer-events-none" />
+      <div className="fixed inset-0 opacity-[0.015]" style={{
+        backgroundImage: 'radial-gradient(circle at 1px 1px, #D4AF37 1px, transparent 0)',
+        backgroundSize: '40px 40px'
+      }} />
+
       <DealerNavbar />
 
       {/* Header */}
-      <div className="relative bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white py-6 px-4 overflow-hidden">
-        <div className="absolute inset-0 opacity-5" style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, white 1px, transparent 0)', backgroundSize: '24px 24px' }} />
+      <div className="relative py-10 px-4 overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-r from-[#D4AF37]/5 via-transparent to-[#D4AF37]/3" />
         <div className="max-w-7xl mx-auto relative">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="w-1 h-6 bg-[#D4AF37] rounded-full" />
-            <h1 className="text-xl md:text-2xl font-light tracking-wide">Welcome to the Trading Floor</h1>
-          </div>
-          <p className="text-gray-400 text-sm ml-3">29,512+ Global Dealers. Search by reference to get the most accurate results</p>
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="text-center"
+          >
+            <div className="inline-flex items-center gap-3 mb-4 px-4 py-2 rounded-full glass-card border-[#D4AF37]/20">
+              <Sparkles size={14} className="text-[#D4AF37]" />
+              <span className="text-[11px] text-[#D4AF37] font-semibold uppercase tracking-[0.12em]">Premium Trading Floor</span>
+            </div>
+            <h1 className="text-2xl md:text-3xl font-light tracking-wide text-white mb-3">
+              Welcome to the <span className="text-gold-gradient font-medium">Trading Floor</span>
+            </h1>
+            <p className="text-white/40 text-sm max-w-xl mx-auto">
+              29,512+ Global Dealers. Search by reference to get the most accurate results.
+            </p>
+          </motion.div>
         </div>
       </div>
 
-      <StatsBar total={total} loaded={listings.length} hasMore={hasMore} loadAllMode={loadAllMode} onLoadAll={handleLoadAll} onBackToPaginated={resetToPaginated} />
+      <StatsBar
+        total={total}
+        loaded={listings.length}
+        hasMore={hasMore}
+        loadAllMode={loadAllMode}
+        onLoadAll={handleLoadAll}
+        onBackToPaginated={resetToPaginated}
+      />
 
       {/* Category Filter Pills + Search */}
-      <div className="bg-white border-b border-gray-200 sticky top-[56px] z-40 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 py-3">
-          <div className="flex flex-col sm:flex-row gap-2 mb-3">
+      <div className="sticky top-[60px] z-40 glass-nav border-b border-[#D4AF37]/10">
+        <div className="max-w-7xl mx-auto px-4 py-4">
+          <div className="flex flex-col sm:flex-row gap-3 mb-4">
             <div className="flex-1 relative">
-              <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input type="text" value={query} onChange={e => setQuery(e.target.value)}
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]/50" />
+              <input
+                type="text"
+                value={query}
+                onChange={e => setQuery(e.target.value)}
                 placeholder="Search by reference, brand, or keywords..."
-                className="w-full pl-9 pr-4 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#3B5BFE] bg-gray-50/50 transition-all duration-200 focus:bg-white" />
+                className="glass-input w-full pl-11 pr-4 py-3 text-sm"
+              />
             </div>
             <div className="flex gap-2">
-              <select value={condition} onChange={e => { setCondition(e.target.value); setPage(1); }}
-                className="px-3 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-600 bg-white hover:border-gray-300 transition-colors cursor-pointer">
+              <select
+                value={condition}
+                onChange={e => { setCondition(e.target.value); setPage(1); }}
+                className="luxury-select text-sm py-3"
+              >
                 {CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
                 onClick={() => { setQuery(''); setCondition('All'); setListingType('forsale'); setPage(1); }}
-                className="px-4 py-2.5 border border-gray-200 rounded-lg text-sm text-gray-500 hover:bg-gray-50 hover:text-gray-700 flex items-center gap-1.5 transition-all"
+                className="px-4 py-3 border border-white/10 rounded-xl text-sm text-white/40 hover:bg-white/5 hover:text-white/70 flex items-center gap-1.5 transition-all"
               >
                 <Filter size={14} /> Reset
               </motion.button>
@@ -579,15 +645,16 @@ export default function TradingFloor() {
             <motion.div
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
-              className="mb-3 px-3 py-2 bg-[#D4AF37]/10 border border-[#D4AF37]/30 rounded-lg flex items-center gap-2"
+              className="mb-3 px-4 py-2.5 glass-card border-[#D4AF37]/20 flex items-center gap-2"
             >
               <Zap size={14} className="text-[#D4AF37]" />
-              <span className="text-xs font-semibold text-[#B8960C]">
-                Load All Mode Active — {listings.length.toLocaleString()} of {total.toLocaleString()} listings loaded. Search and filters work client-side on loaded data.
+              <span className="text-[11px] font-semibold text-[#D4AF37]/80">
+                Load All Mode — {listings.length.toLocaleString()} of {total.toLocaleString()} listings loaded. Search and filters work client-side.
               </span>
             </motion.div>
           )}
-          <div className="flex items-center justify-between flex-wrap gap-2">
+
+          <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2 flex-wrap">
               {[
                 { id: 'forsale' as const, label: 'FOR SALE', icon: DollarSign },
@@ -600,14 +667,16 @@ export default function TradingFloor() {
                 return (
                   <motion.button
                     key={item.id}
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
+                    whileHover={{ scale: 1.04 }}
+                    whileTap={{ scale: 0.96 }}
                     onClick={() => { setListingType(isActive ? 'all' : item.id); setPage(1); }}
-                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider transition-all duration-200 ${
-                      isActive ? 'bg-[#3B5BFE] text-white shadow-md' : 'bg-white text-[#3B5BFE] border border-[#3B5BFE] hover:bg-blue-50'
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.06em] transition-all duration-300 ${
+                      isActive
+                        ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-[#0A0A0F] shadow-lg shadow-[#D4AF37]/20'
+                        : 'bg-white/5 text-white/50 border border-white/10 hover:bg-white/10 hover:text-white/70'
                     }`}
                   >
-                    <Icon size={13} /> {item.label}
+                    <Icon size={12} /> {item.label}
                   </motion.button>
                 );
               })}
@@ -615,25 +684,20 @@ export default function TradingFloor() {
 
             <div className="relative">
               <motion.button
-                whileHover={{ scale: 1.03 }}
-                whileTap={{ scale: 0.97 }}
+                whileHover={{ scale: 1.04 }}
+                whileTap={{ scale: 0.96 }}
                 onClick={() => setShowConverter(!showConverter)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold uppercase tracking-wider transition-all ${
-                  showConverter ? 'bg-[#3B5BFE] text-white' : 'bg-[#3B5BFE] text-white hover:bg-[#2a4ad9] shadow-md'
+                className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.06em] transition-all ${
+                  showConverter
+                    ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-[#0A0A0F]'
+                    : 'bg-white/5 text-[#D4AF37] border border-[#D4AF37]/30 hover:bg-[#D4AF37]/10'
                 }`}
               >
-                <DollarSign size={13} /> CONVERTER
+                <DollarSign size={12} /> CONVERTER
               </motion.button>
               <AnimatePresence>
                 {showConverter && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    <CurrencyConverter onClose={() => setShowConverter(false)} />
-                  </motion.div>
+                  <CurrencyConverter onClose={() => setShowConverter(false)} />
                 )}
               </AnimatePresence>
             </div>
@@ -642,7 +706,7 @@ export default function TradingFloor() {
       </div>
 
       {/* Results */}
-      <div className="max-w-7xl mx-auto px-4 py-6">
+      <div className="relative max-w-7xl mx-auto px-4 py-8">
         {loading && listings.length === 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {Array.from({ length: 8 }).map((_, i) => (
@@ -655,22 +719,22 @@ export default function TradingFloor() {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="text-center py-24 text-gray-400 bg-white rounded-xl border border-gray-100 empty-state-pattern"
+            className="text-center py-24 glass-card empty-state-pattern"
           >
             <motion.div
               animate={{ rotate: [0, 5, -5, 0] }}
               transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
-              className="text-6xl mb-4 opacity-30 inline-block"
+              className="text-6xl mb-4 opacity-20 inline-block"
             >
-              ⌚
+              &#x231A;
             </motion.div>
-            <p className="text-lg font-medium text-gray-500">No listings found</p>
-            <p className="text-sm text-gray-400 mt-1 mb-6">Try adjusting your search or filters</p>
+            <p className="text-lg font-medium text-white/50">No listings found</p>
+            <p className="text-sm text-white/30 mt-1 mb-6">Try adjusting your search or filters</p>
             <motion.button
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
               onClick={() => { setQuery(''); setCondition('All'); setListingType('forsale'); setPage(1); }}
-              className="px-6 py-2.5 bg-[#3B5BFE] hover:bg-[#2a4ad9] text-white text-sm font-medium rounded-lg transition-colors"
+              className="btn-luxury"
             >
               Clear All Filters
             </motion.button>
@@ -697,7 +761,7 @@ export default function TradingFloor() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="flex items-center justify-center gap-2 mt-10 text-sm text-gray-500"
+                className="flex items-center justify-center gap-2 mt-12 text-sm text-white/30"
               >
                 <Loader2 size={16} className="animate-spin text-[#D4AF37]" />
                 <span>Loading more listings...</span>
@@ -707,11 +771,12 @@ export default function TradingFloor() {
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className="text-center mt-10 text-xs text-gray-400"
+                className="text-center mt-12 text-[11px] text-white/20"
               >
+                <div className="gold-divider mb-4 max-w-xs mx-auto" />
                 {loadAllMode
-                  ? `-- Showing first ${listings.length.toLocaleString()} listings of ${total.toLocaleString()} total --`
-                  : `-- ${listings.length.toLocaleString()} listings loaded --`}
+                  ? `Showing first ${listings.length.toLocaleString()} listings of ${total.toLocaleString()} total`
+                  : `${listings.length.toLocaleString()} listings loaded`}
               </motion.div>
             )}
           </>
