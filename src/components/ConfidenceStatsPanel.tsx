@@ -1,7 +1,7 @@
 /**
- * ConfidenceStatsPanel — Shows the 4-tier confidence protocol distribution.
+ * ConfidenceStatsPanel — Shows the verdict distribution.
  * Fetches from /api/confidence-stats and displays:
- *   - Tier breakdown (Auto-approve / Review / Must Review / Manual)
+ *   - Verdict breakdown (APPROVED / REVIEW / HUMAN / RECYCLE)
  *   - Bar chart visualization
  *   - Brand-level confidence comparison
  */
@@ -10,23 +10,22 @@ import { Loader2 } from 'lucide-react';
 
 const API_BASE = import.meta.env.VITE_API_BASE || '';
 
-interface ConfidenceData {
+interface VerdictData {
   total: number;
-  tiers: Record<string, number>;
-  distribution: Record<string, { count: number; percentage: number }>;
-  brandStats: Array<{ brand: string; count: number; avgConfidence: number }>;
-  demo?: boolean;
+  totalRecords: number;
+  exportDate: string;
+  verdictCounts: Record<string, number>;
 }
 
-const TIER_META = {
-  AUTO_APPROVE: { label: 'Auto-Approve', color: '#22C55E', desc: 'All fields matched from catalog' },
-  REVIEW_SUGGESTED: { label: 'Review Suggested', color: '#EAB308', desc: '1 gap — AI can fill' },
-  MUST_REVIEW: { label: 'Must Review', color: '#F97316', desc: '2 gaps — human attention needed' },
-  MANUAL_INTERVENTION: { label: 'Manual', color: '#EF4444', desc: '3+ gaps — AI cannot resolve' },
+const VERDICT_META: Record<string, { label: string; color: string; desc: string }> = {
+  APPROVED: { label: 'Approved', color: '#22C55E', desc: 'Auto-scored, shown on public site' },
+  REVIEW: { label: 'Review', color: '#EAB308', desc: 'AI suggests review' },
+  HUMAN: { label: 'Human', color: '#F97316', desc: 'Needs manual attention' },
+  RECYCLE: { label: 'Recycle', color: '#EF4444', desc: 'Garbage/WTB requests' },
 };
 
 export function ConfidenceStatsPanel() {
-  const [data, setData] = useState<ConfidenceData | null>(null);
+  const [data, setData] = useState<VerdictData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -44,23 +43,24 @@ export function ConfidenceStatsPanel() {
     );
   }
 
-  if (!data) return null;
+  if (!data || !data.verdictCounts) return null;
+
+  const total = data.total || data.totalRecords || 0;
+  const verdicts = data.verdictCounts;
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-sm font-semibold text-text-primary uppercase tracking-wider">
-          Confidence Protocol
+          Verdict Distribution
         </h3>
-        {data.demo && (
-          <span className="text-xs text-text-muted bg-bg-elevated px-2 py-0.5 rounded">DEMO DATA</span>
-        )}
       </div>
 
-      {/* Tier breakdown bars */}
+      {/* Verdict breakdown bars */}
       <div className="space-y-2">
-        {Object.entries(TIER_META).map(([key, meta]) => {
-          const dist = data.distribution[key] || { count: 0, percentage: 0 };
+        {Object.entries(VERDICT_META).map(([key, meta]) => {
+          const count = verdicts[key] || 0;
+          const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
           return (
             <div key={key} className="flex items-center gap-3">
               <div className="w-28 text-xs font-medium text-text-secondary flex-shrink-0">
@@ -70,55 +70,28 @@ export function ConfidenceStatsPanel() {
                 <div
                   className="h-full rounded transition-all duration-500"
                   style={{
-                    width: `${Math.max(dist.percentage, 2)}%`,
+                    width: `${Math.max(percentage, 2)}%`,
                     backgroundColor: meta.color,
                     opacity: 0.85,
                   }}
                 />
                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-mono font-bold text-text-primary">
-                  {dist.percentage}%
+                  {percentage}%
                 </span>
               </div>
               <div className="w-20 text-right text-xs text-text-muted font-mono">
-                {dist.count.toLocaleString()}
+                {count.toLocaleString()}
               </div>
             </div>
           );
         })}
       </div>
 
-      {/* Brand-level confidence */}
-      {data.brandStats && data.brandStats.length > 0 && (
-        <div className="mt-4 pt-4 border-t border-border-default">
-          <h4 className="text-xs font-semibold text-text-muted uppercase tracking-wider mb-2">
-            Brand Confidence
-          </h4>
-          <div className="space-y-1">
-            {data.brandStats.slice(0, 6).map((brand) => (
-              <div key={brand.brand} className="flex items-center justify-between text-xs">
-                <span className="text-text-secondary">{brand.brand}</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-text-muted">{brand.count.toLocaleString()} records</span>
-                  <span
-                    className="font-mono font-bold px-1.5 rounded"
-                    style={{
-                      color: brand.avgConfidence >= 85 ? '#22C55E' : brand.avgConfidence >= 70 ? '#EAB308' : '#EF4444',
-                    }}
-                  >
-                    {brand.avgConfidence}%
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Total records */}
       <div className="mt-3 pt-3 border-t border-border-default flex items-center justify-between">
         <span className="text-xs text-text-muted">Total Records</span>
         <span className="text-sm font-mono font-bold text-gold-primary">
-          {data.total.toLocaleString()}
+          {total.toLocaleString()}
         </span>
       </div>
     </div>

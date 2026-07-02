@@ -37,31 +37,26 @@ interface AlertEvent {
 
 // ─── Check functions ─────────────────────────────────────────────────
 
-/** Check 1: Supabase Database — uses lightweight query to avoid count timeout on 2.39M rows */
+/** Check 1: Supabase Database — uses /api/health to verify connectivity (no direct Supabase call) */
 async function checkSupabase(): Promise<{ status: 'online' | 'offline'; latency: number; message: string }> {
   const start = performance.now();
   try {
-    // Use a lightweight query — just check connectivity, not count 2.39M rows
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/reference_images?select=id&limit=1`, {
-      method: 'GET',
-      headers: REQ_HEADERS,
-    });
+    const res = await fetch('/api/health', { method: 'GET' });
     const latency = Math.round(performance.now() - start);
-    if (!res.ok) {
-      // Try fallback: simple RPC call
-      const fallbackRes = await fetch(`${SUPABASE_URL}/rest/v1/rpc/check_health`, {
-        method: 'POST',
-        headers: REQ_HEADERS,
-        body: JSON.stringify({}),
-      });
-      if (fallbackRes.ok) {
-        return { status: 'online', latency, message: `${latency}ms • Connected via RPC` };
-      }
-      return { status: 'offline', latency, message: `HTTP ${res.status} • API error` };
+    if (res.ok) {
+      const data = await res.json();
+      const supOk = data?.checks?.supabase?.ok === true;
+      return {
+        status: supOk ? 'online' : 'offline',
+        latency,
+        message: supOk
+          ? `${latency}ms • Connected via API`
+          : `${latency}ms • Supabase check failed: ${data?.checks?.supabase?.error || 'unknown'}`
+      };
     }
-    return { status: 'online', latency, message: `${latency}ms • Connected` };
-  } catch (e: any) {
-    return { status: 'offline', latency: Math.round(performance.now() - start), message: e?.message || 'Connection failed' };
+    return { status: 'offline', latency, message: `HTTP ${res.status} • API health endpoint failed` };
+  } catch (err: any) {
+    return { status: 'offline', latency: Math.round(performance.now() - start), message: `Error: ${err.message || 'Network error'}` };
   }
 }
 
