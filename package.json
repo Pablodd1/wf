@@ -1,0 +1,11 @@
+{
+  "name": "watchfacts-poc",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "echo 'No build step required for API-only project'"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0"
+  }
+}
