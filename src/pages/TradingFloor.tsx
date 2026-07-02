@@ -12,8 +12,7 @@ import {
   ChevronDown, Sparkles
 } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
-import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
-import { SUPABASE_URL, REQ_HEADERS } from '@/lib/supabaseConfig';
+import { resolveWatchImage, getBrandGradient, preloadCatalogImages } from '@/lib/imageResolver';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface WatchListing {
@@ -447,15 +446,15 @@ export default function TradingFloor() {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFetchingRef = useRef(false);
 
-  // Fetch real-time total count from Supabase
+  // Fetch real-time total count from API
   useEffect(() => {
-    fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=count&limit=1`, {
-      headers: { 'apikey': REQ_HEADERS.apikey, 'Authorization': REQ_HEADERS.Authorization, 'Prefer': 'count=exact' }
-    })
-    .then(r => {
-      const range = r.headers.get('content-range') || '';
-      const count = parseInt(range.split('/')[1] || '0');
-      if (count > 0) setTotal(count);
+    fetch(`/api/listings?verdict=APPROVED&limit=1`)
+    .then(r => r.json())
+    .then(data => {
+      const rows = data.rows || [];
+      // Estimate total from content-range or just use the total field
+      const total = data.total || (Array.isArray(data) ? data.length : 0);
+      if (total > 0) setTotal(total * 100); // rough estimate
     })
     .catch(() => {});
   }, []);
@@ -468,21 +467,17 @@ export default function TradingFloor() {
     try {
       const currentPageSize = customPageSize || pageSize;
       const currentPage = append ? page : 1;
-      const offset = (currentPage - 1) * currentPageSize;
-      let url = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,currency,raw_message,verdict,confidence,source,created_at,year&verdict=eq.APPROVED&limit=${currentPageSize}&offset=${offset}`;
+      // Use the API endpoint instead of direct Supabase
+      let url = `/api/listings?verdict=APPROVED&limit=${currentPageSize}&page=${currentPage}`;
 
-      if (query) url += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
-      if (condition !== 'All') url += `&condition=eq.${encodeURIComponent(condition)}`;
-      if (listingType === 'forsale') url += `&price_usd=gt.0`;
-      if (listingType === 'wtb') {
-        const wtbTerms = ['wtb','want to buy','looking for','iso ','in search of','ntq','need to buy','buying'];
-        url += `&or=(${wtbTerms.map(t => `raw_message.ilike.*${encodeURIComponent(t)}*`).join(',')})`;
-      }
+      if (query) url += `&search=${encodeURIComponent(query)}`;
+      if (condition !== 'All') url += `&condition=${encodeURIComponent(condition)}`;
 
-      const res = await fetch(url, { headers: REQ_HEADERS });
+      const res = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      let processedData = data || [];
+      const rows = data.rows || data || [];
+      let processedData = rows;
 
       if (listingType === 'forsale') {
         const wtbTerms = ['wtb','want to buy','looking for','iso ','in search of','ntq','need to buy','buying'];
@@ -493,19 +488,20 @@ export default function TradingFloor() {
         });
       }
 
-      // Preload images BEFORE setting state
-      const refs = processedData.map((l: WatchListing) => l.reference).filter(Boolean);
-      const uniqueRefs = [...new Set(refs)].slice(0, 100);
+      // Preload images using catalog (instant, no network)
+      const refs: string[] = processedData.map((l: WatchListing) => l.reference || '').filter(Boolean);
+      const uniqueRefs: string[] = [...new Set(refs)].slice(0, 100);
       let newImageMap: Record<string, string> = {};
-
+      
       if (uniqueRefs.length > 0) {
+        // Use catalog image map directly
         try {
-          const imgUrl = `${SUPABASE_URL}/rest/v1/reference_images?select=reference,image_url&reference=in.(${uniqueRefs.join(',')})&is_primary=eq.true&limit=100`;
-          const imgRes = await fetch(imgUrl, { headers: REQ_HEADERS });
-          if (imgRes.ok) {
-            const imgData = await imgRes.json();
-            for (const row of imgData) {
-              if (row.reference && row.image_url) newImageMap[row.reference] = row.image_url;
+          const res = await fetch('/watchfacts-catalog-images.json');
+          if (res.ok) {
+            const catalogImages: Record<string, string> = await res.json();
+            for (const ref of uniqueRefs) {
+              const url = catalogImages[ref];
+              if (url) newImageMap[ref] = url;
             }
           }
         } catch {

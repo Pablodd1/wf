@@ -147,6 +147,7 @@ function shouldUpdate(record, parsed) {
   const oldPrice = record.price_usd;
   const oldCond  = record.condition;
   const oldYear  = record.year;
+  const oldVerdict = record.verdict;
 
   const newBrand = parsed.brand || null;
   const newRef   = parsed.ref || null;
@@ -156,7 +157,23 @@ function shouldUpdate(record, parsed) {
 
   let reasons = [];
 
-  // 1. Known garbage reference patterns
+  // 0. CATALOG MATCH BOOST: if catalog matched, override to APPROVED
+  if (parsed.catalogMatched) {
+    reasons.push(`catalog_matched: ${parsed.brand} ${parsed.ref}`);
+    return {
+      shouldUpdate: true,
+      reasons,
+      changes: {
+        brand: newBrand,
+        reference: newRef,
+        price_usd: newPrice,
+        condition: newCond,
+        year: newYear,
+        verdict: 'APPROVED',
+        confidence: 100,
+      }
+    };
+  }
   if (hasGarbageReference(oldRef) && !hasGarbageReference(newRef)) {
     reasons.push(`garbage_ref_fixed: "${oldRef}" -> "${newRef}"`);
   }
