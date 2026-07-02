@@ -114,9 +114,10 @@ const REF_PATTERNS = [
   // F.P. Journe — CS (Chronometre Souveau), RS, CE, LB, etc.
   { regex: /\b(CS|RS|CE|LB|LC)\b/i, brandHint: 'F.P. Journe' },
   // Omega — e.g. 145.022-69, 311.30.42, 210.30.42
-  // Also multi-segment: 123.10.35.20.01.001
+  // Also multi-segment: 123.10.35.20.01.001, 2221.80.00
   { regex: /\b(\d{3}\.\d{3}[\-–]?\d{0,2})\b/, brandHint: 'Omega' },
   { regex: /\b(\d{3}(?:\.\d{2,3})+)\b/, brandHint: 'Omega' },
+  { regex: /\b(\d{4}\.\d{2,3}\.\d{2,3})\b/, brandHint: 'Omega' },
   // JLC — e.g. Q397846J, Q4102520
   { regex: /\b(Q\d{6,7}[A-Z]?)\b/i, brandHint: 'Jaeger-LeCoultre' },
   // Generic fallback — NNNNN or NNNN/XX format
@@ -353,10 +354,10 @@ function parseReference(text, brandHint) {
       if (/^\d{4,7}[KM]$/i.test(ref)) continue;  // Price with K/M suffix
 
       // Must contain letters OR be 4-6 digit numeric (Patek 5711, Rolex 116500)
-      // OR be a dotted reference like Omega 145.022-69 or 123.10.35.20.01.001
+      // OR be a dotted reference like Omega 145.022-69 or 123.10.35.20.01.001 or 2221.80.00
       const hasLetters = /[A-Z]/.test(ref);
       const isNumericRef = /^\d{4,6}$/.test(ref);
-      const isDottedRef = /^\d{3}\.\d{2,3}/.test(ref);
+      const isDottedRef = /^\d{3,4}\.\d{2,3}/.test(ref);
       if (!hasLetters && !isNumericRef && !isDottedRef) continue;
 
       // For numeric-only refs, verify not followed by currency
