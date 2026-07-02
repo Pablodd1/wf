@@ -70,7 +70,7 @@ export default function DemoPage() {
       // Use server-side APIs (service_role key, always works)
       const [statsRes, listingsRes] = await Promise.all([
         fetch('/api/confidence-stats'),
-        fetch('/api/listings?limit=4'),
+        fetch('/api/listings?verdict=APPROVED&limit=4'),
       ]);
       const apiData = await statsRes.json();
       const listings = (await listingsRes.json()).rows || [];

@@ -436,7 +436,7 @@ export default function TradingFloor() {
       const currentPageSize = customPageSize || pageSize;
       const currentPage = append ? page : 1;
       const offset = (currentPage - 1) * currentPageSize;
-      let url = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,currency,raw_message,verdict,confidence,source,created_at,year&limit=${currentPageSize}&offset=${offset}`;
+      let url = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,currency,raw_message,verdict,confidence,source,created_at,year&verdict=eq.APPROVED&limit=${currentPageSize}&offset=${offset}`;
 
       if (query) url += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
       if (condition !== 'All') url += `&condition=eq.${encodeURIComponent(condition)}`;

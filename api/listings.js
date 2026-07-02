@@ -31,9 +31,12 @@ module.exports = async function handler(req, res) {
 
     let query = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,confidence,verdict,source,created_at,raw_message,human_edited`;
 
+    // Default to APPROVED only for clean data
+    const effectiveVerdict = verdict || 'APPROVED';
+    query += `&verdict=eq.${encodeURIComponent(effectiveVerdict)}`;
+
     if (brand) query += `&brand=eq.${encodeURIComponent(brand)}`;
     if (reference) query += `&reference=eq.${encodeURIComponent(reference)}`;
-    if (verdict) query += `&verdict=eq.${encodeURIComponent(verdict)}`;
     if (search) {
       const s = encodeURIComponent(search);
       query += `&or=(brand.ilike.*${s}*,reference.ilike.*${s}*,raw_message.ilike.*${s}*)`;

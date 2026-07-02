@@ -81,7 +81,7 @@ export default function PriceResearch() {
       }
 
       try {
-        const liveRes = await fetch('/api/listings?limit=5000');
+        const liveRes = await fetch('/api/listings?verdict=APPROVED&limit=5000');
         const result = await liveRes.json();
         const rows = result.rows || [];
         const brandMap = new Map<string, boolean>();
@@ -125,7 +125,7 @@ export default function PriceResearch() {
       }
 
       try {
-        const liveRes = await fetch(`/api/listings?brand=${encodeURIComponent(selectedModel)}&limit=5000`);
+        const liveRes = await fetch(`/api/listings?verdict=APPROVED&brand=${encodeURIComponent(selectedModel)}&limit=5000`);
         const result = await liveRes.json();
         const rows = result.rows || [];
         const refMap = new Map<string, boolean>();
@@ -156,7 +156,7 @@ export default function PriceResearch() {
     if (!ref) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/listings?reference=${encodeURIComponent(ref)}&limit=1000`);
+      const res = await fetch(`/api/listings?verdict=APPROVED&reference=${encodeURIComponent(ref)}&limit=1000`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const records = await res.json();
       if (!records?.length) { setResult(null); setLoading(false); return; }
