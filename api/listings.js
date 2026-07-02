@@ -17,7 +17,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-    const pageSize = Math.min(parseInt(limit), 100);
+    const pageSize = Math.min(parseInt(limit), 5000);
     const from = (parseInt(page) - 1) * pageSize;
 
     // Use a targeted query — NEVER count(*) on 2.39M rows
