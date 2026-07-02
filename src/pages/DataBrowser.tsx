@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { resolveWatchImage, getBrandGradient, getBrandIcon } from '@/lib/imageResolver';
 import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
+import { useNavigate } from 'react-router-dom';
 
 
 interface DBRecord {
@@ -42,6 +43,7 @@ const verdictColor = (v: string) => {
 };
 
 export default function DataBrowser() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState<DBRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [total, setTotal] = useState(0);
@@ -287,8 +289,15 @@ export default function DataBrowser() {
                 </thead>
                 <tbody>
                   {records.map(r => (
-                    <tr key={r.id} className="border-b border-gray-800 hover:bg-gray-800/30 transition-colors"
-                      onClick={(e) => { if (!(e.target as HTMLElement).closest('button')) toggleSelect(r.id); }}>
+                    <tr key={r.id} className="border-b border-gray-800 hover:bg-gray-800/30 transition-colors cursor-pointer"
+                      onClick={(e) => { 
+                        const target = e.target as HTMLElement;
+                        if (target.closest('button')) {
+                          toggleSelect(r.id);
+                        } else {
+                          navigate(`/admin/watch/${r.id}`);
+                        }
+                      }}>
                       <td className="py-2 px-3">
                         <button onClick={() => toggleSelect(r.id)} className="text-gray-400 hover:text-white">
                           {selected.has(r.id) ? <CheckSquare size={14} className="text-amber-400" /> : <Square size={14} />}

@@ -284,3 +284,332 @@ input:disabled, textarea:disabled, select:disabled {
 input[aria-invalid="true"], textarea[aria-invalid="true"] {
   border-color: #ef4444 !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   GLASSMORPHISM DESIGN SYSTEM — Luxury Watch Marketplace
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── Glass Card ────────────────────────────────────────────────── */
+.glass-card {
+  background: rgba(17, 17, 24, 0.6);
+  backdrop-filter: blur(20px) saturate(1.4);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid rgba(212, 175, 55, 0.12);
+  border-radius: 16px;
+  box-shadow:
+    0 4px 24px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.glass-card:hover {
+  border-color: rgba(212, 175, 55, 0.25);
+  box-shadow:
+    0 8px 40px rgba(0, 0, 0, 0.4),
+    0 0 30px rgba(212, 175, 55, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  transform: translateY(-2px);
+}
+
+/* ─── Glass Navbar ──────────────────────────────────────────────── */
+.glass-nav {
+  background: rgba(10, 10, 15, 0.75);
+  backdrop-filter: blur(24px) saturate(1.2);
+  -webkit-backdrop-filter: blur(24px) saturate(1.2);
+  border-bottom: 1px solid rgba(212, 175, 55, 0.08);
+}
+
+/* ─── Glass Modal / Overlay ─────────────────────────────────────── */
+.glass-modal {
+  background: rgba(17, 17, 24, 0.85);
+  backdrop-filter: blur(32px) saturate(1.3);
+  -webkit-backdrop-filter: blur(32px) saturate(1.3);
+  border: 1px solid rgba(212, 175, 55, 0.15);
+  border-radius: 20px;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* ─── Luxury Button — Primary (Gold) ────────────────────────────── */
+.btn-luxury {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 24px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #0A0A0F;
+  background: linear-gradient(135deg, #D4AF37 0%, #E5C158 50%, #D4AF37 100%);
+  background-size: 200% 100%;
+  border: none;
+  border-radius: 9999px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  box-shadow:
+    0 4px 16px rgba(212, 175, 55, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+
+.btn-luxury::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+  transform: translateX(-100%);
+  transition: transform 0.6s ease;
+}
+
+.btn-luxury:hover {
+  background-position: 100% 0;
+  box-shadow:
+    0 6px 24px rgba(212, 175, 55, 0.45),
+    0 0 20px rgba(212, 175, 55, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.btn-luxury:hover::before {
+  transform: translateX(100%);
+}
+
+.btn-luxury:active {
+  transform: translateY(0) scale(0.98);
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.2);
+}
+
+/* ─── Luxury Button — Outline ───────────────────────────────────── */
+.btn-luxury-outline {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 24px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #D4AF37;
+  background: transparent;
+  border: 1.5px solid rgba(212, 175, 55, 0.4);
+  border-radius: 9999px;
+  cursor: pointer;
+  overflow: hidden;
+  transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.btn-luxury-outline:hover {
+  background: rgba(212, 175, 55, 0.08);
+  border-color: rgba(212, 175, 55, 0.7);
+  color: #E5C158;
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.1);
+  transform: translateY(-1px);
+}
+
+.btn-luxury-outline:active {
+  transform: translateY(0) scale(0.98);
+}
+
+/* ─── Luxury Button — Ghost ─────────────────────────────────────── */
+.btn-luxury-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.7);
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.btn-luxury-ghost:hover {
+  color: #FFFFFF;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Section Divider with Gold Accent ──────────────────────────── */
+.gold-divider {
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.4), transparent);
+}
+
+/* ─── Gold Text Gradient ────────────────────────────────────────── */
+.text-gold-gradient {
+  background: linear-gradient(135deg, #D4AF37, #E5C158, #F0D878);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ─── Subtle Gold Glow ──────────────────────────────────────────── */
+.glow-gold {
+  box-shadow: 0 0 20px rgba(212, 175, 55, 0.15), 0 0 60px rgba(212, 175, 55, 0.05);
+}
+
+/* ─── Animated Border Glow ──────────────────────────────────────── */
+@keyframes border-glow {
+  0%, 100% { border-color: rgba(212, 175, 55, 0.12); }
+  50% { border-color: rgba(212, 175, 55, 0.3); }
+}
+
+.animate-border-glow {
+  animation: border-glow 3s ease-in-out infinite;
+}
+
+/* ─── Float Animation ───────────────────────────────────────────── */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* ─── Shine Sweep Animation ─────────────────────────────────────── */
+@keyframes shine {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.shine-sweep {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shine 3s ease-in-out infinite;
+}
+
+/* ─── Stat Card Number Animation ────────────────────────────────── */
+@keyframes count-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.stat-number {
+  animation: count-up 0.6s ease-out forwards;
+}
+
+/* ─── Glass Input ───────────────────────────────────────────────── */
+.glass-input {
+  background: rgba(26, 26, 36, 0.6) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(212, 175, 55, 0.15) !important;
+  color: #FFFFFF !important;
+  border-radius: 12px !important;
+  padding: 10px 16px !important;
+  transition: all 0.3s ease;
+}
+
+.glass-input:focus {
+  border-color: rgba(212, 175, 55, 0.4) !important;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1), 0 4px 20px rgba(0,0,0,0.2) !important;
+  background: rgba(26, 26, 36, 0.8) !important;
+}
+
+.glass-input::placeholder {
+  color: rgba(156, 163, 175, 0.6) !important;
+}
+
+/* ─── Luxury Select ─────────────────────────────────────────────── */
+.luxury-select {
+  background: rgba(26, 26, 36, 0.6) !important;
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(212, 175, 55, 0.15) !important;
+  color: #FFFFFF !important;
+  border-radius: 12px !important;
+  padding: 10px 36px 10px 16px !important;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23D4AF37' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 12px center !important;
+  transition: all 0.3s ease;
+  cursor: pointer;
+}
+
+.luxury-select:focus {
+  border-color: rgba(212, 175, 55, 0.4) !important;
+  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1) !important;
+}
+
+/* ─── Luxury Table ──────────────────────────────────────────────── */
+.luxury-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.luxury-table thead th {
+  background: rgba(17, 17, 24, 0.8);
+  backdrop-filter: blur(8px);
+  color: #D4AF37;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgba(212, 175, 55, 0.15);
+  text-align: left;
+}
+
+.luxury-table tbody tr {
+  transition: all 0.2s ease;
+}
+
+.luxury-table tbody tr:hover {
+  background: rgba(212, 175, 55, 0.04);
+}
+
+.luxury-table tbody td {
+  padding: 14px 16px;
+  border-bottom: 1px solid rgba(30, 30, 46, 0.6);
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.85);
+}
+
+/* ─── Badge / Pill ──────────────────────────────────────────────── */
+.luxury-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: 9999px;
+  background: rgba(212, 175, 55, 0.1);
+  color: #D4AF37;
+  border: 1px solid rgba(212, 175, 55, 0.2);
+}
+
+/* ─── Hero Gradient Backgrounds ─────────────────────────────────── */
+.bg-hero-dark {
+  background: linear-gradient(135deg, #0A0A0F 0%, #111118 40%, #0D0D16 100%);
+}
+
+.bg-hero-gold {
+  background: linear-gradient(135deg, rgba(212, 175, 55, 0.05) 0%, transparent 50%, rgba(212, 175, 55, 0.03) 100%);
+}
+
+/* ─── Noise Texture Overlay ─────────────────────────────────────── */
+.noise-overlay::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 1;
+}
