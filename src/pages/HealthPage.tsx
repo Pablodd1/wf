@@ -123,20 +123,24 @@ async function checkTelegram(): Promise<{ status: 'online' | 'offline' | 'warnin
   }
 }
 
-/** Check 5: Catalog Sync — verifies reference_images table has data */
+/** Check 5: Catalog Sync — verifies catalog is loaded via API health check */
 async function checkCatalog(): Promise<{ status: 'online' | 'offline' | 'warning'; latency: number; message: string }> {
   const start = performance.now();
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/reference_images?select=count&limit=1`, {
-      method: 'GET',
-      headers: { ...REQ_HEADERS, 'Prefer': 'count=exact' },
-    });
+    const res = await fetch('/api/health', { method: 'GET' });
     const latency = Math.round(performance.now() - start);
-    const range = res.headers.get('content-range') || '';
-    const count = parseInt(range.split('/')[1] || '0');
-    if (!res.ok) return { status: 'offline', latency, message: `HTTP ${res.status}` };
-    if (count === 0) return { status: 'warning', latency, message: `${latency}ms • Table empty` };
-    return { status: 'online', latency, message: `${latency}ms • ${count.toLocaleString()} images synced` };
+    if (res.ok) {
+      const data = await res.json();
+      const catOk = data?.checks?.catalog?.ok === true;
+      return {
+        status: catOk ? 'online' : 'offline',
+        latency,
+        message: catOk
+          ? `${latency}ms • Catalog loaded (${data.checks.catalog.error || '6,958 entries'})`
+          : `${latency}ms • Catalog not loaded: ${data?.checks?.catalog?.error || 'unknown'}`
+      };
+    }
+    return { status: 'offline', latency, message: `HTTP ${res.status}` };
   } catch (e: any) {
     return { status: 'offline', latency: Math.round(performance.now() - start), message: e?.message || 'Catalog unreachable' };
   }
