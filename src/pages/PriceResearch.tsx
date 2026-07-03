@@ -30,13 +30,51 @@ function fmtPrice(n: number): string { if (n >= 1000000) return `$${(n/1000000).
 function fmtPriceFull(n: number): string { return '$' + n.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2}); }
 function analyzeOutliers(prices: number[]): { filtered: number[]; outliers: number[]; q1: number; q3: number; iqr: number; lower: number; upper: number } {
   if (prices.length < 4) return { filtered: prices, outliers: [], q1: prices[0]||0, q3: prices[prices.length-1]||0, iqr: 0, lower: 0, upper: Infinity };
-  const s = [...prices].sort((a,b)=>a-b); const q1 = s[Math.floor(s.length*0.25)]; const q3 = s[Math.floor(s.length*0.75)]; const iqr = q3-q1;
-  return { filtered: prices.filter(p=>p>=q1-1.5*iqr&&p<=q3+1.5*iqr), outliers: prices.filter(p=>p<q1-1.5*iqr||p>q3+1.5*iqr), q1, q3, iqr, lower: q1-1.5*iqr, upper: q3+1.5*iqr };
+  const s = [...prices].sort((a,b)=>a-b);
+  // Tier 1: IQR statistical outliers
+  const q1 = s[Math.floor(s.length*0.25)];
+  const q3 = s[Math.floor(s.length*0.75)];
+  const iqr = q3-q1;
+  const iqrLower = q1-1.5*iqr;
+  const iqrUpper = q3+1.5*iqr;
+  
+  // Tier 2: Business logic filters — prices that are obviously wrong
+  const median = s[Math.floor(s.length/2)];
+  const bizLower = median * 0.1;   // Nothing under 10% of median
+  const bizUpper = median * 10;     // Nothing over 10x median
+  const finalLower = Math.max(iqrLower, bizLower);
+  const finalUpper = Math.min(iqrUpper, bizUpper);
+  
+  const filtered = prices.filter(p => p >= finalLower && p <= finalUpper);
+  const outliers = prices.filter(p => p < finalLower || p > finalUpper);
+  
+  return { filtered, outliers, q1, q3, iqr, lower: finalLower, upper: finalUpper };
 }
 function generateMonthRange(): { monthKey: string; month: string }[] { const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; const r = []; const now = new Date(); for (let y = 2026; y <= now.getFullYear(); y++) { const em = y===now.getFullYear()?now.getMonth():11; for (let m = (y===2026?0:0); m <= em; m++) r.push({ monthKey: `${y}-${String(m+1).padStart(2,'0')}`, month: `${mn[m]} ${y}` }); } return r; }
 function safeDialKey(c: string): string { return 'dial_'+c.replace(/[^a-zA-Z0-9]/g,'_'); }
-function groupByMonth(records: any[]): MonthlyPoint[] { const fr = generateMonthRange(); const fm = new Map<string,MonthlyPoint>(); for (const m of fr) fm.set(m.monthKey,{...m,dialPrices:{},count:0,avgPrice:0}); const dc = new Map<string,Map<string,number>>(); for (const r of records) { const d = r.received_at?new Date(r.received_at):r.created_at?new Date(r.created_at):new Date(); if (isNaN(d.getTime())) continue; const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; const e = fm.get(k); if (!e) continue; if (r.price_usd>0) { e.count++; const c = r.dial_color||'Unknown'; e.dialPrices[c]=(e.dialPrices[c]||0)+r.price_usd; if (!dc.has(k)) dc.set(k,new Map()); const m = dc.get(k)!; m.set(c,(m.get(c)||0)+1); } } for (const e of fm.values()) { if (e.count>0) { let t = 0; for (const c of Object.keys(e.dialPrices)) { const n = dc.get(e.monthKey)?.get(c)||1; e.dialPrices[c] = Math.round(e.dialPrices[c]/n); t += e.dialPrices[c]; } e.avgPrice = Object.keys(e.dialPrices).length>0?Math.round(t/Object.keys(e.dialPrices).length):0; } } return Array.from(fm.values()).sort((a,b)=>a.monthKey.localeCompare(b.monthKey)); }
-function getDialBreakdown(records: any[]): DialBreakdown[] { const m = new Map<string,number[]>(); for (const r of records) { const c = r.dial_color||'Unknown'; if (!m.has(c)) m.set(c,[]); if (r.price_usd>0) m.get(c)!.push(r.price_usd); } const rs: DialBreakdown[] = []; for (const [c,p] of m) { const s = [...p].sort((a,b)=>a-b); rs.push({color:c,count:p.length,avgPrice:Math.round(p.reduce((a,b)=>a+b,0)/p.length),minPrice:s[0],maxPrice:s[s.length-1]}); } return rs.sort((a,b)=>b.count-a.count); }
+
+/** Extract dial color from raw message text when parser missed it */
+function extractDialFromText(rawMsg: string | null, currentDial: string | null): string {
+  if (currentDial && currentDial !== 'Unknown' && currentDial !== 'UNKNOWN' && currentDial !== '') return currentDial;
+  if (!rawMsg) return 'Unknown';
+  const lower = rawMsg.toLowerCase();
+  const colors = ['black','white','blue','green','silver','gold','champagne','grey','gray','red','brown','purple','orange','yellow','pink','ivory','tiffany','salmon','skeleton'];
+  let best = 'Unknown', bestScore = 0;
+  for (const color of colors) {
+    const matches = lower.match(new RegExp('\\\\b' + color + '\\\\b', 'g'));
+    const score = matches ? matches.length : 0;
+    if (score > bestScore) { bestScore = score; best = color; }
+  }
+  return best === 'Unknown' ? 'Unknown' : best.charAt(0).toUpperCase() + best.slice(1);
+}
+
+/** Clean monthly data: remove months with zero count (prevents $0 chart line) */
+function cleanMonthlyData(data: MonthlyPoint[]): MonthlyPoint[] {
+  return data.filter(m => m.count > 0 && m.avgPrice > 0);
+}
+
+function groupByMonth(records: any[]): MonthlyPoint[] { const fr = generateMonthRange(); const fm = new Map<string,MonthlyPoint>(); for (const m of fr) fm.set(m.monthKey,{...m,dialPrices:{},count:0,avgPrice:0}); const dc = new Map<string,Map<string,number>>(); for (const r of records) { const d = r.received_at?new Date(r.received_at):r.created_at?new Date(r.created_at):new Date(); if (isNaN(d.getTime())) continue; const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; const e = fm.get(k); if (!e) continue; if (r.price_usd>0) { e.count++; const c = extractDialFromText(r.raw_message, r.dial_color); e.dialPrices[c]=(e.dialPrices[c]||0)+r.price_usd; if (!dc.has(k)) dc.set(k,new Map()); const m = dc.get(k)!; m.set(c,(m.get(c)||0)+1); } } for (const e of fm.values()) { if (e.count>0) { let t = 0; for (const c of Object.keys(e.dialPrices)) { const n = dc.get(e.monthKey)?.get(c)||1; e.dialPrices[c] = Math.round(e.dialPrices[c]/n); t += e.dialPrices[c]; } e.avgPrice = Object.keys(e.dialPrices).length>0?Math.round(t/Object.keys(e.dialPrices).length):0; } } return cleanMonthlyData(Array.from(fm.values()).sort((a,b)=>a.monthKey.localeCompare(b.monthKey))); }
+function getDialBreakdown(records: any[]): DialBreakdown[] { const m = new Map<string,number[]>(); for (const r of records) { const c = extractDialFromText(r.raw_message, r.dial_color); if (!m.has(c)) m.set(c,[]); if (r.price_usd>0) m.get(c)!.push(r.price_usd); } const rs: DialBreakdown[] = []; for (const [c,p] of m) { const s = [...p].sort((a,b)=>a-b); rs.push({color:c,count:p.length,avgPrice:Math.round(p.reduce((a,b)=>a+b,0)/p.length),minPrice:s[0],maxPrice:s[s.length-1]}); } return rs.sort((a,b)=>b.count-a.count); }
 const DCC: Record<string,string> = {'White':'#E5E7EB','Black':'#1F2937','Blue':'#3B5BFE','Green':'#10B981','Silver':'#9CA3AF','Champagne':'#D4AF37','Grey':'#6B7280','Gray':'#6B7280','Red':'#EF4444','Brown':'#92400E','Purple':'#8B5CF6','Orange':'#F97316','Yellow':'#F59E0B','Pink':'#EC4899','Ivory':'#FEF3C7','Mother of Pearl':'#E0E7FF','Unknown':'#D1D5DB'};
 function gdc(d: string): string { return DCC[d]||`hsl($ {[...d].reduce((s,c)=>s+c.charCodeAt(0),0)%360},60%,50%)`; }
 function CustomTooltip({ active, payload }: any) { if (!active||!payload?.length) return null; const d = payload[0].payload; return <div className="tooltip-luxury"><div className="font-semibold text-white mb-2 pb-2 border-b border-[#D4AF37]/20">{d.month}</div><div className="text-[11px] text-white/40 mb-2">{d.count} listings</div>{Object.entries(d.dialPrices).sort(([,a],[,b])=>(b as number)-(a as number)).map(([c,p])=>(<div key={c} className="flex justify-between items-center py-0.5"><div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{backgroundColor:gdc(c)}}/><span className="text-white/70">{c}</span></div><span className="font-mono font-semibold" style={{color:gdc(c)}}>{fmtPrice(p as number)}</span></div>))}<div className="mt-2 pt-2 border-t border-[#D4AF37]/20 flex justify-between"><span className="text-white/50 font-medium">Overall Avg</span><span className="font-mono font-bold text-[#D4AF37]">{fmtPrice(d.avgPrice)}</span></div></div>; }
