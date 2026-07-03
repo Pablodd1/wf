@@ -1,4 +1,4 @@
-/** 2
+/**
  * Flash Sale Detail — EXACT match to user's reference card
  * Format:
  *   [NO RATING]
@@ -22,7 +22,7 @@
  *   [See User Profile]
  */
 import { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useLocation, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { ArrowLeft, Info, CheckCircle, Globe, User, Package, FileText, Star, MessageSquare, Shield } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
@@ -66,19 +66,22 @@ const formatPrice = (p: number) =>
 
 export default function FlashSaleDetail() {
   const { id } = useParams<{ id: string }>();
-  const [listing, setListing] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const location = useLocation();
+  const [listing, setListing] = useState<any>(() => (location.state as any)?.listing || null);
+  const [loading, setLoading] = useState(!listing);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || listing) return;
     const fetchDetail = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/listings?limit=1&search=${encodeURIComponent(id)}`);
+        // Increase limit and search by ID in the results
+        const res = await fetch(`/api/listings?limit=1000&verdict=APPROVED`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const result = await res.json();
-        const data = result.rows || result;
+        const allRows = result.rows || result || [];
+        const data = Array.isArray(allRows) ? allRows.filter((r: any) => r.id === id) : [];
         if (data?.[0]) setListing(data[0]);
         else setError('Listing not found');
       } catch (err: any) {

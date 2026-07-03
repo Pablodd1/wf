@@ -206,7 +206,7 @@ function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: st
       isNew={isNew}
       rating={rating}
       title={title}
-      onClick={() => navigate(`/flash-sales/${listing.id}`)}
+      onClick={() => navigate(`/flash-sales/${listing.id}`, { state: { listing } })}
     />
   );
 }
