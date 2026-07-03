@@ -1,30 +1,33 @@
-/**
- * Flash Sale Detail — watchfacts.com/flash-sales/:id replica
- * EXACT match to user screenshot: large image, Post Info card, User Info card, Box/Papers badges
+/** 2
+ * Flash Sale Detail — EXACT match to user's reference card
+ * Format:
+ *   [NO RATING]
+ *   [reference] [year] [condition]
+ *   [dial_color] dial
+ *   [bracelet]
+ *   $[price]
+ *   Pm me
+ *   #[listing_id]
+ *   Posted on [date] · Reposted 5x
+ *   Box: Yes
+ *   Papers: Yes
+ *   
+ *   User Information:
+ *   [dealer name]
+ *   [region]
+ *   (0) - Reviews → 55
+ *   WTS Listings → 0
+ *   WTB Listing → 0
+ *   [Check availability]
+ *   [See User Profile]
  */
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowLeft, Info, CheckCircle, Globe, User, Package, FileText } from 'lucide-react';
+import { ArrowLeft, Info, CheckCircle, Globe, User, Package, FileText, Star, MessageSquare, Shield } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
 
-
-// ─── Compute rating ──────────────────────────────────────────────────
-function computeRating(listing: any): { hasRating: boolean; label: string } {
-  let score = 0;
-  if (listing?.brand) score += 20;
-  if (listing?.reference) score += 20;
-  if (listing?.price_usd > 0) score += 20;
-  if (listing?.condition) score += 15;
-  if (listing?.dial_color) score += 10;
-  if (listing?.year) score += 10;
-  if (listing?.raw_message && listing.raw_message.length > 20) score += 5;
-  if (score >= 80) return { hasRating: true, label: `${Math.round(score / 10)}/10` };
-  return { hasRating: false, label: 'NO RATING' };
-}
-
-// ─── Detect box/papers from raw message ──────────────────────────────
 function detectAccessories(raw: string | null): { box: boolean; papers: boolean } {
   if (!raw) return { box: false, papers: false };
   const lower = raw.toLowerCase();
@@ -32,6 +35,34 @@ function detectAccessories(raw: string | null): { box: boolean; papers: boolean 
   const hasPapers = lower.includes('papers') || lower.includes('card') || lower.includes('full set') || lower.includes('complete');
   return { box: hasBox, papers: hasPapers };
 }
+
+function extractDealerName(raw: string | null, source: string | null): string {
+  if (!raw) return source || 'Dealer';
+  const nameMatch = raw.match(/[-–—]\s*([A-Z][a-zA-Z\s]{2,20})(?:\s*$|\s*\n)/);
+  if (nameMatch) return nameMatch[1].trim();
+  return source || 'Verified Dealer';
+}
+
+function extractDial(raw: string | null, currentDial: string | null): string {
+  if (currentDial && currentDial !== 'Unknown') return currentDial;
+  if (!raw) return '';
+  const lower = raw.toLowerCase();
+  const dialColors: [string, string][] = [
+    ['black','Black'],['white','White'],['blue','Blue'],['green','Green'],
+    ['choc','Chocolate'],['chocolate','Chocolate'],['silver','Silver'],
+    ['gold','Gold'],['champagne','Champagne'],['grey','Grey'],['gray','Grey'],
+    ['red','Red'],['brown','Brown'],['pink','Pink'],['tiffany','Tiffany'],
+    ['salmon','Salmon'],['skeleton','Skeleton'],['ivory','Ivory'],
+  ];
+  for (const [keyword, label] of dialColors) {
+    if (lower.includes(keyword)) return label;
+  }
+  return currentDial || '';
+}
+
+const formatPrice = (p: number) =>
+  p >= 1000000 ? `$${(p/1000000).toFixed(1)}M` :
+  p >= 1000 ? `$${p.toLocaleString()}` : `$${p}`;
 
 export default function FlashSaleDetail() {
   const { id } = useParams<{ id: string }>();
@@ -58,134 +89,178 @@ export default function FlashSaleDetail() {
     fetchDetail();
   }, [id]);
 
-  if (loading) return (<div className="min-h-screen bg-white"><DealerNavbar /><div className="flex justify-center py-20"><div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" /></div></div>);
-  if (error || !listing) return (<div className="min-h-screen bg-white"><DealerNavbar /><div className="max-w-4xl mx-auto px-4 py-20 text-center text-red-500">{error || 'Not found'}<br/><Link to="/trading" className="text-blue-600 hover:underline mt-4 inline-block">Back to Trading</Link></div></div>);
+  if (loading) return (
+    <div className="min-h-screen bg-[#0A0A0F]">
+      <DealerNavbar />
+      <div className="flex justify-center py-32">
+        <div className="w-8 h-8 border-2 border-[#D4AF37] border-t-transparent rounded-full animate-spin" />
+      </div>
+    </div>
+  );
+  
+  if (error || !listing) return (
+    <div className="min-h-screen bg-[#0A0A0F]">
+      <DealerNavbar />
+      <div className="max-w-4xl mx-auto px-4 py-20 text-center">
+        <p className="text-red-400 text-sm">{error || 'Not found'}</p>
+        <Link to="/trading" className="text-[#D4AF37] hover:underline mt-4 inline-block text-xs">Back to Trading Floor</Link>
+      </div>
+    </div>
+  );
 
   const imgUrl = resolveWatchImage(listing.reference || '', listing.brand || '');
   const accessories = detectAccessories(listing.raw_message);
-  const rating = computeRating(listing);
   const region = listing.source?.toLowerCase().includes('asia') ? 'ASIA' : listing.source?.toLowerCase().includes('eu') ? 'EUROPE' : 'NORTH AMERICA';
   const postedDate = new Date(listing.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-  const priceLabel = listing.price_usd > 0 ? `$${listing.price_usd.toLocaleString()} + Label` : 'Contact for price';
+  const dealerName = extractDealerName(listing.raw_message, listing.source);
+  const dial = extractDial(listing.raw_message, listing.dial_color);
+  const raw = listing.raw_message || '';
+  const lower = raw.toLowerCase();
+  const bracelet = lower.includes('oyster') ? 'Oyster' : lower.includes('jubilee') ? 'Jubilee' : lower.includes('president') ? 'President' : '';
+  const isPmMe = lower.includes('pm me') || lower.includes('dm me');
+  const price = listing.price_usd > 0 ? formatPrice(listing.price_usd) : 'Contact';
+  
+  // Score for rating
+  let score = 0;
+  if (listing.brand) score += 20;
+  if (listing.reference) score += 20;
+  if (listing.price_usd > 0) score += 20;
+  if (listing.condition) score += 15;
+  if (dial) score += 10;
+  if (listing.year) score += 10;
+  const hasRating = score >= 80;
+  const ratingLabel = hasRating ? `${Math.round(score/10)}/10` : 'NO RATING';
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-[#0A0A0F]">
       <DealerNavbar />
 
-      <div className="max-w-6xl mx-auto px-4 py-6">
+      <div className="max-w-5xl mx-auto px-4 py-6">
         {/* Back link */}
-        <Link to="/trading" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-900 mb-6 transition-colors">
-          <ArrowLeft size={16} /> Back to Trading Floor
+        <Link to="/trading" className="inline-flex items-center gap-1.5 text-xs text-white/30 hover:text-[#D4AF37] mb-6 transition-colors">
+          <ArrowLeft size={14} /> Back to Trading Floor
         </Link>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* LEFT: Large Image */}
           <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}>
-            <div className={`aspect-square bg-gradient-to-br ${getBrandGradient(listing.brand || '')} rounded-xl flex items-center justify-center overflow-hidden`}>
+            <div className={`aspect-square bg-gradient-to-br ${getBrandGradient(listing.brand || '')} rounded-xl flex items-center justify-center overflow-hidden border border-white/5`}>
               {imgUrl ? (
                 <img src={imgUrl} alt={`${listing.brand} ${listing.reference}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
               ) : (
-                <div className="text-center"><div className="text-6xl mb-3 opacity-20">⌚</div><span className="text-xs text-gray-400 uppercase">{listing.brand}</span></div>
+                <div className="text-center">
+                  <span className="text-6xl opacity-10">⌚</span>
+                  <p className="text-xs text-white/20 uppercase tracking-wider mt-2">{listing.brand}</p>
+                </div>
               )}
             </div>
           </motion.div>
 
-          {/* RIGHT: Info Cards */}
+          {/* RIGHT: Info */}
           <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="space-y-4">
 
-            {/* Post Information Card */}
-            <div className="bg-white border border-gray-200 rounded-xl p-6">
-              <h3 className="text-sm font-medium text-gray-500 mb-4">Post Information:</h3>
-
+            {/* POST INFO CARD */}
+            <div className="bg-[#111118] border border-white/5 rounded-xl p-5 space-y-3">
+              
               {/* Rating */}
-              <div className="flex items-center gap-2 mb-3">
-                <Info size={16} className="text-gray-400" />
-                {rating.hasRating ? (
-                  <span className="text-sm font-semibold text-green-600">{rating.label}</span>
+              <div className="flex items-center gap-2">
+                {hasRating ? (
+                  <span className="inline-flex items-center gap-1 text-xs text-emerald-400 font-semibold px-2 py-0.5 bg-emerald-500/10 rounded">
+                    <CheckCircle size={11} /> {ratingLabel}
+                  </span>
                 ) : (
-                  <span className="text-sm font-medium text-gray-500 uppercase tracking-wider">{rating.label}</span>
+                  <span className="inline-flex items-center text-xs text-white/30 uppercase tracking-wider font-medium">
+                    NO RATING
+                  </span>
                 )}
               </div>
 
-              {/* Reference + Description */}
-              <div className="text-gray-900 mb-2">
-                <span className="font-semibold">{listing.reference}</span>
-                {listing.dial_color && ` - ${listing.dial_color} Dial`}
-                {listing.condition && ` - ${listing.condition}`}
+              {/* Reference + Year + Condition */}
+              <div className="text-base font-semibold text-white">
+                {listing.reference}
+                {listing.year && <span className="text-white/40 font-normal ml-1">{listing.year}</span>}
+                {listing.condition && <span className="text-white/30 font-normal ml-1">{listing.condition}</span>}
               </div>
 
-              {/* Details from raw message */}
-              {listing.raw_message && (
-                <p className="text-sm text-gray-600 mb-3">{listing.raw_message}</p>
-              )}
+              {/* Dial */}
+              {dial && <div className="text-sm text-white/60">{dial} dial</div>}
+
+              {/* Bracelet */}
+              {bracelet && <div className="text-sm text-white/60">{bracelet}</div>}
 
               {/* Price */}
-              <div className="text-lg font-semibold text-gray-900 mb-4">{priceLabel}</div>
+              <div className="text-xl font-bold text-white">{price}</div>
 
-              {/* Post ID + Date */}
-              <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                <span className="font-mono">#{listing.id.slice(-7)}</span>
-                <span>Posted on {postedDate}</span>
+              {/* Pm me */}
+              {isPmMe && <div className="text-xs text-[#D4AF37]/70 font-medium">Pm me</div>}
+
+              {/* Listing ID + Date + Reposted */}
+              <div className="flex items-center justify-between text-xs text-white/30">
+                <span className="font-mono">#{listing.id ? listing.id.slice(-7) : '—'}</span>
+                <div className="flex items-center gap-3">
+                  <span>Posted on {postedDate}</span>
+                  <span>· Reposted 0x</span>
+                </div>
               </div>
 
-              {/* Box / Papers Badges */}
-              <div className="flex gap-2">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${accessories.box ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                  <Package size={14} /> Box: {accessories.box ? 'Yes' : 'No'}
+              {/* Box / Papers */}
+              <div className="flex gap-3 pt-1">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/10">
+                  <Package size={13} className="text-white/40" />
+                  <span className="text-white/70">Box: <strong className={accessories.box ? 'text-emerald-400' : 'text-white/40'}>{accessories.box ? 'Yes' : 'No'}</strong></span>
                 </span>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${accessories.papers ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
-                  <FileText size={14} /> Papers: {accessories.papers ? 'Yes' : 'No'}
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium border border-white/10">
+                  <FileText size={13} className="text-white/40" />
+                  <span className="text-white/70">Papers: <strong className={accessories.papers ? 'text-emerald-400' : 'text-white/40'}>{accessories.papers ? 'Yes' : 'No'}</strong></span>
                 </span>
               </div>
             </div>
 
-            {/* Source Information Card */}
-            <div className="bg-white border border-gray-200 rounded-xl p-6">
-              <h3 className="text-sm font-medium text-gray-500 mb-4">Source Information:</h3>
-
-              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <Globe size={14} />
-                <span>{region}</span>
+            {/* USER INFO CARD */}
+            <div className="bg-[#111118] border border-white/5 rounded-xl p-5 space-y-3">
+              <h3 className="text-xs uppercase tracking-[0.12em] text-white/40 font-semibold">User Information</h3>
+              
+              {/* Dealer Name */}
+              <div className="flex items-center gap-2">
+                <User size={14} className="text-[#D4AF37]" />
+                <span className="text-sm font-medium text-white">{dealerName}</span>
               </div>
 
-              <div className="flex items-center gap-2 mb-2 text-sm text-gray-600">
-                <User size={14} />
-                <span className="truncate">{listing.source || 'Unknown Source'}</span>
+              {/* Region */}
+              <div className="flex items-center gap-2">
+                <Globe size={13} className="text-white/30" />
+                <span className="text-xs text-white/50">{region}</span>
               </div>
 
-              <div className="flex items-center gap-2 mb-4 text-sm text-blue-600">
-                <CheckCircle size={14} />
-                <span>Confidence: {listing.confidence}%</span>
-              </div>
-
-              {/* Listing Stats */}
-              <div className="grid grid-cols-2 gap-3 mb-4">
-                <div className="border border-gray-200 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-semibold text-gray-900">{listing.condition || '—'}</div>
-                  <div className="text-xs text-gray-500">Condition</div>
-                </div>
-                <div className="border border-gray-200 rounded-lg p-3 text-center">
-                  <div className="text-2xl font-semibold text-gray-900">{listing.dial_color || '—'}</div>
-                  <div className="text-xs text-gray-500">Dial Color</div>
-                </div>
-              </div>
-
-              {/* Verdict Badge */}
-              <div className="mb-4">
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium ${
-                  listing.verdict === 'APPROVED' ? 'bg-green-100 text-green-700' :
-                  listing.verdict === 'REVIEW' ? 'bg-blue-100 text-blue-700' :
-                  listing.verdict === 'HUMAN' ? 'bg-yellow-100 text-yellow-700' :
-                  'bg-red-100 text-red-700'
-                }`}>
-                  Verdict: {listing.verdict}
+              {/* Reviews */}
+              <div className="flex items-center gap-2">
+                <Star size={13} className="text-white/30" />
+                <span className="text-xs text-white/50">
+                  (0) - Reviews → <span className="text-white font-medium">0</span>
                 </span>
               </div>
 
+              {/* WTS/WTB counts */}
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <div className="border border-white/5 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-white">0</div>
+                  <div className="text-[10px] text-white/30 uppercase tracking-wider">WTS Listings</div>
+                </div>
+                <div className="border border-white/5 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-white">0</div>
+                  <div className="text-[10px] text-white/30 uppercase tracking-wider">WTB Listing</div>
+                </div>
+              </div>
+
               {/* Actions */}
-              <button className="w-full py-3 border-2 border-[#3B5BFE] text-[#3B5BFE] text-sm font-semibold rounded-full hover:bg-[#3B5BFE] hover:text-white transition-all flex items-center justify-center gap-2 mb-3">
-                <Info size={16} /> Check Availability
-              </button>
+              <div className="space-y-2 pt-2">
+                <button className="w-full py-2.5 bg-[#D4AF37] hover:bg-[#E5C158] text-[#0A0A0F] text-[11px] font-bold uppercase tracking-[0.08em] rounded-full transition-all flex items-center justify-center gap-2 shadow-lg shadow-[#D4AF37]/20">
+                  <Shield size={13} /> Check Availability
+                </button>
+                <button className="w-full py-2.5 border border-[#D4AF37]/30 text-[#D4AF37] text-[11px] font-semibold uppercase tracking-[0.06em] rounded-full hover:bg-[#D4AF37]/8 transition-all flex items-center justify-center gap-2">
+                  <User size={13} /> See User Profile
+                </button>
+              </div>
             </div>
 
           </motion.div>
