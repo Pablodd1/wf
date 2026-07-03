@@ -835,6 +835,16 @@ function verdict(parsed) {
     return 'RECYCLE';
   }
 
+  // GARBAGE listing type with good data → HUMAN not RECYCLE
+  if (parsed.listingType === 'GARBAGE' || parsed.listingType === 'OTHER') {
+    if (parsed.brand && parsed.reference && (parsed.price > 0 || parsed.year)) {
+      // Has core data, likely just missed the listing type classifier
+      if (c >= APPROVE_THRESHOLD) return 'APPROVED';
+      if (c >= HUMAN_THRESHOLD) return 'REVIEW';
+      return 'HUMAN';
+    }
+  }
+
   if (parsed.listingType === 'WTS' && (!parsed.price || parsed.price <= 0)) {
     return 'HUMAN';
   }
@@ -936,7 +946,7 @@ function parseFull(rawMsg) {
     if (override.nonWatch) listingType = 'OTHER';
   }
 
-  // REF-CATALOG: Validate (brand, reference) against legacy taxonomy
+  // REF-CATALOG: Validate (brand, reference) against catalog
   const flags = {};
   let validationFlags = [];
   let catalogEntry = null;
@@ -946,23 +956,10 @@ function parseFull(rawMsg) {
     if (catalogEntry) {
       catalogMatched = true;
       flags.catalog_matched = true;
-      // If catalog has dial color, use it as fallback
-      if (!dial && catalogEntry.dialColor) {
-        // Don't override — just note it's available
-      }
     } else {
-      const catalogCheck = validateReference(finalBrand, ref);
-      if (!catalogCheck.matched) {
-        flags.reference_unverified = true;
-        validationFlags.push('REFERENCE_UNVERIFIED');
-        // Lower confidence if reference not in catalog
-        confidence = Math.round(confidence * 0.85);
-      }
-      if (!catalogCheck.brandKnown) {
-        flags.brand_unknown = true;
-        validationFlags.push('BRAND_UNKNOWN');
-        confidence = Math.round(confidence * 0.90);
-      }
+      // Not in catalog — mild penalty only, don't crash good data
+      validationFlags.push('REFERENCE_UNVERIFIED');
+      confidence = Math.round(confidence * 0.90);
     }
   } else if (finalBrand && !ref) {
     // No reference to validate — mild penalty
