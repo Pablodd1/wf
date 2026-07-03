@@ -161,7 +161,8 @@ export default function PriceResearch() {
     try {
       const res = await fetch(`/api/listings?verdict=APPROVED&reference=${encodeURIComponent(ref)}&limit=1000`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const records = await res.json();
+      const result = await res.json();
+      const records = result.rows || result;
       if (!records?.length) { setResult(null); setLoading(false); return; }
       const monthlyData = groupByMonth(records);
       const prices = records.map((r: any) => r.price_usd).filter((p: number) => p > 0).sort((a: number, b: number) => a - b);
