@@ -124,7 +124,6 @@ export default function PipelineDashboard() {
       // Confidence distribution from verdict counts
       const stotal = (apiData.verdictCounts?.APPROVED || 0) +
                      (apiData.verdictCounts?.REVIEW || 0) +
-                     (apiData.verdictCounts?.REVIEW || 0) +
                      (apiData.verdictCounts?.RECYCLE || 0) +
                      (apiData.verdictCounts?.HUMAN || 0);
 
