@@ -246,6 +246,10 @@ export default function PriceResearch() {
           <div className="no-data-luxury">
             <Database size={48} />
             <p className="text-lg font-medium text-white/50">No price data for {selectedRef}</p>
+            <p className="mt-3 text-sm text-white/30 max-w-md mx-auto leading-relaxed">
+              No listings yet — data is still loading as the normalization process 
+              works through the database. Check back later.
+            </p>
           </div>
         )}
 
