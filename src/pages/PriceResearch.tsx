@@ -270,8 +270,8 @@ export default function PriceResearch() {
                 <h2 className="text-xl font-semibold text-white">{result.brand} {result.reference}</h2>
                 <p className="text-sm text-white/40 mt-1">{result.totalListings} listings across {result.monthlyData.length} months</p>
                 <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-3">
-                  {result.dialColors.slice(0,6).map(c => <LuxuryDialBadge key={c} color={c} />)}
-                  {result.dialColors.length > 6 && <LuxuryDialBadge color={`${result.dialColors.length-6} more`} isMore />}
+                  {(result.dialColors || []).slice(0,6).map(c => <LuxuryDialBadge key={c} color={c} />)}
+                  {(result.dialColors || []).length > 6 && <LuxuryDialBadge color={`${(result.dialColors||[]).length-6} more`} isMore />}
                 </div>
               </div>
             </div>
