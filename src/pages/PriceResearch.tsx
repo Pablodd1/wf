@@ -55,8 +55,13 @@ function safeDialKey(c: string): string { return 'dial_'+c.replace(/[^a-zA-Z0-9]
 
 /** Extract dial color from raw message text when parser missed it */
 function extractDialFromText(rawMsg: string | null, currentDial: string | null): string {
-  if (currentDial && currentDial !== 'Unknown' && currentDial !== 'UNKNOWN' && currentDial !== '') return currentDial;
   if (!rawMsg) return 'Unknown';
+  // Normalize incoming dial — lowercase and check if it's a known color
+  const normalizedDial = (currentDial || '').toLowerCase().trim();
+  if (normalizedDial && normalizedDial !== 'unknown' && normalizedDial !== '') {
+    // Capitalize first letter for consistency
+    return normalizedDial.charAt(0).toUpperCase() + normalizedDial.slice(1);
+  }
   const lower = rawMsg.toLowerCase();
   const colors = ['black','white','blue','green','silver','gold','champagne','grey','gray','red','brown','purple','orange','yellow','pink','ivory','tiffany','salmon','skeleton'];
   let best = 'Unknown', bestScore = 0;
@@ -74,7 +79,21 @@ function cleanMonthlyData(data: MonthlyPoint[]): MonthlyPoint[] {
 }
 
 function groupByMonth(records: any[]): MonthlyPoint[] { const fr = generateMonthRange(); const fm = new Map<string,MonthlyPoint>(); for (const m of fr) fm.set(m.monthKey,{...m,dialPrices:{},count:0,avgPrice:0}); const dc = new Map<string,Map<string,number>>(); for (const r of records) { const d = r.received_at?new Date(r.received_at):r.created_at?new Date(r.created_at):new Date(); if (isNaN(d.getTime())) continue; const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; const e = fm.get(k); if (!e) continue; if (r.price_usd>0) { e.count++; const c = extractDialFromText(r.raw_message, r.dial_color); e.dialPrices[c]=(e.dialPrices[c]||0)+r.price_usd; if (!dc.has(k)) dc.set(k,new Map()); const m = dc.get(k)!; m.set(c,(m.get(c)||0)+1); } } for (const e of fm.values()) { if (e.count>0) { let t = 0; for (const c of Object.keys(e.dialPrices)) { const n = dc.get(e.monthKey)?.get(c)||1; e.dialPrices[c] = Math.round(e.dialPrices[c]/n); t += e.dialPrices[c]; } e.avgPrice = Object.keys(e.dialPrices).length>0?Math.round(t/Object.keys(e.dialPrices).length):0; } } return cleanMonthlyData(Array.from(fm.values()).sort((a,b)=>a.monthKey.localeCompare(b.monthKey))); }
-function getDialBreakdown(records: any[]): DialBreakdown[] { const m = new Map<string,number[]>(); for (const r of records) { const c = extractDialFromText(r.raw_message, r.dial_color); if (!m.has(c)) m.set(c,[]); if (r.price_usd>0) m.get(c)!.push(r.price_usd); } const rs: DialBreakdown[] = []; for (const [c,p] of m) { const s = [...p].sort((a,b)=>a-b); rs.push({color:c,count:p.length,avgPrice:Math.round(p.reduce((a,b)=>a+b,0)/p.length),minPrice:s[0],maxPrice:s[s.length-1]}); } return rs.sort((a,b)=>b.count-a.count); }
+function getDialBreakdown(records: any[], filteredPrices?: number[]): DialBreakdown[] {
+  const m = new Map<string,number[]>();
+  const priceSet = filteredPrices ? new Set(filteredPrices) : null;
+  for (const r of records) {
+    const c = extractDialFromText(r.raw_message, r.dial_color);
+    if (!m.has(c)) m.set(c,[]);
+    if (r.price_usd > 0 && (!priceSet || priceSet.has(r.price_usd))) m.get(c)!.push(r.price_usd);
+  }
+  const rs: DialBreakdown[] = [];
+  for (const [c,p] of m) {
+    const s = [...p].sort((a,b)=>a-b);
+    rs.push({color:c,count:p.length,avgPrice:Math.round(p.reduce((a,b)=>a+b,0)/p.length),minPrice:s[0],maxPrice:s[s.length-1]});
+  }
+  return rs.sort((a,b)=>b.count-a.count);
+}
 const DCC: Record<string,string> = {'White':'#E5E7EB','Black':'#1F2937','Blue':'#3B5BFE','Green':'#10B981','Silver':'#9CA3AF','Champagne':'#D4AF37','Grey':'#6B7280','Gray':'#6B7280','Red':'#EF4444','Brown':'#92400E','Purple':'#8B5CF6','Orange':'#F97316','Yellow':'#F59E0B','Pink':'#EC4899','Ivory':'#FEF3C7','Mother of Pearl':'#E0E7FF','Unknown':'#D1D5DB'};
 function gdc(d: string): string { return DCC[d]||`hsl($ {[...d].reduce((s,c)=>s+c.charCodeAt(0),0)%360},60%,50%)`; }
 function CustomTooltip({ active, payload }: any) { if (!active||!payload?.length) return null; const d = payload[0].payload; return <div className="tooltip-luxury"><div className="font-semibold text-white mb-2 pb-2 border-b border-[#D4AF37]/20">{d.month}</div><div className="text-[11px] text-white/40 mb-2">{d.count} listings</div>{Object.entries(d.dialPrices).sort(([,a],[,b])=>(b as number)-(a as number)).map(([c,p])=>(<div key={c} className="flex justify-between items-center py-0.5"><div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{backgroundColor:gdc(c)}}/><span className="text-white/70">{c}</span></div><span className="font-mono font-semibold" style={{color:gdc(c)}}>{fmtPrice(p as number)}</span></div>))}<div className="mt-2 pt-2 border-t border-[#D4AF37]/20 flex justify-between"><span className="text-white/50 font-medium">Overall Avg</span><span className="font-mono font-bold text-[#D4AF37]">{fmtPrice(d.avgPrice)}</span></div></div>; }
@@ -211,9 +230,11 @@ export default function PriceResearch() {
       const prevAvg = firstMonth?.avgPrice ?? avg;
       const priceDrift = prevAvg > 0 ? +(((lastMonth?.avgPrice ?? avg) - prevAvg) / prevAvg * 100).toFixed(2) : 0;
       const { filtered, outliers, lower, upper } = analyzeOutliers(prices);
-      const dialBreakdown = getDialBreakdown(records);
+      const dialBreakdown = getDialBreakdown(records, filtered);
       const dialColors = dialBreakdown.map(d => d.color);
-      setResult({ reference: ref, brand: records[0]?.brand || selectedModel, dialColors, dialBreakdown, monthlyData, overallMin: prices[0] ?? 0, overallMax: prices[prices.length - 1] ?? 0, overallAvg: avg, medianPrice: median, stdDev, priceDrift, totalListings: records.length, iqrLower: lower, iqrUpper: upper, outlierCount: outliers.length, outlierPrices: outliers.sort((a, b) => a - b) });
+      const filteredAvg = filtered.length ? Math.round(filtered.reduce((s: number, p: number) => s + p, 0) / filtered.length) : 0;
+      const filteredMedian = filtered.length ? filtered[Math.floor(filtered.length / 2)] : 0;
+      setResult({ reference: ref, brand: records[0]?.brand || selectedModel, dialColors, dialBreakdown, monthlyData, overallMin: filtered[0] ?? 0, overallMax: filtered[filtered.length - 1] ?? 0, overallAvg: filteredAvg, medianPrice: filteredMedian, stdDev, priceDrift, totalListings: records.length, iqrLower: lower, iqrUpper: upper, outlierCount: outliers.length, outlierPrices: outliers.sort((a, b) => a - b) });
     } catch (err) { console.error('Price research error:', err); setResult(null); }
     finally { setLoading(false); }
   }, [selectedModel]);
@@ -228,7 +249,10 @@ export default function PriceResearch() {
     if (months) { const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - months); data = data.filter(d => { const [y, m] = d.monthKey.split('-'); return new Date(Number(y), Number(m) - 1, 1) >= cutoff; }); }
     return data.map(pt => { const flat: any = { ...pt }; for (const [c, p] of Object.entries(pt.dialPrices)) flat[safeDialKey(c)] = p; return flat; });
   }, [result, dateRange]);
-  const validDialBreakdown = useMemo(() => result ? result.dialBreakdown.filter(d => d.count > 0 && !isNaN(d.avgPrice)) : [], [result]);
+  const validDialBreakdown = useMemo(() => {
+    if (!result || !Array.isArray(result.dialBreakdown)) return [];
+    return result.dialBreakdown.filter(d => d && d.count > 0 && !isNaN(d.avgPrice));
+  }, [result]);
   const watchImage = result ? resolveWatchImage(result.reference, result.brand) : '';
 
   return (
