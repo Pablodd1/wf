@@ -1,5 +1,5 @@
 /**
- * WatchFacts — Semantic Watch Parser v3.1-patch1
+ * WatchFacts — Semantic Watch Parser v4.0
  * ===============================================
  * Extracts structured watch data from free-text dealer messages
  * received via WhatsApp / Telegram. Handles luxury brands, multi-format
@@ -8,6 +8,9 @@
  * v3: WhatsApp format support — emoji stripping, section header detection,
  *     HKD/K/M price formats, N5-N1 condition grading, MM/YYYY year parsing.
  * v3.1-patch1: NORM_001-004 + 5 listing overrides
+ * v4.0: Intent-first parsing (WTB/WTT before price), $5M hard cap,
+ *       section header rejection, expanded price-ref collision detection,
+ *       dial color TitleCase normalization, verdict re-evaluation.
  *
  * CommonJS — runs in Vercel serverless and local Node scripts.
  */
@@ -243,6 +246,8 @@ function stripWhatsAppDecorations(text) {
 function isSectionHeader(text) {
   if (!text) return false;
   const t = text.trim();
+  // v4.0: WTB/ISO/LF lines are NEVER section headers — they're buy requests
+  if (/\b(wtb|iso|lf|looking\s+for|want\s+to\s+buy|seeking|in\s+search\s+of)\b/i.test(t)) return false;
   // Lines starting with clock emoji are always headers
   if (/^[\u231A\u231B]/u.test(t)) return true;
   // 🚩🚩ROLEX🚩🚩 or 🏆Patek Philippe New in HK or ⌚🇭🇰PP Ready in HK
@@ -388,17 +393,42 @@ function parseDial(text, ref) {
     for (const alias of aliases) {
       const rx = new RegExp('(?:^|[^a-z])' + alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[^a-z])', 'i');
       if (rx.test(lower)) {
-        return colour;
+        return normalizeDialColor(colour);
       }
     }
   }
 
   if (ref) {
     const dialCode = inferDialFromRef(ref);
-    if (dialCode) return dialCode;
+    if (dialCode) return normalizeDialColor(dialCode);
   }
 
   return null;
+}
+
+/**
+ * v4.0: Normalize dial color to TitleCase canonical form.
+ */
+function normalizeDialColor(colour) {
+  if (!colour) return colour;
+  const map = {
+    'black': 'Black',
+    'blue': 'Blue',
+    'white': 'White',
+    'green': 'Green',
+    'brown': 'Brown',
+    'grey': 'Grey',
+    'champagne': 'Champagne',
+    'salmon': 'Salmon',
+    'purple': 'Purple',
+    'red': 'Red',
+    'burgundy': 'Burgundy',
+    'orange': 'Orange',
+    'yellow': 'Yellow',
+    'silver': 'Silver',
+    'mother of pearl': 'Mother Of Pearl',
+  };
+  return map[colour.toLowerCase()] || colour;
 }
 
 /**
@@ -544,7 +574,7 @@ function parsePrice(text, ref) {
         const value = pat.handler(m);
         if (!isNaN(value) && value > 0) {
           const final = Math.round(value);
-          if (final >= 500 && final <= 10_000_000) {
+          if (final >= 500 && final <= 5_000_000) {
             return final;
           }
         }
@@ -559,7 +589,7 @@ function parsePrice(text, ref) {
       }
       if (!isNaN(value) && value > 0) {
         const final = Math.round(value * (pat.multiplier || 1));
-        if (final >= 500 && final <= 10_000_000) {
+        if (final >= 500 && final <= 5_000_000) {
           return final;
         }
       }
@@ -764,6 +794,12 @@ function validatePriceNotReference(price, ref) {
   if (Math.abs(price - refNum) / refNum < 0.01) {
     return null; // Price is actually the reference — reject
   }
+  // v4.0: Check if price digits match first 5-6 chars of reference (prefix collision)
+  const priceStr = String(price);
+  const refPrefix = ref.substring(0, Math.min(6, ref.length)).replace(/\D/g, '');
+  if (refPrefix.length >= 5 && priceStr.startsWith(refPrefix)) {
+    return null; // Price matches reference prefix — likely collision
+  }
   return price;
 }
 
@@ -793,7 +829,9 @@ function classifyListingType(text) {
   }
 
   const wtbSignals = [
-    /\b(wtb|want to buy|looking for|seeking|buying|wanted|in search of|iso\b)\b/i,
+    /\b(wtb|want to buy|looking for|seeking|buying|wanted|in search of|iso)\b/i,
+    /\blf\b/i,
+    /\bneed\s+(?!gone|sold|out|help|to\s+sell|quick)/i,
     /\bwant\s+this\s+watch\b/i,
     /\bbuy\s+(?:any|the|a)\b.*\bwatch\b/i,
   ];
@@ -963,6 +1001,16 @@ function verdict(parsed) {
   const HUMAN_THRESHOLD = getHumanThreshold();
   const c = parsed.confidence || 0;
 
+  // v4.0: WTB listings always get REVIEW (never APPROVED)
+  if (parsed.listingType === 'WTB') {
+    return 'REVIEW';
+  }
+
+  // v4.0: Price exceeds cap → REVIEW
+  if (parsed.priceExceedsCap) {
+    return 'REVIEW';
+  }
+
   if (!parsed.brand || !parsed.reference) {
     return 'RECYCLE';
   }
@@ -988,9 +1036,18 @@ function verdict(parsed) {
 }
 
 /**
+ * v4.0: Detect intent (WTB/WTT/GARBAGE) before extracting price.
+ * Returns the listing type classification.
+ */
+function detectIntent(text) {
+  return classifyListingType(text);
+}
+
+/**
  * Full parse: extract all watch fields from a raw dealer message.
  * v3: Strips WhatsApp decorations before parsing.
  * v3.1-patch1: NORM_001-004 + listing overrides.
+ * v4.0: Intent-first parsing, section header rejection, $5M cap.
  */
 function parseFull(rawMsg) {
   if (!rawMsg || typeof rawMsg !== 'string') {
@@ -1016,6 +1073,29 @@ function parseFull(rawMsg) {
   // Only replaces period+space, preserving decimal prices like 95.000
   text = text.replace(/\.\s+/g, ' ').replace(/\.$/, '');
 
+  // v4.0: SECTION HEADER REJECTION — return GARBAGE immediately
+  if (isSectionHeader(text)) {
+    return {
+      brand: null,
+      ref: null,
+      dial: null,
+      condition: null,
+      year: null,
+      price: null,
+      currency: null,
+      confidence: 0,
+      fieldConfidence: {},
+      listingType: 'GARBAGE',
+      accessories: { hasBox: false, hasPapers: false, note: null },
+      flags: { section_header: true },
+      verdict: 'RECYCLE',
+    };
+  }
+
+  // v4.0: INTENT-FIRST PARSING — detect WTB/WTT/GARBAGE before price extraction
+  const intent = detectIntent(text);
+  const isWTB = intent === 'WTB';
+
   // NORM_004: Detect non-watch products
   const isNonWatch = detectNonWatch(text);
 
@@ -1032,20 +1112,28 @@ function parseFull(rawMsg) {
   const dial = parseDial(text, ref || undefined);
   const { condition } = parseCondition(text);
   const year = parseYear(text);
-  const currency = parseCurrency(text) || 'USD';
-  let price = parsePrice(text, ref || undefined);
+  const currency = isWTB ? null : (parseCurrency(text) || 'USD');
+  let price = isWTB ? null : parsePrice(text, ref || undefined);
 
-  // NORM_003: Validate price is not actually a reference number
-  price = validatePriceNotReference(price, ref);
-
-  // NORM_002: Price shorthand validation for HKD
-  // If HKD and value exceeds $10M USD equivalent, cap it
-  if (currency === 'HKD' && price && price > 10000000) {
-    // Likely misinterpreted — flag for review by capping
-    price = Math.min(price, 10000000);
+  // v4.0: Post-parse price cap enforcement ($5M USD hard cap)
+  let priceExceedsCap = false;
+  if (price && price > 5_000_000) {
+    priceExceedsCap = true;
+    price = null;
   }
 
-  let listingType = classifyListingType(text);
+  // NORM_003: Validate price is not actually a reference number
+  if (!isWTB) price = validatePriceNotReference(price, ref);
+
+  // NORM_002: Price shorthand validation for HKD
+  // If HKD and value exceeds $5M USD equivalent, cap it
+  if (!isWTB && currency === 'HKD' && price && price > 5_000_000) {
+    priceExceedsCap = true;
+    price = null;
+  }
+
+  // v4.0: Use intent-detected listing type (not re-classified)
+  let listingType = intent;
 
   // NORM_004: Reduce confidence for non-watch products
   if (isNonWatch) {
@@ -1089,6 +1177,18 @@ function parseFull(rawMsg) {
   let validationFlags = [];
   let catalogEntry = null;
   let catalogMatched = false;
+
+  // v4.0: Add price exceeds cap flag
+  if (priceExceedsCap) {
+    flags.PRICE_EXCEEDS_CAP = true;
+    validationFlags.push('PRICE_EXCEEDS_CAP');
+  }
+
+  // v4.0: Add WTB intent flag
+  if (isWTB) {
+    flags.WTB_INTENT = true;
+    validationFlags.push('WTB_INTENT');
+  }
   if (finalBrand && ref) {
     catalogEntry = lookupCatalog(finalBrand, ref);
     if (catalogEntry) {
@@ -1111,12 +1211,13 @@ function parseFull(rawMsg) {
   }
 
   // Determine final verdict using the verdict function
-  const finalVerdict = catalogMatched ? 'APPROVED' : verdict({
+  const finalVerdict = (catalogMatched && !isWTB) ? 'APPROVED' : verdict({
     confidence,
     brand: finalBrand,
     reference: ref,
     price,
     listingType,
+    priceExceedsCap,
   });
 
   return {
@@ -1177,6 +1278,7 @@ module.exports = {
   // NORM validators
   validatePriceNotReference,
   detectNonWatch,
+  normalizeDialColor,
 
   // Data tables
   RATES,
