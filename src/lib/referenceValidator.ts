@@ -4,7 +4,10 @@
  * references masquerading as brands, etc.
  */
 
-// ─── Patterns ────────────────────────────────────────────────────────
+// Known valid short brand names that should bypass length/reference checks
+const VALID_SHORT_BRANDS = new Set([
+  'IWC', 'RM', 'AP', 'VC', 'PP', 'JLC', 'GP', 'FPJ', 'GS', 'UDG',
+]);
 const PURE_NUMBER    = /^\d+$/;
 const YEAR_PATTERN   = /^(19|20)\d{2}$/;
 const PRICE_SUFFIX   = /^\d+[KkMm]$/;
@@ -46,6 +49,8 @@ export function isValidBrand(brand: string): boolean {
   if (!brand || typeof brand !== 'string') return false;
   const t = brand.trim();
   if (t.length < 2) return false;
+  // Known valid short brands (e.g. IWC) bypass all checks
+  if (VALID_SHORT_BRANDS.has(t)) return true;
   if (PURE_NUMBER.test(t)) return false;
   if (YEAR_PATTERN.test(t)) return false;
   if (PRICE_SUFFIX.test(t)) return false;
