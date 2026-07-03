@@ -85,6 +85,15 @@ module.exports = withRateLimit('/api/green-api-webhook', async function handler(
       }
 
       // Step 4: Save to Supabase
+      const v34Flags = {
+        ...(isDenseDump ? { dense_multi_listing: true } : {}),
+        ...(catalogEntry ? { catalog_matched: true } : { no_catalog_match: true }),
+        // v3.4 schema fields (stored in flags jsonb — no DDL needed)
+        ...(parsed.inclusions ? { inclusions: parsed.inclusions } : {}),
+        ...(parsed.notes ? { notes: parsed.notes } : {}),
+        ...(parsed.details ? { details: parsed.details } : {}),
+        ...(parsed.conditionBucket ? { condition_bucket: parsed.conditionBucket } : {}),
+      };
       const { data: saved, error } = await getClient().from('watch_records').insert({
         brand: parsed.brand || null,
         reference: parsed.ref || null,
@@ -98,11 +107,12 @@ module.exports = withRateLimit('/api/green-api-webhook', async function handler(
         verdict,
         source: 'whatsapp',
         raw_message: rawMessage,
-        flags: isDenseDump ? ['DENSE_MULTI_LISTING'] : (catalogEntry ? [] : ['NO_CATALOG_MATCH']),
+        flags: v34Flags,
+        month_code: parsed.dateMonth || null,
         reprocessed_at: null,
         created_at: new Date(timestamp).toISOString(),
         processed_at: new Date().toISOString(),
-        parser_version: 'v4.1-catalog',
+        parser_version: 'v3.4-catalog',
         listing_type: parsed.listingType || 'WTS',
         human_edited: false,
         image_urls: catalogEntry?.imageUrl ? [catalogEntry.imageUrl] : [],

@@ -48,7 +48,7 @@ module.exports = async function handler(req, res) {
     // Fetch batch with cursor pagination
     let query = client
       .from('watch_records')
-      .select('id, brand, reference, raw_message, verdict, confidence')
+      .select('id, brand, reference, raw_message, verdict, confidence, flags')
       .order('id', { ascending: true })
       .limit(batchSize);
 
@@ -87,7 +87,7 @@ module.exports = async function handler(req, res) {
         reference: parsed.ref,
         confidence: 100,
         verdict: 'APPROVED',
-        parser_version: 'catalog-v1',
+        parser_version: 'v3.4-catalog',
         reprocessed_at: new Date().toISOString()
       };
       
@@ -95,6 +95,14 @@ module.exports = async function handler(req, res) {
       if (parsed.condition) update.condition = parsed.condition;
       if (parsed.year) update.year = parsed.year;
       if (parsed.dial) update.dial_color = parsed.dial;
+      if (parsed.dateMonth) update.month_code = parsed.dateMonth;
+      // v3.4 fields → flags jsonb (no DDL required)
+      const v34 = {};
+      if (parsed.inclusions) v34.inclusions = parsed.inclusions;
+      if (parsed.notes) v34.notes = parsed.notes;
+      if (parsed.details) v34.details = parsed.details;
+      if (parsed.conditionBucket) v34.condition_bucket = parsed.conditionBucket;
+      if (Object.keys(v34).length) update.flags = { ...(record.flags || {}), ...v34, catalog_matched: true };
       
       batch.push(update);
     }
@@ -130,10 +138,10 @@ module.exports = async function handler(req, res) {
         total_updated: 0
       }, { onConflict: 'job_name' });
 
-    // Total progress: estimate from DB
+    // Total progress: estimated count (planner stats — never exact on 2.39M rows)
     const { count: totalRecords } = await client
       .from('watch_records')
-      .select('id', { count: 'exact', head: true })
+      .select('id', { count: 'estimated', head: true })
       .limit(0);
     
     res.status(200).json({

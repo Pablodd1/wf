@@ -340,7 +340,7 @@ function parseReference(text, brandHint) {
     const m = priceStripped.match(pat.regex);
     if (m) {
       let ref = m[1].replace(/\s+/g, '').toUpperCase()
-        .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD)/, '$1')
+        .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD|LAND|CHOC|CHOCO|WIM|OLIVE|SUNDUST|TIFFANY|LAVENDER|PISTACHIO|TURQUOISE|PANDA|PAVE|BLK|SILVER|GREY|GRAY|PN|RBOW|SUB|GMT|YM|OP|DJ|EXP)/, '$1')
         .replace(/[\-\/]$/, '');  // Strip trailing dash/slash
 
       // Strip common dealer/status suffixes that get concatenated
@@ -510,8 +510,8 @@ function parsePrice(text, ref) {
     { regex: /\b(\d{1,3},\d{3})\s*[mM]\b/g, multiplier: 1e6 },
     // 1.080.000 (European dot-thousands chain)
     { regex: /\b(\d{1,3}(?:\.\d{3})+)\b/g, multiplier: 1, european: true },
-    // Currency stuck to number: HKD930K, HKD583K, USD185000
-    { regex: /(?:HKD|USD|USDT|EUR|GBP)\s*(\d{1,6}(?:[.,]\d{1,3})?)\s*([KkMm])?\b/g, handler: (m) => {
+    // Currency stuck to number: HKD930K, HKD583K, USD185000, hkd435k (case-insensitive)
+    { regex: /(?:HKD|USD|USDT|EUR|GBP)\s*(\d{1,6}(?:[.,]\d{1,3})?)\s*([KkMm])?\b/gi, handler: (m) => {
       const num = parseFloat(m[1].replace(/,/g, ''));
       const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] || 1;
       return num * mult;
@@ -524,6 +524,12 @@ function parsePrice(text, ref) {
     }},
     // 268000 with currency
     { regex: /\b(\d{4,7})\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, multiplier: 1 },
+    // v3.4: comma-thousands with currency: "205,000 hkd", "111,500hkd", "3,056,055 HKD"
+    { regex: /\b(\d{1,3}(?:,\d{3})+)\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|AED)\b/gi, handler: (m) => parseFloat(m[1].replace(/,/g, '')) },
+    // v3.4: $-prefixed comma-thousands: "$34,500", "$16,250+ship"
+    { regex: /[$](\d{1,3}(?:,\d{3})+)(?:\.\d+)?\b/g, handler: (m) => parseFloat(m[1].replace(/,/g, '')) },
+    // v3.4: dealer k-shorthand with comma decimal: "$17,9 + 🏷" → 17,900
+    { regex: /[$](\d{1,3}),(\d)\b(?!\d)/g, handler: (m) => (parseFloat(m[1]) + parseFloat(m[2]) / 10) * 1000 },
     // Price context words
     { regex: /(?:price|asking|ask|sell|offer|offered|at|for)\s*[:]?(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1 },
     // General fallback
@@ -619,6 +625,132 @@ function parseAccessories(text) {
 
   return { hasBox: finalBox, hasPapers: finalPapers, note };
 }
+
+// ═══════════════════════════════════════════════════════════════
+// v3.4 EXTRACTORS — inclusions, notes, details, date_month
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * v3.4: Normalize inclusions to a strict enum.
+ * FULL_SET | W_AND_C | BOX_ONLY | PAPERS_ONLY | NAKED | null
+ */
+function parseInclusions(text) {
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  if (/\b(full\s?set|fullset|complete\s?set|b&p|box\s*(?:and|&|\+)\s*papers?)\b/i.test(lower)) return 'FULL_SET';
+  if (/\b(naked|only\s?watch|watch\s?only|no\s?box\s?no\s?papers?)\b/i.test(lower)) return 'NAKED';
+  if (/\b(w&c|w\/c|watch\s*(?:and|&|\+)\s*card|watch\s?card)\b/i.test(lower)) return 'W_AND_C';
+  const noBox = /\b(no|without)\s?box\b/i.test(lower);
+  const noPapers = /\b(no|without)\s?papers?\b/i.test(lower);
+  const hasBox = /\bbox\b/i.test(lower) && !noBox;
+  const hasPapers = /\b(papers?|card)\b/i.test(lower) && !noPapers;
+  if (noBox && (hasPapers || /\bcard\b/i.test(lower))) return 'PAPERS_ONLY';
+  if (hasBox && noPapers) return 'BOX_ONLY';
+  if (hasBox && hasPapers) return 'FULL_SET';
+  return null;
+}
+
+/**
+ * v3.4: Extract dealer notes — shipping, location, quirks.
+ * Returns compact "; "-joined string or null. Never invents data.
+ */
+function parseNotes(text) {
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  const notes = [];
+  if (/\+\s?(label|🏷|lbl|ship)\b|\+\s?🏷️?|plus\s?label/i.test(text)) notes.push('+label');
+  if (/\bready\s?(in\s?|stock\s?)?(hk|hong\s?kong)\b|\bhk\s?(spot|stock|ready)\b/i.test(lower)) notes.push('Ready in HK');
+  if (/\b(nyc|new york)\s?📍?\b/i.test(lower) && /📍|ready|stock|location/i.test(text)) notes.push('NYC');
+  if (/\bdubai\s?(ready|stock)?\b/i.test(lower) && /ready|stock/i.test(lower)) notes.push('Dubai');
+  if (/\b(usa?|us|la|miami)\s?(ready|stock)\b/i.test(lower)) notes.push('US stock');
+  if (/\busdt\s?(ok|✅|accepted)?\b/i.test(lower) && /ok|✅|accept|welcome/i.test(lower)) notes.push('USDT OK');
+  if (/\bwire\b/i.test(lower) && /welcome|only|🔌/i.test(lower)) notes.push('Wire');
+  if (/\bcross-?posted\b/i.test(lower)) notes.push('Cross-posted');
+  if (/\b(hold|on hold)\b/i.test(lower)) notes.push('HOLD');
+  if (/\bugly\s?handwriting\b/i.test(lower)) notes.push('Ugly handwriting');
+  if (/-\s?\d\s?link|minus\s?(one|\d)\s?link|full\s?links?\b/i.test(lower)) {
+    const linkMatch = text.match(/-\s?(\d)\s?link|minus\s?(one|\d)\s?link/i);
+    if (linkMatch) notes.push(`-${linkMatch[1] || linkMatch[2]} link`);
+    else if (/full\s?links?\b/i.test(lower)) notes.push('Full links');
+  }
+  return notes.length ? notes.join('; ') : null;
+}
+
+/**
+ * v3.4: Extract dial/model details beyond plain colour —
+ * Wimbledon, Pave, Olive Arabic, 50th anniversary, Celebration, etc.
+ */
+const DETAIL_KEYWORDS = [
+  'wimbledon', 'pave', 'pavé', 'olive arabic', 'olive', 'celebration',
+  'tiffany', 'sundust', 'lavender', 'pistachio', 'turquoise', 'aubergine',
+  'chocolate', 'choc', 'panda', 'rainbow', 'ice blue', 'mother of pearl',
+  'mop', 'arabic', 'roman', 'diamond', 'smoked', '50th anniversary', '50th',
+  '150th', 'anniversary', 'jubilee', 'oyster', 'oysterflex', 'batman',
+  'pepsi', 'hulk', 'starbucks', 'kermit', 'land dweller', 'ghost',
+  'carnelian', 'onyx', 'meteorite',
+];
+const DETAIL_CANON = {
+  'choc': 'Chocolate', 'pavé': 'Pave', 'mop': 'Mother of Pearl',
+  '50th': '50th Anniversary', '150th': '150th Anniversary',
+};
+function parseDetails(text) {
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  const found = [];
+  for (const kw of DETAIL_KEYWORDS) {
+    const rx = new RegExp('(?:^|[^a-z])' + kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[^a-z])', 'i');
+    if (rx.test(lower)) {
+      const canon = DETAIL_CANON[kw] || kw.split(' ').map(w => w[0].toUpperCase() + w.slice(1)).join(' ');
+      if (!found.includes(canon)) found.push(canon);
+    }
+  }
+  return found.length ? found.slice(0, 4).join(', ') : null;
+}
+
+/**
+ * v3.4: Preserve the original month/year notation — "05/2022", "N7/2025",
+ * "Nov 2024", "12/24". Returns raw string or null.
+ */
+function parseDateMonth(text) {
+  if (!text) return null;
+  // N-code: N7/2025, N3/26
+  const nCode = text.match(/\bN(\d{1,2})\s?\/\s?(20\d{2}|\d{2})\b/i);
+  if (nCode) {
+    const yr = nCode[2].length === 2 ? '20' + nCode[2] : nCode[2];
+    return `${nCode[1].padStart(2, '0')}/${yr}`;
+  }
+  // MM/YYYY: 05/2022, 12/2025
+  const mmYyyy = text.match(/\b(0?[1-9]|1[0-2])\/(20\d{2})\b/);
+  if (mmYyyy) return `${mmYyyy[1].padStart(2, '0')}/${mmYyyy[2]}`;
+  // Month name: Nov 2024, June 2026
+  const monthName = text.match(/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+(20\d{2})\b/i);
+  if (monthName) {
+    const months = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+    return `${months[monthName[1].toLowerCase().slice(0, 3)]}/${monthName[2]}`;
+  }
+  // MM/YY: 12/24 (only when preceded by month-ish context to avoid ref collisions)
+  const mmYy = text.match(/\b(0?[1-9]|1[0-2])\/(2[0-9])\b/);
+  if (mmYy) return `${mmYy[1].padStart(2, '0')}/20${mmYy[2]}`;
+  return null;
+}
+
+/**
+ * v3.4: Normalize condition to exactly 3 buckets.
+ * BRAND_NEW | MINT | USED | null
+ */
+function normalizeConditionBucket(condition, text) {
+  const lower = (text || '').toLowerCase();
+  if (/\b(bnib|brand\s?new|unworn|full\s?stickers?|true\s?new|nos)\b/i.test(lower)) return 'BRAND_NEW';
+  if (/\b(like\s?new|99(\.9)?%|mint|slider|excellent)\b/i.test(lower)) return 'MINT';
+  if (/\b(used|pre-?owned|worn)\b/i.test(lower)) return 'USED';
+  if (!condition) return null;
+  const c = condition.toLowerCase();
+  if (/new|unworn|bnib/.test(c)) return 'BRAND_NEW';
+  if (/mint|like|excellent/.test(c)) return 'MINT';
+  if (/used|good|fair|pre/.test(c)) return 'USED';
+  return null;
+}
+
 
 /**
  * NORM_003: Detect if parsed price is actually the reference number.
@@ -922,6 +1054,12 @@ function parseFull(rawMsg) {
 
   const accessories = parseAccessories(text);
 
+  // v3.4: new schema fields
+  const inclusions = parseInclusions(text);
+  const notes = parseNotes(rawMsg);       // raw — emojis matter for notes
+  const details = parseDetails(text);
+  const dateMonth = parseDateMonth(text);
+
   // Calculate confidence
   let { confidence, fieldConfidence } = calculateConfidence({
     brand: finalBrand,
@@ -987,9 +1125,14 @@ function parseFull(rawMsg) {
     ref,
     dial,
     condition,
+    conditionBucket: normalizeConditionBucket(condition, text), // v3.4: BRAND_NEW | MINT | USED
     year,
     price,
     currency,
+    inclusions,   // v3.4: FULL_SET | W_AND_C | BOX_ONLY | PAPERS_ONLY | NAKED
+    notes,        // v3.4: "+label; Ready in HK; USDT OK"
+    details,      // v3.4: "Wimbledon, Pave"
+    dateMonth,    // v3.4: "05/2022"
     confidence,
     fieldConfidence,
     listingType,
@@ -1047,6 +1190,11 @@ module.exports = {
   parseCondition,
   parseYear,
   parseAccessories,
+  parseInclusions,
+  parseNotes,
+  parseDetails,
+  parseDateMonth,
+  normalizeConditionBucket,
   calculateConfidence,
   confidenceTier,
   inferBrandFromRef,
