@@ -8,7 +8,6 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, Info, CheckCircle, Globe, User, Package, FileText } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
-import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
 
 
 // ─── Compute rating ──────────────────────────────────────────────────
@@ -45,9 +44,10 @@ export default function FlashSaleDetail() {
     const fetchDetail = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${encodeURIComponent(id)}&select=*`, { headers: REQ_HEADERS });
+        const res = await fetch(`/api/listings?limit=1&search=${encodeURIComponent(id)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const result = await res.json();
+        const data = result.rows || result;
         if (data?.[0]) setListing(data[0]);
         else setError('Listing not found');
       } catch (err: any) {
