@@ -36,7 +36,7 @@ interface LuxuryPriceCardProps {
   dealerName: string;
   region: string;
   isNew: boolean;
-  rating: { hasRating: boolean; score: number; label: string };
+  rating: { hasRating: boolean; score: number; label: string; dealRating?: string };
   title: { line1: string; line2: string };
   onClick: () => void;
 }
@@ -163,7 +163,11 @@ export function LuxuryPriceCard({
         {/* Rating Badge */}
         <div className="flex items-center gap-1 pt-0.5">
           {rating.hasRating ? (
-            <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-semibold px-1.5 py-0.5 bg-emerald-500/10 rounded">
+            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+              rating.dealRating === 'GOOD_DEAL' ? 'text-emerald-400 bg-emerald-500/10' :
+              rating.dealRating === 'FAIR_DEAL' ? 'text-amber-400 bg-amber-500/10' :
+              'text-rose-400 bg-rose-500/10'
+            }`}>
               <CheckCircle size={9} />
               {rating.label}
             </span>

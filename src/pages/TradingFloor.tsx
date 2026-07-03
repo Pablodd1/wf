@@ -16,6 +16,7 @@ import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
 import { LuxuryPriceCard } from '@/components/ui/LuxuryPriceCard';
 import { LuxuryStatsBar } from '@/components/ui/LuxuryStatsBar';
 import { LuxurySkeletonCard } from '@/components/ui/LuxurySkeletonCard';
+import { computeDealRating, type DealRating, type PriceAverageData } from '@/lib/dealRating';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 interface WatchListing {
@@ -143,19 +144,20 @@ function extractTitle(raw: string | null): { line1: string; line2: string } {
   };
 }
 
-// ─── Compute rating from data quality ────────────────────────────────────────────
-function computeRating(listing: WatchListing): { hasRating: boolean; score: number; label: string } {
-  let score = 0;
-  if (listing.brand) score += 20;
-  if (listing.reference) score += 20;
-  if (listing.price_usd > 0) score += 20;
-  if (listing.condition) score += 15;
-  if (listing.dial_color) score += 10;
-  if (listing.year) score += 10;
-  if (listing.raw_message && listing.raw_message.length > 20) score += 5;
-
-  if (score >= 80) return { hasRating: true, score, label: `${Math.round(score / 10)}/10` };
-  return { hasRating: false, score, label: 'NO RATING' };
+// ─── Deal rating from market averages ────────────────────────────────────────────
+function getDealRatingForListing(
+  listing: WatchListing,
+  averages: Record<string, PriceAverageData>
+): { hasRating: boolean; score: number; label: string; dealRating: DealRating } {
+  const key = `${listing.brand}|${listing.reference}`;
+  const avgData = averages[key];
+  const result = computeDealRating(listing.price_usd, avgData);
+  return {
+    hasRating: result.rating !== 'NO_RATING',
+    score: result.rating === 'GOOD_DEAL' ? 90 : result.rating === 'FAIR_DEAL' ? 75 : result.rating === 'HIGH_PRICED' ? 50 : 0,
+    label: result.label,
+    dealRating: result.rating,
+  };
 }
 
 // ─── Check if listing is new (within 24h) ──────────────────────────────────────────
@@ -185,12 +187,12 @@ const cardVariants = {
 };
 
 // ─── Watch Card ──────────────────────────────────────────────────────────────────
-function WatchCard({ listing, imageUrl }: { listing: WatchListing; imageUrl?: string }) {
+function WatchCard({ listing, imageUrl, averages }: { listing: WatchListing; imageUrl?: string; averages: Record<string, PriceAverageData> }) {
   const navigate = useNavigate();
   const fallbackImg = resolveWatchImage(listing.reference || '', listing.brand || '');
   const displayImg = imageUrl || fallbackImg;
   const title = extractTitle(listing.raw_message);
-  const rating = computeRating(listing);
+  const rating = getDealRatingForListing(listing, averages);
   const dealerName = extractDealerName(listing.raw_message, listing.source);
   const region = listing.source?.toLowerCase().includes('asia') ? 'ASIA' :
                  listing.source?.toLowerCase().includes('eu') ? 'EUROPE' : 'NORTH AMERICA';
@@ -269,6 +271,17 @@ export default function TradingFloor() {
   const [loadAllMode, setLoadAllMode] = useState(false);
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFetchingRef = useRef(false);
+  const [priceAverages, setPriceAverages] = useState<Record<string, PriceAverageData>>({});
+
+  // Fetch price averages for deal rating
+  useEffect(() => {
+    fetch('/api/price-averages')
+      .then(r => r.json())
+      .then(data => {
+        if (data.averages) setPriceAverages(data.averages);
+      })
+      .catch(() => {});
+  }, []);
 
   // Fetch real-time total count from API
   useEffect(() => {
@@ -574,6 +587,7 @@ export default function TradingFloor() {
                   key={listing.id}
                   listing={listing}
                   imageUrl={imageMap[listing.reference || '']}
+                  averages={priceAverages}
                 />
               ))}
             </motion.div>
