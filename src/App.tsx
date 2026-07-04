@@ -17,6 +17,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AuthProvider } from '@/hooks/useAuth';
+import { ThemeProvider } from '@/hooks/useTheme';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { CookieConsent } from '@/components/CookieConsent';
 import { Footer } from '@/components/Footer';
@@ -92,6 +93,7 @@ export default function App() {
   const location = useLocation();
 
   return (
+    <ThemeProvider>
     <AuthProvider>
       <AnimatePresence mode="wait">
         <motion.div
@@ -146,5 +148,6 @@ export default function App() {
       </AnimatePresence>
       <CookieConsent />
     </AuthProvider>
+    </ThemeProvider>
   );
 }

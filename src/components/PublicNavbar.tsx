@@ -1,4 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 /**
  * Public Navbar — EXACT replica of watchfacts.com
@@ -24,7 +25,8 @@ export function PublicNavbar() {
       </Link>
 
       {/* Navigation */}
-      <nav className="flex items-center gap-6">
+      <nav className="flex items-center gap-3">
+        <ThemeToggle />
         <Link
           to="/reports"
           className={`text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ${isLight ? 'text-[#3B5BFE] border-b-2 border-[#3B5BFE] pb-[2px]' : 'text-white/80 hover:text-white'}`}

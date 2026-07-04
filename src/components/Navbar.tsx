@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import {
   Search, BarChart3,
   Zap, Shield,
@@ -119,6 +120,7 @@ export function Navbar() {
             </span>
             <span className="text-xs text-green-400 font-medium uppercase tracking-wider">System Online</span>
           </div>
+          <ThemeToggle />
           <motion.button
             whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.97 }}

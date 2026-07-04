@@ -1,0 +1,149 @@
+/**
+ * Theme CSS Variables — 3 modes for WatchFacts.
+ *
+ * 'luxury'   — Deep navy-black, gold accents, glassmorphism (default marketplace)
+ * 'contrast' — Clean white background, black text, minimal gold. Best for detailed watch photos.
+ * 'neutral'  — Balanced gray, reduced eye strain. Best for long admin sessions.
+ */
+
+/* ─── Luxury Mode (Default) ──────────────────────────── */
+[data-theme='luxury'] {
+  --tw-bg-base: #0A0A0F;
+  --tw-bg-card: #1A1A24;
+  --tw-bg-input: #16161F;
+  --tw-text-primary: #FFFFFF;
+  --tw-text-secondary: #9CA3AF;
+  --tw-text-muted: #6B7280;
+  --tw-border-base: #1E1E2E;
+  --tw-border-hover: #2A2A3E;
+  --tw-gold: #D4AF37;
+  --tw-gold-light: #E5C158;
+  --tw-gold-dim: #8B6914;
+  --tw-accent: #D4AF37;
+  --tw-card-shadow: 0 8px 32px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.05);
+  --tw-card-hover-shadow: 0 12px 48px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.1);
+  --tw-glass-blur: blur(20px);
+  --tw-glass-bg: rgba(26,26,36,0.7);
+  --tw-glass-border: rgba(212,175,55,0.12);
+}
+
+/* ─── High Contrast Mode (Watch Inspection) ──────────── */
+[data-theme='contrast'] {
+  --tw-bg-base: #F8F9FA;
+  --tw-bg-card: #FFFFFF;
+  --tw-bg-input: #F0F1F3;
+  --tw-text-primary: #111118;
+  --tw-text-secondary: #4A4B56;
+  --tw-text-muted: #787B86;
+  --tw-border-base: #D1D3D8;
+  --tw-border-hover: #B0B2B9;
+  --tw-gold: #8B6914;
+  --tw-gold-light: #A37D18;
+  --tw-gold-dim: #6B5210;
+  --tw-accent: #1A1A24;
+  --tw-card-shadow: 0 2px 12px rgba(0,0,0,0.08);
+  --tw-card-hover-shadow: 0 4px 20px rgba(0,0,0,0.12);
+  --tw-glass-blur: blur(12px);
+  --tw-glass-bg: rgba(255,255,255,0.85);
+  --tw-glass-border: rgba(0,0,0,0.08);
+}
+
+/* ─── Neutral Mode (Admin/Long Reading) ──────────────── */
+[data-theme='neutral'] {
+  --tw-bg-base: #1C1C22;
+  --tw-bg-card: #262630;
+  --tw-bg-input: #1E1E26;
+  --tw-text-primary: #E8E8EE;
+  --tw-text-secondary: #9999A8;
+  --tw-text-muted: #666678;
+  --tw-border-base: #30303A;
+  --tw-border-hover: #40404E;
+  --tw-gold: #B8952A;
+  --tw-gold-light: #CCA63D;
+  --tw-gold-dim: #7A5E1A;
+  --tw-accent: #C9A44C;
+  --tw-card-shadow: 0 4px 20px rgba(0,0,0,0.15);
+  --tw-card-hover-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  --tw-glass-blur: blur(16px);
+  --tw-glass-bg: rgba(38,38,48,0.6);
+  --tw-glass-border: rgba(184,149,42,0.1);
+}
+
+/* ─── Theme Transition ───────────────────────────────── */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+body {
+  background-color: var(--tw-bg-base);
+  color: var(--tw-text-primary);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Apply to common elements that use Tailwind wf- tokens */
+[data-theme='contrast'] .glass-card {
+  background: rgba(255,255,255,0.85) !important;
+  border-color: rgba(0,0,0,0.06) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06) !important;
+  backdrop-filter: blur(12px) !important;
+}
+
+[data-theme='contrast'] .glass-nav {
+  background: rgba(255,255,255,0.92) !important;
+  border-bottom-color: rgba(0,0,0,0.06) !important;
+}
+
+[data-theme='contrast'] .bg-wf-black {
+  background-color: #F8F9FA !important;
+}
+
+[data-theme='contrast'] .bg-wf-dark {
+  background-color: #FFFFFF !important;
+}
+
+[data-theme='contrast'] .bg-wf-card {
+  background-color: #FFFFFF !important;
+}
+
+[data-theme='contrast'] .from-wf-card {
+  --tw-gradient-from: #FFFFFF !important;
+}
+
+[data-theme='contrast'] .text-white {
+  color: #111118 !important;
+}
+
+[data-theme='contrast'] .text-wf-text-secondary {
+  color: #4A4B56 !important;
+}
+
+[data-theme='contrast'] .text-wf-text-muted {
+  color: #787B86 !important;
+}
+
+[data-theme='contrast'] .border-wf-border {
+  border-color: #D1D3D8 !important;
+}
+
+/* Image display — full vibrancy in contrast mode */
+[data-theme='contrast'] img:not([src*='logo']) {
+  filter: brightness(1.05) contrast(1.05) saturate(1.1) !important;
+}
+
+/* Reduce glow effects in contrast mode */
+[data-theme='contrast'] .shadow-gold,
+[data-theme='contrast'] .shadow-glass,
+[data-theme='contrast'] .shadow-gold-lg,
+[data-theme='contrast'] .shadow-glass-hover {
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08) !important;
+}
+
+[data-theme='contrast'] .animate-pulse-glow {
+  animation: none !important;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+}
+
+/* Neutral mode toned down */
+[data-theme='neutral'] .shadow-gold {
+  box-shadow: 0 0 12px rgba(184,149,42,0.08) !important;
+}

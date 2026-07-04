@@ -6,6 +6,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/hooks/useAuth';
 import { LogOut, Watch, TrendingUp, Shield, ExternalLink } from 'lucide-react';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const NAV_ITEMS = [
   { label: 'Trading', path: '/trading', icon: Watch },
@@ -86,7 +87,8 @@ export function DealerNavbar() {
       </nav>
 
       {/* Right side */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
+        <ThemeToggle className="mr-1" />
         {user && (
           <div className="flex items-center gap-4">
             <span className="hidden md:block text-[11px] text-white/40 font-medium tracking-wide">
