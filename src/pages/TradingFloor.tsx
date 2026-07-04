@@ -408,25 +408,41 @@ export default function TradingFloor() {
 
       <DealerNavbar />
 
-      {/* Header */}
-      <div className="relative py-10 px-4 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#D4AF37]/5 via-transparent to-[#D4AF37]/3" />
-        <div className="max-w-7xl mx-auto relative">
+      {/* Hero — Video background with overlay */}
+      <div className="relative h-[40vh] md:h-[50vh] overflow-hidden">
+        <video
+          autoPlay muted loop playsInline
+          poster="/hero-poster.jpg"
+          className="absolute inset-0 w-full h-full object-cover"
+        >
+          <source src="/hero-watches.mp4" type="video/mp4" />
+        </video>
+        <div className="absolute inset-0 bg-gradient-to-b from-wf-black/60 via-wf-black/40 to-wf-black" />
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_50%_40%,rgba(212,175,55,0.12)_0%,transparent_60%)]" />
+        <div className="relative z-10 flex items-center justify-center h-full px-4">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
+            initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            className="text-center"
+            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            className="text-center max-w-3xl"
           >
-            <div className="inline-flex items-center gap-3 mb-4 px-4 py-2 rounded-full glass-card border-[#D4AF37]/20">
-              <Sparkles size={14} className="text-[#D4AF37]" />
-              <span className="text-[11px] text-[#D4AF37] font-semibold uppercase tracking-[0.12em]">Premium Trading Floor</span>
-            </div>
-            <h1 className="text-2xl md:text-3xl font-light tracking-wide text-white mb-3">
-              Welcome to the <span className="text-gold-gradient font-medium">Trading Floor</span>
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.2, duration: 0.4 }}
+              className="inline-flex items-center gap-3 mb-6 px-5 py-2.5 rounded-full backdrop-blur-xl bg-wf-card/40 border border-wf-gold/20"
+            >
+              <Sparkles size={14} className="text-wf-gold" />
+              <span className="text-xs text-wf-gold font-semibold uppercase tracking-[0.15em]">Premium Trading Floor</span>
+            </motion.div>
+            <h1 className="text-3xl md:text-5xl font-light tracking-wide text-white mb-4">
+              Welcome to the{' '}
+              <span className="bg-gradient-to-r from-wf-gold via-wf-gold-light to-wf-gold bg-clip-text text-transparent font-medium">
+                Trading Floor
+              </span>
             </h1>
-            <p className="text-white/40 text-sm max-w-xl mx-auto">
-              29,512+ Global Dealers. Search by reference to get the most accurate results.
+            <p className="text-wf-text-secondary text-sm md:text-base max-w-xl mx-auto">
+              {total.toLocaleString()}+ watches from 600+ verified dealers worldwide. Live prices, real inventory.
             </p>
           </motion.div>
         </div>
