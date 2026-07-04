@@ -15,7 +15,7 @@ module.exports = async function handler(req, res) {
     // 1. Pull all APPROVED records for this brand+reference
     const { data: rows, error } = await client
       .from('watch_records')
-      .select('price_usd, created_at, condition, source')
+      .select('price_usd, created_at, condition, source, dial_color, raw_message')
       .eq('brand', brand)
       .eq('reference', reference)
       .eq('verdict', 'APPROVED')
@@ -71,6 +71,14 @@ module.exports = async function handler(req, res) {
       count: rows.length,
       prices,
       monthly,
+      rows: rows.map(r => ({
+        price_usd: r.price_usd,
+        created_at: r.created_at,
+        dial_color: r.dial_color,
+        raw_message: r.raw_message,
+        condition: r.condition,
+        source: r.source
+      })),
       stats: {
         avg: Math.round(avg),
         median,

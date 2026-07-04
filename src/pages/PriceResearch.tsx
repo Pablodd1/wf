@@ -66,7 +66,7 @@ function extractDialFromText(rawMsg: string | null, currentDial: string | null):
   const colors = ['black','white','blue','green','silver','gold','champagne','grey','gray','red','brown','purple','orange','yellow','pink','ivory','tiffany','salmon','skeleton'];
   let best = 'Unknown', bestScore = 0;
   for (const color of colors) {
-    const matches = lower.match(new RegExp('\\\\b' + color + '\\\\b', 'g'));
+    const matches = lower.match(new RegExp('\\b' + color + '\\b', 'g'));
     const score = matches ? matches.length : 0;
     if (score > bestScore) { bestScore = score; best = color; }
   }
@@ -216,11 +216,11 @@ export default function PriceResearch() {
     if (!ref) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/listings?verdict=APPROVED&reference=${encodeURIComponent(ref)}&limit=1000`);
+      const res = await fetch(`/api/price-research?brand=${encodeURIComponent(selectedModel)}&reference=${encodeURIComponent(ref)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
-      const records = result.rows || result;
-      if (!records?.length) { setResult(null); setLoading(false); return; }
+      if (!result?.rows?.length) { setResult(null); setLoading(false); return; }
+      const records = result.rows;
       const monthlyData = groupByMonth(records);
       const prices = records.map((r: any) => r.price_usd).filter((p: number) => p > 0).sort((a: number, b: number) => a - b);
       const avg = prices.length ? Math.round(prices.reduce((s: number, p: number) => s + p, 0) / prices.length) : 0;
@@ -234,7 +234,7 @@ export default function PriceResearch() {
       const dialColors = dialBreakdown.map(d => d.color);
       const filteredAvg = filtered.length ? Math.round(filtered.reduce((s: number, p: number) => s + p, 0) / filtered.length) : 0;
       const filteredMedian = filtered.length ? filtered[Math.floor(filtered.length / 2)] : 0;
-      setResult({ reference: ref, brand: records[0]?.brand || selectedModel, dialColors, dialBreakdown, monthlyData, overallMin: filtered[0] ?? 0, overallMax: filtered[filtered.length - 1] ?? 0, overallAvg: filteredAvg, medianPrice: filteredMedian, stdDev, priceDrift, totalListings: records.length, iqrLower: lower, iqrUpper: upper, outlierCount: outliers.length, outlierPrices: outliers.sort((a, b) => a - b) });
+      setResult({ reference: ref, brand: selectedModel, dialColors, dialBreakdown, monthlyData, overallMin: filtered[0] ?? 0, overallMax: filtered[filtered.length - 1] ?? 0, overallAvg: filteredAvg, medianPrice: filteredMedian, stdDev, priceDrift, totalListings: records.length, iqrLower: lower, iqrUpper: upper, outlierCount: outliers.length, outlierPrices: outliers.sort((a, b) => a - b) });
     } catch (err) { console.error('Price research error:', err); setResult(null); }
     finally { setLoading(false); }
   }, [selectedModel]);

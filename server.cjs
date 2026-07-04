@@ -18,6 +18,7 @@ const bulkActionHandler = require('./api/bulk-action');
 const updateRecordHandler = require('./api/update-record');
 const exportExcelHandler = require('./api/export-excel');
 const greenApiWebhookHandler = require('./api/green-api-webhook');
+const catalogSummaryHandler = require('./api/catalog-summary');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -53,6 +54,9 @@ app.post('/api/bulk-action', (req, res) => bulkActionHandler(req, res));
 
 // Update single record
 app.post('/api/update-record', (req, res) => updateRecordHandler(req, res));
+
+// Catalog summary (cursor-based batch aggregation)
+app.get('/api/catalog-summary', (req, res) => catalogSummaryHandler(req, res));
 
 // Export Excel
 app.post('/api/export-excel', (req, res) => exportExcelHandler(req, res));

@@ -51,6 +51,7 @@ import LiveQueue from '@/pages/LiveQueue';
 import DemoPage from '@/pages/DemoPage';
 
 import WatchDetailReport from '@/pages/WatchDetailReport';
+import CatalogSummary from '@/pages/CatalogSummary';
 
 function AdminRoutes() {
   return (
@@ -63,9 +64,10 @@ function AdminRoutes() {
         <Route path="/health" element={<HealthPage />} />
         <Route path="/import" element={<BulkImportPage />} />
         <Route path="/settings" element={<SettingsPage />} />
-        <Route path="/pipeline" element={<PipelineDashboard />} />
-        <Route path="/live" element={<LiveQueue />} />
-        <Route path="/watch/:id" element={<WatchDetailReport />} />
+        <Route path='/pipeline' element={<PipelineDashboard />} />
+        <Route path='/live' element={<LiveQueue />} />
+        <Route path='/catalog' element={<CatalogSummary />} />
+        <Route path='/watch/:id' element={<WatchDetailReport />} />
 
         {/* Legacy redirects — old tabs now point to UnifiedReports */}
         <Route path="/data" element={<Navigate to="/admin/reports" replace />} />

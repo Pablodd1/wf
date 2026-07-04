@@ -447,6 +447,7 @@ export default function AdminPage() {
                 { label: 'Refresh All Data', icon: RefreshCw, color: 'bg-blue-500 hover:bg-blue-400', action: loadAll },
                 { label: 'Export Stats', icon: Download, color: 'bg-amber-500 hover:bg-amber-400', action: exportStats },
                 { label: 'View Analytics', icon: BarChart3, color: 'bg-gray-700 hover:bg-gray-600', action: () => window.location.href = '/admin/analytics' },
+                { label: 'Catalog Summary', icon: Database, color: 'bg-purple-600 hover:bg-purple-500', action: () => window.location.href = '/admin/catalog' },
               ].map((item) => {
                 const Icon = item.icon;
                 return (
