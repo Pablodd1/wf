@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hero Poster Generator</title>
+<style>
+  body { margin: 0; background: #000; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1920" height="1080"></canvas>
+<script>
+const c = document.getElementById('c');
+const ctx = c.getContext('2d');
+
+// ─── Background ──────────────────
+const bg = ctx.createRadialGradient(960, 400, 50, 960, 600, 1200);
+bg.addColorStop(0, '#1a1a28');
+bg.addColorStop(0.4, '#0d1118');
+bg.addColorStop(1, '#05080c');
+ctx.fillStyle = bg;
+ctx.fillRect(0, 0, 1920, 1080);
+
+// ─── Gold dust particles ────────
+for (let i = 0; i < 300; i++) {
+  const x = Math.random() * 1920;
+  const y = Math.random() * 1080;
+  const r = 0.5 + Math.random() * 3;
+  const alpha = Math.random() * 0.3;
+  ctx.fillStyle = `rgba(212,175,55,${alpha})`;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ─── Larger gold bokeh circles ───
+for (let i = 0; i < 30; i++) {
+  const x = Math.random() * 1920;
+  const y = Math.random() * 1080;
+  const r = 8 + Math.random() * 25;
+  const alpha = 0.03 + Math.random() * 0.08;
+  ctx.fillStyle = `rgba(212,175,55,${alpha})`;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ─── Watch silhouette (abstract) ──
+// Case body
+const cx = 960, cy = 380;
+ctx.save();
+ctx.translate(cx, cy);
+
+// Gold glow behind watch
+const glow = ctx.createRadialGradient(0, 0, 40, 0, 0, 300);
+glow.addColorStop(0, 'rgba(212,175,55,0.25)');
+glow.addColorStop(0.5, 'rgba(212,175,55,0.08)');
+glow.addColorStop(1, 'rgba(212,175,55,0)');
+ctx.fillStyle = glow;
+ctx.fillRect(-350, -350, 700, 700);
+
+// Watch band
+ctx.strokeStyle = 'rgba(212,175,55,0.15)';
+ctx.lineWidth = 3;
+ctx.beginPath();
+ctx.moveTo(-80, -50);
+ctx.quadraticCurveTo(-60, -350, -15, -380);
+ctx.moveTo(80, -50);
+ctx.quadraticCurveTo(60, -350, 15, -380);
+ctx.stroke();
+
+// Watch case (rounded rectangle)
+ctx.fillStyle = 'rgba(20,20,30,0.9)';
+ctx.strokeStyle = 'rgba(212,175,55,0.6)';
+ctx.lineWidth = 2;
+ctx.beginPath();
+ctx.roundRect(-120, -140, 240, 280, 30);
+ctx.fill();
+ctx.stroke();
+
+// Dial (circle)
+ctx.fillStyle = '#0a0a0f';
+ctx.strokeStyle = 'rgba(212,175,55,0.4)';
+ctx.lineWidth = 1;
+ctx.beginPath();
+ctx.arc(0, 0, 90, 0, Math.PI * 2);
+ctx.fill();
+ctx.stroke();
+
+// Hour markers
+for (let i = 0; i < 12; i++) {
+  const angle = (i * 30 - 90) * Math.PI / 180;
+  ctx.fillStyle = 'rgba(212,175,55,0.5)';
+  ctx.beginPath();
+  ctx.arc(Math.cos(angle) * 70, Math.sin(angle) * 70, 3, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// Hands (showing ~10:10)
+ctx.strokeStyle = 'rgba(212,175,55,0.7)';
+ctx.lineWidth = 2.5;
+ctx.beginPath();
+ctx.moveTo(0, 0);
+ctx.lineTo(0, -55);
+ctx.stroke();
+
+ctx.lineWidth = 1.5;
+ctx.beginPath();
+ctx.moveTo(0, 0);
+ctx.lineTo(45, -20);
+ctx.stroke();
+
+// Crown
+ctx.fillStyle = 'rgba(212,175,55,0.7)';
+ctx.fillRect(-12, -155, 24, 15);
+ctx.fillRect(-8, -165, 16, 10);
+
+// Side buttons
+ctx.fillStyle = 'rgba(212,175,55,0.5)';
+ctx.fillRect(120, -50, 10, 20);
+ctx.fillRect(120, 0, 10, 20);
+ctx.fillRect(120, 50, 10, 20);
+
+ctx.restore();
+
+// ─── Bottom gradient overlay (for text) ──
+const fade = ctx.createLinearGradient(0, 700, 0, 1080);
+fade.addColorStop(0, 'transparent');
+fade.addColorStop(1, 'rgba(5,8,12,0.95)');
+ctx.fillStyle = fade;
+ctx.fillRect(0, 700, 1920, 380);
+
+// ─── Vignette edges ──
+const vignette = ctx.createRadialGradient(960, 540, 400, 960, 540, 1200);
+vignette.addColorStop(0, 'transparent');
+vignette.addColorStop(0.7, 'rgba(0,0,0,0.3)');
+vignette.addColorStop(1, 'rgba(0,0,0,0.7)');
+ctx.fillStyle = vignette;
+ctx.fillRect(0, 0, 1920, 1080);
+
+console.log('Poster generated');
+</script>
+</body>
+</html>

@@ -14,7 +14,8 @@
  * redirect to /admin/reports — they are superseded by UnifiedReports.
  */
 
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { CookieConsent } from '@/components/CookieConsent';
@@ -88,9 +89,19 @@ function AdminRoutes() {
 }
 
 export default function App() {
+  const location = useLocation();
+
   return (
     <AuthProvider>
-      <Routes>
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={location.pathname}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <Routes location={location}>
         {/* Public site */}
         <Route path="/" element={<Home />} />
         <Route path="/reports" element={<><ReportsPage /><Footer /></>} />
@@ -131,6 +142,8 @@ export default function App() {
         <Route path="/health" element={<Navigate to="/admin/health" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </motion.div>
+      </AnimatePresence>
       <CookieConsent />
     </AuthProvider>
   );
