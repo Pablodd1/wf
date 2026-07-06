@@ -62,11 +62,18 @@ function extractMediaMetadata(body) {
     const downloadUrl = fileData.downloadUrl || null;
     if (!downloadUrl) return null;
 
+    // M-7: sanitize client-provided fileName and mimeType
+    const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/gif', 'video/mp4'];
+    const safeMime = ALLOWED_MIME.includes(fileData.mimeType) ? fileData.mimeType : 'application/octet-stream';
+    const safeName = (fileData.fileName || `${Date.now()}.jpg`)
+      .replace(/[^a-zA-Z0-9._-]/g, '_')
+      .substring(0, 100);
+
     return {
       downloadUrl,
       caption: fileData.caption || '',
-      mimeType: fileData.mimeType || 'image/jpeg',
-      fileName: fileData.fileName || `${Date.now()}.jpg`,
+      mimeType: safeMime,
+      fileName: safeName,
       chatId: body.senderData?.chatId || body.instanceData?.wid || 'unknown',
       sender: body.senderData?.sender || body.senderData?.senderName || 'unknown',
       timestamp: body.timestamp ? body.timestamp * 1000 : Date.now(),
@@ -76,17 +83,33 @@ function extractMediaMetadata(body) {
   }
 }
 
+// C-6: Trusted download origin allowlist
+const ALLOWED_DOWNLOAD_HOSTS = [
+  'media.green-api.com', 'api.green-api.com',
+  'pps.whatsapp.net', 'mmg.whatsapp.net',
+];
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+
 /**
  * Download media from Green API's temporary URL and upload to Supabase Storage.
- * Green API download URLs are valid ~24h — must download within that window.
- * Saves to: dealer-photos/<chatId>/<timestamp>_<originalFilename>
  */
 async function downloadAndUpload(meta) {
-  // Step 1: Download from Green API's CDN
+  // C-6: Validate download URL origin before fetching
+  let urlObj;
+  try { urlObj = new URL(meta.downloadUrl); } catch (e) { throw new Error('Invalid download URL'); }
+  if (!ALLOWED_DOWNLOAD_HOSTS.some(h => urlObj.hostname.endsWith(h))) {
+    throw new Error('Blocked: untrusted download URL');
+  }
+  if (urlObj.protocol !== 'https:') throw new Error('Blocked: HTTPS only');
+
+  // Step 1: Download from Green API's CDN (with size check)
   const mediaRes = await fetch(meta.downloadUrl, { timeout: 30000 });
   if (!mediaRes.ok) throw new Error(`Green API download failed: ${mediaRes.status}`);
+  const contentLen = parseInt(mediaRes.headers.get('content-length') || '0');
+  if (contentLen > MAX_FILE_SIZE) throw new Error('File exceeds 50MB limit');
   const buffer = await mediaRes.arrayBuffer();
   if (!buffer || buffer.byteLength === 0) throw new Error('Empty media response');
+  if (buffer.byteLength > MAX_FILE_SIZE) throw new Error('File exceeds 50MB limit');
 
   // Step 2: Upload to Supabase Storage
   const storagePath = `dealer-photos/${meta.chatId.replace(/[^a-zA-Z0-9_-]/g, '_')}/${meta.timestamp}_${meta.fileName}`;
@@ -202,6 +225,22 @@ const handler = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
+  // M-5: Validate Green API webhook signature when GREEN_API_SECRET is configured
+  if (GREEN_API_SECRET) {
+    const crypto = require('crypto');
+    const signature = req.headers['x-green-api-signature'];
+    if (!signature) {
+      return res.status(401).json({ error: 'Missing webhook signature' });
+    }
+    const expected = crypto
+      .createHmac('sha256', GREEN_API_SECRET)
+      .update(JSON.stringify(req.body))
+      .digest('hex');
+    if (signature !== expected) {
+      return res.status(401).json({ error: 'Invalid webhook signature' });
+    }
+  }
+
   const body = req.body || {};
 
   // Quick reject: not a media message
@@ -245,7 +284,7 @@ const handler = async function handler(req, res) {
     }
   } catch (e) {
     console.error('[green-api-media] Error:', e.message);
-    return res.status(500).json({ ok: false, error: e.message });
+    return res.status(500).json({ ok: false, error: 'Internal server error' });
   }
 };
 

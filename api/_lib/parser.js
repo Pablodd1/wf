@@ -572,6 +572,22 @@ function parseBrand(text) {
 }
 
 /**
+ * v4.4: Detect price-like 6-digit numbers that are NOT watch references.
+ * Round HKD prices (ending in 00, 000, or 500) can look like valid 5-6 digit
+ * Rolex refs (the 11-27 range). If the raw text has NO Rolex model keywords,
+ * treat these as prices, not references.
+ */
+function isLikelyPriceNotRef(ref, text) {
+  if (!ref || !text) return false;
+  // Must be a bare 4-6 digit number ending in 00, 000, or 500
+  const roundPricePattern = /^\d{4,6}(00|000|500)$/;
+  if (!roundPricePattern.test(ref)) return false;
+  // If ANY Rolex model keyword is present, it's likely a real ref
+  const rolexKeywords = /\b(rolex|submariner|datejust|daytona|gmt|oyster|day[- ]date|yacht|explorer|sky[- ]dweller|sea[- ]dweller|deepsea|cosmograph)\b/i;
+  return !rolexKeywords.test(text);
+}
+
+/**
  * Extract a watch reference number from the message.
  * v3.1: Stronger guards against years (2023) and prices (95000HKD, 718.000)
  */
@@ -700,6 +716,12 @@ function parseReference(text, brandHint) {
         const after = priceStripped.slice(m.index + m[0].length, m.index + m[0].length + 10).toLowerCase();
         if (/\b(usd|hkd|eur|gbp|k\b|m\b)/.test(after)) continue;
       }
+
+      // v4.4: Skip price-like numeric refs for Rolex patterns.
+      // Round HKD prices (133500, 142500 ending in 00/000/500) can match
+      // the Rolex \d{5,6} pattern. If no Rolex model keywords present in
+      // the text, treat them as prices and continue to next pattern.
+      if (pat.brandHint === 'Rolex' && isLikelyPriceNotRef(ref, text)) continue;
 
       return normalizeRefFormat(ref, pat.brandHint || brandHint);
     }
@@ -927,10 +949,18 @@ function inferBrandFromRef(ref) {
   // inferred as Patek). Corrected to properly anchor both alternatives.
   if (/^[3-7]\d{3}([A-Z]|\/)/.test(r)) return 'Patek Philippe';
   
-  // ── Rolex: 6-digit refs starting with 11-27 ──
-  if (/^\d{6}/.test(r)) {
-    const first2 = parseInt(r.slice(0, 2), 10);
-    if (first2 >= 11 && first2 <= 27) return 'Rolex';
+  // ── Rolex: 5-digit (10XXX-19XXX) and 6-digit (11XXXX-27XXXX) refs ──
+  // v4.4: Also detect 5-digit Rolex refs (e.g. 16700, 16233, 16700A).
+  // Letter suffixes like "A" (serial descriptor) are stripped for digit check.
+  if (/^\d{5,6}/.test(r)) {
+    const digits = r.replace(/[A-Z].*$/, ''); // strip letter suffix
+    if (digits.length === 5) {
+      const first2 = parseInt(digits.slice(0, 2), 10);
+      if (first2 >= 10 && first2 <= 19) return 'Rolex';
+    } else if (digits.length >= 6) {
+      const first2 = parseInt(digits.slice(0, 2), 10);
+      if (first2 >= 11 && first2 <= 27) return 'Rolex';
+    }
   }
   
   // ── AP: 5-digit + 2+ uppercase letters (15210ST, 26240OR) ──
@@ -1632,6 +1662,145 @@ function detectIntent(text) {
 }
 
 /**
+ * v4.4: Specialized WTB (Want To Buy) parser.
+ * WTB messages have NO prices and use different language patterns
+ * (WTB/WTT/looking for/seeking/in search of/LF). Extracts brand,
+ * reference, year range, and desired condition, but NEVER extracts price.
+ */
+function parseWTB(text) {
+  // Extract brand
+  const brand = parseBrand(text);
+
+  // Extract reference
+  const ref = parseReference(text, brand || undefined);
+
+  // Infer brand from ref if not found in text
+  const refInferredBrand = ref ? inferBrandFromRef(ref) : null;
+  let finalBrand = brand || refInferredBrand;
+
+  // Safety net: try ref-based brand inference one more time
+  if (!finalBrand && ref) {
+    finalBrand = inferBrandFromRef(ref);
+  }
+
+  // Extract year range
+  const year = parseYear(text);
+
+  // Extract desired condition
+  const { condition } = parseCondition(text);
+
+  // WTB: NEVER extract price or currency
+  const price = null;
+  const currency = null;
+
+  // Extract other fields
+  const dial = parseDial(text, ref || undefined);
+  const accessories = parseAccessories(text);
+  const inclusions = parseInclusions(text);
+  const notes = parseNotes(text);
+  const details = parseDetails(text);
+  const dateMonth = parseDateMonth(text);
+
+  // Calculate confidence (lower baseline because WTB has less data)
+  let { confidence, fieldConfidence } = calculateConfidence({
+    brand: finalBrand,
+    reference: ref,
+    price,
+    currency,
+    condition,
+    dial,
+    year,
+  });
+
+  // Check accessory/non-watch detectors
+  const isAccessory = detectAccessoryListing(text, ref);
+  const isMultiWatchStockList = detectMultiWatchStockList(text);
+
+  // Apply individual listing overrides
+  if (ref && LISTING_OVERRIDES[ref]) {
+    const override = LISTING_OVERRIDES[ref];
+    if (override.brand) finalBrand = override.brand;
+  }
+
+  // Catalog check
+  const flags = { WTB_INTENT: true };
+  const validationFlags = ['WTB_INTENT'];
+  let catalogEntry = null;
+  let catalogMatched = false;
+
+  if (finalBrand && ref) {
+    catalogEntry = lookupCatalog(finalBrand, ref);
+    if (catalogEntry) {
+      catalogMatched = true;
+      flags.catalog_matched = true;
+    } else {
+      validationFlags.push('REFERENCE_UNVERIFIED');
+      confidence = Math.round(confidence * 0.90);
+    }
+  } else if (finalBrand && !ref) {
+    confidence = Math.round(confidence * 0.95);
+  }
+
+  if (catalogMatched) {
+    confidence = 100;
+    validationFlags.push('CATALOG_MATCHED');
+  }
+
+  // Determine verdict
+  let reviewReason = null;
+  let taxonomyVerdict = null;
+
+  if (isAccessory) {
+    taxonomyVerdict = 'ACCESSORY_NOT_WATCH';
+    reviewReason = 'Strap/bracelet/box/link accessory listing, not a complete watch.';
+  } else if (isMultiWatchStockList) {
+    taxonomyVerdict = 'MULTI_WATCH_STOCK_LIST';
+    reviewReason = 'Multiple distinct brand-specific references found in one message; row boundary unclear.';
+  } else if (finalBrand && !ref) {
+    taxonomyVerdict = 'NEEDS_MANUAL_REVIEW';
+    reviewReason = 'Brand name only — no reference number visible in WTB message.';
+  }
+
+  if (taxonomyVerdict) {
+    flags[taxonomyVerdict] = true;
+    validationFlags.push(taxonomyVerdict);
+  }
+
+  const finalVerdict = taxonomyVerdict || 'REVIEW';
+
+  return {
+    brand: finalBrand,
+    brandExplicit: !!brand,
+    ref,
+    dial,
+    condition,
+    conditionBucket: normalizeConditionBucket(condition, text),
+    year,
+    price,
+    currency,
+    inclusions,
+    notes,
+    details,
+    dateMonth,
+    confidence,
+    fieldConfidence,
+    listingType: 'WTB',
+    accessories,
+    flags,
+    verdict: finalVerdict,
+    reviewReason,
+    catalogMatched,
+    catalogEntry,
+    catalogImageUrl: catalogEntry?.imageUrl || catalogEntry?.image_url || null,
+    confidenceTier: confidenceTier(
+      { brand: finalBrand, ref, dial, condition, year, price, currency },
+      catalogEntry,
+      validationFlags
+    ),
+  };
+}
+
+/**
  * Full parse: extract all watch fields from a raw dealer message.
  * v3: Strips WhatsApp decorations before parsing.
  * v3.1-patch1: NORM_001-004 + listing overrides.
@@ -1686,6 +1855,13 @@ function parseFull(rawMsg) {
 
   // v4.0: INTENT-FIRST PARSING — detect WTB/WTT/GARBAGE before price extraction
   const intent = detectIntent(text);
+
+  // v4.4: Use specialized WTB parser for Want-To-Buy messages.
+  // WTB has NO prices, different language patterns — handled in parseWTB.
+  if (intent === 'WTB') {
+    return parseWTB(text);
+  }
+
   const isWTB = intent === 'WTB';
 
   // NORM_004: Detect non-watch products
@@ -1717,6 +1893,14 @@ function parseFull(rawMsg) {
     }
   } else {
     finalBrand = brand || refInferredBrand;
+  }
+
+  // v4.4: Final safety net — if brand is STILL null but we have a reference
+  // that unambiguously maps to a known brand (Rolex/AP/Patek/etc.), use it.
+  // Required for hash-prefixed dealer lists like "#100 16700 A serial $11000"
+  // where no brand keyword appears in the raw text but the ref is unambiguous.
+  if (!finalBrand && ref) {
+    finalBrand = inferBrandFromRef(ref);
   }
 
   // Extract other fields
@@ -1913,6 +2097,7 @@ function parseFull(rawMsg) {
 module.exports = {
   // Main entry
   parseFull,
+  parseWTB,
 
   // Individual extractors
   parsePrice,
@@ -1924,6 +2109,7 @@ module.exports = {
   toUSD,
   classifyListingType,
   hashMessage,
+  isLikelyPriceNotRef,
 
   // WhatsApp helpers
   stripWhatsAppDecorations,

@@ -36,11 +36,14 @@ const { withRateLimit } = require('./_lib/rate-limiter');
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_BASE = 'https://generativelanguage.googleapis.com/v1beta';
-const GEMINI_MODEL_TEXT = 'gemini-2.0-flash';          // cheapest structured-output
-const GEMINI_MODEL_VISION = 'gemini-2.0-flash';         // same family, multimodal — cheapest vision
+const GEMINI_MODEL_TEXT = 'gemini-2.0-flash';
+const GEMINI_MODEL_VISION = 'gemini-2.0-flash';
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://watchfacts-poc.vercel.app';
+const MAX_BODY_SIZE = 100 * 1024; // 100KB — review requests are small
+const SUPABASE_URL = process.env.SUPABASE_URL;
 
 function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
@@ -136,21 +139,25 @@ Look at the photo and return JSON:
  */
 async function callGeminiText(rawMessage, parsed) {
   const prompt = buildTextPrompt(rawMessage, parsed);
-  const url = `${GEMINI_BASE}/models/${GEMINI_MODEL_TEXT}:generateContent?key=${GEMINI_API_KEY}`;
+  // H-3: API key via x-goog-api-key header, NOT URL query param (avoids Vercel log exposure)
+  const url = `${GEMINI_BASE}/models/${GEMINI_MODEL_TEXT}:generateContent`;
 
   const body = {
     contents: [
       { role: 'user', parts: [{ text: ALEX_SPEC_SYSTEM_PROMPT }, { text: prompt }] }
     ],
     generationConfig: {
-      temperature: 0,        // zero temperature = deterministic, no creative guesses
+      temperature: 0,
       maxOutputTokens: 1024,
     },
   };
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': GEMINI_API_KEY,
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Gemini text API error: ${res.status}`);
@@ -163,6 +170,11 @@ async function callGeminiText(rawMessage, parsed) {
 async function callGeminiVision(rawMessage, parsed, imageUrl) {
   const prompt = buildVisionPrompt(rawMessage, parsed);
 
+  // M-6: Validate image URL belongs to our Supabase storage
+  if (!SUPABASE_URL || !imageUrl.startsWith(SUPABASE_URL + '/storage/v1/object/public/dealer-photos/')) {
+    throw new Error('Invalid image URL — must be from trusted Supabase storage origin');
+  }
+
   // Download image as base64 from Supabase storage
   const imgRes = await fetch(imageUrl);
   if (!imgRes.ok) throw new Error(`Image download failed: ${imgRes.status}`);
@@ -170,7 +182,7 @@ async function callGeminiVision(rawMessage, parsed, imageUrl) {
   const base64 = Buffer.from(imgBuffer).toString('base64');
   const mimeType = imgRes.headers.get('content-type') || 'image/jpeg';
 
-  const url = `${GEMINI_BASE}/models/${GEMINI_MODEL_VISION}:generateContent?key=${GEMINI_API_KEY}`;
+  const url = `${GEMINI_BASE}/models/${GEMINI_MODEL_VISION}:generateContent`;
   const body = {
     contents: [
       {
@@ -189,7 +201,10 @@ async function callGeminiVision(rawMessage, parsed, imageUrl) {
 
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': GEMINI_API_KEY,
+    },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`Gemini vision API error: ${res.status}`);
@@ -206,7 +221,8 @@ function parseGeminiResponse(geminiData) {
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/) || [null, text];
     return JSON.parse(jsonMatch[1].trim());
   } catch (e) {
-    return { error: 'parse_failed', raw: geminiData, cannot_determine: true };
+    console.error('[ai-review-assist] Gemini parse failed:', e.message);
+    return { error: 'parse_failed', cannot_determine: true };
   }
 }
 
@@ -257,17 +273,18 @@ const handler = async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
+  // M-4: Reject oversized payloads
+  const contentLen = parseInt(req.headers['content-length'] || '0');
+  if (contentLen > MAX_BODY_SIZE) {
+    return res.status(413).json({ error: 'Payload too large' });
+  }
+
   // Existing simple update path (backward-compatible with current UI)
-  // If body has 'id' and 'verdict' but no 'tier', it's a direct human-edited update
-  const { id, verdict, brand, reference, dial_color, tier, raw_message, parsed, image_url } = req.body;
+  const { id, verdict, brand, reference, dial_color, tier, raw_message, parsed, image_url } = req.body || {};
   if (id && verdict && !tier) {
     const { getClient } = require('./_lib/supabase');
     try {
-      const updateData = {
-        verdict,
-        human_edited: true,
-        processed_at: new Date().toISOString(),
-      };
+      const updateData = { verdict, human_edited: true, processed_at: new Date().toISOString() };
       if (brand) updateData.brand = brand;
       if (reference) updateData.reference = reference;
       if (dial_color) updateData.dial_color = dial_color;
@@ -278,19 +295,20 @@ const handler = async function handler(req, res) {
         .eq('id', id)
         .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error('[ai-review-assist] DB update error:', error.message);
+        return res.status(500).json({ error: 'Internal server error' });
+      }
       return res.status(200).json({ success: true, data });
     } catch (err) {
-      return res.status(500).json({ error: err.message });
+      console.error('[ai-review-assist] Error:', err.message);
+      return res.status(500).json({ error: 'Internal server error' });
     }
   }
 
   // ── AI-assist paths ──
   if (!GEMINI_API_KEY) {
-    return res.status(503).json({
-      error: 'AI review not configured',
-      detail: 'Set GEMINI_API_KEY env var to enable',
-    });
+    return res.status(503).json({ error: 'AI review not configured' });
   }
 
   if (!raw_message) return res.status(400).json({ error: 'Missing raw_message' });
@@ -303,25 +321,16 @@ const handler = async function handler(req, res) {
       geminiData = await callGeminiVision(raw_message, parsed, image_url);
       suggestion = parseGeminiResponse(geminiData);
     } else {
-      // Default to text-tier (also run text-tier if vision URL missing)
       geminiData = await callGeminiText(raw_message, parsed);
       suggestion = parseGeminiResponse(geminiData);
     }
 
     const result = mergeSuggestion(parsed, suggestion, tier || 'text');
 
-    return res.status(200).json({
-      ok: true,
-      id: id || null,
-      ...result,
-    });
+    return res.status(200).json({ ok: true, id: id || null, ...result });
   } catch (e) {
     console.error('[ai-review-assist] Error:', e.message);
-    return res.status(500).json({
-      ok: false,
-      error: e.message,
-      cannot_determine: true,
-    });
+    return res.status(500).json({ ok: false, error: 'Internal server error', cannot_determine: true });
   }
 };
 

@@ -30,6 +30,8 @@ const { withRateLimit } = require('./_lib/rate-limiter');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://watchfacts-poc.vercel.app';
+const CRON_SECRET = process.env.CRON_SECRET;
 
 const HEADERS = {
   'apikey': SUPABASE_KEY,
@@ -38,7 +40,7 @@ const HEADERS = {
 };
 
 function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
+  res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
   res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 }
@@ -153,6 +155,14 @@ const handler = async function handler(req, res) {
   const limit = Math.min(parseInt(url.searchParams.get('limit') || '5000'), 10000);
   const offset = parseInt(url.searchParams.get('offset') || '0');
 
+  // H-4: Require CRON_SECRET for sensitive/data-export modes
+  if (mode !== 'summary' && mode !== 'taxonomy') {
+    const providedSecret = req.headers['x-cron-secret'] || url.searchParams.get('cron_secret');
+    if (!CRON_SECRET || providedSecret !== CRON_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized — cron_secret required for this mode' });
+    }
+  }
+
   try {
     if (mode === 'taxonomy') {
       const taxonomy = await getTaxonomyDistribution(limit);
@@ -201,7 +211,7 @@ const handler = async function handler(req, res) {
     return res.status(500).json({
       generated_at: new Date().toISOString(),
       parser_version: 'v4.3',
-      error: e.message,
+      error: 'Internal server error',
     });
   }
 };

@@ -9,6 +9,9 @@ const DEFAULT_LIMIT = { windowMs: 60000, maxRequests: 30 };
 const ENDPOINT_LIMITS = {
   '/api/green-api-live':    { windowMs: 60000, maxRequests: 120 },
   '/api/green-api-webhook': { windowMs: 60000, maxRequests: 120 },
+  '/api/green-api-media':   { windowMs: 60000, maxRequests: 120 },
+  '/api/update-record':    { windowMs: 60000, maxRequests: 30 },
+  '/api/ai-review-assist': { windowMs: 60000, maxRequests: 30 },
   '/api/online-search':     { windowMs: 60000, maxRequests: 10 },
 };
 

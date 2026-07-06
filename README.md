@@ -116,7 +116,7 @@ wf/
 
 ---
 
-## API Endpoints (v2)
+## API Endpoints (v4.3)
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
@@ -128,6 +128,8 @@ wf/
 | `/api/insight-details` | GET | Outlier detection + duplicate removal + stats |
 | `/api/price-research` | GET | Monthly price aggregation (avg/min/max/count) |
 | `/api/update-record` | POST | Single record update |
+| `/api/green-api-media` | POST | Green API media webhook — dealer photo ingestion (NEW v4.3) |
+| `/api/ai-review-assist` | POST | AI review suggestions via Gemini text+vision (NEW v4.3) |
 
 **Query examples:**
 ```bash
@@ -204,8 +206,10 @@ The `WatchImage` component tries sources in order:
 | `VITE_SUPABASE_ANON_KEY` | ✅ | Supabase anon key (frontend) |
 | `SUPABASE_URL` | ✅ | Same, for API endpoints |
 | `SUPABASE_SERVICE_ROLE_KEY` | ✅ | Service role key (API endpoints) |
-| `ALLOWED_ORIGIN` | ❌ | CORS origin (default: `*`) |
-
+|| `ALLOWED_ORIGIN` | ❌ | CORS origin (default: `*`) |
+|| `GEMINI_API_KEY` | ❌ | Gemini API key for AI review assist (`/api/ai-review-assist`) |
+|| `GREEN_API_SECRET` | ❌ | Webhook validation secret for Green API media endpoint (`/api/green-api-media`) |
+|
 ---
 
 ## Development
