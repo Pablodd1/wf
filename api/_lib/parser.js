@@ -110,8 +110,10 @@ const REF_PATTERNS = [
   // Patek Philippe — e.g. 5712/1A-001, 5236P, 6300A, 7118, 7300, bare 5711
   { regex: /\b([34567]\d{3}[A-Z]?[\/\-]?[0-9A-Z]{0,4}[\-–]?[0-9A-Z]{0,5})\b/i, brandHint: 'Patek Philippe' },
   // Rolex — e.g. 126529, 116500LN, 228238, 124060
+  // v4.1: Also match "116500 L.N", "116500 L N" (dealer variations with separators)
   // Use [ \t] instead of \s to avoid matching across newlines
-  { regex: /\b(\d{5,6}[ \t]?[A-Z]{0,4})\b/i, brandHint: 'Rolex' },
+  { regex: /\b(\d{5,6}[ \t]?[A-Z][ \t._]?[A-Z]?)\b/i, brandHint: 'Rolex' },
+  { regex: /\b(\d{5,6}[A-Z]{0,4})\b/i, brandHint: 'Rolex' },
   // AP Royal Oak / Offshore — e.g. 15210ST, 26420SO, 26240OR
   { regex: /\b(\d{5}[A-Z]{2,4}\.?\d{0,2})\b/i, brandHint: 'Audemars Piguet' },
   // Richard Mille — e.g. RM07-01, RM11-03, RM35-02
@@ -270,26 +272,165 @@ function isSectionHeader(text) {
 // ═══════════════════════════════════════════════════════════════
 
 /**
- * Split a message that may contain multiple watches separated by // or |.
+ * Split a message that may contain multiple watches.
+ *
+ * Handles three formats:
+ * 1. Delimiter-separated: "watch1 // watch2 | watch3"
+ * 2. WhatsApp multi-watch: refs chained with prices — "126509 Blue N9 Hk$410K 126505 Cho N10 Hk$420K"
+ * 3. Newline-separated: "watch1\nwatch2\nwatch3"
+ *
+ * For format 2, we detect boundaries where a new watch reference appears
+ * after a price/currency token from the previous watch.
  */
 function splitMultiWatch(text) {
   if (!text) return [''];
-  const parts = text
+
+  // ── Phase 1: Split on newlines first (most reliable separator) ──
+  let lines = text.split(/\n+/).map(l => l.trim()).filter(l => l.length > 0);
+
+  // If newlines produced multiple lines, check if each has a ref → already split
+  if (lines.length > 1) {
+    const linesWithRefs = lines.filter(l => /\b\d{4,6}[A-Z]{0,4}\b/i.test(l) || /\bRM\d/i.test(l));
+    if (linesWithRefs.length >= 2) {
+      // Further split each line for delimiter format
+      const result = [];
+      for (const line of lines) {
+        result.push(...splitByDelimiters(line));
+      }
+      return result.filter(p => p.length > 0);
+    }
+  }
+
+  // ── Phase 2: Delimiter-based splitting (//, |, \) ──
+  const single = lines.join(' ');
+  const delimited = splitByDelimiters(single);
+  if (delimited.length > 1) return delimited;
+
+  // ── Phase 3: WhatsApp multi-watch detection ──
+  // Pattern: ref + [optional details] + price → next ref + price
+  // Split BEFORE a reference number that follows a price/currency token
+  const multiSplit = splitWhatsAppMultiWatch(single);
+  if (multiSplit.length > 1) return multiSplit;
+
+  return [single.trim()];
+}
+
+/**
+ * Split on common delimiters: //, |, \, and/&/+ before a digit
+ */
+function splitByDelimiters(text) {
+  if (!text) return [];
+  return text
     .split(/(?:\s*\/\/\s*|\s*\|\s*|\s*\\\s*|\s+(?:and|&|\+)\s+(?=\d|[A-Z]{2,}|\$))/i)
     .map(p => p.trim())
     .filter(p => p.length > 0);
-  return parts.length > 0 ? parts : [text.trim()];
+}
+
+/**
+ * Split WhatsApp-style multi-watch listings.
+ *
+ * Dealer format example:
+ *   "126509 Blue N9 Hk$410K 126505 Cho N10 Hk$420K 126515 Cho f.s D.F N8 Hk$342k"
+ *
+ * Each watch segment contains: reference → [dial/condition details] → price
+ * We split BEFORE each reference that follows a price token.
+ *
+ * Price tokens: Hk$XXX[Kk], $XXX[Kk], XXX[Kk] HKD, USDT XXX, etc.
+ * Reference tokens: 5-6 digit number optionally followed by letters, or RM##-##
+ */
+function splitWhatsAppMultiWatch(text) {
+  if (!text) return [text];
+
+  // Price-currency pattern: detects end of a watch's price info
+  // Matches: Hk$410K, HK$420k, $342k, 410K HKD, HKD 410K, USDT 50K, etc.
+  const priceTokenRe = /(?:(?:HK|hk|Hk|hK)\s*\$\s*\d{1,6}(?:[.,]\d{1,3})?\s*[KkMm]?)|(?:\$\s*\d{1,6}(?:[.,]\d{1,3})?\s*[KkMm]?)|(?:(?:HKD|USD|USDT|EUR|GBP|CHF)\s*\d{1,6}(?:[.,]\d{1,3})?\s*[KkMm]?)|(?:\d{1,6}\s*[KkMm]\s*(?:HKD|USD|USDT))|(?:\d{3,7}\s*(?:HKD|USD|USDT|EUR|GBP|CHF))/gi;
+
+  // Reference pattern: 5-6 digit number (optionally with letters) or RM##-##
+  const refTokenRe = /\b(?:\d{5,6}[A-Z]{0,4}|RM\d{2,3}[-–]?\d{2}|Q\d{6,7})\b/gi;
+
+  // Collect ALL ref and price positions using regex.exec
+  const refs = [];
+  const prices = [];
+  let m;
+
+  // Reset regex
+  const refRe = new RegExp(refTokenRe.source, 'gi');
+  while ((m = refRe.exec(text)) !== null) {
+    refs.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+  }
+
+  const priceRe = new RegExp(priceTokenRe.source, 'gi');
+  while ((m = priceRe.exec(text)) !== null) {
+    // Avoid matching a ref as a price (overlap detection)
+    const overlapsRef = refs.some(r => r.start <= m.index && m.index < r.end);
+    if (!overlapsRef && m[0].length > 2) {
+      prices.push({ start: m.index, end: m.index + m[0].length, text: m[0] });
+    }
+  }
+
+  // Merge into a sorted event timeline
+  const events = [
+    ...refs.map(e => ({ ...e, type: 'ref' })),
+    ...prices.map(e => ({ ...e, type: 'price' })),
+  ].sort((a, b) => a.start - b.start);
+
+  if (refs.length < 2) return [text.trim()];
+
+  // Walk the timeline: split before a REF that comes after a PRICE
+  const segments = [];
+  let lastSplit = 0;
+  let foundPrice = false;
+
+  for (const evt of events) {
+    if (evt.type === 'price') {
+      foundPrice = true;
+    } else if (evt.type === 'ref') {
+      if (foundPrice && evt.start > lastSplit) {
+        // This ref follows a price → new watch
+        segments.push(text.slice(lastSplit, evt.start).trim());
+        lastSplit = evt.start;
+        foundPrice = false;
+      }
+    }
+  }
+
+  // Push remaining text
+  if (lastSplit < text.length) {
+    segments.push(text.slice(lastSplit).trim());
+  }
+
+  // Only return splits if we found 2+ segments with refs
+  if (segments.length > 1) {
+    const refSegments = segments.filter(s => refTokenRe.test(s));
+    if (refSegments.length >= 2) {
+      return segments.filter(s => s.length > 0);
+    }
+  }
+
+  return [text.trim()];
 }
 
 /**
  * Detect the watch brand from a dealer message.
+ * v4.1: RM references are checked FIRST to prevent Richard Mille being
+ *       swallowed under Rolex when a multi-watch message contains both.
  */
 function parseBrand(text) {
   if (!text) return null;
   const lower = text.toLowerCase();
+
+  // v4.1: Check Richard Mille FIRST — "RM" prefix refs must not fall through to Rolex
+  // This prevents "Rolex ... RM030-01 ..." from being classified as Rolex
+  // Match: RM##, RM ##-##, RM###, Richard Mille
+  if (/\b(richard\s*mille|rm\s?\d{2,3})\b/i.test(text)) {
+    return 'Richard Mille';
+  }
+
   for (const entry of BRAND_MAP) {
+    // Skip Richard Mille here — already handled above
+    if (entry.canon === 'Richard Mille') continue;
     for (const alias of entry.names) {
-      const pattern = new RegExp('(?:^|[^a-z])' + alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[^a-z])', 'i');
+      const pattern = new RegExp('(?:^|[^a-z])' + alias.replace(/[.*+?^${}()|[\]\\\\]/g, '\\\\$&') + '(?:$|[^a-z])', 'i');
       if (pattern.test(lower)) {
         return entry.canon;
       }
@@ -328,12 +469,29 @@ function parseReference(text, brandHint) {
   // Remove price-context and years BEFORE searching for references
   // Use [ \t]+ (NOT \s) to avoid matching across newlines
   const priceStripped = clean
+    // Currency+number combos: "410K HKD", "HK$410K", "USDT 50000", "$342k"
     .replace(/\b\d{1,3}(?:,\d{3})*[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)\b/gi, ' ')
     .replace(/\b\d{1,3}\.\d{3}[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)\b/gi, ' ')
     .replace(/\b\d{3,7}[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)\b/gi, ' ')
     .replace(/(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)\s*\d+/gi, ' ')
     .replace(/\d+(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)/gi, ' ')
-    .replace(/\b(19|20)\d{2}\b/g, ' ');
+    // HK$ / Hk$ prefix (common WhatsApp dealer format): "Hk$410K", "HK$420k"
+    .replace(/[Hh][Kk]\$\s*\d{1,6}(?:[.,]\d{1,3})?\s*[KkMm]?\b/g, ' ')
+    // $-prefixed prices: "$5100", "$34,500", "$17.9K", "$4200" (must strip before ref extraction)
+    .replace(/\$\s*\d{1,3}(?:,\d{3})*(?:\.\d+)?\s*[KkMm]?\b/g, ' ')
+    .replace(/\$\s*\d{4,7}\s*[KkMm]?\b/g, ' ')
+    .replace(/\$\s*\d{1,6}\s*[KkMm]\b/g, ' ')
+    // Standalone USDT (not attached to a number — garbage in reference field)
+    .replace(/\bUSDT\b/gi, ' ')
+    // Price with K/M suffix and no currency: "410K", "420k" (only when preceded by non-digit)
+    .replace(/(?<!\d)\d{1,6}\s*[KkMm]\b(?!\w)/g, ' ')
+    // Years: 2020-2030, also "Jun-2006" style date prefixes
+    .replace(/\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-\.]?\s*(19|20)\d{2}\b/gi, ' ')
+    .replace(/\b(19|20)\d{2}\b/g, ' ')
+    // Full sentences/descriptions in parentheses (not refs)
+    .replace(/\([^)]*(?:without|with|full|sticker|card|box|paper)[^)]*\)/gi, ' ')
+    // Status abbreviations: f.s, s.s, k.c, D.F (dealer shorthand not refs)
+    .replace(/\b[fdsk][.]\s?[sck]\b/gi, ' ');
 
   const ordered = [...REF_PATTERNS].sort((a, b) => {
     if (a.brandHint && a.brandHint === brandHint) return -1;
@@ -345,7 +503,10 @@ function parseReference(text, brandHint) {
     const m = priceStripped.match(pat.regex);
     if (m) {
       let ref = m[1].replace(/\s+/g, '').toUpperCase()
-        .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD|LAND|CHOC|CHOCO|WIM|OLIVE|SUNDUST|TIFFANY|LAVENDER|PISTACHIO|TURQUOISE|PANDA|PAVE|BLK|SILVER|GREY|GRAY|PN|RBOW|SUB|GMT|YM|OP|DJ|EXP)/, '$1')
+        // Normalize dealer variations: "116500 L.N" → "116500LN", "116500 l n" → "116500LN"
+        .replace(/[._]/g, '')
+        .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD|LAND|CHOC|CHOCO|WIM|OLIVE|SUNDUST|TIFFANY|LAVENDER|PISTACHIO|TURQUOISE|PANDA|PAVE|BLK|SILVER|GREY|GRAY|PN|RBOW|SUB|GMT|YM|OP|DJ|DD|DD2|DJ2|EXP|II|I)$/i, '$1')
+        .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD|LAND|CHOC|CHOCO|WIM|OLIVE|SUNDUST|TIFFANY|LAVENDER|PISTACHIO|TURQUOISE|PANDA|PAVE|BLK|SILVER|GREY|GRAY|PN|RBOW|SUB|GMT|YM|OP|DJ|DD|DD2|DJ2|EXP|II|I)(?=\d)/i, '$1')
         .replace(/[\-\/]$/, '');  // Strip trailing dash/slash
 
       // Strip common dealer/status suffixes that get concatenated
@@ -384,20 +545,66 @@ function parseReference(text, brandHint) {
 
 /**
  * Extract the dial colour from the message text.
+ * v4.1: Only returns canonical color names. Rejects multi-word text that
+ *       contains commas, "and", "&", or material descriptions (gold, steel, etc.)
+ *       that dealers put alongside dial info.
  */
 function parseDial(text, ref) {
   if (!text) return null;
   const lower = text.toLowerCase();
 
+  // Find ALL matching colors, then pick the best one
+  const foundColors = [];
   for (const [colour, aliases] of Object.entries(DIAL_KEYWORDS)) {
     for (const alias of aliases) {
-      const rx = new RegExp('(?:^|[^a-z])' + alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[^a-z])', 'i');
+      const rx = new RegExp('(?:^|[^a-z])' + alias.replace(/[.*+?^${}()|[\]\\\\]/g, '\\\\$&') + '(?:$|[^a-z])', 'i');
       if (rx.test(lower)) {
-        return normalizeDialColor(colour);
+        foundColors.push(colour);
+        break; // Don't add same color twice from different aliases
       }
     }
   }
 
+  // If exactly one color found, return it
+  if (foundColors.length === 1) {
+    return normalizeDialColor(foundColors[0]);
+  }
+
+  // If multiple colors found, prefer the one that appears closest to "dial" keyword
+  // or closest to the reference number in the text
+  if (foundColors.length > 1) {
+    // Check if "dial" keyword exists and a color is near it
+    const dialIdx = lower.indexOf('dial');
+    if (dialIdx >= 0) {
+      // Find which color appears closest after "dial"
+      let bestColor = null;
+      let bestDist = Infinity;
+      for (const c of foundColors) {
+        const aliases = DIAL_KEYWORDS[c] || [c];
+        for (const alias of aliases) {
+          const idx = lower.indexOf(alias, dialIdx);
+          if (idx >= 0 && idx - dialIdx < bestDist) {
+            bestDist = idx - dialIdx;
+            bestColor = c;
+          }
+        }
+      }
+      if (bestColor) return normalizeDialColor(bestColor);
+    }
+
+    // Fallback: if catalog has a dial color for this ref, use it
+    if (ref) {
+      const catalogEntry = lookupCatalog(null, ref);
+      if (catalogEntry && catalogEntry.dialColor) {
+        return normalizeDialColor(catalogEntry.dialColor.toLowerCase());
+      }
+    }
+
+    // Final fallback: return the first found color (most common use case)
+    return normalizeDialColor(foundColors[0]);
+  }
+
+  // No color keyword found — try inferring from reference suffix
   if (ref) {
     const dialCode = inferDialFromRef(ref);
     if (dialCode) return normalizeDialColor(dialCode);
@@ -450,20 +657,36 @@ function inferDialFromRef(ref) {
 
 /**
  * Infer brand from a known reference number pattern.
+ * v4.1: More conservative — only infer when we have clear brand-specific patterns.
+ *       Avoids misclassifying Rolex 4-digit refs (like 17000, 1601) as Patek Philippe.
  */
 function inferBrandFromRef(ref) {
   if (!ref) return null;
   const r = ref.toUpperCase();
+  
+  // RM prefix → Richard Mille (very reliable)
   if (r.startsWith('RM')) return 'Richard Mille';
+  
+  // PAM prefix → Panerai (very reliable)
   if (r.startsWith('PAM')) return 'Panerai';
-  if (r.startsWith('5') || r.startsWith('4') || r.startsWith('6') || r.startsWith('3') || r.startsWith('7')) {
-    if (/^\d{4,5}[\/\-]?/.test(r)) return 'Patek Philippe';
-  }
+  
+  // Q prefix → Jaeger-LeCoultre (very reliable)
+  if (/^Q\d{6,7}/.test(r)) return 'Jaeger-LeCoultre';
+  
+  // Patek Philippe: only for 4-digit refs starting with 3,4,5,6,7
+  // AND only if followed by a slash or letter suffix (e.g., 5711/1A, 5236P)
+  // Do NOT infer Patek for bare 4-5 digit numbers — too ambiguous with Rolex
+  if (/^[3-7]\d{3}[[A-Z]|[\\/]/.test(r)) return 'Patek Philippe';
+  
+  // Rolex: 6-digit refs starting with 11-27 (covers 116500, 126610, 228238, etc.)
   if (/^\d{6}/.test(r)) {
     const first2 = parseInt(r.slice(0, 2), 10);
     if (first2 >= 11 && first2 <= 27) return 'Rolex';
   }
-  if (/^\d{5}[A-Z]{2}/.test(r)) return 'Audemars Piguet';
+  
+  // AP: 5-digit + 2+ uppercase letters (15210ST, 26240OR)
+  if (/^\d{5}[A-Z]{2,4}/.test(r)) return 'Audemars Piguet';
+  
   return null;
 }
 
@@ -1066,13 +1289,17 @@ function parseFull(rawMsg) {
     };
   }
 
-  // v3: Strip WhatsApp decorations (emoji, flags, timestamps)
+  // v4.1: Strip WhatsApp decorations (emoji, flags, timestamps)
   let text = stripWhatsAppDecorations(rawMsg);
 
   // Fix: Period-separated fields — "5711. Chocolate. Unworn." → "5711 Chocolate Unworn"
   // Only replaces period+space, preserving decimal prices like 95.000
   text = text.replace(/\.\s+/g, ' ').replace(/\.$/, '');
 
+  // v4.1: Normalize newlines — dealer messages may have \n within a single listing
+  // (address, phone number, etc). Only treat \n as separator when followed by a ref/price pattern
+  // Keep \n for multi-watch splitting, but normalize to space for single-watch parse
+  
   // v4.0: SECTION HEADER REJECTION — return GARBAGE immediately
   if (isSectionHeader(text)) {
     return {
