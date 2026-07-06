@@ -72,7 +72,7 @@ const BRAND_MAP = [
   { names: ['a. lange & sohne', 'a.lange', 'lange', 'alange', '朗格'], canon: 'A. Lange & Sohne' },
   { names: ['mb&f', 'mbf', 'max busser'],              canon: 'MB&F' },
   { names: ['omega', '欧米茄', '歐米茄'],                  canon: 'Omega' },
-  { names: ['cartier', '卡地亚', '卡地亞'],                canon: 'Cartier' },
+  { names: ['cartier', '卡地亚', '卡地亞', 'santos', 'tank', 'ballon bleu', 'ballonbleu', 'pasha', 'ronde', 'calibre de cartier', 'crb', 'wsr'], canon: 'Cartier' },
   { names: ['iwc', '万国', '萬國'],                        canon: 'IWC' },
   { names: ['jaeger-lecoultre', 'jaeger', 'jlc', 'jl', '积家', '積家'], canon: 'Jaeger-LeCoultre' },
   { names: ['hublot', '宇舶'],                           canon: 'Hublot' },
@@ -83,6 +83,7 @@ const BRAND_MAP = [
   { names: ['tudor', '帝舵'],                             canon: 'Tudor' },
   { names: ['grand seiko', 'grandseiko', 'gs', '冠蓝狮', '冠藍獅'], canon: 'Grand Seiko' },
   { names: ['seiko', '精工'],                            canon: 'Seiko' },
+  { names: ['glashutte original', 'glashutte', 'glas hutte', 'glasshutte', '格拉苏蒂'], canon: 'Glashutte Original' },
   { names: ['panerai', '沛纳海', '沛納海'],                 canon: 'Panerai' },
   { names: ['ulysse nardin', 'ulysse', '雅典'],           canon: 'Ulysse Nardin' },
   { names: ['girard-perregaux', 'girard perregaux', '芝柏'], canon: 'Girard-Perregaux' },
@@ -116,8 +117,8 @@ const REF_PATTERNS = [
   { regex: /\b(\d{5,6}[A-Z]{0,4})\b/i, brandHint: 'Rolex' },
   // AP Royal Oak / Offshore — e.g. 15210ST, 26420SO, 26240OR
   { regex: /\b(\d{5}[A-Z]{2,4}\.?\d{0,2})\b/i, brandHint: 'Audemars Piguet' },
-  // Richard Mille — e.g. RM07-01, RM11-03, RM35-02
-  { regex: /\b(RM\s?\d{2}[\-–]?\d{2})(?:\s|$|[A-Z]?\b)/i, brandHint: 'Richard Mille' },
+  // Richard Mille — e.g. RM07-01, RM11-03, RM35-02, RM030-01
+  { regex: /\b(RM\s?\d{2,3}[-–]?\d{2,3})(?:\s|$|[A-Z]?\b)/i, brandHint: 'Richard Mille' },
   // Vacheron — e.g. 4300V/220R, 6000V, 85180
   // Must contain V or / to avoid matching years like 2019Y
   { regex: /\b(\d{4,5}[Vv]\/?\d{0,3}[A-Za-z]{0,3})\b/i, brandHint: 'Vacheron Constantin' },
@@ -130,6 +131,16 @@ const REF_PATTERNS = [
   { regex: /\b(\d{4}\.\d{2,3}\.\d{2,3})\b/, brandHint: 'Omega' },
   // JLC — e.g. Q397846J, Q4102520
   { regex: /\b(Q\d{6,7}[A-Z]?)\b/i, brandHint: 'Jaeger-LeCoultre' },
+  // IWC — e.g. IW371615, IW324005
+  { regex: /\b(IW\d{5,7}[A-Z]?)\b/i, brandHint: 'IWC' },
+  // Cartier — e.g. W51007Q4, WSR, CRB, W2
+  { regex: /\b(W\d{5,7}[A-Z]{0,3})\b/i, brandHint: 'Cartier' },
+  { regex: /\b((?:WSR|CRB|CRO|WTB|WEA|W2)\d{4,6}[A-Z]?)\b/i, brandHint: 'Cartier' },
+  // Hublot — e.g. 301.SX.130.RX, MP-05
+  { regex: /\b(MP[-]?\d{2,5})\b/i, brandHint: 'Hublot' },
+  { regex: /\b(\d{3}\.[A-Z]{2}\.\d{3}\.[A-Z]{2})\b/i, brandHint: 'Hublot' },
+  // Glashutte Original — e.g. 1-58-01, 1-39-52-02
+  { regex: /\b(1-\d{2}-\d{2}(?:-\d{2})?)\b/i, brandHint: 'Glashutte Original' },
   // Generic fallback — NNNNN or NNNN/XX format
   { regex: /\b([A-Z]*\d{4,6}[\/\-]?[A-Z0-9]{0,4})\b/i, brandHint: null },
 ];
@@ -253,7 +264,9 @@ function isSectionHeader(text) {
   // Lines starting with clock emoji are always headers
   if (/^[\u231A\u231B]/u.test(t)) return true;
   // 🚩🚩ROLEX🚩🚩 or 🏆Patek Philippe New in HK or ⌚🇭🇰PP Ready in HK
-  if (/^[\u231A\u231B\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]*\s*\w+.*[\u231A\u231B\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]*$/gu.test(t)) {
+  // Only match if the line CONTAINS emoji characters (not just optional)
+  const hasEmoji = /[\u231A\u231B\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/u.test(t);
+  if (hasEmoji && /^[\u231A\u231B\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\s]*\w+.*[\u231A\u231B\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\s]*$/u.test(t)) {
     // If it contains brand names but no reference or price → header
     const hasRef = /\b\d{4,6}/.test(t);
     const hasPrice = /\d+[KkMm]|\d{4,7}|hkd|usd|usdt/i.test(t);
@@ -419,26 +432,37 @@ function parseBrand(text) {
   if (!text) return null;
   const lower = text.toLowerCase();
 
-  // v4.1: Check Richard Mille FIRST — "RM" prefix refs must not fall through to Rolex
-  // This prevents "Rolex ... RM030-01 ..." from being classified as Rolex
-  // Match: RM##, RM ##-##, RM###, Richard Mille
+  // v4.2: Richard Mille checked FIRST (before Rolex) to prevent misclassification
   if (/\b(richard\s*mille|rm\s?\d{2,3})\b/i.test(text)) {
     return 'Richard Mille';
   }
 
+  // Find ALL brand matches, return the FIRST one (leftmost in text)
+  // This handles "Tudor Black Bay 58 Rolex" → Tudor (first), not Rolex
+  let firstMatch = null;
+  let firstIndex = Infinity;
+
   for (const entry of BRAND_MAP) {
-    // Skip Richard Mille here — already handled above
+    // Skip Richard Mille — already handled above
     if (entry.canon === 'Richard Mille') continue;
     for (const alias of entry.names) {
       const pattern = new RegExp('(?:^|[^a-z])' + alias.replace(/[.*+?^${}()|[\]\\\\]/g, '\\\\$&') + '(?:$|[^a-z])', 'i');
-      if (pattern.test(lower)) {
-        return entry.canon;
+      const match = lower.match(pattern);
+      if (match && match.index < firstIndex) {
+        firstIndex = match.index;
+        firstMatch = entry.canon;
       }
       if (alias.length >= 4 && lower.includes(alias)) {
-        return entry.canon;
+        const idx = lower.indexOf(alias);
+        if (idx < firstIndex) {
+          firstIndex = idx;
+          firstMatch = entry.canon;
+        }
       }
     }
   }
+
+  if (firstMatch) return firstMatch;
 
   // NORM_001: If text explicitly contains a different luxury brand, use it
   const EXPLICIT_BRANDS = [
@@ -513,6 +537,13 @@ function parseReference(text, brandHint) {
       // NOTE: OR = rose gold, AS = steel — do NOT strip valid material codes
       // Strip BEFORE length validation
       ref = ref.replace(/(NEED|SOLD|TYIA|WHO|PLZ|DM|NIB|PM|PRE|CARD|NO|THKS|THANK|ROSE|HK|REF|BNIB|TIA)$/i, '');
+      // v4.2: Strip brand abbreviations from reference prefix (per Alex's request)
+      // VC = Vacheron Constantin, PP = Patek Philippe, AP = Audemars Piguet
+      // These are dealer shorthand, not part of the actual reference number
+      // IMPORTANT: Only strip when followed by space or digit separator,
+      // NOT when the abbreviation IS part of the ref (e.g., RM030-01 is a valid RM ref)
+      ref = ref.replace(/^(VC|PP|AP|JLC|IWC|HUB|CART|OMG|ZEN)\s+/i, '');
+      ref = ref.replace(/^(VC|PP|AP|JLC|IWC|HUB|CART|OMG|ZEN)(?=\d{4,})/i, '');
       // Re-validate after stripping
       if (!ref || ref.length < 4) continue;
 
@@ -529,7 +560,8 @@ function parseReference(text, brandHint) {
       const hasLetters = /[A-Z]/.test(ref);
       const isNumericRef = /^\d{4,6}$/.test(ref);
       const isDottedRef = /^\d{3,4}\.\d{2,3}/.test(ref);
-      if (!hasLetters && !isNumericRef && !isDottedRef) continue;
+      const isDashedRef = /^\d-\d{2}-\d{2}/.test(ref);  // Glashutte Original: 1-58-01
+      if (!hasLetters && !isNumericRef && !isDottedRef && !isDashedRef) continue;
 
       // For numeric-only refs, verify not followed by currency
       if (isNumericRef) {
@@ -657,35 +689,61 @@ function inferDialFromRef(ref) {
 
 /**
  * Infer brand from a known reference number pattern.
- * v4.1: More conservative — only infer when we have clear brand-specific patterns.
- *       Avoids misclassifying Rolex 4-digit refs (like 17000, 1601) as Patek Philippe.
+ * v4.2: Reference prefix overrides text brand detection.
+ *       If a Hublot listing has PAM00372 → brand becomes Panerai.
+ *       If an Omega listing has W51007Q4 → brand becomes Cartier.
+ *       If a Hublot listing has IW371615 → brand becomes IWC.
  */
 function inferBrandFromRef(ref) {
   if (!ref) return null;
   const r = ref.toUpperCase();
   
-  // RM prefix → Richard Mille (very reliable)
+  // ── Brand-specific prefixes (very reliable) ──
+  // RM prefix → Richard Mille
   if (r.startsWith('RM')) return 'Richard Mille';
   
-  // PAM prefix → Panerai (very reliable)
+  // PAM prefix → Panerai (NOT Hublot)
   if (r.startsWith('PAM')) return 'Panerai';
   
-  // Q prefix → Jaeger-LeCoultre (very reliable)
+  // Q prefix → Jaeger-LeCoultre
   if (/^Q\d{6,7}/.test(r)) return 'Jaeger-LeCoultre';
   
-  // Patek Philippe: only for 4-digit refs starting with 3,4,5,6,7
+  // IW prefix → IWC (NOT Hublot)
+  if (/^IW\d{5,7}/.test(r)) return 'IWC';
+  
+  // W + 5+ digits → Cartier (NOT Omega)
+  if (/^W\d{5,}[A-Z]?/.test(r)) return 'Cartier';
+  
+  // Cartier format: CRB, CRO, WSR, W2, etc.
+  if (/^(WSR|W2|CBB|CRB|CRO|WTB|WEA)\d/i.test(r)) return 'Cartier';
+  
+  // ── Vacheron Constantin: 4-5 digits ending in V, or with / separator ──
+  if (/^\d{4,5}V$/i.test(r)) return 'Vacheron Constantin';
+  if (/^\d{4,5}V\/\d{0,3}[A-Z]{0,3}$/i.test(r)) return 'Vacheron Constantin';
+  
+  // ── Patek Philippe: 4-digit refs starting with 3,4,5,6,7 ──
   // AND only if followed by a slash or letter suffix (e.g., 5711/1A, 5236P)
   // Do NOT infer Patek for bare 4-5 digit numbers — too ambiguous with Rolex
-  if (/^[3-7]\d{3}[[A-Z]|[\\/]/.test(r)) return 'Patek Philippe';
+  if (/^[3-7]\d{3}[A-Z]|[\\/]/.test(r)) return 'Patek Philippe';
   
-  // Rolex: 6-digit refs starting with 11-27 (covers 116500, 126610, 228238, etc.)
+  // ── Rolex: 6-digit refs starting with 11-27 ──
   if (/^\d{6}/.test(r)) {
     const first2 = parseInt(r.slice(0, 2), 10);
     if (first2 >= 11 && first2 <= 27) return 'Rolex';
   }
   
-  // AP: 5-digit + 2+ uppercase letters (15210ST, 26240OR)
+  // ── AP: 5-digit + 2+ uppercase letters (15210ST, 26240OR) ──
   if (/^\d{5}[A-Z]{2,4}/.test(r)) return 'Audemars Piguet';
+  
+  // ── Hublot: typically has dots (301.SX.130.RX) or MP prefix ──
+  if (/^MP\d{5}/.test(r)) return 'Hublot';
+  if (/^\d{3}\.[A-Z]{2}\.\d{3}\.[A-Z]{2}/.test(r)) return 'Hublot';
+  
+  // ── Omega: dotted format (123.10.35.20.01.001) ──
+  if (/^\d{3}\.\d{2,3}/.test(r)) return 'Omega';
+  
+  // ── Glashutte Original: 1-XX-XX format ──
+  if (/^1-\d{2}-\d{2}/.test(r)) return 'Glashutte Original';
   
   return null;
 }
@@ -1332,8 +1390,19 @@ function parseFull(rawMsg) {
   // Extract reference
   const ref = parseReference(text, brand || undefined);
 
-  // If no brand but we have a reference, try to infer brand
-  let finalBrand = brand || inferBrandFromRef(ref);
+  // v4.2: Reference-prefix brand inference OVERRIDES text-detected brand.
+  // If text says "Hublot" but ref is PAM00372 → brand becomes Panerai.
+  // If text says "Omega" but ref is W51007Q4 → brand becomes Cartier.
+  // If text says "Hublot" but ref is IW371615 → brand becomes IWC.
+  // Only override when the ref-based brand is definitive (prefix match).
+  const refInferredBrand = inferBrandFromRef(ref);
+  let finalBrand;
+  if (refInferredBrand && brand && refInferredBrand !== brand) {
+    // Ref prefix is more reliable than text brand — use ref-based brand
+    finalBrand = refInferredBrand;
+  } else {
+    finalBrand = brand || refInferredBrand;
+  }
 
   // Extract other fields
   const dial = parseDial(text, ref || undefined);

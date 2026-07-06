@@ -1,0 +1,1113 @@
+{
+  "stats": {
+    "totalProcessed": 5000,
+    "correctionsFound": 2079,
+    "refCleaned": 0,
+    "brandFixed": 149,
+    "dialFixed": 1341,
+    "multiWatchSplit": 3084,
+    "priceAdded": 0
+  },
+  "samples": [
+    {
+      "title": " 15510OR .OO.D315CR.02 BLUE   41 MM BRAND NEW 2024  200,000 AED ??? 54500$ USD ??",
+      "old": {
+        "brand": "Audemars Piguet",
+        "ref": "15510OR",
+        "normRef": "NULL",
+        "dial": "NULL"
+      },
+      "new": {
+        "brand": "Audemars Piguet",
+        "ref": "15510OR",
+        "dial": "Blue",
+        "price": 200000
+      },
+      "multiWatch": null,
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "Jaeger-LeCoultre Master 50924E1\\nVan Gogh famous painting enamel dial, 18k rose gold\\nMinute repeate",
+      "old": {
+        "brand": "Jaeger-LeCoultre",
+        "ref": "50924E1",
+        "normRef": "50924E1",
+        "dial": "blue"
+      },
+      "new": {
+        "brand": "Jaeger-LeCoultre",
+        "ref": "50924E1",
+        "dial": "Black",
+        "price": 18000
+      },
+      "multiWatch": "10 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "? Looking for// Sold order ?\\n- VCR 5100T/000P-H041\\n- New 2025/2026\\n- ?? Prefer HK or Thailand dea",
+      "old": {
+        "brand": "Vacheron Constantin",
+        "ref": "5100T/000P-H041",
+        "normRef": "5100T/000P-H041",
+        "dial": "silver"
+      },
+      "new": {
+        "brand": "Patek Philippe",
+        "ref": "5100T/000P-H041",
+        "dial": "",
+        "price": null
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": true,
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "#100 16700 A serial $11000",
+      "old": {
+        "brand": "Rolex",
+        "ref": "16700",
+        "normRef": "16700",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "",
+        "ref": "16700A",
+        "dial": "",
+        "price": null
+      },
+      "multiWatch": null,
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": "",
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "#118395BR Daydate RG Pink Sundust Dial// like new dated 2020 - system checked// 190,000 AED w&c",
+      "old": {
+        "brand": "Rolex",
+        "ref": "118395BR",
+        "normRef": "118395BR",
+        "dial": "pink"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "118395BR",
+        "dial": "Brown",
+        "price": 190000
+      },
+      "multiWatch": "3 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "#11839BR DD RG Pink 36mm// Like new 2020// 190,000 AED w&c",
+      "old": {
+        "brand": "Rolex",
+        "ref": "11839BR",
+        "normRef": "11839BR",
+        "dial": "pink"
+      },
+      "new": {
+        "brand": "Audemars Piguet",
+        "ref": "11839BR",
+        "dial": "Brown",
+        "price": 190000
+      },
+      "multiWatch": "3 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": true,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "#1185 N serial 68279 factory dd $16000 your ?",
+      "old": {
+        "brand": "Rolex",
+        "ref": "1185",
+        "normRef": "1185",
+        "dial": "gold"
+      },
+      "new": {
+        "brand": "",
+        "ref": "68279",
+        "dial": "",
+        "price": 1185
+      },
+      "multiWatch": null,
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": "",
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "#126000 beige op\\nBnew with white ?? \\n35,500 AED",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126000",
+        "normRef": "126000",
+        "dial": "beige"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126000",
+        "dial": "White",
+        "price": null
+      },
+      "multiWatch": "3 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "#126334 DJ silver ind 41// bnew fsb tag ?? 12-2025// 54,000 AED w&c",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126334",
+        "normRef": "126334",
+        "dial": "silver"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126334",
+        "dial": "White",
+        "price": 54000
+      },
+      "multiWatch": "3 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "#126334 DJ Silver Ind 41mm// bnew with fsb ??// 53,000 AED w&c",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126334",
+        "normRef": "126334",
+        "dial": "silver"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126334",
+        "dial": "White",
+        "price": 53000
+      },
+      "multiWatch": "3 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "#126518yml n11 488k\\n#126518yml n12 492k\\n\\nArriving ?? 1/16",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126518",
+        "normRef": "126518",
+        "dial": "gold"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126518YML",
+        "dial": "",
+        "price": 488000
+      },
+      "multiWatch": "4 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": false,
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "#126598rbow\\nBnew 2025 with tag\\n435,000 USD",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126598rbow",
+        "normRef": "126598RBOW",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126598",
+        "dial": "",
+        "price": null
+      },
+      "multiWatch": "3 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": false,
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "#126598RBOW Daytona Rainbow factory// bnew 25 with fsb ??// 435,000 USD w&c",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126598RBOW",
+        "normRef": "126598RBOW",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126598",
+        "dial": "",
+        "price": 435000
+      },
+      "multiWatch": "3 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": false,
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "#126598RBOW Daytona YG Rainbow factory// bnew 2025 fsb ??// 1,600,000 AED w&c",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126598RBOW",
+        "normRef": "126598RBOW",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126598",
+        "dial": "",
+        "price": 1600000
+      },
+      "multiWatch": "3 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": false,
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "#196 spectacular 2 million 1601 gray dial on gray strap $8500 your label",
+      "old": {
+        "brand": "Rolex",
+        "ref": "1601",
+        "normRef": "1601",
+        "dial": "grey"
+      },
+      "new": {
+        "brand": "Audemars Piguet",
+        "ref": "1601",
+        "dial": "Grey",
+        "price": 8500
+      },
+      "multiWatch": null,
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": true,
+        "dialChanged": false
+      }
+    },
+    {
+      "title": "#9 16610 U serial $8400 your label",
+      "old": {
+        "brand": "Rolex",
+        "ref": "16610",
+        "normRef": "16610",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "",
+        "ref": "16610U",
+        "dial": "",
+        "price": null
+      },
+      "multiWatch": null,
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": "",
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "#RWB\\n\\nSOLD ORDERS \\n\\nPlesse PM \\n\\n????????\\n\\n\\n\\n7200/r 2025 new full set \\n\\n\\n\\n6000v/110A fu",
+      "old": {
+        "brand": "Rolex",
+        "ref": "7200/r",
+        "normRef": "7200/R",
+        "dial": "grey"
+      },
+      "new": {
+        "brand": "Patek Philippe",
+        "ref": "N7200/R",
+        "dial": "",
+        "price": null
+      },
+      "multiWatch": "23 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": true,
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "#rwb \\n\\n15410bc Frosted AP Blue 41mm\\n\\nDouble boxed with Card\\n\\nExcellent condition \\n\\nFull link",
+      "old": {
+        "brand": "Audemars Piguet",
+        "ref": "15410BC",
+        "normRef": "15410BC",
+        "dial": "blue"
+      },
+      "new": {
+        "brand": "Audemars Piguet",
+        "ref": "N15410BC",
+        "dial": "Blue",
+        "price": null
+      },
+      "multiWatch": "11 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": false,
+        "dialChanged": false
+      }
+    },
+    {
+      "title": "#RWB WTB � 126710BLRO Pepsi 2 pieces\\n\\n� Jubilee \\n\\n\\n\\n� Excellent early 2023 and 2025/26 BNIB \\n",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126710BLRO",
+        "normRef": "126710BLRO",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126710BLRO",
+        "dial": "White",
+        "price": null
+      },
+      "multiWatch": "16 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "#RWB�\\nReference - 5172G-010\\nModel - Complications Chronograph\\nYear - ///\\nConfig - Salmon Dial, W",
+      "old": {
+        "brand": "Patek Philippe",
+        "ref": "5172G-010",
+        "normRef": "5172G-010",
+        "dial": "pink"
+      },
+      "new": {
+        "brand": "Audemars Piguet",
+        "ref": "5172G-010",
+        "dial": "Brown",
+        "price": 61000
+      },
+      "multiWatch": "12 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": true,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "#WTB #NTQ ~AidenTCT \\nGood price = Confirm in same day \\n\\nAp 15400st only watch & used any dates",
+      "old": {
+        "brand": "Audemars Piguet",
+        "ref": "15400st",
+        "normRef": "15400ST",
+        "dial": "blue"
+      },
+      "new": {
+        "brand": "Richard Mille",
+        "ref": "15400ST",
+        "dial": "",
+        "price": null
+      },
+      "multiWatch": "5 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": true,
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "#WTS ~ AidenTCT \\n3 days to HK ?? \\n\\nRL 126334g Grey Jubs � 2024Y � $18.050 usdt",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126334",
+        "normRef": "126334",
+        "dial": "grey"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126334G",
+        "dial": "Grey",
+        "price": 18050
+      },
+      "multiWatch": "4 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": false,
+        "dialChanged": false
+      }
+    },
+    {
+      "title": "#WTS ~ AidenTCT \\n3 days to ??\\n\\nRM6501 NTPT Fullset � 2024Y � 340.000 usdt",
+      "old": {
+        "brand": "Richard Mille",
+        "ref": "RM6501",
+        "normRef": "RM6501",
+        "dial": "skeleton"
+      },
+      "new": {
+        "brand": "",
+        "ref": "NRM6501",
+        "dial": "",
+        "price": 340000
+      },
+      "multiWatch": "4 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": "",
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "$10,300 + label\\n\\nRolex Oyster Perpetual 31MM (277200) - Steel - \"Candy Pink\" - 2025 Card+WT''\\n\\nU",
+      "old": {
+        "brand": "Rolex",
+        "ref": "277200",
+        "normRef": "277200",
+        "dial": "pink"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "277200",
+        "dial": "White",
+        "price": 10300
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$10,300 + label\\n\\nRolex Oyster Perpetual 31MM (277200) - Steel - \"Candy Pink\" - 2025 Card+WT''\\n\\nU",
+      "old": {
+        "brand": "Rolex",
+        "ref": "277200",
+        "normRef": "277200",
+        "dial": "pink"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "277200",
+        "dial": "White",
+        "price": 10300
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$10,450 + label\\n\\nRolex Datejust 36MM (126233) Steel & Yellow Gold - Oyster Brac - Champ Motif Dial",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126233",
+        "normRef": "126233",
+        "dial": "gold"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126233",
+        "dial": "Champagne",
+        "price": 10450
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$10,450 + label\\n\\nRolex Datejust 36MM (126233) Steel & Yellow Gold - Oyster Brac - Champ Motif Dial",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126233",
+        "normRef": "126233",
+        "dial": "gold"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126233",
+        "dial": "Champagne",
+        "price": 10450
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$10,450 + label\\n\\nRolex Datejust 36MM (126233) Steel & Yellow Gold - Oyster Brac - Champ Motif Dial",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126233",
+        "normRef": "126233",
+        "dial": "gold"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126233",
+        "dial": "Champagne",
+        "price": 10450
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$10,500 + label\\n\\nRolex Oyster Perpetual 31MM (277200) - Steel - \"Candy Pink\" - 2025 Card+WT''\\n\\nU",
+      "old": {
+        "brand": "Rolex",
+        "ref": "277200",
+        "normRef": "277200",
+        "dial": "pink"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "277200",
+        "dial": "White",
+        "price": 10500
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$11,250 + label\\n\\nBreitling Navitimer B01 - 41MM - (RB0139) Rose Gold - Brown Leather - 2024 Card (",
+      "old": {
+        "brand": "Breitling",
+        "ref": "RB0139",
+        "normRef": "RB0139",
+        "dial": "white"
+      },
+      "new": {
+        "brand": "Breitling",
+        "ref": "RB0139",
+        "dial": "Brown",
+        "price": 11250
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$11,250 + label\\n\\nBreitling Navitimer B01 - 41MM - (RB0139) Rose Gold - Brown Leather - 2024 Card (",
+      "old": {
+        "brand": "Breitling",
+        "ref": "RB0139",
+        "normRef": "RB0139",
+        "dial": "beige"
+      },
+      "new": {
+        "brand": "Breitling",
+        "ref": "RB0139",
+        "dial": "Brown",
+        "price": 11250
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$11,250 + label\\n\\nBreitling Navitimer B01 - 41MM - (RB0139) Rose Gold - Brown Leather - 2024 Card (",
+      "old": {
+        "brand": "Breitling",
+        "ref": "RB0139",
+        "normRef": "RB0139",
+        "dial": "white"
+      },
+      "new": {
+        "brand": "Breitling",
+        "ref": "RB0139",
+        "dial": "Brown",
+        "price": 11250
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$11,750 + label *TAKING OFFERS*\\n\\nRolex Deep-Sea Sea-Dweller 44MM (126660) \"James Cameron\" Blue Fad",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126660",
+        "normRef": "126660",
+        "dial": "blue"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126660",
+        "dial": "White",
+        "price": 11750
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$12,200 + label\\n\\nRolex Deep-Sea Sea-Dweller 44MM (126660) \"James Cameron\" Blue Fade Dial - 2021 Ca",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126660",
+        "normRef": "126660",
+        "dial": "blue"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126660",
+        "dial": "White",
+        "price": 12200
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$12,200 + label\\n\\nRolex Deep-Sea Sea-Dweller 44MM (126660) \"James Cameron\" Blue Fade Dial - 2021 Ca",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126660",
+        "normRef": "126660",
+        "dial": "blue"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126660",
+        "dial": "White",
+        "price": 12200
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$12,250 126233 champagne",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126233",
+        "normRef": "126233",
+        "dial": "gold"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126233",
+        "dial": "Champagne",
+        "price": 12250
+      },
+      "multiWatch": null,
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$12,500 + label\\n\\nRolex Datejust 31MM (178274) Steel Jubilee Bracelet - MOP Diamond  'VI' Jubilee -",
+      "old": {
+        "brand": "Rolex",
+        "ref": "178274",
+        "normRef": "178274",
+        "dial": "white"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "178274",
+        "dial": "Mother Of Pearl",
+        "price": 12500
+      },
+      "multiWatch": "6 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$12,500 + label\\n\\nRolex Datejust 31MM (178274) Steel Jubilee Bracelet - MOP Diamond  'VI' Jubilee -",
+      "old": {
+        "brand": "Rolex",
+        "ref": "178274",
+        "normRef": "178274",
+        "dial": "white"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "178274",
+        "dial": "Mother Of Pearl",
+        "price": 12500
+      },
+      "multiWatch": "6 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$12,500 + label\\n\\nRolex Datejust 41MM (126303) Steel & Yellow Gold - Jubilee Brac - Silver Index Di",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126303",
+        "normRef": "126303",
+        "dial": "silver"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126303",
+        "dial": "White",
+        "price": 12500
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$12,750 + label\\n\\nRolex Sea Dweller 43MM (126600) - Steel - Black Dial - 2025 Card+WT (SW902)\\n\\nRe",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126600",
+        "normRef": "126600",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126600",
+        "dial": "White",
+        "price": 12750
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$12,750 + label\\n\\nRolex Sea Dweller 43MM (126600) - Steel - Black Dial - 2025 Card+WT (SW902)\\n\\nRe",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126600",
+        "normRef": "126600",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126600",
+        "dial": "White",
+        "price": 12750
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$12,750 + label *MAKE AN OFFER*\\n\\nRolex Sea Dweller 43MM (126600) - Steel - Black Dial - 2025 Card+",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126600",
+        "normRef": "126600",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126600",
+        "dial": "White",
+        "price": 12750
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$12,850 + label\\n\\nRolex Datejust 41MM (126334) Steel & White Gold - Oyster Bracelet - Charcoal Diam",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126334",
+        "normRef": "126334",
+        "dial": "grey"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126334",
+        "dial": "White",
+        "price": 12850
+      },
+      "multiWatch": "8 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$122,500 + label\\n\\nRolex Daytona 40MM (126506) Platinum \"Platona\" 2026 Card+WT & Box\\n\\nFreshly Dat",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126506",
+        "normRef": "126506",
+        "dial": "blue"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126506",
+        "dial": "White",
+        "price": 122500
+      },
+      "multiWatch": "9 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$13,500 + label\\n\\nRolex Datejust 41MM (126334) \"Wimbledon\" Slate Dial - Jubilee Brac - 2020 Card+WT",
+      "old": {
+        "brand": "Rolex",
+        "ref": "126334",
+        "normRef": "126334",
+        "dial": "grey"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "126334",
+        "dial": "White",
+        "price": 13500
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$13,500 pink 134300 w/c 2026\\n$13,500 lavendar 134300 w/c 2025",
+      "old": {
+        "brand": "Rolex",
+        "ref": "134300",
+        "normRef": "134300",
+        "dial": "pink"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "134300W",
+        "dial": "",
+        "price": 13500
+      },
+      "multiWatch": "2 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": true,
+        "brandChanged": false,
+        "dialChanged": ""
+      }
+    },
+    {
+      "title": "$14,500 + label *MAKE ME AN OFFER!*\\n\\nRolex GMT-Master 40MM (16750) Faded Blue & Red \"Pepsi\" Bezel ",
+      "old": {
+        "brand": "Rolex",
+        "ref": "16750",
+        "normRef": "16750",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "16750",
+        "dial": "Blue",
+        "price": 14500
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$14,650 + label\\n\\nRolex GMT-Master II - 40MM - (116710BLNR) - \"Batman\" - 2016 Card+WT (SW859)\\n\\nRe",
+      "old": {
+        "brand": "Rolex",
+        "ref": "116710BLNR",
+        "normRef": "116710BLNR",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "116710BLNR",
+        "dial": "White",
+        "price": 14650
+      },
+      "multiWatch": "8 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$14,650 + label\\n\\nRolex GMT-Master II - 40MM - (116710BLNR) - \"Batman\" - 2016 Card+WT (SW859)\\n\\nRe",
+      "old": {
+        "brand": "Rolex",
+        "ref": "116710BLNR",
+        "normRef": "116710BLNR",
+        "dial": "black"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "116710BLNR",
+        "dial": "White",
+        "price": 14650
+      },
+      "multiWatch": "8 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    },
+    {
+      "title": "$15,200 + label\\n\\nRolex Datejust 31MM (278273) - Steel & Yellow Gold - ChampagNe Diamond - Oyster B",
+      "old": {
+        "brand": "Rolex",
+        "ref": "278273",
+        "normRef": "278273",
+        "dial": "gold"
+      },
+      "new": {
+        "brand": "Rolex",
+        "ref": "278273",
+        "dial": "Champagne",
+        "price": 15200
+      },
+      "multiWatch": "7 watches",
+      "issues": {
+        "refGarbage": false,
+        "refChanged": false,
+        "brandChanged": false,
+        "dialChanged": true
+      }
+    }
+  ]
+}

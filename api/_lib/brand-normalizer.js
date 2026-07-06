@@ -57,7 +57,7 @@ const CANONICAL_BRANDS = {
   'Harry Winston': ['harry winston'],
   'Corum': ['corum'],
   'Van Cleef & Arpels': ['van cleef & arpels', 'van cleef', 'vca'],
-  'Glashutte Original': ['glashütte original', 'glashutte original', 'glashütte', 'glashutte'],
+  'Glashutte Original': ['glashütte original', 'glashutte original', 'glashütte', 'glashutte', 'glasshutte', 'glas hutte'],
   'Ferrari': ['ferrari'],
   'Hermes': ['hermès', 'hermes', 'kelly', 'birkin', 'constance', 'new mini kelly', 'new mini kelly 20 blue de nord palladium hardware w stamp'],
   'Louis Vuitton': ['louis vuitton'],
