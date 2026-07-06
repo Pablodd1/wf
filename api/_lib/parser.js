@@ -92,6 +92,13 @@ const BRAND_MAP = [
   { names: ['greubel forsey', 'greubelforsey'],        canon: 'Greubel Forsey' },
   { names: ['ferrari'],                                canon: 'Ferrari' },
   { names: ['bulgari', 'bvlgari'],                     canon: 'Bulgari' },
+  { names: ['franck muller', 'franckmuller', 'fm '],   canon: 'Franck Muller' },
+  { names: ['chopard'],                                canon: 'Chopard' },
+  { names: ['hermes', 'hermès', 'hermés'],              canon: 'Hermes' },
+  { names: ['roger dubuis', 'rogerdubuis', 'rddbex'],  canon: 'Roger Dubuis' },
+  { names: ['bell & ross', 'bell and ross', 'bellross', 'b&r'], canon: 'Bell & Ross' },
+  { names: ['longines'],                               canon: 'Longines' },
+  { names: ['montblanc', 'mont blanc'],                canon: 'Montblanc' },
 ];
 
 /** Individual listing overrides — known correction cases */
@@ -141,8 +148,68 @@ const REF_PATTERNS = [
   { regex: /\b(\d{3}\.[A-Z]{2}\.\d{3}\.[A-Z]{2})\b/i, brandHint: 'Hublot' },
   // Glashutte Original — e.g. 1-58-01, 1-39-52-02
   { regex: /\b(1-\d{2}-\d{2}(?:-\d{2})?)\b/i, brandHint: 'Glashutte Original' },
+  // TAG Heuer — e.g. CAL5113, WW2111, CBL2113, WAR201
+  { regex: /\b(CAL\d{3,5})\b/i, brandHint: 'TAG Heuer' },
+  { regex: /\b((?:WW|CBL|WAR|WBD|CAZ|CAY|CAR|CAF)\d{3,6}[A-Z]{0,3})\b/i, brandHint: 'TAG Heuer' },
+  // Grand Seiko — e.g. SBGC221, SBGA211, SBGR253
+  { regex: /\b(SBG[A-Z]\d{3})\b/i, brandHint: 'Grand Seiko' },
+  // Bell & Ross — e.g. BR03-92, BR 03-92, BR0392-BLU-ST/SCA, BR05A-BLM-SKCE/SCE
+  { regex: /\b(BR\s?0?\d{2}[A-Z]?[-–]?\d{0,2}(?:[-–][A-Z]{2,4}[-–][A-Z0-9]{2,4}(?:\/[A-Z0-9]{2,4})?)?)\b/i, brandHint: 'Bell & Ross' },
+  // Blancpain — e.g. AC02-12B53-63A, 5054-0130-B52A, 6669-1127-55B
+  { regex: /\b([A-Z]{0,2}\d{2,4}[-–]\d{2,4}[A-Z]?\d{0,2}[-–][A-Z0-9]{2,4})\b/i, brandHint: 'Blancpain' },
+  // Roger Dubuis — e.g. RDDBEX0364
+  { regex: /\b(RDDBEX\d{3,5})\b/i, brandHint: 'Roger Dubuis' },
+  // Longines — e.g. L3.830.4.92.9, L2.919.4.78.6, l2.175.0
+  { regex: /\b(L\d\.\d{3}\.\d\.\d{2}\.\d)\b/i, brandHint: 'Longines' },
+  { regex: /\b(L\d\.\d{3}\.\d)\b/i, brandHint: 'Longines' },
+  // Girard-Perregaux — e.g. 81060-21-2010-FH7A (long hyphenated, must not be mistaken for a year)
+  { regex: /\b(\d{5}[-–]\d{2}[-–]\d{3,4}[-–][A-Z0-9]{3,5})\b/i, brandHint: 'Girard-Perregaux' },
+  // Ulysse Nardin — e.g. UN 246-00/43, 246 00/43
+  { regex: /\b(UN\s?\d{3}[-–]?\d{2}\/\d{2})\b/i, brandHint: 'Ulysse Nardin' },
+  { regex: /\b(\d{3}[-–]\d{2}\/\d{2})\b/, brandHint: 'Ulysse Nardin' },
+  // Montblanc — e.g. U0111012 (7-digit U-prefixed)
+  { regex: /\b(U\d{7})\b/i, brandHint: 'Montblanc' },
+  // Panerai — explicit PAM##### (before generic fallback so zero-pad normalizer sees it cleanly)
+  { regex: /\b(PAM\s?\d{2,5})\b/i, brandHint: 'Panerai' },
+  // Chopard — e.g. 298600-3001, 168566-3011, 4087
+  { regex: /\b(\d{6}[-–]\d{3,4})\b/, brandHint: 'Chopard' },
+  // Roger Dubuis alt / Hermes Cape Cod — e.g. CC1.810
+  { regex: /\b(CC\d\.\d{3})\b/i, brandHint: 'Hermes' },
   // Generic fallback — NNNNN or NNNN/XX format
   { regex: /\b([A-Z]*\d{4,6}[\/\-]?[A-Z0-9]{0,4})\b/i, brandHint: null },
+];
+
+/**
+ * v4.3: PROTECTED reference patterns — matched BEFORE price/year stripping runs.
+ * These are structurally unambiguous multi-segment references that must never
+ * be touched by the generic price/year/currency stripping regexes, because
+ * their embedded digit groups can look like years or prices (e.g. Girard-
+ * Perregaux "81060-21-2010-FH7A" contains "2010" which looks like a year;
+ * Glashutte "1-58-01" starts with a lone digit; Piaget vintage "9133 A 6"
+ * has internal spaces that must be preserved, not glued or stripped).
+ *
+ * If a protected pattern matches, its extracted ref is returned immediately —
+ * generic cleanup (price-strip, suffix-strip, space-glue) is skipped entirely.
+ */
+const PROTECTED_REF_PATTERNS = [
+  // Girard-Perregaux — long hyphenated ref; embedded "2010" etc. must survive
+  { regex: /\b(\d{5}[-–]\d{2}[-–]\d{3,4}[-–][A-Z0-9]{3,5})\b/i, brandHint: 'Girard-Perregaux', preserveAsIs: true },
+  // Glashutte Original — dashed format starting with a lone digit
+  { regex: /\b(\d-\d{2}-\d{2}(?:-\d{2})?)\b/, brandHint: 'Glashutte Original', preserveAsIs: true },
+  // Roger Dubuis
+  { regex: /\b(RDDBEX\d{3,5})\b/i, brandHint: 'Roger Dubuis', preserveAsIs: true },
+  // Bell & Ross full format with slash suffix
+  { regex: /\b(BR\s?0?\d{2}[A-Z]?[-–]\d{0,2}[-–][A-Z]{2,4}[-–][A-Z0-9]{2,4}(?:\/[A-Z0-9]{2,4})?)\b/i, brandHint: 'Bell & Ross', preserveAsIs: true },
+  // Blancpain dash-caliber style
+  { regex: /\b([A-Z]{0,2}\d{2,4}[-–]\d{2,4}[A-Z]?\d{0,2}[-–][A-Z0-9]{2,4})\b/i, brandHint: 'Blancpain', preserveAsIs: true },
+  // Longines dotted style — do not let the ".9" tail be mistaken for a price decimal
+  { regex: /\b(L\d\.\d{3}\.\d\.\d{2}\.\d)\b/i, brandHint: 'Longines', preserveAsIs: true },
+  // Montblanc 7-digit U-prefix
+  { regex: /\b(U\d{7})\b/i, brandHint: 'Montblanc', preserveAsIs: true },
+  // Piaget vintage spaced format — e.g. "9133 A 6", "9775 A 6" — preserve internal spacing
+  { regex: /\b(\d{4}\s[A-Z]\s\d)\b/i, brandHint: 'Piaget', preserveAsIs: true, keepSpaces: true },
+  // Franck Muller — refs may legitimately contain internal spaces (e.g. "902 QZ REL")
+  { regex: /\b(\d{3,4}\s(?:QZ|SC|DT|REL)(?:\s[A-Z]{2,4})*)\b/i, brandHint: 'Franck Muller', preserveAsIs: true, keepSpaces: true },
 ];
 
 /** Dial colour keywords mapped to canonical names. */
@@ -216,6 +283,21 @@ const PRICE_MULTIPLIERS = { k: 1e3, m: 1e6, b: 1e9 };
 // Non-watch product keywords for NORM_004
 const NON_WATCH_KEYWORDS = ['bag', 'shoulder bag', 'leather', 'hardware', 'crossbody', 'tote', 'clutch', 'purse', 'wallet'];
 
+// v4.3: Hermes bag model names — these are NEVER watches, force NON_WATCH_OR_WRONG_CATEGORY
+const HERMES_BAG_MODELS = ['birkin', 'kelly', 'constance', 'hac', 'picotin', 'evelyne', 'garden party', 'lindy', 'bolide'];
+
+// v4.3: Watch-accessory keywords (strap/bracelet/box/link ONLY, not the watch itself)
+// Distinct from NON_WATCH_KEYWORDS (which is for bags/apparel) — these describe
+// watch-adjacent accessories being sold separately from the watch head.
+const ACCESSORY_KEYWORDS = [
+  'strap only', 'strap for', 'bracelet only', 'bracelet for',
+  'wooden box', 'box only', 'box available', 'watch box',
+  'link only', 'links only', 'extra link', 'spare link',
+];
+// Looser single-word signals — only treated as accessory when NO valid
+// brand-specific reference pattern was found alongside them (checked in caller).
+const ACCESSORY_WEAK_SIGNALS = ['strap', 'bracelet', 'link', 'links', 'box', 'boxes'];
+
 // ═══════════════════════════════════════════════════════════════
 // HELPER: createCryptoHash (Node >=19 compatible)
 // ═══════════════════════════════════════════════════════════════
@@ -274,6 +356,15 @@ function isSectionHeader(text) {
   }
   // Pure emoji lines or bare phone numbers
   if (/^\+?\d[\d\s]*$/.test(t)) return true;
+  // v4.3: Bare brand-name-only text (e.g. "BVLGARI", "ZENITH", "DEFY") must NOT
+  // be discarded as a section header — it needs to flow through to brand
+  // detection so parseFull can flag it NEEDS_MANUAL_REVIEW (brand with no ref)
+  // instead of silently dropping it as GARBAGE. Check against known brand
+  // names before applying the generic short-text-no-digits header heuristic.
+  const isKnownBrandOnly = BRAND_MAP.some(entry =>
+    entry.names.some(name => t.toLowerCase() === name.toLowerCase())
+  );
+  if (isKnownBrandOnly) return false;
   if (t.length < 10 && !/\d/.test(t)) return true;
   // Separator lines
   if (/^-{3,}|={3,}|\*{3,}$/.test(t)) return true;
@@ -490,9 +581,34 @@ function parseReference(text, brandHint) {
   const clean = text
     .replace(/[\u200B\u200C\u200D\uFEFF]/g, '');
 
+  // v4.3: PROTECTED PATTERNS — check BEFORE any price/year stripping.
+  // These multi-segment refs (GP, Glashutte, Bell & Ross, Blancpain, Longines,
+  // Montblanc, Piaget vintage, Franck Muller spaced) must never be run through
+  // the generic price/year/currency stripping below, because their embedded
+  // digit groups can resemble years or prices and get wrongly stripped.
+  const protectedOrdered = [...PROTECTED_REF_PATTERNS].sort((a, b) => {
+    if (a.brandHint && a.brandHint === brandHint) return -1;
+    if (b.brandHint && b.brandHint === brandHint) return 1;
+    return 0;
+  });
+  for (const pat of protectedOrdered) {
+    const m = clean.match(pat.regex);
+    if (m) {
+      let ref = m[1].trim();
+      if (!pat.keepSpaces) ref = ref.replace(/\s+/g, '');
+      ref = ref.toUpperCase();
+      return normalizeRefFormat(ref, pat.brandHint);
+    }
+  }
+
   // Remove price-context and years BEFORE searching for references
   // Use [ \t]+ (NOT \s) to avoid matching across newlines
   const priceStripped = clean
+    // v4.3: Dealer item/stock IDs — "Item # 2405682", "SKU 1234", "Stock #5678"
+    // These are internal dealer tracking numbers, NEVER a brand reference.
+    // NOTE: deliberately excludes "ref" — "Ref: 126610LN" usually precedes the
+    // ACTUAL valid reference and must not be stripped (would destroy real refs).
+    .replace(/\b(?:item|sku|stock)\s*#?\s*\.?\s*(?:no\.?|id)?\s*[:#]?\s*\d{4,10}\b/gi, ' ')
     // Currency+number combos: "410K HKD", "HK$410K", "USDT 50000", "$342k"
     .replace(/\b\d{1,3}(?:,\d{3})*[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)\b/gi, ' ')
     .replace(/\b\d{1,3}\.\d{3}[ \t]*(?:USD|USDT|HKD|EUR|GBP|CHF|HKG)\b/gi, ' ')
@@ -526,9 +642,18 @@ function parseReference(text, brandHint) {
   for (const pat of ordered) {
     const m = priceStripped.match(pat.regex);
     if (m) {
-      let ref = m[1].replace(/\s+/g, '').toUpperCase()
-        // Normalize dealer variations: "116500 L.N" → "116500LN", "116500 l n" → "116500LN"
-        .replace(/[._]/g, '')
+      // v4.3: Preserve internal dots for brands whose reference format IS
+      // dot-separated (Omega 310.32.42.50.02.001, Hublot 301.SX.130.RX,
+      // Hermes Cape Cod CC1.810, Longines L2.175.0). Only strip dots for
+      // brands where they're dealer typos (Rolex "116500 L.N" → "116500LN").
+      const preserveDots = ['Omega', 'Hublot', 'Hermes', 'Longines'].includes(pat.brandHint);
+      let ref = m[1].replace(/\s+/g, '').toUpperCase();
+      if (!preserveDots) {
+        ref = ref
+          // Normalize dealer variations: "116500 L.N" → "116500LN", "116500 l n" → "116500LN"
+          .replace(/[._]/g, '');
+      }
+      ref = ref
         .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD|LAND|CHOC|CHOCO|WIM|OLIVE|SUNDUST|TIFFANY|LAVENDER|PISTACHIO|TURQUOISE|PANDA|PAVE|BLK|SILVER|GREY|GRAY|PN|RBOW|SUB|GMT|YM|OP|DJ|DD|DD2|DJ2|EXP|II|I)$/i, '$1')
         .replace(/^(\d{5,6})(DAY|DATE|NEW|FULL|SET|USED|LIKE|MINT|GREEN|BLUE|BLACK|WHITE|GOLD|LAND|CHOC|CHOCO|WIM|OLIVE|SUNDUST|TIFFANY|LAVENDER|PISTACHIO|TURQUOISE|PANDA|PAVE|BLK|SILVER|GREY|GRAY|PN|RBOW|SUB|GMT|YM|OP|DJ|DD|DD2|DJ2|EXP|II|I)(?=\d)/i, '$1')
         .replace(/[\-\/]$/, '');  // Strip trailing dash/slash
@@ -537,6 +662,9 @@ function parseReference(text, brandHint) {
       // NOTE: OR = rose gold, AS = steel — do NOT strip valid material codes
       // Strip BEFORE length validation
       ref = ref.replace(/(NEED|SOLD|TYIA|WHO|PLZ|DM|NIB|PM|PRE|CARD|NO|THKS|THANK|ROSE|HK|REF|BNIB|TIA)$/i, '');
+      // v4.3: Strip leading "Ref-"/"Ref:"/"Ref " prefix glued onto the extracted match
+      // e.g. "Ref-WSSA0030" → "WSSA0030" (the raw regex sometimes captures the label too)
+      ref = ref.replace(/^REF[-:.]?/i, '');
       // v4.2: Strip brand abbreviations from reference prefix (per Alex's request)
       // VC = Vacheron Constantin, PP = Patek Philippe, AP = Audemars Piguet
       // These are dealer shorthand, not part of the actual reference number
@@ -569,10 +697,71 @@ function parseReference(text, brandHint) {
         if (/\b(usd|hkd|eur|gbp|k\b|m\b)/.test(after)) continue;
       }
 
-      return ref;
+      return normalizeRefFormat(ref, pat.brandHint || brandHint);
     }
   }
   return null;
+}
+
+/**
+ * v4.3: Per-brand suffix/format normalizers — applied as the FINAL step
+ * after a reference has been extracted and validated. Fixes brand-specific
+ * casing/format conventions flagged by Alex's review (missing "M" prefix on
+ * Tudor, zero-padding on Panerai PAM refs, canonical RM##-## spacing, glued
+ * Piaget G0A codes, uppercase Longines "L" prefix).
+ */
+function normalizeRefFormat(ref, brand) {
+  if (!ref) return ref;
+
+  switch (brand) {
+    case 'Tudor':
+      // Restore missing "M" prefix: "7939A1A0RU-0001" → "M7939A1A0RU-0001"
+      if (/^\d{4,5}[A-Z]/.test(ref) && !ref.startsWith('M')) {
+        return 'M' + ref;
+      }
+      return ref;
+
+    case 'Panerai':
+      // Zero-pad to PAM##### — "PAM372" → "PAM00372" (ref already space-stripped by this point)
+      { const m = ref.match(/^PAM0*(\d{1,5})$/i);
+        if (m) return 'PAM' + m[1].padStart(5, '0'); }
+      return ref;
+
+    case 'Richard Mille':
+      // Canonical RM##-## no-space format: "RM 11-03" → "RM11-03"
+      return ref.replace(/^RM\s+/i, 'RM').toUpperCase();
+
+    case 'Piaget':
+      // Glue "G0A 34077" → "G0A34077" (but the protected spaced-vintage pattern
+      // like "9133 A 6" is handled separately with keepSpaces and never reaches here)
+      { const m = ref.match(/^G0A\s?(\d{4,5})$/i);
+        if (m) return 'G0A' + m[1]; }
+      return ref;
+
+    case 'Longines':
+      // Force uppercase leading L: "l2.175.0" → "L2.175.0"
+      return ref.replace(/^l/, 'L');
+
+    case 'IWC':
+      return ref.toUpperCase();
+
+    case 'Bell & Ross':
+      // "03-92" alone (brand already implied "BR") → glue to "BR03-92"
+      if (/^\d{2}-\d{2}$/.test(ref)) return 'BR' + ref;
+      return ref.replace(/^B&R\s*/i, 'BR').toUpperCase();
+
+    case 'Hublot':
+      // Dotted format: uppercase segments — "917nj6909rx" style w/o dots is
+      // ambiguous; only reformat if dots are already present
+      if (/^\d{3}\.[A-Z]{2}\.\d{3,4}\.[A-Z]{2}$/i.test(ref)) return ref.toUpperCase();
+      return ref;
+
+    case 'Grand Seiko':
+      return ref.toUpperCase();
+
+    default:
+      return ref;
+  }
 }
 
 /**
@@ -720,11 +909,19 @@ function inferBrandFromRef(ref) {
   // ── Vacheron Constantin: 4-5 digits ending in V, or with / separator ──
   if (/^\d{4,5}V$/i.test(r)) return 'Vacheron Constantin';
   if (/^\d{4,5}V\/\d{0,3}[A-Z]{0,3}$/i.test(r)) return 'Vacheron Constantin';
-  
+  // v4.3: Vacheron Historiques format — "4200H/222A-B934", "4200H/222J-B935"
+  // (####H/###[letter]-[letter]###). Checked BEFORE the Patek pattern below,
+  // because it would otherwise also match the generic "[3-7]\d{3}[A-Z]" shape.
+  if (/^\d{4}H\/\d{3}[A-Z][-–][A-Z]\d{3,4}$/i.test(r)) return 'Vacheron Constantin';
+
   // ── Patek Philippe: 4-digit refs starting with 3,4,5,6,7 ──
   // AND only if followed by a slash or letter suffix (e.g., 5711/1A, 5236P)
   // Do NOT infer Patek for bare 4-5 digit numbers — too ambiguous with Rolex
-  if (/^[3-7]\d{3}[A-Z]|[\\/]/.test(r)) return 'Patek Philippe';
+  // v4.3 FIX: previous regex /^[3-7]\d{3}[A-Z]|[\\/]/ had broken operator
+  // precedence — the unanchored `|[\\/]` alternative matched ANY string
+  // containing a slash anywhere (e.g. Vacheron "4200H/222A-B934" was wrongly
+  // inferred as Patek). Corrected to properly anchor both alternatives.
+  if (/^[3-7]\d{3}([A-Z]|\/)/.test(r)) return 'Patek Philippe';
   
   // ── Rolex: 6-digit refs starting with 11-27 ──
   if (/^\d{6}/.test(r)) {
@@ -744,9 +941,35 @@ function inferBrandFromRef(ref) {
   
   // ── Glashutte Original: 1-XX-XX format ──
   if (/^1-\d{2}-\d{2}/.test(r)) return 'Glashutte Original';
-  
+
+  // ── v4.3: additional brand-specific prefixes (flag-only, see AUTO_OVERRIDE_BRANDS) ──
+  if (/^RDDBEX\d/.test(r)) return 'Roger Dubuis';
+  if (/^SBG[A-Z]\d{3}/.test(r)) return 'Grand Seiko';
+  if (/^L\d\.\d{3}\.\d/.test(r)) return 'Longines';
+  if (/^U\d{7}$/.test(r)) return 'Montblanc';
+  if (/^CAL\d{3,5}/.test(r)) return 'TAG Heuer';
+  if (/^BR\s?0?\d{2}/.test(r)) return 'Bell & Ross';
+
   return null;
 }
+
+/**
+ * v4.3: Brands for which reference-prefix inference is trusted enough to
+ * AUTO-OVERRIDE the text-detected brand (as approved in v4.2 for the
+ * Hublot/Omega/Rolex cross-contamination cases). Any OTHER inferred brand
+ * mismatch is flagged as WRONG_BRAND_SUSPECT instead of silently changed,
+ * per the new verdict taxonomy — safer default until a human confirms
+ * these newer prefixes (Roger Dubuis, Grand Seiko, Longines, Montblanc,
+ * TAG Heuer, Bell & Ross, Vacheron Historiques) are equally unambiguous.
+ * v4.3: Vacheron Constantin removed from auto-override — Alex flagged a
+ * case (Grand Seiko row containing a VC Historiques ref) that needs human
+ * confirmation rather than a silent brand swap.
+ */
+const AUTO_OVERRIDE_BRANDS = new Set([
+  'Richard Mille', 'Panerai', 'Jaeger-LeCoultre', 'IWC', 'Cartier',
+  'Patek Philippe', 'Rolex', 'Audemars Piguet',
+  'Hublot', 'Omega', 'Glashutte Original',
+]);
 
 /**
  * Extract condition from the message.
@@ -1094,6 +1317,86 @@ function detectNonWatch(text) {
 }
 
 /**
+ * v4.3: Detect if a Hermes-brand row is actually a bag listing, not a watch.
+ * Bag model names (Birkin, Kelly, Constance, Hac, etc.) are never watches.
+ */
+function detectHermesBagModel(text) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+  return HERMES_BAG_MODELS.some(model => {
+    const rx = new RegExp('(?:^|[^a-z])' + model.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:$|[^a-z])', 'i');
+    return rx.test(lower);
+  });
+}
+
+/**
+ * v4.3: Detect if the row describes a watch ACCESSORY (strap/bracelet/box/link)
+ * rather than the watch itself. Returns true only when an accessory keyword
+ * is present AND no clear brand-specific reference number was extracted —
+ * a genuine watch listing that merely mentions "full set with box" should
+ * NOT be flagged (that's normal watch listing language, not an accessory sale).
+ */
+function detectAccessoryListing(text, ref) {
+  if (!text) return false;
+  const lower = text.toLowerCase();
+
+  // Strong signals: explicit "X only" / "X for" phrasing — always an accessory sale
+  if (ACCESSORY_KEYWORDS.some(kw => lower.includes(kw))) return true;
+
+  // v4.3: "links only" / "extra links" / "22links Only" with "watch" and a price
+  // is a WATCH listing describing condition (how many links included), NOT an
+  // accessory-only sale. Only flag "link" when the text does NOT mention a
+  // complete watch or has no extracted reference.
+  const isWatchListing = (
+    /(?:^|[^a-z])watch(?:$|[^a-z])/.test(lower) ||
+    /(?:^|[^a-z])w&c(?:$|[^a-z])/.test(lower) ||
+    ref !== null
+  );
+
+  // v4.3: Accessory keyword as the LEADING word (e.g. "BRACELET 15500/26331OR")
+  // is a strong signal regardless of whether reference-looking numbers follow —
+  // dealers commonly list an accessory alongside the reference numbers of the
+  // watch models it fits, which should not be mistaken for a watch listing.
+  const leadingWord = lower.trim().split(/\s+/)[0];
+  if (ACCESSORY_WEAK_SIGNALS.includes(leadingWord)) return true;
+
+  // Weak signals: bare "strap"/"bracelet"/"box" word present but NO valid
+  // reference extracted AND not a watch listing → likely an accessory-only sale
+  if (!isWatchListing && ACCESSORY_WEAK_SIGNALS.some(kw => {
+    const rx = new RegExp('(?:^|[^a-z])' + kw + '(?:$|[^a-z])', 'i');
+    return rx.test(lower);
+  })) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * v4.3: Detect whether the row is a MULTI_WATCH_STOCK_LIST that couldn't be
+ * cleanly split by splitMultiWatch — i.e. 2+ distinct valid brand-specific
+ * reference patterns are present in one raw message with no clear single-row
+ * boundary. In that case we refuse to guess and flag for manual resolution.
+ */
+function detectMultiWatchStockList(text) {
+  if (!text) return false;
+  const matches = [];
+  for (const pat of REF_PATTERNS) {
+    if (!pat.brandHint) continue; // skip generic fallback — too noisy for this check
+    const re = new RegExp(pat.regex.source, pat.regex.flags.includes('g') ? pat.regex.flags : pat.regex.flags + 'g');
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      matches.push({ ref: m[1], brand: pat.brandHint, index: m.index });
+      if (matches.length > 6) break; // cap — clearly a stock list by now
+    }
+    if (matches.length > 6) break;
+  }
+  // Dedupe by normalized ref value
+  const uniqueRefs = new Set(matches.map(m => m.ref.replace(/[\s._-]/g, '').toUpperCase()));
+  return uniqueRefs.size >= 2;
+}
+
+/**
  * Classify the listing type (WTS / WTB / WTT / GARBAGE).
  */
 function classifyListingType(text) {
@@ -1390,16 +1693,24 @@ function parseFull(rawMsg) {
   // Extract reference
   const ref = parseReference(text, brand || undefined);
 
-  // v4.2: Reference-prefix brand inference OVERRIDES text-detected brand.
-  // If text says "Hublot" but ref is PAM00372 → brand becomes Panerai.
-  // If text says "Omega" but ref is W51007Q4 → brand becomes Cartier.
-  // If text says "Hublot" but ref is IW371615 → brand becomes IWC.
-  // Only override when the ref-based brand is definitive (prefix match).
+  // v4.2/v4.3: Reference-prefix brand inference. For the well-established
+  // cross-contamination set (v4.2), auto-override the text brand — these
+  // prefixes are unambiguous (PAM/IW/W#/RM etc). For newer brand prefixes
+  // (Roger Dubuis, Grand Seiko, Longines, Montblanc, TAG Heuer, Bell & Ross),
+  // flag as WRONG_BRAND_SUSPECT instead of silently changing the brand —
+  // per Alex's review, these need human confirmation before auto-correcting.
   const refInferredBrand = inferBrandFromRef(ref);
   let finalBrand;
+  let wrongBrandSuspect = false;
   if (refInferredBrand && brand && refInferredBrand !== brand) {
-    // Ref prefix is more reliable than text brand — use ref-based brand
-    finalBrand = refInferredBrand;
+    if (AUTO_OVERRIDE_BRANDS.has(refInferredBrand)) {
+      // Ref prefix is more reliable than text brand — use ref-based brand
+      finalBrand = refInferredBrand;
+    } else {
+      // Unconfirmed prefix family — flag, don't silently override
+      finalBrand = brand;
+      wrongBrandSuspect = true;
+    }
   } else {
     finalBrand = brand || refInferredBrand;
   }
@@ -1410,6 +1721,12 @@ function parseFull(rawMsg) {
   const year = parseYear(text);
   const currency = isWTB ? null : (parseCurrency(text) || 'USD');
   let price = isWTB ? null : parsePrice(text, ref || undefined);
+
+  // v4.3: New verdict-taxonomy detectors (checked before confidence scoring,
+  // per Alex's cleanup rules — see PROJECT reference-cleanup spec)
+  const isHermesBag = finalBrand === 'Hermes' && detectHermesBagModel(text);
+  const isAccessory = detectAccessoryListing(text, ref);
+  const isMultiWatchStockList = !isWTB && detectMultiWatchStockList(text);
 
   // v4.0: Post-parse price cap enforcement ($5M USD hard cap)
   let priceExceedsCap = false;
@@ -1516,6 +1833,42 @@ function parseFull(rawMsg) {
     priceExceedsCap,
   });
 
+  // v4.3: New verdict taxonomy — overrides the standard verdict when a
+  // structural data-quality issue is detected (per Alex's reference-cleanup
+  // spec). Checked in priority order: category mismatches first (most
+  // specific/certain), then multi-watch ambiguity, then brand mismatch,
+  // then generic manual review.
+  let reviewReason = null;
+  let taxonomyVerdict = null;
+
+  if (isHermesBag) {
+    taxonomyVerdict = 'NON_WATCH_OR_WRONG_CATEGORY';
+    reviewReason = 'Hermes bag model detected (Birkin/Kelly/Constance/etc.), not a watch.';
+  } else if (isNonWatch) {
+    taxonomyVerdict = 'NON_WATCH_OR_WRONG_CATEGORY';
+    reviewReason = 'Non-watch product keywords detected (bag, leather, apparel).';
+  } else if (isAccessory) {
+    taxonomyVerdict = 'ACCESSORY_NOT_WATCH';
+    reviewReason = 'Strap/bracelet/box/link accessory listing, not a complete watch.';
+  } else if (isMultiWatchStockList) {
+    taxonomyVerdict = 'MULTI_WATCH_STOCK_LIST';
+    reviewReason = 'Multiple distinct brand-specific references found in one message; row boundary unclear.';
+  } else if (wrongBrandSuspect) {
+    taxonomyVerdict = 'WRONG_BRAND_SUSPECT';
+    reviewReason = `Reference format suggests ${refInferredBrand}, but text says ${brand}. Needs confirmation before override.`;
+  } else if (finalBrand && !ref) {
+    // Brand-only text with no extractable reference (e.g. "BVLGARI", "ZENITH", "DEFY")
+    taxonomyVerdict = 'NEEDS_MANUAL_REVIEW';
+    reviewReason = 'Brand or model name only — no reference number visible in raw message.';
+  }
+
+  if (taxonomyVerdict) {
+    flags[taxonomyVerdict] = true;
+    validationFlags.push(taxonomyVerdict);
+  }
+
+  const finalVerdictWithTaxonomy = taxonomyVerdict || finalVerdict;
+
   return {
     brand: finalBrand,
     brandExplicit: !!brand,  // true if brand was found in text, false if inferred from ref pattern
@@ -1535,7 +1888,8 @@ function parseFull(rawMsg) {
     listingType,
     accessories,
     flags,
-    verdict: finalVerdict,
+    verdict: finalVerdictWithTaxonomy,
+    reviewReason,   // v4.3: human-readable explanation when verdict is a taxonomy flag
     catalogMatched,
     catalogEntry,
     catalogImageUrl: catalogEntry?.imageUrl || catalogEntry?.image_url || null,
@@ -1597,4 +1951,11 @@ module.exports = {
   confidenceTier,
   inferBrandFromRef,
   inferDialFromRef,
+
+  // v4.3: new taxonomy detectors + normalizer (exported for testing)
+  detectHermesBagModel,
+  detectAccessoryListing,
+  detectMultiWatchStockList,
+  normalizeRefFormat,
+  AUTO_OVERRIDE_BRANDS,
 };
