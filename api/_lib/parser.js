@@ -631,7 +631,11 @@ function parseReference(text, brandHint) {
     // Full sentences/descriptions in parentheses (not refs)
     .replace(/\([^)]*(?:without|with|full|sticker|card|box|paper)[^)]*\)/gi, ' ')
     // Status abbreviations: f.s, s.s, k.c, D.F (dealer shorthand not refs)
-    .replace(/\b[fdsk][.]\s?[sck]\b/gi, ' ');
+    .replace(/\b[fdsk][.]\s?[sck]\b/gi, ' ')
+    // v4.3.2: Dealer N-condition prefix (N5, N6, N9, N11) before a Rolex ref
+    // "n278273G Green Jub N6 153000" → the "n" prefix prevents \b from matching
+    // Strip "n" or "N" immediately before a 5-6 digit ref to restore word boundary
+    .replace(/\bn(\d{5,6}[A-Z]?)\b/gi, ' $1 ');
 
   const ordered = [...REF_PATTERNS].sort((a, b) => {
     if (a.brandHint && a.brandHint === brandHint) return -1;
