@@ -1,5 +1,6 @@
 /* ═══ WATCHFACTS MAX-PRO LUXURY DESIGN SYSTEM ═══ */
 @import './styles/luxury.css';
+@import './styles/responsive.css';
 
 @tailwind base;
 @tailwind components;

@@ -215,12 +215,12 @@ export default function SettingsPage() {
   return (
     <div className="p-5 max-w-[1200px] mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start flex-col sm:flex-row sm:items-center justify-between mb-6 gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Settings size={22} className="text-[#D4AF37]" /> Settings
+          <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
+            <Settings size={20} className="text-[#D4AF37]" /> Settings
           </h1>
-          <p className="text-sm text-gray-400 mt-1">
+          <p className="text-xs md:text-sm text-gray-400 mt-1">
             Configure parser thresholds, API settings, and export defaults
           </p>
         </div>

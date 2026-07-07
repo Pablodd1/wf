@@ -34,3 +34,4 @@ scripts/migrate_offset.txt
 package-lock.json
 public/watchfacts-export.json
 public/watchfacts-export.csv
+.env*

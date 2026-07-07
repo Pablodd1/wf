@@ -127,10 +127,10 @@ export default function AnalyticsPage() {
   return (
     <div className="p-5 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start sm:items-center justify-between mb-6 gap-3 flex-col sm:flex-row">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <BarChart3 size={22} className="text-amber-400" /> Analytics
+          <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
+            <BarChart3 size={20} className="text-amber-400" /> Analytics
           </h1>
           <div className="flex items-center gap-3 mt-1 text-xs">
             <span className="text-gray-400">

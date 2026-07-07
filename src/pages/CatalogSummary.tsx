@@ -135,10 +135,10 @@ export default function CatalogSummary() {
   return (
     <div className="p-5 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start sm:items-center justify-between mb-6 gap-3 flex-col sm:flex-row">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Database size={22} className="text-amber-400" /> Catalog Summary
+          <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
+            <Database size={20} className="text-amber-400" /> Catalog Summary
           </h1>
           <p className="text-sm text-gray-400 mt-1">
             Brand → Reference → Dial Color → Avg Price + Count

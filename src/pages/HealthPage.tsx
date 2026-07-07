@@ -375,22 +375,22 @@ export default function HealthPage() {
   return (
     <div className="p-5 max-w-[1600px] mx-auto">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-start sm:items-center justify-between mb-6 gap-3 flex-col sm:flex-row">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Activity size={22} className="text-amber-400" /> Health Monitor
+          <h1 className="text-xl md:text-2xl font-bold text-white flex items-center gap-2">
+            <Activity size={20} className="text-amber-400" /> Health Monitor
           </h1>
-          <p className="text-sm text-gray-400 mt-1">Real-time service status and alerts</p>
+          <p className="text-xs md:text-sm text-gray-400 mt-1">Real-time service status and alerts</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
             <input type="checkbox" checked={autoRefresh} onChange={(e) => setAutoRefresh(e.target.checked)}
               className="accent-amber-400" />
             Auto-refresh (30s)
           </label>
           <button onClick={runChecks} disabled={checking}
-            className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-sm disabled:opacity-50">
-            {checking ? <Loader2 size={16} className="animate-spin" /> : <RefreshCw size={16} />}
+            className="px-3 md:px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg font-medium transition-colors border border-gray-700 flex items-center gap-2 text-xs md:text-sm disabled:opacity-50">
+            {checking ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
             Check All
           </button>
         </div>

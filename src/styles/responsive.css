@@ -1,0 +1,700 @@
+/**
+ * ═══════════════════════════════════════════════════════════════════════
+ * WATCHFACTS MOBILE RESPONSIVE — Cellphone & Tablet Viewport Fixes
+ * ═══════════════════════════════════════════════════════════════════════
+ *
+ * Targets every page in the app (public + admin) with mobile-first overrides.
+ * Imported via index.css — no changes needed in individual pages unless
+ * a page uses inline widths/heights that break below 768px.
+ *
+ * Breakpoints:
+ *   xs:   < 480px  (small phones)
+ *   sm:   < 640px  (phones)
+ *   md:   < 768px  (phablets/tablets)
+ *   lg:   < 1024px (tablets landscape)
+ */
+
+/* ═══ GLOBAL MOBILE FIXES ════════════════════════════════════════════ */
+
+/* Prevent horizontal overflow on every page */
+html, body, #root {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Ensure all images/media scale down */
+img, video, iframe, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Responsive tables — horizontal scroll on small screens */
+.table-responsive {
+  display: block;
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  -ms-overflow-style: -ms-autohiding-scrollbar;
+}
+
+.table-responsive table {
+  min-width: 600px; /* forces scroll when table is wider than viewport */
+  width: 100%;
+}
+
+/* ═══ LAYOUT GRID FIXES ══════════════════════════════════════════════ */
+
+/* Collapse multi-column grids to single column on small phones */
+@media (max-width: 480px) {
+  .grid-cols-2,
+  .grid-cols-3,
+  .grid-cols-4,
+  .grid-cols-5,
+  .grid-cols-6,
+  .lg\:grid-cols-2,
+  .lg\:grid-cols-3,
+  .lg\:grid-cols-4,
+  .md\:grid-cols-2,
+  .md\:grid-cols-3,
+  .md\:grid-cols-4 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Force stack on charts that use grid */
+  .grid-cols-1\ lg\:grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Gap reduction on mobile */
+  .gap-3, .gap-4, .gap-5, .gap-6 {
+    gap: 0.75rem !important;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 640px) {
+  .grid-cols-5 {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+  .grid-cols-4,
+  .lg\:grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+  .grid-cols-3,
+  .lg\:grid-cols-3 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .gap-6 {
+    gap: 1rem !important;
+  }
+}
+
+@media (max-width: 640px) {
+  /* 2-column grids become 1 column on phones */
+  .sm\:grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+  .md\:grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ═══ ADMIN PAGE — ADMIN DASHBOARD / ADMINPAGE.TSX ══════════════════ */
+
+@media (max-width: 640px) {
+  .AdminPage .flex.items-center.justify-between.mb-6,
+  div:has(> h1:contains("Administration")) > div:first-child {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 0.75rem !important;
+  }
+}
+
+/* Health cards on admin — 2-col on phones */
+@media (max-width: 480px) {
+  .grid-cols-2.md\:grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* Action buttons wrap on admin */
+@media (max-width: 640px) {
+  .flex-wrap.gap-2,
+  div:has(button:contains("Refresh All Data")) {
+    flex-direction: column !important;
+  }
+  .flex-wrap.gap-2 > button,
+  div:has(button:contains("Refresh All Data")) button {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+/* ═══ UNIFIED REPORTS PAGE ════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Tabs become scrollable row */
+  .flex.items-center.gap-2.flex-wrap:has(button:contains("All Listings")),
+  div:has(> button:contains("All Listings")) {
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 4px;
+  }
+
+  /* Tabs shrink to fit */
+  div:has(> button:contains("All Listings")) button {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+    font-size: 10px !important;
+    padding: 4px 10px !important;
+  }
+
+  /* Pagination compact */
+  .flex.items-center.gap-2:has(button:contains("Prev")) {
+    flex-wrap: wrap !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Filter row stacks */
+  div:has(> input:contains("Search brand")) {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+}
+
+/* ═══ SEARCH PAGE ════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Search filters stack */
+  div:has(> input[placeholder*="Search"]) {
+    flex-direction: column !important;
+  }
+
+  /* Search row — query takes full width */
+  .flex.gap-3.mb-4,
+  .flex.flex-col.sm\:flex-row.gap-3 {
+    flex-direction: column !important;
+  }
+}
+
+/* ═══ TRADING FLOOR ══════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Filter pills — horizontal scroll */
+  nav:has(button:contains("FOR SALE")) {
+    overflow-x: auto !important;
+  }
+
+  /* Hero height on mobile */
+  .h-\[40vh\] {
+    height: 30vh !important;
+  }
+
+  /* Title smaller on mobile */
+  .text-3xl.md\:text-5xl {
+    font-size: 1.5rem !important;
+    line-height: 2rem !important;
+  }
+
+  /* Stats bar compact */
+  .flex.items-center.justify-between.flex-wrap {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Filter buttons horizontal scroll */
+  .flex.items-center.gap-2.flex-wrap:has(button:contains("FOR SALE")) {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    padding-bottom: 4px;
+  }
+
+  nav:has(button:contains("FOR SALE")) button {
+    flex-shrink: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  /* Currency converter — full width on mobile */
+  div:has(> .glass-modal) {
+    position: fixed !important;
+    left: 1rem !important;
+    right: 1rem !important;
+    top: auto !important;
+    bottom: 1rem !important;
+    width: auto !important;
+    max-width: none !important;
+  }
+}
+
+/* ═══ PRICE RESEARCH ════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Chart container — full width */
+  .h-\[400px\] {
+    height: 250px !important;
+  }
+
+  /* Research header compact */
+  .flex.items-start.justify-between {
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Brand/ref selectors stack */
+  div:has(> select:contains("Select Brand")) {
+    flex-direction: column !important;
+  }
+
+  /* Stat tiles grid */
+  .grid.grid-cols-2.md\:grid-cols-4.gap-3 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Dial breakdown table scroll */
+  div:has(table:contains("Dial Color")) {
+    overflow-x: auto !important;
+  }
+
+  /* Price range bar — narrower labels */
+  .range-bar-luxury .marker-value {
+    font-size: 9px !important;
+  }
+
+  /* Date range pills — scrollable */
+  .flex.items-center.gap-2.flex-wrap:has(button:contains("1M")) {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+  }
+
+  div:has(> button:contains("1M")) button {
+    flex-shrink: 0 !important;
+    font-size: 10px !important;
+    padding: 4px 10px !important;
+  }
+}
+
+/* ═══ ANALYTICS PAGE ════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Charts reduce height on mobile */
+  .h-\[300px\], .h-\[350px\], .h-\[400px\],
+  div:has(> .recharts-responsive-container) {
+    height: 220px !important;
+  }
+
+  /* Analytics grid collapses */
+  .grid-cols-1.lg\:grid-cols-2,
+  .grid.grid-cols-1.gap-6.lg\:grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Analytics cards — remove excessive padding */
+  div:has(> h3):has(> .recharts-wrapper) {
+    padding: 1rem !important;
+  }
+
+  /* Prevent chart overflow */
+  .recharts-wrapper {
+    max-width: 100% !important;
+  }
+}
+
+/* ═══ HEALTH PAGE ════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Service cards — 2-col grid */
+  .grid.grid-cols-1.sm\:grid-cols-2.lg\:grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Alert events — horizontal scroll table */
+  div:has(table:contains("Alert")) {
+    overflow-x: auto !important;
+  }
+}
+
+/* ═══ SETTINGS PAGE ════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Settings grid collapses */
+  .grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  .grid-cols-1.lg\:grid-cols-2 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Settings input groups stack */
+  .flex.items-center.justify-between.gap-4 {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+
+  /* Sliders full width */
+  input[type="range"] {
+    width: 100% !important;
+  }
+
+  /* Select/dropdown inside settings */
+  select.luxury-select {
+    width: 100% !important;
+  }
+}
+
+/* ═══ CATALOG SUMMARY ════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Catalog table — horizontal scroll */
+  table:has(th:contains("Brand")) {
+    font-size: 11px !important;
+  }
+
+  /* Table cells — more compact */
+  table:has(th:contains("Brand")) th,
+  table:has(th:contains("Brand")) td {
+    padding: 6px 8px !important;
+  }
+
+  /* Catalog header stats bar */
+  .flex.items-center.justify-between.mb-6 {
+    flex-direction: column !important;
+  }
+}
+
+/* ═══ PIPELINE DASHBOARD ══════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Gauge rings scale down */
+  svg[width="120"][height="120"],
+  svg[viewBox="0 0 120 120"] {
+    width: 80px !important;
+    height: 80px !important;
+  }
+
+  /* Pipeline stats cards */
+  .grid.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Pipeline charts */
+  .h-\[320px\] {
+    height: 200px !important;
+  }
+
+  /* Summary section */
+  .grid.grid-cols-2.gap-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem !important;
+  }
+}
+
+/* ═══ LIVE QUEUE ════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Feed messages — compact */
+  .flex.items-center.gap-3.p-4:has(div:contains("APPROVED")) {
+    padding: 0.5rem !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Status pills */
+  span:has(+ span:contains("APPROVED")) {
+    font-size: 9px !important;
+    padding: 1px 6px !important;
+  }
+
+  /* Message text smaller */
+  .text-xs + .text-xs {
+    font-size: 10px !important;
+  }
+}
+
+/* ═══ DEMO PAGE ════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Demo section padding */
+  .p-8 {
+    padding: 1rem !important;
+  }
+
+  /* Demo feature cards grid */
+  .grid.grid-cols-1.md\:grid-cols-2.lg\:grid-cols-3 {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Compare section */
+  .flex.flex-col.md\:flex-row {
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+}
+
+/* ═══ BULK IMPORT ════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Textarea — full height on mobile */
+  textarea {
+    min-height: 200px !important;
+  }
+
+  /* Import results scroll */
+  .overflow-x-auto {
+    overflow-x: auto !important;
+  }
+}
+
+/* ═══ LOGIN / AUTH PAGES ══════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Login card — full width */
+  .max-w-md {
+    max-width: 100% !important;
+    margin-left: 1rem !important;
+    margin-right: 1rem !important;
+  }
+
+  /* Auth buttons — stacked */
+  div:has(button:contains("Google")) button,
+  button:contains("Sign In With Google"),
+  button:contains("Continue with Google") {
+    width: 100% !important;
+  }
+
+  /* OAuth + Email buttons stack */
+  .flex.flex-col.gap-3 {
+    gap: 0.75rem !important;
+  }
+}
+
+/* ═══ NAVBAR FIXES ════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Navbar links — allow scroll */
+  nav:has(a:contains("Trading Floor")) {
+    overflow-x: auto !important;
+  }
+
+  nav a, nav button {
+    white-space: nowrap !important;
+    font-size: 12px !important;
+  }
+
+  /* Public navbar hamburger-style */
+  nav:has(> .flex.items-center) {
+    flex-wrap: wrap !important;
+  }
+}
+
+/* ═══ GENERAL OVERLAYS / MODALS ══════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Any fixed overlay panel */
+  .glass-modal {
+    width: calc(100% - 2rem) !important;
+    max-width: none !important;
+    left: 1rem !important;
+    right: 1rem !important;
+    max-height: 70vh !important;
+    overflow-y: auto !important;
+  }
+
+  /* Tooltip: prevent off-screen */
+  .tooltip-luxury {
+    max-width: 280px !important;
+    font-size: 10px !important;
+  }
+}
+
+/* ═══ CHARTS & RECHARTS ══════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Recharts responsive wrapper */
+  .recharts-responsive-container {
+    max-width: 100vw !important;
+    overflow: hidden !important;
+  }
+
+  /* Smaller axis labels */
+  .recharts-text {
+    font-size: 10px !important;
+  }
+
+  /* Prevent legend overlap */
+  .recharts-legend-wrapper {
+    font-size: 9px !important;
+  }
+}
+
+/* ═══ FOOTER ════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Footer columns — 2 cols on very small */
+  .grid.grid-cols-2.md\:grid-cols-4 {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ═══ TABLES - GENERAL (UnifiedReports, Catalog, etc.) ════════════════ */
+
+@media (max-width: 640px) {
+  /* Any admin table becomes scrollable */
+  table.luxury-table,
+  table:has(th:contains("Reference")),
+  table:has(th:contains("Brand")),
+  table:has(th:contains("Verdict")) {
+    min-width: 600px !important;
+  }
+
+  .overflow-x-auto:has(table) {
+    margin: 0 -1rem !important;
+    padding: 0 1rem !important;
+  }
+
+  /* Smaller cell padding */
+  .luxury-table tbody td {
+    padding: 8px 10px !important;
+    font-size: 11px !important;
+  }
+
+  .luxury-table thead th {
+    padding: 8px 10px !important;
+    font-size: 9px !important;
+  }
+}
+
+/* ═══ VERDICT DISTRIBUTION BAR ═══════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Verdict bar compact */
+  div:has(> div[style*="backgroundColor"]) .h-8 {
+    height: 24px !important;
+  }
+
+  /* Bar labels smaller */
+  .flex.h-8 span {
+    font-size: 8px !important;
+  }
+
+  /* Verdict legend — wrap */
+  .flex.gap-3.flex-wrap {
+    gap: 0.5rem !important;
+  }
+}
+
+/* ═══ PAGE HEADERS ════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  h1, h2 {
+    word-break: break-word !important;
+  }
+
+  /* Admin page header */
+  .text-2xl {
+    font-size: 1.25rem !important;
+    line-height: 1.5 !important;
+  }
+
+  /* Subtitle hide on smallest */
+  .text-sm.text-gray-400.mt-1 {
+    font-size: 11px !important;
+  }
+}
+
+/* ═══ CARD COMPONENTS ════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .glass-card,
+  .luxury-card,
+  div[class*="bg-gray-900 border border-gray-800 rounded-lg p-4"],
+  div[class*="bg-gray-900 border border-gray-800 rounded-lg p-5"] {
+    padding: 1rem !important;
+    border-radius: 12px !important;
+  }
+
+  .p-5 {
+    padding: 0.75rem !important;
+  }
+
+  .p-4 {
+    padding: 0.75rem !important;
+  }
+}
+
+/* ═══ MAX-WIDTH CONTAINER ADJUSTMENTS ════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .max-w-\[1600px\],
+  .max-w-7xl,
+  .max-w-6xl,
+  .max-w-5xl,
+  .max-w-4xl,
+  .max-w-3xl {
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+  }
+}
+
+/* ═══ STICKY NAV / HEADERS ════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  /* Sticky nav on TradingFloor — compact */
+  .sticky.top-\[60px\] {
+    top: 50px !important;
+  }
+
+  /* Inputs inside sticky nav */
+  .sticky input {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+  }
+}
+
+/* ═══ BUTTONS ════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .btn-luxury {
+    padding: 8px 16px !important;
+    font-size: 10px !important;
+  }
+
+  .btn-luxury-outline {
+    padding: 8px 16px !important;
+    font-size: 10px !important;
+  }
+
+  /* Gold gradient CTA buttons */
+  button:has(> span:contains("Trading Floor")),
+  .inline-flex.items-center.gap-2.px-8.py-4 {
+    padding: 10px 20px !important;
+    font-size: 13px !important;
+  }
+}
+
+/* ═══ SECTION PADDING ════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+  .py-24 {
+    padding-top: 3rem !important;
+    padding-bottom: 3rem !important;
+  }
+
+  .py-20 {
+    padding-top: 2.5rem !important;
+    padding-bottom: 2.5rem !important;
+  }
+
+  .gap-8.mb-10 {
+    gap: 1.5rem !important;
+  }
+
+  .p-8.md\:p-10 {
+    padding: 1.5rem !important;
+  }
+
+  .p-10.md\:p-14 {
+    padding: 1.5rem !important;
+  }
+}

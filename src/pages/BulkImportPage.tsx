@@ -144,7 +144,7 @@ export default function BulkImportPage() {
 
       {/* Input Section */}
       <div className="bg-[#111118] border border-[#1E1E2E] rounded-lg p-5 mb-5">
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-start flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
           <label className="text-sm font-medium text-white flex items-center gap-2">
             <FileText size={16} className="text-[#D4AF37]" />
             Dealer Messages
@@ -220,9 +220,9 @@ export default function BulkImportPage() {
       {/* Preview Table */}
       {preview.length > 0 && (
         <div className="bg-[#111118] border border-[#1E1E2E] rounded-lg overflow-hidden">
-          <div className="px-5 py-3 border-b border-[#1E1E2E] flex items-center justify-between">
+          <div className="px-5 py-3 border-b border-[#1E1E2E] flex items-start flex-col sm:flex-row sm:items-center justify-between gap-2">
             <h3 className="text-sm font-semibold text-white">Parse Preview ({preview.length} listings)</h3>
-            <div className="flex gap-3 text-xs">
+            <div className="flex flex-wrap gap-2 text-xs">
               <span className="text-green-400">{preview.filter(p => p.verdict === 'APPROVED').length} approved</span>
               <span className="text-amber-400">{preview.filter(p => p.verdict === 'REVIEW').length} review</span>
               <span className="text-orange-400">{preview.filter(p => p.verdict === 'HUMAN').length} human</span>

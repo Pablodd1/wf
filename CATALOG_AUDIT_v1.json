@@ -1,0 +1,2164 @@
+{
+  "A. Lange & Sohne": {
+    "entries": 78,
+    "contaminated": 5,
+    "rate": 6.4,
+    "examples": [
+      {
+        "model": "Richard Lange",
+        "ref": "232032",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Saxonia",
+        "ref": "220514",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Saxonia",
+        "ref": "CD TEST DELETE ME 12",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Accutron": {
+    "entries": 9,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Adidas": {
+    "entries": 5,
+    "contaminated": 1,
+    "rate": 20,
+    "examples": [
+      {
+        "model": "Cambridge",
+        "ref": "486786",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Alain Silberstein": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Alpina": {
+    "entries": 4,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Anonimo": {
+    "entries": 17,
+    "contaminated": 2,
+    "rate": 11.8,
+    "examples": [
+      {
+        "model": "Dino Zei",
+        "ref": "11005 BNZ",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Firenze",
+        "ref": "Model 2009",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Antoine Preziuso": {
+    "entries": 2,
+    "contaminated": 1,
+    "rate": 50,
+    "examples": [
+      {
+        "model": "B-Side",
+        "ref": "TITAN B-SIDE",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Armand Nicolet": {
+    "entries": 19,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Arnold & Son": {
+    "entries": 23,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Asprey": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Audemars Piguet": {
+    "entries": 425,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "B.R.M.": {
+    "entries": 7,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Ball Watch Company": {
+    "entries": 63,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Baume & Mercier": {
+    "entries": 199,
+    "contaminated": 4,
+    "rate": 2,
+    "examples": [
+      {
+        "model": "Baumatic",
+        "ref": "443080",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Classima",
+        "ref": "502134",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Hampton",
+        "ref": "MOA 10021",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Bedat & Co": {
+    "entries": 19,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Bell & Ross": {
+    "entries": 120,
+    "contaminated": 25,
+    "rate": 20.8,
+    "examples": [
+      {
+        "model": "Aviation",
+        "ref": "BR0394-BLU-ST/SCA",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "BR 01",
+        "ref": "BR 01-92-HERITAGE",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "BR 01",
+        "ref": "BR 01-96 ALTIMETER",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Bertolucci": {
+    "entries": 6,
+    "contaminated": 1,
+    "rate": 16.7,
+    "examples": [
+      {
+        "model": "Pulchra",
+        "ref": "52158",
+        "reason": "POSSIBLE_PATEK PHILIPPE_REF"
+      }
+    ]
+  },
+  "Blancpain": {
+    "entries": 121,
+    "contaminated": 2,
+    "rate": 1.7,
+    "examples": [
+      {
+        "model": "Fifty Fathoms",
+        "ref": "452748",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Leman",
+        "ref": "452712",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Boucheron": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Bovet": {
+    "entries": 10,
+    "contaminated": 1,
+    "rate": 10,
+    "examples": [
+      {
+        "model": "Chateau de Motiers",
+        "ref": "Chateau de Motiers",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Breguet": {
+    "entries": 126,
+    "contaminated": 4,
+    "rate": 3.2,
+    "examples": [
+      {
+        "model": "Classique",
+        "ref": "452211",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Classique",
+        "ref": "Calendar",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Marine",
+        "ref": "5817BA/12/AVO",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Breil": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Breitling": {
+    "entries": 459,
+    "contaminated": 2,
+    "rate": 0.4,
+    "examples": [
+      {
+        "model": "Chronomat",
+        "ref": "450116",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Unknown",
+        "ref": "Unknown",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Bremont": {
+    "entries": 43,
+    "contaminated": 23,
+    "rate": 53.5,
+    "examples": [
+      {
+        "model": "ALT1-C",
+        "ref": "ALT1-C BK",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "ALT1-C",
+        "ref": "ALT1-C/CR",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "ALT1-C",
+        "ref": "ALT1-C/PW",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Bucherer": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Bueche Girod": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Bulova": {
+    "entries": 8,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Burberry": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Buti": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Bvlgari": {
+    "entries": 208,
+    "contaminated": 39,
+    "rate": 18.8,
+    "examples": [
+      {
+        "model": "Assioma",
+        "ref": "AA48sch",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "B.Zero1",
+        "ref": "101071",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Bvlgari",
+        "ref": "101870",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "CHRONOSWISS": {
+    "entries": 45,
+    "contaminated": 1,
+    "rate": 2.2,
+    "examples": [
+      {
+        "model": "Opus",
+        "ref": "CH7523S SBL",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Caballero": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Carl F. Bucherer": {
+    "entries": 12,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Carlo Ferrara": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Carrera Y Carrera": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Cartier": {
+    "entries": 937,
+    "contaminated": 50,
+    "rate": 5.3,
+    "examples": [
+      {
+        "model": "Ceinture",
+        "ref": "Unknown",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Colisee",
+        "ref": "881095",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Cougar",
+        "ref": "866920",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Casio": {
+    "entries": 4,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Cellini": {
+    "entries": 3,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Chanel": {
+    "entries": 74,
+    "contaminated": 1,
+    "rate": 1.4,
+    "examples": [
+      {
+        "model": "Oval",
+        "ref": "71148",
+        "reason": "POSSIBLE_PATEK PHILIPPE_REF"
+      }
+    ]
+  },
+  "Charriol": {
+    "entries": 5,
+    "contaminated": 1,
+    "rate": 20,
+    "examples": [
+      {
+        "model": "Darling Oval",
+        "ref": "Oval",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Chase-Durer": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Chaumet": {
+    "entries": 5,
+    "contaminated": 1,
+    "rate": 20,
+    "examples": [
+      {
+        "model": "OR-ACIER",
+        "ref": "205476",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Chopard": {
+    "entries": 361,
+    "contaminated": 129,
+    "rate": 35.7,
+    "examples": [
+      {
+        "model": "Classic",
+        "ref": "163154-5001",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Classic",
+        "ref": "168536-3001",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Classic",
+        "ref": "168915-3001",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Christopher Ward": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Citizen": {
+    "entries": 4,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Clerc": {
+    "entries": 7,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Coach": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Concord": {
+    "entries": 34,
+    "contaminated": 4,
+    "rate": 11.8,
+    "examples": [
+      {
+        "model": "Classic",
+        "ref": "114820",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Classic",
+        "ref": "487312",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Saratoga",
+        "ref": "310889",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Corum": {
+    "entries": 134,
+    "contaminated": 12,
+    "rate": 9,
+    "examples": [
+      {
+        "model": "Admiral's Cup",
+        "ref": "60320.035005",
+        "reason": "POSSIBLE_PATEK PHILIPPE_REF"
+      },
+      {
+        "model": "Admiral's Cup",
+        "ref": "798221",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Bubble",
+        "ref": "082.310.980176 BL01",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Croton": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Cuervo Y Sobrinos": {
+    "entries": 15,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Cvstos": {
+    "entries": 3,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "DELANEAU": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Daniel Roth": {
+    "entries": 6,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "David Yurman": {
+    "entries": 18,
+    "contaminated": 1,
+    "rate": 5.6,
+    "examples": [
+      {
+        "model": "Thoroughbred",
+        "ref": "T3049QSST BRAC",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "De Bethune": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "De Grisogono": {
+    "entries": 6,
+    "contaminated": 1,
+    "rate": 16.7,
+    "examples": [
+      {
+        "model": "Classic",
+        "ref": "tre 16/700089",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "De Witt": {
+    "entries": 18,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "DeLaCour": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Devon": {
+    "entries": 2,
+    "contaminated": 2,
+    "rate": 100,
+    "examples": [
+      {
+        "model": "Tread",
+        "ref": "Tread 1",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Tread",
+        "ref": "Tread 2",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Diesel": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Dior": {
+    "entries": 20,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Doxa": {
+    "entries": 5,
+    "contaminated": 3,
+    "rate": 60,
+    "examples": [
+      {
+        "model": "SUB 1500T",
+        "ref": "SUB 5000T",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "SUB 800Ti",
+        "ref": "SUB 800Ti",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Tusa",
+        "ref": "SUB 1000T Tusa",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Dubey & Schaldenbrand": {
+    "entries": 9,
+    "contaminated": 7,
+    "rate": 77.8,
+    "examples": [
+      {
+        "model": "Aerodyn Big Date",
+        "ref": "ADAT/RG/SIG/LS",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Aerodyn Duo",
+        "ref": "ADUOS/RG/SIG/LS",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Gran Chrono Astro",
+        "ref": "AGCA/ST/SIB/BD",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Ebel": {
+    "entries": 89,
+    "contaminated": 11,
+    "rate": 12.4,
+    "examples": [
+      {
+        "model": "1911",
+        "ref": "1911 BTR",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Beluga",
+        "ref": "866960",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Beluga",
+        "ref": "866969",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Eberhard & Co.": {
+    "entries": 15,
+    "contaminated": 2,
+    "rate": 13.3,
+    "examples": [
+      {
+        "model": "Gilda",
+        "ref": "61008 CP+QB",
+        "reason": "POSSIBLE_PATEK PHILIPPE_REF"
+      },
+      {
+        "model": "Gilda",
+        "ref": "61008 CP+QB N",
+        "reason": "POSSIBLE_PATEK PHILIPPE_REF"
+      }
+    ]
+  },
+  "Edox": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Elgin": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Ernst Benz": {
+    "entries": 33,
+    "contaminated": 3,
+    "rate": 9.1,
+    "examples": [
+      {
+        "model": "ChronoFlite World Timer",
+        "ref": "GC10851 D Paris",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "ChronoFlite World Timer",
+        "ref": "GC10851 Geneve",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Chronosport",
+        "ref": "GC10200NS1 DLC",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Eterna": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "F.P. Journe": {
+    "entries": 45,
+    "contaminated": 36,
+    "rate": 80,
+    "examples": [
+      {
+        "model": "Centigraphe",
+        "ref": "CTS ALU",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Centigraphe",
+        "ref": "Centigraphe",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Centigraphe",
+        "ref": "Centigraphe Souverain",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Fendi": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Ferragamo": {
+    "entries": 3,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Ferrari": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Festina": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Fortis": {
+    "entries": 4,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Franc Vila": {
+    "entries": 2,
+    "contaminated": 1,
+    "rate": 50,
+    "examples": [
+      {
+        "model": "Master Quantieme",
+        "ref": "8.03-FVa129-A-RG-GS-rbr",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Franck Muller": {
+    "entries": 157,
+    "contaminated": 26,
+    "rate": 16.6,
+    "examples": [
+      {
+        "model": "Casablanca",
+        "ref": "6850 MP VEGAS",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Cintree Curvex",
+        "ref": "2500 QZD",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Cintree Curvex",
+        "ref": "DM 39 COL DRM D 2RCD",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Frederique Constant": {
+    "entries": 11,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Generic": {
+    "entries": 1,
+    "contaminated": 1,
+    "rate": 100,
+    "examples": [
+      {
+        "model": "Beetle Antique Pendant Watch",
+        "ref": "230026",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Gerald Genta": {
+    "entries": 17,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Gevril": {
+    "entries": 7,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Girard Perragaux": {
+    "entries": 102,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Giuliano Mazzuoli": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Glashutte Original": {
+    "entries": 112,
+    "contaminated": 1,
+    "rate": 0.9,
+    "examples": [
+      {
+        "model": "Nomos",
+        "ref": "Tangente",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Glycine": {
+    "entries": 13,
+    "contaminated": 1,
+    "rate": 7.7,
+    "examples": [
+      {
+        "model": "Airman",
+        "ref": "PAT. 314.050",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Graham": {
+    "entries": 76,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Greubel Forsey": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Gubelin": {
+    "entries": 1,
+    "contaminated": 1,
+    "rate": 100,
+    "examples": [
+      {
+        "model": "Dress",
+        "ref": "Dress",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Gucci": {
+    "entries": 40,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "H. Moser & Cie": {
+    "entries": 5,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Hamilton": {
+    "entries": 36,
+    "contaminated": 2,
+    "rate": 5.6,
+    "examples": [
+      {
+        "model": "365050",
+        "ref": "365050",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "616220",
+        "ref": "616220",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Harry Winston": {
+    "entries": 37,
+    "contaminated": 6,
+    "rate": 16.2,
+    "examples": [
+      {
+        "model": "400/MCADV39PL.K",
+        "ref": "400/MCADV39PL.K",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Ocean",
+        "ref": "400/mcda44zk",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Ocean",
+        "ref": "411/MCA44ZC.K2",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Harwood": {
+    "entries": 6,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Hautlence": {
+    "entries": 8,
+    "contaminated": 1,
+    "rate": 12.5,
+    "examples": [
+      {
+        "model": "HLQ",
+        "ref": "HLQ-06-01/88",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Henry Dunay": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Hermes": {
+    "entries": 55,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Heuer": {
+    "entries": 12,
+    "contaminated": 1,
+    "rate": 8.3,
+    "examples": [
+      {
+        "model": "Big Eye Valjoux",
+        "ref": "Unknown",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Hublot": {
+    "entries": 312,
+    "contaminated": 2,
+    "rate": 0.6,
+    "examples": [
+      {
+        "model": "Big Bang",
+        "ref": "301.rw.613881",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Big Bang",
+        "ref": "310G.Cl.1170.GR.ACF09",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Hugo Boss": {
+    "entries": 8,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "IWC": {
+    "entries": 335,
+    "contaminated": 1,
+    "rate": 0.3,
+    "examples": [
+      {
+        "model": "Ingenieur",
+        "ref": "Unknown",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Jacob & Co.": {
+    "entries": 37,
+    "contaminated": 1,
+    "rate": 2.7,
+    "examples": [
+      {
+        "model": "Epic II",
+        "ref": "E2SSBtest",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Jacques Etoile": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Jaeger LeCoultre": {
+    "entries": 360,
+    "contaminated": 4,
+    "rate": 1.1,
+    "examples": [
+      {
+        "model": "Jaeger-LeCoultre.",
+        "ref": "n/a xxx",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Reverso",
+        "ref": "256275",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Reverso",
+        "ref": "Unknown",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Jaquet Droz": {
+    "entries": 17,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Jean Richard": {
+    "entries": 8,
+    "contaminated": 4,
+    "rate": 50,
+    "examples": [
+      {
+        "model": "1681 Central Seconds",
+        "ref": "60320-52-152-BBB0",
+        "reason": "POSSIBLE_PATEK PHILIPPE_REF"
+      },
+      {
+        "model": "1681 Ronde",
+        "ref": "60310-11-132",
+        "reason": "POSSIBLE_PATEK PHILIPPE_REF"
+      },
+      {
+        "model": "Aerospace Chronograph",
+        "ref": "60650-21G211-FK6A",
+        "reason": "POSSIBLE_PATEK PHILIPPE_REF"
+      }
+    ]
+  },
+  "Jorg Gray": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Juvenia": {
+    "entries": 2,
+    "contaminated": 1,
+    "rate": 50,
+    "examples": [
+      {
+        "model": "Gold Coin",
+        "ref": "$20 Gold Coin",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Kobold": {
+    "entries": 3,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Krieger": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Lacoste": {
+    "entries": 9,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Laurent Ferrier": {
+    "entries": 6,
+    "contaminated": 2,
+    "rate": 33.3,
+    "examples": [
+      {
+        "model": "Galet Square",
+        "ref": "Galet Square",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Galet Square",
+        "ref": "LCF007/G",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Lemania": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Linde Werdelin": {
+    "entries": 21,
+    "contaminated": 3,
+    "rate": 14.3,
+    "examples": [
+      {
+        "model": "Oktopus",
+        "ref": "OKT 11.TB.1",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Oktopus",
+        "ref": "OKT II.TB.1",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Oktopus",
+        "ref": "OKTM II.BMB.1",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Locman": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Longines": {
+    "entries": 101,
+    "contaminated": 1,
+    "rate": 1,
+    "examples": [
+      {
+        "model": "Dress",
+        "ref": "870915",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Louis Moinet": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Louis Vuitton": {
+    "entries": 19,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Lucien Piccard": {
+    "entries": 1,
+    "contaminated": 1,
+    "rate": 100,
+    "examples": [
+      {
+        "model": "Lucien Piccard",
+        "ref": "Lucien Piccard",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Luminox": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "MARANELLO WATCHES": {
+    "entries": 3,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "MB&F": {
+    "entries": 3,
+    "contaminated": 1,
+    "rate": 33.3,
+    "examples": [
+      {
+        "model": "Black Badger",
+        "ref": "57stglb",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Maitre du Temps": {
+    "entries": 9,
+    "contaminated": 1,
+    "rate": 11.1,
+    "examples": [
+      {
+        "model": "Chapter Two",
+        "ref": "Chapter Two",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Mathey-Tissot": {
+    "entries": 2,
+    "contaminated": 1,
+    "rate": 50,
+    "examples": [
+      {
+        "model": "Vintage",
+        "ref": "Vintage",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Mauboussin": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Maurice Lacroix": {
+    "entries": 45,
+    "contaminated": 1,
+    "rate": 2.2,
+    "examples": [
+      {
+        "model": "grand guichet",
+        "ref": "58788",
+        "reason": "POSSIBLE_PATEK PHILIPPE_REF"
+      }
+    ]
+  },
+  "MeisterSinger": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Michael Kors": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Michele": {
+    "entries": 37,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Mido": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Momo Design": {
+    "entries": 13,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Mondaine": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Montblanc": {
+    "entries": 78,
+    "contaminated": 51,
+    "rate": 65.4,
+    "examples": [
+      {
+        "model": "1858",
+        "ref": "113860",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "106467",
+        "ref": "106467",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Boheme",
+        "ref": "111206",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Movado": {
+    "entries": 56,
+    "contaminated": 13,
+    "rate": 23.2,
+    "examples": [
+      {
+        "model": "CurviPlan",
+        "ref": "61819",
+        "reason": "POSSIBLE_PATEK PHILIPPE_REF"
+      },
+      {
+        "model": "Fiero",
+        "ref": "606499",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Juro",
+        "ref": "605030",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Muhle Glashutte": {
+    "entries": 10,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "NOA": {
+    "entries": 6,
+    "contaminated": 6,
+    "rate": 100,
+    "examples": [
+      {
+        "model": "1811",
+        "ref": "GPMSLQ 001",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "1811",
+        "ref": "MSLQ 004",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "16.75 GRT 002",
+        "ref": "16.75 GRT 002  NURBURGRING",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Nivada Grenchen": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Nivrel": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Nomos": {
+    "entries": 6,
+    "contaminated": 1,
+    "rate": 16.7,
+    "examples": [
+      {
+        "model": "Club Automat",
+        "ref": "nom753",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Nomos Glashutte": {
+    "entries": 10,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Officina Del Tempo": {
+    "entries": 3,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Omega": {
+    "entries": 1226,
+    "contaminated": 12,
+    "rate": 1,
+    "examples": [
+      {
+        "model": "Classic",
+        "ref": "172207 1",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Classic",
+        "ref": "Seamaster",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Classic",
+        "ref": "Tank",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Oris": {
+    "entries": 135,
+    "contaminated": 14,
+    "rate": 10.4,
+    "examples": [
+      {
+        "model": "Aquis",
+        "ref": "01 674 7655 7253-07 4 26 34TEB",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Aquis",
+        "ref": "01 733 7653 4259-07 4 26 32GEB",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Aquis",
+        "ref": "01 733 7675 4754-Set RS",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Panerai": {
+    "entries": 306,
+    "contaminated": 1,
+    "rate": 0.3,
+    "examples": [
+      {
+        "model": "Compass",
+        "ref": "451564",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Parmigiani Fleurier": {
+    "entries": 45,
+    "contaminated": 1,
+    "rate": 2.2,
+    "examples": [
+      {
+        "model": "Tonda",
+        "ref": "PFC267-120030",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Pasquale Bruni": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Patek Philippe": {
+    "entries": 497,
+    "contaminated": 3,
+    "rate": 0.6,
+    "examples": [
+      {
+        "model": "Calatrava",
+        "ref": "829836",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Twenty 4",
+        "ref": "4910/10A-001GAO",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Vintage Collection",
+        "ref": "818078",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Paul Picot": {
+    "entries": 9,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Pequignet": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Perrelet": {
+    "entries": 22,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Philip Stein": {
+    "entries": 8,
+    "contaminated": 1,
+    "rate": 12.5,
+    "examples": [
+      {
+        "model": "Teslar",
+        "ref": "340701",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Piaget": {
+    "entries": 138,
+    "contaminated": 3,
+    "rate": 2.2,
+    "examples": [
+      {
+        "model": "Polo",
+        "ref": "240005 M 503 D",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Polo",
+        "ref": "398869",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Tuxedo",
+        "ref": "438937",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Pierre Kunz": {
+    "entries": 7,
+    "contaminated": 4,
+    "rate": 57.1,
+    "examples": [
+      {
+        "model": "Grande Complication",
+        "ref": "G008 QPRI",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Spirit of Challenge",
+        "ref": "G 403 Sport",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Spirit of Challenge",
+        "ref": "G403 SPORT",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Porsche Design": {
+    "entries": 8,
+    "contaminated": 1,
+    "rate": 12.5,
+    "examples": [
+      {
+        "model": "PTR Rattrapante",
+        "ref": "661312",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Quinting": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Rado": {
+    "entries": 25,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Ralph Lauren": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Raymond Weil": {
+    "entries": 118,
+    "contaminated": 4,
+    "rate": 3.4,
+    "examples": [
+      {
+        "model": "Don Giovanni",
+        "ref": "210004",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Shine",
+        "ref": "1500-ST-105383",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Tango",
+        "ref": "5399-sps-00995",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Ressence": {
+    "entries": 9,
+    "contaminated": 8,
+    "rate": 88.9,
+    "examples": [
+      {
+        "model": "Type 1",
+        "ref": "Type 1.3",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Type 1",
+        "ref": "Type 1N",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Type 1",
+        "ref": "Type 1�N",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Revue Thommen": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Richard Mille": {
+    "entries": 9,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Ritmo Mundo": {
+    "entries": 1,
+    "contaminated": 1,
+    "rate": 100,
+    "examples": [
+      {
+        "model": "Idea Italiana",
+        "ref": "Idea Italiana",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Roberge": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Roger Dubuis": {
+    "entries": 64,
+    "contaminated": 2,
+    "rate": 3.1,
+    "examples": [
+      {
+        "model": "Easy Diver",
+        "ref": "SED46-14-91-00/03A10/A",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Easy Diver",
+        "ref": "SED46-14-91-00/09A10/A",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Rolex": {
+    "entries": 566,
+    "contaminated": 17,
+    "rate": 3,
+    "examples": [
+      {
+        "model": "Datejust",
+        "ref": "Unkown",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Day-Date II",
+        "ref": "218206",
+        "reason": "POSSIBLE_OMEGA_REF"
+      },
+      {
+        "model": "Day-Date II",
+        "ref": "218235",
+        "reason": "POSSIBLE_OMEGA_REF"
+      }
+    ]
+  },
+  "Romain Jerome": {
+    "entries": 18,
+    "contaminated": 1,
+    "rate": 5.6,
+    "examples": [
+      {
+        "model": "Titanic DNA",
+        "ref": "T.W2222.00.WW",
+        "reason": "POSSIBLE_CARTIER_REF"
+      }
+    ]
+  },
+  "SWI": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Salvatore Ferragamo": {
+    "entries": 4,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Seiko": {
+    "entries": 102,
+    "contaminated": 3,
+    "rate": 2.9,
+    "examples": [
+      {
+        "model": "Grand Seiko",
+        "ref": "sbgr305",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Grand Seiko",
+        "ref": "stgf077",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Grand Seiko",
+        "ref": "stgf079",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Sevenfriday": {
+    "entries": 10,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Shinola": {
+    "entries": 13,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Sinn": {
+    "entries": 11,
+    "contaminated": 1,
+    "rate": 9.1,
+    "examples": [
+      {
+        "model": "Diver Chronograph",
+        "ref": "U1000 EZM 6",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Sven Andersen": {
+    "entries": 1,
+    "contaminated": 1,
+    "rate": 100,
+    "examples": [
+      {
+        "model": "Jour et Nuit",
+        "ref": "jrntle",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Tag Heuer": {
+    "entries": 621,
+    "contaminated": 18,
+    "rate": 2.9,
+    "examples": [
+      {
+        "model": "Aquaracer",
+        "ref": "CAY211a-0",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Aquaracer",
+        "ref": "WAF 1112",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Aquaracer",
+        "ref": "wan2110",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Technomarine": {
+    "entries": 13,
+    "contaminated": 4,
+    "rate": 30.8,
+    "examples": [
+      {
+        "model": "Blackwatch",
+        "ref": "909007",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Cruise",
+        "ref": "109048",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Cruise",
+        "ref": "110001",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Tiffany & Co.": {
+    "entries": 49,
+    "contaminated": 7,
+    "rate": 14.3,
+    "examples": [
+      {
+        "model": "Atlas 42",
+        "ref": "Atlas 42",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Cocktail",
+        "ref": "Cocktail",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Dress",
+        "ref": "Vintage",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Tissot": {
+    "entries": 43,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Tudor": {
+    "entries": 145,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Tutima": {
+    "entries": 4,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "U-Boat": {
+    "entries": 23,
+    "contaminated": 1,
+    "rate": 4.3,
+    "examples": [
+      {
+        "model": "Classico",
+        "ref": "316-Ltest",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Ulysse Nardin": {
+    "entries": 247,
+    "contaminated": 7,
+    "rate": 2.8,
+    "examples": [
+      {
+        "model": "Marine",
+        "ref": "265-66/154280",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Marine",
+        "ref": "265-90-3/93 WuW",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Maxi Marine",
+        "ref": "263-33-3 WuW",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Universal Geneve": {
+    "entries": 4,
+    "contaminated": 1,
+    "rate": 25,
+    "examples": [
+      {
+        "model": "Polerouter",
+        "ref": "Caliber 215",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Urban Jurgensen": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Urwerk": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Vacheron Constantin": {
+    "entries": 114,
+    "contaminated": 6,
+    "rate": 5.3,
+    "examples": [
+      {
+        "model": "1912 Limited Edition",
+        "ref": "692421",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Dress",
+        "ref": "Dress",
+        "reason": "NON_REF_STRING"
+      },
+      {
+        "model": "Historique",
+        "ref": "690095",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Van Cleef & Arpels": {
+    "entries": 11,
+    "contaminated": 5,
+    "rate": 45.5,
+    "examples": [
+      {
+        "model": "Classic",
+        "ref": "301600",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Facade Paris",
+        "ref": "109795",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Non Praesentaneus",
+        "ref": "322942",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Van Der Bauwede": {
+    "entries": 1,
+    "contaminated": 1,
+    "rate": 100,
+    "examples": [
+      {
+        "model": "Magnum",
+        "ref": "Cal 25",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Versace": {
+    "entries": 16,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Victorinox": {
+    "entries": 3,
+    "contaminated": 2,
+    "rate": 66.7,
+    "examples": [
+      {
+        "model": "Airboss",
+        "ref": "241621",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "Chrono",
+        "ref": "241538",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Vintage VDB": {
+    "entries": 1,
+    "contaminated": 1,
+    "rate": 100,
+    "examples": [
+      {
+        "model": "Vintage VDB GMT",
+        "ref": "VDB 2014 GMT",
+        "reason": "NON_REF_STRING"
+      }
+    ]
+  },
+  "Visconti": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Vogard": {
+    "entries": 2,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Vulcain": {
+    "entries": 6,
+    "contaminated": 5,
+    "rate": 83.3,
+    "examples": [
+      {
+        "model": "50's Presidents Chronograph",
+        "ref": "210150.277LF",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "50's Presidents Chronograph",
+        "ref": "570157.310L",
+        "reason": "POSSIBLE_ROLEX_REF"
+      },
+      {
+        "model": "50's Presidents Chronograph",
+        "ref": "570157.311L",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Waltham": {
+    "entries": 5,
+    "contaminated": 1,
+    "rate": 20,
+    "examples": [
+      {
+        "model": "pocket watch",
+        "ref": "144350",
+        "reason": "POSSIBLE_ROLEX_REF"
+      }
+    ]
+  },
+  "Wittnauer": {
+    "entries": 1,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Wyler Vetta": {
+    "entries": 12,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Zenith": {
+    "entries": 179,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  },
+  "Zodiac": {
+    "entries": 3,
+    "contaminated": 0,
+    "rate": 0,
+    "examples": []
+  }
+}

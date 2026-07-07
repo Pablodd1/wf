@@ -405,30 +405,30 @@ export default function UnifiedReports() {
   return (
     <div className="min-h-screen bg-[#0A0A0F] text-gray-100">
       {/* Header */}
-      <div className="sticky top-0 z-30 bg-[#0A0A0F]/95 backdrop-blur-md border-b border-gray-800 px-6 py-3">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <Database size={20} className="text-gold-primary" />
-            <h1 className="text-lg font-semibold">All Listings Report</h1>
-            <span className="text-xs text-gray-500 font-mono">{total.toLocaleString()} records</span>
+      <div className="sticky top-0 z-30 bg-[#0A0A0F]/95 backdrop-blur-md border-b border-gray-800 px-4 md:px-6 py-3">
+        <div className="flex items-start sm:items-center justify-between mb-3 gap-2 flex-col sm:flex-row">
+          <div className="flex items-center gap-2 md:gap-3 flex-wrap">
+            <Database size={18} className="text-gold-primary shrink-0" />
+            <h1 className="text-base md:text-lg font-semibold">All Listings Report</h1>
+            <span className="text-[11px] md:text-xs text-gray-500 font-mono">{total.toLocaleString()} records</span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 md:gap-2 flex-wrap">
             {selected.size > 0 && (
               <>
-                <span className="text-xs text-gold-primary font-mono">{selected.size} selected</span>
-                <button onClick={() => bulkAction('APPROVED')} className="px-2 py-1 text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30">Approve</button>
-                <button onClick={() => bulkAction('REVIEW')} className="px-2 py-1 text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">Review</button>
-                <button onClick={() => bulkAction('RECYCLE')} className="px-2 py-1 text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30">Recycle</button>
-                <button onClick={exportSelected} className="px-2 py-1 text-xs bg-gold-primary/20 text-gold-primary rounded hover:bg-gold-primary/30 flex items-center gap-1"><Download size={10} /> CSV</button>
+                <span className="text-[11px] md:text-xs text-gold-primary font-mono">{selected.size} selected</span>
+                <button onClick={() => bulkAction('APPROVED')} className="px-1.5 md:px-2 py-1 text-[10px] md:text-xs bg-green-500/20 text-green-400 rounded hover:bg-green-500/30">Approve</button>
+                <button onClick={() => bulkAction('REVIEW')} className="px-1.5 md:px-2 py-1 text-[10px] md:text-xs bg-blue-500/20 text-blue-400 rounded hover:bg-blue-500/30">Review</button>
+                <button onClick={() => bulkAction('RECYCLE')} className="px-1.5 md:px-2 py-1 text-[10px] md:text-xs bg-red-500/20 text-red-400 rounded hover:bg-red-500/30">Recycle</button>
+                <button onClick={exportSelected} className="px-1.5 md:px-2 py-1 text-[10px] md:text-xs bg-gold-primary/20 text-gold-primary rounded hover:bg-gold-primary/30 flex items-center gap-1"><Download size={10} /> CSV</button>
               </>
             )}
             <button onClick={fetchRecords} className="p-1.5 text-gray-400 hover:text-white"><RefreshCw size={14} className={loading ? 'animate-spin' : ''} /></button>
           </div>
         </div>
-        <div className="flex items-center gap-1 overflow-x-auto">
+        <div className="flex items-center gap-1 overflow-x-auto hide-scrollbar">
           {TABS.map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-              className={`px-3 py-1.5 text-[11px] font-medium rounded-t transition-all whitespace-nowrap border-b-2 ${activeTab === tab.key ? 'text-white border-current' : 'text-gray-500 border-transparent hover:text-gray-300'}`}
+              className={`px-2 md:px-3 py-1.5 text-[10px] md:text-[11px] font-medium rounded-t transition-all whitespace-nowrap border-b-2 shrink-0 ${activeTab === tab.key ? 'text-white border-current' : 'text-gray-500 border-transparent hover:text-gray-300'}`}
               style={activeTab === tab.key ? { color: tab.color, borderColor: tab.color } : {}}>
               {tab.label}
             </button>
@@ -437,14 +437,14 @@ export default function UnifiedReports() {
       </div>
 
       {/* Search */}
-      <div className="px-6 py-3 flex items-center gap-3 border-b border-gray-800">
-        <div className="relative flex-1 max-w-md">
+      <div className="px-4 md:px-6 py-2 md:py-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3 border-b border-gray-800">
+        <div className="relative flex-1 max-w-full sm:max-w-md">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
           <input type="text" value={search} onChange={e => setSearch(e.target.value)}
             placeholder="Search brand, reference, message..." className="w-full pl-9 pr-3 py-1.5 bg-gray-900 border border-gray-800 rounded text-xs text-gray-200 placeholder-gray-600 focus:border-gold-primary/50 focus:outline-none" />
         </div>
         <button onClick={() => setShowDuplicates(!showDuplicates)}
-          className={`px-3 py-1.5 text-[11px] rounded border transition-all flex items-center gap-1.5 ${showDuplicates ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-gray-900 text-gray-500 border-gray-800 hover:text-gray-300'}`}>
+          className={`px-2 md:px-3 py-1.5 text-[10px] md:text-[11px] rounded border transition-all flex items-center gap-1.5 justify-center ${showDuplicates ? 'bg-amber-500/20 text-amber-400 border-amber-500/30' : 'bg-gray-900 text-gray-500 border-gray-800 hover:text-gray-300'}`}>
           <Copy size={12} /> Duplicates {duplicates.length > 0 && `(${duplicates.length})`}
         </button>
       </div>
@@ -549,8 +549,8 @@ export default function UnifiedReports() {
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="px-6 py-3 flex items-center justify-between border-t border-gray-800">
-          <span className="text-xs text-gray-500">Page {page + 1} of {totalPages} · {total.toLocaleString()} total</span>
+        <div className="px-4 md:px-6 py-3 flex items-center justify-between border-t border-gray-800 gap-2 flex-col sm:flex-row">
+          <span className="text-[11px] md:text-xs text-gray-500">Page {page + 1} of {totalPages} · {total.toLocaleString()} total</span>
           <div className="flex items-center gap-1">
             <button onClick={() => setPage(Math.max(0, page - 1))} disabled={page === 0}
               className="p-1.5 text-gray-400 hover:text-white disabled:opacity-30 disabled:cursor-not-allowed"><ChevronLeft size={14} /></button>
