@@ -1193,52 +1193,55 @@ function parsePrice(text, ref) {
     // 1.080.000 (European dot-thousands chain)
     { regex: /\b(\d{1,3}(?:\.\d{3})+)\b/g, multiplier: 1, european: true, priority: 1 },
     // Currency stuck to number: HKD930K, HKD583K, USD185000, hkd435k, HKD 98,000,
-    // AED 177,500 (case-insensitive). v4.7: added AED — was previously missing from
-    // this currency-PREFIX form entirely (only the currency-SUFFIX pattern below had it).
+    // AED 177,500 (case-insensitive). v4.9: return RAW amount in original currency.
+    // parsePrice NEVER converts — parseFull stores price+currency as a pair and
+    // conversion happens at read-time (price-research.js convertLegacyPrices).
+    // Previously this multiplied by rate inline, so PREFIX-form HKD ("hkd 165k")
+    // stored a USD value while SUFFIX-form ("165k hkd") stored raw — same watch,
+    // two different numbers. Now both return raw.
     { regex: /(HKD|USD|USDT|EUR|GBP|AED)\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,3})?)\s*([KkMm])?\b/gi, handler: (m) => {
       const cur = m[1].toUpperCase();
       const num = parseFloat(m[2].replace(/,/g, ''));
       const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[3]] || 1;
-      const rate = RATES[cur] || 1; // USD/USDT=1.0, HKD=0.128, AED=0.272, etc.
+      // HKD stays RAW (read-time convertLegacyPrices handles it). All other
+      // currencies convert inline because NOTHING downstream converts them.
+      const rate = cur === 'HKD' ? 1 : (RATES[cur] || 1);
       return num * mult * rate;
     }, priority: (m) => (m[1].toUpperCase() === 'USD' || m[1].toUpperCase() === 'USDT') ? 3 : 2 },
     // NORM_002: hkd998m, hkd 1.5m — explicit HKD with m suffix
     // Also matches typo "hkf" (common in WhatsApp from non-native typists)
     { regex: /hk[df]?\s*(\d{1,3}(?:\.\d{1,3})?)\s*[mM]\b/gi, handler: (m) => {
       const num = parseFloat(m[1]);
-      return num * 1e6 * 0.128; // HKD to USD conversion
+      return num * 1e6; // RAW HKD — converted at read-time
     }, priority: 2 },
     // HK$ with optional space + comma-thousands: "HK$ 355,000", "HK$355,000"
     { regex: /HK\$\s*(\d{1,3}(?:,\d{3})+)\b/gi, handler: (m) => {
       const num = parseFloat(m[1].replace(/,/g, ''));
-      return num * 0.128; // HKD to USD conversion
+      return num; // RAW HKD
     }, priority: 2 },
     // v4.8: HK$ without comma-thousands: "HK$355000", "HK$355000" (compact, no comma)
     // Previously fell through to the generic $-prefix pattern and was treated as USD.
     { regex: /HK\$\s*(\d{4,7})\b/gi, handler: (m) => {
       const num = parseFloat(m[1]);
-      return num * 0.128; // HKD to USD conversion
+      return num; // RAW HKD
     }, priority: 2 },
     // v4.8: ?840,000HKD — encoding artifact where $ → ? in WhatsApp relay.
     // The ? acts as a dollar-sign substitute; if followed by HKD marker,
-    // convert via the standard HKD rate. Without HKD marker, treat as USD
-    // (the ? is a broken $ sign, not a currency indicator by itself).
+    // treat as raw HKD. Without HKD marker, treat as USD (the ? is a broken $).
     { regex: /\?\s*(\d{1,3}(?:,\d{3})+)\s*(?=HKD|hkd)/gi, handler: (m) => {
       const num = parseFloat(m[1].replace(/,/g, ''));
-      return num * 0.128; // HKD to USD conversion
+      return num; // RAW HKD
     }, priority: 2 },
     // HK$ with k/m suffix: "HK$ 355k", "HK$1.5m"
     { regex: /HK\$\s*(\d{1,3}(?:\.\d{1,3})?)\s*([kKmM])\b/g, handler: (m) => {
       const num = parseFloat(m[1]);
       const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] || 1;
-      return num * mult * 0.128; // HKD to USD conversion
+      return num * mult; // RAW HKD
     }, priority: 2 },
-    // 268000 with currency — converts non-USD currencies to USD inline
+    // 268000 with currency — return RAW in original currency (no inline convert)
     { regex: /\b(\d{4,7})\s*(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, handler: (m) => {
       const num = parseFloat(m[1]);
-      const cur = m[2].toUpperCase();
-      const rate = RATES[cur === 'RMB' ? 'CNY' : cur];
-      return rate ? num * rate : num; // USD/USDT pass through at 1:1 (rate=1.0)
+      return num; // RAW
     }, priority: (m) => (m[2].toUpperCase() === 'USD' || m[2].toUpperCase() === 'USDT') ? 3 : 2 },
     // v3.4: comma-thousands with currency: "205,000 hkd", "111,500hkd", "3,056,055 HKD"
     // v4.7 fix: added a negative lookbehind so this doesn't wrongly claim a number
