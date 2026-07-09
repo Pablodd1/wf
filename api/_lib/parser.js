@@ -1068,6 +1068,17 @@ function parsePrice(text, ref) {
   const clean = text.replace(/[\u200B\u200C\u200D\uFEFF]/g, ' ');
 
   let searchText = clean;
+
+  // JASS-6 §1c WF_GLUE_FIX: unstick number+currency tokens BEFORE any pattern
+  // runs. Root-cause fix for the \b-boundary regression: "64.000Usdt" never
+  // matched the European dot-thousands pattern because \b requires a non-word
+  // char after "000", but "U" is a word char. Splitting glued digit+currency
+  // and currency+digit tokens here fixes the whole class (USDT, HKD, USD, ...),
+  // not just one case. TODO(post-Phase-0B): promote to a parseFull() pre-pass
+  // per JASS-6 §1c so ALL sub-parsers get un-glued text, not just parsePrice.
+  searchText = searchText
+    .replace(/(\d)(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED|CNY|AUD|CAD)\b/gi, '$1 $2')
+    .replace(/\b(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED|CNY|AUD|CAD)(\d)/gi, '$1 $2');
   if (ref) {
     searchText = searchText.replace(new RegExp(ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
   }
@@ -1251,6 +1262,9 @@ function parsePrice(text, ref) {
 function parseCurrency(text) {
   if (!text) return null;
   const lower = text.toLowerCase();
+
+  // WORD CODES FIRST (authoritative): explicit "hkd", "usdt", "usd", ...
+  // These outrank symbols so "128k HKD $16,000" resolves HKD, not USD.
   const currencies = [
     ['usdt', 'USDT'], ['usd', 'USD'], ['hkd', 'HKD'], ['eur', 'EUR'],
     ['gbp', 'GBP'], ['chf', 'CHF'], ['sgd', 'SGD'], ['aud', 'AUD'],
@@ -1260,6 +1274,18 @@ function parseCurrency(text) {
     const rx = new RegExp('(?:^|[^a-z])' + code + '(?:[^a-z]|$)', 'i');
     if (rx.test(lower)) return canonical;
   }
+
+  // JASS-6 §6 PRIORITY 3 — SYMBOL-ONLY detection (no word code present).
+  // Handled here, AFTER word codes, because symbols are ambiguous. Regex
+  // metachars ($ €) are matched via plain indexOf, not RegExp, to avoid the
+  // anchor-escaping trap ($ = end-of-line anchor). "hk$" → HKD must be checked
+  // before bare "$" → USD, since "hk$" contains a "$".
+  if (lower.includes('hk$') || lower.includes('hks')) return 'HKD';
+  if (text.includes('$')) return 'USD';
+  if (text.includes('€')) return 'EUR';
+  if (text.includes('£')) return 'GBP';
+  if (text.includes('¥')) return 'JPY';
+
   return null;
 }
 
