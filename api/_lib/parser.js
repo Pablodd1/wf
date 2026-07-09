@@ -1155,7 +1155,12 @@ function parsePrice(text, ref) {
       return rate ? num * rate : num; // USD/USDT pass through at 1:1 (rate=1.0)
     }, priority: (m) => (m[2].toUpperCase() === 'USD' || m[2].toUpperCase() === 'USDT') ? 3 : 2 },
     // v3.4: comma-thousands with currency: "205,000 hkd", "111,500hkd", "3,056,055 HKD"
-    { regex: /\b(\d{1,3}(?:,\d{3})+)\s*(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|AED)\b/gi, handler: (m) => {
+    // v4.7 fix: added a negative lookbehind so this doesn't wrongly claim a number
+    // that actually belongs to a PRECEDING currency word, e.g. "HKD 68,000 USD 8,700"
+    // — without the guard, "68,000 USD" matches here as if it were an authoritative
+    // standalone USD price, when "USD" actually labels the NEXT number (8,700), not
+    // the HKD figure it's immediately following.
+    { regex: /(?<!(?:HKD|USD|USDT|EUR|GBP|CHF|SGD|AUD|CAD|AED)\s{0,3})\b(\d{1,3}(?:,\d{3})+)\s*(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|AED)\b/gi, handler: (m) => {
       const num = parseFloat(m[1].replace(/,/g, ''));
       const cur = m[2].toUpperCase();
       const rate = RATES[cur]; // AED now in RATES directly (v4.7) — no ad-hoc fallback needed
