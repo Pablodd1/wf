@@ -17,6 +17,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import { supabase } from '@/hooks/useAuth';
 import {
   Search, Loader2, ChevronLeft, ChevronRight, Eye, Edit3, Sparkles,
   RefreshCw, Database, X, CheckCircle, XCircle, AlertTriangle, Clock,
@@ -25,7 +26,19 @@ import {
   Activity, TrendingUp, Layers,
 } from 'lucide-react';
 
-const ADMIN_KEY = 'wf-admin-2026';
+// Admin write actions authenticate via the logged-in user's Supabase session
+// token (see useAuth/AuthProvider) — NOT a shared static key. The server
+// verifies this token against Supabase auth before allowing any write.
+async function adminFetch(url: string, options: RequestInit) {
+  const { data: { session } } = await supabase.auth.getSession();
+  return fetch(url, {
+    ...options,
+    headers: {
+      ...options.headers,
+      'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
+    },
+  });
+}
 
 // ─── Verdict configs ──────────────────────────────────────────────────────
 const VERDICT_CONFIG: Record<string, { label: string; color: string; bg: string; border: string }> = {
@@ -134,9 +147,9 @@ function DetailModal({ record, onClose, onRefresh, currentRef, currentDial }: {
   const saveEdit = async () => {
     setSaving(true);
     try {
-      const res = await fetch('/api/update-record', {
+      const res = await adminFetch('/api/update-record', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: record.id, ...form }),
       });
       if (res.ok) {
@@ -150,9 +163,9 @@ function DetailModal({ record, onClose, onRefresh, currentRef, currentDial }: {
   const updateVerdict = async (v: string) => {
     setSaving(true);
     try {
-      await fetch('/api/update-record', {
+      await adminFetch('/api/update-record', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: record.id, verdict: v }),
       });
       onRefresh();
@@ -262,8 +275,8 @@ function DetailModal({ record, onClose, onRefresh, currentRef, currentDial }: {
                 const isActive = (record.listing_type || '').toUpperCase() === lt;
                 return (
                   <button key={lt} onClick={() => updateVerdict('HUMAN').then(() => {
-                    fetch('/api/update-record', {
-                      method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-admin-key': ADMIN_KEY },
+                    adminFetch('/api/update-record', {
+                      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
                       body: JSON.stringify({ id: record.id, listing_type: lt }),
                     });
                   })}

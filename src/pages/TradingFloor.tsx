@@ -248,7 +248,9 @@ function SkeletonCard({ index }: { index: number }) {
 
 
 // ─── Trading Floor Detail Modal — shows ALL info on click ─────────────────
-const ADMIN_KEY_WF = 'wf-admin-2026';
+// Note: ADMIN_KEY_WF constant removed (2026-07-09) — was declared but never
+// used anywhere in this file (dead code). If write access is ever needed
+// here, route it through an authenticated admin session, not a shared key.
 
 function WatchDetailModal({ listing, onClose, averages, priceStats, onPriceStats }: {
   listing: WatchListing;

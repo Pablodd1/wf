@@ -12,6 +12,7 @@
  */
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { supabase } from '@/hooks/useAuth';
 import {
   ArrowLeft, Eye, CheckCircle, XCircle, Clock, AlertTriangle,
   DollarSign, TrendingUp, TrendingDown, Activity, ShieldCheck,
@@ -196,9 +197,13 @@ export default function WatchDetailReport() {
     if (!record) return;
     setSaving(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
       await fetch('/api/update-record', {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'x-admin-key': 'wf-admin-2026' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
+        },
         body: JSON.stringify({ id: record.id, ...editForm }),
       });
       setEditing(false);

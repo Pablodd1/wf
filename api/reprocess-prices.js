@@ -8,7 +8,7 @@
  *   - "$42k" shorthand not parsed
  * 
  * POST: { admin_key, brand, reference }
- * GET:  ?key=wf-admin-2026&brand=Rolex&reference=52506
+ * GET:  ?key=<ADMIN_KEY>&brand=Rolex&reference=52506
  */
 const { getClient } = require('./_lib/supabase');
 const { parseFull } = require('./_lib/parser');
