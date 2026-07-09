@@ -1505,15 +1505,35 @@ function detectAccessoryListing(text, ref) {
  * cleanly split by splitMultiWatch — i.e. 2+ distinct valid brand-specific
  * reference patterns are present in one raw message with no clear single-row
  * boundary. In that case we refuse to guess and flag for manual resolution.
+ *
+ * v4.8: Strip currency-adjacent numbers before ref-pattern matching so that
+ * price figures like "HKD 63000" or "$80000" don't get mistaken for Rolex
+ * reference numbers (e.g. Rolex 5-6 digit pattern). Without this, a single-
+ * watch listing like "124300 Blue, HKD 63000" would falsely detect 124300
+ * AND 63000 as two distinct references → MULTI_WATCH_STOCK_LIST false positive.
+ * The strip regex targets numbers immediately adjacent to currency keywords
+ * (both prefix and suffix forms) as well as $-prefixed and HK$-prefixed
+ * numbers with optional comma-thousands and k/K/m/M suffixes.
  */
 function detectMultiWatchStockList(text) {
   if (!text) return false;
+
+  // v4.8: Strip price numbers AND year-like numbers so they don't pollute
+  // reference detection. Rolex's 4-6 digit pattern greedily matches years
+  // (2021, 2025) and prices (63000, 8300) as if they were references.
+  // Matches: "HKD 63000", "63000 HKD", "$80000", "HK$63000", "USD 8,700",
+  // "HKD 355k", "355K HKD", "$1.5m", bare year "2021", "2025", etc.
+  const priceStripped = text.replace(
+    /(?:\b(?:HKD|USD|USDT|EUR|GBP|CHF|SGD|AUD|AED|CAD|CNY|RMB)\s*\d[\d,]*(?:\s*[KkMm])?\b)|(?:\b\d[\d,]*(?:\s*[KkMm])?\s*(?:HKD|USD|USDT|EUR|GBP|CHF|SGD|AUD|AED|CAD|CNY|RMB)\b)|(?:HK?\$\s*\d[\d,]*(?:\s*[KkMm])?\b)|(?:\$\d[\d,]*(?:\s*[KkMm])?\b)|(?:\b(?:19\d\d|20[012]\d)(?:\s*(?:card|year|tag|dated|papers|warranty))?\b)/gi,
+    ' '
+  );
+
   const matches = [];
   for (const pat of REF_PATTERNS) {
     if (!pat.brandHint) continue; // skip generic fallback — too noisy for this check
     const re = new RegExp(pat.regex.source, pat.regex.flags.includes('g') ? pat.regex.flags : pat.regex.flags + 'g');
     let m;
-    while ((m = re.exec(text)) !== null) {
+    while ((m = re.exec(priceStripped)) !== null) {
       matches.push({ ref: m[1], brand: pat.brandHint, index: m.index });
       if (matches.length > 6) break; // cap — clearly a stock list by now
     }
