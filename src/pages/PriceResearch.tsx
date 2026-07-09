@@ -379,6 +379,8 @@ export default function PriceResearch() {
                   <span className="text-amber-400/70">{result.outlierCount} outlier{result.outlierCount>1?'s':''} removed</span>
                 </>
               )}
+              <span className="text-white/30">·</span>
+              <span className="text-[#D4AF37]/70">Median is the most reliable figure — some legacy listings may reflect incomplete currency conversion.</span>
             </div>
 
             {/* Navigation & Individual Listings */}
