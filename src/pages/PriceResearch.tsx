@@ -112,13 +112,47 @@ export default function PriceResearch() {
     setLoading(true);
     setError('');
     try {
-      const r = await fetch(`/api/price-research?reference=${encodeURIComponent(ref)}`);
+      // v4.7 API requires both brand AND reference — resolve brand from the picker or default to Rolex
+      const brand = pBrand || 'Rolex';
+      const r = await fetch(`/api/price-research?brand=${encodeURIComponent(brand)}&reference=${encodeURIComponent(ref)}`);
       const d = await r.json();
-      if (d.success) setData(d);
+      if (d.stats) {
+        // Bridge v4.7 API → 4cd7394 theme interface
+        const bs = d.buyers_sellers || { buyers: 0, sellers: 0 };
+        const bridged: PriceData = {
+          ...d,
+          success: true,
+          resolvedRef: d.reference,
+          model: null,
+          collection: null,
+          dialColors: (d.dial_colors || []).map((dc: any) => dc.dial_color || dc),
+          dial_analysis: (d.dial_colors || []).map((dc: any) => ({
+            dial_color: dc.dial_color || dc,
+            count: dc.count || 0,
+            avg_price: dc.avg_price || dc.median_price || 0,
+            min_price: dc.min_price || 0,
+            max_price: dc.max_price || 0,
+          })),
+          totalListings: d.count || 0,
+          rawCount: d.count || 0,
+          outliersRemoved: d.outliers_removed || 0,
+          liquidity: {
+            source: 'live_fallback',
+            listing_count: d.count || 0,
+            liquidity_score: bs.sellers > 0 ? Math.round((bs.buyers / bs.sellers) * 100) : null,
+            sale_count: bs.sellers,
+            search_count: bs.buyers,
+            demand_score: bs.buyers,
+            supply_score: bs.sellers,
+            wtb_fs_ratio: bs.sellers > 0 ? bs.buyers / bs.sellers : null,
+          },
+        };
+        setData(bridged);
+      }
       else setError(d.error || 'No data for this reference');
     } catch { setError('Failed to fetch'); }
     finally { setLoading(false); }
-  }, []);
+  }, [pBrand]);
 
   useEffect(() => { fetchData(query); }, [query, fetchData]);
 
