@@ -16,7 +16,8 @@ import {
   ArrowLeft, Eye, CheckCircle, XCircle, Clock, AlertTriangle,
   DollarSign, TrendingUp, TrendingDown, Activity, ShieldCheck,
   FileText, Hash, Palette, Calendar, Gauge, RefreshCw,
-  Trash2, UserCheck, Bot, AlertOctagon
+  Trash2, UserCheck, Bot, AlertOctagon, Save, Loader2,
+  Edit3, ExternalLink, Sparkles, ArrowUpDown,
 } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { SUPABASE_URL, REQ_HEADERS } from '@/lib/supabaseConfig';
@@ -84,6 +85,35 @@ export default function WatchDetailReport() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [priceStats, setPriceStats] = useState<any>(null);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [reparsing, setReparsing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    brand: '',
+    reference: '',
+    dial_color: '',
+    condition: '',
+    year: null as number | null,
+    price_usd: 0,
+    verdict: 'REVIEW',
+    confidence: 0,
+  });
+
+  // Initialize editForm when record loads
+  useEffect(() => {
+    if (record) {
+      setEditForm({
+        brand: record.brand || '',
+        reference: record.reference || '',
+        dial_color: record.dial_color || '',
+        condition: record.condition || '',
+        year: record.year,
+        price_usd: record.price_usd || 0,
+        verdict: record.verdict || 'REVIEW',
+        confidence: record.confidence || 0,
+      });
+    }
+  }, [record?.id]);
 
   useEffect(() => {
     if (!id) return;
@@ -134,6 +164,69 @@ export default function WatchDetailReport() {
       setError(err.message);
     }
     setLoading(false);
+  };
+
+  // ─── Reference/Dial swap detection helpers ─────────────────────────────
+  const KNOWN_COLORS = new Set([
+    'Black','White','Blue','Green','Silver','Gold','Champagne','Grey','Gray',
+    'Red','Brown','Purple','Orange','Yellow','Pink','Ivory','Tiffany','Salmon',
+    'Skeleton','MOP','Mother Of Pearl','Opaline','Burgundy','Chocolate','Navy',
+  ]);
+
+  function looksLikeColor(val: string): boolean {
+    if (!val) return false;
+    return KNOWN_COLORS.has(val) || KNOWN_COLORS.has(val.charAt(0).toUpperCase() + val.slice(1).toLowerCase());
+  }
+
+  function looksLikeRef(val: string): boolean {
+    if (!val || val.length < 4) return false;
+    return /^\d{5,8}$/.test(val) || /^\d{5,6}[A-Z]{2,4}$/i.test(val)
+      || /^\d{4,5}\/\d{1,2}[A-Za-z]?$/.test(val) || /^\d{5}[A-Z]{2,4}$/i.test(val)
+      || /^RM\d{2,4}/i.test(val);
+  }
+
+  function handleSwapRefDial() {
+    const newDial = record?.reference || editForm.reference;
+    const newRef = record?.dial_color || editForm.dial_color;
+    setEditForm(f => ({ ...f, reference: newRef, dial_color: newDial }));
+  }
+
+  // ─── Save edited fields ────────────────────────────────────────────────
+  const saveEdit = async () => {
+    if (!record) return;
+    setSaving(true);
+    try {
+      await fetch('/api/update-record', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'x-admin-key': 'wf-admin-2026' },
+        body: JSON.stringify({ id: record.id, ...editForm }),
+      });
+      setEditing(false);
+      loadRecord(record.id);
+    } catch {}
+    setSaving(false);
+  };
+
+  // ─── Re-run parser ─────────────────────────────────────────────────────
+  const reparseRecord = async () => {
+    if (!record?.raw_message) return;
+    setReparsing(true);
+    try {
+      const res = await fetch('/api/batch-parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: [record.raw_message], id: record.id }),
+      });
+      if (res.ok) {
+        setTimeout(() => { if (record) loadRecord(record.id); }, 1500);
+      }
+    } catch {}
+    setTimeout(() => setReparsing(false), 2000);
+  };
+
+  // ─── AI review assist modal ────────────────────────────────────────────
+  const triggerAiReview = () => {
+    if (record) navigate(`/admin/reports?ai=${record.id}`);
   };
 
   if (loading) {
@@ -420,20 +513,121 @@ export default function WatchDetailReport() {
               </div>
             </div>
 
+            {/* Reference/Dial Swap Detection */}
+            {(record.dial_color && looksLikeRef(record.dial_color)) ||
+             (record.reference && looksLikeColor(record.reference)) ? (
+              <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+                <div className="flex items-start gap-2">
+                  <AlertOctagon size={16} className="text-red-400 mt-0.5 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-red-400 mb-1">Reference/Dial Data Swap Suspected</div>
+                    <div className="text-[11px] text-red-300/80 mb-2">
+                      {record.reference && looksLikeColor(record.reference)
+                        ? `Reference "${record.reference}" looks like a dial color name`
+                        : `Dial "${record.dial_color}" looks like a reference number`}
+                    </div>
+                    <button
+                      onClick={() => handleSwapRefDial()}
+                      className="inline-flex items-center gap-1 px-3 py-1 text-[10px] font-semibold bg-red-500/20 text-red-400 border border-red-500/30 rounded hover:bg-red-500/30 transition-colors"
+                    >
+                      <ArrowUpDown size={12} /> Swap Reference ↔ Dial
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
             {/* Actions */}
             <div className="bg-[#111118] border border-[#1E1E2E] rounded-xl overflow-hidden">
               <div className="p-5 space-y-2">
                 <button
-                  onClick={() => navigate(`/admin/browser?edit=${record.id}`)}
-                  className="w-full px-4 py-2 bg-[#D4AF37] hover:bg-[#E5C158] text-black rounded-lg font-medium transition-colors text-sm"
+                  onClick={() => setEditing(true)}
+                  className="w-full px-4 py-2 bg-[#D4AF37] hover:bg-[#E5C158] text-black rounded-lg font-medium transition-colors text-sm flex items-center justify-center gap-2"
                 >
-                  Edit Record
+                  <Edit3 size={14} /> {editing ? 'Editing...' : 'Edit Record'}
                 </button>
+                {editing && (
+                  <div className="space-y-2 pt-2 border-t border-[#1E1E2E]">
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div>
+                        <label className="text-[9px] text-gray-500 uppercase">Brand</label>
+                        <input value={editForm.brand} onChange={e => setEditForm(f => ({...f, brand: e.target.value}))}
+                          className="w-full mt-0.5 px-2 py-1 bg-gray-900 border border-gray-800 rounded text-gray-200" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-gray-500 uppercase">Reference</label>
+                        <input value={editForm.reference} onChange={e => setEditForm(f => ({...f, reference: e.target.value}))}
+                          className="w-full mt-0.5 px-2 py-1 bg-gray-900 border border-gray-800 rounded text-gray-200 font-mono" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-gray-500 uppercase">Dial</label>
+                        <input value={editForm.dial_color} onChange={e => setEditForm(f => ({...f, dial_color: e.target.value}))}
+                          className="w-full mt-0.5 px-2 py-1 bg-gray-900 border border-gray-800 rounded text-gray-200" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-gray-500 uppercase">Condition</label>
+                        <input value={editForm.condition} onChange={e => setEditForm(f => ({...f, condition: e.target.value}))}
+                          className="w-full mt-0.5 px-2 py-1 bg-gray-900 border border-gray-800 rounded text-gray-200" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-gray-500 uppercase">Year</label>
+                        <input type="number" value={editForm.year || ''} onChange={e => setEditForm(f => ({...f, year: parseInt(e.target.value) || null}))}
+                          className="w-full mt-0.5 px-2 py-1 bg-gray-900 border border-gray-800 rounded text-gray-200 font-mono" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-gray-500 uppercase">Price USD</label>
+                        <input type="number" value={editForm.price_usd || ''} onChange={e => setEditForm(f => ({...f, price_usd: parseFloat(e.target.value) || 0}))}
+                          className="w-full mt-0.5 px-2 py-1 bg-gray-900 border border-gray-800 rounded text-gray-200 font-mono" />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-gray-500 uppercase">Verdict</label>
+                        <select value={editForm.verdict} onChange={e => setEditForm(f => ({...f, verdict: e.target.value}))}
+                          className="w-full mt-0.5 px-2 py-1 bg-gray-900 border border-gray-800 rounded text-gray-200">
+                          {['APPROVED', 'REVIEW', 'HUMAN', 'RECYCLE'].map(v => <option key={v} value={v}>{v}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-gray-500 uppercase">Confidence</label>
+                        <input type="number" min="0" max="100" value={editForm.confidence} onChange={e => setEditForm(f => ({...f, confidence: parseInt(e.target.value) || 0}))}
+                          className="w-full mt-0.5 px-2 py-1 bg-gray-900 border border-gray-800 rounded text-gray-200 font-mono" />
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-1">
+                      <button onClick={() => setEditing(false)}
+                        className="flex-1 px-2 py-1.5 text-xs text-gray-400 border border-gray-800 rounded hover:text-white">Cancel</button>
+                      <button onClick={saveEdit} disabled={saving}
+                        className="flex-1 px-2 py-1.5 text-xs font-medium bg-green-500 text-black rounded hover:bg-green-400 disabled:opacity-50 flex items-center justify-center gap-1">
+                        {saving ? <Loader2 size={12} className="animate-spin" /> : <Save size={12} />}
+                        Save
+                      </button>
+                    </div>
+                  </div>
+                )}
                 <button
                   onClick={() => navigate(`/price-research?brand=${encodeURIComponent(record.brand)}&ref=${encodeURIComponent(record.reference)}`)}
-                  className="w-full px-4 py-2 bg-[#111118] hover:bg-[#1A1A24] text-white rounded-lg font-medium transition-colors border border-[#1E1E2E] text-sm"
+                  className="w-full px-4 py-2 bg-[#111118] hover:bg-[#1A1A24] text-white rounded-lg font-medium transition-colors border border-[#1E1E2E] text-sm flex items-center justify-center gap-2"
                 >
-                  View Price Research
+                  <TrendingUp size={14} /> Price Research
+                </button>
+                <button
+                  onClick={() => navigate(`/admin/browser?edit=${record.id}`)}
+                  className="w-full px-4 py-2 bg-[#111118] hover:bg-[#1A1A24] text-white rounded-lg font-medium transition-colors border border-[#1E1E2E] text-sm flex items-center justify-center gap-2"
+                >
+                  <Eye size={14} /> Open in Admin Browser
+                </button>
+                <button
+                  onClick={reparseRecord}
+                  disabled={reparsing}
+                  className="w-full px-4 py-2 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 rounded-lg font-medium transition-colors border border-blue-500/20 text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                >
+                  <RefreshCw size={14} className={reparsing ? 'animate-spin' : ''} />
+                  {reparsing ? 'Re-parsing...' : 'Re-run Parser'}
+                </button>
+                <button
+                  onClick={triggerAiReview}
+                  className="w-full px-4 py-2 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg font-medium transition-colors border border-amber-500/20 text-sm flex items-center justify-center gap-2"
+                >
+                  <Sparkles size={14} /> AI Review Assist
                 </button>
               </div>
             </div>

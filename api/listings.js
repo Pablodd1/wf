@@ -7,7 +7,8 @@ module.exports = async function handler(req, res) {
   const {
     brand,
     reference,
-    verdict = 'APPROVED',
+    verdict,
+    condition,
     limit = 50,
     page = 1,
     search,
@@ -24,11 +25,14 @@ module.exports = async function handler(req, res) {
     let query = client
       .from('watch_records')
       .select('*')
-      .eq('verdict', verdict)
       .limit(pageSize);
+
+    // Verdict filter is OPTIONAL — Trading Floor shows all, Admin can filter
+    if (verdict) query = query.eq('verdict', verdict);
 
     if (brand) query = query.eq('brand', brand);
     if (reference) query = query.eq('reference', reference);
+    if (condition) query = query.eq('condition', condition);
     if (search) {
       query = query.or(`brand.ilike.%${search}%,reference.ilike.%${search}%,raw_message.ilike.%${search}%`);
     }

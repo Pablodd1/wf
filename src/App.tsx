@@ -53,6 +53,7 @@ import LiveQueue from '@/pages/LiveQueue';
 import DemoPage from '@/pages/DemoPage';
 
 import WatchDetailReport from '@/pages/WatchDetailReport';
+import AdminListingsBrowser from '@/pages/AdminListingsBrowser';
 import CatalogSummary from '@/pages/CatalogSummary';
 
 function AdminRoutes() {
@@ -69,6 +70,7 @@ function AdminRoutes() {
         <Route path='/pipeline' element={<PipelineDashboard />} />
         <Route path='/live' element={<LiveQueue />} />
         <Route path='/catalog' element={<CatalogSummary />} />
+        <Route path='/browser' element={<AdminListingsBrowser />} />
         <Route path='/watch/:id' element={<WatchDetailReport />} />
 
         {/* Legacy redirects — old tabs now point to UnifiedReports */}

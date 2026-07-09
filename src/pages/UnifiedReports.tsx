@@ -14,6 +14,7 @@
  */
 // @ts-nocheck
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Download, Loader2, ChevronLeft, ChevronRight,
@@ -284,6 +285,7 @@ function EditModal({ record, onSave, onClose }: {
 }
 
 export default function UnifiedReports() {
+  const navigate = useNavigate();
   const [records, setRecords] = useState<DBRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('ALL');
@@ -485,8 +487,7 @@ export default function UnifiedReports() {
                   <th className="py-2 px-2 text-center">Conf</th>
                   <th className="py-2 px-2 text-left">Source</th>
                   <th className="py-2 px-2 text-left">Date</th>
-                  <th className="py-2 px-2 text-center">Edit</th>
-                  <th className="py-2 px-2 text-center">AI Review</th>
+                  <th className="py-2 px-2 text-center">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -516,16 +517,53 @@ export default function UnifiedReports() {
                       <td className="py-2 px-2 text-gray-500 text-xs">{r.source || '—'}</td>
                       <td className="py-2 px-2 text-gray-500 text-xs">{new Date(r.created_at).toLocaleDateString()}</td>
                       <td className="py-2 px-2 text-center">
-                        <button onClick={() => setEditingRecord(r)}
-                          className="p-1 text-gray-600 hover:text-gold-primary transition-colors rounded" title="Edit this record">
-                          <Edit3 size={12} />
-                        </button>
-                      </td>
-                      <td className="py-2 px-2 text-center">
-                        <button onClick={() => setAiReviewRecord(r)}
-                          className="p-1 text-gray-600 hover:text-gold-primary transition-colors rounded" title="AI Review Assist — read raw data, identify brand, web search">
-                          <Sparkles size={12} />
-                        </button>
+                        <div className="flex items-center justify-center gap-0.5" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => setEditingRecord(r)}
+                            className="p-1 text-gray-600 hover:text-gold-primary transition-colors rounded" title="Edit record">
+                            <Edit3 size={12} />
+                          </button>
+                          <button onClick={() => setAiReviewRecord(r)}
+                            className="p-1 text-gray-600 hover:text-amber-400 transition-colors rounded" title="AI Review Assist">
+                            <Sparkles size={12} />
+                          </button>
+                          <button onClick={() => navigate(`/admin/browser?edit=${r.id}`)}
+                            className="p-1 text-gray-600 hover:text-blue-400 transition-colors rounded" title="View in Admin Browser">
+                            <Eye size={12} />
+                          </button>
+                          {r.raw_message && (
+                            <button onClick={async () => {
+                              try {
+                                await fetch('/api/batch-parse', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ messages: [r.raw_message], id: r.id }),
+                                });
+                                // Refetch after a short delay
+                                setTimeout(() => fetchRecords(), 1500);
+                              } catch {}
+                            }} className="p-1 text-gray-600 hover:text-blue-400 transition-colors rounded" title="Re-run parser">
+                              <RefreshCw size={12} />
+                            </button>
+                          )}
+                          {(r.verdict === 'RECYCLE' || r.verdict === 'TRASH') && (
+                            <div className="flex items-center gap-0.5 ml-1 pl-1 border-l border-gray-800">
+                              <button onClick={async () => {
+                                await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${r.id}`, {
+                                  method: 'PATCH', headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ verdict: 'REVIEW', human_edited: true }),
+                                });
+                                fetchRecords();
+                              }} className="p-0.5 text-[9px] text-blue-400 hover:text-blue-300 font-medium" title="Move to Review">R</button>
+                              <button onClick={async () => {
+                                await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${r.id}`, {
+                                  method: 'PATCH', headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ verdict: 'APPROVED', confidence: 100, human_edited: true }),
+                                });
+                                fetchRecords();
+                              }} className="p-0.5 text-[9px] text-green-400 hover:text-green-300 font-medium" title="Approve">A</button>
+                            </div>
+                          )}
+                        </div>
                       </td>
                     </tr>
                     {isExpanded && (

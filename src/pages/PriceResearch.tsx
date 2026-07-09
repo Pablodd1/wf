@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Info, Loader2, TrendingDown, TrendingUp, Search, Filter, BarChart3, ArrowRight, Eye, Database, Activity } from 'lucide-react';
+import { Info, Loader2, TrendingDown, TrendingUp, Search, Filter, BarChart3, ArrowRight, Eye, Database, Activity, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Area, ComposedChart,
@@ -109,6 +109,8 @@ export default function PriceResearch() {
   const [selectedRef, setSelectedRef] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<PriceResult|null>(null);
+  const [listingRecords, setListingRecords] = useState<any[]>([]);
+  const [showListings, setShowListings] = useState(false);
   const [dateRange, setDateRange] = useState('6M');
   const [validationNote, setValidationNote] = useState('');
 
@@ -219,8 +221,9 @@ export default function PriceResearch() {
       const res = await fetch(`/api/price-research?brand=${encodeURIComponent(selectedModel)}&reference=${encodeURIComponent(ref)}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const result = await res.json();
-      if (!result?.rows?.length) { setResult(null); setLoading(false); return; }
+      if (!result?.rows?.length) { setResult(null); setListingRecords([]); setLoading(false); return; }
       const records = result.rows;
+      setListingRecords(records);
       const monthlyData = groupByMonth(records);
       const prices = records.map((r: any) => r.price_usd).filter((p: number) => p > 0).sort((a: number, b: number) => a - b);
       const avg = prices.length ? Math.round(prices.reduce((s: number, p: number) => s + p, 0) / prices.length) : 0;
@@ -349,6 +352,55 @@ export default function PriceResearch() {
               ].map(s => (
                 <LuxuryStatTile key={s.label} label={s.label} value={s.val} color={s.color} icon={s.icon} delay={s.delay} />
               ))}
+            </div>
+
+            {/* Navigation & Individual Listings */}
+            <div className="chart-container-luxury">
+              <div className="px-5 py-3 border-b border-[#D4AF37]/10 flex items-center justify-between">
+                <h3 className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-[0.08em] flex items-center gap-2">
+                  <Eye size={14} /> Individual Listings ({listingRecords.length})
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => {
+                    navigate(`/trading?brand=${encodeURIComponent(selectedModel)}&ref=${encodeURIComponent(selectedRef)}`);
+                  }} className="text-[10px] px-2 py-1 bg-gray-800 text-gray-300 border border-gray-700 rounded hover:text-white flex items-center gap-1">
+                    <ExternalLink size={10} /> View on Trading Floor
+                  </button>
+                  <button onClick={() => setShowListings(!showListings)}
+                    className="text-[10px] px-2 py-1 bg-gray-800 text-gray-300 rounded hover:text-white flex items-center gap-1">
+                    {showListings ? <ChevronUp size={10} /> : <ChevronDown size={10} />} {showListings ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+              {showListings && listingRecords.length > 0 && (
+                <div className="p-3 max-h-60 overflow-y-auto">
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="border-b border-white/5 text-gray-500">
+                        <th className="py-1.5 px-2 text-left">Dial</th>
+                        <th className="py-1.5 px-2 text-left">Condition</th>
+                        <th className="py-1.5 px-2 text-right">Price</th>
+                        <th className="py-1.5 px-2 text-left">Date</th>
+                        <th className="py-1.5 px-2 text-left">Source</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {listingRecords.slice(0, 200).map((r: any, i: number) => (
+                        <tr key={i} className="border-b border-white/5 hover:bg-white/5">
+                          <td className="py-1 px-2 text-gray-300">{extractDialFromText(r.raw_message, r.dial_color)}</td>
+                          <td className="py-1 px-2 text-gray-400">{r.condition || '—'}</td>
+                          <td className="py-1 px-2 text-right font-mono text-gray-200">{r.price_usd > 0 ? `$${r.price_usd.toLocaleString()}` : '—'}</td>
+                          <td className="py-1 px-2 text-gray-400">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
+                          <td className="py-1 px-2 text-gray-400">{r.source || '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {listingRecords.length > 200 && (
+                    <div className="text-center text-[10px] text-gray-500 py-2">Showing 200 of {listingRecords.length} listings</div>
+                  )}
+                </div>
+              )}
             </div>
 
             <DataInterpretation result={result} />

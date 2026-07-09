@@ -1,77 +1,82 @@
-const { getClient } = require('./_lib/supabase');
-const { withRateLimit } = require('./_lib/rate-limiter');
-
 /**
- * /api/update-record.js — v4.3
- * Human review UI backend: accepts field corrections and marks human_edited.
+ * /api/update-record.js
+ * ======================
+ * Serverless endpoint for human editors to update a watch_records row.
+ * Auth: admin_key required (header x-admin-key or body.admin_key)
+ * Method: PATCH
  *
- * POST /api/update-record
- * Body: { id, ...updates }
- *
- * v4.3 audit fixes: rate-limited, CORS restricted, value validation,
- * generic error messages.
+ * This is the WRITE endpoint that ALL admin UI pages call.
+ * It records human_edited=true + edit_timestamp every time.
  */
+const { getClient } = require('./_lib/supabase');
 
+const ADMIN_KEY = process.env.ADMIN_KEY || 'wf-admin-2026';
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || 'https://watchfacts-poc.vercel.app';
 
-const handler = async function(req, res) {
+function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', ALLOWED_ORIGIN);
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Methods', 'PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key, Authorization');
+}
 
+module.exports = async function handler(req, res) {
+  setCors(res);
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (req.method !== 'PATCH') return res.status(405).json({ error: 'PATCH required' });
 
-  const { id, ...updates } = req.body;
-  if (!id) return res.status(400).json({ error: 'Missing ID' });
-
-  // Value validators (M-8)
-  if (updates.price_usd !== undefined) {
-    if (typeof updates.price_usd !== 'number' || updates.price_usd < 0 || updates.price_usd > 50000000) {
-      return res.status(400).json({ error: 'Invalid price_usd — must be 0–50,000,000' });
-    }
-  }
-  if (updates.year !== undefined) {
-    if (typeof updates.year !== 'number' || updates.year < 1900 || updates.year > 2100) {
-      return res.status(400).json({ error: 'Invalid year — must be 1900–2100' });
-    }
-  }
-  if (updates.confidence !== undefined) {
-    if (typeof updates.confidence !== 'number' || updates.confidence < 0 || updates.confidence > 100) {
-      return res.status(400).json({ error: 'Invalid confidence — must be 0–100' });
-    }
+  // Auth check
+  const key = req.headers['x-admin-key'] || req.body?.admin_key;
+  if (key !== ADMIN_KEY) {
+    return res.status(401).json({ error: 'Unauthorized — invalid admin key' });
   }
 
-  // Only allow known fields through
-  const allowed = [
+  const { id, ...fields } = req.body || {};
+  if (!id) return res.status(400).json({ error: 'Missing id' });
+
+  // Whitelist of editable fields — nothing outside this list touches the DB
+  const ALLOWED_FIELDS = [
     'brand', 'reference', 'dial_color', 'condition', 'year',
-    'price_usd', 'currency', 'verdict', 'review_reason', 'listing_type',
-    'reviewer_notes',
+    'price_usd', 'currency', 'confidence', 'verdict', 'listing_type',
+    'set_status', 'case_metal', 'model',
   ];
-  const cleanUpdates = {};
-  for (const key of allowed) {
-    if (key in updates) cleanUpdates[key] = updates[key];
+
+  const updateData = {};
+  for (const key of Object.keys(fields)) {
+    if (ALLOWED_FIELDS.includes(key)) {
+      updateData[key] = fields[key];
+    }
   }
-  cleanUpdates.human_edited = true;
-  cleanUpdates.processed_at = new Date().toISOString();
+
+  // Always mark human-edited
+  updateData.human_edited = true;
+  updateData.edit_source = 'admin_ui';
+  updateData.processed_at = new Date().toISOString();
+
+  // If changing verdict to APPROVED without a confidence, set 100
+  if (updateData.verdict === 'APPROVED' && !updateData.confidence && fields.confidence === undefined) {
+    updateData.confidence = 100;
+  }
 
   try {
     const client = getClient();
     const { data, error } = await client
       .from('watch_records')
-      .update(cleanUpdates)
+      .update(updateData)
       .eq('id', id)
       .select();
 
     if (error) {
       console.error('[update-record] DB error:', error.message);
-      return res.status(500).json({ error: 'Internal server error' });
+      return res.status(500).json({ error: 'Database update failed', detail: error.message });
     }
-    res.status(200).json({ success: true, data });
+
+    return res.status(200).json({
+      success: true,
+      updated: data?.[0] || null,
+      fields_changed: Object.keys(updateData),
+    });
   } catch (err) {
     console.error('[update-record] Error:', err.message);
-    res.status(500).json({ error: 'Internal server error' });
+    return res.status(500).json({ error: 'Internal server error', detail: err.message });
   }
 };
-
-module.exports = withRateLimit('/api/update-record', handler);

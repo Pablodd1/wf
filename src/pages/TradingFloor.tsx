@@ -9,7 +9,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Filter, Info, Loader2,
   TrendingUp, DollarSign, Watch, Gem, X, Zap,
-  Sparkles
+  Sparkles, AlertTriangle, Database, Eye, ExternalLink,
+  RefreshCw, Clock, CheckCircle, AlertOctagon, ArrowRight,
+  Activity, Hash, Palette, Gauge, Calendar, UserCheck, Bot,
+  FileText, Edit3, Save,
 } from 'lucide-react';
 import { DealerNavbar } from '@/components/DealerNavbar';
 import { resolveWatchImage, getBrandGradient } from '@/lib/imageResolver';
@@ -187,8 +190,7 @@ const cardVariants = {
 };
 
 // ─── Watch Card ──────────────────────────────────────────────────────────────────
-function WatchCard({ listing, imageUrl, averages }: { listing: WatchListing; imageUrl?: string; averages: Record<string, PriceAverageData> }) {
-  const navigate = useNavigate();
+function WatchCard({ listing, imageUrl, averages, onSelect }: { listing: WatchListing; imageUrl?: string; averages: Record<string, PriceAverageData>; onSelect: (l: WatchListing) => void }) {
   const fallbackImg = resolveWatchImage(listing.reference || '', listing.brand || '');
   const displayImg = imageUrl || fallbackImg;
   const title = extractTitle(listing.raw_message);
@@ -208,7 +210,7 @@ function WatchCard({ listing, imageUrl, averages }: { listing: WatchListing; ima
       isNew={isNew}
       rating={rating}
       title={title}
-      onClick={() => navigate(`/flash-sales/${listing.id}`, { state: { listing } })}
+      onClick={() => onSelect(listing)}
     />
   );
 }
@@ -245,6 +247,200 @@ function SkeletonCard({ index }: { index: number }) {
 }
 
 
+// ─── Trading Floor Detail Modal — shows ALL info on click ─────────────────
+const ADMIN_KEY_WF = 'wf-admin-2026';
+
+function WatchDetailModal({ listing, onClose, averages, priceStats, onPriceStats }: {
+  listing: WatchListing;
+  onClose: () => void;
+  averages: Record<string, PriceAverageData>;
+  priceStats: any;
+  onPriceStats: (s: any) => void;
+}) {
+  const navigate = useNavigate();
+  const fmtPrice2 = (p: number) => p >= 1000000 ? `$${(p/1000000).toFixed(1)}M` : p >= 1000 ? `$${p.toLocaleString()}` : `$${p}`;
+  const fmtDate2 = (d: string) => new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  const dealerName = extractDealerName(listing.raw_message, listing.source);
+  const raw = listing.raw_message || '';
+  const lower = raw.toLowerCase();
+  const bracelet = lower.includes('oyster') ? 'Oyster' : lower.includes('jubilee') ? 'Jubilee' : lower.includes('president') ? 'President' : '';
+  const accessories = { box: lower.includes('box') || lower.includes('full set'), papers: lower.includes('papers') || lower.includes('card') };
+  const region = listing.source?.toLowerCase().includes('asia') ? 'ASIA' : listing.source?.toLowerCase().includes('eu') ? 'EUROPE' : 'NORTH AMERICA';
+
+  // Fetch price stats on open
+  useEffect(() => {
+    if (!listing.reference || !listing.brand) return;
+    const ref = encodeURIComponent(listing.reference);
+    const brand = encodeURIComponent(listing.brand);
+    fetch(`/api/price-research?brand=${brand}&reference=${ref}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.rows?.length > 0) {
+          const prices = data.rows.map((r: any) => r.price_usd).filter((p: number) => p > 0).sort((a: number, b: number) => a - b);
+          if (prices.length > 0) {
+            const avg = prices.reduce((a: number, b: number) => a + b, 0) / prices.length;
+            const median = prices[Math.floor(prices.length / 2)];
+            const q1 = prices[Math.floor(prices.length * 0.25)];
+            const q3 = prices[Math.floor(prices.length * 0.75)];
+            const iqr = q3 - q1;
+            const outlierLow = q1 - 1.5 * iqr;
+            const outlierHigh = q3 + 1.5 * iqr;
+            const isOutlier = listing.price_usd > outlierHigh || listing.price_usd < outlierLow;
+            onPriceStats({ avg, median, q1, q3, iqr, outlierLow, outlierHigh, isOutlier, count: prices.length });
+          }
+        }
+      })
+      .catch(() => {});
+  }, [listing.id]);
+
+  const rating = (() => {
+    const key = `${listing.brand}|${listing.reference}`;
+    const avgData = averages[key];
+    const result = computeDealRating(listing.price_usd, avgData);
+    return { hasRating: result.rating !== 'NO_RATING', label: result.label, rating: result.rating };
+  })();
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 20 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        exit={{ opacity: 0, scale: 0.95, y: 20 }}
+        className="bg-[#111118] border border-white/10 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-[#111118] border-b border-white/5 px-5 py-3 flex items-center justify-between z-10">
+          <div className="flex items-center gap-2">
+            <div className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+              rating.rating === 'GOOD_DEAL' ? 'bg-emerald-500/10 text-emerald-400' :
+              rating.rating === 'FAIR_DEAL' ? 'bg-blue-500/10 text-blue-400' :
+              rating.rating === 'HIGH_PRICED' ? 'bg-red-500/10 text-red-400' :
+              'bg-gray-500/10 text-gray-400'
+            }`}>
+              {rating.hasRating ? rating.label : 'NO RATING'}
+            </div>
+            <span className="text-xs text-white/30 font-mono">#{listing.id?.slice(-8) || '—'}</span>
+          </div>
+          <button onClick={onClose} className="p-1.5 text-white/30 hover:text-white transition-colors rounded"><X size={16} /></button>
+        </div>
+
+        <div className="p-5 space-y-5">
+          {/* RAW MESSAGE — always first */}
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-amber-400 font-semibold mb-1.5">Raw Message</div>
+            <pre className="bg-[#0A0A0F] border border-amber-500/10 rounded-lg p-3 text-xs text-gray-300 whitespace-pre-wrap font-mono max-h-40 overflow-y-auto leading-relaxed">
+              {listing.raw_message || '(no raw message)'}
+            </pre>
+          </div>
+
+          {/* Quick fields */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <div className="bg-[#0A0A0F] rounded-lg p-3">
+              <div className="text-[10px] text-gray-500 uppercase mb-0.5">Brand</div>
+              <div className="text-sm font-medium text-white">{listing.brand || '—'}</div>
+            </div>
+            <div className="bg-[#0A0A0F] rounded-lg p-3">
+              <div className="text-[10px] text-gray-500 uppercase mb-0.5">Reference</div>
+              <div className="text-sm font-mono text-white">{listing.reference || '—'}</div>
+            </div>
+            <div className="bg-[#0A0A0F] rounded-lg p-3">
+              <div className="text-[10px] text-gray-500 uppercase mb-0.5">Dial</div>
+              <div className="text-sm text-white">{listing.dial_color || '—'}</div>
+            </div>
+            <div className="bg-[#0A0A0F] rounded-lg p-3">
+              <div className="text-[10px] text-gray-500 uppercase mb-0.5">Condition</div>
+              <div className="text-sm text-white">{listing.condition || '—'}</div>
+            </div>
+            <div className="bg-[#0A0A0F] rounded-lg p-3">
+              <div className="text-[10px] text-gray-500 uppercase mb-0.5">Year</div>
+              <div className="text-sm text-white">{listing.year || '—'}</div>
+            </div>
+            <div className="bg-[#0A0A0F] rounded-lg p-3">
+              <div className="text-[10px] text-gray-500 uppercase mb-0.5">Price (USD)</div>
+              <div className="text-sm font-bold text-[#D4AF37] font-mono">{listing.price_usd > 0 ? fmtPrice2(listing.price_usd) : '—'}</div>
+            </div>
+          </div>
+
+          {/* Price stats & Outlier */}
+          {priceStats && priceStats.count > 1 && (
+            <div className="bg-[#0A0A0F] rounded-lg p-4 border border-white/5">
+              <div className="flex items-center gap-2 mb-2">
+                <Activity size={14} className="text-[#D4AF37]" />
+                <span className="text-xs font-semibold text-gray-300">Market Analysis</span>
+                {priceStats.isOutlier ? (
+                  <span className="px-2 py-0.5 bg-red-400/10 text-red-400 rounded text-[10px] font-medium">OUTLIER</span>
+                ) : (
+                  <span className="px-2 py-0.5 bg-green-400/10 text-green-400 rounded text-[10px] font-medium">IN RANGE</span>
+                )}
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-xs">
+                <div><span className="text-gray-500">Avg</span> <span className="text-white font-mono block">{fmtPrice2(priceStats.avg)}</span></div>
+                <div><span className="text-gray-500">Median</span> <span className="text-white font-mono block">{fmtPrice2(priceStats.median)}</span></div>
+                <div><span className="text-gray-500">Range</span> <span className="text-white font-mono block">{fmtPrice2(priceStats.q1)}-{fmtPrice2(priceStats.q3)}</span></div>
+                <div><span className="text-gray-500">{priceStats.count} listings</span></div>
+              </div>
+            </div>
+          )}
+
+          {/* Details */}
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div className="bg-[#0A0A0F] rounded-lg p-2.5">
+              <span className="text-gray-500">Dealer: </span><span className="text-white">{dealerName}</span>
+            </div>
+            <div className="bg-[#0A0A0F] rounded-lg p-2.5">
+              <span className="text-gray-500">Region: </span><span className="text-white">{region}</span>
+            </div>
+            <div className="bg-[#0A0A0F] rounded-lg p-2.5">
+              <span className="text-gray-500">Source: </span><span className="text-white">{listing.source || '—'}</span>
+            </div>
+            <div className="bg-[#0A0A0F] rounded-lg p-2.5">
+              <span className="text-gray-500">Currency: </span><span className="text-white">{listing.currency || '—'}</span>
+            </div>
+            {bracelet && (
+              <div className="bg-[#0A0A0F] rounded-lg p-2.5">
+                <span className="text-gray-500">Bracelet: </span><span className="text-white">{bracelet}</span>
+              </div>
+            )}
+            <div className="bg-[#0A0A0F] rounded-lg p-2.5">
+              <span className="text-gray-500">Box/Papers: </span>
+              <span className="text-white">{accessories.box ? 'Box' : ''}{accessories.box && accessories.papers ? ' + ' : ''}{accessories.papers ? 'Papers' : '—'}</span>
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+            <button
+              onClick={() => navigate(`/flash-sales/${listing.id}`, { state: { listing } })}
+              className="px-4 py-2 bg-[#D4AF37] hover:bg-[#E5C158] text-black rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+            >
+              <Eye size={14} /> View Full Detail
+            </button>
+            <button
+              onClick={() => navigate(`/price-research?brand=${encodeURIComponent(listing.brand || '')}&ref=${encodeURIComponent(listing.reference || '')}`)}
+              className="px-4 py-2 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg text-xs font-medium flex items-center gap-1.5 hover:bg-blue-500/20 transition-colors"
+            >
+              <TrendingUp size={14} /> Price Research
+            </button>
+            <button
+              onClick={() => navigate(`/admin/browser?edit=${listing.id}`)}
+              className="px-4 py-2 bg-gray-800 text-gray-300 border border-gray-700 rounded-lg text-xs font-medium flex items-center gap-1.5 hover:text-white transition-colors"
+            >
+              <Edit3 size={14} /> Edit in Admin
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </motion.div>
+  );
+}
+
 // ─── Throttle helper ──────────────────────────────────────────────────────────────────
 function throttle<T extends (...args: unknown[]) => void>(fn: T, wait: number): T {
   let lastTime = 0;
@@ -272,6 +468,8 @@ export default function TradingFloor() {
   const searchTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFetchingRef = useRef(false);
   const [priceAverages, setPriceAverages] = useState<Record<string, PriceAverageData>>({});
+  const [selectedListing, setSelectedListing] = useState<WatchListing | null>(null);
+  const [priceStats, setPriceStats] = useState<any>(null);
 
   // Fetch price averages for deal rating
   useEffect(() => {
@@ -285,7 +483,7 @@ export default function TradingFloor() {
 
   // Fetch real-time total count from API
   useEffect(() => {
-    fetch(`/api/listings?verdict=APPROVED&limit=1`)
+    fetch(`/api/listings?limit=1`)
     .then(r => r.json())
     .then(data => {
       const rows = data.rows || [];
@@ -305,7 +503,7 @@ export default function TradingFloor() {
       const currentPageSize = customPageSize || pageSize;
       const currentPage = append ? page : 1;
       // Use the API endpoint instead of direct Supabase
-      let url = `/api/listings?verdict=APPROVED&limit=${currentPageSize}&page=${currentPage}`;
+      let url = `/api/listings?limit=${currentPageSize}&page=${currentPage}`;
 
       if (query) url += `&search=${encodeURIComponent(query)}`;
       if (condition !== 'All') url += `&condition=${encodeURIComponent(condition)}`;
@@ -398,7 +596,7 @@ export default function TradingFloor() {
   }, [fetchListings]);
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] relative">
+    <><div className="min-h-screen bg-[#0A0A0F] relative">
       {/* Subtle background gradient */}
       <div className="fixed inset-0 bg-gradient-to-b from-[#0A0A0F] via-[#0D0D14] to-[#0A0A0F] pointer-events-none" />
       <div className="fixed inset-0 opacity-[0.015]" style={{
@@ -604,6 +802,7 @@ export default function TradingFloor() {
                   listing={listing}
                   imageUrl={imageMap[listing.reference || '']}
                   averages={priceAverages}
+                  onSelect={setSelectedListing}
                 />
               ))}
             </motion.div>
@@ -633,5 +832,17 @@ export default function TradingFloor() {
         )}
       </div>
     </div>
+      <AnimatePresence>
+        {selectedListing && (
+          <WatchDetailModal
+            listing={selectedListing}
+            onClose={() => { setSelectedListing(null); setPriceStats(null); }}
+            averages={priceAverages}
+            priceStats={priceStats}
+            onPriceStats={setPriceStats}
+          />
+        )}
+      </AnimatePresence>
+    </>
   );
 }
