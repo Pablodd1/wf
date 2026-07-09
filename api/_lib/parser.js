@@ -1137,7 +1137,9 @@ function parsePrice(text, ref) {
   // per JASS-6 §1c so ALL sub-parsers get un-glued text, not just parsePrice.
   searchText = searchText
     .replace(/(\d)(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED|CNY|AUD|CAD)\b/gi, '$1 $2')
-    .replace(/\b(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED|CNY|AUD|CAD)(\d)/gi, '$1 $2');
+    .replace(/\b(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED|CNY|AUD|CAD)(\d)/gi, '$1 $2')
+    // v4.10: unstick multiplier+currency glue: "165khkd" → "165k hkd", "1.2musd" → "1.2m usd"
+    .replace(/(\d[kKmM])(HKD|USDT|USD|EUR|CHF|GBP|SGD|JPY|AED|CNY|AUD|CAD)\b/gi, '$1 $2');
   if (ref) {
     searchText = searchText.replace(new RegExp(ref.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ');
   }
@@ -1186,6 +1188,11 @@ function parsePrice(text, ref) {
     { regex: /\b(\d{1,3},\d{2})\s*[mM]\b/g, handler: (m) => parseFloat(m[1].replace(',', '.')) * 1e6, priority: 1 },
     // 1.85m, 1.4M, 1.265m, 2.35m (dot + m/M)
     { regex: /\b(\d{1,3}(?:\.\d{1,3})?)\s*[mM]\b(?![a-zA-Z])/g, multiplier: 1e6, priority: 1 },
+    // v4.10: mil/mill/million word forms: 1.2mil, 1.2mill, 1.2 million, 3mil
+    { regex: /\b(\d{1,3}(?:[.,]\d{1,3})?)\s*(?:mil|mill|million)\b/gi, handler: (m) => {
+      const num = parseFloat(m[1].replace(',', '.'));
+      return num * 1e6;
+    }, priority: 1 },
     // 865K, 118K, 120k (uppercase or lowercase K)
     { regex: /\b(\d{1,6}(?:[.,]\d{1,3})?)\s*[kK]\b(?![a-zA-Z])/g, multiplier: 1e3, priority: 1 },
     // 1,68M (European comma thousands)
@@ -1273,6 +1280,10 @@ function parsePrice(text, ref) {
     }, priority: (m) => m[2] ? 2 : 3 },
     // v3.4: dealer k-shorthand with comma decimal: "$17,9 + 🏷" → 17,900
     { regex: /[$](\d{1,3}),(\d)\b(?!\d)/g, handler: (m) => (parseFloat(m[1]) + parseFloat(m[2]) / 10) * 1000, priority: 3 },
+    // v4.10: $-prefixed bare number (no k/m suffix, no comma-thousands): "$5500", "$8900"
+    // Previously fell through to the bare-number fallback at priority 1, losing to
+    // any earlier bare number in the text (e.g. model name "1908"). Now priority 3.
+    { regex: /(?<!HK)[$](\d{3,7})\b/g, multiplier: 1, priority: 3 },
     // Price context words
     { regex: /(?:price|asking|ask|sell|offer|offered|at|for)\s*[:]?(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1, priority: 1 },
     // Bare comma-thousands with NO $ or currency marker: "41,000", "298,000" on its own line.
@@ -1312,9 +1323,12 @@ function parsePrice(text, ref) {
   }
 
   if (candidates.length === 0) return null;
-  // Sort by priority descending, then by earliest position in text (stable
-  // tie-break — matches prior "first match wins" behavior for same-priority ties).
-  candidates.sort((a, b) => b.priority - a.priority || a.index - b.index);
+  // v4.10: price-at-end heuristic — when multiple candidates share the same
+  // priority (common in multi-watch listings where several prices appear at
+  // the same authority level), prefer the LAST one in the text. Jasmel:
+  // "usually the price is at the end." Previously this broke ties by earliest
+  // position, which picked the first watch's price in a multi-watch message.
+  candidates.sort((a, b) => b.priority - a.priority || b.index - a.index);
   return candidates[0].value;
 }
 
@@ -1673,7 +1687,7 @@ function classifyListingType(text) {
   }
 
   const wtbSignals = [
-    /\b(wtb|want to buy|looking for|seeking|buying|wanted|in search of|iso)\b/i,
+    /\b(wtb|want to buy|looking for|seeking|buying|wanted|in search of|iso|ntq)\b/i,
     /\blf\b/i,
     /\bneed\s+(?!gone|sold|out|help|to\s+sell|quick)/i,
     /\bwant\s+this\s+watch\b/i,

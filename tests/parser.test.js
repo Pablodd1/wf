@@ -177,3 +177,43 @@ describe('P7 - inferDialFromRef removes unsafe codes', () => {
     expect(inferDialFromRef('116610LV')).toBe('Green');
   });
 });
+
+// v4.10 fixes — JASS-6 quick wins batch
+describe('v4.10 - NTQ intent → WTB', () => {
+  it('NTQ Rolex 126710BLRO → listingType WTB', () => {
+    expect(parseFull('NTQ Rolex 126710BLRO').listingType).toBe('WTB');
+  });
+  it('NTQ lowercase → WTB', () => {
+    expect(parseFull('ntq AP 15500ST').listingType).toBe('WTB');
+  });
+});
+
+describe('v4.10 - mil/mill/million → millions', () => {
+  it('1.2mil → 1200000', () => expect(parsePrice('Rolex 1.2mil')).toBe(1200000));
+  it('1.2mill → 1200000', () => expect(parsePrice('Rolex 1.2mill')).toBe(1200000));
+  it('1.2 million → 1200000', () => expect(parsePrice('Rolex 1.2 million')).toBe(1200000));
+  it('3mil → 3000000', () => expect(parsePrice('AP 3mil')).toBe(3000000));
+  it('2.5 million → 2500000', () => expect(parsePrice('Patek 2.5 million')).toBe(2500000));
+});
+
+describe('v4.10 - glued k+currency', () => {
+  it('165khkd → 165000', () => expect(parsePrice('Rolex 165khkd')).toBe(165000));
+});
+
+describe('v4.10 - ref# not parsed as price', () => {
+  it('116500 Skeleton → price null (no real price)', () => {
+    expect(parseFull('Rolex 116500 Skeleton').price).toBeNull();
+  });
+  it('$5500 wins over model name 1908', () => {
+    expect(parseFull('Rolex 1908 black dial $5500').price).toBe(5500);
+  });
+});
+
+describe('v4.10 - price-at-end tie-break', () => {
+  it('two equal-priority prices → last wins', () => {
+    expect(parsePrice('41000 42000')).toBe(42000);
+  });
+  it('$-prefixed still wins over bare number (priority)', () => {
+    expect(parsePrice('$5500 9900')).toBe(5500);
+  });
+});
