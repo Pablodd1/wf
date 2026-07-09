@@ -41,15 +41,21 @@ function convertLegacyPrices(rows) {
 }
 
 // ─── IQR outlier removal ──────────────────────────────────────────────────────
+// SANITY_FLOOR guards against the negative-lower-fence problem: on high-variance
+// references (e.g. Patek 5711/1A, IQR ~$100K) the IQR lower bound (Q1-1.5*IQR)
+// goes negative, so zero low-side filtering happens and junk (unconverted HKD
+// remnants, dealer shorthand like "$128") survives into the "clean" set. A real
+// luxury watch never trades below $500, so we clamp the effective lower bound.
+const SANITY_FLOOR = 500;
 function removeOutliers(prices) {
-  if (!prices || prices.length < 4) return prices; // need ≥4 for meaningful IQR
+  if (!prices || prices.length < 4) return prices.filter(p => p >= SANITY_FLOOR); // still floor-filter tiny sets
   const sorted = [...prices].sort((a, b) => a - b);
   const q1Idx = Math.floor(sorted.length * 0.25);
   const q3Idx = Math.floor(sorted.length * 0.75);
   const q1 = sorted[q1Idx];
   const q3 = sorted[q3Idx];
   const iqr = q3 - q1;
-  const lowerBound = q1 - 1.5 * iqr;
+  const lowerBound = Math.max(q1 - 1.5 * iqr, SANITY_FLOOR);
   const upperBound = q3 + 1.5 * iqr;
   return sorted.filter(p => p >= lowerBound && p <= upperBound);
 }
