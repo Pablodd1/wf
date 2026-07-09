@@ -1073,17 +1073,51 @@ function parsePrice(text, ref) {
   // Skip year numbers that could be mistaken for prices
   searchText = searchText.replace(/\b(20[0-3]\d)\b/g, ' ');
 
+  // v4.7: normalize dealer punctuation between a number and its currency marker.
+  // Gulf/HK dealer notation writes "176,000/- AED" and "$ 43,500/-USD" — the
+  // "/-" separator and space-after-$ broke every currency-aware pattern below
+  // (they only tolerated \s*, not "/-"), causing both prices to fall through
+  // to the currency-blind bare-number catchall. Normalizing "/-" to a space
+  // and collapsing "$ " to "$" here fixes the root tokenization gap.
+  // IMPORTANT: only collapse a STANDALONE "$ " (not preceded by another
+  // currency-prefix letter like "K" in "HK$") — otherwise "HK$ 355,000"
+  // becomes "HK$355,000" and the plain $-prefix pattern wrongly matches the
+  // "$" that's actually part of "HK$", stealing priority from the correct
+  // HK$-aware conversion pattern.
+  searchText = searchText.replace(/\/-/g, ' ').replace(/(?<![A-Za-z])\$\s+/g, '$');
+
+  // v4.7: each pattern now carries a `priority` — used to pick the winning
+  // candidate when a message has MULTIPLE currency-tagged numbers (e.g. an
+  // AED figure and an explicit USD figure in the same listing). Previously
+  // the array-scan returned on the FIRST pattern that matched ANYTHING valid,
+  // which meant array position — not currency authority — decided the winner.
+  // Now: collect every match from every pattern, then prefer the highest
+  // priority. USD/USDT explicit markers always win over any other currency
+  // or over a currency-blind bare number.
+  //   3 = explicit $ or USD/USDT marker (authoritative)
+  //   2 = explicit non-USD currency marker (HKD/EUR/GBP/etc — converted, but
+  //       only trusted over a bare number, never over an explicit USD figure)
+  //   1 = currency-blind bare number (last resort, most ambiguous)
   const patterns = [
+    // $-prefixed k/m shorthand: "$42k", "$1.5m" — explicit $ marker, highest priority.
+    // Must come before the generic k/m patterns below so an explicit $42k always
+    // outranks an unrelated bare number (e.g. a model name like "1908") elsewhere
+    // in the same message at the same nominal magnitude.
+    { regex: /[$](\d{1,4}(?:\.\d{1,3})?)\s*([kKmM])\b/g, handler: (m) => {
+      const num = parseFloat(m[1]);
+      const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] || 1;
+      return num * mult;
+    }, priority: 3 },
     // European comma-decimal: 1,58m → 1.58 → 1,580,000
-    { regex: /\b(\d{1,3},\d{2})\s*[mM]\b/g, handler: (m) => parseFloat(m[1].replace(',', '.')) * 1e6 },
+    { regex: /\b(\d{1,3},\d{2})\s*[mM]\b/g, handler: (m) => parseFloat(m[1].replace(',', '.')) * 1e6, priority: 1 },
     // 1.85m, 1.4M, 1.265m, 2.35m (dot + m/M)
-    { regex: /\b(\d{1,3}(?:\.\d{1,3})?)\s*[mM]\b(?![a-zA-Z])/g, multiplier: 1e6 },
+    { regex: /\b(\d{1,3}(?:\.\d{1,3})?)\s*[mM]\b(?![a-zA-Z])/g, multiplier: 1e6, priority: 1 },
     // 865K, 118K, 120k (uppercase or lowercase K)
-    { regex: /\b(\d{1,6}(?:[.,]\d{1,3})?)\s*[kK]\b(?![a-zA-Z])/g, multiplier: 1e3 },
+    { regex: /\b(\d{1,6}(?:[.,]\d{1,3})?)\s*[kK]\b(?![a-zA-Z])/g, multiplier: 1e3, priority: 1 },
     // 1,68M (European comma thousands)
-    { regex: /\b(\d{1,3},\d{3})\s*[mM]\b/g, multiplier: 1e6 },
+    { regex: /\b(\d{1,3},\d{3})\s*[mM]\b/g, multiplier: 1e6, priority: 1 },
     // 1.080.000 (European dot-thousands chain)
-    { regex: /\b(\d{1,3}(?:\.\d{3})+)\b/g, multiplier: 1, european: true },
+    { regex: /\b(\d{1,3}(?:\.\d{3})+)\b/g, multiplier: 1, european: true, priority: 1 },
     // Currency stuck to number: HKD930K, HKD583K, USD185000, hkd435k, HKD 98,000 (case-insensitive)
     { regex: /(HKD|USD|USDT|EUR|GBP)\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,3})?)\s*([KkMm])?\b/gi, handler: (m) => {
       const cur = m[1].toUpperCase();
@@ -1091,82 +1125,85 @@ function parsePrice(text, ref) {
       const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[3]] || 1;
       const rate = RATES[cur] || 1; // USD/USDT=1.0, HKD=0.128, etc.
       return num * mult * rate;
-    }},
+    }, priority: (m) => (m[1].toUpperCase() === 'USD' || m[1].toUpperCase() === 'USDT') ? 3 : 2 },
     // NORM_002: hkd998m, hkd 1.5m — explicit HKD with m suffix
     // Also matches typo "hkf" (common in WhatsApp from non-native typists)
     { regex: /hk[df]?\s*(\d{1,3}(?:\.\d{1,3})?)\s*[mM]\b/gi, handler: (m) => {
       const num = parseFloat(m[1]);
       return num * 1e6 * 0.128; // HKD to USD conversion
-    }},
+    }, priority: 2 },
     // HK$ with optional space + comma-thousands: "HK$ 355,000", "HK$355,000"
     { regex: /HK\$\s*(\d{1,3}(?:,\d{3})+)\b/gi, handler: (m) => {
       const num = parseFloat(m[1].replace(/,/g, ''));
       return num * 0.128; // HKD to USD conversion
-    }},
+    }, priority: 2 },
     // HK$ with k/m suffix: "HK$ 355k", "HK$1.5m"
     { regex: /HK\$\s*(\d{1,3}(?:\.\d{1,3})?)\s*([kKmM])\b/g, handler: (m) => {
       const num = parseFloat(m[1]);
       const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] || 1;
       return num * mult * 0.128; // HKD to USD conversion
-    }},
+    }, priority: 2 },
     // 268000 with currency — converts non-USD currencies to USD inline
     { regex: /\b(\d{4,7})\s*(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, handler: (m) => {
       const num = parseFloat(m[1]);
       const cur = m[2].toUpperCase();
       const rate = RATES[cur === 'RMB' ? 'CNY' : cur];
       return rate ? num * rate : num; // USD/USDT pass through at 1:1 (rate=1.0)
-    }},
+    }, priority: (m) => (m[2].toUpperCase() === 'USD' || m[2].toUpperCase() === 'USDT') ? 3 : 2 },
     // v3.4: comma-thousands with currency: "205,000 hkd", "111,500hkd", "3,056,055 HKD"
     { regex: /\b(\d{1,3}(?:,\d{3})+)\s*(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|AED)\b/gi, handler: (m) => {
       const num = parseFloat(m[1].replace(/,/g, ''));
       const cur = m[2].toUpperCase();
       const rate = RATES[cur] || (cur === 'AED' ? 0.272 : undefined);
       return rate ? num * rate : num;
-    }},
+    }, priority: (m) => (m[2].toUpperCase() === 'USD' || m[2].toUpperCase() === 'USDT') ? 3 : 2 },
     // v3.4: $-prefixed comma-thousands: "$34,500", "$16,250+ship"
-    { regex: /[$](\d{1,3}(?:,\d{3})+)(?:\.\d+)?\b/g, handler: (m) => parseFloat(m[1].replace(/,/g, '')) },
+    { regex: /[$](\d{1,3}(?:,\d{3})+)(?:\.\d+)?\b/g, handler: (m) => parseFloat(m[1].replace(/,/g, '')), priority: 3 },
     // v3.4: dealer k-shorthand with comma decimal: "$17,9 + 🏷" → 17,900
-    { regex: /[$](\d{1,3}),(\d)\b(?!\d)/g, handler: (m) => (parseFloat(m[1]) + parseFloat(m[2]) / 10) * 1000 },
+    { regex: /[$](\d{1,3}),(\d)\b(?!\d)/g, handler: (m) => (parseFloat(m[1]) + parseFloat(m[2]) / 10) * 1000, priority: 3 },
     // Price context words
-    { regex: /(?:price|asking|ask|sell|offer|offered|at|for)\s*[:]?(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1 },
+    { regex: /(?:price|asking|ask|sell|offer|offered|at|for)\s*[:]?(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1, priority: 1 },
     // Bare comma-thousands with NO $ or currency marker: "41,000", "298,000" on its own line.
     // Common in dealer messages where price sits alone after ref/model info.
     // Ambiguity (USD vs HKD) is flagged separately via the ambiguousCurrency guard.
-    { regex: /\b(\d{1,3}(?:,\d{3})+)\b(?!\s*(?:hkd|usd|usdt))/gi, multiplier: 1 },
+    { regex: /\b(\d{1,3}(?:,\d{3})+)\b(?!\s*(?:hkd|usd|usdt))/gi, multiplier: 1, priority: 1 },
     // General fallback
-    { regex: /\b(\d{4,7})\b/g, multiplier: 1 },
+    { regex: /\b(\d{4,7})\b/g, multiplier: 1, priority: 1 },
   ];
 
+  // Collect ALL valid candidates across the whole pattern array (instead of
+  // returning on the first pattern that matches anything), then pick the
+  // highest-priority one. Ties (same priority) keep first-match order, which
+  // preserves prior behavior for the common single-currency case.
+  const candidates = [];
   for (const pat of patterns) {
     const matches = [...searchText.matchAll(pat.regex)];
     for (const m of matches) {
-      // Custom handler for complex patterns (e.g., European comma-decimal, currency-attached)
-      if (pat.handler) {
-        const value = pat.handler(m);
-        if (!isNaN(value) && value > 0) {
-          const final = Math.round(value);
-          if (final >= 500 && final <= 5_000_000) {
-            return final;
-          }
-        }
-        continue;
-      }
-      let raw = m[1].replace(/,/g, '');
       let value;
-      if (pat.european && /\d\.\d{3}$/.test(raw)) {
-        value = parseInt(raw.replace(/\./g, ''), 10);
+      if (pat.handler) {
+        value = pat.handler(m);
       } else {
-        value = parseFloat(raw.replace(/,/g, ''));
-      }
-      if (!isNaN(value) && value > 0) {
-        const final = Math.round(value * (pat.multiplier || 1));
-        if (final >= 500 && final <= 5_000_000) {
-          return final;
+        let raw = m[1].replace(/,/g, '');
+        if (pat.european && /\d\.\d{3}$/.test(raw)) {
+          value = parseInt(raw.replace(/\./g, ''), 10);
+        } else {
+          value = parseFloat(raw.replace(/,/g, ''));
         }
+        if (!isNaN(value)) value = value * (pat.multiplier || 1);
       }
+      if (value == null || isNaN(value) || value <= 0) continue;
+      const final = Math.round(value);
+      if (final < 500 || final > 5_000_000) continue;
+      const priority = typeof pat.priority === 'function' ? pat.priority(m) : pat.priority;
+      candidates.push({ value: final, priority, index: m.index });
     }
   }
-  return null;
+
+  if (candidates.length === 0) return null;
+  // Sort by priority descending, then by earliest position in text (stable
+  // tie-break — matches prior "first match wins" behavior for same-priority ties).
+  candidates.sort((a, b) => b.priority - a.priority || a.index - b.index);
+  return candidates[0].value;
 }
 
 /**
