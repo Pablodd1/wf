@@ -1158,7 +1158,19 @@ function parsePrice(text, ref) {
       return rate ? num * rate : num;
     }, priority: (m) => (m[2].toUpperCase() === 'USD' || m[2].toUpperCase() === 'USDT') ? 3 : 2 },
     // v3.4: $-prefixed comma-thousands: "$34,500", "$16,250+ship"
-    { regex: /[$](\d{1,3}(?:,\d{3})+)(?:\.\d+)?\b/g, handler: (m) => parseFloat(m[1].replace(/,/g, '')), priority: 3 },
+    // v4.7 fix: a "$" is sometimes used loosely as a generic currency symbol
+    // followed by an explicit non-USD currency word, e.g. "$400,000 HKD" —
+    // here the trailing HKD is authoritative, not the $ sign. Detect that
+    // case and convert using the correct rate instead of treating $ as USD.
+    { regex: /[$](\d{1,3}(?:,\d{3})+)(?:\.\d+)?\s*(HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|AED|RMB)?\b/gi, handler: (m) => {
+      const num = parseFloat(m[1].replace(/,/g, ''));
+      const trailingCur = m[2]?.toUpperCase();
+      if (trailingCur) {
+        const rate = RATES[trailingCur === 'RMB' ? 'CNY' : trailingCur] || (trailingCur === 'AED' ? 0.272 : 1);
+        return num * rate;
+      }
+      return num; // no trailing non-USD currency — $ is authoritative USD
+    }, priority: (m) => m[2] ? 2 : 3 },
     // v3.4: dealer k-shorthand with comma decimal: "$17,9 + 🏷" → 17,900
     { regex: /[$](\d{1,3}),(\d)\b(?!\d)/g, handler: (m) => (parseFloat(m[1]) + parseFloat(m[2]) / 10) * 1000, priority: 3 },
     // Price context words
