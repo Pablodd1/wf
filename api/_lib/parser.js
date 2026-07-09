@@ -1084,11 +1084,13 @@ function parsePrice(text, ref) {
     { regex: /\b(\d{1,3},\d{3})\s*[mM]\b/g, multiplier: 1e6 },
     // 1.080.000 (European dot-thousands chain)
     { regex: /\b(\d{1,3}(?:\.\d{3})+)\b/g, multiplier: 1, european: true },
-    // Currency stuck to number: HKD930K, HKD583K, USD185000, hkd435k (case-insensitive)
-    { regex: /(?:HKD|USD|USDT|EUR|GBP)\s*(\d{1,6}(?:[.,]\d{1,3})?)\s*([KkMm])?\b/gi, handler: (m) => {
-      const num = parseFloat(m[1].replace(/,/g, ''));
-      const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] || 1;
-      return num * mult;
+    // Currency stuck to number: HKD930K, HKD583K, USD185000, hkd435k, HKD 98,000 (case-insensitive)
+    { regex: /(HKD|USD|USDT|EUR|GBP)\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,3})?)\s*([KkMm])?\b/gi, handler: (m) => {
+      const cur = m[1].toUpperCase();
+      const num = parseFloat(m[2].replace(/,/g, ''));
+      const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[3]] || 1;
+      const rate = RATES[cur] || 1; // USD/USDT=1.0, HKD=0.128, etc.
+      return num * mult * rate;
     }},
     // NORM_002: hkd998m, hkd 1.5m — explicit HKD with m suffix
     // Also matches typo "hkf" (common in WhatsApp from non-native typists)
@@ -1096,10 +1098,31 @@ function parsePrice(text, ref) {
       const num = parseFloat(m[1]);
       return num * 1e6 * 0.128; // HKD to USD conversion
     }},
-    // 268000 with currency
-    { regex: /\b(\d{4,7})\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, multiplier: 1 },
+    // HK$ with optional space + comma-thousands: "HK$ 355,000", "HK$355,000"
+    { regex: /HK\$\s*(\d{1,3}(?:,\d{3})+)\b/gi, handler: (m) => {
+      const num = parseFloat(m[1].replace(/,/g, ''));
+      return num * 0.128; // HKD to USD conversion
+    }},
+    // HK$ with k/m suffix: "HK$ 355k", "HK$1.5m"
+    { regex: /HK\$\s*(\d{1,3}(?:\.\d{1,3})?)\s*([kKmM])\b/g, handler: (m) => {
+      const num = parseFloat(m[1]);
+      const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] || 1;
+      return num * mult * 0.128; // HKD to USD conversion
+    }},
+    // 268000 with currency — converts non-USD currencies to USD inline
+    { regex: /\b(\d{4,7})\s*(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, handler: (m) => {
+      const num = parseFloat(m[1]);
+      const cur = m[2].toUpperCase();
+      const rate = RATES[cur === 'RMB' ? 'CNY' : cur];
+      return rate ? num * rate : num; // USD/USDT pass through at 1:1 (rate=1.0)
+    }},
     // v3.4: comma-thousands with currency: "205,000 hkd", "111,500hkd", "3,056,055 HKD"
-    { regex: /\b(\d{1,3}(?:,\d{3})+)\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|AED)\b/gi, handler: (m) => parseFloat(m[1].replace(/,/g, '')) },
+    { regex: /\b(\d{1,3}(?:,\d{3})+)\s*(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|AED)\b/gi, handler: (m) => {
+      const num = parseFloat(m[1].replace(/,/g, ''));
+      const cur = m[2].toUpperCase();
+      const rate = RATES[cur] || (cur === 'AED' ? 0.272 : undefined);
+      return rate ? num * rate : num;
+    }},
     // v3.4: $-prefixed comma-thousands: "$34,500", "$16,250+ship"
     { regex: /[$](\d{1,3}(?:,\d{3})+)(?:\.\d+)?\b/g, handler: (m) => parseFloat(m[1].replace(/,/g, '')) },
     // v3.4: dealer k-shorthand with comma decimal: "$17,9 + 🏷" → 17,900
@@ -1334,8 +1357,11 @@ function validatePriceNotReference(price, ref) {
   if (!price || !ref) return price;
   const refNum = parseInt(ref.replace(/\D/g, ''), 10);
   if (isNaN(refNum)) return price;
-  // If price is within 1% of the reference number, reject it
-  if (Math.abs(price - refNum) / refNum < 0.01) {
+  // If price is EXACTLY the reference number (or within 0.05%), reject it —
+  // catches direct collisions like price=52506 when ref=52506. Tightened from
+  // 1% to 0.05% because on 5-digit refs (e.g. 52506), a 1% band swallows
+  // legitimate nearby prices ($52,700 for a $52,506-adjacent listing).
+  if (Math.abs(price - refNum) / refNum < 0.0005) {
     return null; // Price is actually the reference — reject
   }
   // v4.0: Check if price digits match first 5-6 chars of reference (prefix collision)
@@ -1916,6 +1942,21 @@ function parseFull(rawMsg) {
   const currency = isWTB ? null : (parseCurrency(text) || 'USD');
   let price = isWTB ? null : parsePrice(text, ref || undefined);
 
+  // v4.7: Ambiguous currency guard — a bare "355k" style number with NO $ sign
+  // and NO currency word (HKD/USD/USDT) nearby is impossible to convert safely.
+  // HK dealers often omit the currency (assumed HKD by regional convention) while
+  // US/EU dealers use bare "k" for USD. Guessing either way risks a 7.8x price
+  // error. Flag as ambiguous instead of silently trusting the raw number.
+  let ambiguousCurrency = false;
+  if (!isWTB && price) {
+    const hasDollarSign = /\$/.test(text);
+    const hasCurrencyWord = /\b(hkd|usd|usdt|eur|gbp|chf|sgd|aed|cny)\b/i.test(text);
+    const hasBareK = /\b\d{2,4}k\b/i.test(text);
+    if (hasBareK && !hasDollarSign && !hasCurrencyWord) {
+      ambiguousCurrency = true;
+    }
+  }
+
   // v4.3: New verdict-taxonomy detectors (checked before confidence scoring,
   // per Alex's cleanup rules — see PROJECT reference-cleanup spec)
   const isHermesBag = finalBrand === 'Hermes' && detectHermesBagModel(text);
@@ -2047,6 +2088,9 @@ function parseFull(rawMsg) {
   } else if (isMultiWatchStockList) {
     taxonomyVerdict = 'MULTI_WATCH_STOCK_LIST';
     reviewReason = 'Multiple distinct brand-specific references found in one message; row boundary unclear.';
+  } else if (ambiguousCurrency) {
+    taxonomyVerdict = 'NEEDS_MANUAL_REVIEW';
+    reviewReason = `Price "${price}" has no currency marker ($/HKD/USD) — could be HKD (÷7.8) or USD. Needs human confirmation.`;
   } else if (wrongBrandSuspect) {
     taxonomyVerdict = 'WRONG_BRAND_SUSPECT';
     reviewReason = `Reference format suggests ${refInferredBrand}, but text says ${brand}. Needs confirmation before override.`;

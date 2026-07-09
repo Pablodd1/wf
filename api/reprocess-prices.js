@@ -56,24 +56,34 @@ module.exports = async function handler(req, res) {
     // 2. Re-parse each record
     let updated = 0;
     let unchanged = 0;
+    let skippedMultiWatch = 0;
+    let skippedAmbiguous = 0;
     let samples = [];
 
     for (const record of records) {
       const parsed = parseFull(record.raw_message);
-      
-      let newPrice = parsed.price;
-      let newCurrency = parsed.currency || 'USD';
 
-      // Apply HKD conversion for explicit HKD prices
-      const rawLower = record.raw_message.toLowerCase();
-      const isHKD = /hkd|hk\$/.test(rawLower);
-      const hasUSD = /usd|usdt|\$\d/.test(rawLower);
-      
-      if (newPrice && isHKD && !hasUSD) {
-        // Pure HKD listing — convert to USD
-        newPrice = Math.round(newPrice * (CURRENCY_RATES.HKD || 0.128));
-        newCurrency = 'USD';
+      // Skip multi-watch broadcasts — per CTO rule, these are HUMAN review only,
+      // never trust an auto-extracted price from a stock list. Force verdict=HUMAN.
+      if (parsed.verdict === 'MULTI_WATCH_STOCK_LIST') {
+        skippedMultiWatch++;
+        await client.from('watch_records').update({ verdict: 'HUMAN', confidence: 50 }).eq('id', record.id);
+        continue;
       }
+
+      // Skip ambiguous-currency prices (bare "355k" with no $/HKD/USD marker) —
+      // could be off by 7.8x if we guess wrong. Force verdict=HUMAN for confirmation.
+      if (parsed.verdict === 'NEEDS_MANUAL_REVIEW' && parsed.reviewReason?.includes('currency marker')) {
+        skippedAmbiguous++;
+        await client.from('watch_records').update({ verdict: 'HUMAN', confidence: 40 }).eq('id', record.id);
+        continue;
+      }
+
+      // parseFull() now returns fully-converted USD prices (currency conversion
+      // is applied inline inside parsePrice() as of the v4.7 patch) — no need
+      // for a second conversion pass here.
+      const newPrice = parsed.price;
+      const newCurrency = 'USD'; // parsePrice() always converts to USD internally now
 
       // Only update if price changed significantly (>$10 diff or was null)
       const oldPrice = record.price_usd;
@@ -83,7 +93,7 @@ module.exports = async function handler(req, res) {
           .update({ 
             price_usd: newPrice, 
             currency: newCurrency,
-            parser_version: 'v4.6-reprocess',
+            parser_version: 'v4.7-reprocess',
           })
           .eq('id', record.id);
 
@@ -108,8 +118,10 @@ module.exports = async function handler(req, res) {
       total: records.length,
       updated,
       unchanged,
+      skippedMultiWatch,
+      skippedAmbiguous,
       samples,
-      message: `Updated ${updated} of ${records.length} prices for ${brand} ${reference}. Old parser artifacts fixed.`
+      message: `Updated ${updated} of ${records.length} prices for ${brand} ${reference}. Skipped ${skippedMultiWatch} multi-watch + ${skippedAmbiguous} ambiguous-currency (need HUMAN review).`
     });
 
   } catch (err) {
