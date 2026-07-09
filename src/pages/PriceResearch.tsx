@@ -24,7 +24,7 @@ const PRICE_REQ = {
 
 interface MonthlyPoint { month: string; monthKey: string; dialPrices: Record<string, number>; count: number; avgPrice: number; }
 interface DialBreakdown { color: string; count: number; avgPrice: number; minPrice: number; maxPrice: number; }
-interface PriceResult { reference: string; brand: string; dialColors: string[]; dialBreakdown: DialBreakdown[]; monthlyData: MonthlyPoint[]; overallMin: number; overallMax: number; overallAvg: number; priceDrift: number; totalListings: number; medianPrice: number; stdDev: number; iqrLower: number; iqrUpper: number; outlierCount: number; outlierPrices: number[]; }
+interface PriceResult { reference: string; brand: string; dialColors: string[]; dialBreakdown: DialBreakdown[]; monthlyData: MonthlyPoint[]; overallMin: number; overallMax: number; overallAvg: number; priceDrift: number; totalListings: number; medianPrice: number; stdDev: number; iqrLower: number; iqrUpper: number; outlierCount: number; outlierPrices: number[]; q1: number; q3: number; buyers: number; sellers: number; filteredCount: number; }
 
 function fmtPrice(n: number): string { if (n >= 1000000) return `$${(n/1000000).toFixed(1)}M`; if (n >= 1000) return `$${(n/1000).toFixed(n>=10000?0:1)}k`; return `$${n}`; }
 function fmtPriceFull(n: number): string { return '$' + n.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -227,7 +227,6 @@ export default function PriceResearch() {
       const monthlyData = groupByMonth(records);
       const prices = records.map((r: any) => r.price_usd).filter((p: number) => p > 0).sort((a: number, b: number) => a - b);
       const avg = prices.length ? Math.round(prices.reduce((s: number, p: number) => s + p, 0) / prices.length) : 0;
-      const median = prices.length ? prices[Math.floor(prices.length / 2)] : 0;
       const stdDev = prices.length ? Math.round(Math.sqrt(prices.reduce((s: number, p: number) => s + Math.pow(p - avg, 2), 0) / prices.length)) : 0;
       const firstMonth = monthlyData[0]; const lastMonth = monthlyData[monthlyData.length - 1];
       const prevAvg = firstMonth?.avgPrice ?? avg;
@@ -235,9 +234,20 @@ export default function PriceResearch() {
       const { filtered, outliers, lower, upper } = analyzeOutliers(prices);
       const dialBreakdown = getDialBreakdown(records, filtered);
       const dialColors = dialBreakdown.map(d => d.color);
-      const filteredAvg = filtered.length ? Math.round(filtered.reduce((s: number, p: number) => s + p, 0) / filtered.length) : 0;
-      const filteredMedian = filtered.length ? filtered[Math.floor(filtered.length / 2)] : 0;
-      setResult({ reference: ref, brand: selectedModel, dialColors, dialBreakdown, monthlyData, overallMin: filtered[0] ?? 0, overallMax: filtered[filtered.length - 1] ?? 0, overallAvg: filteredAvg, medianPrice: filteredMedian, stdDev, priceDrift, totalListings: records.length, iqrLower: lower, iqrUpper: upper, outlierCount: outliers.length, outlierPrices: outliers.sort((a, b) => a - b) });
+
+      // PREFER server-computed stats (IQR-filtered + min-5 gated). Fall back to client compute.
+      const srv = result.stats || {};
+      const bs = result.buyers_sellers || { buyers: 0, sellers: 0 };
+      const filteredAvg = srv.avg ?? (filtered.length ? Math.round(filtered.reduce((s: number, p: number) => s + p, 0) / filtered.length) : 0);
+      const filteredMedian = srv.median ?? (filtered.length ? filtered[Math.floor(filtered.length / 2)] : 0);
+      const srvMin = srv.min ?? (filtered[0] ?? 0);
+      const srvMax = srv.max ?? (filtered[filtered.length - 1] ?? 0);
+      const srvQ1 = srv.q1 ?? lower;
+      const srvQ3 = srv.q3 ?? upper;
+      const srvOutliers = result.outliers_removed ?? outliers.length;
+      const srvFilteredCount = result.filtered_count ?? filtered.length;
+
+      setResult({ reference: ref, brand: selectedModel, dialColors, dialBreakdown, monthlyData, overallMin: srvMin, overallMax: srvMax, overallAvg: filteredAvg, medianPrice: filteredMedian, stdDev, priceDrift, totalListings: result.count ?? records.length, iqrLower: lower, iqrUpper: upper, outlierCount: srvOutliers, outlierPrices: outliers.sort((a, b) => a - b), q1: srvQ1, q3: srvQ3, buyers: bs.buyers, sellers: bs.sellers, filteredCount: srvFilteredCount });
     } catch (err) { console.error('Price research error:', err); setResult(null); }
     finally { setLoading(false); }
   }, [selectedModel]);
@@ -342,16 +352,33 @@ export default function PriceResearch() {
             </div>
 
             {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
               {[
-                {label:'Average', val: fmtPrice(result.overallAvg), color: '#D4AF37', delay: 0},
-                {label:'Median', val: fmtPrice(result.medianPrice), color: '#FFFFFF', delay: 0.05},
-                {label:'Range', val: `${fmtPrice(result.overallMin)}-${fmtPrice(result.overallMax)}`, color: '#9CA3AF', delay: 0.1},
-                {label:'Listings', val: `${result.totalListings}`, color: '#FFFFFF', delay: 0.15},
-                {label:'Drift', val: `${result.priceDrift>0?'+':''}${result.priceDrift}%`, color: result.priceDrift < 0 ? '#EF4444' : '#22C55E', icon: result.priceDrift < 0 ? <TrendingDown size={16}/> : <TrendingUp size={16}/>, delay: 0.2},
+                {label:'Median', val: fmtPrice(result.medianPrice), color: '#D4AF37', delay: 0},
+                {label:'Average', val: fmtPrice(result.overallAvg), color: '#FFFFFF', delay: 0.05},
+                {label:'IQR (Q1–Q3)', val: `${fmtPrice(result.q1)}–${fmtPrice(result.q3)}`, color: '#9CA3AF', delay: 0.1},
+                {label:'Sellers', val: `${result.sellers.toLocaleString()}`, color: '#22C55E', delay: 0.15},
+                {label:'Buyers', val: `${result.buyers.toLocaleString()}`, color: '#3B82F6', delay: 0.2},
+                {label:'Drift', val: `${result.priceDrift>0?'+':''}${result.priceDrift}%`, color: result.priceDrift < 0 ? '#EF4444' : '#22C55E', icon: result.priceDrift < 0 ? <TrendingDown size={16}/> : <TrendingUp size={16}/>, delay: 0.25},
               ].map(s => (
                 <LuxuryStatTile key={s.label} label={s.label} value={s.val} color={s.color} icon={s.icon} delay={s.delay} />
               ))}
+            </div>
+
+            {/* Data-quality transparency note */}
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-white/40 -mt-2 px-1">
+              <span className="flex items-center gap-1.5">
+                <Info size={12} className="text-[#D4AF37]/60" />
+                Analytics: IQR outlier removal + min 5 listings per bucket
+              </span>
+              <span className="text-white/30">·</span>
+              <span>{result.filteredCount.toLocaleString()} of {result.totalListings.toLocaleString()} in clean range</span>
+              {result.outlierCount > 0 && (
+                <>
+                  <span className="text-white/30">·</span>
+                  <span className="text-amber-400/70">{result.outlierCount} outlier{result.outlierCount>1?'s':''} removed</span>
+                </>
+              )}
             </div>
 
             {/* Navigation & Individual Listings */}
