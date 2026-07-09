@@ -1129,6 +1129,10 @@ function parsePrice(text, ref) {
     { regex: /[$](\d{1,3}),(\d)\b(?!\d)/g, handler: (m) => (parseFloat(m[1]) + parseFloat(m[2]) / 10) * 1000 },
     // Price context words
     { regex: /(?:price|asking|ask|sell|offer|offered|at|for)\s*[:]?(\d{1,3}(?:[,]?\d{3})*(?:\.\d+)?)/gi, multiplier: 1 },
+    // Bare comma-thousands with NO $ or currency marker: "41,000", "298,000" on its own line.
+    // Common in dealer messages where price sits alone after ref/model info.
+    // Ambiguity (USD vs HKD) is flagged separately via the ambiguousCurrency guard.
+    { regex: /\b(\d{1,3}(?:,\d{3})+)\b(?!\s*(?:hkd|usd|usdt))/gi, multiplier: 1 },
     // General fallback
     { regex: /\b(\d{4,7})\b/g, multiplier: 1 },
   ];
@@ -1942,17 +1946,18 @@ function parseFull(rawMsg) {
   const currency = isWTB ? null : (parseCurrency(text) || 'USD');
   let price = isWTB ? null : parsePrice(text, ref || undefined);
 
-  // v4.7: Ambiguous currency guard — a bare "355k" style number with NO $ sign
-  // and NO currency word (HKD/USD/USDT) nearby is impossible to convert safely.
-  // HK dealers often omit the currency (assumed HKD by regional convention) while
-  // US/EU dealers use bare "k" for USD. Guessing either way risks a 7.8x price
-  // error. Flag as ambiguous instead of silently trusting the raw number.
+  // v4.7: Ambiguous currency guard — a bare "355k" or bare "41,000" number with
+  // NO $ sign and NO currency word (HKD/USD/USDT) nearby is impossible to convert
+  // safely. HK dealers often omit the currency (assumed HKD by regional convention)
+  // while US/EU dealers write bare numbers for USD. Guessing either way risks a
+  // 7.8x price error. Flag as ambiguous instead of silently trusting the raw number.
   let ambiguousCurrency = false;
   if (!isWTB && price) {
     const hasDollarSign = /\$/.test(text);
     const hasCurrencyWord = /\b(hkd|usd|usdt|eur|gbp|chf|sgd|aed|cny)\b/i.test(text);
     const hasBareK = /\b\d{2,4}k\b/i.test(text);
-    if (hasBareK && !hasDollarSign && !hasCurrencyWord) {
+    const hasBareCommaNumber = /\b\d{1,3}(?:,\d{3})+\b/.test(text);
+    if ((hasBareK || hasBareCommaNumber) && !hasDollarSign && !hasCurrencyWord) {
       ambiguousCurrency = true;
     }
   }
