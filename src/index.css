@@ -1,619 +1,167 @@
-/* ═══ WATCHFACTS MAX-PRO LUXURY DESIGN SYSTEM ═══ */
-@import './styles/luxury.css';
-@import './styles/responsive.css';
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 @layer base {
   :root {
+    --background: 240 20% 4%;
+    --foreground: 0 0% 100%;
+    --card: 240 20% 7%;
+    --card-foreground: 0 0% 100%;
+    --popover: 240 20% 7%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 40 35% 60%;
+    --primary-foreground: 240 20% 4%;
+    --secondary: 240 10% 13%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 240 10% 13%;
+    --muted-foreground: 220 9% 46%;
+    --accent: 240 10% 13%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 15% 14%;
+    --input: 240 15% 14%;
+    --ring: 40 35% 60%;
+    --radius: 0.5rem;
+
     --bg-primary: #0A0A0F;
     --bg-card: #111118;
     --bg-elevated: #1A1A24;
+    --bg-input: #16161F;
     --border-default: #1E1E2E;
     --border-hover: #2A2A3E;
-    --gold-primary: #D4AF37;
-    --gold-light: #E5C158;
-    --gold-dim: #8B6914;
+    --border-active: #C9A96E;
+    --gold-primary: #C9A96E;
+    --gold-muted: #8B7355;
+    --gold-bright: #D4B87A;
+    --gold-glow: rgba(201, 169, 110, 0.15);
     --text-primary: #FFFFFF;
     --text-secondary: #9CA3AF;
-    --text-muted: #9CA3AF;
+    --text-muted: #6B7280;
+    --success: #22C55E;
+    --success-dim: rgba(34, 197, 94, 0.15);
+    --warning: #F59E0B;
+    --warning-dim: rgba(245, 158, 11, 0.15);
+    --danger: #EF4444;
+    --danger-dim: rgba(239, 68, 68, 0.15);
+    --info: #3B82F6;
+    --info-dim: rgba(59, 130, 246, 0.15);
+    --purple: #8B5CF6;
+    --purple-dim: rgba(139, 92, 246, 0.15);
+    --teal: #14B8A6;
+    --teal-dim: rgba(20, 184, 166, 0.15);
+    --shadow-card: 0 2px 8px rgba(0,0,0,0.3);
+    --shadow-elevated: 0 8px 24px rgba(0,0,0,0.4);
+    --shadow-gold: 0 0 20px rgba(201, 169, 110, 0.15);
+    --shadow-gold-strong: 0 0 30px rgba(201, 169, 110, 0.25);
+
+    --ease-default: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ease-in: cubic-bezier(0.4, 0, 1, 1);
+    --ease-out: cubic-bezier(0, 0, 0.2, 1);
+    --duration-fast: 150ms;
+    --duration-base: 300ms;
+    --duration-slow: 500ms;
+    --duration-enter: 400ms;
+  }
+
+  body {
+    @apply bg-bg-primary text-text-primary font-sans antialiased;
+    background-color: #0A0A0F;
+    color: #FFFFFF;
+    font-family: "Inter", system-ui, sans-serif;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image: url("/grid-pattern.svg");
+    background-repeat: repeat;
+    background-size: 40px 40px;
+    opacity: 0.3;
+    pointer-events: none;
+    z-index: 0;
   }
 
   * {
-    @apply border-[#1E1E2E];
+    scrollbar-width: thin;
+    scrollbar-color: #1A1A24 transparent;
   }
 
-  html, body, #root {
-    min-height: 100dvh;
-    background-color: #0A0A0F;
+  *::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background-color: #1A1A24;
+    border-radius: 3px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: #2A2A3E;
+  }
+
+  ::selection {
+    background-color: rgba(201, 169, 110, 0.3);
     color: #FFFFFF;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
-
-  html {
-    scroll-behavior: smooth;
   }
 }
 
-/* ─── Scrollbar ─────────────────────────────────────────────────── */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #0A0A0F; }
-::-webkit-scrollbar-thumb { background: #2A2A3E; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #D4AF37; }
-::-webkit-scrollbar-corner { background: #0A0A0F; }
-
-/* Firefox scrollbar */
-* { scrollbar-width: thin; scrollbar-color: #2A2A3E #0A0A0F; }
-
-/* Hide scrollbar for nav */
-.hide-scrollbar::-webkit-scrollbar { display: none; }
-
-/* ─── Shimmer / Skeleton Animation ──────────────────────────────── */
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-.shimmer {
-  background: linear-gradient(90deg, #E5E7EB 25%, #F3F4F6 50%, #E5E7EB 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-
-.shimmer-dark {
-  background: linear-gradient(90deg, #1E1E2E 25%, #2A2A3E 50%, #1E1E2E 75%);
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-
-/* ─── Gold Pulse Animation ──────────────────────────────────────── */
-@keyframes pulse-gold {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(212, 175, 55, 0.4); }
-  50% { box-shadow: 0 0 0 8px rgba(212, 175, 55, 0); }
-}
-
-.animate-pulse-gold {
-  animation: pulse-gold 2s ease-in-out infinite;
-}
-
-/* ─── Card Hover Glow ───────────────────────────────────────────── */
-@keyframes card-glow {
-  0%, 100% { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); }
-  50% { box-shadow: 0 8px 24px rgba(212, 175, 55, 0.12), 0 0 40px rgba(212, 175, 55, 0.06); }
-}
-
-/* ─── Spin Animation for Loading ────────────────────────────────── */
-@keyframes spin-gold {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-.animate-spin-gold {
-  animation: spin-gold 1s linear infinite;
-  color: #D4AF37;
-}
-
-/* ─── Toast Notifications ───────────────────────────────────────── */
-@keyframes toast-slide-in {
-  0% { transform: translateX(120%); opacity: 0; }
-  100% { transform: translateX(0); opacity: 1; }
-}
-
-@keyframes toast-slide-out {
-  0% { transform: translateX(0); opacity: 1; }
-  100% { transform: translateX(120%); opacity: 0; }
-}
-
-@keyframes toast-progress {
-  0% { width: 100%; }
-  100% { width: 0%; }
-}
-
-.toast-enter {
-  animation: toast-slide-in 0.3s ease-out forwards;
-}
-
-.toast-exit {
-  animation: toast-slide-out 0.3s ease-in forwards;
-}
-
-.toast-progress-bar {
-  animation: toast-progress 3s linear forwards;
-}
-
-/* ─── Staggered Entrance Animation Classes ──────────────────────── */
-@keyframes fade-in-up {
-  0% { opacity: 0; transform: translateY(16px); }
-  100% { opacity: 1; transform: translateY(0); }
-}
-
-.animate-fade-in-up {
-  animation: fade-in-up 0.4s ease-out forwards;
-}
-
-/* ─── Button Press Effect ───────────────────────────────────────── */
-.btn-press:active {
-  transform: scale(0.98);
-}
-
-/* ─── Price Tag Monospace ───────────────────────────────────────── */
-.price-mono {
-  font-family: 'Courier New', Courier, monospace;
-  letter-spacing: -0.02em;
-  font-variant-numeric: tabular-nums;
-}
-
-/* ─── NEW Badge ─────────────────────────────────────────────────── */
-.new-badge {
-  background: linear-gradient(135deg, #D4AF37, #B8942E);
-  color: white;
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  padding: 2px 8px;
-  border-radius: 9999px;
-  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.4);
-}
-
-/* ─── Empty State Pattern ───────────────────────────────────────── */
-.empty-state-pattern {
-  background-image: radial-gradient(circle at 1px 1px, rgba(212, 175, 55, 0.08) 1px, transparent 0);
-  background-size: 24px 24px;
-}
-
-/* ─── Tab Active Underline ──────────────────────────────────────── */
-.tab-active {
-  position: relative;
-  color: #D4AF37;
-}
-
-.tab-active::after {
-  content: '';
-  position: absolute;
-  bottom: -1px;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, #D4AF37, #E5C158);
-  border-radius: 1px;
-}
-
-/* ─── Tooltip ───────────────────────────────────────────────────── */
-.tooltip {
-  position: relative;
-}
-
-.tooltip::before {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%) scale(0.95);
-  padding: 4px 10px;
-  background: #1A1A24;
-  color: #D4AF37;
-  font-size: 11px;
-  font-weight: 500;
-  white-space: nowrap;
-  border-radius: 6px;
-  border: 1px solid #2A2A3E;
-  opacity: 0;
-  pointer-events: none;
-  transition: all 0.15s ease-out;
-  z-index: 100;
-}
-
-.tooltip:hover::before {
-  opacity: 1;
-  transform: translateX(-50%) scale(1);
-}
-
-/* ─── Reduced Motion Support ────────────────────────────────────── */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+@layer utilities {
+  /* Mobile table horizontal scroll */
+  .mobile-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
-  html {
-    scroll-behavior: auto;
+  
+  /* Minimum tap target size */
+  .tap-target {
+    min-height: 44px;
+    min-width: 44px;
   }
-}
-
-/* ═══ GLOBAL INPUT FIX: Dark backgrounds, visible text ═══ */
-input, textarea, select {
-  background-color: #1A1A24 !important;
-  color: #FFFFFF !important;
-  border: 1px solid #2A2A3E !important;
-  border-radius: 8px !important;
-  padding: 8px 12px !important;
-  font-size: 14px !important;
-}
-input::placeholder, textarea::placeholder {
-  color: #6B7280 !important;
-  opacity: 1 !important;
-}
-input:focus, textarea:focus, select:focus {
-  outline: none !important;
-  border-color: #D4AF37 !important;
-  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.15) !important;
-}
-/* For number inputs */
-input[type="number"] {
-  color: #D4AF37 !important;
-  font-family: 'Courier New', monospace !important;
-}
-/* Checkbox and radio styling */
-input[type="checkbox"], input[type="radio"] {
-  accent-color: #D4AF37 !important;
-  width: 16px !important;
-  height: 16px !important;
-}
-/* Select dropdown */
-select option {
-  background-color: #1A1A24 !important;
-  color: #FFFFFF !important;
-}
-/* Search input specific */
-input[type="search"] {
-  background-color: #111118 !important;
-  color: #FFFFFF !important;
-  border: 1px solid #1E1E2E !important;
-}
-input[type="search"]:focus {
-  border-color: #D4AF37 !important;
-  background-color: #1A1A24 !important;
-}
-/* Ensure labels are visible */
-label {
-  color: #9CA3AF !important;
-  font-size: 12px !important;
-  font-weight: 500 !important;
-  text-transform: uppercase !important;
-  letter-spacing: 0.05em !important;
-}
-/* Disabled state */
-input:disabled, textarea:disabled, select:disabled {
-  background-color: #111118 !important;
-  color: #6B7280 !important;
-  border-color: #1E1E2E !important;
-  cursor: not-allowed !important;
-}
-/* Error state */
-input[aria-invalid="true"], textarea[aria-invalid="true"] {
-  border-color: #ef4444 !important;
-}
-
-/* ═══════════════════════════════════════════════════════════════════
-   GLASSMORPHISM DESIGN SYSTEM — Luxury Watch Marketplace
-   ═══════════════════════════════════════════════════════════════════ */
-
-/* ─── Glass Card ────────────────────────────────────────────────── */
-.glass-card {
-  background: rgba(17, 17, 24, 0.6);
-  backdrop-filter: blur(20px) saturate(1.4);
-  -webkit-backdrop-filter: blur(20px) saturate(1.4);
-  border: 1px solid rgba(212, 175, 55, 0.12);
-  border-radius: 16px;
-  box-shadow:
-    0 4px 24px rgba(0, 0, 0, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-.glass-card:hover {
-  border-color: rgba(212, 175, 55, 0.25);
-  box-shadow:
-    0 8px 40px rgba(0, 0, 0, 0.4),
-    0 0 30px rgba(212, 175, 55, 0.08),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  transform: translateY(-2px);
-}
-
-/* ─── Glass Navbar ──────────────────────────────────────────────── */
-.glass-nav {
-  background: rgba(10, 10, 15, 0.75);
-  backdrop-filter: blur(24px) saturate(1.2);
-  -webkit-backdrop-filter: blur(24px) saturate(1.2);
-  border-bottom: 1px solid rgba(212, 175, 55, 0.08);
-}
-
-/* ─── Glass Modal / Overlay ─────────────────────────────────────── */
-.glass-modal {
-  background: rgba(17, 17, 24, 0.85);
-  backdrop-filter: blur(32px) saturate(1.3);
-  -webkit-backdrop-filter: blur(32px) saturate(1.3);
-  border: 1px solid rgba(212, 175, 55, 0.15);
-  border-radius: 20px;
-  box-shadow:
-    0 24px 80px rgba(0, 0, 0, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-/* ─── Luxury Button — Primary (Gold) ────────────────────────────── */
-.btn-luxury {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 24px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #0A0A0F;
-  background: linear-gradient(135deg, #D4AF37 0%, #E5C158 50%, #D4AF37 100%);
-  background-size: 200% 100%;
-  border: none;
-  border-radius: 9999px;
-  cursor: pointer;
-  overflow: hidden;
-  transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  box-shadow:
-    0 4px 16px rgba(212, 175, 55, 0.3),
-    inset 0 1px 0 rgba(255, 255, 255, 0.3);
-}
-
-.btn-luxury::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
-  transform: translateX(-100%);
-  transition: transform 0.6s ease;
-}
-
-.btn-luxury:hover {
-  background-position: 100% 0;
-  box-shadow:
-    0 6px 24px rgba(212, 175, 55, 0.45),
-    0 0 20px rgba(212, 175, 55, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.4);
-  transform: translateY(-1px);
-}
-
-.btn-luxury:hover::before {
-  transform: translateX(100%);
-}
-
-.btn-luxury:active {
-  transform: translateY(0) scale(0.98);
-  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.2);
-}
-
-/* ─── Luxury Button — Outline ───────────────────────────────────── */
-.btn-luxury-outline {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 10px 24px;
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: #D4AF37;
-  background: transparent;
-  border: 1.5px solid rgba(212, 175, 55, 0.4);
-  border-radius: 9999px;
-  cursor: pointer;
-  overflow: hidden;
-  transition: all 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-}
-
-.btn-luxury-outline:hover {
-  background: rgba(212, 175, 55, 0.08);
-  border-color: rgba(212, 175, 55, 0.7);
-  color: #E5C158;
-  box-shadow: 0 0 20px rgba(212, 175, 55, 0.1);
-  transform: translateY(-1px);
-}
-
-.btn-luxury-outline:active {
-  transform: translateY(0) scale(0.98);
-}
-
-/* ─── Luxury Button — Ghost ─────────────────────────────────────── */
-.btn-luxury-ghost {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 8px 16px;
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.7);
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-.btn-luxury-ghost:hover {
-  color: #FFFFFF;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-/* ─── Section Divider with Gold Accent ──────────────────────────── */
-.gold-divider {
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(212, 175, 55, 0.4), transparent);
-}
-
-/* ─── Gold Text Gradient ────────────────────────────────────────── */
-.text-gold-gradient {
-  background: linear-gradient(135deg, #D4AF37, #E5C158, #F0D878);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* ─── Subtle Gold Glow ──────────────────────────────────────────── */
-.glow-gold {
-  box-shadow: 0 0 20px rgba(212, 175, 55, 0.15), 0 0 60px rgba(212, 175, 55, 0.05);
-}
-
-/* ─── Animated Border Glow ──────────────────────────────────────── */
-@keyframes border-glow {
-  0%, 100% { border-color: rgba(212, 175, 55, 0.12); }
-  50% { border-color: rgba(212, 175, 55, 0.3); }
-}
-
-.animate-border-glow {
-  animation: border-glow 3s ease-in-out infinite;
-}
-
-/* ─── Float Animation ───────────────────────────────────────────── */
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
-}
-
-.animate-float {
-  animation: float 4s ease-in-out infinite;
-}
-
-/* ─── Shine Sweep Animation ─────────────────────────────────────── */
-@keyframes shine {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
-}
-
-.shine-sweep {
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.08) 50%, transparent 100%);
-  background-size: 200% 100%;
-  animation: shine 3s ease-in-out infinite;
-}
-
-/* ─── Stat Card Number Animation ────────────────────────────────── */
-@keyframes count-up {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-.stat-number {
-  animation: count-up 0.6s ease-out forwards;
-}
-
-/* ─── Glass Input ───────────────────────────────────────────────── */
-.glass-input {
-  background: rgba(26, 26, 36, 0.6) !important;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(212, 175, 55, 0.15) !important;
-  color: #FFFFFF !important;
-  border-radius: 12px !important;
-  padding: 10px 16px !important;
-  transition: all 0.3s ease;
-}
-
-.glass-input:focus {
-  border-color: rgba(212, 175, 55, 0.4) !important;
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1), 0 4px 20px rgba(0,0,0,0.2) !important;
-  background: rgba(26, 26, 36, 0.8) !important;
-}
-
-.glass-input::placeholder {
-  color: rgba(156, 163, 175, 0.6) !important;
-}
-
-/* ─── Luxury Select ─────────────────────────────────────────────── */
-.luxury-select {
-  background: rgba(26, 26, 36, 0.6) !important;
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(212, 175, 55, 0.15) !important;
-  color: #FFFFFF !important;
-  border-radius: 12px !important;
-  padding: 10px 36px 10px 16px !important;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23D4AF37' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") !important;
-  background-repeat: no-repeat !important;
-  background-position: right 12px center !important;
-  transition: all 0.3s ease;
-  cursor: pointer;
-}
-
-.luxury-select:focus {
-  border-color: rgba(212, 175, 55, 0.4) !important;
-  box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.1) !important;
-}
-
-/* ─── Luxury Table ──────────────────────────────────────────────── */
-.luxury-table {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
-}
-
-.luxury-table thead th {
-  background: rgba(17, 17, 24, 0.8);
-  backdrop-filter: blur(8px);
-  color: #D4AF37;
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(212, 175, 55, 0.15);
-  text-align: left;
-}
-
-.luxury-table tbody tr {
-  transition: all 0.2s ease;
-}
-
-.luxury-table tbody tr:hover {
-  background: rgba(212, 175, 55, 0.04);
-}
-
-.luxury-table tbody td {
-  padding: 14px 16px;
-  border-bottom: 1px solid rgba(30, 30, 46, 0.6);
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-/* ─── Badge / Pill ──────────────────────────────────────────────── */
-.luxury-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 10px;
-  font-size: 10px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  border-radius: 9999px;
-  background: rgba(212, 175, 55, 0.1);
-  color: #D4AF37;
-  border: 1px solid rgba(212, 175, 55, 0.2);
-}
-
-/* ─── Hero Gradient Backgrounds ─────────────────────────────────── */
-.bg-hero-dark {
-  background: linear-gradient(135deg, #0A0A0F 0%, #111118 40%, #0D0D16 100%);
-}
-
-.bg-hero-gold {
-  background: linear-gradient(135deg, rgba(212, 175, 55, 0.05) 0%, transparent 50%, rgba(212, 175, 55, 0.03) 100%);
-}
-
-/* ─── Noise Texture Overlay ─────────────────────────────────────── */
-.noise-overlay::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-  pointer-events: none;
-  z-index: 1;
+  
+  /* Hide scrollbar but keep functionality */
+  .hide-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .hide-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  /* Text truncate with ellipsis */
+  .text-ellipsis {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  
+  /* Responsive grid for cards */
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(1, 1fr);
+    gap: 0.75rem;
+  }
+  @media (min-width: 480px) {
+    .card-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (min-width: 768px) {
+    .card-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+  @media (min-width: 1024px) {
+    .card-grid { grid-template-columns: repeat(4, 1fr); }
+  }
+  @media (min-width: 1440px) {
+    .card-grid { grid-template-columns: repeat(5, 1fr); }
+  }
 }

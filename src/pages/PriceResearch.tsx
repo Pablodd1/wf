@@ -1,539 +1,625 @@
-/**
- * Price Research — Deduplicated brands & clean references
- */
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Info, Loader2, TrendingDown, TrendingUp, Search, Filter, BarChart3, ArrowRight, Eye, Database, Activity, ExternalLink, ChevronDown, ChevronUp } from 'lucide-react';
-import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Area, ComposedChart,
-} from 'recharts';
-import { DealerNavbar } from '@/components/DealerNavbar';
-import { resolveWatchImage } from '@/lib/imageResolver';
-import { filterValidReferences, filterValidBrands } from '@/lib/referenceValidator';
-import { SUPABASE_URL, REQ_HEAD, REQ_HEADERS } from '@/lib/supabaseConfig';
-import { LuxuryPriceResearchHeader } from '@/components/ui/LuxuryPriceResearchHeader';
-import { LuxuryStatTile } from '@/components/ui/LuxuryStatTile';
-import { LuxuryDialBadge } from '@/components/ui/LuxuryDialBadge';
+import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { ExternalLink, FileSpreadsheet, Download } from 'lucide-react';
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
 
-const PRICE_REQ = {
-  ...REQ_HEADERS,
-  'Prefer': 'count=exact',
-};
-
-interface MonthlyPoint { month: string; monthKey: string; dialPrices: Record<string, number>; count: number; avgPrice: number; }
-interface DialBreakdown { color: string; count: number; avgPrice: number; minPrice: number; maxPrice: number; }
-interface PriceResult { reference: string; brand: string; dialColors: string[]; dialBreakdown: DialBreakdown[]; monthlyData: MonthlyPoint[]; overallMin: number; overallMax: number; overallAvg: number; priceDrift: number; totalListings: number; medianPrice: number; stdDev: number; iqrLower: number; iqrUpper: number; outlierCount: number; outlierPrices: number[]; q1: number; q3: number; buyers: number; sellers: number; filteredCount: number; }
-
-function fmtPrice(n: number): string { if (n >= 1000000) return `$${(n/1000000).toFixed(1)}M`; if (n >= 1000) return `$${(n/1000).toFixed(n>=10000?0:1)}k`; return `$${n}`; }
-function fmtPriceFull(n: number): string { return '$' + n.toLocaleString('en-US', {minimumFractionDigits:2,maximumFractionDigits:2}); }
-function analyzeOutliers(prices: number[]): { filtered: number[]; outliers: number[]; q1: number; q3: number; iqr: number; lower: number; upper: number } {
-  if (prices.length < 4) return { filtered: prices, outliers: [], q1: prices[0]||0, q3: prices[prices.length-1]||0, iqr: 0, lower: 0, upper: Infinity };
-  const s = [...prices].sort((a,b)=>a-b);
-  // Tier 1: IQR statistical outliers
-  const q1 = s[Math.floor(s.length*0.25)];
-  const q3 = s[Math.floor(s.length*0.75)];
-  const iqr = q3-q1;
-  const iqrLower = q1-1.5*iqr;
-  const iqrUpper = q3+1.5*iqr;
-  
-  // Tier 2: Business logic filters — prices that are obviously wrong
-  const median = s[Math.floor(s.length/2)];
-  const bizLower = median * 0.1;   // Nothing under 10% of median
-  const bizUpper = median * 10;     // Nothing over 10x median
-  const finalLower = Math.max(iqrLower, bizLower);
-  const finalUpper = Math.min(iqrUpper, bizUpper);
-  
-  const filtered = prices.filter(p => p >= finalLower && p <= finalUpper);
-  const outliers = prices.filter(p => p < finalLower || p > finalUpper);
-  
-  return { filtered, outliers, q1, q3, iqr, lower: finalLower, upper: finalUpper };
-}
-function generateMonthRange(): { monthKey: string; month: string }[] { const mn = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']; const r = []; const now = new Date(); for (let y = 2026; y <= now.getFullYear(); y++) { const em = y===now.getFullYear()?now.getMonth():11; for (let m = (y===2026?0:0); m <= em; m++) r.push({ monthKey: `${y}-${String(m+1).padStart(2,'0')}`, month: `${mn[m]} ${y}` }); } return r; }
-function safeDialKey(c: string): string { return 'dial_'+c.replace(/[^a-zA-Z0-9]/g,'_'); }
-
-/** Extract dial color from raw message text when parser missed it */
-function extractDialFromText(rawMsg: string | null, currentDial: string | null): string {
-  if (!rawMsg) return 'Unknown';
-  // Normalize incoming dial — lowercase and check if it's a known color
-  const normalizedDial = (currentDial || '').toLowerCase().trim();
-  if (normalizedDial && normalizedDial !== 'unknown' && normalizedDial !== '') {
-    // Capitalize first letter for consistency
-    return normalizedDial.charAt(0).toUpperCase() + normalizedDial.slice(1);
-  }
-  const lower = rawMsg.toLowerCase();
-  const colors = ['black','white','blue','green','silver','gold','champagne','grey','gray','red','brown','purple','orange','yellow','pink','ivory','tiffany','salmon','skeleton'];
-  let best = 'Unknown', bestScore = 0;
-  for (const color of colors) {
-    const matches = lower.match(new RegExp('\\b' + color + '\\b', 'g'));
-    const score = matches ? matches.length : 0;
-    if (score > bestScore) { bestScore = score; best = color; }
-  }
-  return best === 'Unknown' ? 'Unknown' : best.charAt(0).toUpperCase() + best.slice(1);
+// ── Types ──────────────────────────────────────────────────────
+interface RowData {
+  price_usd: number;
+  created_at: string;
+  dial_color: string | null;
+  condition: string | null;
+  source: string;
+  year: number | null;
+  raw_message: string;
 }
 
-/** Clean monthly data: remove months with zero count (prevents $0 chart line) */
-function cleanMonthlyData(data: MonthlyPoint[]): MonthlyPoint[] {
-  return data.filter(m => m.count > 0 && m.avgPrice > 0);
+interface MonthlyPoint {
+  month: string; count: number; avg_price: number; min_price: number; max_price: number;
 }
 
-function groupByMonth(records: any[]): MonthlyPoint[] { const fr = generateMonthRange(); const fm = new Map<string,MonthlyPoint>(); for (const m of fr) fm.set(m.monthKey,{...m,dialPrices:{},count:0,avgPrice:0}); const dc = new Map<string,Map<string,number>>(); for (const r of records) { const d = r.received_at?new Date(r.received_at):r.created_at?new Date(r.created_at):new Date(); if (isNaN(d.getTime())) continue; const k = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; const e = fm.get(k); if (!e) continue; if (r.price_usd>0) { e.count++; const c = extractDialFromText(r.raw_message, r.dial_color); e.dialPrices[c]=(e.dialPrices[c]||0)+r.price_usd; if (!dc.has(k)) dc.set(k,new Map()); const m = dc.get(k)!; m.set(c,(m.get(c)||0)+1); } } for (const e of fm.values()) { if (e.count>0) { let t = 0; for (const c of Object.keys(e.dialPrices)) { const n = dc.get(e.monthKey)?.get(c)||1; e.dialPrices[c] = Math.round(e.dialPrices[c]/n); t += e.dialPrices[c]; } e.avgPrice = Object.keys(e.dialPrices).length>0?Math.round(t/Object.keys(e.dialPrices).length):0; } } return cleanMonthlyData(Array.from(fm.values()).sort((a,b)=>a.monthKey.localeCompare(b.monthKey))); }
-function getDialBreakdown(records: any[], filteredPrices?: number[]): DialBreakdown[] {
-  const m = new Map<string,number[]>();
-  const priceSet = filteredPrices ? new Set(filteredPrices) : null;
-  for (const r of records) {
-    const c = extractDialFromText(r.raw_message, r.dial_color);
-    if (!m.has(c)) m.set(c,[]);
-    if (r.price_usd > 0 && (!priceSet || priceSet.has(r.price_usd))) m.get(c)!.push(r.price_usd);
-  }
-  const rs: DialBreakdown[] = [];
-  for (const [c,p] of m) {
-    const s = [...p].sort((a,b)=>a-b);
-    rs.push({color:c,count:p.length,avgPrice:Math.round(p.reduce((a,b)=>a+b,0)/p.length),minPrice:s[0],maxPrice:s[s.length-1]});
-  }
-  return rs.sort((a,b)=>b.count-a.count);
+interface DialPoint {
+  dial_color: string; count: number; avg_price: number; min_price: number; max_price: number;
 }
-const DCC: Record<string,string> = {'White':'#E5E7EB','Black':'#1F2937','Blue':'#3B5BFE','Green':'#10B981','Silver':'#9CA3AF','Champagne':'#D4AF37','Grey':'#6B7280','Gray':'#6B7280','Red':'#EF4444','Brown':'#92400E','Purple':'#8B5CF6','Orange':'#F97316','Yellow':'#F59E0B','Pink':'#EC4899','Ivory':'#FEF3C7','Mother of Pearl':'#E0E7FF','Unknown':'#D1D5DB'};
-function gdc(d: string): string { return DCC[d]||`hsl($ {[...d].reduce((s,c)=>s+c.charCodeAt(0),0)%360},60%,50%)`; }
-function CustomTooltip({ active, payload }: any) { if (!active||!payload?.length) return null; const d = payload[0].payload; return <div className="tooltip-luxury"><div className="font-semibold text-white mb-2 pb-2 border-b border-[#D4AF37]/20">{d.month}</div><div className="text-[11px] text-white/40 mb-2">{d.count} listings</div>{Object.entries(d.dialPrices).sort(([,a],[,b])=>(b as number)-(a as number)).map(([c,p])=>(<div key={c} className="flex justify-between items-center py-0.5"><div className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full" style={{backgroundColor:gdc(c)}}/><span className="text-white/70">{c}</span></div><span className="font-mono font-semibold" style={{color:gdc(c)}}>{fmtPrice(p as number)}</span></div>))}<div className="mt-2 pt-2 border-t border-[#D4AF37]/20 flex justify-between"><span className="text-white/50 font-medium">Overall Avg</span><span className="font-mono font-bold text-[#D4AF37]">{fmtPrice(d.avgPrice)}</span></div></div>; }
-function PriceRangeBar({ min, avg, max }: { min: number; avg: number; max: number }) { const r = max-min||1; const ap = ((avg-min)/r)*100; return <div className="range-bar-luxury"><div className="range-track" /><div className="range-marker" style={{left:'0%',top:'12px'}}><span className="marker-label">Min</span><div className="marker-dot"/><span className="marker-value" style={{color:'rgba(255,255,255,0.5)'}}>{fmtPrice(min)}</span></div><div className="range-marker avg" style={{left:`${ap}%`,top:'4px',transform:'translateX(-50%)'}}><span className="marker-label" style={{color:'#D4AF37',fontWeight:700}}>Average</span><div className="marker-dot"/><span className="marker-value">{fmtPrice(avg)}</span></div><div className="range-marker" style={{right:'0%',top:'12px'}}><span className="marker-label">Max</span><div className="marker-dot"/><span className="marker-value" style={{color:'rgba(255,255,255,0.5)'}}>{fmtPrice(max)}</span></div></div>; }
-function DataInterpretation({ result }: { result: PriceResult }) { const od = result.outlierCount>0?`${result.outlierCount} outlier${result.outlierCount>1?'s were':' was'} detected and removed using the IQR method (Q1-1.5xIQR=${fmtPrice(result.iqrLower)}, Q3+1.5xIQR=${fmtPrice(result.iqrUpper)}). The removed outlier prices are: ${result.outlierPrices.map(p=>fmtPriceFull(p)).join(', ')}.`:'No outliers were detected using the IQR method. All data points fall within the expected range.'; const td = result.priceDrift>5?`Strong upward trend (+${result.priceDrift}%). Market demand increasing.`:result.priceDrift>0?`Slight upward trend (+${result.priceDrift}%). Prices stable with modest growth.`:result.priceDrift>-5?`Slight downward trend (${result.priceDrift}%). Minor correction or seasonal fluctuation.`: `Downward trend (${result.priceDrift}%). Possible market softening.`; return <div className="data-card-luxury"><div className="flex items-center gap-2 mb-4"><Activity size={16} className="text-[#D4AF37]"/><h3>Data Analysis &amp; Interpretation</h3></div><div className="space-y-3 text-sm leading-relaxed"><p><strong>Dataset Overview:</strong> Analyzed {result.totalListings} listings for the {result.brand} {result.reference}.</p><p><strong>Outlier Detection:</strong> {od}</p><p><strong>Price Trend:</strong> {td}</p><p><strong>Dial Color Variations:</strong> {result.dialBreakdown.filter(d=>d.count>0).length} different dial color(s) identified.</p></div></div>; }
-function Footer() { return <footer className="bg-[#0A0A0F] border-t border-[#D4AF37]/8 pt-10 pb-6 px-6 mt-auto"><div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-8 text-sm mb-10"><div><h4 className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-wider mb-4">Features</h4><ul className="space-y-2"><li><span className="text-white/40">Trading Floor</span></li><li><span className="text-white/40">ChronoMatch</span></li></ul></div><div><h4 className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-wider mb-4">Tools</h4><ul className="space-y-2"><li><span className="text-white/40">Glossary</span></li><li><span className="text-white/40">Currency Converter</span></li></ul></div><div><h4 className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-wider mb-4">Dealers</h4><ul className="space-y-2"><li><span className="text-white/40">Dealer Directory</span></li><li><span className="text-white/40">Do Not Trade List</span></li></ul></div><div><h4 className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-wider mb-4">Company</h4><ul className="space-y-2"><li><span className="text-white/40">About Us</span></li><li><span className="text-white/40">About Simon</span></li><li><span className="text-white/40">Contact</span></li><li><span className="text-white/40">Terms</span></li><li><span className="text-white/40">Privacy Policy</span></li></ul></div></div><div className="text-center text-xs text-white/20 border-t border-[#D4AF37]/8 pt-4">&copy; 2026 Watchfacts Inc. All Rights Reserved.</div></footer>; }
 
+// Real liquidity — either precomputed indicators or a live-derived fallback.
+// NO invented seller/buyer numbers (every field traces to real data).
+interface LiquidityData {
+  source: 'indicators' | 'live_fallback';
+  listing_count: number;
+  liquidity_score?: number | null;
+  sale_count?: number | null;
+  search_count?: number | null;
+  demand_score?: number | null;
+  supply_score?: number | null;
+  wtb_fs_ratio?: number | null;
+}
+
+interface PriceData {
+  success: boolean;
+  brand: string;
+  reference: string;
+  resolvedRef: string | null;
+  model: string | null;
+  collection: string | null;
+  dialColors: string[] | null;
+  dial_analysis: DialPoint[];
+  totalListings: number;
+  count: number;
+  rawCount: number;
+  outliersRemoved: number;
+  stats: {
+    avg: number; median: number; min: number; max: number; range: number;
+  } | null;
+  liquidity: LiquidityData | null;
+  monthly: MonthlyPoint[];
+  prices: number[];
+  rows: RowData[];
+}
+
+const NAVY = '#1a2744';
+const GOLD = '#c9a03a';
+const WHITE = '#ffffff';
+const LIGHT_GRAY = '#f8f9fa';
+const BORDER = '#e9ecef';
+const TEXT = '#212529';
+const MUTED = '#6c757d';
+const GREEN = '#198754';
+const RED = '#dc3545';
+const BLUE = '#0d6efd';
+
+// ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
-  const navigate = useNavigate();
-  const [models, setModels] = useState<string[]>([]);
-  const [references, setReferences] = useState<string[]>([]);
-  const [selectedModel, setSelectedModel] = useState('');
-  const [selectedRef, setSelectedRef] = useState('');
+  const [searchParams] = useSearchParams();
+  const [query, setQuery] = useState(searchParams.get('ref') || '52506');
+  const [data, setData] = useState<PriceData | null>(null);
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<PriceResult|null>(null);
-  const [listingRecords, setListingRecords] = useState<any[]>([]);
-  const [showListings, setShowListings] = useState(false);
-  const [dateRange, setDateRange] = useState('6M');
-  const [validationNote, setValidationNote] = useState('');
+  const [error, setError] = useState('');
 
-  // Fetch brands — from the precomputed brand index (instant, git-safe,
-  // built by scripts/build-price-index.js). Falls back to a live API call
-  // if the index file isn't deployed yet.
-  useEffect(() => {
-    const fetchModels = async () => {
-      // Try the precomputed index first — wrapped in its own try/catch so a
-      // parse failure (e.g. Vercel's SPA fallback returning index.html with
-      // HTTP 200 for a not-yet-deployed file) falls through to the live API
-      // instead of aborting entirely.
-      try {
-        const res = await fetch('/watchfacts-brand-index.json');
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('json')) {
-            const brandIndex = await res.json();
-            let brands = Object.keys(brandIndex).sort((a, b) => a.localeCompare(b));
-            brands = filterValidBrands(brands);
-            if (brands.length > 0) {
-              setModels(brands);
-              setValidationNote(`${brands.length} brands found`);
-              return;
-            }
-          }
-        }
-      } catch {
-        // Index not ready or invalid — fall through to live API below.
-      }
+  // ── Drill-down picker state (brand → model → reference) ──
+  const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC'];
+  const [pBrand, setPBrand] = useState('');
+  const [pModels, setPModels] = useState<{ model: string; listing_count: number; reference_count: number }[]>([]);
+  const [pModel, setPModel] = useState('');
+  const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; avg_price: number }[]>([]);
+  const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
 
-      try {
-        const liveRes = await fetch('/api/listings?verdict=APPROVED&limit=5000');
-        const result = await liveRes.json();
-        const rows = result.rows || [];
-        const brandMap = new Map<string, boolean>();
-        for (const row of rows) {
-          if (row.brand && !brandMap.has(row.brand)) brandMap.set(row.brand, true);
-        }
-        const brands = Array.from(brandMap.keys()).sort((a, b) => a.localeCompare(b));
-        setModels(brands);
-        setValidationNote(brands.length > 0 ? `${brands.length} brands found (live fallback)` : 'Brand index still building — check back shortly');
-      } catch (err: any) {
-        setValidationNote(`Brand error: ${err?.message || 'Failed'}`);
-        setModels([]);
-      }
-    };
-    fetchModels();
+  const loadModels = useCallback(async (brand: string) => {
+    setPBrand(brand); setPModel(''); setPModels([]); setPRefs([]);
+    if (!brand) return;
+    setPLoading('models');
+    try {
+      const r = await fetch(`/api/catalog-models?brand=${encodeURIComponent(brand)}`);
+      const d = await r.json();
+      if (d.success) setPModels(d.models || []);
+    } catch { /* ignore — direct search still works */ }
+    finally { setPLoading(''); }
   }, []);
 
-  // Fetch references — from the precomputed brand index (already grouped
-  // by brand, so this is an instant in-memory lookup, no network call).
-  useEffect(() => {
-    const fetchRefs = async () => {
-      if (!selectedModel) { setReferences([]); return; }
-
-      try {
-        const res = await fetch('/watchfacts-brand-index.json');
-        if (res.ok) {
-          const contentType = res.headers.get('content-type') || '';
-          if (contentType.includes('json')) {
-            const brandIndex = await res.json();
-            const refs: string[] = brandIndex[selectedModel] || [];
-            if (refs.length > 0) {
-              const validRefs = filterValidReferences(refs);
-              setReferences(validRefs);
-              setValidationNote(`${validRefs.length} references found`);
-              return;
-            }
-          }
-        }
-      } catch {
-        // Index not ready or invalid — fall through to live API below.
-      }
-
-      try {
-        const liveRes = await fetch(`/api/listings?verdict=APPROVED&brand=${encodeURIComponent(selectedModel)}&limit=5000`);
-        const result = await liveRes.json();
-        const rows = result.rows || [];
-        const refMap = new Map<string, boolean>();
-        for (const row of rows) {
-          if (row.reference && !refMap.has(row.reference)) {
-            if (/^(19|20)\d{2}$/.test(row.reference)) continue;
-            if (/^\d{5,}$/.test(row.reference)) continue;
-            if (/^0\d+$/.test(row.reference)) continue;
-            if (/\b(HKD|AED|USD|EUR|GBP|CHF|JPY|CNY)\b/i.test(row.reference)) continue;
-            if (/\b(GREY|MSRP|WANT|ONLY|BEST|BOX|PAPERS|FULL|SET|BNIB|B&P)\b/i.test(row.reference)) continue;
-            if (/^\d{1,3}$/.test(row.reference)) continue;
-            if (row.reference.length < 4 || row.reference.length > 25) continue;
-            refMap.set(row.reference, true);
-          }
-        }
-        const validRefs = filterValidReferences(Array.from(refMap.keys()));
-        setReferences(validRefs);
-        setValidationNote(validRefs.length > 0 ? `${validRefs.length} references found (live fallback)` : 'No references found');
-      } catch (err: any) {
-        setValidationNote(`Ref error: ${err?.message || 'Failed'}`);
-        setReferences([]);
-      }
-    };
-    fetchRefs();
-  }, [selectedModel]);
-
-  const fetchPriceData = useCallback(async (ref: string) => {
-    if (!ref) return;
-    setLoading(true);
+  const loadRefs = useCallback(async (brand: string, model: string) => {
+    setPModel(model); setPRefs([]);
+    if (!brand || !model) return;
+    setPLoading('refs');
     try {
-      const res = await fetch(`/api/price-research?brand=${encodeURIComponent(selectedModel)}&reference=${encodeURIComponent(ref)}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const result = await res.json();
-      if (!result?.rows?.length) { setResult(null); setListingRecords([]); setLoading(false); return; }
-      const records = result.rows;
-      setListingRecords(records);
-      const monthlyData = groupByMonth(records);
-      const prices = records.map((r: any) => r.price_usd).filter((p: number) => p > 0).sort((a: number, b: number) => a - b);
-      const avg = prices.length ? Math.round(prices.reduce((s: number, p: number) => s + p, 0) / prices.length) : 0;
-      const stdDev = prices.length ? Math.round(Math.sqrt(prices.reduce((s: number, p: number) => s + Math.pow(p - avg, 2), 0) / prices.length)) : 0;
-      const firstMonth = monthlyData[0]; const lastMonth = monthlyData[monthlyData.length - 1];
-      const prevAvg = firstMonth?.avgPrice ?? avg;
-      const priceDrift = prevAvg > 0 ? +(((lastMonth?.avgPrice ?? avg) - prevAvg) / prevAvg * 100).toFixed(2) : 0;
-      const { filtered, outliers, lower, upper } = analyzeOutliers(prices);
-      const dialBreakdown = getDialBreakdown(records, filtered);
-      const dialColors = dialBreakdown.map(d => d.color);
+      const r = await fetch(`/api/catalog-references?brand=${encodeURIComponent(brand)}&model=${encodeURIComponent(model)}`);
+      const d = await r.json();
+      if (d.success) setPRefs(d.references || []);
+    } catch { /* ignore */ }
+    finally { setPLoading(''); }
+  }, []);
 
-      // PREFER server-computed stats (IQR-filtered + min-5 gated). Fall back to client compute.
-      const srv = result.stats || {};
-      const bs = result.buyers_sellers || { buyers: 0, sellers: 0 };
-      const filteredAvg = srv.avg ?? (filtered.length ? Math.round(filtered.reduce((s: number, p: number) => s + p, 0) / filtered.length) : 0);
-      const filteredMedian = srv.median ?? (filtered.length ? filtered[Math.floor(filtered.length / 2)] : 0);
-      const srvMin = srv.min ?? (filtered[0] ?? 0);
-      const srvMax = srv.max ?? (filtered[filtered.length - 1] ?? 0);
-      const srvQ1 = srv.q1 ?? lower;
-      const srvQ3 = srv.q3 ?? upper;
-      const srvOutliers = result.outliers_removed ?? outliers.length;
-      const srvFilteredCount = result.filtered_count ?? filtered.length;
-
-      setResult({ reference: ref, brand: selectedModel, dialColors, dialBreakdown, monthlyData, overallMin: srvMin, overallMax: srvMax, overallAvg: filteredAvg, medianPrice: filteredMedian, stdDev, priceDrift, totalListings: result.count ?? records.length, iqrLower: lower, iqrUpper: upper, outlierCount: srvOutliers, outlierPrices: outliers.sort((a, b) => a - b), q1: srvQ1, q3: srvQ3, buyers: bs.buyers, sellers: bs.sellers, filteredCount: srvFilteredCount });
-    } catch (err) { console.error('Price research error:', err); setResult(null); }
+  const fetchData = useCallback(async (ref: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      const r = await fetch(`/api/price-research?reference=${encodeURIComponent(ref)}`);
+      const d = await r.json();
+      if (d.success) setData(d);
+      else setError(d.error || 'No data for this reference');
+    } catch { setError('Failed to fetch'); }
     finally { setLoading(false); }
-  }, [selectedModel]);
+  }, []);
 
-  useEffect(() => { if (selectedRef) fetchPriceData(selectedRef); }, [selectedRef, fetchPriceData]);
+  useEffect(() => { fetchData(query); }, [query, fetchData]);
 
-  const filteredData = useMemo(() => {
-    if (!result) return [];
-    const ranges: Record<string, number> = { '1M': 1, '3M': 3, '6M': 6, '1Y': 12 };
-    const months = ranges[dateRange];
-    let data = result.monthlyData;
-    if (months) { const cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - months); data = data.filter(d => { const [y, m] = d.monthKey.split('-'); return new Date(Number(y), Number(m) - 1, 1) >= cutoff; }); }
-    return data.map(pt => { const flat: any = { ...pt }; for (const [c, p] of Object.entries(pt.dialPrices)) flat[safeDialKey(c)] = p; return flat; });
-  }, [result, dateRange]);
-  const validDialBreakdown = useMemo(() => {
-    if (!result || !Array.isArray(result.dialBreakdown)) return [];
-    return result.dialBreakdown.filter(d => d && d.count > 0 && !isNaN(d.avgPrice));
-  }, [result]);
-  const watchImage = result ? resolveWatchImage(result.reference, result.brand) : '';
+  // ── Derived stats ─────────────────────────────────────────
+  const stats = data?.stats
+    ? {
+        avg: data.stats.avg,
+        median: data.stats.median,
+        min: data.stats.min,
+        max: data.stats.max,
+        count: data.count,
+      }
+    : null;
+
+  // Chart data: combine monthly + forecast placeholder
+  const chartData = (data?.monthly || []).map(m => ({
+    month: m.month,
+    min: m.min_price,
+    avg: m.avg_price,
+    max: m.max_price,
+    count: m.count,
+  }));
+
+  const listings = (data?.rows || []).map(r => ({
+    title: r.raw_message,
+    priceUSD: r.price_usd,
+    price: r.price_usd,
+    currency: 'USD',
+    dial: r.dial_color || 'N/A',
+    date: r.created_at ? r.created_at.split('T')[0] : '',
+    condition: r.condition || 'N/A',
+  }));
+
+  const displayRef = data?.resolvedRef || data?.reference || query;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: WHITE }}>
+        <div className="animate-spin w-8 h-8 border-2 rounded-full" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-[#0A0A0F] flex flex-col relative">
-      {/* Subtle background gradient */}
-      <div className="fixed inset-0 bg-gradient-to-b from-[#0A0A0F] via-[#0D0D14] to-[#0A0A0F] pointer-events-none" />
-      <div className="fixed inset-0 opacity-[0.012] gold-dot-pattern pointer-events-none" />
+    <div style={{ backgroundColor: WHITE, color: TEXT, fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh' }}>
+      <NavBar />
 
-      <DealerNavbar />
-      <main className="flex-1 max-w-5xl mx-auto w-full px-4 py-8 relative z-10">
-        {/* Header */}
-        <LuxuryPriceResearchHeader brandCount={models.length} />
+      <div style={{ backgroundColor: NAVY, color: WHITE, padding: '32px 0' }}>
+        <div className="max-w-6xl mx-auto px-4">
+          <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
+          <p style={{ color: 'rgba(255,255,255,0.6)', fontSize: 14 }}>
+            Live market pricing from dealer database — enter a reference to see current offers, historical trends, and volume.
+          </p>
+        </div>
+      </div>
 
-        {/* Dropdowns with validation note */}
-        <div className="flex flex-col sm:flex-row gap-4 max-w-3xl mx-auto mb-4">
-          <div className="flex-1 relative">
-            <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]/50 z-10" />
-            <select value={selectedModel} onChange={e => { setSelectedModel(e.target.value); setSelectedRef(''); setResult(null); setValidationNote(''); }}
-              className="luxury-dropdown w-full pl-11">
-              <option value="">Select Brand</option>
-              {models.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* ── Drill-down: Browse by Model (real listings only) ─────── */}
+        <div className="mb-6" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 20 }}>
+          <h3 style={{ fontSize: 15, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Browse by Model</h3>
+          <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
+            Only models &amp; references with real listings appear — every option is backed by actual watches.
           </div>
-          <div className="flex-1 relative">
-            <Filter size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#D4AF37]/50 z-10" />
-            <select value={selectedRef} onChange={e => setSelectedRef(e.target.value)} disabled={!references.length}
-              className="luxury-dropdown w-full pl-11">
-              <option value="">Select Reference</option>
-              {references.map(r => <option key={r} value={r}>{r}</option>)}
-            </select>
+
+          {/* Brand chips */}
+          <div className="flex gap-2 flex-wrap mb-3">
+            {BRANDS.map(b => (
+              <button key={b} onClick={() => loadModels(b)}
+                style={{
+                  padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: 'none',
+                  backgroundColor: pBrand === b ? NAVY : WHITE,
+                  color: pBrand === b ? WHITE : MUTED,
+                  fontWeight: pBrand === b ? 600 : 400,
+                }}>
+                {b}
+              </button>
+            ))}
+          </div>
+
+          {pLoading === 'models' && <div style={{ fontSize: 13, color: MUTED }}>Loading models…</div>}
+
+          {/* Model cards */}
+          {pModels.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+              {pModels.map(m => (
+                <button key={m.model} onClick={() => loadRefs(pBrand, m.model)}
+                  style={{
+                    textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                    border: `1px solid ${pModel === m.model ? NAVY : BORDER}`,
+                    backgroundColor: pModel === m.model ? '#eef1f6' : WHITE,
+                  }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.model}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{m.listing_count.toLocaleString()} listings · {m.reference_count} refs</div>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {pLoading === 'refs' && <div style={{ fontSize: 13, color: MUTED }}>Loading references…</div>}
+
+          {/* Reference cards */}
+          {pRefs.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {pRefs.map(r => (
+                <button key={r.reference} onClick={() => { setQuery(r.reference); fetchData(r.reference); }}
+                  style={{
+                    textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
+                    border: `1px solid ${GOLD}`, backgroundColor: WHITE,
+                  }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{r.listing_count.toLocaleString()} listings · avg ${r.avg_price.toLocaleString()}</div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ── Search ─────────────────────────────────────────── */}
+        <div className="mb-8">
+          <div className="flex gap-2 mb-3">
+            <div className="flex-1 relative">
+              <input
+                type="text" value={query}
+                onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && fetchData(query)}
+                placeholder="Enter reference (e.g. 52506, 126334, 5711/1A)"
+                style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none' }}
+              />
+            </div>
+            <button onClick={() => fetchData(query)}
+              style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: WHITE, border: 'none', fontWeight: 600, fontSize: 14, cursor: 'pointer' }}>
+              Search
+            </button>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {['52506', '126334', '5711/1A'].map(ref => (
+              <button key={ref} onClick={() => { setQuery(ref); fetchData(ref); }}
+                style={{
+                  padding: '6px 14px', borderRadius: 20, fontSize: 13, cursor: 'pointer', border: 'none',
+                  backgroundColor: query === ref ? NAVY : LIGHT_GRAY,
+                  color: query === ref ? WHITE : MUTED,
+                  fontWeight: query === ref ? 600 : 400,
+                }}>
+                {ref}
+              </button>
+            ))}
           </div>
         </div>
 
-        {/* Validation note */}
-        {validationNote && (
-          <div className="max-w-3xl mx-auto mb-8">
-            <p className={`text-[11px] flex items-center gap-1.5 ${validationNote.includes('error') || validationNote.includes('Error') || validationNote.includes('No brands') ? 'text-red-400' : 'text-emerald-400'}`}>
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1a5 5 0 100 10A5 5 0 006 1zm2.354 4.354l-2.5 2.5a.5.5 0 01-.708 0l-1.5-1.5a.5.5 0 11.708-.708L5.5 6.793l2.146-2.147a.5.5 0 01.708.708z" fill="currentColor"/></svg>
-              {validationNote}
-            </p>
+        {error && (
+          <div style={{ padding: 16, borderRadius: 8, marginBottom: 24, backgroundColor: '#fff5f5', border: '1px solid #fecaca', color: RED, fontSize: 14 }}>
+            {error}
           </div>
         )}
 
-        {/* Loading */}
-        {loading && (
-          <div className="flex flex-col items-center justify-center py-16">
-            <div className="spinner-luxury mb-4" />
-            <p className="text-sm text-white/40">Analyzing {selectedRef}...</p>
-          </div>
-        )}
-
-        {/* No data */}
-        {!loading && selectedRef && !result && (
-          <div className="no-data-luxury">
-            <Database size={48} />
-            <p className="text-lg font-medium text-white/50">No price data for {selectedRef}</p>
-            <p className="mt-3 text-sm text-white/30 max-w-md mx-auto leading-relaxed">
-              No listings yet — data is still loading as the normalization process 
-              works through the database. Check back later.
-            </p>
-          </div>
-        )}
-
-        {/* Results */}
-        {result && !loading && (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-            {/* Watch Header */}
-            <div className="watch-header-luxury">
-              {watchImage ? (
-                <img src={watchImage} alt={result.reference} className="w-28 h-28 object-contain rounded-lg" />
-              ) : (
-                <div className="w-28 h-28 bg-gradient-to-br from-[#1A1A24] to-[#111118] rounded-lg flex items-center justify-center">
-                  <span className="text-4xl opacity-20 text-white">&#x231A;</span>
+        {data && (
+          <>
+            {/* ── Watch Identity ──────────────────────────────── */}
+            <div className="mb-8" style={{ padding: '24px 0', borderBottom: `1px solid ${BORDER}` }}>
+              <div style={{ fontSize: 13, color: MUTED, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4 }}>
+                {data.brand}
+              </div>
+              <div className="flex items-baseline gap-3 mb-3">
+                <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model || 'Unknown Model'}</h2>
+                <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{displayRef}</span>
+                {data.collection && <span style={{ fontSize: 13, color: MUTED }}>{data.collection}</span>}
+              </div>
+              {data.dialColors && data.dialColors.length > 0 && (
+                <div style={{ fontSize: 14, color: MUTED }}>
+                  Dial colors: <span style={{ color: TEXT, fontWeight: 500 }}>{data.dialColors.join(', ')}</span>
                 </div>
               )}
-              <div className="text-center sm:text-left flex-1">
-                <h2 className="text-xl font-semibold text-white">{result.brand} {result.reference}</h2>
-                <p className="text-sm text-white/40 mt-1">{result.totalListings} listings across {result.monthlyData.length} months</p>
-                <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-3">
-                  {(result.dialColors || []).slice(0,6).map(c => <LuxuryDialBadge key={c} color={c} />)}
-                  {(result.dialColors || []).length > 6 && <LuxuryDialBadge color={`${(result.dialColors||[]).length-6} more`} isMore />}
+            </div>
+
+            {/* ── Stats Cards ──────────────────────────────────── */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {/* Volume */}
+              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Market Volume</h3>
+                <div style={{ fontSize: 14, color: MUTED }}>
+                  # of Listings:{' '}
+                  <span style={{ fontSize: 36, fontWeight: 700, color: NAVY, display: 'block', marginTop: 4 }}>
+                    {data.totalListings.toLocaleString()}
+                  </span>
                 </div>
+                <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
+                  {data.count} after filtering · {data.outliersRemoved} outliers removed
+                </div>
+              </div>
+
+              {/* Liquidity — REAL data only, no invented seller/buyer counts */}
+              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
+                <div className="flex items-center justify-between mb-4">
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Liquidity & Demand</h3>
+                  {data.liquidity && (
+                    <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, padding: '2px 8px', borderRadius: 10,
+                      backgroundColor: data.liquidity.source === 'indicators' ? '#e7f5ec' : '#fff4e5',
+                      color: data.liquidity.source === 'indicators' ? GREEN : '#b8860b' }}>
+                      {data.liquidity.source === 'indicators' ? 'Market Indicators' : 'Live Count'}
+                    </span>
+                  )}
+                </div>
+                {data.liquidity && (
+                  <>
+                    {data.liquidity.source === 'indicators' ? (
+                      <>
+                        {data.liquidity.liquidity_score != null && (
+                          <div className="flex items-center justify-between mb-2">
+                            <span style={{ fontSize: 13, color: MUTED }}>Liquidity Score</span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{data.liquidity.liquidity_score}</span>
+                          </div>
+                        )}
+                        {data.liquidity.sale_count != null && (
+                          <div className="flex items-center justify-between mb-2">
+                            <span style={{ fontSize: 13, color: MUTED }}>Sales (window)</span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: GREEN }}>{data.liquidity.sale_count}</span>
+                          </div>
+                        )}
+                        {data.liquidity.demand_score != null && (
+                          <div className="flex items-center justify-between mb-2">
+                            <span style={{ fontSize: 13, color: MUTED }}>Demand</span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: BLUE }}>{data.liquidity.demand_score}</span>
+                          </div>
+                        )}
+                        {data.liquidity.supply_score != null && (
+                          <div className="flex items-center justify-between mb-2">
+                            <span style={{ fontSize: 13, color: MUTED }}>Supply</span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: RED }}>{data.liquidity.supply_score}</span>
+                          </div>
+                        )}
+                        {data.liquidity.wtb_fs_ratio != null && (
+                          <div className="flex items-center justify-between">
+                            <span style={{ fontSize: 13, color: MUTED }}>WTB/FS Ratio</span>
+                            <span style={{ fontSize: 16, fontWeight: 700, color: data.liquidity.wtb_fs_ratio > 1 ? RED : GREEN }}>
+                              {Number(data.liquidity.wtb_fs_ratio).toFixed(2)}
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div>
+                        <div style={{ fontSize: 13, color: MUTED }}>Real listings for sale</div>
+                        <div style={{ fontSize: 36, fontWeight: 700, color: NAVY, marginTop: 4 }}>
+                          {data.liquidity.listing_count.toLocaleString()}
+                        </div>
+                        <div style={{ fontSize: 11, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
+                          No precomputed indicators for this reference — showing live count only.
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Pricing Summary */}
+              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing</h3>
+                {stats && (
+                  <>
+                    <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
+                      Avg:{' '}
+                      <span style={{ color: GREEN, fontWeight: 700, fontSize: 20 }}>
+                        ${stats.avg.toLocaleString()}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
+                      Median:{' '}
+                      <span style={{ color: NAVY, fontWeight: 600 }}>
+                        ${stats.median.toLocaleString()}
+                      </span>
+                    </div>
+                    <div className="flex justify-between mt-3" style={{ fontSize: 12, color: MUTED }}>
+                      <span>Min: ${stats.min.toLocaleString()}</span>
+                      <span>Max: ${stats.max.toLocaleString()}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
+                      Based on {stats.count} real listings (IQR-filtered)
+                    </div>
+                  </>
+                )}
+                <button
+                  onClick={() => {
+                    if (!data) return;
+                    const url = `/api/export-excel?reference=${encodeURIComponent(data.reference)}&brand=${encodeURIComponent(data.brand)}`;
+                    window.open(url, '_blank');
+                  }}
+                  style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: WHITE, color: NAVY, border: `2px solid ${NAVY}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Download size={16} /> Download CSV
+                </button>
               </div>
             </div>
 
-            {/* Stats Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-              {[
-                {label:'Median', val: fmtPrice(result.medianPrice), color: '#D4AF37', delay: 0},
-                {label:'Average', val: fmtPrice(result.overallAvg), color: '#FFFFFF', delay: 0.05},
-                {label:'IQR (Q1–Q3)', val: `${fmtPrice(result.q1)}–${fmtPrice(result.q3)}`, color: '#9CA3AF', delay: 0.1},
-                {label:'Sellers', val: `${result.sellers.toLocaleString()}`, color: '#22C55E', delay: 0.15},
-                {label:'Buyers', val: `${result.buyers.toLocaleString()}`, color: '#3B82F6', delay: 0.2},
-                {label:'Drift', val: `${result.priceDrift>0?'+':''}${result.priceDrift}%`, color: result.priceDrift < 0 ? '#EF4444' : '#22C55E', icon: result.priceDrift < 0 ? <TrendingDown size={16}/> : <TrendingUp size={16}/>, delay: 0.25},
-              ].map(s => (
-                <LuxuryStatTile key={s.label} label={s.label} value={s.val} color={s.color} icon={s.icon} delay={s.delay} />
-              ))}
-            </div>
-
-            {/* Data-quality transparency note */}
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-white/40 -mt-2 px-1">
-              <span className="flex items-center gap-1.5">
-                <Info size={12} className="text-[#D4AF37]/60" />
-                Analytics: IQR outlier removal + min 5 listings per bucket
-              </span>
-              <span className="text-white/30">·</span>
-              <span>{result.filteredCount.toLocaleString()} of {result.totalListings.toLocaleString()} in clean range</span>
-              {result.outlierCount > 0 && (
-                <>
-                  <span className="text-white/30">·</span>
-                  <span className="text-amber-400/70">{result.outlierCount} outlier{result.outlierCount>1?'s':''} removed</span>
-                </>
-              )}
-              <span className="text-white/30">·</span>
-              <span className="text-[#D4AF37]/70">Median is the most reliable figure — some legacy listings may reflect incomplete currency conversion.</span>
-            </div>
-
-            {/* Navigation & Individual Listings */}
-            <div className="chart-container-luxury">
-              <div className="px-5 py-3 border-b border-[#D4AF37]/10 flex items-center justify-between">
-                <h3 className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-[0.08em] flex items-center gap-2">
-                  <Eye size={14} /> Individual Listings ({listingRecords.length})
-                </h3>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => {
-                    navigate(`/trading?brand=${encodeURIComponent(selectedModel)}&ref=${encodeURIComponent(selectedRef)}`);
-                  }} className="text-[10px] px-2 py-1 bg-gray-800 text-gray-300 border border-gray-700 rounded hover:text-white flex items-center gap-1">
-                    <ExternalLink size={10} /> View on Trading Floor
-                  </button>
-                  <button onClick={() => setShowListings(!showListings)}
-                    className="text-[10px] px-2 py-1 bg-gray-800 text-gray-300 rounded hover:text-white flex items-center gap-1">
-                    {showListings ? <ChevronUp size={10} /> : <ChevronDown size={10} />} {showListings ? 'Hide' : 'Show'}
-                  </button>
+            {/* ── Dial Color Analysis: EVERY dial color found in real listings ── */}
+            {data.dial_analysis && data.dial_analysis.length > 0 && (
+              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Dial Color Analysis</h3>
+                <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
+                  Every dial color found across real listings for {displayRef} — backed by actual watches, not estimates.
                 </div>
-              </div>
-              {showListings && listingRecords.length > 0 && (
-                <div className="p-3 max-h-60 overflow-y-auto">
-                  <table className="w-full text-[11px]">
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                     <thead>
-                      <tr className="border-b border-white/5 text-gray-500">
-                        <th className="py-1.5 px-2 text-left">Dial</th>
-                        <th className="py-1.5 px-2 text-left">Condition</th>
-                        <th className="py-1.5 px-2 text-right">Price</th>
-                        <th className="py-1.5 px-2 text-left">Date</th>
-                        <th className="py-1.5 px-2 text-left">Source</th>
+                      <tr style={{ textAlign: 'left', color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
+                        <th style={{ padding: '8px 12px', fontWeight: 600 }}>Dial Color</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Listings</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Avg</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Min</th>
+                        <th style={{ padding: '8px 12px', fontWeight: 600, textAlign: 'right' }}>Max</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {listingRecords.slice(0, 200).map((r: any, i: number) => (
-                        <tr key={i} className="border-b border-white/5 hover:bg-white/5">
-                          <td className="py-1 px-2 text-gray-300">{extractDialFromText(r.raw_message, r.dial_color)}</td>
-                          <td className="py-1 px-2 text-gray-400">{r.condition || '—'}</td>
-                          <td className="py-1 px-2 text-right font-mono text-gray-200">{r.price_usd > 0 ? `$${r.price_usd.toLocaleString()}` : '—'}</td>
-                          <td className="py-1 px-2 text-gray-400">{r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}</td>
-                          <td className="py-1 px-2 text-gray-400">{r.source || '—'}</td>
+                      {data.dial_analysis.map((d, i) => (
+                        <tr key={i} style={{ borderBottom: `1px solid ${BORDER}` }}>
+                          <td style={{ padding: '10px 12px', color: TEXT, fontWeight: 500 }}>{d.dial_color}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: NAVY, fontWeight: 600 }}>{d.count.toLocaleString()}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: GREEN, fontWeight: 600 }}>${d.avg_price.toLocaleString()}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: MUTED }}>${d.min_price.toLocaleString()}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: MUTED }}>${d.max_price.toLocaleString()}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  {listingRecords.length > 200 && (
-                    <div className="text-center text-[10px] text-gray-500 py-2">Showing 200 of {listingRecords.length} listings</div>
-                  )}
                 </div>
-              )}
-            </div>
-
-            <DataInterpretation result={result} />
-
-            {/* Dial Breakdown Table */}
-            <div className="chart-container-luxury overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-[#D4AF37]/10 flex items-center justify-between">
-                <h3 className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-[0.08em] flex items-center gap-2">
-                  <Eye size={14} /> Dial Color Breakdown
-                </h3>
-                <span className="text-[10px] text-white/30 tracking-wide">Click row for details</span>
               </div>
-              <table className="luxury-table-dark">
-                <thead>
-                  <tr>
-                    <th>Dial</th>
-                    <th className="text-right">Count</th>
-                    <th className="text-right">Min</th>
-                    <th className="text-right">Avg</th>
-                    <th className="text-right">Max</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {validDialBreakdown.map((d,i) => (
-                    <tr key={d.color} onClick={() => navigate(`/insight?ref=${encodeURIComponent(result.reference)}&dial=${encodeURIComponent(d.color)}&brand=${encodeURIComponent(result.brand)}`)}>
-                      <td className="font-medium">
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full border border-white/10 shadow-sm" style={{backgroundColor: gdc(d.color)}} />
-                          {d.color}
-                        </div>
-                      </td>
-                      <td className="text-right text-white/50">{d.count}</td>
-                      <td className="text-right font-mono text-white/50">{fmtPrice(d.minPrice)}</td>
-                      <td className="text-right font-mono text-[#D4AF37] font-semibold">{fmtPrice(d.avgPrice)}</td>
-                      <td className="text-right font-mono text-white/50">{fmtPrice(d.maxPrice)}</td>
-                      <td className="text-right"><ArrowRight size={14} className="text-white/20 group-hover:text-[#D4AF37] transition-colors inline-block" /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            )}
 
-            {/* Price Range */}
-            <div className="chart-container-luxury">
-              <h3 className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-[0.08em] flex items-center gap-2 mb-4">
-                <BarChart3 size={14} /> Price Range Distribution
-              </h3>
-              <PriceRangeBar min={result.overallMin} avg={result.overallAvg} max={result.overallMax} />
-            </div>
+            {/* ── Price Chart ───────────────────────────────── */}
+            {chartData.length >= 2 && (
+              <>
+                <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Price History (Monthly)</h3>
+                    <div className="flex gap-3">
+                      <span style={{ fontSize: 13, color: MUTED }}>Min / Avg / Max</span>
+                    </div>
+                  </div>
 
-            {/* Chart */}
-            <div className="chart-container-luxury">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[11px] font-semibold text-[#D4AF37] uppercase tracking-[0.08em] flex items-center gap-2">
-                  <TrendingUp size={14} /> Price Trend by Dial Color
-                </h3>
-                <select value={dateRange} onChange={e => setDateRange(e.target.value)} className="date-range-luxury">
-                  <option value="1M">1 Month</option>
-                  <option value="3M">3 Months</option>
-                  <option value="6M">6 Months</option>
-                  <option value="1Y">1 Year</option>
-                  <option value="ALL">All Time</option>
-                </select>
-              </div>
-              {filteredData.length > 0 ? (
-                <div className="w-full h-[340px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={filteredData} margin={{top:10,right:20,left:10,bottom:10}}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-                      <XAxis dataKey="month" tick={{fontSize:11,fill:'rgba(255,255,255,0.3)'}} axisLine={{stroke:'rgba(255,255,255,0.08)'}} />
-                      <YAxis tick={{fontSize:11,fill:'rgba(255,255,255,0.3)'}} tickFormatter={(v:number)=>`$${(v/1000).toFixed(0)}k`} axisLine={{stroke:'rgba(255,255,255,0.08)'}} />
-                      <Tooltip content={<CustomTooltip/>} />
-                      {validDialBreakdown.map(d => {
-                        const c = gdc(d.color);
-                        const dk = safeDialKey(d.color);
-                        return <Line key={d.color} type="monotone" dataKey={dk} stroke={c} strokeWidth={2} dot={{r:4,fill:c,stroke:'rgba(10,10,15,0.8)',strokeWidth:2}} activeDot={{r:7,stroke:'rgba(10,10,15,0.8)',strokeWidth:2}} connectNulls name={d.color} />;
-                      })}
-                      <Line type="monotone" dataKey="avgPrice" stroke="rgba(212,175,55,0.5)" strokeWidth={1.5} strokeDasharray="6 3" dot={false} name="Overall Avg" />
+                  <ResponsiveContainer width="100%" height={280}>
+                    <ComposedChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#dee2e6" />
+                      <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
+                      <YAxis stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                        formatter={(value: number) => [`$${value.toLocaleString()}`, '']}
+                      />
+                      <Area type="monotone" dataKey="max" stroke="none" fill={RED} fillOpacity={0.05} />
+                      <Area type="monotone" dataKey="min" stroke="none" fill={GREEN} fillOpacity={0.05} />
+                      <Line type="monotone" dataKey="max" stroke={RED} strokeWidth={1} dot={false} />
+                      <Line type="monotone" dataKey="avg" stroke={BLUE} strokeWidth={2} dot={{ r: 4, fill: BLUE, stroke: WHITE, strokeWidth: 2 }} />
+                      <Line type="monotone" dataKey="min" stroke={GREEN} strokeWidth={1} dot={false} />
                     </ComposedChart>
                   </ResponsiveContainer>
+
+                  <div className="flex items-center gap-6 mt-3" style={{ fontSize: 13, color: MUTED }}>
+                    <span className="flex items-center gap-1.5">
+                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: GREEN, display: 'inline-block' }} />
+                      ${stats?.min?.toLocaleString() || 'N/A'} MIN
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: BLUE, display: 'inline-block' }} />
+                      ${stats?.avg?.toLocaleString() || 'N/A'} AVERAGE
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: RED, display: 'inline-block' }} />
+                      ${stats?.max?.toLocaleString() || 'N/A'} MAX
+                    </span>
+                  </div>
+
+                  <div style={{ fontSize: 12, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
+                    Based on {data.count} listings from the dealer database — IQR outlier filtering applied.
+                  </div>
                 </div>
-              ) : (
-                <div className="no-data-luxury">
-                  <p>No trend data for this range</p>
+              </>
+            )}
+
+            {/* ── Listings Table ──────────────────────────────── */}
+            <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
+              <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
+                Recent Listings ({listings.length} of {data.totalListings})
+              </div>
+              {listings.length === 0 && (
+                <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: 14 }}>
+                  No recent listings found.
                 </div>
               )}
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 mt-4 pt-3 border-t border-white/5 text-[11px] text-white/40">
-                {validDialBreakdown.map(d => (
-                  <span key={d.color} className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{backgroundColor: gdc(d.color)}} />
-                    {d.color} ({d.count})
-                  </span>
-                ))}
-                <span className="flex items-center gap-1.5">
-                  <span className="w-4 h-0 border-t border-dashed border-[#D4AF37]/50" />
-                  Overall Avg
-                </span>
-              </div>
+              {listings.slice(0, 100).map((l, i) => (
+                <ListingRow key={i} listing={l} />
+              ))}
             </div>
-          </motion.div>
+          </>
         )}
-      </main>
-      <Footer />
+
+        <Footer />
+      </div>
+    </div>
+  );
+}
+
+// ── Sub-Components ─────────────────────────────────────────────
+
+function NavBar() {
+  return (
+    <nav style={{ backgroundColor: WHITE, borderBottom: `1px solid ${BORDER}`, padding: '12px 0' }}>
+      <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
+        <div style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif" }}>
+          WatchFacts
+        </div>
+        <div className="flex gap-6" style={{ fontSize: 14 }}>
+          {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => (
+            <a key={item} href="#" style={{
+              color: item === 'Price Research' ? GOLD : MUTED,
+              fontWeight: item === 'Price Research' ? 600 : 400,
+              textDecoration: 'none',
+              borderBottom: item === 'Price Research' ? `2px solid ${GOLD}` : 'none',
+              paddingBottom: 4,
+            }}>{item}</a>
+          ))}
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+function ListingRow({ listing }: { listing: { title: string; priceUSD: number; dial: string; date: string; condition: string } }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
+      onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
+      onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
+      <div style={{ width: 44, height: 44, borderRadius: 6, backgroundColor: LIGHT_GRAY, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0, color: MUTED }}>⌚</div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{listing.title}</div>
+        <div style={{ fontSize: 12, color: MUTED, marginTop: 2 }}>
+          {listing.dial && <span className="mr-2">Dial: {listing.dial}</span>}
+          {listing.condition && <span className="mr-2">· {listing.condition}</span>}
+          {listing.date && <span>· {listing.date}</span>}
+        </div>
+      </div>
+      <div style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>
+      </div>
+      <ExternalLink className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
+    </div>
+  );
+}
+
+function Footer() {
+  const linkStyle: React.CSSProperties = { color: MUTED, fontSize: 13, textDecoration: 'none', cursor: 'pointer' };
+  const sectionTitle: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: NAVY, marginBottom: 8 };
+
+  return (
+    <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 32, marginTop: 16 }}>
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-6 mb-8">
+        <div>
+          <div style={sectionTitle}>Features</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <a href="#" style={linkStyle}>Trading Floor</a>
+            <a href="#" style={linkStyle}>ChronoMatch</a>
+          </div>
+        </div>
+        <div>
+          <div style={sectionTitle}>Tools</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <a href="#" style={linkStyle}>Glossary</a>
+            <a href="#" style={linkStyle}>Currency Converter</a>
+          </div>
+        </div>
+        <div>
+          <div style={sectionTitle}>Dealers</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <a href="#" style={linkStyle}>Dealer Directory</a>
+            <a href="#" style={linkStyle}>Do Not Trade List</a>
+          </div>
+        </div>
+        <div>
+          <div style={sectionTitle}>Apps</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <a href="#" style={linkStyle}>Get the App</a>
+            <a href="#" style={linkStyle}>Hire Fi</a>
+          </div>
+        </div>
+        <div>
+          <div style={sectionTitle}>Community</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <a href="#" style={linkStyle}>Join Groups</a>
+          </div>
+        </div>
+        <div>
+          <div style={sectionTitle}>Company</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <a href="#" style={linkStyle}>About Us</a>
+            <a href="#" style={linkStyle}>About Simon</a>
+            <a href="#" style={linkStyle}>Contact</a>
+            <a href="#" style={linkStyle}>Terms</a>
+            <a href="#" style={linkStyle}>Privacy Policy</a>
+          </div>
+        </div>
+      </div>
+      <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 16, paddingBottom: 32, fontSize: 12, color: MUTED, textAlign: 'center' }}>
+        &copy; 2026 Watchfacts Inc. All Rights Reserved.
+      </div>
     </div>
   );
 }
