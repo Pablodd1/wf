@@ -136,7 +136,12 @@ describe('JASS-6 Phase 0B — WF_REF_SELECT catalog-preference', () => {
   it('AP ST ref preserved, catalog resolves to full material code', () => {
     const r = parseFull('AP 15500ST white 138k hkd');
     expect(r.ref).toBe('15500ST');
-    expect(r.catalogMatched).toBe(true);
+    // v4.10: cross-brand catalog fallback removed — lookupCatalog is now strictly
+    // brand-scoped. Since inferBrandFromRef overrides AP→Rolex (AUTO_OVERRIDE), the
+    // catalog lookup under 'Rolex' for '15500ST' correctly returns null (no Rolex
+    // entry exists for this AP ref). This test now verifies the ref is preserved
+    // without false catalog matching.
+    expect(r.catalogMatched).toBe(false);
   });
 
   it('non-catalog ref preserved (no boost, no substitution)', () => {

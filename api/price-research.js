@@ -99,6 +99,83 @@ function removeOutliers(prices) {
   return medianRationalityGate(iqrFiltered, sorted);
 }
 
+// v4.10: removeOutliersWithDetail — same logic as removeOutliers but also returns
+// which prices were removed and why. Used to surface outlier detail in the API
+// response so the UI can show "X listings removed: $973 (IQR low), $45000 (rationality)".
+function removeOutliersWithDetail(prices) {
+  if (!prices || prices.length === 0) return { cleaned: [], removed: [] };
+  if (prices.length < 4) {
+    const cleaned = prices.filter(p => p >= SANITY_FLOOR);
+    const removed = prices
+      .filter(p => p < SANITY_FLOOR)
+      .map(p => ({ price: p, reason: 'BELOW_SANITY_FLOOR', bound: SANITY_FLOOR }));
+    return { cleaned, removed };
+  }
+  const sorted = [...prices].sort((a, b) => a - b);
+  const q1Idx = Math.floor(sorted.length * 0.25);
+  const q3Idx = Math.floor(sorted.length * 0.75);
+  const q1 = sorted[q1Idx];
+  const q3 = sorted[q3Idx];
+  const iqr = q3 - q1;
+  const lowerBound = Math.max(q1 - 1.5 * iqr, SANITY_FLOOR);
+  const upperBound = q3 + 1.5 * iqr;
+
+  const cleaned = [];
+  const removed = [];
+  for (const p of sorted) {
+    if (p < lowerBound) {
+      removed.push({ price: p, reason: 'IQR_LOW', bound: Math.round(lowerBound) });
+    } else if (p > upperBound) {
+      removed.push({ price: p, reason: 'IQR_HIGH', bound: Math.round(upperBound) });
+    } else {
+      cleaned.push(p);
+    }
+  }
+
+  // Median rationality gate (same as medianRationalityGate but with detail tracking)
+  if (cleaned.length >= 10) {
+    const cSorted = [...cleaned].sort((a, b) => a - b);
+    const mid = Math.floor(cSorted.length / 2);
+    const median = cSorted.length % 2 === 0
+      ? (cSorted[mid - 1] + cSorted[mid]) / 2
+      : cSorted[mid];
+    const floor = median * 0.5;
+    const rationalityFiltered = [];
+    for (const p of cleaned) {
+      if (p < floor) {
+        removed.push({ price: p, reason: 'RATIONALITY_GATE', bound: Math.round(floor) });
+      } else {
+        rationalityFiltered.push(p);
+      }
+    }
+    return { cleaned: rationalityFiltered, removed };
+  }
+
+  return { cleaned, removed };
+}
+
+// v4.10: Dedup rows by normalized raw_message hash. Dealer broadcasts often
+// relay the same message across multiple channels, creating exact (or near-exact)
+// duplicates. We normalize by lowercasing, trimming, removing emoji/whitespace
+// variance, then hash to identify dupes. First occurrence wins.
+function dedupRows(rows) {
+  if (!rows || rows.length === 0) return { deduped: [], duplicates_removed: 0 };
+  const seen = new Set();
+  const deduped = [];
+  for (const r of rows) {
+    const msg = (r.raw_message || '').toLowerCase().trim()
+      .replace(/[\u200B-\uFEFF]/g, '')     // zero-width / BOM
+      .replace(/\s+/g, ' ')                  // collapse whitespace
+      .replace(/[\u{1F000}-\u{1FFFF}\u2600-\u27BF]/gu, ''); // emoji
+    const hash = msg.substring(0, 200); // first 200 chars is enough for identity
+    if (hash.length < 10) { deduped.push(r); continue; } // too short to dedup
+    if (seen.has(hash)) continue;
+    seen.add(hash);
+    deduped.push(r);
+  }
+  return { deduped, duplicates_removed: rows.length - deduped.length };
+}
+
 // ─── Median + quartile computation ───────────────────────────────────────────
 function computeStats(prices) {
   if (!prices || prices.length === 0) return null;
@@ -196,11 +273,14 @@ module.exports = async function handler(req, res) {
     }
 
     // 2. Convert legacy HKD prices
-    const cleanRows = convertLegacyPrices(rows);
+    const convertedRows = convertLegacyPrices(rows);
 
-    // 3. Extract all prices + IQR outlier removal
+    // 2a. v4.10: Dedup — remove relayed duplicates from dealer broadcasts
+    const { deduped: cleanRows, duplicates_removed } = dedupRows(convertedRows);
+
+    // 3. Extract all prices + IQR outlier removal (with detail tracking)
     const allPrices = cleanRows.map(r => r.price_usd).filter(p => p != null && p > 0);
-    const outlierRemoved = removeOutliers(allPrices);
+    const { cleaned: outlierRemoved, removed: outlierDetails } = removeOutliersWithDetail(allPrices);
     const outliersRemoved = allPrices.length - outlierRemoved.length;
     const stats = computeStats(outlierRemoved);
 
@@ -272,6 +352,8 @@ module.exports = async function handler(req, res) {
       count: cleanRows.length,
       filtered_count: outlierRemoved.length,
       outliers_removed: outliersRemoved,
+      outlier_details: outlierDetails.length > 0 ? outlierDetails : undefined,
+      duplicates_removed,
       prices: outlierRemoved,
       monthly,
       dial_colors,

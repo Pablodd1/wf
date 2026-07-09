@@ -146,14 +146,14 @@ function lookupCatalog(brand, ref) {
     }
   }
 
-  // 5. Fuzzy: same ref, any brand (cross-brand match)
-  // This catches cases where the parser identifies a ref but under wrong brand
-  for (const [k, v] of catalogIndex) {
-    const [, cref] = k.split('|');
-    if (cref === refNormalized || cref.startsWith(refNormalized.substring(0, 6))) {
-      return v;
-    }
-  }
+  // 5. Cross-brand fuzzy fallback REMOVED (v4.10).
+  // Previously this matched refs against ALL brands regardless of the
+  // requested brand, causing cross-brand contamination: e.g.
+  // lookupCatalog('Rolex', '82172') would return a Vacheron entry.
+  // The parser's candidate scoring then gave this a +50 prefix-fold bonus,
+  // causing a Rolex candidate ('82172') to steal the ref from the correct
+  // Patek candidate ('82172/000R'). Cross-brand matches are unreliable
+  // and should not influence brand-scoped ref selection.
 
   return null;
 }

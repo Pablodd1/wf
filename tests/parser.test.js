@@ -217,3 +217,21 @@ describe('v4.10 - price-at-end tie-break', () => {
     expect(parsePrice('$5500 9900')).toBe(5500);
   });
 });
+
+describe('v4.10 - slash-ref preservation', () => {
+  it('82172/000R → ref keeps slash portion', () => {
+    expect(parseFull('Patek 82172/000R').ref).toBe('82172/000R');
+  });
+  it('82172/000R-B654 → full composite ref preserved', () => {
+    expect(parseFull('Patek 82172/000R-B654').ref).toBe('82172/000R-B654');
+  });
+  it('4020T/000R-B654 → letter-prefixed + slash preserved', () => {
+    expect(parseFull('Patek 4020T/000R-B654').ref).toBe('4020T/000R-B654');
+  });
+  it('5711/1A → classic Patek slash ref still works', () => {
+    expect(parseFull('Patek 5711/1A').ref).toBe('5711/1A');
+  });
+  it('5712/1A-001 → slash + dash composite preserved', () => {
+    expect(parseFull('Patek 5712/1A-001').ref).toBe('5712/1A-001');
+  });
+});

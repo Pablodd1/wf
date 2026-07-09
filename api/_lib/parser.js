@@ -117,8 +117,10 @@ const LISTING_OVERRIDES = {
 
 /** Reference patterns per brand family. */
 const REF_PATTERNS = [
-  // Patek Philippe — e.g. 5712/1A-001, 5236P, 6300A, 7118, 7300, bare 5711
-  { regex: /\b([34567]\d{3}[A-Z]?[\/\-]?[0-9A-Z]{0,4}[\-–]?[0-9A-Z]{0,5})\b/i, brandHint: 'Patek Philippe' },
+  // Patek Philippe — e.g. 5712/1A-001, 5236P, 6300A, 7118, 7300, bare 5711, 82172/000R, 4020T/000R-B654
+  // v4.10: expanded from [34567]\d{3} to [2-9]\d{3,4} to cover 5-digit refs (82172) and
+  // letter-embedded model codes (4020T). Slash refs like 5711/1A now preserved correctly.
+  { regex: /\b([2-9]\d{3,4}[A-Z]?[\/\-]?[0-9A-Z]{0,4}[\-–]?[0-9A-Z]{0,5})\b/i, brandHint: 'Patek Philippe' },
   // Rolex — e.g. 126529, 116500LN, 228238, 124060
   // v4.1: Also match "116500 L.N", "116500 L N" (dealer variations with separators)
   // Use [ \t] instead of \s to avoid matching across newlines
@@ -782,6 +784,12 @@ function parseReference(text, brandHint) {
     // Tie-breakers folded into the score so a single comparison decides.
     score -= c.patIndex * 0.01;   // earlier pattern wins ties
     score -= c.pos * 0.0001;      // earlier position wins deeper ties
+    // v4.10: prefer longer refs at the same position — a slash-ref like
+    // '82172/000R' is more specific than a bare '82172' extracted by a
+    // different brand pattern at the same text position. Without this,
+    // a cross-brand catalog fold (Rolex 82172 → VC catalog entry) would
+    // steal the ref from the correct Patek '82172/000R' candidate.
+    score += c.value.length * 0.001;
     if (score > bestScore) {
       bestScore = score;
       best = c;
