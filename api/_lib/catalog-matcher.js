@@ -13,8 +13,10 @@ const path = require('path');
 
 // Load once at require-time
 const CATALOG_PATH = path.join(__dirname, '..', '..', 'public', 'catalog.json');
+const SHORTREF_MAP_PATH = path.join(__dirname, 'shortref-map.json');
 let catalogData = [];
 let catalogIndex = new Map();  // key: brand|ref_upper → entry
+let shortrefMap = {};          // JASS-6 Phase 0: "BRAND|SHORT" → "FULLREF" (unambiguous folds only)
 
 try {
   const raw = fs.readFileSync(CATALOG_PATH, 'utf8');
@@ -35,6 +37,18 @@ try {
   // Non-fatal — app works without catalog
   catalogData = [];
   catalogIndex = new Map();
+}
+
+// JASS-6 Phase 0 short→full map. Built by scripts/build-shortref-map.js — folds
+// a bare short ref to its full catalog form ONLY when the expansion is
+// unambiguous (exactly one full ref extends that numeric base). Ambiguous bases
+// (e.g. AP 15210 → 28 variants) are deliberately absent, so we never guess.
+try {
+  shortrefMap = JSON.parse(fs.readFileSync(SHORTREF_MAP_PATH, 'utf8'));
+  console.log(`[catalog-matcher] Loaded ${Object.keys(shortrefMap).length} short→full ref mappings`);
+} catch (err) {
+  console.warn('[catalog-matcher] short→full map not loaded (non-fatal):', err.message);
+  shortrefMap = {};
 }
 
 /**
@@ -62,6 +76,17 @@ function lookupCatalog(brand, ref) {
   // 1. Exact match: brand + full reference
   let key = `${brandUpper}|${refNormalized}`;
   if (catalogIndex.has(key)) return catalogIndex.get(key);
+
+  // 1a. JASS-6 Phase 0 short→full fold. BEFORE the fuzzy prefix walk below,
+  // consult the unambiguous short→full map. This deterministically resolves
+  // a bare "116500" to "116500LN" instead of letting the fuzzy walk grab the
+  // wrong sibling (116503) that merely shares the "1165" prefix. Only present
+  // for bases with exactly ONE full-ref expansion, so it never guesses.
+  const mapKey = `${brandUpper}|${refNormalized}`;
+  if (shortrefMap[mapKey]) {
+    const fullEntry = catalogIndex.get(`${brandUpper}|${shortrefMap[mapKey]}`);
+    if (fullEntry) return fullEntry;
+  }
 
   // 1b. Try original ref (in case normalization changed something)
   if (refNormalized !== refUpper) {
