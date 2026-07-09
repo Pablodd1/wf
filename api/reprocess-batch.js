@@ -95,10 +95,19 @@ module.exports = async (req, res) => {
       if (!record.raw_message || record.raw_message.length < 3) continue;
       try {
         const parsed = parser.parseFull(record.raw_message);
+        // JASS-6 Phase 0B: persist the catalog's FULL reference when the parser
+        // matched a catalog entry AND that entry is a genuine short→full fold of
+        // the dealer's ref (full startsWith short). Otherwise keep the dealer's
+        // extracted ref verbatim (no-override; guards Patek 5711/1A vs 5711/110P-001).
+        const _short = (parsed.ref || '').toUpperCase().replace(/[\s\-\/._]/g, '');
+        const _full = (parsed.catalogEntry?.reference || '').toUpperCase().replace(/[\s\-\/._]/g, '');
+        const canonicalRef = (parsed.catalogMatched && _full && (_full === _short || (_full.startsWith(_short) && _short.length >= 4)))
+          ? parsed.catalogEntry.reference
+          : (parsed.ref || null);
         const v = parsed.confidence >= 85 ? 'APPROVED' : parsed.confidence >= 70 ? 'REVIEW' : parsed.confidence >= 50 ? 'HUMAN' : 'RECYCLE';
         if (parsed.brand || parsed.ref || parsed.price) {
           const { error: updateError } = await supabase.from('watch_records').update({
-            brand: parsed.brand || null, reference: parsed.ref || null, dial_color: parsed.dial || null,
+            brand: parsed.brand || null, reference: canonicalRef, dial_color: parsed.dial || null,
             condition: parsed.condition || null, year: parsed.year || null, price_raw: parsed.price || null,
             price_usd: parsed.price || null, currency: parsed.currency || 'USD', confidence: parsed.confidence || 0,
             verdict: v, listing_type: parsed.listingType || 'WTS', accessories: parsed.accessories || {},

@@ -94,9 +94,14 @@ module.exports = withRateLimit('/api/green-api-webhook', async function handler(
         ...(parsed.details ? { details: parsed.details } : {}),
         ...(parsed.conditionBucket ? { condition_bucket: parsed.conditionBucket } : {}),
       };
+      const _short = (parsed.ref || '').toUpperCase().replace(/[\s\-\/._]/g, '');
+      const _full = (catalogEntry?.reference || '').toUpperCase().replace(/[\s\-\/._]/g, '');
+      const _canonicalRef = (parsed.catalogMatched && _full && (_full === _short || (_full.startsWith(_short) && _short.length >= 4)))
+        ? catalogEntry.reference
+        : (parsed.ref || null);
       const { data: saved, error } = await getClient().from('watch_records').insert({
         brand: parsed.brand || null,
-        reference: parsed.ref || null,
+        reference: _canonicalRef,
         dial_color: catalogEntry?.dialColor || parsed.dial || null,
         condition: parsed.condition || null,
         year: parsed.year ? parseInt(parsed.year) : null,

@@ -81,10 +81,17 @@ module.exports = async function handler(req, res) {
       // Only update if verdict would change
       if (record.verdict === 'APPROVED' && record.confidence >= 100) continue;
       
+      // JASS-6 Phase 0B: persist FULL catalog ref on genuine short→full fold.
+      const _short = (parsed.ref || '').toUpperCase().replace(/[\s\-\/._]/g, '');
+      const _full = (catalogEntry?.reference || '').toUpperCase().replace(/[\s\-\/._]/g, '');
+      const canonicalRef = (_full && (_full === _short || (_full.startsWith(_short) && _short.length >= 4)))
+        ? catalogEntry.reference
+        : parsed.ref;
+
       const update = {
         id: record.id,
         brand: parsed.brand,
-        reference: parsed.ref,
+        reference: canonicalRef,
         confidence: 100,
         verdict: 'APPROVED',
         parser_version: 'v3.4-catalog',
