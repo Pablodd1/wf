@@ -5,6 +5,15 @@
 const fs = require('fs');
 const path = require('path');
 
+// JASS-6 Phase 0 short→full map. require() (not fs.readFileSync) so Vercel's
+// serverless bundler statically includes the JSON in the function bundle.
+let shortrefMap = {};
+try {
+  shortrefMap = require('./_lib/shortref-map.json');
+} catch (e) {
+  shortrefMap = {};
+}
+
 let catalog = null;
 function loadCatalog() {
   if (!catalog) {
@@ -45,9 +54,21 @@ module.exports = async function handler(req, res) {
       // Exact match
       const exact = cat.filter(c => normalizeRef(c.reference) === normRef);
       results = exact;
-      
-      // Fuzzy match if no exact
-      if (!exact.length) {
+
+      // JASS-6 Phase 0 short→full fold: BEFORE fuzzy, try the unambiguous map.
+      // Resolves "116500" → "116500LN" deterministically instead of letting
+      // levenshtein grab a wrong sibling (116503). Map is brand-scoped.
+      if (!exact.length && brand) {
+        const mapKey = `${brand.toUpperCase().trim()}|${normRef}`;
+        const fullRef = shortrefMap[mapKey];
+        if (fullRef) {
+          const folded = cat.filter(c => normalizeRef(c.reference) === normalizeRef(fullRef));
+          if (folded.length) results = folded;
+        }
+      }
+
+      // Fuzzy match if still nothing
+      if (!results.length) {
         results = cat
           .map(c => ({ ...c, distance: levenshtein(normRef, normalizeRef(c.reference)) }))
           .filter(c => c.distance <= 3)
