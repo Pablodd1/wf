@@ -796,7 +796,7 @@ function normalizeRefFormat(ref, brand) {
  *       contains commas, "and", "&", or material descriptions (gold, steel, etc.)
  *       that dealers put alongside dial info.
  */
-function parseDial(text, ref) {
+function parseDial(text, ref, brand) {
   if (!text) return null;
   const lower = text.toLowerCase();
 
@@ -841,7 +841,7 @@ function parseDial(text, ref) {
 
     // Fallback: if catalog has a dial color for this ref, use it
     if (ref) {
-      const catalogEntry = lookupCatalog(null, ref);
+      const catalogEntry = lookupCatalog(brand || null, ref);
       if (catalogEntry && catalogEntry.dialColor) {
         return normalizeDialColor(catalogEntry.dialColor.toLowerCase());
       }
@@ -851,8 +851,14 @@ function parseDial(text, ref) {
     return normalizeDialColor(foundColors[0]);
   }
 
-  // No color keyword found — try inferring from reference suffix
+  // No color keyword found — try catalog, then ref-suffix inference
   if (ref) {
+    // Catalog fallback: if catalog has a dial color for this ref, use it
+    const catalogEntry = lookupCatalog(brand || null, ref);
+    if (catalogEntry && catalogEntry.dialColor) {
+      return normalizeDialColor(catalogEntry.dialColor.toLowerCase());
+    }
+    // Try inferring from reference suffix
     const dialCode = inferDialFromRef(ref);
     if (dialCode) return normalizeDialColor(dialCode);
   }
@@ -1694,7 +1700,7 @@ function parseWTB(text) {
   const currency = null;
 
   // Extract other fields
-  const dial = parseDial(text, ref || undefined);
+  const dial = parseDial(text, ref || undefined, finalBrand);
   const accessories = parseAccessories(text);
   const inclusions = parseInclusions(text);
   const notes = parseNotes(text);
@@ -1904,7 +1910,7 @@ function parseFull(rawMsg) {
   }
 
   // Extract other fields
-  const dial = parseDial(text, ref || undefined);
+  const dial = parseDial(text, ref || undefined, finalBrand);
   const { condition } = parseCondition(text);
   const year = parseYear(text);
   const currency = isWTB ? null : (parseCurrency(text) || 'USD');
