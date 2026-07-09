@@ -114,8 +114,15 @@ export default function PriceResearch() {
     try {
       // v4.7 API requires both brand AND reference — resolve brand from the picker or default to Rolex
       const brand = pBrand || 'Rolex';
-      const r = await fetch(`/api/price-research?brand=${encodeURIComponent(brand)}&reference=${encodeURIComponent(ref)}`);
+      const [r, catalogR] = await Promise.all([
+        fetch(`/api/price-research?brand=${encodeURIComponent(brand)}&reference=${encodeURIComponent(ref)}`),
+        // Catalog lookup for display fields (model, collection) — fixes "Unknown Model"
+        // which was previously hardcoded to null here instead of looked up.
+        fetch(`/api/catalog?brand=${encodeURIComponent(brand)}&reference=${encodeURIComponent(ref)}`).catch(() => null),
+      ]);
       const d = await r.json();
+      const catalogData = catalogR ? await catalogR.json().catch(() => null) : null;
+      const catalogEntry = catalogData?.results?.[0] || null;
       if (d.stats) {
         // Bridge v4.7 API → 4cd7394 theme interface
         const bs = d.buyers_sellers || { buyers: 0, sellers: 0 };
@@ -123,8 +130,8 @@ export default function PriceResearch() {
           ...d,
           success: true,
           resolvedRef: d.reference,
-          model: null,
-          collection: null,
+          model: catalogEntry?.model || null,
+          collection: null, // catalog.json has no 'collection' field — model is the closest equivalent
           dialColors: (d.dial_colors || []).map((dc: any) => dc.dial_color || dc),
           dial_analysis: (d.dial_colors || []).map((dc: any) => ({
             dial_color: dc.dial_color || dc,
