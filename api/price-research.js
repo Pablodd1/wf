@@ -28,12 +28,23 @@ function convertLegacyPrices(rows) {
           return { ...r, price_usd: Math.round(rawPrice * HKD_RATE), _hkdConverted: true };
         }
       }
-      // Fallback: HKD present, no explicit regex match. Only convert when the stored
-      // value is implausibly small for a luxury watch (< $500) — a true unconverted
-      // HKD figure. Genuine USD listings that merely mention HKD in body text are left
-      // untouched; the IQR filter downstream handles any residual noise.
+      // Fallback: HKD present, no explicit regex match (e.g. "HKD 68,000 / USD 8,700"
+      // where the HKD number precedes the USD and the regex above captures the wrong
+      // adjacent pair). v4.8: apply the same storedMatchesRawHKD guard that the
+      // explicit path uses — only convert when the stored price ≈ the raw HKD figure
+      // extracted from the message. Raised threshold from $500 to $5,000 to match
+      // the priceTooLow check above. Records at $1,114 that match 68,000 raw HKD
+      // get converted; records at legitimate USD prices are left untouched.
+      const rawHKD = parseInt((msg.match(/(\d[\d,]*)\s*hkd|hkd\s*(\d[\d,]*)/i) || [])[1] || '0'.replace(/[,k]/gi, ''));
+      if (rawHKD > 1000) {
+        const storedMatchesRawHKD = Math.abs(rawHKD - r.price_usd) < 5;
+        if (storedMatchesRawHKD) {
+          return { ...r, price_usd: Math.round(rawHKD * HKD_RATE), _hkdConverted: true, _hkdFallback: true };
+        }
+      }
+      // Last resort: implausibly small price with HKD signal. Convert it.
       if (r.price_usd < 500) {
-        return { ...r, price_usd: Math.round(r.price_usd * HKD_RATE), _hkdConverted: true, _hkdFallback: true };
+        return { ...r, price_usd: Math.round(r.price_usd * HKD_RATE), _hkdConverted: true, _hkdLastResort: true };
       }
     }
     return r;
@@ -47,8 +58,34 @@ function convertLegacyPrices(rows) {
 // remnants, dealer shorthand like "$128") survives into the "clean" set. A real
 // luxury watch never trades below $500, so we clamp the effective lower bound.
 const SANITY_FLOOR = 500;
+
+// v4.8: Median-based rationality guard. On high-variance references the IQR lower
+// fence can go negative, letting through HKD artifacts at $973 or $980 that are
+// clearly wrong (the correct USD value would be 7.8× higher). A real luxury watch
+// never trades below 50% of the reference's median — anything that does is either
+// an unconverted foreign-currency figure, a parts-only listing, or a typo.
+// Gate only activates when the reference has ≥ 10 records (enough for a stable
+// median) and only filters AFTER IQR (so extreme-but-real outliers aren't
+// double-counted).
+function medianRationalityGate(prices, allPrices) {
+  if (!prices || prices.length < 10) return prices;
+  const sorted = [...prices].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+  const floor = median * 0.5;
+  const filtered = prices.filter(p => p >= floor);
+  if (filtered.length < prices.length) {
+    // Log how many were caught — useful for tuning but not exposed in API
+    const removed = prices.length - filtered.length;
+    if (process.env.DEBUG) console.log(`[rationality-gate] Removed ${removed} prices below ${Math.round(floor)} (50% of median ${Math.round(median)})`);
+  }
+  return filtered;
+}
+
 function removeOutliers(prices) {
-  if (!prices || prices.length < 4) return prices.filter(p => p >= SANITY_FLOOR); // still floor-filter tiny sets
+  if (!prices || prices.length < 4) return (prices || []).filter(p => p >= SANITY_FLOOR);
   const sorted = [...prices].sort((a, b) => a - b);
   const q1Idx = Math.floor(sorted.length * 0.25);
   const q3Idx = Math.floor(sorted.length * 0.75);
@@ -57,7 +94,9 @@ function removeOutliers(prices) {
   const iqr = q3 - q1;
   const lowerBound = Math.max(q1 - 1.5 * iqr, SANITY_FLOOR);
   const upperBound = q3 + 1.5 * iqr;
-  return sorted.filter(p => p >= lowerBound && p <= upperBound);
+  const iqrFiltered = sorted.filter(p => p >= lowerBound && p <= upperBound);
+  // Apply median rationality gate on top of IQR
+  return medianRationalityGate(iqrFiltered, sorted);
 }
 
 // ─── Median + quartile computation ───────────────────────────────────────────

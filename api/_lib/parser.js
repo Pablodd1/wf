@@ -1105,7 +1105,9 @@ function parsePrice(text, ref) {
     // Must come before the generic k/m patterns below so an explicit $42k always
     // outranks an unrelated bare number (e.g. a model name like "1908") elsewhere
     // in the same message at the same nominal magnitude.
-    { regex: /[$](\d{1,4}(?:\.\d{1,3})?)\s*([kKmM])\b/g, handler: (m) => {
+    // v4.8: also match ?840,000HKD — encoding artifact where $ was replaced by ?
+    // in WhatsApp relay. Priority 3 (same as $) because it's a dollar substitute.
+    { regex: /[$?](\d{1,4}(?:\.\d{1,3})?)\s*([kKmM])\b/g, handler: (m) => {
       const num = parseFloat(m[1]);
       const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] || 1;
       return num * mult;
@@ -1141,6 +1143,20 @@ function parsePrice(text, ref) {
       const num = parseFloat(m[1].replace(/,/g, ''));
       return num * 0.128; // HKD to USD conversion
     }, priority: 2 },
+    // v4.8: HK$ without comma-thousands: "HK$355000", "HK$355000" (compact, no comma)
+    // Previously fell through to the generic $-prefix pattern and was treated as USD.
+    { regex: /HK\$\s*(\d{4,7})\b/gi, handler: (m) => {
+      const num = parseFloat(m[1]);
+      return num * 0.128; // HKD to USD conversion
+    }, priority: 2 },
+    // v4.8: ?840,000HKD — encoding artifact where $ → ? in WhatsApp relay.
+    // The ? acts as a dollar-sign substitute; if followed by HKD marker,
+    // convert via the standard HKD rate. Without HKD marker, treat as USD
+    // (the ? is a broken $ sign, not a currency indicator by itself).
+    { regex: /\?\s*(\d{1,3}(?:,\d{3})+)\s*(?=HKD|hkd)/gi, handler: (m) => {
+      const num = parseFloat(m[1].replace(/,/g, ''));
+      return num * 0.128; // HKD to USD conversion
+    }, priority: 2 },
     // HK$ with k/m suffix: "HK$ 355k", "HK$1.5m"
     { regex: /HK\$\s*(\d{1,3}(?:\.\d{1,3})?)\s*([kKmM])\b/g, handler: (m) => {
       const num = parseFloat(m[1]);
@@ -1171,7 +1187,9 @@ function parsePrice(text, ref) {
     // followed by an explicit non-USD currency word, e.g. "$400,000 HKD" —
     // here the trailing HKD is authoritative, not the $ sign. Detect that
     // case and convert using the correct rate instead of treating $ as USD.
-    { regex: /[$](\d{1,3}(?:,\d{3})+)(?:\.\d+)?\s*(HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|AED|RMB)?\b/gi, handler: (m) => {
+    // v4.8: negative lookbehind for HK so "HK$355,000" is not misread
+    // as USD $355,000 — HK$ prefix means HKD, not a loose dollar sign.
+    { regex: /(?<!HK)[$](\\d{1,3}(?:,\d{3})+)(?:\.\d+)?\s*(HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|AED|RMB)?\b/gi, handler: (m) => {
       const num = parseFloat(m[1].replace(/,/g, ''));
       const trailingCur = m[2]?.toUpperCase();
       if (trailingCur) {
@@ -1518,13 +1536,19 @@ function detectAccessoryListing(text, ref) {
 function detectMultiWatchStockList(text) {
   if (!text) return false;
 
-  // v4.8: Strip price numbers AND year-like numbers so they don't pollute
-  // reference detection. Rolex's 4-6 digit pattern greedily matches years
-  // (2021, 2025) and prices (63000, 8300) as if they were references.
+  // v4.8: Strip price numbers so they don't pollute reference detection.
   // Matches: "HKD 63000", "63000 HKD", "$80000", "HK$63000", "USD 8,700",
-  // "HKD 355k", "355K HKD", "$1.5m", bare year "2021", "2025", etc.
+  // "HKD 355k", "355K HKD", "$1.5m", etc.
+  // The stripped numbers become a space so word boundaries remain intact.
+  // Note: uses \d+(?:,\d{3})* for the number part to avoid consuming trailing
+  // commas (e.g. "2020, HKD" — the comma belongs to punctuation, not the number).
+  // v4.8: also strip bare 4-digit years (19xx/20xx) which Rolex's greedy 4-6
+  // digit ref pattern catches as fake references. Zero genuine Rolex references
+  // are bare years (confirmed against 5876-entry catalog).
+  // MUST come FIRST in the alternation, before the currency-suffix patterns
+  // which would otherwise greedily match "2021 HKD" as a currency-suffix pair.
   const priceStripped = text.replace(
-    /(?:\b(?:HKD|USD|USDT|EUR|GBP|CHF|SGD|AUD|AED|CAD|CNY|RMB)\s*\d[\d,]*(?:\s*[KkMm])?\b)|(?:\b\d[\d,]*(?:\s*[KkMm])?\s*(?:HKD|USD|USDT|EUR|GBP|CHF|SGD|AUD|AED|CAD|CNY|RMB)\b)|(?:HK?\$\s*\d[\d,]*(?:\s*[KkMm])?\b)|(?:\$\d[\d,]*(?:\s*[KkMm])?\b)|(?:\b(?:19\d\d|20[012]\d)(?:\s*(?:card|year|tag|dated|papers|warranty))?\b)/gi,
+    /(?:\b(?:19\d\d|20[012]\d)(?:\s*(?:card|year|tag|dated|papers|warranty))?\b)|(?:\b(?:HKD|USD|USDT|EUR|GBP|CHF|SGD|AUD|AED|CAD|CNY|RMB)\s*\d+(?:,\d{3})*(?:\s*[KkMm])?\b)|(?:\b\d+(?:,\d{3})*(?:\s*[KkMm])?\s+(?:HKD|USD|USDT|EUR|GBP|CHF|SGD|AUD|AED|CAD|CNY|RMB)\b)|(?:HK?\$\s*\d+(?:,\d{3})*(?:\s*[KkMm])?\b)|(?:\$\d+(?:,\d{3})*(?:\s*[KkMm])?\b)/gi,
     ' '
   );
 
