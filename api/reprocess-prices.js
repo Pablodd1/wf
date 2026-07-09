@@ -30,6 +30,7 @@ module.exports = async function handler(req, res) {
   const brand = req.body?.brand || req.query?.brand;
   const reference = req.body?.reference || req.query?.reference;
   const limit = Math.min(parseInt(req.body?.limit || req.query?.limit) || 500, 2000);
+  const dryRun = String(req.body?.dry_run ?? req.query?.dry_run ?? '').toLowerCase() === 'true';
 
   if (!brand || !reference) {
     return res.status(400).json({ error: 'brand and reference required' });
@@ -59,6 +60,7 @@ module.exports = async function handler(req, res) {
     let skippedMultiWatch = 0;
     let skippedAmbiguous = 0;
     let samples = [];
+    const dryRunDiff = []; // full diff list, only populated when dryRun=true
 
     for (const record of records) {
       const parsed = parseFull(record.raw_message);
@@ -67,7 +69,11 @@ module.exports = async function handler(req, res) {
       // never trust an auto-extracted price from a stock list. Force verdict=HUMAN.
       if (parsed.verdict === 'MULTI_WATCH_STOCK_LIST') {
         skippedMultiWatch++;
-        await client.from('watch_records').update({ verdict: 'HUMAN', confidence: 50 }).eq('id', record.id);
+        if (dryRun) {
+          dryRunDiff.push({ id: record.id, action: 'verdict->HUMAN (multi-watch)', old_price: record.price_usd, new_price: record.price_usd });
+        } else {
+          await client.from('watch_records').update({ verdict: 'HUMAN', confidence: 50 }).eq('id', record.id);
+        }
         continue;
       }
 
@@ -75,7 +81,11 @@ module.exports = async function handler(req, res) {
       // could be off by 7.8x if we guess wrong. Force verdict=HUMAN for confirmation.
       if (parsed.verdict === 'NEEDS_MANUAL_REVIEW' && parsed.reviewReason?.includes('currency marker')) {
         skippedAmbiguous++;
-        await client.from('watch_records').update({ verdict: 'HUMAN', confidence: 40 }).eq('id', record.id);
+        if (dryRun) {
+          dryRunDiff.push({ id: record.id, action: 'verdict->HUMAN (ambiguous currency)', old_price: record.price_usd, new_price: record.price_usd });
+        } else {
+          await client.from('watch_records').update({ verdict: 'HUMAN', confidence: 40 }).eq('id', record.id);
+        }
         continue;
       }
 
@@ -88,24 +98,35 @@ module.exports = async function handler(req, res) {
       // Only update if price changed significantly (>$10 diff or was null)
       const oldPrice = record.price_usd;
       if (newPrice && (!oldPrice || Math.abs(newPrice - oldPrice) > 10)) {
-        const { error: updateErr } = await client
-          .from('watch_records')
-          .update({ 
-            price_usd: newPrice, 
-            currency: newCurrency,
-            parser_version: 'v4.7-reprocess',
-          })
-          .eq('id', record.id);
-
-        if (!updateErr) {
+        if (dryRun) {
           updated++;
-          if (samples.length < 5) {
-            samples.push({
-              id: record.id.substring(0, 8),
-              old_price: oldPrice,
-              new_price: newPrice,
-              raw_snippet: record.raw_message.substring(0, 60),
-            });
+          dryRunDiff.push({
+            id: record.id,
+            action: 'price_usd update',
+            old_price: oldPrice,
+            new_price: newPrice,
+            raw_snippet: record.raw_message.substring(0, 80),
+          });
+        } else {
+          const { error: updateErr } = await client
+            .from('watch_records')
+            .update({ 
+              price_usd: newPrice, 
+              currency: newCurrency,
+              parser_version: 'v4.7-reprocess',
+            })
+            .eq('id', record.id);
+
+          if (!updateErr) {
+            updated++;
+            if (samples.length < 5) {
+              samples.push({
+                id: record.id.substring(0, 8),
+                old_price: oldPrice,
+                new_price: newPrice,
+                raw_snippet: record.raw_message.substring(0, 60),
+              });
+            }
           }
         }
       } else {
@@ -115,13 +136,19 @@ module.exports = async function handler(req, res) {
 
     res.status(200).json({
       success: true,
+      dry_run: dryRun,
       total: records.length,
       updated,
       unchanged,
       skippedMultiWatch,
       skippedAmbiguous,
       samples,
-      message: `Updated ${updated} of ${records.length} prices for ${brand} ${reference}. Skipped ${skippedMultiWatch} multi-watch + ${skippedAmbiguous} ambiguous-currency (need HUMAN review).`
+      // Full diff only returned in dry-run mode — lets you review every change
+      // before committing. In live mode, only a 5-record sample is returned.
+      diff: dryRun ? dryRunDiff : undefined,
+      message: dryRun
+        ? `DRY RUN — would update ${updated} of ${records.length} prices for ${brand} ${reference}. No writes were made. ${skippedMultiWatch} multi-watch + ${skippedAmbiguous} ambiguous-currency would move to HUMAN. Review the 'diff' array, then re-run with dry_run=false to apply.`
+        : `Updated ${updated} of ${records.length} prices for ${brand} ${reference}. Skipped ${skippedMultiWatch} multi-watch + ${skippedAmbiguous} ambiguous-currency (need HUMAN review).`
     });
 
   } catch (err) {

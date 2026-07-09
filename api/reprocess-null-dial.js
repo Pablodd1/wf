@@ -22,6 +22,7 @@ module.exports = async function handler(req, res) {
   }
 
   const limit = Math.min(parseInt(req.query?.limit || req.body?.limit) || BATCH_SIZE, 1000);
+  const dryRun = String(req.query?.dry_run ?? req.body?.dry_run ?? '').toLowerCase() === 'true';
 
   try {
     const client = getClient();
@@ -65,9 +66,9 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // 3. Batch update records that got a dial
+    // 3. Batch update records that got a dial — skipped entirely in dry-run mode
     let updated = 0;
-    if (updates.length > 0) {
+    if (!dryRun && updates.length > 0) {
       // Update in sub-batches of 200
       for (let i = 0; i < updates.length; i += 200) {
         const batch = updates.slice(i, i + 200);
@@ -86,7 +87,7 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    // 4. Sample: show what was filled
+    // 4. Sample: show what was filled (or would be filled, in dry-run)
     const samples = updates.slice(0, 10).map(u => ({
       ...u,
       // fetch the record's reference for context
@@ -94,13 +95,18 @@ module.exports = async function handler(req, res) {
 
     res.status(200).json({
       success: true,
+      dry_run: dryRun,
       total: records.length,
       filled,
       noChange,
       noMsg,
       updated,
       samples: samples.slice(0, 10).map(u => ({ id: u.id, dial_color: u.dial_color })),
-      message: `Filled ${filled} of ${records.length} records (${Math.round(filled/records.length*100)}%). Run again for next batch.`
+      // Full diff only in dry-run — every record that would get a dial filled
+      diff: dryRun ? updates : undefined,
+      message: dryRun
+        ? `DRY RUN — would fill ${filled} of ${records.length} records (${Math.round(filled/records.length*100)}%). No writes were made. Review 'diff', then re-run with dry_run=false.`
+        : `Filled ${filled} of ${records.length} records (${Math.round(filled/records.length*100)}%). Run again for next batch.`
     });
 
   } catch (err) {
