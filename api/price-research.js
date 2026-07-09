@@ -10,19 +10,27 @@ const CURRENCY_RATES = {
 function convertLegacyPrices(rows) {
   return (rows || []).map(r => {
     if (!r.price_usd || !r.raw_message) return r;
+    // Skip records already converted at extract-time (Pass 2 sets currency='USD')
+    if (r.currency && r.currency.toUpperCase() === 'USD') return r;
     const msg = r.raw_message;
     const hasHKD = /hkd|hk\$/i.test(msg);
     const hasK = /\d+[kK]/.test(msg);
     const priceTooLow = r.price_usd > 0 && r.price_usd < 5000;
     if (priceTooLow && hasHKD && !hasK) {
-      const hkdMatch = msg.match(/(\d+[kK]?)\s*hkd|hkd\s*(\d+[kK]?)/i);
+      // Extract the explicit HKD amount adjacent to an HKD token
+      const hkdMatch = msg.match(/(\d[\d,]*)\s*hkd|hkd\s*(\d[\d,]*)/i);
       if (hkdMatch) {
-        const rawPrice = parseInt((hkdMatch[1] || hkdMatch[2]).replace(/k/i, ''));
-        if (!isNaN(rawPrice) && rawPrice > 1000) {
+        const rawPrice = parseInt((hkdMatch[1] || hkdMatch[2]).replace(/[,k]/gi, ''));
+        // Only convert when stored price ≈ the raw HKD figure (i.e. HKD was stored as USD unconverted).
+        // A genuine USD price that merely mentions HKD elsewhere won't match its own stored value.
+        const storedMatchesRawHKD = Math.abs(rawPrice - r.price_usd) < 5;
+        if (!isNaN(rawPrice) && rawPrice > 1000 && storedMatchesRawHKD) {
           return { ...r, price_usd: Math.round(rawPrice * HKD_RATE), _hkdConverted: true };
         }
       }
-      return { ...r, price_usd: Math.round(r.price_usd * HKD_RATE), _hkdConverted: true };
+      // Fallback: HKD present, sub-$5K, k-suffix absent, but no explicit regex match.
+      // Convert conservatively — the IQR filter downstream catches any false positives.
+      return { ...r, price_usd: Math.round(r.price_usd * HKD_RATE), _hkdConverted: true, _hkdFallback: true };
     }
     return r;
   });
@@ -116,7 +124,7 @@ module.exports = async function handler(req, res) {
     // 1. Pull ALL records for this brand+reference (no verdict filter — analytics filters client-side)
     const { data: rows, error } = await client
       .from('watch_records')
-      .select('price_usd, created_at, condition, source, dial_color, raw_message, listing_type, verdict')
+      .select('price_usd, currency, created_at, condition, source, dial_color, raw_message, listing_type, verdict')
       .eq('brand', brand)
       .eq('reference', reference)
       .order('created_at', { ascending: false });
