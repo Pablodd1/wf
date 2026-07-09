@@ -285,7 +285,7 @@ export default function PriceResearch() {
           {pRefs.length > 0 && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {pRefs.map(r => (
-                <button key={r.reference} onClick={() => { setQuery(r.reference); fetchData(r.reference); }}
+                <button key={r.reference} onClick={() => { setQuery(r.reference); setTimeout(() => fetchData(r.reference), 0); }}
                   style={{
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,
