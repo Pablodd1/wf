@@ -28,9 +28,13 @@ function convertLegacyPrices(rows) {
           return { ...r, price_usd: Math.round(rawPrice * HKD_RATE), _hkdConverted: true };
         }
       }
-      // Fallback: HKD present, sub-$5K, k-suffix absent, but no explicit regex match.
-      // Convert conservatively — the IQR filter downstream catches any false positives.
-      return { ...r, price_usd: Math.round(r.price_usd * HKD_RATE), _hkdConverted: true, _hkdFallback: true };
+      // Fallback: HKD present, no explicit regex match. Only convert when the stored
+      // value is implausibly small for a luxury watch (< $500) — a true unconverted
+      // HKD figure. Genuine USD listings that merely mention HKD in body text are left
+      // untouched; the IQR filter downstream handles any residual noise.
+      if (r.price_usd < 500) {
+        return { ...r, price_usd: Math.round(r.price_usd * HKD_RATE), _hkdConverted: true, _hkdFallback: true };
+      }
     }
     return r;
   });
