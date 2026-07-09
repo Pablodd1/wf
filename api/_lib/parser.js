@@ -661,7 +661,20 @@ function parseReference(text, brandHint) {
     return 0;
   });
 
+  // WF_REF_SELECT (JASS-6 §3): collect EVERY valid candidate across all
+  // patterns, then prefer the one that hits the catalog under the parsed
+  // brand. Previously this loop early-returned on the FIRST valid match, so
+  // a short ref like "116500" locked to whatever pattern fired first instead
+  // of the catalog-backed full form "116500LN". We keep the exact same
+  // per-candidate validation, just defer the return until all are gathered.
+  // Ranking: catalog-exact(brand-scoped) > pattern order (which already puts
+  // the brandHint-matching patterns first) > text position. The catalog
+  // lookup is ALWAYS brand-scoped (never null) so "116500" can't cross-map
+  // to a Blancpain entry that happens to share the numeric prefix.
+  const candidates = [];
+  let patIndex = -1;
   for (const pat of ordered) {
+    patIndex++;
     const m = priceStripped.match(pat.regex);
     if (m) {
       // v4.3: Preserve internal dots for brands whose reference format IS
@@ -725,10 +738,56 @@ function parseReference(text, brandHint) {
       // the text, treat them as prices and continue to next pattern.
       if (pat.brandHint === 'Rolex' && isLikelyPriceNotRef(ref, text)) continue;
 
-      return normalizeRefFormat(ref, pat.brandHint || brandHint);
+      const normalized = normalizeRefFormat(ref, pat.brandHint || brandHint);
+      candidates.push({
+        value: normalized,
+        brand: pat.brandHint || brandHint || null,
+        patIndex,
+        pos: m.index,
+      });
     }
   }
-  return null;
+
+  if (candidates.length === 0) return null;
+  // NOTE: no single-candidate fast-return — even a lone candidate may be a
+  // short form ("116500") that the catalog completes to its full ref
+  // ("116500LN"). Scoring must run for every path so the short→full fold
+  // applies uniformly (JASS-6 Phase 0B short-to-full reference map).
+
+  // WF_REF_SELECT ranking. Score each candidate; higher = preferred.
+  //   +100  catalog-exact under its own brand (brand-scoped lookup)
+  //   + 50  catalog match via short→full prefix fold under its own brand
+  // Ties broken by original pattern order (brandHint patterns sorted first),
+  // then by earliest text position — preserving prior "first match wins".
+  let best = candidates[0];
+  let bestScore = -Infinity;
+  for (const c of candidates) {
+    let score = 0;
+    if (c.brand) {
+      const hit = lookupCatalog(c.brand, c.value);
+      if (hit) {
+        // Compare post-normalize: case-insensitive, separators removed.
+        const hitRef = (hit.reference || '').toUpperCase().replace(/[\s\-\/._]/g, '');
+        const candRef = c.value.toUpperCase().replace(/[\s\-\/._]/g, '');
+        if (hitRef === candRef) {
+          score += 100;                       // exact catalog match
+        } else if (hitRef.startsWith(candRef) && candRef.length >= 4) {
+          score += 50;                        // legit short→full fold (116500 ⊂ 116500LN)
+        }
+        // else: candidate merely coexists in catalog under a different ref —
+        // NOT a prefix fold. Score 0 so we never prefer it over the dealer's
+        // own extraction (JASS-6 no-override guard, CTO review line 146).
+      }
+    }
+    // Tie-breakers folded into the score so a single comparison decides.
+    score -= c.patIndex * 0.01;   // earlier pattern wins ties
+    score -= c.pos * 0.0001;      // earlier position wins deeper ties
+    if (score > bestScore) {
+      bestScore = score;
+      best = c;
+    }
+  }
+  return best.value;
 }
 
 /**
