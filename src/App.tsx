@@ -13,25 +13,31 @@ import AdminPage from '@/pages/AdminPage';
 import PriceResearch from '@/pages/PriceResearch';
 import DemandSignals from '@/pages/DemandSignals';
 import InsightDetails from '@/pages/InsightDetails';
+import { AuthProvider } from '@/hooks/useAuth';
+import { ThemeProvider } from '@/hooks/useTheme';
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Home />} />
-      <Route path="/trading" element={<TradingFloor />} />
-      <Route path="/analytics" element={<AnalyticsPage />} />
-      <Route path="/analytics-dashboard" element={<AnalyticsDashboard />} />
-      <Route path="/review" element={<ReviewPage />} />
-      <Route path="/review-queue" element={<ReviewQueue />} />
-      <Route path="/clean" element={<CleanPage />} />
-      <Route path="/reprocess" element={<ReprocessPage />} />
-      <Route path="/demo" element={<DemoPage />} />
-      <Route path="/demo-mode" element={<DemoMode />} />
-      <Route path="/admin" element={<AdminPage />} />
-      <Route path="/price-research" element={<PriceResearch />} />
-      <Route path="/demand" element={<DemandSignals />} />
-      <Route path="/insight" element={<InsightDetails />} />
-      <Route path="*" element={<Navigate to="/" replace />} />
-    </Routes>
+    <ThemeProvider>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/trading" element={<TradingFloor />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/analytics-dashboard" element={<AnalyticsDashboard />} />
+          <Route path="/review" element={<ReviewPage />} />
+          <Route path="/review-queue" element={<ReviewQueue />} />
+          <Route path="/clean" element={<CleanPage />} />
+          <Route path="/reprocess" element={<ReprocessPage />} />
+          <Route path="/demo" element={<DemoPage />} />
+          <Route path="/demo-mode" element={<DemoMode />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="/price-research" element={<PriceResearch />} />
+          <Route path="/demand" element={<DemandSignals />} />
+          <Route path="/insight" element={<InsightDetails />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

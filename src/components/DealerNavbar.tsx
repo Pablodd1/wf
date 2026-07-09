@@ -4,7 +4,7 @@
  */
 import { Link, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useAuth } from '@/hooks/useAuth';
+import { useSafeAuth } from '@/hooks/useAuth';
 import { LogOut, Watch, TrendingUp, Shield, ExternalLink } from 'lucide-react';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
@@ -17,7 +17,7 @@ const NAV_ITEMS = [
 
 export function DealerNavbar() {
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, logout } = useSafeAuth();
   const isActive = (path: string) => location.pathname === path;
 
   return (

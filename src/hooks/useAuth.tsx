@@ -191,4 +191,13 @@ export function useAuth(): AuthContextValue {
   return ctx;
 }
 
+/**
+ * Safe variant of useAuth that returns null/empty when AuthProvider is not mounted.
+ * Use in components that may render outside admin-protected routes (e.g. DealerNavbar).
+ */
+export function useSafeAuth() {
+  const ctx = useContext(AuthContext);
+  return ctx || { user: null, loading: false, error: null, login: async () => {}, logout: () => {}, signInWithGoogle: async () => {}, signInWithApple: async () => {} };
+}
+
 export { supabase };
