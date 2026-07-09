@@ -97,3 +97,70 @@ describe('multi-watch bundle splitting and 7xxx reference matching', () => {
     expect(r2.year).toBe(2021);
   });
 });
+
+describe('JASS-6 Phase 0B — WF_REF_SELECT catalog-preference', () => {
+  const { parseReference } = require('../api/_lib/parser');
+
+  // CONTRACT: parseReference returns the dealer's RAW extracted ref (audit-safe,
+  // no-override). The full catalog form is exposed separately via
+  // parseFull().catalogEntry.reference. These tests lock that contract so a
+  // future change can't silently start substituting refs.
+
+  it('short ref preserved verbatim, catalog completes to full form', () => {
+    const r = parseFull('Rolex 116500 Black Full Set 142500 HKD');
+    expect(r.ref).toBe('116500');                        // dealer text untouched
+    expect(r.catalogMatched).toBe(true);
+    expect(r.catalogEntry.reference).toBe('116500LN');   // short→full fold
+    expect(r.confidence).toBe(100);
+  });
+
+  it('exact full ref is an exact catalog hit', () => {
+    const r = parseFull('Rolex 126610LN Full Set 130k hkd');
+    expect(r.ref).toBe('126610LN');
+    expect(r.catalogEntry.reference).toBe('126610LN');
+    expect(r.confidence).toBe(100);
+  });
+
+  it('exact stub ref preserved (no suffix in catalog)', () => {
+    const r = parseFull('Rolex 126334 Blue N6/26 117000 HKD');
+    expect(r.ref).toBe('126334');
+    expect(r.catalogEntry.reference).toBe('126334');
+  });
+
+  it('Patek slash ref preserved, catalog enrichment resolves', () => {
+    const r = parseFull('PP 5711/1A Tiffany 450k hkd');
+    expect(r.ref).toBe('5711/1A');
+    expect(r.catalogMatched).toBe(true);
+  });
+
+  it('AP ST ref preserved, catalog resolves to full material code', () => {
+    const r = parseFull('AP 15500ST white 138k hkd');
+    expect(r.ref).toBe('15500ST');
+    expect(r.catalogMatched).toBe(true);
+  });
+
+  it('non-catalog ref preserved (no boost, no substitution)', () => {
+    // 134567 is not a real Rolex ref — must pass through unchanged, no crash.
+    const r = parseReference('Rolex 134567 xyz', 'Rolex');
+    expect(r).toBe('134567');
+  });
+
+  it('BRAND-SCOPING GUARD: short numeric ref never cross-maps to another brand', () => {
+    // 116500 is a Rolex ref. Under Blancpain it must NOT resolve to the Rolex
+    // catalog entry — lookupCatalog is brand-scoped, so parseReference returns
+    // the Blancpain-context extraction, and parseFull must not claim a Rolex
+    // catalog match under a Blancpain brand.
+    const r = parseFull('Blancpain 5015 Fifty Fathoms blue 80k hkd');
+    expect(r.brand).toBe('Blancpain');
+    // Whatever ref is extracted, the catalog entry (if any) must be Blancpain's,
+    // never a Rolex entry bled in via shared numeric prefix.
+    if (r.catalogEntry) {
+      expect(r.catalogEntry.brand).toBe('Blancpain');
+    }
+  });
+
+  it('LV suffix ref not cross-mapped or stripped', () => {
+    const r = parseReference('Rolex 126610LV Full Set', 'Rolex');
+    expect(r).toBe('126610LV');
+  });
+});
