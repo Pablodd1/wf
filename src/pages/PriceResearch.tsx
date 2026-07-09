@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ExternalLink, FileSpreadsheet, Download } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
@@ -108,7 +108,17 @@ export default function PriceResearch() {
     finally { setPLoading(''); }
   }, []);
 
+  const fetchSeq = useRef(0);
   const fetchData = useCallback(async (ref: string) => {
+    // v4.7 race-condition fix: clicking a brand chip changes pBrand -> gives
+    // fetchData a new identity -> the useEffect below re-fires for the OLD
+    // query value (background refetch). If that stale fetch resolves AFTER
+    // a newer one triggered by clicking a drill-down reference card, its
+    // setData() call would silently overwrite the correct, newer data on
+    // screen — looking exactly like "the reference click did nothing".
+    // Fix: tag each call with a sequence number; only the LATEST call is
+    // allowed to commit state.
+    const mySeq = ++fetchSeq.current;
     setLoading(true);
     setError('');
     try {
@@ -123,6 +133,7 @@ export default function PriceResearch() {
       const d = await r.json();
       const catalogData = catalogR ? await catalogR.json().catch(() => null) : null;
       const catalogEntry = catalogData?.results?.[0] || null;
+      if (mySeq !== fetchSeq.current) return; // a newer request has since started — discard this stale result
       if (d.stats) {
         // Bridge v4.7 API → 4cd7394 theme interface
         const bs = d.buyers_sellers || { buyers: 0, sellers: 0 };
@@ -157,11 +168,21 @@ export default function PriceResearch() {
         setData(bridged);
       }
       else setError(d.error || 'No data for this reference');
-    } catch { setError('Failed to fetch'); }
-    finally { setLoading(false); }
+    } catch { if (mySeq === fetchSeq.current) setError('Failed to fetch'); }
+    finally { if (mySeq === fetchSeq.current) setLoading(false); }
   }, [pBrand]);
 
-  useEffect(() => { fetchData(query); }, [query, fetchData]);
+  // v4.7: only auto-refetch on a genuine query change, NOT every time pBrand
+  // changes fetchData's identity (see fetchSeq comment above for why that
+  // caused silent overwrites). Brand-chip clicks alone should never trigger
+  // a background refetch of the currently-displayed reference.
+  const lastFetchedQuery = useRef<string | null>(null);
+  useEffect(() => {
+    if (lastFetchedQuery.current === query) return;
+    lastFetchedQuery.current = query;
+    fetchData(query);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
 
   // ── Derived stats ─────────────────────────────────────────
   const stats = data?.stats
