@@ -57,6 +57,8 @@ const RATES = {
   JPY:  0.0066,
   CNY:  0.138,
   RMB:  0.138,
+  AED:  0.272, // v4.7: was previously an ad-hoc inline fallback in one pattern only —
+               // moved into RATES so every pattern that does RATES[cur] gets it for free.
 };
 
 /** Brands we know how to detect, with aliases and extraction rules. */
@@ -1118,12 +1120,14 @@ function parsePrice(text, ref) {
     { regex: /\b(\d{1,3},\d{3})\s*[mM]\b/g, multiplier: 1e6, priority: 1 },
     // 1.080.000 (European dot-thousands chain)
     { regex: /\b(\d{1,3}(?:\.\d{3})+)\b/g, multiplier: 1, european: true, priority: 1 },
-    // Currency stuck to number: HKD930K, HKD583K, USD185000, hkd435k, HKD 98,000 (case-insensitive)
-    { regex: /(HKD|USD|USDT|EUR|GBP)\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,3})?)\s*([KkMm])?\b/gi, handler: (m) => {
+    // Currency stuck to number: HKD930K, HKD583K, USD185000, hkd435k, HKD 98,000,
+    // AED 177,500 (case-insensitive). v4.7: added AED — was previously missing from
+    // this currency-PREFIX form entirely (only the currency-SUFFIX pattern below had it).
+    { regex: /(HKD|USD|USDT|EUR|GBP|AED)\s*(\d{1,3}(?:,\d{3})*(?:\.\d{1,3})?)\s*([KkMm])?\b/gi, handler: (m) => {
       const cur = m[1].toUpperCase();
       const num = parseFloat(m[2].replace(/,/g, ''));
       const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[3]] || 1;
-      const rate = RATES[cur] || 1; // USD/USDT=1.0, HKD=0.128, etc.
+      const rate = RATES[cur] || 1; // USD/USDT=1.0, HKD=0.128, AED=0.272, etc.
       return num * mult * rate;
     }, priority: (m) => (m[1].toUpperCase() === 'USD' || m[1].toUpperCase() === 'USDT') ? 3 : 2 },
     // NORM_002: hkd998m, hkd 1.5m — explicit HKD with m suffix
@@ -1154,7 +1158,7 @@ function parsePrice(text, ref) {
     { regex: /\b(\d{1,3}(?:,\d{3})+)\s*(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|AED)\b/gi, handler: (m) => {
       const num = parseFloat(m[1].replace(/,/g, ''));
       const cur = m[2].toUpperCase();
-      const rate = RATES[cur] || (cur === 'AED' ? 0.272 : undefined);
+      const rate = RATES[cur]; // AED now in RATES directly (v4.7) — no ad-hoc fallback needed
       return rate ? num * rate : num;
     }, priority: (m) => (m[2].toUpperCase() === 'USD' || m[2].toUpperCase() === 'USDT') ? 3 : 2 },
     // v3.4: $-prefixed comma-thousands: "$34,500", "$16,250+ship"
@@ -1166,7 +1170,7 @@ function parsePrice(text, ref) {
       const num = parseFloat(m[1].replace(/,/g, ''));
       const trailingCur = m[2]?.toUpperCase();
       if (trailingCur) {
-        const rate = RATES[trailingCur === 'RMB' ? 'CNY' : trailingCur] || (trailingCur === 'AED' ? 0.272 : 1);
+        const rate = RATES[trailingCur === 'RMB' ? 'CNY' : trailingCur] || 1;
         return num * rate;
       }
       return num; // no trailing non-USD currency — $ is authoritative USD
