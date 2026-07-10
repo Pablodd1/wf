@@ -1,7 +1,9 @@
 const { getClient } = require('./_lib/supabase');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   try {
     const client = getClient();
 

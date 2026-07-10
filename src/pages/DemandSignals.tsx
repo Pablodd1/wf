@@ -144,18 +144,11 @@ export default function DemandSignals() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch recent records with prices for demand analysis
-      const url = `${SUPABASE_URL}/rest/v1/watch_records?select=brand,reference,price_usd,confidence,source,created_at&price_usd=gt.0&limit=5000&order=created_at.desc`;
-      const res = await fetch(url, { headers: REQ_HEADERS });
+      // Fetch recent records with prices for demand analysis via API proxy
+      const res = await fetch('/api/demand-signals?days=30&limit=5000');
       const data = await res.json();
-      setRecords(data || []);
-
-      // Get total count
-      const countRes = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
-        method: 'GET', headers: { ...REQ_HEADERS, 'Prefer': 'count=exact' },
-      });
-      const range = countRes.headers.get('content-range') || '';
-      setTotalCount(parseInt(range.split('/')[1] || '0'));
+      setRecords(data.records || []);
+      setTotalCount(data.totalCount || 0);
     } catch (err) {
       console.error('Demand signals fetch error:', err);
       setRecords([]);

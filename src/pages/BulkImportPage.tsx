@@ -102,10 +102,10 @@ export default function BulkImportPage() {
       if (records.length === 0) continue;
 
       try {
-        const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records`, {
+        const res = await fetch('/api/bulk-import', {
           method: 'POST',
-          headers: { ...REQ_HEADERS, 'Content-Type': 'application/json', 'Prefer': 'resolution=merge-duplicates' },
-          body: JSON.stringify(records),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ records }),
         });
         if (res.ok) success += records.length;
         else errors += records.length;

@@ -12,6 +12,8 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { parseFull } = require('./_lib/parser');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 const CURRENCY_RATES = {
   HKD: 0.128, EUR: 1.08, GBP: 1.27, CHF: 1.13,
@@ -19,7 +21,7 @@ const CURRENCY_RATES = {
 };
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const admin_key = req.method === 'POST' ? req.body?.admin_key : req.query?.key;

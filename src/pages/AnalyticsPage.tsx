@@ -39,7 +39,7 @@ type SortKey = 'reference' | 'brand' | 'count' | 'avgPrice';
 
 // ─── Data fetchers (query materialized views, not raw table) ─────────
 const fetcher = async (view: string): Promise<any[]> => {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${view}?select=*&limit=100`, { headers: REQ_HEADERS });
+  const res = await fetch(`/api/materialized-views?view=${view}&limit=100`);
   if (!res.ok) throw new Error(`${view}: HTTP ${res.status}`);
   return res.json();
 };

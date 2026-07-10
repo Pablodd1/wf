@@ -62,50 +62,23 @@ export default function DataBrowser() {
   const fetchRecords = useCallback(async () => {
     setLoading(true);
     try {
-      const offset = page * PAGE_SIZE;
-      let url = `${SUPABASE_URL}/rest/v1/watch_records?select=*&limit=${PAGE_SIZE}&offset=${offset}`;
-      if (query) url += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
-      if (brandFilter !== 'All') url += `&brand=eq.${encodeURIComponent(brandFilter)}`;
-      if (verdictFilter !== 'All') url += `&verdict=eq.${encodeURIComponent(verdictFilter)}`;
-      if (confMin > 0) url += `&confidence=gte.${confMin}`;
-      url += `&order=${sortField}.${sortDir}`;
+      const params = new URLSearchParams({
+        page: String(page + 1),
+        limit: String(PAGE_SIZE),
+        sortField,
+        sortDir,
+      });
+      if (query) params.append('search', query);
+      if (brandFilter !== 'All') params.append('brand', brandFilter);
+      if (verdictFilter !== 'All') params.append('verdict', verdictFilter);
+      if (confMin > 0) params.append('confMin', String(confMin));
 
-      const res = await fetch(url, { headers: REQ_HEADERS });
+      const res = await fetch(`/api/data-browser?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      // Guard: ensure data is an array (Supabase may return an error object,
-      // e.g. on statement timeout) — prevents "X is not iterable" crashes.
-      setRecords(Array.isArray(data) ? data : []);
-
-      // Get total count with filters — skip count=exact when no filters are
-      // active (full-table count on 2.39M rows risks a Supabase statement
-      // timeout). Use the fast precomputed stats API for the unfiltered case.
-      const hasFilters = !!query || brandFilter !== 'All' || verdictFilter !== 'All' || confMin > 0;
-      if (!hasFilters) {
-        try {
-          const statsRes = await fetch('/api/confidence-stats');
-          const stats = await statsRes.json();
-          setTotal(stats.total || stats.totalRecords || 0);
-        } catch {
-          // leave total as previous value
-        }
-      } else {
-        let countUrl = `${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`;
-        if (query) countUrl += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
-        if (brandFilter !== 'All') countUrl += `&brand=eq.${encodeURIComponent(brandFilter)}`;
-        if (verdictFilter !== 'All') countUrl += `&verdict=eq.${encodeURIComponent(verdictFilter)}`;
-        if (confMin > 0) countUrl += `&confidence=gte.${confMin}`;
-
-        try {
-          const countRes = await fetch(countUrl, { method: 'GET', headers: REQ_HEAD });
-          if (countRes.ok) {
-            const range = countRes.headers.get('content-range') || '';
-            setTotal(parseInt(range.split('/')[1] || '0'));
-          }
-        } catch {
-          // leave total as previous value — filtered counts are best-effort
-        }
-      }
+      
+      setRecords(Array.isArray(data.records) ? data.records : []);
+      setTotal(data.pagination?.total || 0);
     } catch (err) {
       console.error('Data browser error:', err);
     }
@@ -143,14 +116,18 @@ export default function DataBrowser() {
     setActionLoading(`bulk-${newVerdict}`);
     const ids = Array.from(selected);
     try {
-      for (const id of ids) {
-        await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${id}`, {
-          method: 'PATCH', headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ verdict: newVerdict, human_edited: true }),
-        });
+      const res = await fetch('/api/data-browser', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          ids, 
+          updates: { verdict: newVerdict, human_edited: true } 
+        }),
+      });
+      if (res.ok) {
+        setSelected(new Set());
+        fetchRecords();
       }
-      setSelected(new Set());
-      fetchRecords();
     } catch (e) { /* silent */ }
     setActionLoading(null);
   };

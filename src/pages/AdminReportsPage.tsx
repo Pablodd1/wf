@@ -86,7 +86,7 @@ const tooltipStyle = {
 };
 
 const fetcher = async (view: string, limit = 100): Promise<any[]> => {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/${view}?select=*&limit=${limit}`, { headers: REQ_HEADERS });
+  const res = await fetch(`/api/materialized-views?view=${view}&limit=${limit}`);
   if (!res.ok) throw new Error(`${view}: HTTP ${res.status}`);
   return res.json();
 };

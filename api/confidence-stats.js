@@ -7,6 +7,8 @@
 const fs = require('fs');
 const path = require('path');
 const { getClient } = require('./_lib/supabase');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 const STATS_PATH = path.join(__dirname, '..', 'public', 'watchfacts-stats.json');
 const VERDICTS = ['APPROVED', 'REVIEW', 'HUMAN', 'RECYCLE'];
@@ -16,7 +18,7 @@ let cache = null;
 let cacheAt = 0;
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=300');
 
   if (cache && Date.now() - cacheAt < 60_000) {

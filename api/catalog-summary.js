@@ -6,6 +6,8 @@
  * Caches for 5 minutes in-memory.
  */
 const { getClient } = require('./_lib/supabase');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 // In-memory cache
 let cache = null;
@@ -14,7 +16,7 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const BATCH_SIZE = 1000;
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
 
   // Return cached response if fresh

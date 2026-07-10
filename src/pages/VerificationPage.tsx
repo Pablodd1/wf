@@ -77,16 +77,13 @@ export default function VerificationPage() {
   useEffect(() => {
     async function load() {
       try {
-        const [statsRes, verdictRes] = await Promise.all([
-          fetch(`${SUPABASE_URL}/rest/v1/mv_stats_summary?select=*`, { headers: REQ_HEADERS }),
-          fetch(`${SUPABASE_URL}/rest/v1/mv_verdict_dist?select=verdict,count`, { headers: REQ_HEADERS }),
-        ]);
-        const stats = await statsRes.json();
-        const verdicts = await verdictRes.json();
+        // Use secure API proxy instead of direct Supabase call
+        const res = await fetch('/api/verification-stats');
+        const data = await res.json();
 
-        const total = stats[0]?.total_records ?? 2390143;
+        const total = data.stats?.total_records ?? 2390143;
         const vMap: Record<string, number> = {};
-        for (const v of verdicts) vMap[v.verdict] = parseInt(v.count) || 0;
+        for (const v of data.verdictDistribution) vMap[v.verdict] = parseInt(v.count) || 0;
 
         setMetrics({
           total,

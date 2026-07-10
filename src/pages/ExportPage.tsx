@@ -77,14 +77,13 @@ export default function ExportPage() {
   const addLog = (msg: string) => setLogs(prev => [msg, ...prev].slice(0, 50));
 
   const buildQueryUrl = (offset: number, limit: number): string => {
-    let url = `${SUPABASE_URL}/rest/v1/watch_records?select=${COLUMNS.map(c => c.key).join(',')}&limit=${limit}&offset=${offset}`;
-    if (filters.brand !== 'All') url += `&brand=eq.${encodeURIComponent(filters.brand)}`;
-    if (filters.verdict !== 'All') url += `&verdict=eq.${encodeURIComponent(filters.verdict)}`;
-    if (filters.minPrice) url += `&price_usd=gte.${filters.minPrice}`;
-    if (filters.maxPrice) url += `&price_usd=lte.${filters.maxPrice}`;
-    if (filters.dateFrom) url += `&created_at=gte.${encodeURIComponent(filters.dateFrom)}`;
-    if (filters.dateTo) url += `&created_at=lte.${encodeURIComponent(filters.dateTo + 'T23:59:59')}`;
-    url += `&order=created_at.desc`;
+    let url = `/api/export?columns=${COLUMNS.map(c => c.key).join(',')}&limit=${limit}&offset=${offset}`;
+    if (filters.brand !== 'All') url += `&brand=${encodeURIComponent(filters.brand)}`;
+    if (filters.verdict !== 'All') url += `&verdict=${encodeURIComponent(filters.verdict)}`;
+    if (filters.minPrice) url += `&minPrice=${filters.minPrice}`;
+    if (filters.maxPrice) url += `&maxPrice=${filters.maxPrice}`;
+    if (filters.dateFrom) url += `&dateFrom=${encodeURIComponent(filters.dateFrom)}`;
+    if (filters.dateTo) url += `&dateTo=${encodeURIComponent(filters.dateTo + 'T23:59:59')}`;
     return url;
   };
 

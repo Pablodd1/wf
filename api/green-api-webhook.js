@@ -10,9 +10,11 @@ const { getClient } = require('./_lib/supabase');
 const { parseMessageWithContext } = require('./_lib/context-tracker');
 const { matchParsedListing } = require('./_lib/catalog-matcher');
 const { withRateLimit } = require('./_lib/rate-limiter');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 module.exports = withRateLimit('/api/green-api-webhook', async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
 
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });

@@ -9,13 +9,15 @@
  * Lightweight: one-shot query, grouped aggregation, no cursor needed.
  */
 const { getClient } = require('./_lib/supabase');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 let cache = null;
 let cacheAt = 0;
 const CACHE_MS = 300_000; // 5 min
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
 
   if (cache && Date.now() - cacheAt < CACHE_MS) {

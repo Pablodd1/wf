@@ -4,6 +4,8 @@
  */
 const fs = require('fs');
 const path = require('path');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 // JASS-6 Phase 0 short→full map. require() (not fs.readFileSync) so Vercel's
 // serverless bundler statically includes the JSON in the function bundle.
@@ -42,7 +44,7 @@ function levenshtein(a, b) {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   
   try {
     const { reference, brand, dial, limit = 10 } = req.query;

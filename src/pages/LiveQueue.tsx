@@ -101,10 +101,7 @@ export default function LiveQueue() {
 
   async function fetchRecent() {
     try {
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,price_usd,confidence,verdict,raw_message,created_at&order=created_at.desc&limit=20`,
-        { headers: REQ_HEADERS }
-      );
+      const res = await fetch('/api/live-queue');
       if (!res.ok) return;
       const data = await res.json();
       if (!Array.isArray(data) || data.length === 0) return;

@@ -1,4 +1,6 @@
 const { getClient } = require('./_lib/supabase');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 // ─── Currency conversion (read-time for legacy DB records) ───────────────────
 const HKD_RATE = 0.128;
@@ -236,7 +238,7 @@ function aggregateWithMin5(rows, keyFn, labelKey) {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { brand, reference } = req.query;

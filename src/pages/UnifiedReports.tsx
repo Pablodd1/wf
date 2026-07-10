@@ -309,23 +309,16 @@ export default function UnifiedReports() {
   const fetchRecords = useCallback(async () => {
     setLoading(true);
     try {
-      let query = `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,dial_color,condition,price_usd,confidence,verdict,source,created_at,raw_message,human_edited`;
-      query += `&created_at=gte.${encodeURIComponent(oneYearAgo)}`;
-      if (activeTab !== 'ALL') query += `&verdict=eq.${activeTab}`;
-      if (search.trim()) {
-        const s = encodeURIComponent(search.trim());
-        query += `&or=(brand.ilike.*${s}*,reference.ilike.*${s}*,raw_message.ilike.*${s}*)`;
-      }
-      query += `&order=${sortBy}.${sortDir}`;
-      const from = page * PAGE_SIZE;
-      query += `&limit=${PAGE_SIZE}&offset=${from}`;
+      const params = new URLSearchParams({
+        limit: String(PAGE_SIZE),
+        offset: String(page * PAGE_SIZE),
+        sortBy,
+        sortDir,
+      });
+      if (activeTab !== 'ALL') params.set('verdict', activeTab);
+      if (search.trim()) params.set('search', search.trim());
 
-      // IMPORTANT: do NOT use count=exact (REQ_HEAD) here — on the full 2.39M
-      // table with created_at/verdict filters it triggers Supabase's statement
-      // timeout (57014) and silently returns an error object instead of rows.
-      // Use REQ_HEADERS (no count) for the data fetch, and get the total
-      // separately from the fast precomputed stats endpoint.
-      const res = await fetch(query, { headers: REQ_HEADERS });
+      const res = await fetch(`/api/reports?${params}`);
       const data = await res.json();
       setRecords(Array.isArray(data) ? data : []);
 
@@ -370,10 +363,10 @@ export default function UnifiedReports() {
 
   const bulkAction = async (verdict: string) => {
     if (selected.size === 0) return;
-    await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=in.(${[...selected].join(',')})`, {
-      method: 'PATCH',
-      headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ verdict }),
+    await fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [...selected], verdict }),
     });
     setSelected(new Set());
     fetchRecords();
@@ -381,10 +374,10 @@ export default function UnifiedReports() {
 
   const saveEdit = async (form: Partial<DBRecord>) => {
     if (!editingRecord) return;
-    await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${editingRecord.id}`, {
-      method: 'PATCH',
-      headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ...form, human_edited: true, edit_source: 'admin_ui' }),
+    await fetch('/api/reports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids: [editingRecord.id], ...form, human_edited: true, edit_source: 'admin_ui' }),
     });
     setEditingRecord(null);
     fetchRecords();
@@ -548,16 +541,18 @@ export default function UnifiedReports() {
                           {(r.verdict === 'RECYCLE' || r.verdict === 'TRASH') && (
                             <div className="flex items-center gap-0.5 ml-1 pl-1 border-l border-gray-800">
                               <button onClick={async () => {
-                                await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${r.id}`, {
-                                  method: 'PATCH', headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ verdict: 'REVIEW', human_edited: true }),
+                                await fetch('/api/reports', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ ids: [r.id], verdict: 'REVIEW', human_edited: true }),
                                 });
                                 fetchRecords();
                               }} className="p-0.5 text-[9px] text-blue-400 hover:text-blue-300 font-medium" title="Move to Review">R</button>
                               <button onClick={async () => {
-                                await fetch(`${SUPABASE_URL}/rest/v1/watch_records?id=eq.${r.id}`, {
-                                  method: 'PATCH', headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ verdict: 'APPROVED', confidence: 100, human_edited: true }),
+                                await fetch('/api/reports', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ ids: [r.id], verdict: 'APPROVED', confidence: 100, human_edited: true }),
                                 });
                                 fetchRecords();
                               }} className="p-0.5 text-[9px] text-green-400 hover:text-green-300 font-medium" title="Approve">A</button>

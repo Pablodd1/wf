@@ -86,37 +86,18 @@ export default function QualityPage() {
       setLoading(true);
       try {
         /* 1. Core stats via materialized view */
-        const statsRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/mv_stats_summary?select=*`,
-          { headers: REQ_HEADERS }
-        );
+        const statsRes = await fetch('/api/materialized-views?view=mv_stats_summary');
         const statsData = await statsRes.json();
 
         /* 2. Verdict distribution via materialized view */
-        const verdictRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/mv_verdict_dist?select=verdict,count&order=count.desc`,
-          { headers: REQ_HEADERS }
-        );
+        const verdictRes = await fetch('/api/materialized-views?view=mv_verdict_dist');
         const verdictData = await verdictRes.json();
 
-        /* 3. Outlier samples — extreme prices & invalid years */
-        const outliersRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,price_usd,year,raw_message,verdict` +
-          `&or=(price_usd.gt.5000000,price_usd.lt.100,and(year.lt.1900,year.not.is.null),and(year.gt.2030,year.not.is.null))` +
-          `&limit=50&order=id.desc`,
-          { headers: REQ_HEADERS }
-        );
-        const outliersData = await outliersRes.json();
-
-        /* 4. Field presence counts */
-        const presenceRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/rpc/get_field_presence`,
-          { method: 'POST', headers: { ...REQ_HEADERS, 'Content-Type': 'application/json' } }
-        );
-        let presenceData: any = {};
-        try {
-          presenceData = await presenceRes.json();
-        } catch { /* RPC may not exist yet */ }
+        /* 3. Outlier samples & field presence via quality-metrics API */
+        const qualityRes = await fetch('/api/quality-metrics');
+        const qualityData = await qualityRes.json();
+        const outliersData = qualityData.outliers || [];
+        let presenceData = qualityData.fieldPresence || {};
 
         if (cancelled) return;
 

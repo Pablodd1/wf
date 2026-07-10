@@ -23,6 +23,7 @@
 'use strict';
 
 const { withRateLimit } = require('./_lib/rate-limiter');
+const { setCorsHeaders } = require('./_lib/cors');
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -33,12 +34,6 @@ const HEADERS = {
   'Authorization': `Bearer ${SUPABASE_KEY}`,
   'Content-Type': 'application/json',
 };
-
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-}
 
 /**
  * Check if this is a media message from Green API (image, video, document).
@@ -221,13 +216,15 @@ async function saveStandaloneMedia(meta, photoObj) {
 
 // ─── MAIN HANDLER ──────────────────────────────────────────────────────────
 const handler = async function handler(req, res) {
-  setCors(res);
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (setCorsHeaders(res, req)) return;
+  
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
 
   // M-5: Validate Green API webhook signature when GREEN_API_SECRET is configured
   if (GREEN_API_SECRET) {
     const crypto = require('crypto');
+const { setCorsHeaders } = require('./_lib/cors');
+
     const signature = req.headers['x-green-api-signature'];
     if (!signature) {
       return res.status(401).json({ error: 'Missing webhook signature' });

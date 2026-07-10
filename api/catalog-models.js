@@ -20,6 +20,8 @@
 const fs = require('fs');
 const path = require('path');
 const { getClient } = require('./_lib/supabase');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 let catalog = null;
 function loadCatalog() {
@@ -30,7 +32,7 @@ function loadCatalog() {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const { brand } = req.query;

@@ -41,26 +41,20 @@ const ONE_YEAR_AGO = (() => {
 
 // ─── Fetch exact count by verdict (1-year filtered) ────────────────
 async function fetchVerdictCount(verdict: string): Promise<number> {
-  // NOTE: intentionally unused for live counts now — see fetchStatsFromApi().
-  // Kept as a fallback for callers that still import it directly.
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?verdict=eq.${verdict}&created_at=gte.${encodeURIComponent(ONE_YEAR_AGO)}&select=id&limit=1`, {
-      method: 'GET', headers: REQ_HEAD,
-    });
+    const res = await fetch(`/api/admin?type=verdict-count&verdict=${encodeURIComponent(verdict)}`);
     if (!res.ok) return 0;
-    const range = res.headers.get('content-range') || '';
-    return parseInt(range.split('/')[1] || '0');
+    const data = await res.json();
+    return data.count || 0;
   } catch { return 0; }
 }
 
 async function fetchTotalCount(): Promise<number> {
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?created_at=gte.${encodeURIComponent(ONE_YEAR_AGO)}&select=id&limit=1`, {
-      method: 'GET', headers: REQ_HEAD,
-    });
+    const res = await fetch('/api/admin?type=total-count');
     if (!res.ok) return 0;
-    const range = res.headers.get('content-range') || '';
-    return parseInt(range.split('/')[1] || '0');
+    const data = await res.json();
+    return data.count || 0;
   } catch { return 0; }
 }
 
@@ -86,19 +80,9 @@ async function fetchStatsFromApi(): Promise<{ total: number; approved: number; r
 // ─── Fetch recent human-edited activity ──────────────────────────────
 async function fetchActivityLog(): Promise<ActivityEntry[]> {
   try {
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/watch_records?select=id,brand,reference,verdict,human_edited,created_at,price_usd&human_edited=eq.true&order=created_at.desc&limit=20`,
-      { headers: REQ_HEADERS }
-    );
+    const res = await fetch('/api/admin?type=activity-log');
     const data = await res.json();
-    return (data || []).map((r: any, i: number) => ({
-      id: r.id || String(i),
-      action: r.verdict === 'APPROVED' ? 'Approved' : r.verdict === 'RECYCLE' ? 'Recycled' : 'Reviewed',
-      target: `${r.brand || 'Unknown'} ${r.reference || ''}`,
-      status: 'success' as const,
-      timestamp: r.created_at || new Date().toISOString(),
-      details: r.price_usd ? `$${r.price_usd.toLocaleString()}` : undefined,
-    }));
+    return data || [];
   } catch { return []; }
 }
 
@@ -106,9 +90,7 @@ async function fetchActivityLog(): Promise<ActivityEntry[]> {
 async function testSupabaseHealth(): Promise<{ status: 'online' | 'offline'; latency: number; message: string }> {
   const start = Date.now();
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/watch_records?select=id&limit=1`, {
-      method: 'GET', headers: REQ_HEADERS,
-    });
+    const res = await fetch('/api/admin?type=total-count');
     const latency = Date.now() - start;
     return { status: res.ok ? 'online' : 'offline', latency, message: `${latency}ms` };
   } catch {

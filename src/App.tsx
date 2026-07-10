@@ -13,6 +13,9 @@ import AdminPage from '@/pages/AdminPage';
 import PriceResearch from '@/pages/PriceResearch';
 import DemandSignals from '@/pages/DemandSignals';
 import InsightDetails from '@/pages/InsightDetails';
+import ReviewDashboard from '@/pages/ReviewDashboard';
+import BatchReview from '@/pages/BatchReview';
+import CreateBatch from '@/pages/CreateBatch';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ThemeProvider } from '@/hooks/useTheme';
 
@@ -35,6 +38,9 @@ export default function App() {
           <Route path="/price-research" element={<PriceResearch />} />
           <Route path="/demand" element={<DemandSignals />} />
           <Route path="/insight" element={<InsightDetails />} />
+          <Route path="/pipeline" element={<ReviewDashboard />} />
+          <Route path="/pipeline/batch/:batchId" element={<BatchReview />} />
+          <Route path="/pipeline/create" element={<CreateBatch />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

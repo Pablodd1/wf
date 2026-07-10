@@ -208,21 +208,15 @@ export default function InsightDetails() {
     const fetchData = async () => {
       setLoading(true);
       try {
-        let url = `${SUPABASE_URL}/rest/v1/watch_records?select=*&reference=eq.${encodeURIComponent(ref)}&limit=1000`;
+        let url = `/api/insight?reference=${encodeURIComponent(ref)}`;
         if (dial && dial !== 'Any') {
-          url += `&dial_color=eq.${encodeURIComponent(dial)}`;
+          url += `&dial=${encodeURIComponent(dial)}`;
         }
         if (month) {
-          const [year, mon] = month.split('-');
-          const start = `${year}-${mon}-01`;
-          const endMon = parseInt(mon) + 1;
-          const endYear = endMon > 12 ? parseInt(year) + 1 : year;
-          const endMonStr = endMon > 12 ? '01' : String(endMon).padStart(2, '0');
-          const end = `${endYear}-${endMonStr}-01`;
-          url += `&received_at=gte.${start}&received_at=lt.${end}`;
+          url += `&month=${encodeURIComponent(month)}`;
         }
 
-        const res = await fetch(url, { headers: REQ_HEADERS });
+        const res = await fetch(url);
         const data = await res.json();
         setListings(data || []);
       } catch {

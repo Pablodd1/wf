@@ -39,14 +39,16 @@ export default function SearchPage() {
     setLoading(true);
     setError(null);
     try {
-      const offset = page * pageSize;
-      let url = `${SUPABASE_URL}/rest/v1/watch_records?select=*&limit=${pageSize}&offset=${offset}`;
-      if (query) url += `&or=(reference.ilike.*${encodeURIComponent(query)}*,brand.ilike.*${encodeURIComponent(query)}*)`;
-      if (brandFilter !== 'All') url += `&brand=eq.${encodeURIComponent(brandFilter)}`;
-      if (conditionFilter !== 'All') url += `&condition=eq.${encodeURIComponent(conditionFilter)}`;
-      if (confMin > 0) url += `&confidence=gte.${confMin}`;
+      const params = new URLSearchParams({
+        query,
+        brand: brandFilter,
+        condition: conditionFilter,
+        confMin: confMin.toString(),
+        page: page.toString(),
+        limit: pageSize.toString()
+      });
 
-      const res = await fetch(url, { headers: REQ_HEADERS });
+      const res = await fetch(`/api/search?${params}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       setRecords(data || []);

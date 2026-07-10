@@ -13,9 +13,11 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { confidenceTier } = require('./_lib/parser');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
 
   if (req.method === 'OPTIONS') return res.status(200).end();

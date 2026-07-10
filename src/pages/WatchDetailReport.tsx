@@ -125,41 +125,21 @@ export default function WatchDetailReport() {
     setLoading(true);
     setError('');
     try {
-      // Fetch the specific record
-      const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/watch_records?id=eq.${recordId}&limit=1`,
-        { headers: REQ_HEADERS }
-      );
+      // Fetch record and price stats via API proxy
+      const res = await fetch(`/api/watch-detail-report?recordId=${recordId}`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      if (!data || data.length === 0) {
+      
+      if (!data.record) {
         setError('Record not found');
         setLoading(false);
         return;
       }
-      const rec = data[0];
-      setRecord(rec);
-
-      // Fetch price stats for this reference to determine if outlier
-      if (rec.reference && rec.brand) {
-        const statsRes = await fetch(
-          `${SUPABASE_URL}/rest/v1/watch_records?select=price_usd&reference=eq.${encodeURIComponent(rec.reference)}&verdict=eq.APPROVED&price_usd=gt.0&limit=1000`,
-          { headers: REQ_HEADERS }
-        );
-        if (statsRes.ok) {
-          const prices = (await statsRes.json()).map((r: any) => r.price_usd).filter((p: number) => p > 0).sort((a: number, b: number) => a - b);
-          if (prices.length > 0) {
-            const avg = prices.reduce((a: number, b: number) => a + b, 0) / prices.length;
-            const median = prices[Math.floor(prices.length / 2)];
-            const q1 = prices[Math.floor(prices.length * 0.25)];
-            const q3 = prices[Math.floor(prices.length * 0.75)];
-            const iqr = q3 - q1;
-            const outlierLow = q1 - 1.5 * iqr;
-            const outlierHigh = q3 + 1.5 * iqr;
-            const isOutlier = rec.price_usd > outlierHigh || rec.price_usd < outlierLow;
-            setPriceStats({ avg, median, q1, q3, iqr, outlierLow, outlierHigh, isOutlier, totalComparisons: prices.length });
-          }
-        }
+      
+      setRecord(data.record);
+      
+      if (data.priceStats) {
+        setPriceStats(data.priceStats);
       }
     } catch (err: any) {
       setError(err.message);

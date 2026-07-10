@@ -21,6 +21,8 @@ const { parseFull, verdict, toUSD, classifyListingType } = require('./_lib/parse
 const { parseMessageWithContext } = require('./_lib/context-tracker');
 const { matchParsedListing } = require('./_lib/catalog-matcher');
 const { withRateLimit } = require('./_lib/rate-limiter');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -31,13 +33,6 @@ const HEADERS = {
   'Authorization': `Bearer ${SUPABASE_KEY}`,
   'Content-Type': 'application/json',
 };
-
-// ─── CORS ────────────────────────────────────────────────────────────────────
-function setCors(res) {
-  res.setHeader('Access-Control-Allow-Origin', process.env.ALLOWED_ORIGIN || '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-}
 
 // ─── VERIFY GREEN API WEBHOOK ──────────────────────────────────────────────
 function isValidWebhook(body) {
@@ -141,8 +136,7 @@ async function processMessage(body) {
 
 // ─── MAIN HANDLER ──────────────────────────────────────────────────────────
 const handler = async function handler(req, res) {
-  setCors(res);
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (setCorsHeaders(res, req)) return;
 
   // ── GET /api/green-api-live/stats ──
   if (req.method === 'GET') {

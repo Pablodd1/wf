@@ -3,9 +3,11 @@
  * Returns monthly min/avg/max price data for chart — SUPABASE
  */
 const { getMonthlyPrices } = require('./_lib/supabase');
+const { setCorsHeaders } = require('./_lib/cors');
+
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   
   try {
     const { reference, months = 6 } = req.query;

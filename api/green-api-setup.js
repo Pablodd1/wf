@@ -1,3 +1,4 @@
+const { setCorsHeaders } = require('./_lib/cors');
 /**
  * /api/green-api-setup.js
  * One-time setup to configure Green API webhook.
@@ -17,7 +18,7 @@ async function callGreenApi(method, payload) {
 }
 
 module.exports = async (req, res) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  if (setCorsHeaders(res, req)) return;
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
