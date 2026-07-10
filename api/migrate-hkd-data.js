@@ -5,7 +5,7 @@
  * Run: curl -X POST "https://watchfacts-poc.vercel.app/api/migrate-hkd-data"
  * (requires ADMIN_KEY in request body)
  */
-const { createClient } = require('@supabase/supabase-js');
+const { getClient } = require('./_lib/supabase');
 
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') {
@@ -19,10 +19,10 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const supabase = createClient(
-      process.env.SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_KEY
-    );
+    const supabase = getClient();
+    if (!supabase) {
+      return res.status(500).json({ error: 'Supabase client unavailable' });
+    }
 
     // Find all HKD records with no currency flag
     const { data: rows, error } = await supabase
