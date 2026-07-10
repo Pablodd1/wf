@@ -142,10 +142,6 @@ async function routeMessage(body, supabaseClient) {
     created_at: new Date((body.timestamp || Date.now()/1000) * 1000).toISOString(),
     flags: [],
     catalog_entry: catalogEntry || null,
-
-    // Insert into batch if needed
-    batch_id: null,
-    normalized_record_id: null,
   };
 
   // 9. Route based on confidence level

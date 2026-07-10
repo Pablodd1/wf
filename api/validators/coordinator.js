@@ -3,20 +3,20 @@
  * Orchestrates all validators and aggregates results
  */
 
-import { CurrencyValidator } from './currency.js';
-import { ReferenceValidator } from './reference.js';
-import { DialValidator } from './dial.js';
-import { OutlierValidator } from './outlier.js';
-import { AnalyticsValidator } from './analytics.js';
-import { ImageValidator } from './image.js';
-import { createClient } from '@supabase/supabase-js';
+const { CurrencyValidator } = require('./currency.js');
+const { ReferenceValidator } = require('./reference.js');
+const { DialValidator } = require('./dial.js');
+const { OutlierValidator } = require('./outlier.js');
+const { AnalyticsValidator } = require('./analytics.js');
+const { ImageValidator } = require('./image.js');
+const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-export class ValidationCoordinator {
+class ValidationCoordinator {
   constructor() {
     this.validators = [
       new CurrencyValidator(),
@@ -205,3 +205,5 @@ export class ValidationCoordinator {
     return stats;
   }
 }
+
+module.exports = { ValidationCoordinator };

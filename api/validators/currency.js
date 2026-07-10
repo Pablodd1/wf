@@ -3,9 +3,9 @@
  * Validates currency conversions and detects outliers
  */
 
-import { BaseValidator } from './base.js';
+const { BaseValidator } = require('./base.js');
 
-export class CurrencyValidator extends BaseValidator {
+class CurrencyValidator extends BaseValidator {
   constructor() {
     super('CURRENCY', '1.0');
     
@@ -142,3 +142,5 @@ export class CurrencyValidator extends BaseValidator {
     };
   }
 }
+
+module.exports = { CurrencyValidator };

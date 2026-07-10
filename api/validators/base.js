@@ -3,7 +3,7 @@
  * All validation agents inherit from this
  */
 
-export class BaseValidator {
+class BaseValidator {
   constructor(name, version = '1.0') {
     this.name = name;
     this.version = version;
@@ -73,3 +73,5 @@ export class BaseValidator {
  * @property {Object} output_data
  * @property {Array} issues
  */
+
+module.exports = { BaseValidator };

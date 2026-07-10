@@ -3,15 +3,15 @@
  * Detects statistical outliers based on brand/reference pricing
  */
 
-import { BaseValidator } from './base.js';
-import { createClient } from '@supabase/supabase-js';
+const { BaseValidator } = require('./base.js');
+const { createClient } = require('@supabase/supabase-js');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_KEY
 );
 
-export class OutlierValidator extends BaseValidator {
+class OutlierValidator extends BaseValidator {
   constructor() {
     super('OUTLIER', '1.0');
   }
@@ -173,3 +173,5 @@ export class OutlierValidator extends BaseValidator {
     };
   }
 }
+
+module.exports = { OutlierValidator };

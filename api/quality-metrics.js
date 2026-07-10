@@ -3,15 +3,15 @@
  * Used by QualityPage.tsx
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { setCorsHeaders } from './_lib/cors';
+const { createClient } = require('@supabase/supabase-js');
+const { setCorsHeaders } = require('./_lib/cors');
 
 const supabase = createClient(
   process.env.SUPABASE_URL || '',
   process.env.SUPABASE_SERVICE_KEY || ''
 );
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (!setCorsHeaders(req, res)) {
     return;
   }
@@ -50,3 +50,5 @@ export default async function handler(req, res) {
     res.status(500).json({ error: 'Internal server error' });
   }
 }
+
+module.exports = handler;

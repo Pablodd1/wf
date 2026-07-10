@@ -7,9 +7,11 @@
  * POST /api/batch/:id/review - Submit review decision
  */
 
-import { createClient } from '@supabase/supabase-js';
-import { parseMessage } from '../parser.js';
-import { ValidationCoordinator } from '../validators/coordinator.js';
+'use strict';
+
+const { createClient } = require('@supabase/supabase-js');
+const { parseMessage } = require('../parser.js');
+const { ValidationCoordinator } = require('../validators/coordinator.js');
 
 const supabase = createClient(
   process.env.SUPABASE_URL,

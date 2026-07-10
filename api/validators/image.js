@@ -3,9 +3,9 @@
  * Validates image URLs and checks accessibility
  */
 
-import { BaseValidator } from './base.js';
+const { BaseValidator } = require('./base.js');
 
-export class ImageValidator extends BaseValidator {
+class ImageValidator extends BaseValidator {
   constructor() {
     super('IMAGE', '1.0');
   }
@@ -132,3 +132,5 @@ export class ImageValidator extends BaseValidator {
     return result;
   }
 }
+
+module.exports = { ImageValidator };

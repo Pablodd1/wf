@@ -3,10 +3,10 @@
  * Validates reference numbers against catalog
  */
 
-import { BaseValidator } from './base.js';
-import { lookupCatalog } from '../_lib/catalog.js';
+const { BaseValidator } = require('./base.js');
+const { lookupCatalog } = require('../_lib/catalog-matcher');
 
-export class ReferenceValidator extends BaseValidator {
+class ReferenceValidator extends BaseValidator {
   constructor() {
     super('REFERENCE', '1.0');
   }
@@ -190,3 +190,5 @@ export class ReferenceValidator extends BaseValidator {
     return { valid: true };
   }
 }
+
+module.exports = { ReferenceValidator };

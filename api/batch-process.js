@@ -6,11 +6,11 @@
  * Body: { batchId: "...", dryRun: true }
  */
 
-import { getClient } from './_lib/supabase';
-import { parseFull } from './_lib/parser';
-import { routeMessage } from './_lib/message-router';
+const { getClient } = require('./_lib/supabase');
+const { parseFull } = require('./_lib/parser');
+const { routeMessage } = require('./_lib/message-router');
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -154,3 +154,5 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: error.message });
   }
 }
+
+module.exports = handler;

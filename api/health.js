@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { setCorsHeaders } = require('./_lib/cors');
 
 module.exports = async function handler(req, res) {
   if (setCorsHeaders(res, req)) return;
@@ -41,7 +42,6 @@ module.exports = async function handler(req, res) {
   // Check 3: Catalog matcher
   try {
     const { lookupCatalog } = require('./_lib/catalog-matcher');
-const { setCorsHeaders } = require('./_lib/cors');
 
     const cat = lookupCatalog('Rolex', '126610LN');
     checks.catalog = {

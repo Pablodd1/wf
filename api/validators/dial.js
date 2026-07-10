@@ -3,9 +3,9 @@
  * Validates dial colors and descriptions
  */
 
-import { BaseValidator } from './base.js';
+const { BaseValidator } = require('./base.js');
 
-export class DialValidator extends BaseValidator {
+class DialValidator extends BaseValidator {
   constructor() {
     super('DIAL', '1.0');
     
@@ -114,3 +114,5 @@ export class DialValidator extends BaseValidator {
     };
   }
 }
+
+module.exports = { DialValidator };

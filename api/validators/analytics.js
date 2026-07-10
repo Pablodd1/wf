@@ -3,9 +3,9 @@
  * Validates computed analytics and statistics
  */
 
-import { BaseValidator } from './base.js';
+const { BaseValidator } = require('./base.js');
 
-export class AnalyticsValidator extends BaseValidator {
+class AnalyticsValidator extends BaseValidator {
   constructor() {
     super('ANALYTICS', '1.0');
   }
@@ -149,3 +149,5 @@ export class AnalyticsValidator extends BaseValidator {
     };
   }
 }
+
+module.exports = { AnalyticsValidator };

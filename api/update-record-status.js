@@ -3,9 +3,9 @@
  * Approve or reject a normalized record
  */
 
-import { createClient } from '@supabase/supabase-js';
+const { createClient } = require('@supabase/supabase-js');
 
-export default async function handler(req, res) {
+async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -65,3 +65,5 @@ export default async function handler(req, res) {
     });
   }
 }
+
+module.exports = handler;
