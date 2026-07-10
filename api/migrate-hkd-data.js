@@ -17,7 +17,7 @@ module.exports = async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { adminKey, dryRun = true, debug = false, batchSize = 500 } = req.body;
+  const { adminKey, dryRun = true, debug = false, batchSize = 50, offset = 0 } = req.body;
   if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
     return res.status(401).json({ error: 'Invalid admin key' });
   }
@@ -27,6 +27,10 @@ module.exports = async function handler(req, res) {
     if (!supabase) {
       return res.status(500).json({ error: 'Supabase client unavailable' });
     }
+
+    // Vercel serverless timeout protection (55s max, leave 5s buffer)
+    const startTime = Date.now();
+    const TIMEOUT_MS = 55000;
 
     if (debug) {
       // Diagnostic: check currency distribution and sample HKD records
