@@ -68,20 +68,27 @@ module.exports = async function handler(req, res) {
     //   storedPrice / rawHKD ≈ 0.0163
     // If the ratio is close to 0.0163, we apply the correction factor.
     
-    let offset = 0;
+    let currentOffset = offset; // Use parameter from request body
     let totalScanned = 0;
     let totalCorrected = 0;
     let totalSkipped = 0;
     const samples = [];
+    let timedOut = false;
 
     while (true) {
+      // Timeout protection: exit loop if approaching Vercel's 60s limit
+      if (Date.now() - startTime > TIMEOUT_MS) {
+        timedOut = true;
+        break;
+      }
+
       const { data: batch, error } = await supabase
         .from('watch_records')
         .select('id, price_usd, raw_message')
         .ilike('raw_message', '%HKD%')
         .gt('price_usd', 0)
         .order('id')
-        .range(offset, offset + batchSize - 1);
+        .range(currentOffset, currentOffset + batchSize - 1);
 
       if (error) throw error;
       if (!batch || batch.length === 0) break;
@@ -160,7 +167,7 @@ module.exports = async function handler(req, res) {
         totalCorrected++;
       }
 
-      offset += batchSize;
+      currentOffset += batchSize;
       if (batch.length < batchSize) break;
     }
 
@@ -171,9 +178,10 @@ module.exports = async function handler(req, res) {
       totalSkipped,
       correctionFactor: CORRECTION_FACTOR,
       samples,
+      nextOffset: timedOut ? currentOffset : null,
       message: dryRun
-        ? `Dry run: ${totalCorrected} records would be corrected out of ${totalScanned} scanned.`
-        : `Migration complete: ${totalCorrected} records corrected.`
+        ? `Dry run: ${totalCorrected} records would be corrected out of ${totalScanned} scanned.${timedOut ? ' (timeout - continue with nextOffset)' : ''}`
+        : `Migration complete: ${totalCorrected} records corrected.${timedOut ? ' (timeout - continue with nextOffset)' : ''}`
     });
 
   } catch (err) {
