@@ -16,6 +16,7 @@ import InsightDetails from '@/pages/InsightDetails';
 import ReviewDashboard from '@/pages/ReviewDashboard';
 import BatchReview from '@/pages/BatchReview';
 import CreateBatch from '@/pages/CreateBatch';
+import MonitorDashboard from '@/pages/MonitorDashboard';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ThemeProvider } from '@/hooks/useTheme';
 
@@ -41,6 +42,7 @@ export default function App() {
           <Route path="/pipeline" element={<ReviewDashboard />} />
           <Route path="/pipeline/batch/:batchId" element={<BatchReview />} />
           <Route path="/pipeline/create" element={<CreateBatch />} />
+          <Route path="/monitor" element={<MonitorDashboard />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
