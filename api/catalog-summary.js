@@ -1,10 +1,11 @@
 /**
  * GET /api/catalog-summary
  * Returns brand → reference → dial_color → { avg_price, count, min_year, max_year }
- * Uses cursor-based pagination on id to avoid Supabase/MySQL 57014 timeouts.
- * Processes in batches of 1000, aggregates client-side, caches for 5 minutes.
+ * v4.10: rewritten from MySQL db.query to Supabase client (MySQL john@% 500 fix).
+ * Uses cursor-based pagination on id to avoid timeouts.
+ * Caches for 5 minutes in-memory.
  */
-const db = require('./_lib/db');
+const { getClient } = require('./_lib/supabase');
 
 // In-memory cache
 let cache = null;
@@ -22,14 +23,20 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    // Step 1: Get min/max id to know the range
-    const rangeRows = await db.query(`
-      SELECT MIN(id) as min_id, MAX(id) as max_id, COUNT(*) as total
-      FROM watch_records
-    `);
-    const { min_id, max_id, total } = rangeRows[0];
+    const client = getClient();
+    if (!client) {
+      return res.status(500).json({ error: 'Database client not available' });
+    }
 
-    if (!min_id || !max_id) {
+    // Step 1: Get total count + id range
+    const { count, error: countErr } = await client
+      .from('watch_records')
+      .select('id', { count: 'exact', head: true });
+
+    if (countErr) throw countErr;
+    const total = count || 0;
+
+    if (total === 0) {
       return res.status(200).json({
         generated_at: new Date().toISOString(),
         total_records: 0,
@@ -37,26 +44,26 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Step 2: Cursor-based pagination — iterate through id ranges
-    const aggregation = {}; // key: "brand||ref||dial" → accumulator
-
-    let cursor = min_id;
+    // Step 2: Cursor-based pagination
+    const aggregation = {};
+    let cursor = 0;
     let batchesProcessed = 0;
+    const MAX_BATCHES = 2500;
 
-    while (cursor <= max_id) {
-      const batchEnd = cursor + BATCH_SIZE - 1;
+    while (batchesProcessed < MAX_BATCHES) {
+      const { data: batch, error: batchErr } = await client
+        .from('watch_records')
+        .select('id, brand, reference, dial_color, price_usd, year')
+        .gt('id', cursor)
+        .not('brand', 'is', null)
+        .not('reference', 'is', null)
+        .order('id', { ascending: true })
+        .limit(BATCH_SIZE);
 
-      const rows = await db.query(
-        `SELECT id, brand, reference, dial_color, price_usd, year
-         FROM watch_records
-         WHERE id >= ? AND id <= ?
-           AND brand IS NOT NULL
-           AND reference IS NOT NULL
-         ORDER BY id`,
-        [cursor, batchEnd]
-      );
+      if (batchErr) throw batchErr;
+      if (!batch || batch.length === 0) break;
 
-      for (const row of rows) {
+      for (const row of batch) {
         const dial = row.dial_color || 'Unknown';
         const key = `${row.brand}||${row.reference}||${dial}`;
 
@@ -87,11 +94,12 @@ module.exports = async function handler(req, res) {
         }
       }
 
-      cursor = batchEnd + 1;
+      // Advance cursor to last id in this batch
+      cursor = batch[batch.length - 1].id;
       batchesProcessed++;
 
-      // Safety: cap at 2500 batches (2.5M rows with 1000 batch size)
-      if (batchesProcessed > 2500) break;
+      // If we got fewer than BATCH_SIZE rows, we've reached the end
+      if (batch.length < BATCH_SIZE) break;
     }
 
     // Step 3: Build summary array
