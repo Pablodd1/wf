@@ -1223,6 +1223,11 @@ function parsePrice(text, ref) {
       const num = parseFloat(m[1]);
       return Math.round(num * 0.128); // HKD → USD at 0.128
     }, priority: 4 },
+    // v4.11: k-suffix HKD: 855k hkd, 410K HKD, 165k hkd (number+k then currency)
+    { regex: /\b(\d{1,3}(?:\.\d{1,3})?)\s*([kK])\s*(HKD|hkd)\b/gi, handler: (m) => {
+      const num = parseFloat(m[1]) * 1000;
+      return Math.round(num * 0.128); // HKD → USD
+    }, priority: 4 },
     // Currency stuck to number: HKD930K, HKD583K, USD185000, hkd435k, HKD 98,000,
     // AED 177,500 (case-insensitive). v4.9: return RAW amount in original currency.
     // parsePrice NEVER converts — parseFull stores price+currency as a pair and
@@ -1937,7 +1942,7 @@ function parseWTB(text) {
   const brand = parseBrand(text);
 
   // Extract reference
-  const ref = parseReference(text, brand || undefined);
+  let ref = parseReference(text, brand || undefined);
 
   // Infer brand from ref if not found in text
   const refInferredBrand = ref ? inferBrandFromRef(ref) : null;
@@ -2136,7 +2141,7 @@ function parseFull(rawMsg) {
   const brand = parseBrand(text);
 
   // Extract reference
-  const ref = parseReference(text, brand || undefined);
+  let ref = parseReference(text, brand || undefined);
 
   // v4.2/v4.3: Reference-prefix brand inference. For the well-established
   // cross-contamination set (v4.2), auto-override the text brand — these
