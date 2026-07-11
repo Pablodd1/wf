@@ -1,36 +1,64 @@
+/**
+ * GET /api/listings
+ * Trading Floor data API — serves all watch categories with proper counts.
+ * 
+ * Query params:
+ *   category  = all | watches | multi | wtb | forsale  (default: all)
+ *   brand     = filter by brand
+ *   reference = filter by reference  
+ *   condition = filter by condition
+ *   search    = text search across brand/reference/raw_message
+ *   sort      = created_at | price_usd | confidence (default: created_at)
+ *   order     = asc | desc (default: desc)
+ *   limit     = page size (default: 50, max: 500)
+ *   page      = page number (default: 1)
+ */
 const { getClient } = require('./_lib/supabase');
 const { setCorsHeaders } = require('./_lib/cors');
-
 
 module.exports = async function handler(req, res) {
   if (setCorsHeaders(res, req)) return;
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const {
-    brand,
-    reference,
-    verdict,
-    condition,
-    limit = 50,
-    page = 1,
-    search,
-    sort = 'created_at',
-    order = 'desc'
+    brand, reference, condition, search,
+    sort = 'created_at', order = 'desc',
+    limit = 50, page = 1,
+    category = 'all',
   } = req.query;
 
   try {
     const client = getClient();
-    const pageSize = Math.min(parseInt(limit), 5000);
+    const pageSize = Math.min(parseInt(limit), 500);
     const from = (parseInt(page) - 1) * pageSize;
 
-    // Use a targeted query — NEVER count(*) on 2.39M rows
-    let query = client
-      .from('watch_records')
-      .select('*')
-      .limit(pageSize);
+    // Build query — start with base, add filters
+    let query = client.from('watch_records').select('*', { count: 'estimated' });
 
-    // Verdict filter is OPTIONAL — Trading Floor shows all, Admin can filter
-    if (verdict) query = query.eq('verdict', verdict);
+    // ── Category filters ──
+    switch (category) {
+      case 'watches':
+        // Single watches only — exclude multi-listings, WTB, non-watch
+        query = query.not('listing_type', 'in', '(MULTI,NON_WATCH)');
+        query = query.not('verdict', 'eq', 'RECYCLE');
+        break;
+      case 'multi':
+        // Multi-watch stock lists
+        query = query.eq('listing_type', 'MULTI');
+        break;
+      case 'wtb':
+        // Want to buy
+        query = query.eq('listing_type', 'WTB');
+        break;
+      case 'forsale':
+        // WTS only (exclude WTB, MULTI, NON_WATCH, RECYCLE)
+        query = query.not('listing_type', 'in', '(WTB,MULTI,NON_WATCH)');
+        query = query.not('verdict', 'eq', 'RECYCLE');
+        break;
+      default:
+        // 'all' — everything except RECYCLE
+        query = query.not('verdict', 'eq', 'RECYCLE');
+    }
 
     if (brand) query = query.eq('brand', brand);
     if (reference) query = query.eq('reference', reference);
@@ -39,7 +67,7 @@ module.exports = async function handler(req, res) {
       query = query.or(`brand.ilike.%${search}%,reference.ilike.%${search}%,raw_message.ilike.%${search}%`);
     }
 
-    const { data, error } = await query
+    const { data, count, error } = await query
       .order(sort, { ascending: order === 'asc' })
       .range(from, from + pageSize - 1);
 
@@ -47,9 +75,10 @@ module.exports = async function handler(req, res) {
 
     res.status(200).json({
       rows: data || [],
-      total: data?.length || 0,
+      total: count || 0,
       page: parseInt(page),
-      limit: pageSize
+      limit: pageSize,
+      category,
     });
   } catch (err) {
     console.error('Listings error:', err);

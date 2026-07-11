@@ -458,7 +458,7 @@ export default function TradingFloor() {
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState('');
   const [condition, setCondition] = useState('All');
-  const [listingType, setListingType] = useState<'all' | 'forsale' | 'wtb' | 'watches' | 'other'>('forsale');
+  const [listingType, setListingType] = useState<'all' | 'forsale' | 'wtb' | 'multi' | 'watches'>('all');
   const [showConverter, setShowConverter] = useState(false);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(2392784);
@@ -485,13 +485,10 @@ export default function TradingFloor() {
 
   // Fetch real-time total count from API
   useEffect(() => {
-    fetch(`/api/listings?limit=1`)
+    fetch(`/api/stats`)
     .then(r => r.json())
     .then(data => {
-      const rows = data.rows || [];
-      // Estimate total from content-range or just use the total field
-      const total = data.total || (Array.isArray(data) ? data.length : 0);
-      if (total > 0) setTotal(total * 100); // rough estimate
+      if (data.totalRecords) setTotal(data.totalRecords);
     })
     .catch(() => {});
   }, []);
@@ -504,8 +501,14 @@ export default function TradingFloor() {
     try {
       const currentPageSize = customPageSize || pageSize;
       const currentPage = append ? page : 1;
-      // Use the API endpoint instead of direct Supabase
-      let url = `/api/listings?limit=${currentPageSize}&page=${currentPage}`;
+      // Map listingType to API category
+      const categoryMap: Record<string, string> = {
+        all: 'all', forsale: 'forsale', wtb: 'wtb',
+        multi: 'multi', watches: 'watches'
+      };
+      const category = categoryMap[listingType] || 'all';
+      
+      let url = `/api/listings?limit=${currentPageSize}&page=${currentPage}&category=${category}`;
 
       if (query) url += `&search=${encodeURIComponent(query)}`;
       if (condition !== 'All') url += `&condition=${encodeURIComponent(condition)}`;
@@ -514,16 +517,10 @@ export default function TradingFloor() {
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
       const rows = data.rows || data || [];
+      
+      // Use real total from API
+      if (data.total && !append) setTotal(data.total);
       let processedData = rows;
-
-      if (listingType === 'forsale') {
-        const wtbTerms = ['wtb','want to buy','looking for','iso ','in search of','ntq','need to buy','buying'];
-        processedData = processedData.filter((l: WatchListing) => {
-          if (!l.raw_message) return true;
-          const lower = l.raw_message.toLowerCase();
-          return !wtbTerms.some(t => lower.includes(t));
-        });
-      }
 
       // Preload images using catalog (instant, no network)
       const refs: string[] = processedData.map((l: WatchListing) => l.reference || '').filter(Boolean);
@@ -682,7 +679,7 @@ export default function TradingFloor() {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
-                onClick={() => { setQuery(''); setCondition('All'); setListingType('forsale'); setPage(1); }}
+                onClick={() => { setQuery(''); setCondition('All'); setListingType('all'); setPage(1); }}
                 className="px-4 py-3 border border-white/10 rounded-xl text-sm text-white/40 hover:bg-white/5 hover:text-white/70 flex items-center gap-1.5 transition-all"
               >
                 <Filter size={14} /> Reset
@@ -706,10 +703,10 @@ export default function TradingFloor() {
           <div className="flex items-center justify-between flex-wrap gap-3">
             <div className="flex items-center gap-2 flex-wrap">
               {[
+                { id: 'all' as const, label: 'ALL WATCHES', icon: Watch },
                 { id: 'forsale' as const, label: 'FOR SALE', icon: DollarSign },
-                { id: 'wtb' as const, label: 'NTQ/WTB', icon: Search },
-                { id: 'watches' as const, label: 'WATCHES', icon: Watch },
-                { id: 'other' as const, label: 'OTHER', icon: Gem },
+                { id: 'multi' as const, label: 'MULTI-LISTINGS', icon: Database },
+                { id: 'wtb' as const, label: 'WTB', icon: Search },
               ].map(item => {
                 const Icon = item.icon;
                 const isActive = listingType === item.id;
@@ -718,7 +715,7 @@ export default function TradingFloor() {
                     key={item.id}
                     whileHover={{ scale: 1.04 }}
                     whileTap={{ scale: 0.96 }}
-                    onClick={() => { setListingType(isActive ? 'all' : item.id); setPage(1); }}
+                    onClick={() => { setListingType(item.id); setPage(1); }}
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-[11px] font-semibold uppercase tracking-[0.06em] transition-all duration-300 ${
                       isActive
                         ? 'bg-gradient-to-r from-[#D4AF37] to-[#E5C158] text-[#0A0A0F] shadow-lg shadow-[#D4AF37]/20'
