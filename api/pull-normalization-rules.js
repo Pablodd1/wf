@@ -25,6 +25,16 @@ module.exports = async function handler(req, res) {
   });
 
   try {
+    // Diagnostic: first check what we can see
+    const [dbs] = await conn.execute('SHOW DATABASES');
+    const dbNames = dbs.map(r => r.Database);
+    
+    const [tbls] = await conn.execute(
+      'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?',
+      ['thecollective_inventory']
+    );
+    const tblNames = tbls.map(r => r.TABLE_NAME).filter(n => n.includes('normal'));
+    
     const [rows] = await conn.execute(
       `SELECT 
         LOWER(extracted_reference) as extracted_ref,
@@ -39,12 +49,13 @@ module.exports = async function handler(req, res) {
          AND manufacturer_reference IS NOT NULL
          AND manufacturer_brand IS NOT NULL
        ORDER BY extracted_reference
-       LIMIT 10000`
+       LIMIT 5000`
     );
 
     res.json({
       ok: true,
       count: rows.length,
+      diagnostics: { dbNames, tblNames },
       rows: rows,
     });
   } catch (e) {
