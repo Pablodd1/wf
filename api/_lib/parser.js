@@ -1217,6 +1217,12 @@ function parsePrice(text, ref) {
     { regex: /\b(\d{1,3},\d{3})\s*[mM]\b/g, multiplier: 1e6, priority: 1 },
     // 1.080.000 (European dot-thousands chain)
     { regex: /\b(\d{1,3}(?:\.\d{3})+)\b/g, multiplier: 1, european: true, priority: 1 },
+    // v4.11: number stuck to HKD suffix: 36600HKD, 35500HKD, 18200hkd (no space, no comma)
+    // This is the single most common HKD format in dealer broadcasts and was MISSING.
+    { regex: /\b(\d{4,6})(HKD|hkd)\b/gi, handler: (m) => {
+      const num = parseFloat(m[1]);
+      return Math.round(num * 0.128); // HKD → USD at 0.128
+    }, priority: 4 },
     // Currency stuck to number: HKD930K, HKD583K, USD185000, hkd435k, HKD 98,000,
     // AED 177,500 (case-insensitive). v4.9: return RAW amount in original currency.
     // parsePrice NEVER converts — parseFull stores price+currency as a pair and
@@ -1230,43 +1236,44 @@ function parsePrice(text, ref) {
       const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[3]] || 1;
       // HKD stays RAW (read-time convertLegacyPrices handles it). All other
       // currencies convert inline because NOTHING downstream converts them.
-      const rate = cur === 'HKD' ? 1 : (RATES[cur] || 1);
+      const rate = cur === 'HKD' ? 0.128 : (RATES[cur] || 1);
       return num * mult * rate;
     }, priority: (m) => (m[1].toUpperCase() === 'USD' || m[1].toUpperCase() === 'USDT') ? 3 : 2 },
     // NORM_002: hkd998m, hkd 1.5m — explicit HKD with m suffix
     // Also matches typo "hkf" (common in WhatsApp from non-native typists)
     { regex: /hk[df]?\s*(\d{1,3}(?:\.\d{1,3})?)\s*[mM]\b/gi, handler: (m) => {
       const num = parseFloat(m[1]);
-      return num * 1e6; // RAW HKD — converted at read-time
+      return Math.round(num * 1e6 * 0.128); // HKD → USD
     }, priority: 2 },
-    // HK$ with optional space + comma-thousands: "HK$ 355,000", "HK$355,000"
+    // HK$ with optional space + comma-thousands
     { regex: /HK\$\s*(\d{1,3}(?:,\d{3})+)\b/gi, handler: (m) => {
       const num = parseFloat(m[1].replace(/,/g, ''));
-      return num; // RAW HKD
+      return Math.round(num * 0.128); // HKD → USD
     }, priority: 2 },
-    // v4.8: HK$ without comma-thousands: "HK$355000", "HK$355000" (compact, no comma)
-    // Previously fell through to the generic $-prefix pattern and was treated as USD.
+    // v4.8: HK$ without comma-thousands
     { regex: /HK\$\s*(\d{4,7})\b/gi, handler: (m) => {
       const num = parseFloat(m[1]);
-      return num; // RAW HKD
+      return Math.round(num * 0.128); // HKD → USD
     }, priority: 2 },
-    // v4.8: ?840,000HKD — encoding artifact where $ → ? in WhatsApp relay.
+    // v4.8: ?840,000HKD
     // The ? acts as a dollar-sign substitute; if followed by HKD marker,
     // treat as raw HKD. Without HKD marker, treat as USD (the ? is a broken $).
     { regex: /\?\s*(\d{1,3}(?:,\d{3})+)\s*(?=HKD|hkd)/gi, handler: (m) => {
       const num = parseFloat(m[1].replace(/,/g, ''));
-      return num; // RAW HKD
+      return Math.round(num * 0.128); // HKD → USD
     }, priority: 2 },
-    // HK$ with k/m suffix: "HK$ 355k", "HK$1.5m"
+    // HK$ with k/m suffix
     { regex: /HK\$\s*(\d{1,3}(?:\.\d{1,3})?)\s*([kKmM])\b/g, handler: (m) => {
       const num = parseFloat(m[1]);
       const mult = { k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] || 1;
-      return num * mult; // RAW HKD
+      return Math.round(num * mult * 0.128); // HKD → USD
     }, priority: 2 },
-    // 268000 with currency — return RAW in original currency (no inline convert)
+    // 268000 HKD — convert HKD inline, pass others through
     { regex: /\b(\d{4,7})\s*(USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, handler: (m) => {
       const num = parseFloat(m[1]);
-      return num; // RAW
+      const cur = m[2].toUpperCase();
+      const rate = RATES[cur] || 1;
+      return cur === 'HKD' ? Math.round(num * 0.128) : (rate ? Math.round(num * rate) : num);
     }, priority: (m) => (m[2].toUpperCase() === 'USD' || m[2].toUpperCase() === 'USDT') ? 3 : 2 },
     // v3.4: comma-thousands with currency: "205,000 hkd", "111,500hkd", "3,056,055 HKD"
     // v4.7 fix: added a negative lookbehind so this doesn't wrongly claim a number
