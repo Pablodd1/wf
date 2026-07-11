@@ -20,7 +20,7 @@
 // ═══════════════════════════════════════════════════════════════
 // CATALOG MATCHER — wired in at module load time
 // ═══════════════════════════════════════════════════════════════
-const { lookupCatalog } = require('./catalog-matcher');
+const { lookupCatalog, lookupEnriched, lookupNormalized } = require('./catalog-matcher');
 
 // ═══════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -910,6 +910,11 @@ function parseDial(text, ref, brand) {
 
     // Fallback: if catalog has a dial color for this ref, use it
     if (ref) {
+      // Try enriched_refs first (has dial_color + image_url)
+      const enrichedEntry = lookupEnriched(brand || null, ref);
+      if (enrichedEntry && enrichedEntry.dial_color) {
+        return normalizeDialColor(enrichedEntry.dial_color.toLowerCase());
+      }
       const catalogEntry = lookupCatalog(brand || null, ref);
       if (catalogEntry && catalogEntry.dialColor) {
         return normalizeDialColor(catalogEntry.dialColor.toLowerCase());
@@ -923,6 +928,11 @@ function parseDial(text, ref, brand) {
   // No color keyword found — try catalog, then ref-suffix inference
   if (ref) {
     // Catalog fallback: if catalog has a dial color for this ref, use it
+    // Try enriched_refs first
+    const enrichedEntry2 = lookupEnriched(brand || null, ref);
+    if (enrichedEntry2 && enrichedEntry2.dial_color) {
+      return normalizeDialColor(enrichedEntry2.dial_color.toLowerCase());
+    }
     const catalogEntry = lookupCatalog(brand || null, ref);
     if (catalogEntry && catalogEntry.dialColor) {
       return normalizeDialColor(catalogEntry.dialColor.toLowerCase());
@@ -2247,6 +2257,22 @@ function parseFull(rawMsg) {
   if (priceExceedsCap) {
     flags.PRICE_EXCEEDS_CAP = true;
     validationFlags.push('PRICE_EXCEEDS_CAP');
+  }
+
+  // Normalization rules lookup: resolve short extracted ref to full manufacturer ref
+  if (ref && lookupNormalized) {
+    const normHit = lookupNormalized(ref);
+    if (normHit) {
+      if (normHit.b && (!finalBrand || finalBrand === 'Unknown')) {
+        finalBrand = normHit.b;
+      }
+      if (normHit.r) {
+        ref = normHit.r; // replace short ref with full ref
+      }
+      if (normHit.d && !dial) {
+        // We'll let parseDial handle this via enriched lookup
+      }
+    }
   }
 
   // v4.0: Add WTB intent flag

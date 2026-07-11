@@ -13,10 +13,38 @@ const path = require('path');
 
 // Load once at require-time
 const CATALOG_PATH = path.join(__dirname, '..', '..', 'public', 'catalog.json');
+const ENRICHED_PATH = path.join(__dirname, '..', '..', 'public', 'enriched_refs.json');
 const SHORTREF_MAP_PATH = path.join(__dirname, 'shortref-map.json');
+const NORM_LOOKUP_PATH = path.join(__dirname, '..', '..', 'data', 'normalization-lookup.json');
 let catalogData = [];
 let catalogIndex = new Map();  // key: brand|ref_upper → entry
 let shortrefMap = {};          // JASS-6 Phase 0: "BRAND|SHORT" → "FULLREF" (unambiguous folds only)
+let enrichedIndex = new Map(); // key: brand|ref_upper → enriched entry (dial_color, image_url)
+let normLookup = {};           // key: short_extracted_ref → {b: brand, r: full_ref, d: dial}
+
+// Load enriched_refs.json for dial_color enrichment
+try {
+  const enrichedRaw = fs.readFileSync(ENRICHED_PATH, 'utf8');
+  const enrichedData = JSON.parse(enrichedRaw);
+  for (const entry of enrichedData) {
+    if (!entry.brand || !entry.reference) continue;
+    const key = `${entry.brand.toUpperCase().trim()}|${entry.reference.toUpperCase().trim()}`;
+    if (!enrichedIndex.has(key)) {
+      enrichedIndex.set(key, entry);
+    }
+  }
+  console.log(`[catalog-matcher] Loaded ${enrichedIndex.size} enriched ref entries (from ${enrichedData.length} raw)`);
+} catch (err) {
+  console.warn('[catalog-matcher] Failed to load enriched_refs.json:', err.message);
+}
+
+// Load normalization-lookup.json (MySQL short-ref -> full-ref mappings)
+try {
+  normLookup = JSON.parse(fs.readFileSync(NORM_LOOKUP_PATH, 'utf8'));
+  console.log(`[catalog-matcher] Loaded ${Object.keys(normLookup).length} normalization short-ref mappings`);
+} catch (err) {
+  console.warn('[catalog-matcher] Normalization lookup not loaded (non-fatal):', err.message);
+}
 
 try {
   const raw = fs.readFileSync(CATALOG_PATH, 'utf8');
@@ -199,4 +227,15 @@ module.exports = {
   getStats,
   catalogIndex,
   catalogData,
+  /** Look up dial color from enriched_refs.json */
+  lookupEnriched(brand, ref) {
+    if (!brand || !ref || enrichedIndex.size === 0) return null;
+    const key = `${brand.toUpperCase().trim()}|${ref.toUpperCase().trim()}`;
+    return enrichedIndex.get(key) || null;
+  },
+  /** Resolve short extracted ref to full manufacturer ref via normalization rules */
+  lookupNormalized(extractedRef) {
+    if (!extractedRef || !normLookup) return null;
+    return normLookup[extractedRef.toUpperCase().trim()] || null;
+  },
 };
