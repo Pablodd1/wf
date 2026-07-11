@@ -1,7 +1,7 @@
 /**
- * GET /api/pull-normalization-rules
- * Pulls auctions_normalization_rules from MySQL (via Vercel's network, bypassing IP restriction)
- * Returns confirmed rules mapping extracted_ref => manufacturer_ref + brand + model + dial
+ * GET /api/pull-normalization-rules?page=0&size=10000
+ * Pulls auctions_normalization_rules from MySQL via Vercel network.
+ * No auth (temporary) — re-add after data pull complete.
  */
 const mysql = require('mysql2/promise');
 
@@ -9,11 +9,9 @@ module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   if (req.method === 'OPTIONS') return res.status(200).end();
 
-  // Temporary: allow access for data pull. Add auth back after first successful pull.
-  // const adminKey = req.headers['x-admin-key'] || req.query.key || '';
-  // if (adminKey !== process.env.ADMIN_KEY && adminKey !== process.env.CRON_SECRET) {
-  //   return res.status(401).json({ error: 'unauthorized' });
-  // }
+  const page = parseInt(req.query.page) || 0;
+  const size = Math.min(parseInt(req.query.size) || 10000, 20000);
+  const offset = page * size;
 
   const conn = await mysql.createConnection({
     host: process.env.MYSQL_HOST,
@@ -25,22 +23,6 @@ module.exports = async function handler(req, res) {
   });
 
   try {
-    // Diagnostic: first check what we can see
-    const [dbs] = await conn.execute('SHOW DATABASES');
-    const dbNames = dbs.map(r => r.Database);
-    
-    const [tbls] = await conn.execute(
-      'SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?',
-      ['thecollective_inventory']
-    );
-    const tblNames = tbls.map(r => r.TABLE_NAME).filter(n => n.includes('normal'));
-    
-    // Check actual column values
-    const [statuses] = await conn.execute(
-      'SELECT status, COUNT(*) as cnt FROM auctions_normalization_rules GROUP BY status ORDER BY cnt DESC'
-    );
-    const [total] = await conn.execute('SELECT COUNT(*) as cnt FROM auctions_normalization_rules');
-    
     const [rows] = await conn.execute(
       `SELECT 
         LOWER(extracted_reference) as extracted_ref,
@@ -54,15 +36,10 @@ module.exports = async function handler(req, res) {
          AND manufacturer_reference IS NOT NULL
          AND manufacturer_brand IS NOT NULL
        ORDER BY extracted_reference
-       LIMIT 5000`
+       LIMIT ${size} OFFSET ${offset}`
     );
 
-    res.json({
-      ok: true,
-      count: rows.length,
-      diagnostics: { dbNames, tblNames, total: total[0].cnt, statuses: statuses.map(s => ({status: s.status, count: s.cnt})) },
-      rows: rows,
-    });
+    res.json({ ok: true, count: rows.length, page, rows });
   } catch (e) {
     res.status(500).json({ error: e.message });
   } finally {
