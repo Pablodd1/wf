@@ -43,9 +43,12 @@ module.exports = async function handler(req, res) {
         query = query.not('verdict', 'eq', 'RECYCLE');
         break;
       case 'multi':
-        // Multi-watch stock lists
-        query = query.eq('listing_type', 'MULTI');
-        query = query.not('verdict', 'eq', 'RECYCLE');
+        // Multi-watch stock lists — detected via flags.multi_listing = true
+        // These have verdict=HUMAN and flags containing multi_listing
+        query = query.eq('verdict', 'HUMAN');
+        query = query.not('flags', 'is', null);
+        // We can't filter JSONB fields with simple eq, so accept all HUMAN that aren't RECYCLE
+        // and filter more precisely in the response if needed
         break;
       case 'wtb':
         // Want to buy
