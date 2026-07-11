@@ -28,6 +28,12 @@ export function PublicNavbar() {
       <nav className="flex items-center gap-3">
         <ThemeToggle />
         <Link
+          to="/dashboard"
+          className={`text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ${isLight ? 'text-gray-500 hover:text-gray-900' : 'text-white/70 hover:text-white/90'}`}
+        >
+          Dashboard
+        </Link>
+        <Link
           to="/reports"
           className={`text-[11px] font-medium uppercase tracking-[0.08em] transition-colors ${isLight ? 'text-[#3B5BFE] border-b-2 border-[#3B5BFE] pb-[2px]' : 'text-white/80 hover:text-white'}`}
         >

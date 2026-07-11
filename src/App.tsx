@@ -17,6 +17,7 @@ import ReviewDashboard from '@/pages/ReviewDashboard';
 import BatchReview from '@/pages/BatchReview';
 import CreateBatch from '@/pages/CreateBatch';
 import MonitorDashboard from '@/pages/MonitorDashboard';
+import PipelineDashboard from '@/pages/PipelineDashboard';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ThemeProvider } from '@/hooks/useTheme';
 
@@ -26,6 +27,7 @@ export default function App() {
       <AuthProvider>
         <Routes>
           <Route path="/" element={<Home />} />
+          <Route path="/dashboard" element={<PipelineDashboard />} />
           <Route path="/trading" element={<TradingFloor />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/analytics-dashboard" element={<AnalyticsDashboard />} />
