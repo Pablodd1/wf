@@ -45,6 +45,7 @@ module.exports = async function handler(req, res) {
       case 'multi':
         // Multi-watch stock lists
         query = query.eq('listing_type', 'MULTI');
+        query = query.not('verdict', 'eq', 'RECYCLE');
         break;
       case 'wtb':
         // Want to buy
