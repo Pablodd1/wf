@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ExternalLink, FileSpreadsheet, Download } from 'lucide-react';
-import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart } from 'recharts';
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, ComposedChart, BarChart, Bar, Cell } from 'recharts';
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
@@ -67,6 +67,7 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
+const CHART_COLORS = ['#0d6efd', '#198754', '#dc3545', '#fd7e14', '#6f42c1', '#20c997', '#d63384', '#0dcaf0', '#ffc107', '#6610f2'];
 
 // ── Component ──────────────────────────────────────────────────
 export default function PriceResearch() {
@@ -503,6 +504,40 @@ export default function PriceResearch() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+
+            {/* ── Dial Color Price Chart ── */}
+            {data.dial_analysis && data.dial_analysis.length > 1 && (
+              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Price by Dial Color</h3>
+                <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
+                  Average price comparison across dial color variants for {displayRef}
+                </div>
+                <ResponsiveContainer width="100%" height={Math.max(200, Math.min(400, data.dial_analysis.length * 60))}>
+                  <BarChart data={data.dial_analysis} layout="vertical" margin={{ left: 80, right: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#dee2e6" />
+                    <XAxis type="number" stroke={MUTED} fontSize={11} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <YAxis type="category" dataKey="dial_color" stroke={MUTED} fontSize={12} width={80} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8 }}
+                      formatter={(value: number, name: string) => [`$${value.toLocaleString()}`, name === 'avg_price' ? 'Avg Price' : name]}
+                    />
+                    <Bar dataKey="avg_price" radius={[0, 4, 4, 0]} maxBarSize={32}>
+                      {data.dial_analysis.map((_, i) => (
+                        <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+                <div className="flex items-center gap-4 mt-3 flex-wrap" style={{ fontSize: 12, color: MUTED }}>
+                  {data.dial_analysis.slice(0, 10).map((d, i) => (
+                    <span key={i} className="flex items-center gap-1">
+                      <span style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: CHART_COLORS[i % CHART_COLORS.length], display: 'inline-block' }} />
+                      {d.dial_color}: ${d.avg_price.toLocaleString()}
+                    </span>
+                  ))}
                 </div>
               </div>
             )}
