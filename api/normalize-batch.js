@@ -53,15 +53,12 @@ module.exports = async function handler(req, res) {
     const limit = Math.min(parseInt(req.body?.limit) || 100, 200);
     const offset = parseInt(req.body?.offset) || 0;
 
-    // Fetch unprocessed MYSQL_RAW records
+    // Fetch MYSQL_RAW records — no filter, just range (faster)
     const { data: records, error: fetchErr } = await client
       .from('watch_records')
       .select('id,raw_message,brand,reference,dial_color,price_usd,currency,verdict,listing_type,confidence,parser_version')
       .eq('source', 'MYSQL_RAW')
-      // Only re-normalize if parser_version is old or missing
-      .or('parser_version.is.null,parser_version.eq.v1')
-      .range(offset, offset + limit - 1)
-      .order('id', { ascending: true });
+      .range(offset, offset + limit - 1);
 
     if (fetchErr) throw fetchErr;
     if (!records || records.length === 0) {
@@ -75,6 +72,9 @@ module.exports = async function handler(req, res) {
     let nonWatchTagged = 0;
 
     for (const rec of records) {
+      // Skip already-normalized records (parser_version set)
+      if (rec.parser_version === 'jass-v5') continue;
+      
       const msg = rec.raw_message || '';
       if (msg.length < 10) continue;
 
