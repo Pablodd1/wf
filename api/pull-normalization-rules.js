@@ -35,6 +35,12 @@ module.exports = async function handler(req, res) {
     );
     const tblNames = tbls.map(r => r.TABLE_NAME).filter(n => n.includes('normal'));
     
+    // Check actual column values
+    const [statuses] = await conn.execute(
+      'SELECT status, COUNT(*) as cnt FROM auctions_normalization_rules GROUP BY status ORDER BY cnt DESC'
+    );
+    const [total] = await conn.execute('SELECT COUNT(*) as cnt FROM auctions_normalization_rules');
+    
     const [rows] = await conn.execute(
       `SELECT 
         LOWER(extracted_reference) as extracted_ref,
@@ -44,8 +50,7 @@ module.exports = async function handler(req, res) {
         COALESCE(manufacturer_dial_color,'') as mfr_dial,
         COALESCE(confirmed_nickname,'') as nickname
        FROM auctions_normalization_rules
-       WHERE status = 'confirmed'
-         AND extracted_reference IS NOT NULL
+       WHERE extracted_reference IS NOT NULL
          AND manufacturer_reference IS NOT NULL
          AND manufacturer_brand IS NOT NULL
        ORDER BY extracted_reference
@@ -55,7 +60,7 @@ module.exports = async function handler(req, res) {
     res.json({
       ok: true,
       count: rows.length,
-      diagnostics: { dbNames, tblNames },
+      diagnostics: { dbNames, tblNames, total: total[0].cnt, statuses: statuses.map(s => ({status: s.status, count: s.cnt})) },
       rows: rows,
     });
   } catch (e) {
