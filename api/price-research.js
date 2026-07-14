@@ -30,7 +30,8 @@ function lookupModel(reference, brand) {
 // market_reference_indicators_current has never been queried by live code — if
 // column names differ, we fall back to a live-derived count. REAL DATA ONLY:
 // no invented seller/buyer numbers.
-async function lookupLiquidity(client, reference, listingCount) {
+async function lookupLiquidity(client, reference, brand, listingCount) {
+  const supplyDemand = await lookupSupplyDemand(client, reference, brand);
   try {
     const { data, error } = await client
       .from('market_reference_indicators_current')
@@ -49,10 +50,54 @@ async function lookupLiquidity(client, reference, listingCount) {
         supply_score: d.supply_score,
         wtb_fs_ratio: d.wtb_fs_ratio,
         listing_count: listingCount,
+        supply_count: supplyDemand.supply_count,
+        demand_count: supplyDemand.demand_count,
       };
     }
   } catch { /* fall through to live count */ }
-  return { source: 'live_fallback', listing_count: listingCount };
+  return {
+    source: 'live_fallback',
+    listing_count: listingCount,
+    supply_count: supplyDemand.supply_count,
+    demand_count: supplyDemand.demand_count,
+    wtb_fs_ratio: supplyDemand.wtb_fs_ratio,
+  };
+}
+
+// Counts are the most transparent supply/demand fallback: approved WTS rows
+// are supply and approved WTB/NTQ rows are demand. Head/count avoids shipping
+// records and keeps the query bounded to the exact reference.
+async function lookupSupplyDemand(client, reference, brand) {
+  try {
+    const [supply, demand] = await Promise.all([
+      client
+        .from('watch_records')
+        .select('id', { count: 'estimated', head: true })
+        .eq('brand', brand)
+        .eq('reference', reference)
+        .eq('verdict', 'APPROVED')
+        .eq('listing_type', 'WTS'),
+      client
+        .from('watch_records')
+        .select('id', { count: 'estimated', head: true })
+        .eq('brand', brand)
+        .eq('reference', reference)
+        .eq('verdict', 'APPROVED')
+        .in('listing_type', ['WTB', 'NTQ']),
+    ]);
+    if (supply.error || demand.error) return { supply_count: null, demand_count: null, wtb_fs_ratio: null };
+    const supplyCount = Number.isFinite(supply.count) ? supply.count : null;
+    const demandCount = Number.isFinite(demand.count) ? demand.count : null;
+    return {
+      supply_count: supplyCount,
+      demand_count: demandCount,
+      wtb_fs_ratio: supplyCount != null && demandCount != null && supplyCount > 0
+        ? Math.round((demandCount / supplyCount) * 100) / 100
+        : null,
+    };
+  } catch {
+    return { supply_count: null, demand_count: null, wtb_fs_ratio: null };
+  }
 }
 
 function inferBrand(ref) {
@@ -254,7 +299,7 @@ module.exports = async function handler(req, res) {
 
     // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
     const model = lookupModel(targetRef, brand);
-    const liquidity = await lookupLiquidity(client, targetRef, marketRows.length);
+    const liquidity = await lookupLiquidity(client, targetRef, brand, marketRows.length);
 
     res.status(200).json({
       success: true, brand, reference: rawRef,

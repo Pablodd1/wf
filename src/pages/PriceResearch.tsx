@@ -42,6 +42,8 @@ interface LiquidityData {
   demand_score?: number | null;
   supply_score?: number | null;
   wtb_fs_ratio?: number | null;
+  supply_count?: number | null;
+  demand_count?: number | null;
 }
 
 interface PriceData {
@@ -409,6 +411,24 @@ export default function PriceResearch() {
                 </div>
                 {data.liquidity && (
                   <>
+                    {(data.liquidity.supply_count != null || data.liquidity.demand_count != null) && (
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 12 }}>
+                          <div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase' }}>Supply</div>
+                          <div style={{ fontSize: 24, fontWeight: 700, color: RED, marginTop: 3 }}>
+                            {data.liquidity.supply_count?.toLocaleString() ?? '—'}
+                          </div>
+                          <div style={{ fontSize: 11, color: MUTED }}>approved WTS listings</div>
+                        </div>
+                        <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 12 }}>
+                          <div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase' }}>Demand</div>
+                          <div style={{ fontSize: 24, fontWeight: 700, color: BLUE, marginTop: 3 }}>
+                            {data.liquidity.demand_count?.toLocaleString() ?? '—'}
+                          </div>
+                          <div style={{ fontSize: 11, color: MUTED }}>approved WTB + NTQ requests</div>
+                        </div>
+                      </div>
+                    )}
                     {data.liquidity.source === 'indicators' ? (
                       <>
                         {data.liquidity.liquidity_score != null && (
