@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowRight, BarChart3, Building2, Search, ShieldCheck } from 'lucide-react';
+import { ArrowRight, BarChart3, Building2, Search, ShieldCheck, Sparkles } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { FrontDeskWidget } from '@/components/FrontDeskWidget';
 import { SocialShareRail } from '@/components/SocialShareRail';
@@ -8,6 +8,7 @@ const routes = [
   { icon: Search, label: 'Price research', detail: 'Reference-level market evidence', to: '/price-research' },
   { icon: BarChart3, label: 'Trading floor', detail: 'Dated dealer listings', to: '/trading' },
   { icon: ShieldCheck, label: 'Dealer access', detail: 'Operations and review workspace', to: '/dealer-login' },
+  { icon: Sparkles, label: 'HIRE FII', detail: 'AI-powered deal matching across dealer chats', to: '/hire-fi' },
 ];
 
 const assemblyStages = [
@@ -67,6 +68,7 @@ export default function LandingPage() {
         <nav className="flex items-center gap-5 text-xs font-medium text-white/70 sm:gap-7">
           <Link to="/price-research" className="transition-colors hover:text-white">Research</Link>
           <Link to="/trading" className="transition-colors hover:text-white">Trading</Link>
+          <Link to="/hire-fi" className="text-[#d8bd80] transition-colors hover:text-white">HIRE FII</Link>
           <Link to="/dealer-login" className="hidden transition-colors hover:text-white sm:block">Dealer login</Link>
         </nav>
       </header>
