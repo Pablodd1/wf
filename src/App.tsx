@@ -21,6 +21,7 @@ const DemandSignals = lazy(() => import('@/pages/DemandSignals'));
 const InsightDetails = lazy(() => import('@/pages/InsightDetails'));
 const DealerLogin = lazy(() => import('@/pages/DealerLogin'));
 const HireFi = lazy(() => import('@/pages/HireFi'));
+const Partners = lazy(() => import('@/pages/Partners'));
 
 export default function App() {
   return (
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
         <Route path="/hire-fi" element={<HireFi />} />
+        <Route path="/partners" element={<Partners />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Suspense>
