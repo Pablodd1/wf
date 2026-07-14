@@ -27,6 +27,11 @@ function normalizeBrand(brand) {
   return String(brand || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function humanLabel(value) {
+  const label = String(value || '').trim();
+  return label && !/^(unknown|n\/a|unspecified|null)$/i.test(label) ? label : null;
+}
+
 function inferredOrExpectedBrand(reference, expectedBrand) {
   return expectedBrand || inferBrand(reference) || null;
 }
@@ -74,7 +79,7 @@ function loadCatalogs() {
       _catalog.set(ref, {
         brand: item.brand || inferBrand(item.reference) || null,
         collection: item.collection || null,
-        model: item.model || null,
+        model: humanLabel(item.model) || humanLabel(item.collection),
         caseMetal: item.case_metal || null,
         productionYears: item.production_years || null,
         status: item.status || null,
@@ -93,8 +98,8 @@ function loadCatalogs() {
       if (!ref || _enriched.has(ref)) continue;
       _enriched.set(ref, {
         brand: item.brand || inferBrand(item.reference) || null,
-        collection: item.collection && item.collection !== 'Unknown' ? item.collection : null,
-        model: item.model && item.model !== 'Unknown' ? item.model : null,
+        collection: humanLabel(item.collection),
+        model: humanLabel(item.model) || humanLabel(item.collection),
         caseMetal: item.case_metal && item.case_metal !== 'Unknown' ? item.case_metal : null,
         productionYears: item.production_years && item.production_years !== 'Unknown' ? item.production_years : null,
         liquidityScore: item.liquidity_score != null ? item.liquidity_score : null,

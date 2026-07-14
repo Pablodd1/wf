@@ -5,7 +5,12 @@ import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, 
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
+  id?: string;
   price_usd: number;
+  price_raw?: number | null;
+  currency?: string | null;
+  raw_price_text?: string | null;
+  raw_message?: string | null;
   created_at: string;
   listing_date?: string | null;
   dial_color: string | null;
@@ -175,10 +180,11 @@ export default function PriceResearch() {
   const displayRef = data?.resolvedRef || data?.reference || query;
 
   const listings = (data?.rows || []).filter(r => !r.is_outlier).map(r => ({
-    title: `${data?.brand || ''} ${displayRef}`.trim(),
+    title: `${data?.model || data?.brand || 'Watch'} ${displayRef}`.trim(),
     priceUSD: r.price_usd,
-    price: r.price_usd,
-    currency: 'USD',
+    rawPrice: r.raw_price_text || (r.price_raw && r.currency ? `${r.price_raw.toLocaleString()} ${r.currency}` : null),
+    priceNormalization: r.price_normalization,
+    rawMessage: r.raw_message,
     dial: r.dial_color || 'N/A',
     date: (r.listing_date || r.created_at) ? (r.listing_date || r.created_at).split('T')[0] : '',
     condition: r.condition || 'N/A',
@@ -319,7 +325,7 @@ export default function PriceResearch() {
                 {data.brand}
               </div>
               <div className="flex items-baseline gap-3 mb-3">
-                <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model || 'Unknown Model'}</h2>
+                <h2 style={{ fontSize: 28, fontWeight: 700, color: TEXT }}>{data.model || `${data.brand} ${displayRef}`.trim() || 'Watch'}</h2>
                 <span style={{ fontSize: 18, color: GOLD, fontFamily: 'monospace' }}>{displayRef}</span>
                 {data.collection && <span style={{ fontSize: 13, color: MUTED }}>{data.collection}</span>}
               </div>
@@ -637,7 +643,10 @@ export default function PriceResearch() {
                     <tbody>
                       {data.outlier_rows.slice(0, 100).map((row, index) => (
                         <tr key={`${row.created_at}-${row.price_usd}-${index}`} style={{ borderBottom: `1px solid ${BORDER}` }}>
-                          <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>${row.price_usd.toLocaleString()}</td>
+                          <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>
+                            ${row.price_usd.toLocaleString()}
+                            {row.raw_price_text && <div style={{ color: MUTED, fontSize: 11, fontWeight: 400 }}>{row.raw_price_text}</div>}
+                          </td>
                           <td style={{ padding: '11px 8px' }}>{(row.listing_date || row.created_at) ? (row.listing_date || row.created_at).split('T')[0] : 'Unknown'}</td>
                           <td style={{ padding: '11px 8px', color: '#8a6500' }}>{outlierReason(row.outlier_reason)}</td>
                           <td style={{ padding: '11px 8px' }}>{row.condition || 'Unspecified'}</td>
@@ -698,7 +707,7 @@ function NavBar() {
   );
 }
 
-function ListingRow({ listing }: { listing: { title: string; priceUSD: number; dial: string; date: string; condition: string } }) {
+function ListingRow({ listing }: { listing: { title: string; priceUSD: number; rawPrice: string | null; priceNormalization?: string | null; rawMessage?: string | null; dial: string; date: string; condition: string } }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
@@ -711,6 +720,16 @@ function ListingRow({ listing }: { listing: { title: string; priceUSD: number; d
           {listing.condition && <span className="mr-2">· {listing.condition}</span>}
           {listing.date && <span>· {listing.date}</span>}
         </div>
+        {(listing.rawPrice || listing.priceNormalization) && (
+          <div style={{ fontSize: 11, color: GREEN, marginTop: 4 }}>
+            Raw: {listing.rawPrice || 'price evidence'} {listing.priceNormalization ? ` - ${listing.priceNormalization.replaceAll('_', ' ').toLowerCase()}` : ''}
+          </div>
+        )}
+        {listing.rawMessage && (
+          <div style={{ fontSize: 11, color: MUTED, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            Source: {listing.rawMessage}
+          </div>
+        )}
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${listing.priceUSD?.toLocaleString()}</div>

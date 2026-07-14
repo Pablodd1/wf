@@ -17,7 +17,12 @@ const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 function lookupModel(reference, brand) {
   try {
     const hit = lookupCatalog(reference, brand || null);
-    return hit && hit.found ? (hit.model || null) : null;
+    if (!hit || !hit.found) return null;
+    const model = String(hit.model || '').trim();
+    if (model && !/^(unknown|n\/a|unspecified|null)$/i.test(model)) return model;
+    const collection = String(hit.collection || '').trim();
+    if (collection && !/^(unknown|n\/a|unspecified|null)$/i.test(collection)) return collection;
+    return null;
   } catch { return null; }
 }
 
@@ -277,7 +282,8 @@ module.exports = async function handler(req, res) {
       outliersRemoved: outlierRows.length,
       outliers: outlierRows.map(row => row.price_usd),
       outlier_rows: outlierRows.map(r => ({
-        price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
+        id: r.id, price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
+        price_raw: r.price_raw, currency: r.currency, raw_price_text: r.price_evidence, raw_message: r.raw_message,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year, is_outlier: true, outlier_reason: r.outlier_reason,
         stored_price_usd: r.stored_price_usd, price_normalization: r.price_normalization,
@@ -308,7 +314,8 @@ module.exports = async function handler(req, res) {
       liquidity,
       monthly, prices,
       rows: classifiedRows.map(r => ({
-        price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
+        id: r.id, price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
+        price_raw: r.price_raw, currency: r.currency, raw_price_text: r.price_evidence, raw_message: r.raw_message,
         dial_color: r.dial_color, condition: r.condition,
         source: r.source, year: r.year,
         stored_price_usd: r.stored_price_usd, price_normalization: r.price_normalization,
