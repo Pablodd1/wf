@@ -26,7 +26,14 @@ const SOFT = '#8B7355';
 const DARK_ACTION = '#2A2F37';
 const RED = '#EF4444';
 
-const FILTER_TABS = ['All', 'WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'Other'];
+const FILTER_TABS = [
+  { label: 'All', value: 'All' },
+  { label: 'WTS', value: 'WTS' },
+  { label: 'WTB', value: 'WTB' },
+  { label: 'Trade', value: 'TRADE' },
+  { label: 'Multi-listings', value: 'MULTI' },
+  { label: 'Other', value: 'OTHER' },
+];
 
 interface ListingRecord {
   id: string;
@@ -63,7 +70,8 @@ type QualityMode = 'market' | 'archive';
 
 export default function TradingFloor() {
   const [searchParams] = useSearchParams();
-  const [activeTab, setActiveTab] = useState(searchParams.get('type') || 'WTS');
+  const requestedType = searchParams.get('type')?.toUpperCase();
+  const [activeTab, setActiveTab] = useState(requestedType === 'NTQ' ? 'WTB' : requestedType || 'All');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [listings, setListings] = useState<ListingRecord[]>([]);
@@ -151,17 +159,17 @@ export default function TradingFloor() {
             <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
               {FILTER_TABS.map(tab => (
                 <button
-                  key={tab}
+                  key={tab.value}
                   type="button"
-                  onClick={() => { setActiveTab(tab); setPage(1); setSelectedListing(null); }}
+                  onClick={() => { setActiveTab(tab.value); setPage(1); setSelectedListing(null); }}
                   className="h-9 shrink-0 rounded-md px-4 text-sm font-medium transition"
                   style={{
-                    border: `1px solid ${activeTab === tab ? GOLD : BORDER}`,
-                    background: activeTab === tab ? GOLD : PANEL,
-                    color: activeTab === tab ? '#09090D' : MUTED,
+                    border: `1px solid ${activeTab === tab.value ? GOLD : BORDER}`,
+                    background: activeTab === tab.value ? GOLD : PANEL,
+                    color: activeTab === tab.value ? '#09090D' : MUTED,
                   }}
                 >
-                  {tab}
+                  {tab.label}
                 </button>
               ))}
             </div>

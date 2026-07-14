@@ -778,7 +778,13 @@ module.exports = async function handler(req, res) {
         order: 'created_at.desc',
       });
 
-      if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
+      // WTB is the single customer-facing buyer view. NTQ is an upstream
+      // synonym for buyer intent and must never be split into a second tab.
+      if (listingType === 'WTB') {
+        params.set('or', '(listing_type.eq.WTB,listing_type.eq.NTQ)');
+      } else if (allowedTypes.has(listingType)) {
+        params.set('listing_type', `eq.${listingType}`);
+      }
       // Customer-facing mode is approved market evidence only. Human/recycle
       // records and unresolved references remain available in the archive and
       // review workflows, never mixed into customer-facing listings.
