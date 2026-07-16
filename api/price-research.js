@@ -67,7 +67,8 @@ async function lookupDemand(client, brand, referenceVariants, catalog) {
   const eligible = (data || []).filter(row => !classifyDemandEligibility(row, catalog));
   const grouped = new Map();
   for (const row of eligible) {
-    const dial = String(row.dial_color || '').trim();
+    const normalizedDial = normalizeDialValue(row.dial_color);
+    const dial = normalizedDial.known ? normalizedDial.value : '';
     const key = dial.toLowerCase();
     if (!key) continue;
     const current = grouped.get(key) || { dial_color: dial, count: 0 };
