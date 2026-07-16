@@ -37,3 +37,6 @@ public/watchfacts-export.json
 public/watchfacts-export.csv
 .env*
 .shadow-trigger-token
+mission-images-checkpoint*.json
+orphaned_images*.log
+failed_images*.log

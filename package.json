@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
+    "mission-images": "node tools/mission-images/index.js",
+    "test:mission-images": "node --test tests/mission-images.test.js",
     "shadow:progress": "node tools/shadow-reprocess/shadow-progress-report.cjs",
     "test:normalization": "node --test tests/normalization-v4.test.cjs tests/dial-normalization.test.cjs tests/market-row-normalization.test.cjs tests/market-stats.test.cjs tests/price-research-eligibility.test.cjs tests/shadow-reprocess.test.cjs tests/promotion-policy.test.cjs tests/catalog-confirmation.test.cjs tests/review-decision-policy.test.cjs"
   },
@@ -43,6 +45,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "csv-parser": "^3.2.1",
     "date-fns": "^4.1.0",
     "embla-carousel-react": "^8.6.0",
     "framer-motion": "^12.40.0",
