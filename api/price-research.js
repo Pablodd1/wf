@@ -9,6 +9,7 @@ const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
 const { lookupCatalog } = require('./_lib/catalog');
 const { buildComparableCohorts, classifyPrice, summarizePrices } = require('./_lib/market-stats.cjs');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
+const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
 const { classifyDemandEligibility, classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
@@ -225,7 +226,13 @@ module.exports = async function handler(req, res) {
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
         const normalized = normalizeMarketRow(row, [rawRef, targetRef]);
-        return { ...normalized, stored_price_usd: row.price_usd, price_usd: normalized.analytics_price_usd };
+        const normalizedDial = normalizeDialValue(normalized.dial_color);
+        return {
+          ...normalized,
+          dial_color: normalizedDial.known ? normalizedDial.value : normalized.dial_color,
+          stored_price_usd: row.price_usd,
+          price_usd: normalized.analytics_price_usd,
+        };
       });
     let catalogHit = lookupCatalog(targetRef, brand || null);
     // Historical Patek listings commonly omit the catalog's terminal variant

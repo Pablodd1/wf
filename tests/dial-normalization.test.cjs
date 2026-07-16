@@ -16,6 +16,7 @@ test('turns placeholder dial values into audited unknown values', () => {
 
 test('canonicalizes spelling and dealer shorthand without losing meaningful variants', () => {
   assert.equal(normalizeDialValue('gray dial').value, 'Grey');
+  assert.equal(normalizeDialValue('Blue Dial').value, 'Blue');
   assert.equal(normalizeDialValue('M.O.P.').value, 'Mother of Pearl');
   assert.equal(normalizeDialValue('choco').value, 'Chocolate');
   assert.equal(normalizeDialValue('tiffany').value, 'Tiffany Blue');
