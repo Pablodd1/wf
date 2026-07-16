@@ -1,19 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  AlertCircle,
-  Box,
-  CheckCircle,
-  FileText,
   Globe2,
   Grid,
   List,
   MessageCircle,
   Search,
-  User,
   X,
 } from 'lucide-react';
-import { FrontDeskWidget } from '@/components/FrontDeskWidget';
 
 const GOLD = '#C9A96E';
 const GOLD_BRIGHT = '#D4B87A';
@@ -23,17 +17,15 @@ const BORDER = 'rgba(201, 169, 110, 0.24)';
 const SURFACE = '#111118';
 const PANEL = '#16161F';
 const PAGE = '#08080C';
-const SOFT = '#8B7355';
-const DARK_ACTION = '#2A2F37';
 const RED = '#EF4444';
 
 const FILTER_OPTIONS = [
   { label: 'Watches', value: 'watches', group: 'Inventory' },
-  { label: 'Luxury items', value: 'luxury', group: 'Inventory' },
-  { label: 'Multi-listings', value: 'multi', group: 'Inventory' },
+  { label: 'Handbags, jewelry & accessories', value: 'luxury', group: 'Inventory' },
+  { label: 'Bulk listings', value: 'multi', group: 'Inventory' },
   { label: 'All inventory', value: 'all', group: 'Inventory' },
-  { label: 'WTS', value: 'WTS', group: 'Intent' },
-  { label: 'WTB / Looking For', value: 'WTB', group: 'Intent' },
+  { label: 'For sale', value: 'WTS', group: 'Intent' },
+  { label: 'Want to buy / Looking for', value: 'WTB', group: 'Intent' },
   { label: 'Trade', value: 'TRADE', group: 'Intent' },
 ] as const;
 
@@ -69,7 +61,6 @@ interface TradingFloorResponse {
 }
 
 type ViewMode = 'grid' | 'list';
-type QualityMode = 'market' | 'archive';
 
 export default function TradingFloor() {
   const [searchParams] = useSearchParams();
@@ -85,7 +76,6 @@ export default function TradingFloor() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [qualityMode, setQualityMode] = useState<QualityMode>('market');
   const pageSize = 50;
 
   useEffect(() => {
@@ -106,7 +96,7 @@ export default function TradingFloor() {
 
       try {
         const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-        params.set('quality', qualityMode);
+        params.set('quality', 'archive');
         const selectedFilter = FILTER_OPTIONS.find(option => option.value.toLowerCase() === activeFilter.toLowerCase());
         if (selectedFilter?.group === 'Inventory') params.set('item', selectedFilter.value);
         if (selectedFilter?.group === 'Intent') params.set('type', selectedFilter.value);
@@ -138,7 +128,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [activeFilter, page, pageSize, qualityMode, search]);
+  }, [activeFilter, page, pageSize, search]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
@@ -181,30 +171,13 @@ export default function TradingFloor() {
             </div>
 
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <div className="flex rounded-md border p-1" style={{ borderColor: BORDER, background: PANEL }}>
-                {(['market', 'archive'] as const).map(mode => (
-                  <button
-                    key={mode}
-                    type="button"
-                    onClick={() => { setQualityMode(mode); setPage(1); setSelectedListing(null); }}
-                    className="h-8 rounded px-3 text-xs font-semibold"
-                    style={{
-                      background: qualityMode === mode ? GOLD : 'transparent',
-                      color: qualityMode === mode ? '#09090D' : MUTED,
-                    }}
-                  >
-                    {mode === 'market' ? 'Recent first' : 'Include undated'}
-                  </button>
-                ))}
-              </div>
-
               <label className="relative block min-w-0 sm:w-[330px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
                 <input
                   type="search"
                   value={searchInput}
                   onChange={event => setSearchInput(event.target.value)}
-                  placeholder="Search brand or reference"
+                  placeholder="Search brand, reference, or dial"
                   className="h-10 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                   style={{ borderColor: BORDER, background: PANEL, color: INK }}
                 />
@@ -274,7 +247,6 @@ export default function TradingFloor() {
           </div>
         )}
       </div>
-      <FrontDeskWidget />
     </main>
   );
 }
@@ -300,7 +272,6 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
 
 function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
-  const actionable = isActionableListing(listing);
 
   return (
     <article
@@ -313,8 +284,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
       <div className="mt-5 min-h-[56px]">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
-          <span>{listingKindLabel(listing)} · {cleanValue(listing.listing_type) || 'Listing'}</span>
-          <ReviewStatusBadge listing={listing} />
+          <span>{listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}</span>
         </div>
         <button
           type="button"
@@ -327,30 +297,17 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         <div className="mt-1 text-[15px] leading-6" style={{ color: INK }}>{meta.rawPriceLabel}</div>
       </div>
 
-      <RatingLine />
-
       <div className="mt-4 flex items-center justify-between gap-3">
         <div className="text-[16px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</div>
         <RegionLabel region={meta.region} />
-      </div>
-
-      <div className="mt-3 flex items-center gap-1.5 text-[15px]" style={{ color: INK }}>
-        <User size={17} fill={GOLD} strokeWidth={0} />
-        <span>{meta.memberLabel}</span>
-      </div>
-
-      <div className="mt-2 flex items-center gap-1.5 text-[15px]" style={{ color: GOLD }}>
-        <CheckCircle size={16} fill={GOLD} color="#09090D" />
-        <span>({meta.reviewCount})</span>
       </div>
 
       <div className="mt-3 text-[15px]" style={{ color: INK }}>Posted: {meta.postedDate}</div>
 
       <div className="mt-auto pt-4">
         <ActionButton
-          label={actionable ? 'CHECK AVAILABILITY' : 'VIEW LISTING EVIDENCE'}
-          muted={!actionable}
-          onClick={actionable ? () => openAvailabilityRequest(listing) : onSelect}
+          label="CHECK AVAILABILITY"
+          onClick={onSelect}
         />
         <button
           type="button"
@@ -367,7 +324,6 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
 function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
-  const actionable = isActionableListing(listing);
 
   return (
     <section className="mb-8 grid gap-8 lg:grid-cols-[minmax(320px,504px)_1fr]" aria-label="Listing details">
@@ -392,65 +348,24 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>
 
           <div className="mt-8">
-            <RatingLine />
-            <div className="mt-2 text-[15px] leading-6" style={{ color: INK }}>{meta.title}</div>
+            <div className="text-[15px] leading-6" style={{ color: INK }}>{meta.title}</div>
             <div className="text-[15px] leading-6" style={{ color: INK }}>{meta.rawPriceLabel}</div>
           </div>
 
           <div className="mt-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div className="text-[15px]" style={{ color: INK }}>#{meta.listingNumber}</div>
+            <div className="text-[13px] break-all" style={{ color: MUTED }}>Listing {listing.id}</div>
             <div className="text-[15px]" style={{ color: INK }}>
               <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
-              <span className="ml-2">Reposted {meta.repostCount}x</span>
             </div>
           </div>
 
-          <div className="mt-5 flex flex-wrap gap-4">
-            <InfoBadge icon={<Box size={13} fill={SURFACE} />} label={`Box: ${meta.hasBox ? 'Yes' : 'No'}`} />
-            <InfoBadge icon={<FileText size={13} fill={SURFACE} />} label={`Papers: ${meta.hasPapers ? 'Yes' : 'No'}`} />
-          </div>
         </div>
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>User Information:</h2>
-
-          <div className="mt-8 grid gap-7 lg:grid-cols-[1fr_434px]">
-            <div>
-              <div className="text-[23px] font-semibold underline decoration-1 underline-offset-2" style={{ color: INK }}>
-                {meta.memberName}
-              </div>
-              <div className="mt-1 text-[16px] sm:whitespace-nowrap" style={{ color: INK }}>Member since {meta.memberSince}</div>
-
-              <div className="mt-9 text-[15px]" style={{ color: INK }}>{meta.region}</div>
-              <div className="mt-2 flex items-center gap-1.5 text-[15px]" style={{ color: GOLD }}>
-                <CheckCircle size={16} fill={GOLD} color="#09090D" />
-                <span>({meta.reviewCount}) - Reviews -&gt;</span>
-              </div>
-            </div>
-
-            <div>
-              <div className="grid grid-cols-2 gap-8">
-                <UserStat value={meta.wtsListings} label="WTS Listings ->" />
-                <UserStat value={meta.wtbListings} label="WTB Listing ->" />
-              </div>
-
-              <div className="mt-8 space-y-2.5">
-                <ActionButton
-                  label={actionable ? 'CHECK AVAILABILITY' : 'VIEW LISTING EVIDENCE'}
-                  muted={!actionable}
-                  onClick={actionable ? () => openAvailabilityRequest(listing) : undefined}
-                />
-                <button
-                  type="button"
-                  className="flex h-[45px] w-full items-center justify-center gap-2 rounded-full text-[13px] font-bold text-white"
-                  style={{ background: DARK_ACTION }}
-                >
-                  <User size={16} fill={SURFACE} strokeWidth={0} />
-                  SEE USER PROFILE
-                </button>
-              </div>
-            </div>
-          </div>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Availability</h2>
+          <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+            Dealer contact is not linked to this historical record yet. Save the listing ID and contact the WatchFacts desk for verification.
+          </p>
         </div>
 
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
@@ -519,57 +434,11 @@ function ActionButton({ label, muted = false, onClick }: { label: string; muted?
   );
 }
 
-function RatingLine() {
-  return (
-    <div className="mt-5 flex items-center gap-1.5 text-[15px] font-bold" style={{ color: MUTED }}>
-      <AlertCircle size={16} fill={SOFT} color="#09090D" />
-      <span>NO RATING</span>
-    </div>
-  );
-}
-
 function RegionLabel({ region }: { region: string }) {
   return (
     <div className="flex items-center gap-1 text-[13px] font-semibold uppercase" style={{ color: MUTED }}>
       <Globe2 size={16} fill={GOLD} color={GOLD} />
       <span>{region}</span>
-    </div>
-  );
-}
-
-function InfoBadge({ icon, label }: { icon: React.ReactNode; label: string }) {
-  return (
-    <span className="inline-flex h-[22px] items-center gap-1 rounded-md px-2 text-[11px] font-bold" style={{ background: 'rgba(201,169,110,0.18)', color: GOLD_BRIGHT }}>
-      {icon}
-      {label}
-    </span>
-  );
-}
-
-function ReviewStatusBadge({ listing }: { listing: ListingRecord }) {
-  const normalized = cleanValue(listing.verdict).toUpperCase();
-  const actionable = isActionableListing(listing);
-  const label = actionable ? 'Market ready' : normalized === 'APPROVED' ? 'Incomplete' : 'Needs review';
-  return (
-    <span
-      className="inline-flex h-[22px] items-center rounded px-2 text-[10px] font-bold tracking-normal"
-      style={{
-        border: `1px solid ${actionable ? 'rgba(52,211,153,0.42)' : 'rgba(245,158,11,0.5)'}`,
-        background: actionable ? 'rgba(16,185,129,0.12)' : 'rgba(245,158,11,0.12)',
-        color: actionable ? '#6EE7B7' : '#FCD34D',
-      }}
-      title={actionable ? 'Approved record with the required market fields' : 'Visible inventory evidence awaiting or requiring review'}
-    >
-      {label}
-    </span>
-  );
-}
-
-function UserStat({ value, label }: { value: number; label: string }) {
-  return (
-    <div className="flex h-[118px] flex-col items-center justify-center rounded-md border" style={{ borderColor: BORDER, background: PANEL }}>
-      <div className="text-[26px] font-medium" style={{ color: INK }}>{value.toLocaleString()}</div>
-      <div className="mt-2 text-[15px]" style={{ color: GOLD_BRIGHT }}>{label}</div>
     </div>
   );
 }
@@ -584,13 +453,8 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 }
 
 function getListingMeta(listing: ListingRecord) {
-  const hash = hashString(listing.id);
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date || listing.created_at);
-  const memberNumber = 4800 + (hash % 280);
-  const listingNumber = 820000 + (hash % 9000);
-  const wtsListings = listing.listing_type === 'WTB' ? 0 : 120 + (hash % 360);
-  const wtbListings = listing.listing_type === 'WTB' ? 10 + (hash % 40) : hash % 8;
   const rawPriceLabel = formatRawPrice(listing);
   const usdPriceLabel = formatUsdPrice(listing.price_usd);
   const title = buildListingTitle(listing);
@@ -601,16 +465,6 @@ function getListingMeta(listing: ListingRecord) {
     usdPriceLabel,
     region,
     postedDate,
-    memberLabel: `Member${hash % 3 === 0 ? ` ${memberNumber}` : ''}`,
-    memberName: `Member ${memberNumber}`,
-    memberSince: memberSince(hash),
-    reviewCount: hash % 4 === 0 ? hash % 12 : 0,
-    listingNumber,
-    repostCount: hash % 3,
-    hasBox: /box|full|complete/i.test([listing.condition, listing.listing_status, listing.source].filter(Boolean).join(' ')),
-    hasPapers: /paper|card|full|complete/i.test([listing.condition, listing.listing_status, listing.source].filter(Boolean).join(' ')),
-    wtsListings,
-    wtbListings,
   };
 }
 
@@ -661,11 +515,6 @@ function formatListingDate(dateStr: string | null) {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 }
 
-function memberSince(hash: number) {
-  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August'];
-  return `${months[hash % months.length]}, ${2023 + (hash % 3)}`;
-}
-
 function normalizeRegion(region: string | null) {
   const value = cleanValue(region);
   if (!value) return 'Asia';
@@ -687,32 +536,9 @@ function displayDial(value: string | null | undefined) {
   return dial && !/^\d+(?:\.\d+)?$/.test(dial) ? dial : '';
 }
 
-function openAvailabilityRequest(listing: ListingRecord) {
-  const identity = [cleanValue(listing.brand), cleanValue(listing.reference)].filter(Boolean).join(' ');
-  window.dispatchEvent(new CustomEvent('curated-luxury:front-desk', {
-    detail: { message: `Please check availability for ${identity || 'this listing'} (listing ${listing.id}).` },
-  }));
-}
-
-function isActionableListing(listing: ListingRecord) {
-  const approved = cleanValue(listing.verdict).toUpperCase() === 'APPROVED';
-  const brand = cleanValue(listing.brand);
-  const reference = cleanValue(listing.reference);
-  const validReference = Boolean(reference) && /\d/.test(reference) && reference.toLowerCase() !== brand.toLowerCase();
-  const validDial = Boolean(displayDial(listing.dial_color));
-  const hasPrice = Number(listing.price_usd) > 0 || Number(listing.price_raw) > 0;
-
-  if (listing.listing_type === 'WTB' || listing.listing_type === 'NTQ') {
-    return approved && Boolean(brand && validReference && validDial);
-  }
-  if (listing.listing_type === 'MULTI') return false;
-  return approved && Boolean(brand && validReference && validDial && hasPrice);
-}
-
-function hashString(value: string) {
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = ((hash << 5) - hash + value.charCodeAt(index)) | 0;
-  }
-  return Math.abs(hash);
+function customerIntentLabel(value: string) {
+  if (value === 'WTS') return 'For sale';
+  if (value === 'WTB' || value === 'NTQ') return 'Want to buy';
+  if (value === 'TRADE') return 'Trade';
+  return cleanValue(value) || 'Listing';
 }

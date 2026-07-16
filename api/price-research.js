@@ -11,6 +11,7 @@ const { buildComparableCohorts, classifyPrice, summarizePrices } = require('./_l
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
 const { classifyDemandEligibility, classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
+const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -106,6 +107,8 @@ module.exports = async function handler(req, res) {
 
   const rawRef = (req.query.reference || '').trim();
   let brand = (req.query.brand || '').trim();
+  const evidencePage = Math.max(1, Number.parseInt(String(req.query.evidencePage || '1'), 10) || 1);
+  const evidencePageSize = Math.min(100, Math.max(25, Number.parseInt(String(req.query.evidencePageSize || '100'), 10) || 100));
 
   if (!rawRef) return res.status(400).json({ error: 'reference required' });
 
@@ -255,7 +258,10 @@ module.exports = async function handler(req, res) {
       .map(row => ({ row, reason: classifyResearchEligibility(row, catalogHit) }))
       .filter(item => item.reason)
       .map(({ row, reason }) => ({ ...row, is_outlier: true, outlier_reason: reason }));
-    const marketRows = normalizedRows.filter(row => !classifyResearchEligibility(row, catalogHit));
+    const eligibleMarketRows = normalizedRows.filter(row => !classifyResearchEligibility(row, catalogHit));
+    // Reposts remain immutable evidence, but the same dealer repeatedly offering
+    // the same configuration at the same price is one market observation.
+    const { uniqueRows: marketRows, repostRows } = deduplicateReposts(eligibleMarketRows);
     const currencyCorrections = normalizedRows.filter(row => row.price_normalization).length;
     const isUnknownDial = value => {
       const normalized = String(value || '').trim().toUpperCase();
@@ -287,6 +293,7 @@ module.exports = async function handler(req, res) {
     const includedRows = classifiedRows.filter(row => !row.is_outlier && row.price_usd > 0);
     const outlierRows = [
       ...requiredFieldExclusions,
+      ...repostRows.map(row => ({ ...row, is_outlier: true, outlier_reason: 'REPOST_DUPLICATE' })),
       ...classifiedRows.filter(row => row.is_outlier && row.outlier_reason !== 'INVALID_PRICE'),
     ];
 
@@ -339,9 +346,9 @@ module.exports = async function handler(req, res) {
     const liquidity = await lookupLiquidity(client, targetRef, marketRows.length, demand);
 
     const outlierEvidenceLimit = 100;
-    const comparableEvidenceLimit = 250;
     const serializedOutliers = outlierRows.slice(0, outlierEvidenceLimit);
-    const serializedComparables = classifiedRows.slice(0, comparableEvidenceLimit);
+    const comparableOffset = (evidencePage - 1) * evidencePageSize;
+    const serializedComparables = includedRows.slice(comparableOffset, comparableOffset + evidencePageSize);
 
     res.status(200).json({
       success: true, brand, reference: rawRef,
@@ -362,6 +369,9 @@ module.exports = async function handler(req, res) {
       },
       totalListings,
       listing_count: marketRows.length,
+      eligible_observation_count: eligibleMarketRows.length,
+      unique_offer_count: marketRows.length,
+      repost_count: repostRows.length,
       sampledListings: rows.length,
       sampleCapped: rows.length >= sampleLimit,
       count: prices.length,
@@ -400,6 +410,7 @@ module.exports = async function handler(req, res) {
         included_count: includedRows.length,
         excluded_count: outlierRows.length,
         required_field_excluded_count: requiredFieldExclusions.length,
+        repost_excluded_count: repostRows.length,
         plausibility_floor_usd: marketPriceFloorUsd,
         plausibility_excluded_count: outlierRows.filter(row => row.outlier_reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR').length,
         lower_fence: summary.stats?.lower_fence ?? null,
@@ -407,10 +418,13 @@ module.exports = async function handler(req, res) {
       },
       evidence: {
         comparable_returned: serializedComparables.length,
-        comparable_total: classifiedRows.length,
+        comparable_total: includedRows.length,
+        comparable_page: evidencePage,
+        comparable_page_size: evidencePageSize,
+        comparable_pages: Math.max(1, Math.ceil(includedRows.length / evidencePageSize)),
         outliers_returned: serializedOutliers.length,
         outliers_total: outlierRows.length,
-        truncated: classifiedRows.length > comparableEvidenceLimit || outlierRows.length > outlierEvidenceLimit,
+        truncated: includedRows.length > evidencePageSize || outlierRows.length > outlierEvidenceLimit,
       },
       liquidity,
       monthly, prices,

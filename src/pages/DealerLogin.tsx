@@ -45,10 +45,6 @@ export default function DealerLogin() {
             <p className="mb-3 text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Controlled dealer access</p>
             <h1 className="max-w-xl font-serif text-4xl leading-tight sm:text-5xl">Your market operations workspace.</h1>
             <p className="mt-5 max-w-lg text-sm leading-7 text-white/60">Access Price Search, the Trading Floor, and the WatchFacts rated-dealer network. Accounts are provisioned by WatchFacts; public registration is disabled.</p>
-            <div className="mt-8 grid max-w-lg gap-3 text-sm text-white/70 sm:grid-cols-2">
-              <div className="border-t border-white/15 pt-3">Encrypted session cookies</div>
-              <div className="border-t border-white/15 pt-3">Credential activity auditing</div>
-            </div>
           </section>
 
           <section className="border border-white/12 bg-[#111118] p-6 sm:p-8">
@@ -63,7 +59,6 @@ export default function DealerLogin() {
               {error && <div role="alert" className="border-l-2 border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div>}
               <button type="submit" disabled={loading} className="h-11 w-full bg-[#c9a96e] text-sm font-semibold text-[#09090d] transition-colors hover:bg-[#d4b87a] disabled:opacity-60">{loading ? 'Signing in...' : 'Sign in securely'}</button>
             </form>
-            <p className="mt-3 text-center text-[11px] leading-5 text-white/40">Sign-in attempts and session activity are recorded for account security.</p>
             {betaSkipEnabled && (
               <div className="mt-5 border-t border-white/10 pt-5">
                 <button type="button" onClick={skipForBeta} className="h-10 w-full border border-white/20 text-xs font-semibold text-white/75 transition-colors hover:border-white/45 hover:text-white">Skip and enter beta</button>

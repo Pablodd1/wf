@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ArrowRight, BarChart3, Building2, Search, ShieldCheck } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
-import { FrontDeskWidget } from '@/components/FrontDeskWidget';
 import { SocialShareRail } from '@/components/SocialShareRail';
 
 const routes = [
@@ -196,7 +195,6 @@ export default function LandingPage() {
         <Link to="/dealer-login" className="text-white/70 transition-colors hover:text-white">Open operations</Link>
       </footer>
       <SocialShareRail />
-      <FrontDeskWidget />
     </main>
   );
 }

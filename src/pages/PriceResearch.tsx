@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Download, Eye, ImageOff, Loader2, X } from 'lucide-react';
+import { Link, useSearchParams } from 'react-router-dom';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Eye, ImageOff, Loader2, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -18,7 +18,8 @@ interface RowData {
   price_normalization?: string | null;
   outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' |
     'MISSING_BRAND' | 'MISSING_REFERENCE' | 'CATALOG_MODEL_UNCONFIRMED' | 'MISSING_PRICE' |
-    'MISSING_DIAL' | 'CATALOG_DIAL_UNCONFIRMED' | 'CATALOG_DIAL_MISMATCH' | null;
+    'MISSING_DIAL' | 'CATALOG_DIAL_UNCONFIRMED' | 'CATALOG_DIAL_MISMATCH' |
+    'REPOST_DUPLICATE' | null;
 }
 
 interface MonthlyPoint {
@@ -69,6 +70,9 @@ interface CohortPoint {
 interface LiquidityData {
   source: 'indicators' | 'live_fallback';
   listing_count: number;
+  eligible_observation_count?: number;
+  unique_offer_count?: number;
+  repost_count?: number;
   liquidity_score?: number | null;
   sale_count?: number | null;
   search_count?: number | null;
@@ -100,6 +104,9 @@ interface PriceData {
     status: 'corrected_for_analytics' | 'as_stored';
   };
   totalListings: number;
+  eligible_observation_count?: number;
+  unique_offer_count?: number;
+  repost_count?: number;
   sampledListings: number;
   sampleCapped: boolean;
   count: number;
@@ -121,6 +128,9 @@ interface PriceData {
   evidence?: {
     comparable_returned: number;
     comparable_total: number;
+    comparable_page?: number;
+    comparable_page_size?: number;
+    comparable_pages?: number;
     outliers_returned: number;
     outliers_total: number;
     truncated: boolean;
@@ -128,6 +138,7 @@ interface PriceData {
   methodology: {
     method: 'IQR_1_5' | 'PLAUSIBILITY_FLOOR_THEN_IQR_1_5'; minimum_sample: number; included_count: number; excluded_count: number;
     plausibility_floor_usd?: number; plausibility_excluded_count?: number; required_field_excluded_count?: number;
+    repost_excluded_count?: number;
     lower_fence?: number | null; upper_fence?: number | null;
   };
 }
@@ -220,7 +231,7 @@ export default function PriceResearch() {
     finally { setPLoading(''); }
   }, []);
 
-  const fetchData = useCallback(async (ref: string, condition = '', dial = '', brand = '') => {
+  const fetchData = useCallback(async (ref: string, condition = '', dial = '', brand = '', evidencePage = 1) => {
     const normalizedReference = ref.trim();
     if (!normalizedReference) {
       setError('Enter a reference to search');
@@ -236,6 +247,7 @@ export default function PriceResearch() {
       if (brand) params.set('brand', brand);
       if (condition) params.set('condition', condition);
       if (dial) params.set('dial', dial);
+      params.set('evidencePage', String(evidencePage));
       const r = await fetch(`/api/price-research?${params.toString()}`);
       const d = await r.json();
       if (d.success) {
@@ -338,6 +350,7 @@ export default function PriceResearch() {
     if (reason === 'MISSING_DIAL') return 'Missing required dial color';
     if (reason === 'CATALOG_DIAL_UNCONFIRMED') return 'Dial configuration unavailable in catalog';
     if (reason === 'CATALOG_DIAL_MISMATCH') return 'Dial is not valid for this catalog reference';
+    if (reason === 'REPOST_DUPLICATE') return 'Dealer repost already counted once';
     return 'Invalid price';
   };
 
@@ -507,11 +520,11 @@ export default function PriceResearch() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
               {/* Volume */}
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Market Sample</h3>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Market Activity</h3>
                 <div style={{ fontSize: 14, color: MUTED }}>
-                  Sampled WTS observations:{' '}
+                  Unique comparable offers:{' '}
                   <span style={{ fontSize: 36, fontWeight: 700, color: NAVY, display: 'block', marginTop: 4 }}>
-                    {data.totalListings.toLocaleString()}
+                    {(data.unique_offer_count ?? data.count).toLocaleString()}
                   </span>
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
@@ -520,6 +533,11 @@ export default function PriceResearch() {
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                   Cohort: {data.selected_cohort.condition} / {data.selected_cohort.dial_color}
                 </div>
+                {(data.repost_count || 0) > 0 && (
+                  <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
+                    {data.repost_count?.toLocaleString()} dealer reposts counted once.
+                  </div>
+                )}
                 {data.dial_data_quality && data.dial_data_quality.unknown_count > 0 && (
                   <div style={{ fontSize: 11, color: '#8a6500', marginTop: 6, lineHeight: 1.4 }}>
                     Dial data {data.dial_data_quality.completeness_percent}% complete.{' '}
@@ -647,15 +665,6 @@ export default function PriceResearch() {
                     Analytics are withheld until at least five catalog-consistent observations exist for the same reference, dial, and condition.
                   </div>
                 )}
-                <button
-                  onClick={() => {
-                    if (!data) return;
-                    const url = `/api/export-excel?reference=${encodeURIComponent(data.reference)}&brand=${encodeURIComponent(data.brand)}`;
-                    window.open(url, '_blank');
-                  }}
-                  style={{ marginTop: 16, padding: '10px 20px', borderRadius: 8, backgroundColor: WHITE, color: NAVY, border: `2px solid ${NAVY}`, fontSize: 14, fontWeight: 500, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Download size={16} /> Download CSV
-                </button>
               </div>
             </div>
 
@@ -773,12 +782,15 @@ export default function PriceResearch() {
 
             {/* ── Listings Table ──────────────────────────────── */}
             {data.analytics_ready ? (
-            <section style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '24px 0', marginBottom: 24 }}>
+            <details style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '18px 0', marginBottom: 24 }}>
+              <summary style={{ cursor: 'pointer', color: NAVY, fontWeight: 700, fontSize: 14, marginBottom: 16 }}>
+                How this price was calculated
+              </summary>
               <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
                 <div style={{ flex: 1 }}>
                   <div className="flex items-center gap-2" style={{ marginBottom: 6 }}>
                     <CheckCircle2 size={18} color={GREEN} />
-                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Comparable price set</h3>
+                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
                     Required WTS fields and catalog configuration are checked first. Cohorts with five or more observations then use a market plausibility floor followed by the standard 1.5 x IQR method. Exclusions remain visible below.
@@ -816,7 +828,7 @@ export default function PriceResearch() {
                   )}
                 </div>
               </div>
-            </section>
+            </details>
             ) : (
               <section aria-label="Insufficient qualified market evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
                 <div className="flex items-start gap-3">
@@ -900,6 +912,25 @@ export default function PriceResearch() {
                   onOpen={() => void openListing(row)}
                 />
               ))}
+              {(data.evidence?.comparable_pages || 1) > 1 && (
+                <div className="flex items-center justify-between gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${BORDER}` }}>
+                  <button
+                    type="button"
+                    disabled={(data.evidence?.comparable_page || 1) <= 1 || loading}
+                    onClick={() => void fetchData(data.reference, data.selected_cohort.condition, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) - 1)}
+                    style={{ border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) <= 1 ? 0.45 : 1 }}
+                  >Previous</button>
+                  <span style={{ color: MUTED, fontSize: 12 }}>
+                    Page {data.evidence?.comparable_page || 1} of {data.evidence?.comparable_pages || 1}
+                  </span>
+                  <button
+                    type="button"
+                    disabled={(data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) || loading}
+                    onClick={() => void fetchData(data.reference, data.selected_cohort.condition, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) + 1)}
+                    style={{ border: `1px solid ${BORDER}`, background: NAVY, color: WHITE, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) ? 0.45 : 1 }}
+                  >Next</button>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -927,19 +958,11 @@ function NavBar() {
   return (
     <nav style={{ backgroundColor: WHITE, borderBottom: `1px solid ${BORDER}`, padding: '12px 0' }}>
       <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
-        <div style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif" }}>
-          Curated Luxury
-        </div>
+        <Link to="/" style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif", textDecoration: 'none' }}>Curated Luxury</Link>
         <div className="flex gap-3 sm:gap-6" style={{ fontSize: 14 }}>
-          {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map((item, index) => (
-            <a key={item} href="#" className={index > 1 ? 'hidden md:inline' : undefined} style={{
-              color: item === 'Price Research' ? GOLD : MUTED,
-              fontWeight: item === 'Price Research' ? 600 : 400,
-              textDecoration: 'none',
-              borderBottom: item === 'Price Research' ? `2px solid ${GOLD}` : 'none',
-              paddingBottom: 4,
-            }}>{item}</a>
-          ))}
+          <Link to="/trading" style={{ color: MUTED, textDecoration: 'none', paddingBottom: 4 }}>Trading Floor</Link>
+          <Link to="/price-research" style={{ color: GOLD, fontWeight: 600, textDecoration: 'none', borderBottom: `2px solid ${GOLD}`, paddingBottom: 4 }}>Price Research</Link>
+          <Link to="/dealer" className="hidden md:inline" style={{ color: MUTED, textDecoration: 'none', paddingBottom: 4 }}>Dealer Workspace</Link>
         </div>
       </div>
     </nav>
@@ -1087,49 +1110,25 @@ function Footer() {
 
   return (
     <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 32, marginTop: 16 }}>
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-6 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
         <div>
           <div style={sectionTitle}>Features</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>Trading Floor</a>
-            <a href="#" style={linkStyle}>ChronoMatch</a>
-          </div>
-        </div>
-        <div>
-          <div style={sectionTitle}>Tools</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>Glossary</a>
-            <a href="#" style={linkStyle}>Currency Converter</a>
+            <Link to="/trading" style={linkStyle}>Trading Floor</Link>
+            <Link to="/price-research" style={linkStyle}>Price Research</Link>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Dealers</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>Dealer Directory</a>
-            <a href="#" style={linkStyle}>Do Not Trade List</a>
-          </div>
-        </div>
-        <div>
-          <div style={sectionTitle}>Apps</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>Get the App</a>
-            <a href="#" style={linkStyle}>Hire Fi</a>
-          </div>
-        </div>
-        <div>
-          <div style={sectionTitle}>Community</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>Join Groups</a>
+            <Link to="/dealer" style={linkStyle}>Dealer Workspace</Link>
+            <Link to="/dealer-login" style={linkStyle}>Dealer Login</Link>
           </div>
         </div>
         <div>
           <div style={sectionTitle}>Company</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <a href="#" style={linkStyle}>About Us</a>
-            <a href="#" style={linkStyle}>About Simon</a>
-            <a href="#" style={linkStyle}>Contact</a>
-            <a href="#" style={linkStyle}>Terms</a>
-            <a href="#" style={linkStyle}>Privacy Policy</a>
+            <Link to="/" style={linkStyle}>Home</Link>
           </div>
         </div>
       </div>

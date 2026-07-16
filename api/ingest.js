@@ -16,6 +16,7 @@ const {
   extractPriceObservations,
   segmentDealerMessage,
 } = require('./_lib/normalization-v4.cjs');
+const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -808,8 +809,10 @@ module.exports = async function handler(req, res) {
           // database statement timeouts. Brand lookup remains exact but
           // case-insensitive; full-text message search belongs in a dedicated
           // indexed search service/RPC.
-          if (/\d/.test(escapedSearch)) params.set('reference', `eq.${escapedSearch}`);
-          else params.set('brand', `ilike.${escapedSearch}`);
+          const parsedSearch = parseTradingSearch(search);
+          if (parsedSearch.reference) params.set('reference', `eq.${parsedSearch.reference}`);
+          if (parsedSearch.brand) params.set('brand', `ilike.${parsedSearch.brand}`);
+          if (parsedSearch.dial) params.set('dial_color', `ilike.${parsedSearch.dial}`);
         }
       }
 
