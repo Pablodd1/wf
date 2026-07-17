@@ -9,6 +9,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
+import { VoiceSearchAssistant } from '../components/VoiceSearchAssistant';
 
 const GOLD = '#C9A96E';
 const GOLD_BRIGHT = '#D4B87A';
@@ -202,6 +203,16 @@ export default function TradingFloor() {
                   style={{ borderColor: BORDER, background: PANEL, color: INK }}
                 />
               </label>
+              <VoiceSearchAssistant
+                context="trading"
+                tone="dark"
+                onAccept={({ query }) => {
+                  setSearchInput(query);
+                  setSearch(query);
+                  setPage(1);
+                  setSelectedListing(null);
+                }}
+              />
             </div>
           </div>
         </div>

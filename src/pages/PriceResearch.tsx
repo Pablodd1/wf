@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, Copy, Eye, ImageOff, Loader2, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { VoiceSearchAssistant } from '@/components/VoiceSearchAssistant';
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
@@ -448,6 +449,17 @@ export default function PriceResearch() {
                 style={{ width: '100%', padding: '12px 16px', borderRadius: 8, border: `1px solid ${BORDER}`, fontSize: 14, outline: 'none' }}
               />
             </div>
+            <VoiceSearchAssistant
+              context="price"
+              tone="light"
+              disabled={loading}
+              onAccept={({ query: voiceQuery, brand, reference }) => {
+                const acceptedQuery = reference || voiceQuery;
+                setQuery(acceptedQuery);
+                setQueryBrand(brand);
+                void fetchData(acceptedQuery, '', '', brand);
+              }}
+            />
             <button onClick={() => void fetchData(query, '', '', queryBrand)} disabled={loading}
               style={{ padding: '12px 24px', borderRadius: 8, backgroundColor: GOLD, color: WHITE, border: 'none', fontWeight: 600, fontSize: 14, cursor: loading ? 'wait' : 'pointer', opacity: loading ? 0.7 : 1 }}>
               {loading ? 'Searching…' : 'Search'}

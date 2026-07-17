@@ -69,6 +69,7 @@
 - Summary counters (auto-approved / AI review / human review)
 - Sticky processing pipeline guide
 - **Clear All** button — fresh start whenever user wants
+- **Permission-based voice search** on Trading Floor and Price Research. Live transcription starts only after a microphone click, shows the interpreted query, and requires explicit acceptance before searching. Chrome and Edge provide the most consistent Web Speech support; typed search remains available everywhere.
 
 ---
 
