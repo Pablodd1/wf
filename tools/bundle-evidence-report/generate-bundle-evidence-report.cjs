@@ -10,6 +10,7 @@ const baseUrl = process.env.SUPABASE_URL;
 const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
 const pageSize = Math.max(10, Math.min(Number(process.env.BUNDLE_REPORT_PAGE_SIZE || 250), 500));
 const maxRows = Math.max(0, Number(process.env.BUNDLE_REPORT_MAX_ROWS || 1000));
+const startAfter = String(process.env.BUNDLE_REPORT_START_AFTER || '').trim();
 const outputDir = process.env.BUNDLE_REPORT_OUTPUT_DIR || path.join(process.cwd(), 'audit-output', 'bundle-evidence');
 
 if (!baseUrl || !key) throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are required');
@@ -76,7 +77,7 @@ async function main() {
     'disposition', 'review_reasons', 'has_images', 'raw_message', 'proposed_candidates',
   ].join(',') + '\n');
 
-  let lastId = '';
+  let lastId = startAfter;
   let written = 0;
   let rawMessagePresent = 0;
   let safeSplitCandidates = 0;
@@ -120,7 +121,7 @@ async function main() {
 
   await new Promise((resolve, reject) => writer.end(error => (error ? reject(error) : resolve())));
   const summary = {
-    generatedAt: new Date().toISOString(), readOnly: true, reportLimit: maxRows || 'unbounded', rowsWritten: written,
+    generatedAt: new Date().toISOString(), readOnly: true, reportLimit: maxRows || 'unbounded', startAfter: startAfter || null, rowsWritten: written,
     rawMessageCoveragePercent: written ? Number(((rawMessagePresent / written) * 100).toFixed(2)) : 0,
     safeSplitCandidates, humanReviewRequired, reviewReasonCounts: reasonCounts, csvPath,
     safety: 'No source messages, live listings, shadow proposals, or review decisions were changed.',
