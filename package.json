@@ -14,6 +14,7 @@
     "media:seed-manifest": "node tools/mission-images/seed-media-manifest.cjs",
     "media:publish-other-pilot": "node tools/mission-images/publish-other-pilot.cjs",
     "audit:duplicates": "node tools/duplicate-audit/audit-brand.cjs",
+    "audit:price-normalization": "node tools/price-quality/audit-price-normalization.cjs",
     "audit:smallest-brands": "node tools/brand-qa/audit-smallest-brands.cjs",
     "audit:sources": "node tools/source-activity-audit/audit-source-activity.cjs",
     "export:multilistings": "node tools/multilisting/export-multilistings.cjs",

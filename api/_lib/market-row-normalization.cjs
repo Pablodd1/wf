@@ -8,7 +8,7 @@ function compact(value) {
 
 function explicitAmount(line, currencies) {
   const labels = currencies.join('|');
-  const before = new RegExp(`(?:${labels})\\s*[:=$-]?\\s*([\\d][\\d.,]*)\\s*(K|M|MN|W|万)?`, 'i');
+  const before = new RegExp(`(?:${labels})\\s*[:=$-]?\\s*([\\d][\\d.,]*)\\s*(K|M|MN|W|万)?(?![\\dA-Z])`, 'i');
   const after = new RegExp(`([\\d][\\d.,]*)\\s*(K|M|MN|W|万)?\\s*(?:${labels})`, 'i');
   const match = line.match(before) || line.match(after);
   return match ? parseNumber(match[1], match[2]) : null;
