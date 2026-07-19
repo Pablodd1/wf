@@ -17,6 +17,7 @@ const {
   segmentDealerMessage,
 } = require('./_lib/normalization-v4.cjs');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
+const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 
 function normalizeListingTypeParam(value) {
   const text = String(value || '').trim().toUpperCase();
@@ -825,7 +826,15 @@ module.exports = async function handler(req, res) {
       // view avoids letting undated legacy imports dominate page one, while the
       // all-inventory view and every explicit search still include those rows.
       // Price Research applies its own stricter approved/comparable-data policy.
-      params.set('or', '(verdict.neq.RECYCLE,verdict.is.null)');
+      // WTS requires a real asking price. WTB/NTQ may legitimately omit one.
+      // Keep this database-side so pagination totals and page sizes describe
+      // customer-visible inventory rather than filtering 50-row pages in the
+      // browser. A positive original price remains eligible for deterministic
+      // query-time USD recovery below.
+      params.set(
+        'and',
+        '(or(verdict.neq.RECYCLE,verdict.is.null),or(listing_type.neq.WTS,price_usd.gt.0,price_raw.gt.0))'
+      );
       // Supabase preview bootstrap rows are useful for deployment checks, but
       // must never be presented as dealer inventory in a customer environment.
       params.set('id', 'not.like.preview_demo_*');
@@ -866,15 +875,25 @@ module.exports = async function handler(req, res) {
       );
       if (!resp.ok) throw new Error(`Supabase returned ${resp.status}`);
       const records = await resp.json();
+      const normalizedRecords = Array.isArray(records)
+        ? records.map(record => {
+            const normalized = normalizeMarketRow(record, record.reference || null);
+            return {
+              ...record,
+              price_usd: normalized.analytics_price_usd,
+              price_normalization: normalized.price_normalization,
+            };
+          })
+        : [];
       const contentRange = resp.headers.get('content-range') || '';
       const total = Number.parseInt(contentRange.split('/')[1] || '0', 10) || 0;
       return res.status(200).json({
-        count: Array.isArray(records) ? records.length : 0,
+        count: normalizedRecords.length,
         total,
         page,
         pageSize,
         totalIsEstimate: true,
-        records: Array.isArray(records) ? records : [],
+        records: normalizedRecords,
         status: 'ok',
         accessMode: serviceKey ? 'server_key' : 'publishable_read_only',
       });

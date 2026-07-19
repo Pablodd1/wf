@@ -14,6 +14,19 @@ function explicitAmount(line, currencies) {
   return match ? parseNumber(match[1], match[2]) : null;
 }
 
+function structuredAmount(row) {
+  const amount = Number(row?.price_raw);
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  const currency = String(row?.currency || '').trim().toUpperCase().replace(/[^A-Z$]/g, '');
+  if (['USD', 'USDT', 'US$', 'U$'].includes(currency)) {
+    return { amountUsd: Math.round(amount), reason: 'STRUCTURED_ORIGINAL_PRICE_USD' };
+  }
+  if (['HKD', 'HDK', 'HK$', 'HK'].includes(currency)) {
+    return { amountUsd: Math.round(amount / 7.8), reason: 'STRUCTURED_ORIGINAL_PRICE_HKD' };
+  }
+  return null;
+}
+
 function referenceLine(rawMessage, reference) {
   const refs = (Array.isArray(reference) ? reference : [reference]).map(compact).filter(Boolean);
   if (!refs.length) return null;
@@ -45,18 +58,31 @@ function referenceBlock(rawMessage, reference) {
 function normalizeMarketRow(row, reference) {
   const stored = Number(row.price_usd);
   const line = referenceBlock(row.raw_message, reference);
-  if (!line) return { ...row, analytics_price_usd: stored, price_normalization: null };
-  const usd = explicitAmount(line, ['USDT', 'USD', 'US\\$', 'U\\$']);
-  if (usd) {
-    const converted = Math.round(usd);
-    return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_USD_FROM_REFERENCE_LINE' : null };
+  if (line) {
+    const usd = explicitAmount(line, ['USDT', 'USD', 'US\\$', 'U\\$']);
+    if (usd) {
+      const converted = Math.round(usd);
+      return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_USD_FROM_REFERENCE_LINE' : null };
+    }
+    const hkd = explicitAmount(line, ['HKD', 'HDK', 'HK\\$', 'HK']);
+    if (hkd) {
+      const converted = Math.round(hkd / 7.8);
+      return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_HKD_FROM_REFERENCE_LINE' : null };
+    }
   }
-  const hkd = explicitAmount(line, ['HKD', 'HK\\$']);
-  if (hkd) {
-    const converted = Math.round(hkd / 7.8);
-    return { ...row, analytics_price_usd: converted, price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_HKD_FROM_REFERENCE_LINE' : null };
+  const structured = structuredAmount(row);
+  if (structured) {
+    return {
+      ...row,
+      analytics_price_usd: structured.amountUsd,
+      price_normalization: structured.amountUsd !== Math.round(stored) ? structured.reason : null,
+    };
   }
-  return { ...row, analytics_price_usd: stored, price_normalization: null };
+  return {
+    ...row,
+    analytics_price_usd: Number.isFinite(stored) && stored > 0 ? stored : null,
+    price_normalization: null,
+  };
 }
 
 module.exports = { normalizeMarketRow, referenceBlock, referenceLine };

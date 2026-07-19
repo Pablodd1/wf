@@ -48,3 +48,36 @@ test('reads an explicit USD equivalent from the short multiline listing block', 
   assert.equal(result.analytics_price_usd, 168000);
   assert.equal(result.price_normalization, 'EXPLICIT_USD_FROM_REFERENCE_LINE');
 });
+
+test('recovers an explicit HKD price when the stored USD price is null', () => {
+  const result = normalizeMarketRow({
+    price_usd: null,
+    price_raw: null,
+    currency: null,
+    raw_message: '5712/1A blue 2024 HDK 871k',
+  }, '5712/1A');
+  assert.equal(result.analytics_price_usd, 111667);
+  assert.equal(result.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
+});
+
+test('recovers a structured original HKD price without inventing source evidence', () => {
+  const result = normalizeMarketRow({
+    price_usd: null,
+    price_raw: 780000,
+    currency: 'HKD',
+    raw_message: '5712/1A blue full set',
+  }, '5712/1A');
+  assert.equal(result.analytics_price_usd, 100000);
+  assert.equal(result.price_normalization, 'STRUCTURED_ORIGINAL_PRICE_HKD');
+});
+
+test('keeps an unsupported structured currency unresolved', () => {
+  const result = normalizeMarketRow({
+    price_usd: null,
+    price_raw: 100000,
+    currency: 'CNY',
+    raw_message: '5712/1A blue full set',
+  }, '5712/1A');
+  assert.equal(result.analytics_price_usd, null);
+  assert.equal(result.price_normalization, null);
+});

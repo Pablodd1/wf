@@ -310,10 +310,12 @@ module.exports = async function handler(req, res) {
       allExcludedRows: outlierRows,
     } = partitionExcludedEvidence(requiredFieldExclusions, repostRows, classifiedRows);
 
-    // Monthly aggregation
+    // Monthly aggregation uses the original source observation only. created_at
+    // is when the record entered this database and must not be presented as the
+    // WhatsApp, Green API, or legacy-source posting date.
     const monthlyMap = {};
     includedRows.forEach(r => {
-      const observedAt = r.listing_date || r.created_at;
+      const observedAt = r.listing_date;
       if (!observedAt) return;
       const d = new Date(observedAt);
       if (isNaN(d.getTime())) return;
@@ -358,8 +360,11 @@ module.exports = async function handler(req, res) {
     const demand = await lookupDemand(client, brand, referenceVariants, catalogHit);
     const liquidity = await lookupLiquidity(client, targetRef, marketRows.length, demand);
 
+    const hasPositivePrice = row => Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0;
+    const missingPriceRows = outlierRows.filter(row => !hasPositivePrice(row));
+    const reviewableOutlierRows = outlierRows.filter(hasPositivePrice);
     const outlierEvidenceLimit = 100;
-    const serializedOutliers = outlierRows.slice(0, outlierEvidenceLimit);
+    const serializedOutliers = reviewableOutlierRows.slice(0, outlierEvidenceLimit);
     const comparableOffset = (evidencePage - 1) * evidencePageSize;
     const serializedComparables = includedRows.slice(comparableOffset, comparableOffset + evidencePageSize);
 
@@ -391,6 +396,7 @@ module.exports = async function handler(req, res) {
       rawCount: validPriceRows.length,
       outliersRemoved: statisticalOutlierRows.length,
       excludedEvidenceCount: outlierRows.length,
+      missingPriceExcludedCount: missingPriceRows.length,
       outliers: statisticalOutlierRows.map(row => row.price_usd),
       outlier_rows: serializedOutliers.map(r => ({
         id: r.id,
@@ -436,6 +442,7 @@ module.exports = async function handler(req, res) {
         excluded_count: outlierRows.length,
         statistical_outlier_count: statisticalOutlierRows.length,
         required_field_excluded_count: requiredFieldExclusions.length,
+        missing_price_excluded_count: missingPriceRows.length,
         repost_excluded_count: repostRows.length,
         plausibility_floor_usd: marketPriceFloorUsd,
         plausibility_excluded_count: outlierRows.filter(row => row.outlier_reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR').length,
@@ -449,8 +456,9 @@ module.exports = async function handler(req, res) {
         comparable_page_size: evidencePageSize,
         comparable_pages: Math.max(1, Math.ceil(includedRows.length / evidencePageSize)),
         outliers_returned: serializedOutliers.length,
-        outliers_total: outlierRows.length,
-        truncated: includedRows.length > evidencePageSize || outlierRows.length > outlierEvidenceLimit,
+        outliers_total: reviewableOutlierRows.length,
+        missing_price_excluded: missingPriceRows.length,
+        truncated: includedRows.length > evidencePageSize || reviewableOutlierRows.length > outlierEvidenceLimit,
       },
       liquidity,
       monthly, prices,

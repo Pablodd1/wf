@@ -76,6 +76,7 @@ interface ListingRecord {
   thumbnail_url: string | null;
   region: string | null;
   raw_message?: string | null;
+  price_normalization?: string | null;
 }
 
 interface TradingFloorResponse {
@@ -250,20 +251,33 @@ export default function TradingFloor() {
               <LocationSelect value={locationFilter} onChange={value => { setLocationFilter(value); setPage(1); setSelectedListing(null); }} />
             </div>
 
-            <div className="flex flex-col gap-2">
-              <label className="relative block min-w-0">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
-                <input
-                  type="search"
-                  value={searchInput}
-                  onChange={event => setSearchInput(event.target.value)}
-                  placeholder="Search brand, reference, item, or source text"
-                  className="h-10 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
-                  style={{ borderColor: BORDER, background: PANEL, color: INK }}
-                />
-              </label>
+            <form
+              className="flex min-w-0 flex-col gap-2"
+              onSubmit={event => {
+                event.preventDefault();
+                setSearch(searchInput.trim());
+                setPage(1);
+                setSelectedListing(null);
+              }}
+            >
+              <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] gap-2">
+                <label className="relative block min-w-0">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
+                  <input
+                    type="search"
+                    value={searchInput}
+                    onChange={event => setSearchInput(event.target.value)}
+                    placeholder="Brand, reference, item, or source text"
+                    className="h-10 w-full min-w-0 rounded-md border pl-10 pr-3 text-sm outline-none"
+                    style={{ borderColor: BORDER, background: PANEL, color: INK }}
+                  />
+                </label>
+                <button type="submit" className="h-10 rounded-md px-4 text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>
+                  Search
+                </button>
+              </div>
               <p className="text-xs leading-5" style={{ color: MUTED }}>Filters are independent. Category, buyer/seller intent, bulk/single, and location all query the database.</p>
-            </div>
+            </form>
           </div>
         </div>
       </div>
@@ -465,6 +479,11 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
           {meta.title}
         </button>
         <div className="mt-1 text-[15px] leading-6" style={{ color: INK }}>{meta.rawPriceLabel}</div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs" style={{ color: MUTED }}>
+          {[displayDial(listing.dial_color), cleanValue(listing.condition), listing.year ? String(listing.year) : ''].filter(Boolean).map(value => (
+            <span key={value} className="rounded-full border px-2.5 py-1" style={{ borderColor: BORDER }}>{value}</span>
+          ))}
+        </div>
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3">
@@ -620,7 +639,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             <div className="mt-5 grid gap-3 border-t pt-4 text-xs sm:grid-cols-2" style={{ borderColor: DETAIL_BORDER, color: DETAIL_MUTED }}>
               <div><span className="uppercase tracking-[0.1em]" style={{ color: GOLD_BRIGHT }}>Source</span><div className="mt-1">{cleanValue(evidence.source) || 'Unavailable'}</div></div>
               <div><span className="uppercase tracking-[0.1em]" style={{ color: GOLD_BRIGHT }}>Source type</span><div className="mt-1">{cleanValue(evidence.source_type) || 'Unavailable'}</div></div>
-              <div><span className="uppercase tracking-[0.1em]" style={{ color: GOLD_BRIGHT }}>Posted timestamp</span><div className="mt-1">{formatListingDate(evidence.listing_date || evidence.created_at)}</div></div>
+              <div><span className="uppercase tracking-[0.1em]" style={{ color: GOLD_BRIGHT }}>Original source timestamp</span><div className="mt-1">{formatSourceDate(evidence.listing_date)}</div></div>
             </div>
           )}
         </div>
@@ -726,9 +745,9 @@ function RegionLabel({ region }: { region: string }) {
 
 function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
-  const postedDate = formatListingDate(listing.listing_date || listing.created_at);
+  const postedDate = formatSourceDate(listing.listing_date);
   const rawPriceLabel = formatRawPrice(listing);
-  const usdPriceLabel = formatUsdPrice(listing.price_usd);
+  const usdPriceLabel = formatUsdPrice(listing);
   const title = buildListingTitle(listing);
 
   return {
@@ -763,15 +782,24 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function formatRawPrice(listing: ListingRecord) {
-  if (listing.price_raw && listing.currency) {
-    return `${compactNumber(listing.price_raw)}${listing.currency}`;
+  if (Number(listing.price_raw) > 0 && listing.currency) {
+    return `${compactNumber(Number(listing.price_raw))}${listing.currency}`;
   }
-  if (listing.price_usd) return `${compactNumber(listing.price_usd)}USD`;
-  return 'Price on request';
+  if (Number(listing.price_usd) > 0) return `${compactNumber(listing.price_usd as number)}USD`;
+  if (isBuyerIntent(listing.listing_type)) return 'Price target not published';
+  if (listing.listing_type === 'MULTI') return 'Multi-listing / split pending';
+  if (listing.listing_type === 'OTHER') return 'Luxury item / details pending';
+  return 'Price unavailable / review required';
 }
 
-function formatUsdPrice(value: number | null) {
-  if (value == null || value <= 0) return 'Ask';
+function formatUsdPrice(listing: ListingRecord) {
+  const value = Number(listing.price_usd);
+  if (!Number.isFinite(value) || value <= 0) {
+    if (isBuyerIntent(listing.listing_type)) return 'Buyer request';
+    if (listing.listing_type === 'MULTI') return 'Split pending';
+    if (listing.listing_type === 'OTHER') return 'Details pending';
+    return 'Price unavailable';
+  }
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -784,11 +812,15 @@ function compactNumber(value: number) {
   return Math.round(value).toLocaleString('en-US').replace(/,/g, '');
 }
 
-function formatListingDate(dateStr: string | null) {
-  if (!dateStr) return 'Not listed';
+function formatSourceDate(dateStr: string | null) {
+  if (!dateStr) return 'Original post date unavailable';
   const parsed = new Date(dateStr);
   if (Number.isNaN(parsed.getTime())) return dateStr;
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
+}
+
+function isBuyerIntent(value: string | null | undefined) {
+  return value === 'WTB' || value === 'NTQ';
 }
 
 function normalizeRegion(region: string | null) {

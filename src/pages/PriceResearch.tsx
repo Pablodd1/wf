@@ -933,7 +933,7 @@ export default function PriceResearch() {
                           <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>
                             {Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0 ? `$${Number(row.price_usd).toLocaleString()}` : 'No price'}
                           </td>
-                          <td style={{ padding: '11px 8px' }}>{(row.listing_date || row.created_at) ? (row.listing_date || row.created_at).split('T')[0] : 'Unknown'}</td>
+                          <td style={{ padding: '11px 8px' }}>{row.listing_date ? row.listing_date.split('T')[0] : 'Source date unavailable'}</td>
                           <td style={{ padding: '11px 8px', color: '#8a6500' }}>{outlierReason(row.outlier_reason)}</td>
                           <td style={{ padding: '11px 8px' }}>{row.condition || 'Unspecified'}</td>
                           <td style={{ padding: '11px 8px' }}>{row.dial_color || 'Unspecified'}</td>
@@ -1010,7 +1010,7 @@ export default function PriceResearch() {
 // ── Sub-Components ─────────────────────────────────────────────
 
 function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
-  const date = row.listing_date || row.created_at;
+  const date = row.listing_date;
   return (
     <button type="button" onClick={onOpen} aria-label={`View source detail for ${title} at $${row.price_usd.toLocaleString()}`}
       style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '12px 24px', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
@@ -1046,7 +1046,7 @@ function ListingDetailModal({ summary, detail, loading, error, onClose, outlierL
   const [activeImage, setActiveImage] = useState(0);
   const [copied, setCopied] = useState(false);
   const images = detail?.image_urls || [];
-  const observedAt = detail?.listing_date || detail?.created_at || summary.listing_date || summary.created_at;
+  const observedAt = detail?.listing_date || summary.listing_date;
   // The summary price is the exact value used by the comparable-set and
   // outlier calculations. A legacy detail row may still contain an older
   // currency conversion, so it must never replace the analytics value here.
