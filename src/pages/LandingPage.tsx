@@ -204,6 +204,23 @@ export default function LandingPage() {
         </div>
       </section>
 
+      <section className="border-b border-white/10 bg-[#0a0a0a] px-5 py-20 sm:px-8 sm:py-24 lg:px-12 lg:py-28" aria-labelledby="hire-fi-heading">
+        <div className="mx-auto grid max-w-[1440px] gap-10 border-y border-white/10 py-10 lg:grid-cols-[1fr_auto] lg:items-center lg:gap-16 lg:py-14">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#d8bd80]">Hire Fi</p>
+            <h2 id="hire-fi-heading" className="mt-4 max-w-4xl text-4xl font-medium leading-[1.04] sm:text-6xl">
+              Objects beyond the <span className="text-[#d8bd80]">ORDINARY.</span>
+            </h2>
+            <p className="mt-6 max-w-2xl text-sm leading-7 text-white/58 sm:text-base">
+              Hire Fi monitors luxury dealer conversations around the clock, helping collectors, dealers, and wholesalers find the next exceptional opportunity.
+            </p>
+          </div>
+          <a href="https://luxfi.ai/#add-fi" target="_blank" rel="noreferrer" className="inline-flex h-12 items-center justify-center border border-[#d8bd80] px-6 text-sm font-semibold uppercase tracking-[0.12em] text-[#d8bd80] transition-colors hover:bg-[#d8bd80] hover:text-black">
+            Hire Fi <ArrowRight size={17} className="ml-3" />
+          </a>
+        </div>
+      </section>
+
       <section className="border-y border-white/10 bg-[#080808] px-5 py-24 text-center sm:px-8 sm:py-32 lg:px-12 lg:py-40">
         <div className="mx-auto max-w-[1100px]">
           <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#d8bd80]">Private luxury marketplace</p>

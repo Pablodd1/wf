@@ -30,7 +30,6 @@ const FILTER_OPTIONS = [
   { label: 'All inventory', value: 'all', group: 'Inventory' },
   { label: 'For sale', value: 'WTS', group: 'Intent' },
   { label: 'Want to buy / Looking for', value: 'WTB', group: 'Intent' },
-  { label: 'Trade', value: 'TRADE', group: 'Intent' },
 ] as const;
 
 interface ListingRecord {
@@ -82,6 +81,17 @@ interface ListingBenchmark {
   count: number;
   stats: { avg: number; median: number; min: number; max: number } | null;
   rating: MarketPriceRating;
+}
+
+interface ListingEvidence {
+  raw_message: string | null;
+  listing_date: string | null;
+  created_at: string | null;
+  source: string | null;
+  source_type: string | null;
+  dealer_id: string | null;
+  listing_type: string | null;
+  listing_status: string | null;
 }
 
 type ViewMode = 'grid' | 'list';
@@ -405,6 +415,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const canLoadBenchmark = Boolean(listing.reference && listing.brand && listing.listing_type === 'WTS');
   const [contact, setContact] = useState<ListingContact | null>(null);
   const [rawMessage, setRawMessage] = useState<string | null>(null);
+  const [evidence, setEvidence] = useState<ListingEvidence | null>(null);
   const [benchmark, setBenchmark] = useState<ListingBenchmark>({
     loading: canLoadBenchmark,
     count: 0,
@@ -418,9 +429,13 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       .then(response => response.json())
       .then(payload => setContact(payload))
       .catch(error => { if (error?.name !== 'AbortError') setContact({ contact_available: false, reason: 'CONTACT_UNAVAILABLE' }); });
-    fetch(`/api/trading-listing?id=${encodeURIComponent(listing.id)}`, { credentials: 'include', signal: controller.signal })
+    fetch(`/api/trading-listing?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
       .then(async response => response.ok ? response.json() : null)
-      .then(payload => setRawMessage(payload?.listing?.raw_message || null))
+      .then(payload => {
+        const source = payload?.listing || null;
+        setEvidence(source);
+        setRawMessage(source?.raw_message || null);
+      })
       .catch(error => { if (error?.name !== 'AbortError') setRawMessage(null); });
 
     if (!canLoadBenchmark) return () => controller.abort();
@@ -475,7 +490,12 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>
 
           <div className="mt-6 text-[15px]" style={{ color: INK }}>
-              <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
+            <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
+          </div>
+          <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs uppercase tracking-[0.1em]" style={{ color: MUTED }}>
+            <span>{customerIntentLabel(listing.listing_type)}</span>
+            <span>{listingKindLabel(listing)}</span>
+            {listing.listing_status && <span>{cleanValue(listing.listing_status)}</span>}
           </div>
         </div>
 
@@ -503,7 +523,14 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           {rawMessage ? (
             <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{rawMessage}</pre>
           ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Sign in with a credentialed dealer or administrator account to inspect preserved source evidence.</p>
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>No raw source message is preserved for this historical record.</p>
+          )}
+          {evidence && (
+            <div className="mt-5 grid gap-3 border-t pt-4 text-xs sm:grid-cols-2" style={{ borderColor: BORDER, color: MUTED }}>
+              <div><span className="uppercase tracking-[0.1em]" style={{ color: GOLD_BRIGHT }}>Source</span><div className="mt-1">{cleanValue(evidence.source) || 'Unavailable'}</div></div>
+              <div><span className="uppercase tracking-[0.1em]" style={{ color: GOLD_BRIGHT }}>Source type</span><div className="mt-1">{cleanValue(evidence.source_type) || 'Unavailable'}</div></div>
+              <div><span className="uppercase tracking-[0.1em]" style={{ color: GOLD_BRIGHT }}>Posted timestamp</span><div className="mt-1">{formatListingDate(evidence.listing_date || evidence.created_at)}</div></div>
+            </div>
           )}
         </div>
 

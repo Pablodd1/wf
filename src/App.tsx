@@ -30,7 +30,7 @@ export default function App() {
         <Route path="/dealer" element={<DealerGate allowBetaSkip><DealerPortal /></DealerGate>} />
         <Route path="/dashboard" element={<DealerGate allowedRoles={['admin']}><OperationsDashboard /></DealerGate>} />
         <Route path="/dashboard/legacy" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/trading" element={<DealerGate allowBetaSkip><TradingFloor /></DealerGate>} />
+        <Route path="/trading" element={<TradingFloor />} />
         <Route path="/analytics" element={<DealerGate><SourceAnalytics /></DealerGate>} />
         <Route path="/analytics/legacy" element={<Navigate to="/analytics" replace />} />
         <Route path="/analytics-dashboard" element={<Navigate to="/analytics" replace />} />
