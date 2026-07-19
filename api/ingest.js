@@ -18,6 +18,13 @@ const {
 } = require('./_lib/normalization-v4.cjs');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 
+function normalizeListingTypeParam(value) {
+  const text = String(value || '').trim().toUpperCase();
+  if (['SALE', 'SELL', 'SELLER', 'FS'].includes(text)) return 'WTS';
+  if (['BUY', 'BUYER', 'LOOKING'].includes(text)) return 'WTB';
+  return text;
+}
+
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
 // ============================================================
@@ -764,13 +771,16 @@ module.exports = async function handler(req, res) {
       const pageSize = Number.isFinite(requestedPageSize)
         ? Math.min(Math.max(requestedPageSize, 10), 100)
         : 50;
-      const listingType = String(req.query?.type || '').toUpperCase();
+      const listingType = normalizeListingTypeParam(req.query?.type || req.query?.listing_type || '');
       const itemType = String(req.query?.item || '').toLowerCase();
+      const listingFormat = String(req.query?.format || 'single').toLowerCase();
+      const regionFilter = String(req.query?.region || '').toLowerCase();
       const search = String(req.query?.q || '').trim().slice(0, 100);
       const quality = String(req.query?.quality || 'market').toLowerCase();
       const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
       const allowedTypes = new Set(['WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'OTHER']);
-      const allowedItems = new Set(['all', 'watches', 'luxury', 'multi']);
+      const allowedItems = new Set(['all', 'watches', 'luxury', 'jewelry', 'handbags', 'accessories', 'multi']);
+      const allowedFormats = new Set(['single', 'bulk', 'all']);
       const start = (page - 1) * pageSize;
       const end = start + pageSize - 1;
       const tableName = serviceKey ? 'watch_records' : 'trading_floor_listings';
@@ -786,12 +796,30 @@ module.exports = async function handler(req, res) {
       // include both values so every "looking for / want to buy" request is
       // found in one demand view while the stored source classification stays
       // unchanged for auditability.
-      if (listingType === 'WTB') params.set('listing_type', 'in.(WTB,NTQ)');
-      else if (allowedTypes.has(listingType)) params.set('listing_type', `eq.${listingType}`);
-      if (!listingType && itemType === 'luxury') params.set('listing_type', 'eq.OTHER');
-      if (!listingType && itemType === 'multi') params.set('listing_type', 'eq.MULTI');
-      if (!listingType && itemType === 'watches') params.set('listing_type', 'not.in.(MULTI,OTHER)');
-      if (!listingType && itemType === 'all') params.set('listing_type', 'neq.MULTI');
+      const normalizedItem = allowedItems.has(itemType) ? itemType : 'all';
+      const normalizedFormat = allowedFormats.has(listingFormat) ? listingFormat : 'single';
+
+      if (normalizedItem === 'multi' || normalizedFormat === 'bulk') {
+        params.set('listing_type', 'eq.MULTI');
+      } else if (listingType === 'WTB') {
+        params.set('listing_type', 'in.(WTB,NTQ)');
+      } else if (allowedTypes.has(listingType)) {
+        params.set('listing_type', `eq.${listingType}`);
+      } else if (normalizedItem === 'luxury' || normalizedItem === 'jewelry' || normalizedItem === 'handbags' || normalizedItem === 'accessories') {
+        params.set('listing_type', 'eq.OTHER');
+      } else if (normalizedItem === 'watches') {
+        params.set('listing_type', normalizedFormat === 'all' ? 'not.eq.OTHER' : 'not.in.(MULTI,OTHER)');
+      } else if (normalizedFormat === 'single') {
+        params.set('listing_type', 'neq.MULTI');
+      }
+
+      if (normalizedItem === 'jewelry') params.set('source_type', 'ilike.*jewelry*');
+      if (normalizedItem === 'handbags') params.set('source_type', 'ilike.*handbag*');
+      if (normalizedItem === 'accessories') params.set('source_type', 'ilike.*accessor*');
+      if (regionFilter === 'pending') params.set('region', 'is.null');
+      if (regionFilter === 'north_america') params.set('region', 'ilike.*north*');
+      if (regionFilter === 'europe') params.set('region', 'ilike.*europe*');
+      if (regionFilter === 'asia') params.set('region', 'ilike.*asia*');
       if (imagesOnly) params.set('has_images', 'eq.true');
       // Customer-facing inventory never includes RECYCLE records. The recent
       // view avoids letting undated legacy imports dominate page one, while the

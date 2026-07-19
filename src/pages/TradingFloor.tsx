@@ -26,13 +26,32 @@ const DETAIL_INK = '#172033';
 const DETAIL_MUTED = '#667085';
 const DETAIL_BORDER = '#D9E0EA';
 
-const FILTER_OPTIONS = [
-  { label: 'Watches', value: 'watches', group: 'Inventory', help: 'Watch listings only' },
-  { label: 'Other luxury', value: 'luxury', group: 'Inventory', help: 'Jewelry and other luxury items pending normalization' },
-  { label: 'Multi-item posts', value: 'multi', group: 'Inventory', help: 'One source message containing several items' },
-  { label: 'All inventory', value: 'all', group: 'Inventory', help: 'All customer-visible inventory' },
-  { label: 'For sale', value: 'WTS', group: 'Intent', help: 'Items offered by a seller' },
-  { label: 'Want to buy', value: 'WTB', group: 'Intent', help: 'Buyer requests and looking-for posts' },
+const CATEGORY_OPTIONS = [
+  { label: 'All categories', value: 'all', help: 'Watches, jewelry, handbags, and accessories when available' },
+  { label: 'Watches', value: 'watches', help: 'Watch listings and watch buyer requests' },
+  { label: 'Handbags', value: 'handbags', help: 'Handbag inventory when source-backed listings are available' },
+  { label: 'Jewelry', value: 'jewelry', help: 'Jewelry inventory with source-backed media' },
+  { label: 'Other accessories', value: 'accessories', help: 'Other luxury accessories pending normalization' },
+] as const;
+
+const INTENT_OPTIONS = [
+  { label: 'All intents', value: 'all', help: 'Buyer and seller activity together' },
+  { label: 'For sale', value: 'WTS', help: 'Items offered by a seller' },
+  { label: 'Want to buy', value: 'WTB', help: 'Buyer requests and looking-for posts' },
+] as const;
+
+const FORMAT_OPTIONS = [
+  { label: 'Single listings', value: 'single', help: 'One normalized item per listing' },
+  { label: 'Bulk / multi-item', value: 'bulk', help: 'One source message containing several items' },
+  { label: 'All formats', value: 'all', help: 'Single listings plus bulk posts' },
+] as const;
+
+const LOCATION_OPTIONS = [
+  { label: 'All locations', value: 'all' },
+  { label: 'North America', value: 'north_america' },
+  { label: 'Europe', value: 'europe' },
+  { label: 'Asia', value: 'asia' },
+  { label: 'Location pending', value: 'pending' },
 ] as const;
 
 interface ListingRecord {
@@ -103,9 +122,15 @@ type ViewMode = 'grid' | 'list';
 
 export default function TradingFloor() {
   const [searchParams] = useSearchParams();
-  const initialFilter = searchParams.get('item') || searchParams.get('type') || 'all';
+  const initialCategory = searchParams.get('item') || 'all';
+  const initialIntent = normalizeIntentParam(searchParams.get('type') || searchParams.get('listing_type') || 'all');
+  const initialFormat = searchParams.get('format') || 'single';
+  const initialLocation = searchParams.get('region') || 'all';
   const initialSearch = searchParams.get('q') || '';
-  const [activeFilter, setActiveFilter] = useState(initialFilter);
+  const [categoryFilter, setCategoryFilter] = useState(initialCategory);
+  const [intentFilter, setIntentFilter] = useState(initialIntent);
+  const [formatFilter, setFormatFilter] = useState(initialFormat);
+  const [locationFilter, setLocationFilter] = useState(initialLocation);
   const [searchInput, setSearchInput] = useState(initialSearch);
   const [search, setSearch] = useState(initialSearch);
   const [listings, setListings] = useState<ListingRecord[]>([]);
@@ -138,9 +163,10 @@ export default function TradingFloor() {
       try {
         const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
         params.set('quality', 'archive');
-        const selectedFilter = FILTER_OPTIONS.find(option => option.value.toLowerCase() === activeFilter.toLowerCase());
-        if (selectedFilter?.group === 'Inventory') params.set('item', selectedFilter.value);
-        if (selectedFilter?.group === 'Intent') params.set('type', selectedFilter.value);
+        if (categoryFilter !== 'all') params.set('item', categoryFilter);
+        if (intentFilter !== 'all') params.set('type', intentFilter);
+        if (formatFilter !== 'all') params.set('format', formatFilter);
+        if (locationFilter !== 'all') params.set('region', locationFilter);
         if (search) params.set('q', search);
 
         const response = await fetch(`/api/ingest?${params.toString()}`, { signal: controller.signal });
@@ -169,7 +195,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [activeFilter, page, pageSize, search]);
+  }, [categoryFilter, formatFilter, intentFilter, locationFilter, page, pageSize, search]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -201,7 +227,7 @@ export default function TradingFloor() {
             <div>
               <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {totalIsEstimate ? '~' : ''}{total.toLocaleString()} customer-visible listings
+                {totalIsEstimate ? '~' : ''}{total.toLocaleString()} records matching {activeFilterSummary(categoryFilter, intentFilter, formatFilter, locationFilter)}
               </p>
             </div>
 
@@ -211,28 +237,16 @@ export default function TradingFloor() {
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar" aria-label="Trading floor filters">
-              {FILTER_OPTIONS.map(option => (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => { setActiveFilter(option.value); setPage(1); setSelectedListing(null); }}
-                  className="h-9 shrink-0 rounded-md px-4 text-sm font-medium transition"
-                  style={{
-                    border: `1px solid ${activeFilter.toLowerCase() === option.value.toLowerCase() ? GOLD : BORDER}`,
-                    background: activeFilter.toLowerCase() === option.value.toLowerCase() ? GOLD : PANEL,
-                    color: activeFilter.toLowerCase() === option.value.toLowerCase() ? '#09090D' : MUTED,
-                  }}
-                  title={`${option.label}: ${option.help}`}
-                >
-                  {option.label}
-                </button>
-              ))}
+          <div className="grid gap-3 xl:grid-cols-[1fr_380px] xl:items-start">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4" aria-label="Trading floor filters">
+              <FilterGroup label="Explore" options={CATEGORY_OPTIONS} value={categoryFilter} onChange={setCategoryFilter} onReset={() => { setPage(1); setSelectedListing(null); }} />
+              <FilterGroup label="Buyer / seller" options={INTENT_OPTIONS} value={intentFilter} onChange={setIntentFilter} onReset={() => { setPage(1); setSelectedListing(null); }} />
+              <FilterGroup label="Listing size" options={FORMAT_OPTIONS} value={formatFilter} onChange={setFormatFilter} onReset={() => { setPage(1); setSelectedListing(null); }} />
+              <LocationSelect value={locationFilter} onChange={value => { setLocationFilter(value); setPage(1); setSelectedListing(null); }} />
             </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              <label className="relative block min-w-0 sm:w-[330px]">
+            <div className="flex flex-col gap-2">
+              <label className="relative block min-w-0">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
                 <input
                   type="search"
@@ -243,6 +257,7 @@ export default function TradingFloor() {
                   style={{ borderColor: BORDER, background: PANEL, color: INK }}
                 />
               </label>
+              <p className="text-xs leading-5" style={{ color: MUTED }}>Filters are independent. Category, buyer/seller intent, bulk/single, and location all query the database.</p>
             </div>
           </div>
         </div>
@@ -256,6 +271,7 @@ export default function TradingFloor() {
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</span>
           <span>Page <strong style={{ color: INK }}>{page}</strong> of <strong style={{ color: INK }}>{totalPages}</strong></span>
+          <span>{activeFilterSummary(categoryFilter, intentFilter, formatFilter, locationFilter)}</span>
           <span title="Records are fetched 50 at a time from Postgres for speed; pagination and search still query the server-side dataset.">50 per page keeps the browser fast; search runs on the database.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
@@ -313,6 +329,54 @@ export default function TradingFloor() {
         )}
       </div>
     </main>
+  );
+}
+
+type FilterOption = { label: string; value: string; help: string };
+
+function FilterGroup({ label, options, value, onChange, onReset }: { label: string; options: readonly FilterOption[]; value: string; onChange: (value: string) => void; onReset: () => void }) {
+  return (
+    <fieldset className="min-w-0">
+      <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: GOLD }}>{label}</legend>
+      <div className="flex gap-2 overflow-x-auto pb-1 hide-scrollbar">
+        {options.map(option => {
+          const active = value.toLowerCase() === option.value.toLowerCase();
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => { onChange(option.value); onReset(); }}
+              className="h-9 shrink-0 rounded-md px-3 text-sm font-medium transition"
+              style={{
+                border: `1px solid ${active ? GOLD : BORDER}`,
+                background: active ? GOLD : PANEL,
+                color: active ? '#09090D' : MUTED,
+              }}
+              title={`${option.label}: ${option.help}`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
+function LocationSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="min-w-0">
+      <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: GOLD }}>Location</span>
+      <select
+        value={value}
+        onChange={event => onChange(event.target.value)}
+        className="h-9 w-full rounded-md border px-3 text-sm outline-none"
+        style={{ borderColor: BORDER, background: PANEL, color: INK }}
+        title="Filter by listing location when the source provides it"
+      >
+        {LOCATION_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+    </label>
   );
 }
 
@@ -711,7 +775,7 @@ function formatListingDate(dateStr: string | null) {
 
 function normalizeRegion(region: string | null) {
   const value = cleanValue(region);
-  if (!value) return 'Asia';
+  if (!value) return 'Location pending';
   if (/north.?america|usa|us|canada/i.test(value)) return 'North America';
   if (/europe|uk|germany|france|italy|swiss/i.test(value)) return 'Europe';
   if (/asia|hong|china|japan|singapore|hk/i.test(value)) return 'Asia';
@@ -735,4 +799,24 @@ function customerIntentLabel(value: string) {
   if (value === 'WTB' || value === 'NTQ') return 'Want to buy';
   if (value === 'TRADE') return 'Exchange offer';
   return cleanValue(value) || 'Listing';
+}
+
+function normalizeIntentParam(value: string) {
+  if (/^(sale|sell|seller|fs|wts)$/i.test(value)) return 'WTS';
+  if (/^(buy|buyer|wtb|ntq|looking)$/i.test(value)) return 'WTB';
+  return value || 'all';
+}
+
+function activeFilterSummary(category: string, intent: string, format: string, location: string) {
+  const labels = [
+    findLabel(CATEGORY_OPTIONS, category),
+    findLabel(INTENT_OPTIONS, intent),
+    findLabel(FORMAT_OPTIONS, format),
+    findLabel(LOCATION_OPTIONS, location),
+  ].filter(label => label && !/^all /i.test(label));
+  return labels.length ? labels.join(' / ') : 'all inventory';
+}
+
+function findLabel(options: readonly { label: string; value: string }[], value: string) {
+  return options.find(option => option.value.toLowerCase() === value.toLowerCase())?.label || '';
 }
