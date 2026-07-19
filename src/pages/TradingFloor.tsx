@@ -27,12 +27,12 @@ const DETAIL_MUTED = '#667085';
 const DETAIL_BORDER = '#D9E0EA';
 
 const FILTER_OPTIONS = [
-  { label: 'Watches', value: 'watches', group: 'Inventory' },
-  { label: 'Other luxury (unnormalized)', value: 'luxury', group: 'Inventory' },
-  { label: 'Bulk listings', value: 'multi', group: 'Inventory' },
-  { label: 'All inventory', value: 'all', group: 'Inventory' },
-  { label: 'For sale', value: 'WTS', group: 'Intent' },
-  { label: 'Want to buy / Looking for', value: 'WTB', group: 'Intent' },
+  { label: 'Watches', value: 'watches', group: 'Inventory', help: 'Watch listings only' },
+  { label: 'Other luxury', value: 'luxury', group: 'Inventory', help: 'Jewelry and other luxury items pending normalization' },
+  { label: 'Multi-item posts', value: 'multi', group: 'Inventory', help: 'One source message containing several items' },
+  { label: 'All inventory', value: 'all', group: 'Inventory', help: 'All customer-visible inventory' },
+  { label: 'For sale', value: 'WTS', group: 'Intent', help: 'Items offered by a seller' },
+  { label: 'Want to buy', value: 'WTB', group: 'Intent', help: 'Buyer requests and looking-for posts' },
 ] as const;
 
 interface ListingRecord {
@@ -224,7 +224,7 @@ export default function TradingFloor() {
                     background: activeFilter.toLowerCase() === option.value.toLowerCase() ? GOLD : PANEL,
                     color: activeFilter.toLowerCase() === option.value.toLowerCase() ? '#09090D' : MUTED,
                   }}
-                  title={`${option.group}: ${option.label}`}
+                  title={`${option.label}: ${option.help}`}
                 >
                   {option.label}
                 </button>
@@ -733,6 +733,6 @@ function displayDial(value: string | null | undefined) {
 function customerIntentLabel(value: string) {
   if (value === 'WTS') return 'For sale';
   if (value === 'WTB' || value === 'NTQ') return 'Want to buy';
-  if (value === 'TRADE') return 'Trade';
+  if (value === 'TRADE') return 'Exchange offer';
   return cleanValue(value) || 'Listing';
 }
