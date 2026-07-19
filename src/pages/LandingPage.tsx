@@ -111,17 +111,40 @@ export default function LandingPage() {
     <main className="min-h-screen bg-[#080808] text-white">
       <MarketHeader className="sticky top-0" />
 
-      <section ref={heroRef} className="relative isolate flex min-h-[72svh] items-center justify-center overflow-hidden border-b border-white/10 bg-[#050403] px-4 py-8 sm:min-h-[calc(94svh-6rem)] sm:px-8 sm:py-10 lg:px-12" aria-label="Curated Luxury">
-        <div ref={heroMediaRef} className="absolute inset-0 z-[-2] origin-center will-change-transform">
-          <img
-            src="/images/home/curated-luxury-jewelry-hero.png"
-            alt=""
-            aria-hidden="true"
-            className="h-full w-full object-contain object-center"
-          />
+      <section ref={heroRef} className="relative isolate flex min-h-[72svh] items-center overflow-hidden border-b border-white/10 bg-[#050403] px-5 py-12 sm:min-h-[calc(94svh-6rem)] sm:px-8 sm:py-16 lg:px-12" aria-label="Curated Luxury">
+        <div className="absolute inset-0 z-[-2] bg-[radial-gradient(circle_at_76%_42%,rgba(216,189,128,0.15),transparent_24%),linear-gradient(90deg,#050403_0%,#080705_54%,#030302_100%)]" />
+        <div className="mx-auto grid w-full max-w-[1440px] gap-10 lg:grid-cols-[0.86fr_1.14fr] lg:items-center">
+          <div className="relative z-10 max-w-xl py-4 text-left sm:py-10">
+            <p className="text-[10px] font-semibold uppercase text-[#d8bd80]" style={{ letterSpacing: '0.32em' }}>
+              Private luxury marketplace
+            </p>
+            <h1 className="mt-8 font-serif text-[clamp(3.4rem,9vw,8.75rem)] font-medium uppercase leading-[0.9] text-[#d8bd80]" style={{ letterSpacing: '0.11em' }}>
+              Curated<br />Luxury
+            </h1>
+            <div className="mt-8 h-px w-28 bg-[#d8bd80]" />
+            <p className="mt-8 max-w-sm text-xl font-light leading-8 text-white/76 sm:text-2xl sm:leading-9">
+              A considered marketplace for collectors, dealers, and wholesalers.
+            </p>
+            <div className="mt-10 flex flex-col gap-3 sm:flex-row">
+              <button onClick={() => navigate('/trading')} className="flex h-12 items-center justify-center gap-2 bg-white px-6 text-sm font-semibold text-black transition-colors hover:bg-[#d8bd80]">
+                Explore the collection <ArrowRight size={17} />
+              </button>
+              <button onClick={() => navigate('/price-research')} className="flex h-12 items-center justify-center gap-2 border border-white/30 px-6 text-sm font-semibold text-white transition-colors hover:border-[#d8bd80] hover:text-[#d8bd80]">
+                Watch intelligence <Search size={16} />
+              </button>
+            </div>
+          </div>
+
+          <div ref={heroMediaRef} className="relative min-h-[420px] overflow-hidden border border-[#8f681b]/55 bg-black/30 will-change-transform sm:min-h-[620px] lg:min-h-[720px]">
+            <img
+              src="/images/home/curated-luxury-jewelry-hero.png"
+              alt=""
+              aria-hidden="true"
+              className="absolute inset-0 h-full w-full object-cover object-[88%_center]"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,4,3,0.34)_0%,rgba(5,4,3,0)_38%,rgba(5,4,3,0.08)_100%)]" />
+          </div>
         </div>
-        <div className="absolute inset-0 z-[-1] bg-[radial-gradient(circle_at_72%_44%,rgba(216,189,128,0.08),transparent_28%),linear-gradient(90deg,rgba(0,0,0,0.16)_0%,rgba(0,0,0,0.03)_48%,rgba(0,0,0,0.14)_100%)]" />
-        <h1 className="sr-only">Curated Luxury, a considered marketplace for collectors, dealers, and wholesalers.</h1>
 
         <a href="#collections" aria-label="Scroll to collections" className="absolute bottom-6 right-5 hidden items-center gap-3 text-[10px] font-medium uppercase tracking-[0.12em] text-white/55 transition-colors hover:text-white sm:flex lg:right-12">
           Discover more <ArrowDown size={14} />
