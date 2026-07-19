@@ -56,6 +56,7 @@ interface ListingRecord {
   has_images: boolean;
   thumbnail_url: string | null;
   region: string | null;
+  raw_message?: string | null;
 }
 
 interface TradingFloorResponse {
@@ -237,7 +238,7 @@ export default function TradingFloor() {
                   type="search"
                   value={searchInput}
                   onChange={event => setSearchInput(event.target.value)}
-                  placeholder="Search brand, reference, or dial"
+                  placeholder="Search brand, reference, item, or source text"
                   className="h-10 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                   style={{ borderColor: BORDER, background: PANEL, color: INK }}
                 />
@@ -418,7 +419,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const canLoadBenchmark = Boolean(listing.reference && listing.brand && listing.listing_type === 'WTS');
   const [contact, setContact] = useState<ListingContact | null>(null);
-  const [rawMessage, setRawMessage] = useState<string | null>(null);
+  const [rawMessage, setRawMessage] = useState<string | null>(listing.raw_message || null);
   const [evidence, setEvidence] = useState<ListingEvidence | null>(null);
   const [benchmark, setBenchmark] = useState<ListingBenchmark>({
     loading: canLoadBenchmark,
@@ -659,6 +660,10 @@ function getListingMeta(listing: ListingRecord) {
 
 function buildListingTitle(listing: ListingRecord) {
   if (listing.listing_type === 'MULTI' && !cleanValue(listing.reference)) return 'Multi-item dealer listing';
+  if (listing.listing_type === 'OTHER' && !cleanValue(listing.brand) && !cleanValue(listing.reference)) {
+    const sourceLabel = cleanValue(listing.raw_message)?.split(/\r?\n/).map(line => line.trim()).find(Boolean);
+    return sourceLabel ? sourceLabel.slice(0, 100) : 'Luxury item · source identity pending';
+  }
   const parts = [
     cleanValue(listing.brand) === 'Unknown' ? '' : cleanValue(listing.brand),
     cleanValue(listing.reference),

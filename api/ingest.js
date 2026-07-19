@@ -776,7 +776,7 @@ module.exports = async function handler(req, res) {
       const tableName = serviceKey ? 'watch_records' : 'trading_floor_listings';
       const params = new URLSearchParams({
         // Keep this response marketplace-safe even when a server key is used.
-        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region',
+        select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,region,raw_message',
         // This matches the production created_at DESC index. NULLS LAST needs a
         // dedicated index before it can be enabled safely on millions of rows.
         order: 'created_at.desc',
@@ -816,6 +816,9 @@ module.exports = async function handler(req, res) {
           if (parsedSearch.reference) params.set('reference', `eq.${parsedSearch.reference}`);
           if (parsedSearch.brand) params.set('brand', `ilike.${parsedSearch.brand}`);
           if (parsedSearch.dial) params.set('dial_color', `ilike.${parsedSearch.dial}`);
+          if (!parsedSearch.reference && !parsedSearch.brand && !parsedSearch.dial) {
+            params.set('raw_message', `ilike.*${escapedSearch.replace(/[^a-z0-9 $-]/gi, '')}*`);
+          }
         }
       }
 
