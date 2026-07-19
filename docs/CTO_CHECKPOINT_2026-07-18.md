@@ -6,7 +6,7 @@ Current branch: `codex/global-market-header`
 
 ## Current state
 
-The working tree is clean. The latest pushed commit is `f1b2d96`.
+The working tree is clean. The latest checkpoint commit is `3b4a999`.
 
 Recent completed work:
 
@@ -27,10 +27,10 @@ Recent completed work:
 
 ## Pending order
 
-1. Review and merge the global market header branch after checking the Vercel preview.
+1. Confirm PR #46’s hero/header deployment in the Vercel preview; the correction is already present on `origin/main`.
 2. Review and merge the global price-normalization audit branch.
 3. Convert the 100,000-row audit result into a durable report/export, then design a deterministic remediation canary. Do not update production rows from aggregate findings alone.
-4. Run targeted canary checks for `5712/1R`, `5712/1A`, `3712/1A`, `116500LN`, and `52506`.
+4. Resolve catalog labels and unknown-dial cohorts for the five canary references, especially `5712/1A`.
 5. Separate deterministic explicit-currency corrections from repeated-reference, bundles, and multilistings requiring review.
 6. Split bundles before duplicate suppression and export the multilistings report.
 7. Revalidate Price Research and Trading Floor totals, minimum-five comparable rules, outlier exclusion, and visible discarded-outlier evidence.
