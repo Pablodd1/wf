@@ -140,6 +140,27 @@ export default function LandingPage() {
         </a>
       </section>
 
+      <section className="border-b border-white/10 bg-[#080808] px-5 py-24 text-center sm:px-8 sm:py-32 lg:px-12 lg:py-40">
+        <div className="mx-auto max-w-[1100px]">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#d8bd80]">Private luxury marketplace</p>
+          <h2 className="mt-7 text-4xl font-medium leading-[1.02] sm:text-6xl lg:text-8xl">
+            Objects beyond the ordinary.<br />
+            <span className="text-white/42">It is a point of view.</span>
+          </h2>
+          <p className="mx-auto mt-8 max-w-3xl text-base leading-7 text-white/58 sm:text-lg sm:leading-8">
+            We bring exceptional objects into one considered marketplace. Some are icons. Others are known only to devoted collectors. Each deserves to be seen with context, care, and an appreciation for what makes it singular.
+          </p>
+          <div className="mt-11 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <button onClick={() => navigate('/trading')} className="flex h-12 min-w-[220px] items-center justify-center gap-2 bg-white px-5 text-sm font-semibold text-black transition-colors hover:bg-[#d8bd80]">
+              Explore the collection <ArrowRight size={17} />
+            </button>
+            <button onClick={() => navigate('/price-research')} className="flex h-12 min-w-[220px] items-center justify-center gap-2 border border-white/35 px-5 text-sm font-semibold text-white transition-colors hover:border-white">
+              Watch intelligence <Search size={16} />
+            </button>
+          </div>
+        </div>
+      </section>
+
       <section className="border-b border-white/10 bg-[#080808] px-5 py-16 sm:px-8 sm:py-20 lg:px-12">
         <div className="mx-auto max-w-[1440px]">
           <div className="grid gap-8 border-b border-white/10 pb-10 lg:grid-cols-[0.85fr_1.15fr] lg:items-end">
@@ -200,27 +221,6 @@ export default function LandingPage() {
                 </div>
               </Link>
             ))}
-          </div>
-        </div>
-      </section>
-
-      <section className="border-y border-white/10 bg-[#080808] px-5 py-24 text-center sm:px-8 sm:py-32 lg:px-12 lg:py-40">
-        <div className="mx-auto max-w-[1100px]">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-[#d8bd80]">Private luxury marketplace</p>
-          <h2 className="mt-7 text-4xl font-medium leading-[1.02] sm:text-6xl lg:text-8xl">
-            Objects beyond the ordinary.<br />
-            <span className="text-white/42">It is a point of view.</span>
-          </h2>
-          <p className="mx-auto mt-8 max-w-3xl text-base leading-7 text-white/58 sm:text-lg sm:leading-8">
-            We bring exceptional objects into one considered marketplace. Some are icons. Others are known only to devoted collectors. Each deserves to be seen with context, care, and an appreciation for what makes it singular.
-          </p>
-          <div className="mt-11 flex flex-col items-center justify-center gap-4 sm:flex-row">
-            <button onClick={() => navigate('/trading')} className="flex h-12 min-w-[220px] items-center justify-center gap-2 bg-white px-5 text-sm font-semibold text-black transition-colors hover:bg-[#d8bd80]">
-              Explore the collection <ArrowRight size={17} />
-            </button>
-            <button onClick={() => navigate('/price-research')} className="flex h-12 min-w-[220px] items-center justify-center gap-2 border border-white/35 px-5 text-sm font-semibold text-white transition-colors hover:border-white">
-              Watch intelligence <Search size={16} />
-            </button>
           </div>
         </div>
       </section>
