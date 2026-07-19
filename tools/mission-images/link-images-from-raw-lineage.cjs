@@ -7,6 +7,7 @@ const csv = require('csv-parser');
 const CSV_PATH = process.env.MEDIA_INVENTORY_CSV || 'C:/Users/jasme/Downloads/thecollective-prod_inventory.csv';
 const PUBLIC_BASE = String(process.env.DO_PUBLIC_BASE_URL || 'https://thecollective-prod.nyc3.digitaloceanspaces.com/').replace(/\/+$/, '');
 const TARGET = Math.min(500, Math.max(1, Number(process.env.MEDIA_LINEAGE_LIMIT || 100)));
+const CANDIDATE_LIMIT = Math.min(10000, Math.max(TARGET, Number(process.env.MEDIA_LINEAGE_CANDIDATE_LIMIT || TARGET * 12)));
 const APPLY = String(process.env.APPLY_MEDIA_LINKS || '').toLowerCase() === 'true';
 const SUPABASE_URL = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
@@ -128,7 +129,7 @@ async function run() {
       source_etag: String(row.ETag || '').replace(/^"|"$/g, ''),
       source_modified_at: String(row.LastModified || ''),
     });
-    if (foundByRecord.size >= TARGET * 5) break;
+    if (foundByRecord.size >= CANDIDATE_LIMIT) break;
   }
   stream.destroy();
 
@@ -161,6 +162,7 @@ async function run() {
     ambiguous_image_filenames: ambiguousFilenames.size,
     csv_rows_scanned: scanned,
     lineage_matches: candidates.length,
+    candidate_limit: CANDIDATE_LIMIT,
     customer_safe_matches: safe.length,
     database_result: databaseResult,
     sample: safe.slice(0, 10).map(item => ({ record_id: item.record_id, brand: item.watch.brand, reference: item.watch.reference, url: item.public_url, source_identity_verified: true })),
