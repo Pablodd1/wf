@@ -23,6 +23,7 @@ Recent completed work:
 - The audit scanner passed its targeted tests and the normalization suite passed 100/100.
 - A 5,000-row read-only production sample found 936 stored-price mismatches: 846 high, 65 medium, 25 low; 829 HKD-derived and 107 USD-derived. This is a report, not a mass update.
 - A 100,000-row read-only Railway scan found 18,305 candidates: 16,040 high, 1,643 medium, and 622 low; 15,936 explicit-HKD-derived and 2,369 explicit-USD-derived. It also found 2,014 likely legacy HKD double-conversions, 440 normalized values below the $500 floor, 59 stored values below the floor, and 369 repeated-reference review cases. No production rows were changed.
+- Production canary checks returned analytics-ready data for all five John references. Results: `5712/1R` 9 comparables, average $243,610, 4 outliers removed; `5712/1A` 531 comparables, average $122,215, 115 outliers removed, 122 unknown dials; `3712/1A` 9 comparables, average $130,482, 1 outlier removed; `116500LN` 922 comparables, average $27,045, 225 outliers removed; `52506` 211 comparables, average $45,400, 43 outliers removed. Follow-up: three responses lacked a catalog-resolved reference label, and `5712/1A` has a material unknown-dial cohort.
 
 ## Pending order
 
