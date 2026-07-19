@@ -83,21 +83,21 @@ export default function LandingPage() {
     <main className="min-h-screen bg-[#080808] text-white">
       <MarketHeader className="sticky top-0" />
 
-      <section className="relative isolate flex min-h-[72svh] items-center overflow-hidden border-b border-white/10 bg-[#050403] px-5 py-16 sm:min-h-[calc(94svh-6rem)] sm:px-8 sm:py-20 lg:px-12" aria-label="Curated Luxury">
-        <div className="absolute inset-0 z-[-2] bg-[radial-gradient(circle_at_50%_34%,rgba(216,189,128,0.12),transparent_28%),linear-gradient(180deg,#050403_0%,#090806_58%,#030302_100%)]" />
-        <div className="mx-auto w-full max-w-[1180px] text-center">
-          <div className="mx-auto max-w-5xl">
+      <section className="relative isolate overflow-hidden border-b border-white/10 bg-[#050403] px-5 py-6 sm:px-8 sm:py-14 lg:flex lg:min-h-[calc(100svh-5rem)] lg:items-center lg:px-12 lg:py-16" aria-label="Curated Luxury">
+        <div className="absolute inset-0 z-[-2] bg-[#050403]" />
+        <div className="mx-auto grid w-full max-w-[1440px] gap-8 sm:gap-10 lg:grid-cols-[0.8fr_1.2fr] lg:items-center lg:gap-6 xl:gap-12">
+          <div className="relative z-10 max-w-xl py-4 lg:py-10">
             <p className="text-[10px] font-semibold uppercase text-[#d8bd80]" style={{ letterSpacing: '0.32em' }}>
               Private luxury marketplace
             </p>
-            <h1 className="mt-8 font-serif text-[clamp(3.25rem,10vw,9.5rem)] font-medium uppercase leading-[0.88] text-[#d8bd80]" style={{ letterSpacing: '0.08em' }}>
-              Curated Luxury
+            <h1 className="mt-6 font-serif text-[clamp(3.25rem,7vw,7.25rem)] font-medium uppercase leading-[0.9] text-[#d8bd80]" style={{ letterSpacing: '0.06em' }}>
+              Curated<br />Luxury
             </h1>
-            <div className="mx-auto mt-10 h-px w-28 bg-[#d8bd80]" />
-            <p className="mx-auto mt-8 max-w-2xl text-xl font-light leading-8 text-white/76 sm:text-2xl sm:leading-9">
+            <div className="mt-8 h-px w-24 bg-[#d8bd80]" />
+            <p className="mt-7 max-w-lg text-lg font-light leading-8 text-white/76 sm:text-xl">
               A considered marketplace for collectors, dealers, and wholesalers.
             </p>
-            <div className="mt-11 flex flex-col justify-center gap-3 sm:flex-row">
+            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <button onClick={() => navigate('/trading')} className="flex h-12 items-center justify-center gap-2 bg-white px-6 text-sm font-semibold text-black transition-colors hover:bg-[#d8bd80]">
                 Explore the collection <ArrowRight size={17} />
               </button>
@@ -105,6 +105,19 @@ export default function LandingPage() {
                 Watch intelligence <Search size={16} />
               </button>
             </div>
+          </div>
+
+          <div className="relative aspect-[4/3] overflow-hidden border border-white/10 bg-[#0a0907] sm:aspect-auto sm:min-h-[520px] lg:min-h-[min(70svh,760px)]">
+            <img
+              src="/images/home/curated-luxury-marketplace-hero.webp"
+              alt="An unbranded mechanical watch, high jewelry, leather handbag, and collectible design object"
+              fetchPriority="high"
+              className="absolute inset-0 h-full w-full object-cover object-center"
+            />
+            <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,4,3,0.34)_0%,transparent_34%),linear-gradient(180deg,transparent_64%,rgba(5,4,3,0.28)_100%)]" />
+            <span className="absolute bottom-5 right-5 border border-white/20 bg-black/45 px-3 py-2 text-[9px] font-medium uppercase text-white/65 backdrop-blur-sm" style={{ letterSpacing: '0.18em' }}>
+              Watches · Jewelry · Handbags · Rare objects
+            </span>
           </div>
         </div>
 
