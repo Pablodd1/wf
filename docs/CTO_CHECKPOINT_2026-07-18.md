@@ -22,12 +22,13 @@ Recent completed work:
 - Price Research canary `5712/1R` was verified against its exact raw line; stale `$31,917` was corrected to `$249,350` USD normalized.
 - The audit scanner passed its targeted tests and the normalization suite passed 100/100.
 - A 5,000-row read-only production sample found 936 stored-price mismatches: 846 high, 65 medium, 25 low; 829 HKD-derived and 107 USD-derived. This is a report, not a mass update.
+- A 100,000-row read-only Railway scan found 18,305 candidates: 16,040 high, 1,643 medium, and 622 low; 15,936 explicit-HKD-derived and 2,369 explicit-USD-derived. It also found 2,014 likely legacy HKD double-conversions, 440 normalized values below the $500 floor, 59 stored values below the floor, and 369 repeated-reference review cases. No production rows were changed.
 
 ## Pending order
 
 1. Review and merge the global market header branch after checking the Vercel preview.
 2. Review and merge the global price-normalization audit branch.
-3. Run a larger read-only price audit through Railway and save the report. Do not update production rows from aggregate findings alone.
+3. Convert the 100,000-row audit result into a durable report/export, then design a deterministic remediation canary. Do not update production rows from aggregate findings alone.
 4. Run targeted canary checks for `5712/1R`, `5712/1A`, `3712/1A`, `116500LN`, and `52506`.
 5. Separate deterministic explicit-currency corrections from repeated-reference, bundles, and multilistings requiring review.
 6. Split bundles before duplicate suppression and export the multilistings report.
