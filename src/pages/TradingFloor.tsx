@@ -22,6 +22,9 @@ const SURFACE = '#111118';
 const PANEL = '#16161F';
 const PAGE = '#08080C';
 const RED = '#EF4444';
+const DETAIL_INK = '#172033';
+const DETAIL_MUTED = '#667085';
+const DETAIL_BORDER = '#D9E0EA';
 
 const FILTER_OPTIONS = [
   { label: 'Watches', value: 'watches', group: 'Inventory' },
@@ -90,6 +93,7 @@ interface ListingEvidence {
   source: string | null;
   source_type: string | null;
   dealer_id: string | null;
+  seller_name: string | null;
   listing_type: string | null;
   listing_status: string | null;
 }
@@ -458,14 +462,15 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
   return (
     <section className="mb-8 grid gap-8 lg:grid-cols-[minmax(320px,504px)_1fr]" aria-label="Selected listing">
-      <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
+      <div className="rounded-md border bg-white p-2" style={{ borderColor: DETAIL_BORDER, boxShadow: '0 12px 32px rgba(16,24,40,0.08)' }}>
         <ListingImage listing={listing} className="h-[648px] w-full" large />
       </div>
 
       <div className="space-y-8">
-        <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
+        <div className="rounded-md border bg-white px-6 py-7" style={{ borderColor: DETAIL_BORDER, color: DETAIL_INK, boxShadow: '0 12px 32px rgba(16,24,40,0.08)' }}>
+          <div className="text-sm" style={{ color: DETAIL_MUTED }}>Post information</div>
           <div className="flex items-start justify-between gap-4">
-            <h2 className="font-serif text-2xl font-medium tracking-normal" style={{ color: INK }}>{meta.title}</h2>
+            <h2 className="mt-3 font-serif text-2xl font-medium tracking-normal" style={{ color: DETAIL_INK }}>{meta.title}</h2>
             <button
               type="button"
               aria-label="Close listing details"
@@ -479,18 +484,18 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>
 
           <div className="mt-6">
-            <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</div>
-            <div className="mt-1 text-sm" style={{ color: MUTED }}>{meta.rawPriceLabel}</div>
+            <div className="text-2xl font-semibold" style={{ color: '#B48A2A' }}>{meta.usdPriceLabel}</div>
+            <div className="mt-1 text-sm" style={{ color: DETAIL_MUTED }}>{meta.rawPriceLabel}</div>
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
+          <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: DETAIL_MUTED }}>
             {[displayDial(listing.dial_color), cleanValue(listing.condition), listing.year ? String(listing.year) : ''].filter(Boolean).map(value => (
-              <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: BORDER }}>{value}</span>
+              <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: DETAIL_BORDER }}>{value}</span>
             ))}
           </div>
 
-          <div className="mt-6 text-[15px]" style={{ color: INK }}>
-            <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
+          <div className="mt-6 text-[15px]" style={{ color: DETAIL_INK }}>
+            <span style={{ color: '#B48A2A' }}>Posted on</span> {meta.postedDate}
           </div>
           <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs uppercase tracking-[0.1em]" style={{ color: MUTED }}>
             <span>{customerIntentLabel(listing.listing_type)}</span>
@@ -499,34 +504,42 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>
         </div>
 
-        <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Check availability</h2>
+        <div className="rounded-md border bg-white px-6 py-7" style={{ borderColor: DETAIL_BORDER, color: DETAIL_INK, boxShadow: '0 12px 32px rgba(16,24,40,0.08)' }}>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: DETAIL_INK }}>User information</h2>
+          <p className="mt-2 text-sm" style={{ color: DETAIL_MUTED }}>{contact?.dealer_name || evidence?.seller_name || 'Dealer identity not available'}</p>
+          {contact?.dealer_stats && (
+            <div className="mt-5 grid grid-cols-2 gap-4">
+              <ProfileStat label="WTS listings" value={contact.dealer_stats.wts_posts} />
+              <ProfileStat label="WTB listings" value={contact.dealer_stats.wtb_posts} />
+            </div>
+          )}
+          <h3 className="mt-6 text-[16px] font-medium tracking-normal" style={{ color: DETAIL_INK }}>Check availability</h3>
           {contact?.dealer_profile_url && (
-            <Link to={contact.dealer_profile_url} className="mt-4 block border-y py-3 text-sm" style={{ borderColor: BORDER, color: GOLD_BRIGHT }}>
+            <Link to={contact.dealer_profile_url} className="mt-4 block border-y py-3 text-sm" style={{ borderColor: DETAIL_BORDER, color: '#315DDB' }}>
               View dealer profile{contact.dealer_rating != null ? ` · ${Number(contact.dealer_rating).toFixed(2)} rating` : ''}{contact.dealer_stats ? ` · ${Number(contact.dealer_stats.active_listings).toLocaleString()} active listings` : ''}
             </Link>
           )}
           {contact?.contact_available && contact.whatsapp_url ? (
             <>
-              <p className="mt-3 text-sm" style={{ color: MUTED }}>Contact {contact.dealer_name || 'the verified dealer'} directly about this item.</p>
+              <p className="mt-3 text-sm" style={{ color: DETAIL_MUTED }}>Contact {contact.dealer_name || 'the verified dealer'} directly about this item.</p>
               <a href={contact.whatsapp_url} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
                 <MessageCircle size={18} /> Continue on WhatsApp
               </a>
             </>
           ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>{contact?.dealer_profile_url ? 'This dealer profile is verified; direct WhatsApp contact is awaiting consent or a verified phone.' : 'Dealer identity has not yet been verified for this historical listing.'}</p>
+            <p className="mt-3 text-sm leading-6" style={{ color: DETAIL_MUTED }}>{contact?.dealer_profile_url ? 'This dealer profile is verified; direct WhatsApp contact is awaiting consent or a verified phone.' : 'Dealer identity has not yet been verified for this historical listing.'}</p>
           )}
         </div>
 
-        <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Raw source message</h2>
+        <div className="rounded-md border bg-white px-6 py-6" style={{ borderColor: DETAIL_BORDER, color: DETAIL_INK, boxShadow: '0 12px 32px rgba(16,24,40,0.08)' }}>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: DETAIL_INK }}>Raw source message</h2>
           {rawMessage ? (
             <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{rawMessage}</pre>
           ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>No raw source message is preserved for this historical record.</p>
+            <p className="mt-3 text-sm leading-6" style={{ color: DETAIL_MUTED }}>No raw source message is preserved for this historical record.</p>
           )}
           {evidence && (
-            <div className="mt-5 grid gap-3 border-t pt-4 text-xs sm:grid-cols-2" style={{ borderColor: BORDER, color: MUTED }}>
+            <div className="mt-5 grid gap-3 border-t pt-4 text-xs sm:grid-cols-2" style={{ borderColor: DETAIL_BORDER, color: DETAIL_MUTED }}>
               <div><span className="uppercase tracking-[0.1em]" style={{ color: GOLD_BRIGHT }}>Source</span><div className="mt-1">{cleanValue(evidence.source) || 'Unavailable'}</div></div>
               <div><span className="uppercase tracking-[0.1em]" style={{ color: GOLD_BRIGHT }}>Source type</span><div className="mt-1">{cleanValue(evidence.source_type) || 'Unavailable'}</div></div>
               <div><span className="uppercase tracking-[0.1em]" style={{ color: GOLD_BRIGHT }}>Posted timestamp</span><div className="mt-1">{formatListingDate(evidence.listing_date || evidence.created_at)}</div></div>
@@ -534,23 +547,23 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           )}
         </div>
 
-        <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
+        <div className="rounded-md border bg-white px-6 py-6" style={{ borderColor: DETAIL_BORDER, color: DETAIL_INK, boxShadow: '0 12px 32px rgba(16,24,40,0.08)' }}>
           <div className="flex items-start justify-between gap-4">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: benchmark.rating.color }}>Price rating</div>
-              <div className="mt-2 text-xl font-semibold" style={{ color: INK }}>{benchmark.loading ? 'Calculating…' : benchmark.rating.label}</div>
-              {!benchmark.loading && <p className="mt-2 text-sm leading-6" style={{ color: MUTED }}>{benchmark.rating.reason}</p>}
+              <div className="mt-2 text-xl font-semibold" style={{ color: DETAIL_INK }}>{benchmark.loading ? 'Calculating…' : benchmark.rating.label}</div>
+              {!benchmark.loading && <p className="mt-2 text-sm leading-6" style={{ color: DETAIL_MUTED }}>{benchmark.rating.reason}</p>}
             </div>
             <div className="h-3 w-3 shrink-0 rounded-full" style={{ background: benchmark.rating.color }} />
           </div>
           {benchmark.stats && benchmark.count >= 5 && (
-            <div className="mt-6 grid grid-cols-3 gap-3 border-t pt-5 text-center" style={{ borderColor: BORDER }}>
+            <div className="mt-6 grid grid-cols-3 gap-3 border-t pt-5 text-center" style={{ borderColor: DETAIL_BORDER }}>
               <MarketStat label="Min" value={benchmark.stats.min} />
               <MarketStat label="Average" value={benchmark.stats.avg} />
               <MarketStat label="Max" value={benchmark.stats.max} />
             </div>
           )}
-          <div className="mt-4 text-xs" style={{ color: MUTED }}>{benchmark.count.toLocaleString()} outlier-clean comparable offers</div>
+          <div className="mt-4 text-xs" style={{ color: DETAIL_MUTED }}>{benchmark.count.toLocaleString()} outlier-clean comparable offers</div>
         </div>
       </div>
     </section>
@@ -559,6 +572,15 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
 function MarketStat({ label, value }: { label: string; value: number }) {
   return <div><div className="text-[11px] uppercase" style={{ color: MUTED }}>{label}</div><div className="mt-1 text-sm font-semibold" style={{ color: INK }}>${Math.round(value).toLocaleString()}</div></div>;
+}
+
+function ProfileStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="rounded-md border px-4 py-4 text-center" style={{ borderColor: DETAIL_BORDER }}>
+      <div className="text-2xl font-semibold" style={{ color: DETAIL_INK }}>{Number(value || 0).toLocaleString()}</div>
+      <div className="mt-1 text-xs uppercase tracking-[0.08em]" style={{ color: '#315DDB' }}>{label}</div>
+    </div>
+  );
 }
 
 function ListingImage({ listing, className, large = false }: { listing: ListingRecord; className: string; large?: boolean }) {

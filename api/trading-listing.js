@@ -10,7 +10,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const { data, error } = await getClient().from('watch_records')
-      .select('id,raw_message,listing_date,created_at,source,source_type,dealer_id,listing_type,listing_status')
+      .select('id,raw_message,listing_date,created_at,source,source_type,dealer_id,seller_name,listing_type,listing_status')
       .eq('id', id)
       .maybeSingle();
     if (error) throw error;
