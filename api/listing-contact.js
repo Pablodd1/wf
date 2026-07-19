@@ -20,7 +20,10 @@ module.exports = async function handler(req, res) {
     if (!listing.dealer_id) return res.status(200).json({ success: true, contact_available: false, reason: 'DEALER_UNRESOLVED' });
 
     const { data: dealer, error: dealerError } = await client
-      .from('dealers').select('id,slug,display_name,status,contact_consent,rating,review_count,whatsapp_group_count').eq('id', listing.dealer_id).maybeSingle();
+      .from('dealers')
+      .select('id,slug,display_name,company_name,country_code,city,status,contact_consent,rating,review_count,whatsapp_group_count,avatar_url,profile_summary')
+      .eq('id', listing.dealer_id)
+      .maybeSingle();
     if (dealerError) throw dealerError;
     if (!dealer || dealer.status !== 'VERIFIED') {
       return res.status(200).json({ success: true, contact_available: false, reason: 'CONTACT_NOT_VERIFIED' });
@@ -30,10 +33,15 @@ module.exports = async function handler(req, res) {
     const profile = {
       dealer_id: dealer.id,
       dealer_name: dealer.display_name || 'Verified dealer',
+      dealer_company_name: dealer.company_name,
       dealer_profile_url: `/dealers/${dealer.slug || dealer.id}`,
       dealer_rating: dealer.rating,
       dealer_review_count: dealer.review_count,
       dealer_group_count: dealer.whatsapp_group_count,
+      dealer_city: dealer.city,
+      dealer_country_code: dealer.country_code,
+      dealer_avatar_url: dealer.avatar_url,
+      dealer_profile_summary: dealer.profile_summary,
       dealer_stats: profileStats || null,
     };
     if (!dealer.contact_consent) {

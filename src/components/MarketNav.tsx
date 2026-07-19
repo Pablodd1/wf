@@ -21,7 +21,6 @@ export function MarketNav() {
 
   const links = [
     ...PUBLIC_LINKS,
-    ...(role ? [{ to: '/dealers', label: 'Dealers' }] : []),
     ...(role === 'admin' ? [{ to: '/dashboard', label: 'Dashboard' }] : []),
   ];
 

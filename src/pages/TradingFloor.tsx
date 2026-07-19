@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { isCustomerSafeFeaturedListing } from '../lib/featuredListings';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   Globe2,
   Grid,
@@ -90,10 +90,15 @@ interface ListingContact {
   contact_available: boolean;
   dealer_id?: string;
   dealer_name?: string;
+  dealer_company_name?: string | null;
   dealer_profile_url?: string;
   dealer_rating?: number | null;
   dealer_review_count?: number;
   dealer_group_count?: number;
+  dealer_city?: string | null;
+  dealer_country_code?: string | null;
+  dealer_avatar_url?: string | null;
+  dealer_profile_summary?: string | null;
   dealer_stats?: { active_listings: number; wts_posts: number; wtb_posts: number } | null;
   whatsapp_url?: string;
   reason?: string;
@@ -570,20 +575,28 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
 
         <div className="rounded-md border bg-white px-6 py-7" style={{ borderColor: DETAIL_BORDER, color: DETAIL_INK, boxShadow: '0 12px 32px rgba(16,24,40,0.08)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: DETAIL_INK }}>User information</h2>
-          <p className="mt-2 text-sm" style={{ color: DETAIL_MUTED }}>{contact?.dealer_name || evidence?.seller_name || 'Dealer identity not available'}</p>
-          {contact?.dealer_stats && (
-            <div className="mt-5 grid grid-cols-2 gap-4">
-              <ProfileStat label="WTS listings" value={contact.dealer_stats.wts_posts} />
-              <ProfileStat label="WTB listings" value={contact.dealer_stats.wtb_posts} />
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: DETAIL_INK }}>Dealer information</h2>
+          <div className="mt-4 flex items-start gap-4">
+            {contact?.dealer_avatar_url && (
+              <img src={contact.dealer_avatar_url} alt="" className="h-14 w-14 rounded-full object-cover" loading="lazy" />
+            )}
+            <div>
+              <p className="text-lg font-semibold" style={{ color: DETAIL_INK }}>{contact?.dealer_name || evidence?.seller_name || 'Dealer identity not available'}</p>
+              {contact?.dealer_company_name && <p className="mt-1 text-sm" style={{ color: DETAIL_MUTED }}>{contact.dealer_company_name}</p>}
+              <p className="mt-1 text-sm" style={{ color: DETAIL_MUTED }}>{dealerLocationLabel(contact)}</p>
             </div>
+          </div>
+          {contact?.dealer_profile_summary && <p className="mt-4 text-sm leading-6" style={{ color: DETAIL_MUTED }}>{contact.dealer_profile_summary}</p>}
+          <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <ProfileStat label="FS listings" value={contact?.dealer_stats?.wts_posts ?? 0} />
+            <ProfileStat label="WTB listings" value={contact?.dealer_stats?.wtb_posts ?? 0} />
+            <ProfileStat label="Common groups" value={contact?.dealer_group_count ?? 0} />
+            <ProfileStat label="Reviews" value={contact?.dealer_review_count ?? 0} />
+          </div>
+          {contact?.dealer_rating != null && (
+            <p className="mt-3 text-sm" style={{ color: DETAIL_MUTED }}>Rated {Number(contact.dealer_rating).toFixed(2)} / 5 from the loaded dealer directory.</p>
           )}
           <h3 className="mt-6 text-[16px] font-medium tracking-normal" style={{ color: DETAIL_INK }}>Check availability</h3>
-          {contact?.dealer_profile_url && (
-            <Link to={contact.dealer_profile_url} className="mt-4 block border-y py-3 text-sm" style={{ borderColor: DETAIL_BORDER, color: '#315DDB' }}>
-              View dealer profile{contact.dealer_rating != null ? ` · ${Number(contact.dealer_rating).toFixed(2)} rating` : ''}{contact.dealer_stats ? ` · ${Number(contact.dealer_stats.active_listings).toLocaleString()} active listings` : ''}
-            </Link>
-          )}
           {contact?.contact_available && contact.whatsapp_url ? (
             <>
               <p className="mt-3 text-sm" style={{ color: DETAIL_MUTED }}>Contact {contact.dealer_name || 'the verified dealer'} directly about this item.</p>
@@ -646,6 +659,11 @@ function ProfileStat({ label, value }: { label: string; value: number }) {
       <div className="mt-1 text-xs uppercase tracking-[0.08em]" style={{ color: '#315DDB' }}>{label}</div>
     </div>
   );
+}
+
+function dealerLocationLabel(contact: ListingContact | null) {
+  const location = [cleanValue(contact?.dealer_city), cleanValue(contact?.dealer_country_code)].filter(Boolean).join(', ');
+  return location || 'Location not published';
 }
 
 function ListingImage({ listing, className, large = false }: { listing: ListingRecord; className: string; large?: boolean }) {
