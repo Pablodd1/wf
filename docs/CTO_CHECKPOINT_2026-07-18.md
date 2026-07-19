@@ -24,6 +24,7 @@ Recent completed work:
 - A 5,000-row read-only production sample found 936 stored-price mismatches: 846 high, 65 medium, 25 low; 829 HKD-derived and 107 USD-derived. This is a report, not a mass update.
 - A 100,000-row read-only Railway scan found 18,305 candidates: 16,040 high, 1,643 medium, and 622 low; 15,936 explicit-HKD-derived and 2,369 explicit-USD-derived. It also found 2,014 likely legacy HKD double-conversions, 440 normalized values below the $500 floor, 59 stored values below the floor, and 369 repeated-reference review cases. No production rows were changed.
 - Production canary checks returned analytics-ready data for all five John references. Results: `5712/1R` 9 comparables, average $243,610, 4 outliers removed; `5712/1A` 531 comparables, average $122,215, 115 outliers removed, 122 unknown dials; `3712/1A` 9 comparables, average $130,482, 1 outlier removed; `116500LN` 922 comparables, average $27,045, 225 outliers removed; `52506` 211 comparables, average $45,400, 43 outliers removed. Follow-up: three responses lacked a catalog-resolved reference label, and `5712/1A` has a material unknown-dial cohort.
+- Multilistings dry-run evidence: 100 parents produced 1,150 child candidates with 100% exact raw-lineage coverage, zero missing sources, zero missing lineage, zero live writes, and no promotion decision. The attempted 10,000-parent dry run exceeded ten minutes and was stopped; the next task is performance optimization or smaller checkpointed slices before scaling.
 
 ## Pending order
 
@@ -32,7 +33,7 @@ Recent completed work:
 3. Convert the 100,000-row audit result into a durable report/export, then design a deterministic remediation canary. Do not update production rows from aggregate findings alone.
 4. Resolve catalog labels and unknown-dial cohorts for the five canary references, especially `5712/1A`.
 5. Separate deterministic explicit-currency corrections from repeated-reference, bundles, and multilistings requiring review.
-6. Split bundles before duplicate suppression and export the multilistings report.
+6. Optimize the bundle cohort scan, then split bundles before duplicate suppression and export the multilistings report.
 7. Revalidate Price Research and Trading Floor totals, minimum-five comparable rules, outlier exclusion, and visible discarded-outlier evidence.
 8. Review dealer attribution, WTS/WTB counts, years of activity, raw-message access, and WhatsApp contact behavior.
 9. Run the 100-image message-lineage pilot only after text normalization and listing lineage are stable.
