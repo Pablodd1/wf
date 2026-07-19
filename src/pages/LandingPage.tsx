@@ -87,8 +87,6 @@ export default function LandingPage() {
     if (!hero || !media) return;
 
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const video = media.querySelector('video');
-    if (reducedMotion) video?.pause();
 
     const updateHero = () => {
       const compactViewport = window.matchMedia('(max-width: 639px)').matches;
@@ -97,7 +95,7 @@ export default function LandingPage() {
       media.style.transform = reducedMotion || compactViewport
         ? 'none'
         : `translate3d(0, ${progress * 72}px, 0) scale(${1.04 + progress * 0.045})`;
-      media.style.opacity = compactViewport ? '1' : String(1 - progress * 0.32);
+      media.style.opacity = compactViewport ? '1' : String(1 - progress * 0.18);
     };
 
     updateHero();
@@ -113,27 +111,17 @@ export default function LandingPage() {
     <main className="min-h-screen bg-[#080808] text-white">
       <MarketHeader className="sticky top-0" />
 
-      <section ref={heroRef} className="relative isolate flex min-h-[68svh] items-center justify-center overflow-hidden border-b border-white/10 bg-black px-5 sm:min-h-[calc(94svh-6rem)] sm:px-8 lg:px-12" aria-label="Curated Luxury">
-        <div ref={heroMediaRef} className="absolute -inset-[5%] z-[-2] origin-center opacity-45 will-change-transform">
-          <video className="h-full w-full object-cover" autoPlay muted loop playsInline preload="metadata" poster="/video/curated-luxury-hero-poster.jpg" aria-hidden="true">
-            <source src="/video/curated-luxury-hero.webm" type="video/webm" />
-            <source src="/video/curated-luxury-hero.mp4" type="video/mp4" />
-          </video>
+      <section ref={heroRef} className="relative isolate flex min-h-[72svh] items-center justify-center overflow-hidden border-b border-white/10 bg-[#050403] px-4 py-8 sm:min-h-[calc(94svh-6rem)] sm:px-8 sm:py-10 lg:px-12" aria-label="Curated Luxury">
+        <div ref={heroMediaRef} className="absolute inset-0 z-[-2] origin-center will-change-transform">
+          <img
+            src="/images/home/curated-luxury-jewelry-hero.png"
+            alt=""
+            aria-hidden="true"
+            className="h-full w-full object-contain object-center"
+          />
         </div>
-        <div className="absolute inset-0 z-[-1] bg-[linear-gradient(180deg,rgba(0,0,0,0.72)_0%,rgba(0,0,0,0.58)_46%,rgba(0,0,0,0.78)_100%)]" />
-
-        <div className="relative z-10 max-w-full text-center">
-          <h1
-            className="px-2 font-serif text-[clamp(2.5rem,8vw,8.5rem)] font-semibold leading-[0.9] text-[#d8bd80]"
-            style={{ letterSpacing: '0.06em' }}
-          >
-            CURATED LUXURY
-          </h1>
-          <div className="mx-auto mt-5 h-px w-40 bg-[linear-gradient(90deg,transparent,#d8bd80,transparent)] sm:w-72" />
-          <p className="mx-auto mt-6 max-w-2xl px-4 text-xs font-medium uppercase leading-6 text-white/72 sm:text-sm" style={{ letterSpacing: '0.12em' }}>
-            A considered marketplace for collectors, dealers, and wholesalers
-          </p>
-        </div>
+        <div className="absolute inset-0 z-[-1] bg-[radial-gradient(circle_at_72%_44%,rgba(216,189,128,0.08),transparent_28%),linear-gradient(90deg,rgba(0,0,0,0.16)_0%,rgba(0,0,0,0.03)_48%,rgba(0,0,0,0.14)_100%)]" />
+        <h1 className="sr-only">Curated Luxury, a considered marketplace for collectors, dealers, and wholesalers.</h1>
 
         <a href="#collections" aria-label="Scroll to collections" className="absolute bottom-6 right-5 hidden items-center gap-3 text-[10px] font-medium uppercase tracking-[0.12em] text-white/55 transition-colors hover:text-white sm:flex lg:right-12">
           Discover more <ArrowDown size={14} />
