@@ -9,6 +9,7 @@ function cleanText(value) {
 function isPriceLike(value) {
   const text = cleanText(value);
   if (!text) return false;
+  if (!/\d/.test(text)) return false;
   return /^(?:[$£€¥]\s*)?[\d,.]+(?:\s*(?:k|m|mn|mil|million|w|万))?(?:\s*(?:usd|usdt|hkd|hk\$|eur|gbp|chf|rmb|cny|jpy))?$/i.test(text)
     || /^(?:usd|usdt|hkd|hk\$|eur|gbp|chf|rmb|cny|jpy)\s*[\d,.]+/i.test(text);
 }
@@ -31,6 +32,23 @@ function isReferencePriceCollision(record) {
   });
 }
 
+function isPunctuationOnly(value) {
+  const text = cleanText(value);
+  return Boolean(text && !/[a-z0-9]/i.test(text));
+}
+
+function isLikelyYearAsPrice(record) {
+  const price = Number(record?.price_usd);
+  const currentYear = new Date().getUTCFullYear();
+  return Number.isInteger(price)
+    && price >= 1900
+    && price <= currentYear + 2
+    && record?.price_raw == null
+    && cleanText(record?.reference) == null
+    && record?.year == null
+    && cleanText(record?.condition) == null;
+}
+
 function sanitizeTradingRecord(record) {
   const issues = [];
   const sanitized = { ...record };
@@ -39,7 +57,10 @@ function sanitizeTradingRecord(record) {
   const dial = cleanText(record.dial_color);
   const condition = cleanText(record.condition);
 
-  if (reference && brand && reference.localeCompare(brand, undefined, { sensitivity: 'accent' }) === 0) {
+  if (isPunctuationOnly(reference)) {
+    sanitized.reference = null;
+    issues.push('REFERENCE_PUNCTUATION_ONLY');
+  } else if (reference && brand && reference.localeCompare(brand, undefined, { sensitivity: 'accent' }) === 0) {
     sanitized.reference = null;
     issues.push('REFERENCE_EQUALS_BRAND');
   } else if (reference && /(?:[$Â£â‚¬Â¥]|\b(?:USD|USDT|HKD|HK\$|EUR|GBP|CHF|RMB|CNY|JPY)\b)/i.test(reference)) {
@@ -47,12 +68,18 @@ function sanitizeTradingRecord(record) {
     issues.push('REFERENCE_PRICE_CONTAMINATION');
   }
 
-  if (isPriceLike(dial)) {
+  if (isPunctuationOnly(dial)) {
+    sanitized.dial_color = null;
+    issues.push('DIAL_PUNCTUATION_ONLY');
+  } else if (isPriceLike(dial)) {
     sanitized.dial_color = null;
     issues.push('DIAL_PRICE_CONTAMINATION');
   }
 
-  if (isPriceLike(condition)) {
+  if (isPunctuationOnly(condition)) {
+    sanitized.condition = null;
+    issues.push('CONDITION_PUNCTUATION_ONLY');
+  } else if (isPriceLike(condition)) {
     sanitized.condition = null;
     issues.push('CONDITION_PRICE_CONTAMINATION');
   }
@@ -78,6 +105,11 @@ function sanitizeTradingRecord(record) {
     issues.push('REFERENCE_TOKEN_AS_PRICE');
   }
 
+  if (isLikelyYearAsPrice(record)) {
+    sanitized.price_usd = null;
+    issues.push('YEAR_TOKEN_AS_PRICE');
+  }
+
   const usdPrice = Number(sanitized.price_usd);
   if (sanitized.reference && Number.isFinite(usdPrice) && usdPrice > 0 && usdPrice < 1000) {
     sanitized.price_usd = null;
@@ -92,4 +124,4 @@ function sanitizeTradingRecord(record) {
   };
 }
 
-module.exports = { isPriceLike, isReferencePriceCollision, sanitizeTradingRecord };
+module.exports = { isLikelyYearAsPrice, isPriceLike, isReferencePriceCollision, sanitizeTradingRecord };

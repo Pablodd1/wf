@@ -103,4 +103,8 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.doesNotMatch(floor, /label: 'Bulk listings'/);
   assert.doesNotMatch(floor, /label: 'Trade'/);
   assert.match(floor, /VIEW BUYER REQUEST/);
+  assert.match(floor, /useState<InventoryScope>\('market'\)/);
+  assert.match(floor, /Recent inventory/);
+  assert.match(floor, /Full archive/);
+  assert.match(floor, /Searches still include the complete historical archive/);
 });

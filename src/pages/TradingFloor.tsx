@@ -48,7 +48,7 @@ interface ListingRecord {
   source_type: string | null;
   listing_date: string | null;
   listing_status: string | null;
-  created_at: string;
+  created_at: string | null;
   confidence: number;
   has_images: boolean;
   thumbnail_url: string | null;
@@ -93,6 +93,7 @@ interface ListingBenchmark {
 }
 
 type ViewMode = 'grid' | 'list';
+type InventoryScope = 'market' | 'archive';
 
 export default function TradingFloor() {
   const [searchParams] = useSearchParams();
@@ -115,6 +116,7 @@ export default function TradingFloor() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [inventoryScope, setInventoryScope] = useState<InventoryScope>('market');
   const pageSize = typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 48;
 
   const resetResults = useCallback(() => {
@@ -144,7 +146,7 @@ export default function TradingFloor() {
 
       try {
         const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
-        params.set('quality', 'archive');
+        params.set('quality', inventoryScope);
         if (cursor) params.set('cursor', cursor);
         const selectedFilter = FILTER_OPTIONS.find(option => option.value.toLowerCase() === activeFilter.toLowerCase());
         if (selectedFilter?.group === 'Inventory') params.set('item', selectedFilter.value);
@@ -180,13 +182,13 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [activeFilter, conditionFilter, cursor, pageSize, regionFilter, search]);
+  }, [activeFilter, conditionFilter, cursor, inventoryScope, pageSize, regionFilter, search]);
 
   useEffect(() => {
     const controller = new AbortController();
     async function loadFeatured() {
       try {
-        const params = new URLSearchParams({ item: 'watches', images: 'true', quality: 'archive', page: '1', pageSize: '100' });
+        const params = new URLSearchParams({ item: 'watches', images: 'true', quality: 'market', page: '1', pageSize: '100' });
         const response = await fetch(`/api/ingest?${params}`, { signal: controller.signal });
         const data = await response.json() as TradingFloorResponse;
         if (response.ok && data.status === 'ok') {
@@ -281,6 +283,31 @@ export default function TradingFloor() {
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
               />
             </label>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex gap-2" aria-label="Inventory date coverage">
+              <button
+                type="button"
+                onClick={() => { setInventoryScope('market'); resetResults(); }}
+                className="h-9 rounded-md border px-4 text-sm font-medium"
+                style={{ borderColor: inventoryScope === 'market' ? GOLD : BORDER, background: inventoryScope === 'market' ? GOLD : PANEL, color: inventoryScope === 'market' ? '#09090D' : MUTED }}
+              >
+                Recent inventory
+              </button>
+              <button
+                type="button"
+                onClick={() => { setInventoryScope('archive'); resetResults(); }}
+                className="h-9 rounded-md border px-4 text-sm font-medium"
+                style={{ borderColor: inventoryScope === 'archive' ? GOLD : BORDER, background: inventoryScope === 'archive' ? GOLD : PANEL, color: inventoryScope === 'archive' ? '#09090D' : MUTED }}
+              >
+                Full archive
+              </button>
+            </div>
+            <p className="text-xs leading-5" style={{ color: MUTED }}>
+              {inventoryScope === 'market'
+                ? 'Dated listings first. Searches still include the complete historical archive.'
+                : 'Includes historical records whose original posting date or fields may be incomplete.'}
+            </p>
           </div>
           <CurrencyConverter compact />
         </div>

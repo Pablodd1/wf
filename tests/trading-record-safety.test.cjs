@@ -2,13 +2,14 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { isPriceLike, isReferencePriceCollision, sanitizeTradingRecord } = require('../api/_lib/trading-record-safety.cjs');
+const { isLikelyYearAsPrice, isPriceLike, isReferencePriceCollision, sanitizeTradingRecord } = require('../api/_lib/trading-record-safety.cjs');
 
 test('recognizes numeric and currency amounts as price-like values', () => {
   assert.equal(isPriceLike('9000.00'), true);
   assert.equal(isPriceLike('HKD 250K'), true);
   assert.equal(isPriceLike('$1,250,000'), true);
   assert.equal(isPriceLike('Ice Blue'), false);
+  assert.equal(isPriceLike('.'), false);
 });
 
 test('withholds contaminated customer fields without dropping the listing', () => {
@@ -85,6 +86,26 @@ test('does not confuse an alphanumeric reference numeric core with a price', () 
 
 test('does not quarantine an explicit converted price when raw and USD values differ', () => {
   assert.equal(isReferencePriceCollision({ reference: '16610', price_raw: 16610, price_usd: 2129 }), false);
+});
+
+test('withholds punctuation-only fields and a deterministic year-as-price artifact', () => {
+  const punctuation = sanitizeTradingRecord({ brand: 'Patek Philippe', reference: '.', dial_color: '.', condition: '-', price_usd: null });
+  assert.equal(punctuation.reference, null);
+  assert.equal(punctuation.dial_color, null);
+  assert.equal(punctuation.condition, null);
+  assert.deepEqual(punctuation.data_quality_issues, ['REFERENCE_PUNCTUATION_ONLY', 'DIAL_PUNCTUATION_ONLY', 'CONDITION_PUNCTUATION_ONLY']);
+
+  const record = { brand: 'Rolex', reference: null, price_raw: null, price_usd: 2023, year: null, condition: null };
+  assert.equal(isLikelyYearAsPrice(record), true);
+  const result = sanitizeTradingRecord(record);
+  assert.equal(result.price_usd, null);
+  assert.deepEqual(result.data_quality_issues, ['YEAR_TOKEN_AS_PRICE']);
+});
+
+test('keeps a low four-digit price when another field makes the value plausible', () => {
+  const result = sanitizeTradingRecord({ brand: 'Panerai', reference: null, price_usd: 2023, condition: 'Used' });
+  assert.equal(result.price_usd, 2023);
+  assert.deepEqual(result.data_quality_issues, []);
 });
 
 test('withholds sub-thousand reference prices from the customer Trading Floor', () => {
