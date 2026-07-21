@@ -292,7 +292,7 @@ export default function TradingFloor() {
                 className="h-9 rounded-md border px-4 text-sm font-medium"
                 style={{ borderColor: inventoryScope === 'market' ? GOLD : BORDER, background: inventoryScope === 'market' ? GOLD : PANEL, color: inventoryScope === 'market' ? '#09090D' : MUTED }}
               >
-                Recent inventory
+                Main inventory
               </button>
               <button
                 type="button"
@@ -305,7 +305,7 @@ export default function TradingFloor() {
             </div>
             <p className="text-xs leading-5" style={{ color: MUTED }}>
               {inventoryScope === 'market'
-                ? 'Dated listings first. Searches still include the complete historical archive.'
+                ? 'Main indexed inventory first. Searches still include the complete historical archive.'
                 : 'Includes historical records whose original posting date or fields may be incomplete.'}
             </p>
           </div>
