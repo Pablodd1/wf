@@ -44,6 +44,7 @@
     "audit:dealer-reconciliation": "node tools/dealer-lineage/audit-reconciliation.cjs",
     "build:seller-lineage": "node tools/dealer-lineage/build-seller-lineage-manifest.cjs",
     "stage:seller-lineage": "node tools/dealer-lineage/stage-seller-lineage-manifest.cjs",
+    "verify:seller-lineage-schema": "node tools/dealer-lineage/verify-private-lineage-schema.cjs",
     "reconcile:seller-child-lineage": "node tools/dealer-lineage/reconcile-child-lineage.cjs",
     "stage:seller-child-lineage": "node tools/dealer-lineage/stage-child-lineage-manifest.cjs",
     "audit:forecast-readiness": "node tools/forecast-readiness/audit-live-cohorts.cjs",
