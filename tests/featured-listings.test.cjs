@@ -19,7 +19,7 @@ const valid = {
 };
 
 test('accepts a complete approved image-backed WTS listing', () => {
-  assert.equal(isCustomerSafeFeaturedListing(valid), true);
+  assert.equal(isCustomerSafeFeaturedListing({ ...valid, featured_verified: true, featured_price_source: 'source_line', featured_reference_source: 'catalog_exact' }), true);
 });
 
 test('rejects implausible prices, incomplete identity, and review records', () => {
@@ -30,6 +30,12 @@ test('rejects implausible prices, incomplete identity, and review records', () =
 });
 
 test('rejects confidence values outside the 0-100 contract', () => {
-  assert.equal(isCustomerSafeFeaturedListing({ ...valid, confidence: 1000 }), false);
-  assert.equal(isCustomerSafeFeaturedListing({ ...valid, confidence: 84 }), false);
+  const verified = { ...valid, featured_verified: true, featured_price_source: 'source_line', featured_reference_source: 'catalog_exact' };
+  assert.equal(isCustomerSafeFeaturedListing({ ...verified, confidence: 1000 }), false);
+  assert.equal(isCustomerSafeFeaturedListing({ ...verified, confidence: 84 }), false);
+});
+
+test('rejects unverified featured values even when the legacy fields look complete', () => {
+  assert.equal(isCustomerSafeFeaturedListing(valid), false);
+  assert.equal(isCustomerSafeFeaturedListing({ ...valid, featured_verified: true, featured_price_source: 'stored_column', featured_reference_source: 'catalog_exact' }), false);
 });

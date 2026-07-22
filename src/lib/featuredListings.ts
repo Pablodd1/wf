@@ -8,6 +8,9 @@ type FeaturedListing = {
   confidence?: number | null;
   has_images?: boolean | null;
   thumbnail_url?: string | null;
+  featured_verified?: boolean | null;
+  featured_price_source?: string | null;
+  featured_reference_source?: string | null;
 };
 
 const MISSING_VALUES = new Set(['', 'n/a', 'na', 'none', 'null', 'unknown', 'undefined']);
@@ -21,6 +24,9 @@ export function isCustomerSafeFeaturedListing(listing: FeaturedListing) {
   const confidence = Number(listing.confidence);
 
   return Boolean(
+    listing.featured_verified === true &&
+    listing.featured_price_source === 'source_line' &&
+    listing.featured_reference_source === 'catalog_exact' &&
     listing.has_images &&
     listing.thumbnail_url &&
     listing.verdict === 'APPROVED' &&

@@ -17,6 +17,7 @@
     "stage:duplicate-review": "node tools/duplicate-audit/stage-review-candidates.cjs",
     "audit:duplicate-review-batch": "node tools/duplicate-audit/audit-review-batch.cjs",
     "audit:price-normalization": "node tools/price-quality/audit-price-normalization.cjs",
+    "audit:priority-references": "node tools/price-quality/audit-priority-references.cjs",
     "audit:emoji-prices": "node tools/price-quality/audit-emoji-prices.cjs",
     "stage:price-canary": "node tools/price-quality/stage-price-canary.cjs",
     "audit:smallest-brands": "node tools/brand-qa/audit-smallest-brands.cjs",

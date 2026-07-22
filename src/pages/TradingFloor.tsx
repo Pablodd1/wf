@@ -288,8 +288,7 @@ export default function TradingFloor() {
     const controller = new AbortController();
     async function loadFeatured() {
       try {
-        const params = new URLSearchParams({ item: 'watches', images: 'true', quality: 'market', page: '1', pageSize: '100' });
-        const response = await fetch(`/api/ingest?${params}`, { signal: controller.signal });
+        const response = await fetch('/api/featured-listings', { signal: controller.signal });
         const data = await response.json() as TradingFloorResponse;
         if (response.ok && data.status === 'ok') {
           setFeaturedListings((data.records || []).filter(isCustomerSafeFeaturedListing));
