@@ -121,3 +121,17 @@ The 100-row canary was split into two local, untracked review files:
 Validation found 49/49 review rows with raw evidence and parent IDs, zero
 preapproved decisions, and 51/51 blocked rows deferred. Raw-message evidence
 and private lineage were not committed to GitHub.
+
+### Remaining seller exceptions
+
+Of the 42 unmatched parents:
+
+- 35 have no exact seller-lineage evidence in the supplied user export;
+- seven share a message hash with eight seller candidates but fail the exact
+  timestamp gate.
+
+The eight hash-only candidates are not timezone-level drift. Their timestamps
+differ from the parent by approximately 150 to 310 days, and one candidate
+also disagrees on WTS/WTB intent. The exact-time gate remains unchanged and
+all seven parents remain unresolved. A local `seller-timestamp-review-7.csv`
+contains pseudonymized identities and no raw phone numbers.
