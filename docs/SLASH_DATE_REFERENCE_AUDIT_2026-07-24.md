@@ -90,15 +90,21 @@ service-role check found:
 
 | Private staging check | Coverage |
 | --- | ---: |
-| Parent lineage matched | 1 / 44 |
-| Parent phone present | 1 / 44 |
-| Parent seller name present | 0 / 44 |
-| Parent source date present | 1 / 44 |
+| Parent lineage matched | 2 / 44 |
+| Parent phone present | 2 / 44 |
+| Parent seller name present | 1 / 44 |
+| Parent source date present | 2 / 44 |
 | Child lineage matched | 0 / 44 |
 | Verified dealer matches | 0 / 44 |
 
 The private tables are reachable and correctly protected, but their data does
 not yet cover this canary. Customer pages must not show or infer dealer contact,
 reputation, or seller activity from these rows. The next lineage job must join
-the 43 unmatched parents to the source user export, stage exact matches
+the 42 unmatched parents to the source user export, stage exact matches
 privately, and rerun this same canary before contact information is eligible.
+
+The two exact source-user matches passed dry-run and were upserted into the
+private parent-lineage table. Immediate read-back returned two matches, no
+unmatched/conflicting/orphaned rows, and zero mismatches across phone, name,
+intent, original date, listing linkage, title hash, and image evidence. No
+dealer was assigned, consent remains ungranted, and no public record changed.
