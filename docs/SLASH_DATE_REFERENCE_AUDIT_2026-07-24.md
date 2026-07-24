@@ -108,3 +108,16 @@ private parent-lineage table. Immediate read-back returned two matches, no
 unmatched/conflicting/orphaned rows, and zero mismatches across phone, name,
 intent, original date, listing linkage, title hash, and image evidence. No
 dealer was assigned, consent remains ungranted, and no public record changed.
+
+### Human-review package
+
+The 100-row canary was split into two local, untracked review files:
+
+- `human-review-49.csv`: correction candidates with blank decision and notes
+  columns, exact child raw text, parent ID, original date, proposed/exported
+  identity, and price/currency evidence;
+- `held-51.csv`: deterministically blocked rows premarked `DEFER`.
+
+Validation found 49/49 review rows with raw evidence and parent IDs, zero
+preapproved decisions, and 51/51 blocked rows deferred. Raw-message evidence
+and private lineage were not committed to GitHub.
