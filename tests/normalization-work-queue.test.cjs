@@ -39,3 +39,21 @@ test('completed cursor scans stop while queue workers remain available by defaul
   assert.match(worker, /shouldStop = result\.complete && exitOnComplete/);
   assert.match(worker, /event: 'worker_complete'/);
 });
+
+test('queue worker reports bounded batch timings and lease resource summaries', () => {
+  assert.match(worker, /event: 'batch_complete'/);
+  for (const metric of [
+    'claimReadMs',
+    'analyzeWallMs',
+    'analyzeCpuMs',
+    'shadowUpsertMs',
+    'completionRpcMs',
+    'totalMs',
+    'rowsPerSecond',
+    'memoryMb',
+  ]) {
+    assert.match(worker, new RegExp(metric));
+  }
+  assert.match(worker, /records\.map\(analyzeRecord\)/);
+  assert.doesNotMatch(worker, /event: 'batch_complete'[\s\S]{0,500}raw_message/);
+});
