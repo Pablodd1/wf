@@ -4,6 +4,7 @@
 // only shadow proposals and uses a Postgres lease so it cannot race Vercel.
 
 const { randomUUID } = require('node:crypto');
+const { performance } = require('node:perf_hooks');
 const { analyzeRecord } = require('./shadow-reprocess.cjs');
 
 const baseUrl = process.env.SUPABASE_URL;
@@ -30,6 +31,57 @@ if (!['cursor', 'queue'].includes(workerMode)) {
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function roundMetric(value) {
+  return Number(value.toFixed(2));
+}
+
+function memoryMb() {
+  const memory = process.memoryUsage();
+  return {
+    rss: roundMetric(memory.rss / 1024 / 1024),
+    heapUsed: roundMetric(memory.heapUsed / 1024 / 1024),
+    external: roundMetric(memory.external / 1024 / 1024),
+  };
+}
+
+function emptyStageTimings() {
+  return {
+    claimReadMs: 0,
+    analyzeWallMs: 0,
+    analyzeCpuMs: 0,
+    shadowUpsertMs: 0,
+    completionRpcMs: 0,
+    totalMs: 0,
+  };
+}
+
+function addStageTimings(totals, batch) {
+  for (const stage of Object.keys(totals)) totals[stage] += batch[stage];
+}
+
+function roundedStageTimings(timings) {
+  return Object.fromEntries(
+    Object.entries(timings).map(([stage, duration]) => [stage, roundMetric(duration)]),
+  );
+}
+
+function queueLeaseSummary({ processed, changed, complete, batches, leaseStartedAt, stageTotals }) {
+  const runtimeMs = performance.now() - leaseStartedAt;
+  return {
+    processed,
+    changed,
+    complete,
+    queue: true,
+    batchSize,
+    rowsPerLease,
+    batches,
+    runtimeMs: roundMetric(runtimeMs),
+    rowsPerSecond: runtimeMs > 0 ? roundMetric(processed / (runtimeMs / 1000)) : 0,
+    stageTotalsMs: roundedStageTimings(stageTotals),
+    memoryMb: memoryMb(),
+  };
 }
 
 async function rest(path, options = {}) {
@@ -84,42 +136,94 @@ async function releaseQueueWork(sourceRecordIds, error) {
 }
 
 async function runQueueLease() {
+  const leaseStartedAt = performance.now();
   let processed = 0;
   let changed = 0;
+  let batches = 0;
+  const stageTotals = emptyStageTimings();
 
   while (processed < rowsPerLease) {
+    const batchStartedAt = performance.now();
     const limit = Math.min(batchSize, rowsPerLease - processed);
+    const claimStartedAt = performance.now();
     const records = await callRpc('claim_normalization_shadow_work', {
       p_holder: holder,
       p_limit: limit,
       p_lease_seconds: 900,
     });
-    if (!records?.length) return { processed, changed, complete: true, queue: true };
+    const claimReadMs = performance.now() - claimStartedAt;
+    if (!records?.length) {
+      return queueLeaseSummary({
+        processed,
+        changed,
+        complete: true,
+        batches,
+        leaseStartedAt,
+        stageTotals,
+      });
+    }
 
     const sourceRecordIds = records.map(record => record.id);
     try {
+      const analyzeStartedAt = performance.now();
+      const analyzeCpuStarted = process.cpuUsage();
       const shadowRows = records.map(analyzeRecord);
+      const analyzeWallMs = performance.now() - analyzeStartedAt;
+      const analyzeCpu = process.cpuUsage(analyzeCpuStarted);
+      const analyzeCpuMs = (analyzeCpu.user + analyzeCpu.system) / 1000;
+      const upsertStartedAt = performance.now();
       await rest('normalization_shadow_v4?on_conflict=source_record_id', {
         method: 'POST',
         headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
         body: JSON.stringify(shadowRows),
       });
+      const shadowUpsertMs = performance.now() - upsertStartedAt;
+      const completionStartedAt = performance.now();
       const completed = await callRpc('complete_normalization_shadow_work', {
         p_holder: holder,
         p_source_record_ids: sourceRecordIds,
       });
+      const completionRpcMs = performance.now() - completionStartedAt;
       if (Number(completed) !== sourceRecordIds.length) {
         throw new Error(`Queue completion mismatch: expected ${sourceRecordIds.length}, completed ${completed}`);
       }
+      const batchChanged = shadowRows.filter(row => row.change_flags.length > 0).length;
+      const totalMs = performance.now() - batchStartedAt;
+      const batchTimings = {
+        claimReadMs,
+        analyzeWallMs,
+        analyzeCpuMs,
+        shadowUpsertMs,
+        completionRpcMs,
+        totalMs,
+      };
       processed += records.length;
-      changed += shadowRows.filter(row => row.change_flags.length > 0).length;
+      changed += batchChanged;
+      batches += 1;
+      addStageTimings(stageTotals, batchTimings);
+      console.log(JSON.stringify({
+        event: 'batch_complete',
+        jobName,
+        workerMode,
+        rows: records.length,
+        changed: batchChanged,
+        rowsPerSecond: totalMs > 0 ? roundMetric(records.length / (totalMs / 1000)) : 0,
+        timingMs: roundedStageTimings(batchTimings),
+      }));
     } catch (error) {
       await releaseQueueWork(sourceRecordIds, error);
       throw error;
     }
   }
 
-  return { processed, changed, complete: false, queue: true };
+  return queueLeaseSummary({
+    processed,
+    changed,
+    complete: false,
+    batches,
+    leaseStartedAt,
+    stageTotals,
+  });
 }
 
 async function runLease() {

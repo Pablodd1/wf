@@ -1,13 +1,13 @@
 # WatchFacts CTO Control Center
 
 **Control date:** July 26, 2026
-**Assignment mode:** bounded implementation after read-only stabilization
+**Assignment mode:** final shadow-normalization control readback
 **Current release decision:** do not bulk-promote normalization, bundles, images,
 sellers, or duplicates.
 
 **Infrastructure update:** the upgraded Supabase and Railway queue path has now
-been measured through two exact 500,000-row cohorts. Four Railway workers with
-batch size 250 are the current validated ceiling. This workload is dominated by
+exactly reconciled every raw-evidence-eligible record. Four Railway workers with
+batch size 250 remain the validated ceiling. The workload is dominated by
 database round trips and record complexity rather than worker CPU or memory;
 adding a larger machine is not the fastest current move.
 
@@ -39,94 +39,145 @@ Catalog confirmation is fail-closed through
 
 ## Current exact operating snapshot
 
-The following counts are from the July 25 production readback. “Analyzed” or
-“normalized” is not the same as human-approved, published, or correct.
+The following counts combine the July 25 inventory readback with the final
+July 26 exact shadow reconciliation. “Analyzed” or “normalized” is not the same
+as human-approved, published, or correct.
 
 | Control measure | Exact count | Decision meaning |
 | --- | ---: | --- |
 | Raw records | 17,000 | Immutable source layer; preserve |
 | Watch records | 2,631,583 | Live legacy inventory; do not bulk rewrite |
-| Shadow rows analyzed | 2,631,468 | Deterministic coverage, not approval |
-| Normalization pending | 1,988,995 | Proposed changes still pending |
+| Raw-evidence-eligible watch records | 2,631,476 | Deterministic shadow-analysis scope |
+| Eligible shadow rows analyzed | 2,631,476 | Full eligible coverage, not approval |
+| Remaining eligible rows | 0 | Exact eligible cohort complete |
+| Normalization errors | 0 | No eligible row was silently dropped |
+| Missing-raw rows | 107 | Separately blocked pending exact gap audit |
 | Catalog-confirmed identities | 22,976 | Eligible for later bounded review |
 | Identity conflicts | 82,111 | Block |
 | Identity unverified | 38,595 | Block |
 | Human-approved identities | 0 | No automatic promotion claim |
 | Verified Trading Floor candidates | 10,864 | Preview canary source only |
 | Bundle parents requiring split | 761,489 | Parent must not display as a child |
-| Image-backed listings | 1,531 | Source-linked does not mean visually verified |
-| Visually verified images | 0 | Customer image release remains blocked |
+| Accepted image-audit cohort | 1,531 | Exact input/output; 0 errors |
+| Manifest-linked image candidates | 1,523 | Lineage link does not mean visually verified |
+| Images requiring visual review | 1,359 | Private human-review scope |
+| Structural image rejects | 172 | Blocked before visual review |
+| Visually verified / auto-approved images | 0 / 0 | Customer image release remains blocked |
 | Private seller candidates | 16,094 | Identity/consent review only |
 | Seller-linked listings | 0 | Do not publish seller/contact data |
 | Unbundled staged children | 70,194 | Review lanes only |
 | Unbundled approved/published | 0 | No bulk publication |
+
+The `2,631,476` eligible rows plus the `107` separately blocked missing-raw rows
+reconcile exactly to `2,631,583` watch records. The 107-row gap is not a parser
+error and must not be normalized without immutable raw evidence.
+
+## Accepted image audit and local reviewer
+
+The exact image audit reconciled `1,531` input rows to `1,531` output rows with
+zero errors. It found `1,523` manifest links and routed `1,359` rows to visual
+review. The remaining `172` were structural rejects:
+
+| Structural reject | Exact rows |
+| --- | ---: |
+| Manifest missing | 8 |
+| Dial conflict | 161 |
+| Brand conflict | 3 |
+| **Total** | **172** |
+
+No image was visually verified or automatically approved.
+
+The accepted private reviewer packet reconciles `50 = 50 + 0`: 50 review rows
+and zero errors. It contains zero reviewer decisions, zero defaulted decisions,
+and caused zero database writes. A named operator is required; the only valid
+decisions are `MATCH` and `NO_MATCH`, each with a reason of at least 12
+characters. The packet and reviewer remain local-only.
+They must not be published or committed.
 
 ## July 26 bounded normalization operations
 
 All results below are deterministic `v4.2-line-condition` shadow analysis.
 They are not human approvals or public promotion.
 
-| Cohort | Input | Output | Errors | Whole-cohort rate | Disposition |
-| --- | ---: | ---: | ---: | ---: | --- |
-| July 26 cohort 1 | 500,000 | 500,000 | 0 | 115.53 rows/sec | Exactly reconciled |
-| July 26 cohort 2 | 500,000 | 500,000 | 0 | 139.09 rows/sec | Exactly reconciled |
-| July 26 cohort 3 | 500,000 | Running | 0 at latest gate | ~162 rows/sec at latest interval | Four workers; bounded |
+| Cohort | Input | Output | Errors | Whole-cohort rate | Human review | No change | Disposition |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| July 26 cohort 1 | 500,000 | 500,000 | 0 | 115.53 rows/sec | Recorded in cohort artifacts | Recorded in cohort artifacts | Exactly reconciled |
+| July 26 cohort 2 | 500,000 | 500,000 | 0 | 139.09 rows/sec | Recorded in cohort artifacts | Recorded in cohort artifacts | Exactly reconciled |
+| July 26 cohort 3 | 500,000 | 500,000 | 0 | 162.72 rows/sec | 381,061 | 118,939 | Exactly reconciled |
+| July 26 final cohort | 236,476 | 236,476 | 0 | 171.79 rows/sec | 180,934 | 55,542 | Exactly reconciled |
 
-After cohort 2, exact queue-complete coverage reached 1,895,000 records. The
-remaining archive estimate was 736,583 records. Cohort 3 began only after
-cohort 2 reconciled input IDs to shadow IDs with matching SHA-256 sets and zero
-missing/extra rows.
+For the final cohort, the four-worker processing window measured `298.07`
+rows/second. The `171.79` rows/second whole-cohort rate remains the conservative
+operational measure because it includes queue and reconciliation overhead.
 
-Current cohort 3 boundary:
+Final exact coverage:
 
 ```text
-created_at: 2026-07-26T13:38:36.412Z
-after: mysql_auctions_39c7ab3d-545e-48d2-ab48-ee61c5394e50
-first: mysql_auctions_39c7afd6-bba9-4ec9-ba9d-7bfbf4888995
-last: mysql_auctions_c18e37a0-ad41-43ac-a967-c0c914322739
+raw-evidence eligible: 2,631,476
+shadow covered: 2,631,476
+remaining eligible: 0
+errors: 0
+missing raw evidence: 107 separately blocked
 workers: 4
 batch size: 250
 watch_records writes: 0
 promotion: false
 ```
 
-Completed cohort artifacts:
+Final normalization deployment:
 
 ```text
-audit-output/normalization-canary-500k-20260726/
-audit-output/normalization-canary-500k-20260726-2/
+Railway deployment: 0563930b
+Git commit: f309fde
+workers: 4
+batch size: 250
 ```
 
-The active cohort writes its final reconciled artifacts only after completion:
+PR #140 then merged and Railway automatically deployed the observability-only
+change:
 
 ```text
-audit-output/normalization-canary-500k-20260726-3/
+Railway deployment: 2c8c9f4e-e785-43ff-8494-2161a077dd59
+Git commit: 25ff5c36abe2eed150d95166607dcd14745ccf8e
+instances: 4
+worker_started events: 4
+lease_complete: processed 0; batches 0; timing and memory present
+process exits: clean
+final queue: 236,476 COMPLETE; 0 unfinished; 0 FAILED
 ```
+
+This validates startup, zero-work lease summaries, timing/memory emission, and
+clean exit. It does not exercise per-batch metrics. A synthetic 1,000-row
+production canary was not created because remaining eligible rows are zero and
+resetting evidence or creating `watch_records` solely for a test is prohibited.
 
 Current release controls:
 
 | Change | State | Gate |
 | --- | --- | --- |
-| Client Trading Floor/Price Research readiness ([PR #131](https://github.com/Pablodd1/wf/pull/131)) | Merged and production-verified | Complete |
-| Worker observability and reversible duplicate controls ([PR #132](https://github.com/Pablodd1/wf/pull/132)) | Draft | Finish active cohort; query-plan and rollback canaries |
-| Immutable review packets and Review Queue lane ([PR #133](https://github.com/Pablodd1/wf/pull/133)) | Draft; Supabase/Vercel previews passed | No production migration/import |
-| Bounded packet exporter/importer ([PR #134](https://github.com/Pablodd1/wf/pull/134)) | Draft, stacked on #133; migrations compiled in disposable preview | Preview-specific RPC canary and rollback |
+| Stable-key image audit ([PR #138](https://github.com/Pablodd1/wf/pull/138)) | Merged to `main` at `f309fde` | Complete |
+| Count-independent image audit ([PR #142](https://github.com/Pablodd1/wf/pull/142)) | Merged to `main` at `2f38615` | Exact 1,531-row audit accepted; visual decisions remain local |
+| Worker observability and reversible duplicate controls ([PR #132](https://github.com/Pablodd1/wf/pull/132)) | Draft | Query-plan, fail-closed API, restore-idempotency, and rollback canaries |
+| Immutable review packets and Review Queue lane ([PR #133](https://github.com/Pablodd1/wf/pull/133)) | Draft; preview checks passed | No production migration/import |
+| Bounded packet exporter/importer ([PR #134](https://github.com/Pablodd1/wf/pull/134)) | Draft, stacked on #133 | Preview-specific RPC canary and rollback |
+| Redacted review-learning candidate exporter ([PR #137](https://github.com/Pablodd1/wf/pull/137)) | Draft, stacked on #134 | Engineer-reviewed candidates only; no automatic rule changes |
+| Worker observability-only release ([PR #140](https://github.com/Pablodd1/wf/pull/140)) | Merged and automatically deployed at `25ff5c3`; zero-work observability passed | Per-batch gate on the first legitimate new 1,000 rows or in preview |
 
 ## Workstream controls
 
 | Workstream | Authoritative contract | Current disposition | Next bounded gate |
 | --- | --- | --- | --- |
-| Normalization | [`NORMALIZATION_CONTRACT.md`](NORMALIZATION_CONTRACT.md) | Shadow/reports only | Reproducible local 100,000-row benchmark |
+| Normalization | [`NORMALIZATION_CONTRACT.md`](NORMALIZATION_CONTRACT.md) | Full eligible shadow coverage; no automatic approval | Audit the 107 missing-raw rows separately |
 | Promotion | [`SHADOW_PROMOTION_POLICY.md`](SHADOW_PROMOTION_POLICY.md) | Human approval required | Review a bounded catalog-confirmed cohort |
 | Currency | [`CURRENCY_RULES.md`](CURRENCY_RULES.md) | Explicit evidence only; bare `$` is ambiguous | Audit exact-line evidence and FX provenance |
 | Catalog identity | [`DATA_IDENTITY_INCIDENT_2026-07-24.md`](DATA_IDENTITY_INCIDENT_2026-07-24.md) | Fail closed | Continue bounded identity staging/readback |
 | Bundles | [`BUNDLE_CANARY_V42_2026-07-18.md`](BUNDLE_CANARY_V42_2026-07-18.md) | Split and review before parent suppression | Work priority children in small review batches |
-| Images | [`IMAGE_RECONCILIATION.md`](IMAGE_RECONCILIATION.md) | Exact lineage plus visual review | Signed 50-image review packet |
+| Images | [`IMAGE_RECONCILIATION.md`](IMAGE_RECONCILIATION.md) | Exact audit complete; 1,359 need visual review; 0 verified | Local operator decisions only; no packet publication |
 | Seller/dealer | [`IMAGES_SELLER_UNBUNDLED_STATUS_2026-07-24.md`](IMAGES_SELLER_UNBUNDLED_STATUS_2026-07-24.md) | Private evidence; no consent/verification | Owner review of exact identity groups |
 | Duplicates | [`DUPLICATE_AUDIT_PROTOCOL.md`](DUPLICATE_AUDIT_PROTOCOL.md) | No suppression before bundle decisions | Human review only |
 | Green API | [`GREEN_API_INTEGRATION.md`](GREEN_API_INTEGRATION.md) | Converge into immutable raw pipeline | Preserve event/message/media lineage |
-| Railway | [`RAILWAY_NORMALIZATION_WORKER.md`](RAILWAY_NORMALIZATION_WORKER.md) | Four replicas, batch 250, bounded queue cohorts | Reconcile every cohort before seeding another |
-| Human review packets | [`NORMALIZATION_REVIEW_PACKETS.md`](NORMALIZATION_REVIEW_PACKETS.md) | Draft PRs only; no production import | Preview RPC canary with preview-specific key |
+| Railway | [`RAILWAY_NORMALIZATION_WORKER.md`](RAILWAY_NORMALIZATION_WORKER.md) | Four replicas, batch 250 ceiling; zero-work observability passed | First legitimate new 1,000 rows or preview-only per-batch canary |
+| Human review packets | [PR #133](https://github.com/Pablodd1/wf/pull/133) | Draft PRs only; no production import | Preview RPC canary with preview-specific key |
 
 ## 100,000-row benchmark
 
@@ -218,30 +269,10 @@ The 62,054 changed rows are deterministic proposals, not approved
 normalizations. The smaller 17,329 “ready for human approval” cohort still
 requires a reviewer decision; it is not safe for automatic publication.
 
-At the measured local-file rate, compute-only extrapolations are:
-
-| Scope | Rows | Estimated time |
-| --- | ---: | ---: |
-| All current watch records | 2,631,583 | 43.52 minutes |
-| Current normalization-pending count | 1,988,995 | 32.90 minutes |
-
-These estimates exclude database transfer, shadow writes, retries, worker
-leases, Supabase contention, catalog corrections, image/seller correlation,
-bundle materialization, and human review. They must not be presented as the
-time to make the Trading Floor fully accurate.
-
-Human time must be modeled separately. At an illustrative 30 seconds per
-decision:
-
-| Review scope | One reviewer | Four reviewers | Eight reviewers |
-| --- | ---: | ---: | ---: |
-| First 100 rows | 50 minutes | 13 minutes | 6 minutes |
-| First 1,000 rows | 8.33 hours | 2.08 hours | 1.04 hours |
-| 17,329 ready-for-approval rows | 144.41 hours | 36.10 hours | 18.05 hours |
-
-These are uninterrupted handling-time estimates, not staffing commitments.
-The 82,671 human-review dispositions should not all be sent to people: most
-must first be reduced by catalog/evidence repair and then re-benchmarked.
+The benchmark remains reproducible capacity evidence. Its former full-run time
+estimates are removed because the eligible production shadow run is now
+complete and exactly reconciled. Human review duration is not inferred from
+worker throughput.
 
 The largest human-review blockers in this static snapshot are:
 
@@ -284,9 +315,8 @@ or unreconciled benchmark.
 
 ## Railway decision
 
-Railway can remain the worker platform, but adding replicas today is not the
-safe first action without a bounded test. The post-upgrade canaries are now
-complete and recorded in
+Railway remains the worker platform. The post-upgrade canaries and four-worker
+shadow cohorts are complete. Their earlier gates are recorded in
 [`SUPABASE_POST_UPGRADE_NORMALIZATION_CANARY_2026-07-25.md`](SUPABASE_POST_UPGRADE_NORMALIZATION_CANARY_2026-07-25.md).
 Queue mode passed with two workers after removing its redundant global lease;
 legacy cursor mode retains the global lease.
@@ -294,7 +324,7 @@ legacy cursor mode retains the global lease.
 Current safe operating point:
 
 ```text
-Railway replicas: 4
+Railway replicas: 4 maximum
 SHADOW_BATCH_SIZE: 250
 SHADOW_WORKER_MODE: queue
 Bounded cohorts only
@@ -309,26 +339,31 @@ Measured production shadow results:
 | 2 workers, batch 250 | 178.94 | 50,000/50,000; 0 errors |
 | 4 workers, batch 250, cohort 1 | 115.53 whole-cohort | 500,000/500,000; 0 errors |
 | 4 workers, batch 250, cohort 2 | 139.09 whole-cohort | 500,000/500,000; 0 errors |
+| 4 workers, batch 250, cohort 3 | 162.72 whole-cohort | 500,000/500,000; 0 errors |
+| 4 workers, batch 250, final cohort | 171.79 whole-cohort; 298.07 worker-window | 236,476/236,476; 0 errors |
 
-Batch 500 added only 2.65%, so 250 remains safer. Four workers are now deployed
-and validated through two exact cohorts. CPU and memory headroom remained
-available, but end-to-end throughput did not scale linearly; do not increase
-above four without a new bounded contention canary.
+Batch 500 added only 2.65%, so 250 remains safer. Two workers added 124.39%
+over the original baseline. Large-cohort throughput then improved across exact
+source ranges but did not scale linearly. Four workers and batch 250 are the
+ceiling until a separately approved contention canary proves a higher setting.
+The final run used Railway deployment `0563930b` at commit `f309fde`.
 
 ## Fastest accurate next move
 
-1. Finish and exactly reconcile the active third 500,000-row cohort.
-2. Run the final estimated 236,583-row archive cohort only after that gate.
-3. Review the largest blocker categories and representative changed rows.
-4. Convert stable repeated corrections into tests before changing parser or
+1. Audit the exact 107-row missing-raw gap without fabricating source evidence.
+2. Review the largest blocker categories and representative changed rows.
+3. Complete PR #132's query-plan, fail-closed API, restore-idempotency, and
+   rollback gates in preview only.
+4. Exercise PR #140's per-batch metrics on the first legitimate new 1,000 rows
+   or in preview; do not reset completed evidence or create synthetic
+   `watch_records` to force a production canary.
+5. Convert stable repeated corrections into tests before changing parser or
    catalog behavior on a separately approved branch.
-5. Route uncertain rows to the existing human-review lanes in small cohorts;
+6. Route uncertain rows to the existing human-review lanes in small cohorts;
    do not create a second source of truth.
-6. Use corrections as labeled fixtures for deterministic rules first and ML
+7. Use corrections as labeled fixtures for deterministic rules first and ML
    suggestions second. ML suggestions never auto-approve price, currency,
    identity, seller, bundle, or image relationships.
-7. Keep review-packet storage, exporter, and importer draft-only until the
-   preview-specific RPC canary and rollback complete.
 
 ## Human correction and learning loop
 
@@ -353,15 +388,21 @@ human remain authoritative.
 
 ## Explicit holds
 
-- Do not run an unbounded full-dataset job; use exact, reconciled cohorts only.
+- Do not bulk-promote shadow normalization into live records.
+- Do not start another unbounded worker run; future work must be bounded and
+  exactly reconciled.
+- Do not reset completed queue evidence or create synthetic `watch_records` to
+  manufacture an observability canary.
 - Do not write benchmark output to `watch_records`.
 - Do not change parser/catalog behavior or production review records without a
-  separate reviewed release. Approved UI and private-schema work remains in
-  reviewable branches with production packet import held.
+  separate reviewed release.
 - Do not display bundle parents as normalized child listings.
-- Do not attach images by brand/reference resemblance or filename proximity.
+- Do not infer bundle children or attach images by brand/reference resemblance,
+  filename proximity, or visual similarity.
+- Do not publish or commit the private image-review packet or local reviewer
+  state.
 - Do not expose seller identity/contact without verified lineage and consent.
-- Do not treat shadow completion, catalog match, or “review ready” as human
+- Do not treat shadow completion, catalog match, or "review ready" as human
   approval.
 
 ## Related decision record
@@ -369,4 +410,4 @@ human remain authoritative.
 The infrastructure and acceleration assessment is in
 [`CTO_NORMALIZATION_EXPEDITE_DECISION_2026-07-25.md`](CTO_NORMALIZATION_EXPEDITE_DECISION_2026-07-25.md).
 Its implementation plan requires separate approval and is not authorized by
-this read-only assignment. This control center remains the entrypoint.
+this docs-only update. This control center remains the entrypoint.

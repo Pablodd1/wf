@@ -25,8 +25,7 @@ function expectedUrl(objectKey) {
 }
 
 function sourceId(recordId) {
-  const prefix = 'mysql_auction_watches_';
-  return String(recordId || '').startsWith(prefix) ? String(recordId).slice(prefix.length) : '';
+  return String(recordId || '').match(/^mysql_(?:auction_watches|auctions)_(.+)$/)?.[1] || '';
 }
 
 function validateLedger(ledger, expectedHash, actualHash) {

@@ -74,4 +74,6 @@ test('requires an exact signed ledger before applying images', () => {
   assert.deepEqual(validateLedger({ rows: [row] }, hash, hash), []);
   assert.deepEqual(validateLedger({ rows: [row] }, 'wrong', hash), ['LEDGER_SHA256_MISMATCH']);
   assert.equal(sourceId(row.record_id), '1');
+  assert.equal(sourceId('mysql_auctions_2'), '2');
+  assert.equal(sourceId('mysql_unknown_3'), '');
 });
