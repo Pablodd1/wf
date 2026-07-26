@@ -10,11 +10,18 @@ module.exports = async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   const id = String(req.query?.id || '').trim();
   if (!id || id.length > 250) return res.status(400).json({ error: 'Valid listing id required' });
+  const surface = String(req.query?.surface || 'trading-floor').trim().toLowerCase();
+  if (!['trading-floor', 'price-research'].includes(surface)) {
+    return res.status(400).json({ error: 'Valid listing surface required' });
+  }
 
   try {
     const client = getClient();
+    const publicTable = surface === 'price-research'
+      ? 'price_research_verified_source'
+      : 'trading_floor_verified_listings';
     const { data: publicListing, error: publicError } = await client
-      .from('trading_floor_verified_listings').select('id').eq('id', id).maybeSingle();
+      .from(publicTable).select('id').eq('id', id).maybeSingle();
     if (publicError) throw publicError;
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
 

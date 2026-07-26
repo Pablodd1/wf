@@ -37,6 +37,15 @@ test('redacts standalone phone and email before external AI review', () => {
   assert.match(redacted, /30,000/);
 });
 
+test('redacts poster headings and messaging handles without changing listing evidence', () => {
+  const raw = '[7/12/2026, 7:19 AM] Jane Dealer: Rolex 116500LN USD 30,000\nTelegram: @jane_watches\nhttps://t.me/jane_watches';
+  const redacted = redactPublicSource(raw);
+  assert.doesNotMatch(redacted, /Jane Dealer|jane_watches/);
+  assert.match(redacted, /\[POSTER REDACTED\]/);
+  assert.match(redacted, /116500LN/);
+  assert.match(redacted, /30,000/);
+});
+
 test('neutralizes spreadsheet formulas and quotes CSV values', () => {
   assert.equal(csvCell('=HYPERLINK("https://bad.example")'), '"\'=HYPERLINK(""https://bad.example"")"');
   assert.equal(csvCell('Rolex, 116500LN'), '"Rolex, 116500LN"');
@@ -124,13 +133,14 @@ test('public listing evidence is withheld and public dealer profiles omit raw me
   assert.doesNotMatch(profileRoute, /select\([^)]*raw_message/);
 });
 
-test('Price Research keeps source evidence reviewer-only and shows verified seller activity on click', () => {
+test('Price Research shows contact-redacted source evidence and only verified seller activity on click', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
-  assert.match(page, /Source evidence/);
-  assert.match(page, /authenticated review workflow/);
-  assert.match(page, /Seller and market activity/);
+  assert.match(page, /Original listing/);
+  assert.match(page, /CONTACT REDACTED/);
+  assert.match(page, /Posted by/);
+  assert.match(page, /No identity or contact data is guessed/);
   assert.match(page, /api\/listing-contact/);
   assert.doesNotMatch(page, /title\.startsWith\('Raw source'\)/);
 });

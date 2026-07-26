@@ -5,14 +5,8 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
+const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const { isCustomerIdentitySafe } = require('./_lib/trading-record-safety.cjs');
-
-function normalizeAccessories(value) {
-  if (!value) return [];
-  if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean).slice(0, 20);
-  if (typeof value === 'string') return value.split(/[,;|]/).map(item => item.trim()).filter(Boolean).slice(0, 20);
-  return [];
-}
 
 async function resolveRawSource(client, listing) {
   const flags = listing.flags && !Array.isArray(listing.flags) ? listing.flags : {};
@@ -43,9 +37,13 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,accessories,image_urls,thumbnail_url,has_images,dealer_photos,region,source_type,listing_status,confidence';
+    const strictVerifiedPublication = process.env.STRICT_VERIFIED_PUBLICATION === 'true';
+    const sourceTable = strictVerifiedPublication
+      ? 'price_research_verified_source'
+      : 'watch_records';
+    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,dial_color,listing_type,listing_status';
     const { data, error } = await client
-      .from('watch_records')
+      .from(sourceTable)
       .select(columns)
       .eq('id', id)
       .eq('verdict', 'APPROVED')
@@ -56,11 +54,24 @@ module.exports = async function handler(req, res) {
     if (error) throw error;
     if (!data) return res.status(404).json({ error: 'Listing not found' });
     if (!isCustomerIdentitySafe(data)) return res.status(404).json({ error: 'Listing under identity review' });
-    const rawSource = await resolveRawSource(client, data);
+    const [rawSource, verifiedMediaResult] = await Promise.all([
+      resolveRawSource(client, data),
+      client
+        .from('trading_floor_verified_listings')
+        .select('has_images,image_urls,thumbnail_url')
+        .eq('id', id)
+        .maybeSingle(),
+    ]);
     const normalized = normalizeMarketRow(
       { ...data, raw_message: rawSource.text },
       data.reference,
     );
+    const redactedSource = redactPublicSource(rawSource.text).trim();
+    const publicSource = redactedSource.slice(0, 12_000);
+    const verifiedMedia = verifiedMediaResult.error ? null : verifiedMediaResult.data;
+    const verifiedImages = Array.isArray(verifiedMedia?.image_urls)
+      ? verifiedMedia.image_urls.map(value => String(value || '').trim()).filter(Boolean).slice(0, 10)
+      : [];
 
     return res.status(200).json({
       success: true,
@@ -68,29 +79,14 @@ module.exports = async function handler(req, res) {
         id: data.id,
         brand: data.brand,
         reference: data.reference,
-        price_raw: data.price_raw,
         price_usd: normalized.analytics_price_usd,
-        stored_price_usd: data.price_usd,
-        price_normalization: normalized.price_normalization,
-        currency: data.currency,
-        raw_message: null,
-        raw_message_scope: 'unavailable',
-        raw_message_lineage_id: null,
-        source_message_available_to_reviewers: Boolean(rawSource.text),
+        raw_message: publicSource || null,
+        raw_message_scope: publicSource ? rawSource.scope : 'unavailable',
+        raw_message_truncated: redactedSource.length > publicSource.length,
         created_at: data.created_at,
         listing_date: data.listing_date,
-        condition: data.condition,
-        source: data.source,
-        dial_color: data.dial_color,
-        year: data.year,
-        listing_type: data.listing_type,
-        accessories: normalizeAccessories(data.accessories),
-        image_urls: [],
-        has_images: false,
-        region: data.region,
-        source_type: data.source_type,
-        listing_status: data.listing_status,
-        confidence: data.confidence,
+        image_urls: verifiedImages,
+        has_images: Boolean(verifiedMedia?.has_images && verifiedImages.length),
       },
     });
   } catch (error) {

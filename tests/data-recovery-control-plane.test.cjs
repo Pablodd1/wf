@@ -254,7 +254,8 @@ test('production verified publication is an explicit rollout switch', () => {
 test('dealer contact and profiles use verified identity and consent boundaries', () => {
   const contact = fs.readFileSync(path.join(__dirname, '..', 'api', 'listing-contact.js'), 'utf8');
   const profile = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealer-profile.js'), 'utf8');
-  assert.match(contact, /from\('trading_floor_verified_listings'\)/);
+  assert.match(contact, /surface === 'price-research'[\s\S]*price_research_verified_source/);
+  assert.match(contact, /trading_floor_verified_listings/);
   assert.match(contact, /dealer\.status !== 'VERIFIED'/);
   assert.match(contact, /!dealer\.contact_consent/);
   assert.match(contact, /SELLER_LINEAGE_UNVERIFIED/);
@@ -276,10 +277,12 @@ test('forward hardening renders canonical identity and preserves reviewed decisi
 test('strict publication covers floor, archive, price research, featured, and details', () => {
   const ingest = fs.readFileSync(path.join(__dirname, '..', 'api', 'ingest.js'), 'utf8');
   const price = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
+  const priceDetail = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research-listing.js'), 'utf8');
   const featured = fs.readFileSync(path.join(__dirname, '..', 'api', 'featured-listings.js'), 'utf8');
   const detail = fs.readFileSync(path.join(__dirname, '..', 'api', 'trading-listing.js'), 'utf8');
   assert.match(ingest, /strictVerifiedPublication[\s\S]*\? 'trading_floor_verified_listings'[\s\S]*quality === 'archive'/);
   assert.match(price, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
+  assert.match(priceDetail, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
   assert.match(price, /lookupDemand\(client, sourceTable,/);
   assert.doesNotMatch(price, /\.from\('watch_records'\)/);
   assert.match(featured, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
