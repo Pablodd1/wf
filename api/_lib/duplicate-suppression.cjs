@@ -3,6 +3,13 @@
 const RPC_BATCH_SIZE = 1000;
 const DIRECT_BATCH_SIZE = 100;
 const MAX_CONCURRENCY = 3;
+const SUPPRESSION_UNAVAILABLE = 'DUPLICATE_SUPPRESSION_UNAVAILABLE';
+
+function unavailable() {
+  const error = new Error('Duplicate suppression lookup unavailable');
+  error.code = SUPPRESSION_UNAVAILABLE;
+  return error;
+}
 
 function uniqueIds(values) {
   return [...new Set((values || []).map(value => String(value || '').trim()).filter(Boolean))];
@@ -57,7 +64,7 @@ async function loadDirect(client, cohortIds) {
     .select('duplicate_id')
     .eq('status', 'SUPPRESSED')
     .in('duplicate_id', batch));
-  if (results.some(result => result?.error)) return new Set();
+  if (results.some(result => result?.error)) throw unavailable();
   return idsFromResults(results);
 }
 
@@ -78,19 +85,19 @@ async function loadAnalyticsSuppressedIds(client, cohortIdValues) {
           batch => client.rpc('reviewed_suppressed_duplicate_ids', { p_duplicate_ids: batch })
         );
         const results = [first, ...remaining];
-        if (results.some(result => result?.error)) return new Set();
+        if (results.some(result => result?.error)) throw unavailable();
         return idsFromResults(results);
       }
-      if (!isMissingBatchRpc(first.error)) return new Set();
+      if (!isMissingBatchRpc(first.error)) throw unavailable();
     }
 
     // Before the batch RPC migration is deployed, retain the same graceful
     // behavior with bounded PostgREST queries. Every query is still restricted
     // to IDs already present in the current Price Research cohort.
     return await loadDirect(client, cohortIds);
-  } catch {
-    // Keep analytics available before duplicate-review infrastructure exists.
-    return new Set();
+  } catch (error) {
+    if (error?.code === SUPPRESSION_UNAVAILABLE) throw error;
+    throw unavailable();
   }
 }
 
@@ -98,5 +105,6 @@ module.exports = {
   DIRECT_BATCH_SIZE,
   MAX_CONCURRENCY,
   RPC_BATCH_SIZE,
+  SUPPRESSION_UNAVAILABLE,
   loadAnalyticsSuppressedIds,
 };

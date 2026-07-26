@@ -20,6 +20,14 @@ const publicationMigration = fs.readFileSync(
   path.join(__dirname, '..', 'supabase', 'migrations', '20260726140000_exclude_reviewed_duplicates_from_publication.sql'),
   'utf8'
 );
+const restoreMigration = fs.readFileSync(
+  path.join(__dirname, '..', 'supabase', 'migrations', '20260726170000_audited_duplicate_suppression_restore.sql'),
+  'utf8'
+);
+const decisionRoute = fs.readFileSync(
+  path.join(__dirname, '..', 'api', 'duplicate-review-decision.js'),
+  'utf8'
+);
 const queueRoute = fs.readFileSync(
   path.join(__dirname, '..', 'api', 'duplicate-review-queue.js'),
   'utf8'
@@ -115,6 +123,22 @@ test('strict publication has no client-side 20,000 suppression ceiling', () => {
   const strictView = publicationMigration.slice(publicationMigration.indexOf('CREATE OR REPLACE VIEW public.price_research_verified_source'));
   assert.match(strictView, /NOT EXISTS/);
   assert.doesNotMatch(strictView, /20_?000|LIMIT\s+20000/i);
+});
+
+test('suppression restoration is admin-only, append-only, and preserves prior decision evidence', () => {
+  assert.match(restoreMigration, /CREATE TABLE IF NOT EXISTS public\.duplicate_review_decision_events/);
+  assert.match(restoreMigration, /BEFORE UPDATE OR DELETE ON public\.duplicate_review_decision_events/);
+  assert.match(restoreMigration, /prior_decision_evidence[\s\S]*v_candidate\.evidence/);
+  assert.match(restoreMigration, /SECURITY DEFINER[\s\S]*SET search_path = ''/);
+  assert.match(restoreMigration, /WHERE id = p_candidate_id[\s\S]*FOR UPDATE/);
+  assert.match(restoreMigration, /v_candidate\.status <> 'SUPPRESSED'/);
+  assert.match(restoreMigration, /INSERT INTO public\.duplicate_review_decision_events[\s\S]*UPDATE public\.duplicate_review_candidates/);
+  assert.match(restoreMigration, /GRANT EXECUTE ON FUNCTION public\.restore_duplicate_review_suppression[\s\S]*TO service_role/);
+  assert.match(restoreMigration, /REVOKE ALL ON FUNCTION public\.restore_duplicate_review_suppression[\s\S]*FROM PUBLIC, anon, authenticated/);
+  assert.doesNotMatch(restoreMigration, /(?:UPDATE|DELETE FROM)\s+public\.watch_records/i);
+
+  assert.match(decisionRoute, /decision === 'RESTORE_KEEP_BOTH' && auth\.role !== 'admin'/);
+  assert.match(decisionRoute, /rpc\/restore_duplicate_review_suppression/);
 });
 
 test('duplicate review queue requests a planned count only for the queue page', () => {

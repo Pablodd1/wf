@@ -29,24 +29,40 @@ module.exports = async function handler(req, res) {
   const decision = String(req.body?.decision || '').trim().toUpperCase();
   const reason = String(req.body?.reason || '').trim().slice(0, 1000);
   if (!candidateId) return res.status(400).json({ error: 'candidateId is required' });
-  if (!['SUPPRESS', 'KEEP_BOTH', 'DEFER'].includes(decision)) return res.status(400).json({ error: 'Unsupported duplicate decision' });
+  if (!['SUPPRESS', 'KEEP_BOTH', 'DEFER', 'RESTORE_KEEP_BOTH'].includes(decision)) {
+    return res.status(400).json({ error: 'Unsupported duplicate decision' });
+  }
+  if (decision === 'RESTORE_KEEP_BOTH' && auth.role !== 'admin') {
+    return res.status(403).json({ error: 'Admin role required to restore suppression' });
+  }
   if (!reason) return res.status(400).json({ error: 'A duplicate review reason is required' });
 
   try {
-    const result = await rest(baseUrl, key, 'rpc/apply_duplicate_review_decision', {
+    const restore = decision === 'RESTORE_KEEP_BOTH';
+    const result = await rest(baseUrl, key, restore
+      ? 'rpc/restore_duplicate_review_suppression'
+      : 'rpc/apply_duplicate_review_decision', {
       method: 'POST',
-      body: JSON.stringify({
-        p_candidate_id: candidateId,
-        p_decision: decision,
-        p_operator_id: auth.user.email || auth.user.id,
-        p_reason: reason,
-      }),
+      body: JSON.stringify(restore
+        ? {
+            p_candidate_id: candidateId,
+            p_operator_id: auth.user.email || auth.user.id,
+            p_reason: reason,
+          }
+        : {
+            p_candidate_id: candidateId,
+            p_decision: decision,
+            p_operator_id: auth.user.email || auth.user.id,
+            p_reason: reason,
+          }),
     });
     return res.status(200).json({ status: 'ok', result, rawEvidencePreserved: true, watchRecordsDeleted: false });
   } catch (error) {
     console.error('[duplicate-review-decision]', error);
     const message = String(error?.message || '');
-    if (/not pending|reason|required|Unsupported/i.test(message)) return res.status(409).json({ error: message.replace(/^Supabase \d+: /, '') });
+    if (/not pending|not suppressed|reason|required|Unsupported/i.test(message)) {
+      return res.status(409).json({ error: message.replace(/^Supabase \d+: /, '') });
+    }
     return res.status(500).json({ error: 'Duplicate review decision failed' });
   }
 };
