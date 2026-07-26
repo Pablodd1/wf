@@ -15,6 +15,7 @@ import {
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
+import { JoinGroupsCta } from '../components/JoinGroupsCta';
 import { rateMarketPrice, type MarketPriceRating } from '../lib/marketPriceRating';
 
 const GOLD = '#C9A96E';
@@ -453,6 +454,10 @@ export default function TradingFloor() {
             </button>
           </div>
         )}
+
+        <div className="pt-10">
+          <JoinGroupsCta dark />
+        </div>
       </div>
     </main>
   );

@@ -5,6 +5,7 @@ import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, Res
 import { LuxFiBanner } from '../components/LuxFiBanner';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
+import { JoinGroupsCta } from '../components/JoinGroupsCta';
 import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -1466,6 +1467,9 @@ function Footer() {
 
   return (
     <div style={{ borderTop: `1px solid ${BORDER}`, paddingTop: 32, marginTop: 16 }}>
+      <div style={{ marginBottom: 32 }}>
+        <JoinGroupsCta />
+      </div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-6 mb-8">
         <div>
           <div style={sectionTitle}>Features</div>
