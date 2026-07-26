@@ -139,6 +139,8 @@ test('strict publication covers floor, archive, price research, featured, and de
   const detail = fs.readFileSync(path.join(__dirname, '..', 'api', 'trading-listing.js'), 'utf8');
   assert.match(ingest, /strictVerifiedPublication[\s\S]*\? 'trading_floor_verified_listings'[\s\S]*quality === 'archive'/);
   assert.match(price, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
+  assert.match(price, /lookupDemand\(client, sourceTable,/);
+  assert.doesNotMatch(price, /\.from\('watch_records'\)/);
   assert.match(featured, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*price_research_verified_source/);
   assert.match(detail, /STRICT_VERIFIED_PUBLICATION === 'true'[\s\S]*trading_floor_verified_listings/);
 });

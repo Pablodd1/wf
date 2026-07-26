@@ -83,9 +83,9 @@ async function lookupLiquidity(client, reference, listingCount, demand, selectio
   return { source: 'live_fallback', listing_count: listingCount, ...demand };
 }
 
-async function lookupDemand(client, brand, referenceVariants, catalog, selection) {
+async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection) {
   const { data, error } = await client
-    .from('watch_records')
+    .from(sourceTable)
     .select('id,brand,reference,dial_color,condition,listing_type,verdict,raw_message,flags')
     .eq('brand', brand)
     .in('reference', referenceVariants)
@@ -186,6 +186,9 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    const sourceTable = process.env.STRICT_VERIFIED_PUBLICATION === 'true'
+      ? 'price_research_verified_source'
+      : 'watch_records';
 
     // Resolve reference — support prefix matching (3712 -> 3712/1A)
     let targetRef = rawRef;
@@ -197,7 +200,7 @@ module.exports = async function handler(req, res) {
       const equivalentReferences = listEquivalentReferences(rawRef, brand);
       referenceVariants = equivalentReferences;
       const exactRefResults = await Promise.all(equivalentReferences.map(reference => client
-        .from('watch_records')
+        .from(sourceTable)
         .select('reference')
         .eq('brand', brand)
         .eq('verdict', 'APPROVED')
@@ -214,7 +217,7 @@ module.exports = async function handler(req, res) {
       let refError = exactRefError;
       if (!exactRefError && (!exactRefs || exactRefs.length === 0)) {
         const prefixResult = await client
-          .from('watch_records')
+          .from(sourceTable)
           .select('reference')
           .eq('brand', brand)
           .eq('verdict', 'APPROVED')
@@ -253,9 +256,6 @@ module.exports = async function handler(req, res) {
     // reference does not produce a chart made only from its newest day.
     const pageSize = 1000;
     const sampleLimit = 5000;
-    const sourceTable = process.env.STRICT_VERIFIED_PUBLICATION === 'true'
-      ? 'price_research_verified_source'
-      : 'watch_records';
     const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id';
     const buildRowsQuery = (from, to) => client
       .from(sourceTable)
@@ -333,7 +333,7 @@ module.exports = async function handler(req, res) {
       .map(dial => dial.value);
     if (supplementalCatalogDials.length) {
       const supplementalPages = await Promise.all(supplementalCatalogDials.map(dial => client
-        .from('watch_records')
+        .from(sourceTable)
         .select(columns)
         .eq('brand', brand)
         .in('reference', referenceVariants)
@@ -495,7 +495,7 @@ module.exports = async function handler(req, res) {
 
     // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
     const model = catalogHit?.found ? (catalogHit.model || null) : lookupModel(targetRef, brand);
-    const demand = await lookupDemand(client, brand, referenceVariants, catalogHit, selection);
+    const demand = await lookupDemand(client, sourceTable, brand, referenceVariants, catalogHit, selection);
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
     const outlierEvidenceLimit = 100;
