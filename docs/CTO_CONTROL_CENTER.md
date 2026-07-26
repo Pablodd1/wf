@@ -51,7 +51,7 @@ as human-approved, published, or correct.
 | Eligible shadow rows analyzed | 2,631,476 | Full eligible coverage, not approval |
 | Remaining eligible rows | 0 | Exact eligible cohort complete |
 | Normalization errors | 0 | No eligible row was silently dropped |
-| Missing-raw rows | 107 | Separately blocked pending exact gap audit |
+| Missing-raw rows | 107 | Exact gap audit complete; 0 exact recoveries, all remain blocked |
 | Catalog-confirmed identities | 22,976 | Eligible for later bounded review |
 | Identity conflicts | 82,111 | Block |
 | Identity unverified | 38,595 | Block |
@@ -71,6 +71,52 @@ as human-approved, published, or correct.
 The `2,631,476` eligible rows plus the `107` separately blocked missing-raw rows
 reconcile exactly to `2,631,583` watch records. The 107-row gap is not a parser
 error and must not be normalized without immutable raw evidence.
+
+## Accepted missing-raw gap audit
+
+The read-only July 26 audit independently re-read the exact 107-row gap and
+reconciled:
+
+```text
+2,631,583 watch_records
+= 2,631,476 raw-evidence-eligible rows
++ 107 raw-message-null rows
+```
+
+The two exact missing-ID reads produced the same SHA-256:
+`cb244382b0ef4c49221fbde6d2b1d6b5d3668a3dad42979ebdd978b043eff797`.
+All 107 rows are WTS records from `WATCHES_FINAL_V2`: 85 Rolex, 12 Patek
+Philippe, 5 Vacheron Constantin, 2 Blancpain, 2 Richard Mille, and 1 Audemars
+Piguet. None has a `raw_messages` pointer or image lineage.
+
+The supplied `User list all details..csv` was scanned completely:
+
+| Evidence check | Result |
+| --- | ---: |
+| Bytes | 1,320,589,058 |
+| Data rows | 1,293,376 |
+| SHA-256 | `2c8f500f829cf64437f2db4bcc12bdc9e3a49a15edab3597994c1b4e2bbbee5b` |
+| Exact source-UUID matches | 0 |
+| Front-image review candidates | 0 |
+
+The authoritative `WATCHES_FINAL_V2_20260706_1108.xlsx` workbook was then
+hashed and scanned across the six affected brand sheets:
+
+| Workbook check | Result |
+| --- | ---: |
+| Bytes | 100,223,864 |
+| Rows scanned | 496,501 |
+| SHA-256 | `ba677083c9fc446e3f716c7f82d4e6ba64bf7ec01f7624e65ece7f71be07c4b6` |
+| Unique timestamp plus field candidate | 1 |
+| Ambiguous candidates | 52 |
+| Unresolved | 54 |
+| Exact database-UUID recovery | 0 |
+
+The workbook has no database UUID column. Its one unique composite candidate
+is review-only, not permission to repair `watch_records`. The remaining gap
+requires an original `WATCHES_FINAL_V2` import/mapping export containing the
+database record UUID or another signed lineage key. The local private audit
+artifacts remain ignored under `audit-output/missing-raw-gap-20260726/`.
 
 ## Accepted image audit and local reviewer
 
@@ -157,6 +203,7 @@ Current release controls:
 | --- | --- | --- |
 | Stable-key image audit ([PR #138](https://github.com/Pablodd1/wf/pull/138)) | Merged to `main` at `f309fde` | Complete |
 | Count-independent image audit ([PR #142](https://github.com/Pablodd1/wf/pull/142)) | Merged to `main` at `2f38615` | Exact 1,531-row audit accepted; visual decisions remain local |
+| WatchFacts groups footer ([PR #145](https://github.com/Pablodd1/wf/pull/145)) | Merged and deployed at `e7cc59c` | Production Trading Floor and Price Research smoke passed |
 | Worker observability and reversible duplicate controls ([PR #132](https://github.com/Pablodd1/wf/pull/132)) | Draft | Query-plan, fail-closed API, restore-idempotency, and rollback canaries |
 | Immutable review packets and Review Queue lane ([PR #133](https://github.com/Pablodd1/wf/pull/133)) | Draft; preview checks passed | No production migration/import |
 | Bounded packet exporter/importer ([PR #134](https://github.com/Pablodd1/wf/pull/134)) | Draft, stacked on #133 | Preview-specific RPC canary and rollback |
@@ -167,7 +214,7 @@ Current release controls:
 
 | Workstream | Authoritative contract | Current disposition | Next bounded gate |
 | --- | --- | --- | --- |
-| Normalization | [`NORMALIZATION_CONTRACT.md`](NORMALIZATION_CONTRACT.md) | Full eligible shadow coverage; no automatic approval | Audit the 107 missing-raw rows separately |
+| Normalization | [`NORMALIZATION_CONTRACT.md`](NORMALIZATION_CONTRACT.md) | Full eligible shadow coverage; 107 missing-source rows audited and blocked | Review the one composite candidate; obtain an exact UUID/source mapping for the remainder |
 | Promotion | [`SHADOW_PROMOTION_POLICY.md`](SHADOW_PROMOTION_POLICY.md) | Human approval required | Review a bounded catalog-confirmed cohort |
 | Currency | [`CURRENCY_RULES.md`](CURRENCY_RULES.md) | Explicit evidence only; bare `$` is ambiguous | Audit exact-line evidence and FX provenance |
 | Catalog identity | [`DATA_IDENTITY_INCIDENT_2026-07-24.md`](DATA_IDENTITY_INCIDENT_2026-07-24.md) | Fail closed | Continue bounded identity staging/readback |
@@ -350,18 +397,21 @@ The final run used Railway deployment `0563930b` at commit `f309fde`.
 
 ## Fastest accurate next move
 
-1. Audit the exact 107-row missing-raw gap without fabricating source evidence.
-2. Review the largest blocker categories and representative changed rows.
-3. Complete PR #132's query-plan, fail-closed API, restore-idempotency, and
+1. Review the one unique missing-raw workbook candidate; do not repair it
+   without a signed UUID/source-row lineage decision.
+2. Obtain the original `WATCHES_FINAL_V2` import mapping with database UUIDs
+   for the other 106 rows; the supplied user-list CSV is not that source.
+3. Review the largest blocker categories and representative changed rows.
+4. Complete PR #132's query-plan, fail-closed API, restore-idempotency, and
    rollback gates in preview only.
-4. Exercise PR #140's per-batch metrics on the first legitimate new 1,000 rows
+5. Exercise PR #140's per-batch metrics on the first legitimate new 1,000 rows
    or in preview; do not reset completed evidence or create synthetic
    `watch_records` to force a production canary.
-5. Convert stable repeated corrections into tests before changing parser or
+6. Convert stable repeated corrections into tests before changing parser or
    catalog behavior on a separately approved branch.
-6. Route uncertain rows to the existing human-review lanes in small cohorts;
+7. Route uncertain rows to the existing human-review lanes in small cohorts;
    do not create a second source of truth.
-7. Use corrections as labeled fixtures for deterministic rules first and ML
+8. Use corrections as labeled fixtures for deterministic rules first and ML
    suggestions second. ML suggestions never auto-approve price, currency,
    identity, seller, bundle, or image relationships.
 
