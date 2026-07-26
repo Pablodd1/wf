@@ -5,7 +5,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const { classifyIdentity, scopeSource } = require('../tools/data-quality/stage-identity-review.cjs');
-const { auditImageRows } = require('../tools/data-quality/audit-image-backed-listings.cjs');
+const {
+  auditImageRows,
+  auditImageRowsReconciled,
+  exactKeysetScan,
+  keysetPaged,
+} = require('../tools/data-quality/audit-image-backed-listings.cjs');
 const { validateLedger } = require('../tools/data-quality/apply-image-review-canary.cjs');
 const { chunks } = require('../tools/data-quality/verify-recovery-readback.cjs');
 
@@ -52,6 +57,77 @@ test('image audit rejects structural conflicts and leaves clean lineage for visu
   assert.equal(result[0].image_status, 'VISUAL_REVIEW_REQUIRED');
   assert.match(result[1].issues, /CATALOG_BRAND_CONFLICT/);
   assert.match(result[2].issues, /MANIFEST_MISSING/);
+});
+
+test('image audit keyset pagination reconciles more than 1000 rows under changing default order', async () => {
+  const source = Array.from({ length: 1505 }, (_, index) => ({
+    id: `record-${String(index).padStart(4, '0')}`,
+  }));
+  let calls = 0;
+  const fetchPage = async route => {
+    calls += 1;
+    const query = new URL(`https://example.test${route}`).searchParams;
+    assert.equal(query.get('order'), 'id.asc');
+    assert.equal(query.has('offset'), false);
+    const cursor = String(query.get('id') || '').replace(/^gt\./, '');
+    const changingDefaultOrder = calls % 2 ? [...source].reverse() : [...source.slice(17), ...source.slice(0, 17)];
+    return changingDefaultOrder
+      .filter(row => !cursor || row.id > cursor)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .slice(0, Number(query.get('limit')));
+  };
+  const scan = await exactKeysetScan({
+    table: 'watch_records',
+    select: 'id',
+    key: 'id',
+    fetchPage,
+  }, async () => source.length);
+  assert.equal(scan.reconciliation.reconciled, true);
+  assert.equal(scan.rows.length, 1505);
+  assert.equal(new Set(scan.rows.map(row => row.id)).size, 1505);
+});
+
+test('image audit keyset pagination fails closed on duplicate keys', async () => {
+  await assert.rejects(
+    keysetPaged({
+      table: 'watch_records',
+      select: 'id',
+      key: 'id',
+      fetchPage: async () => [{ id: 'a' }, { id: 'a' }],
+    }),
+    /missing or duplicate/,
+  );
+});
+
+test('image audit exact counts fail closed when the source changes during a scan', async () => {
+  const counts = [1505, 1506];
+  const scan = await exactKeysetScan({
+    table: 'watch_records',
+    select: 'id',
+    key: 'id',
+    pageSize: 2000,
+    fetchPage: async () => Array.from({ length: 1505 }, (_, index) => ({
+      id: `record-${String(index).padStart(4, '0')}`,
+    })),
+  }, async () => counts.shift());
+  assert.equal(scan.reconciliation.reconciled, false);
+  assert.equal(scan.reconciliation.exact_count_before, 1505);
+  assert.equal(scan.reconciliation.exact_count_after, 1506);
+});
+
+test('image audit reconciles every input row to output or a bounded error', () => {
+  const broken = { id: 'broken' };
+  Object.defineProperty(broken, 'brand', { get: () => { throw new Error('broken identity'); } });
+  const result = auditImageRowsReconciled([
+    { id: 'clean', brand: 'Patek Philippe', reference: '5712/1A', dial_color: 'Blue' },
+    broken,
+  ], [
+    { source_object_key: 'a', public_url: 'https://img/a.jpg', matched_record_id: 'clean' },
+  ]);
+  assert.equal(result.reconciliation.reconciled, true);
+  assert.equal(result.reconciliation.equation, '2 = 1 + 1');
+  assert.equal(result.errors.length, 1);
+  assert.equal(result.errors[0].record_id, 'broken');
 });
 
 test('image canary requires explicit reviewer evidence', () => {

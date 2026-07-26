@@ -34,6 +34,22 @@ async function supabaseFetch(route, options = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+async function supabaseCount(route) {
+  const { url, key } = supabaseConfig();
+  const response = await fetch(`${url}${route}`, {
+    method: 'HEAD',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      Prefer: 'count=exact',
+    },
+  });
+  if (!response.ok) throw new Error(`Supabase count ${response.status}`);
+  const total = Number(response.headers.get('content-range')?.split('/').at(-1));
+  if (!Number.isSafeInteger(total) || total < 0) throw new Error('Supabase exact count missing');
+  return total;
+}
+
 function boundedInt(value, fallback, min, max) {
   const parsed = Number.parseInt(String(value || ''), 10);
   return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback;
@@ -60,6 +76,7 @@ function writeJson(filePath, value) {
 
 module.exports = {
   boundedInt,
+  supabaseCount,
   supabaseFetch,
   writeCsv,
   writeJson,
