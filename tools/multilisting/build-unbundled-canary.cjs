@@ -11,8 +11,17 @@ const { assessReferenceQuality } = require('../../api/_lib/reference-quality.cjs
 
 const DEFAULT_LIMIT = 1000;
 const VERSION = 'manual-unbundle-canary-v3';
+const MAX_CATALOG_CACHE_SIZE = 20_000;
+const MAX_PARENT_CACHE_SIZE = 1_000;
 const catalogConfirmationCache = new Map();
-const parentSegmentationCache = new WeakMap();
+const parentSegmentationCache = new Map();
+
+function setBoundedCache(cache, key, value, maximumSize) {
+  cache.set(key, value);
+  if (cache.size > maximumSize) {
+    cache.delete(cache.keys().next().value);
+  }
+}
 
 function text(value) {
   return String(value ?? '').trim();
@@ -42,7 +51,12 @@ function primaryParsedPrice(candidate) {
 function parsedChildCandidate(row, parent) {
   if (parent && typeof parent === 'object' && text(parent.raw_message)) {
     if (!parentSegmentationCache.has(parent)) {
-      parentSegmentationCache.set(parent, segmentDealerMessage(text(parent.raw_message)));
+      setBoundedCache(
+        parentSegmentationCache,
+        parent,
+        segmentDealerMessage(text(parent.raw_message)),
+        MAX_PARENT_CACHE_SIZE,
+      );
     }
     const parentCandidates = parentSegmentationCache.get(parent);
     const childIndex = Number.parseInt(text(row.candidate_index), 10);
@@ -60,7 +74,12 @@ function cachedCatalogConfirmation(candidate) {
     .map(value => upper(value))
     .join('|');
   if (!catalogConfirmationCache.has(key)) {
-    catalogConfirmationCache.set(key, confirmCatalogCandidate(candidate));
+    setBoundedCache(
+      catalogConfirmationCache,
+      key,
+      confirmCatalogCandidate(candidate),
+      MAX_CATALOG_CACHE_SIZE,
+    );
   }
   return catalogConfirmationCache.get(key);
 }
@@ -100,7 +119,6 @@ function buildCanaryRow(row, parent) {
   if (intent.blocker) blockers.push(intent.blocker);
   if (intent.value && intent.value !== upper(row.listing_type)) reviewReasons.push('INTENT_CORRECTED_FROM_PARENT_CONTEXT');
 
-  const childSegments = segmentDealerMessage(text(row.raw_line));
   const parsedCandidate = parsedChildCandidate(row, parent);
   const parsedPrice = primaryParsedPrice(parsedCandidate);
   const referenceQuality = assessReferenceQuality({
@@ -136,6 +154,7 @@ function buildCanaryRow(row, parent) {
   const exportedPriceUsd = numeric(row.price_usd);
   const exportedCurrency = upper(row.price_currency) || null;
   if (!parsedCandidate) {
+    const childSegments = segmentDealerMessage(text(row.raw_line));
     blockers.push(childSegments.length > 1 ? 'PARSER_MULTIPLE_CANDIDATES' : 'PARSER_NO_CANDIDATE');
   }
 

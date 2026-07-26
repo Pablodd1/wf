@@ -8,6 +8,23 @@ const { serializeJsonLine } = require('./json-line.cjs');
 
 const VERSION = 'manual-unbundle-full-v4';
 const DEFAULT_SHARD_SIZE = 10_000;
+const RETRYABLE_FILE_ERRORS = new Set(['EPERM', 'EBUSY', 'EACCES']);
+
+function sleepSync(milliseconds) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+}
+
+function renameWithRetry(source, destination) {
+  for (let attempt = 1; attempt <= 12; attempt += 1) {
+    try {
+      fs.renameSync(source, destination);
+      return;
+    } catch (error) {
+      if (!RETRYABLE_FILE_ERRORS.has(error?.code) || attempt === 12) throw error;
+      sleepSync(attempt * 50);
+    }
+  }
+}
 
 function text(value) {
   return String(value ?? '').trim();
@@ -43,7 +60,7 @@ function loadParents(parentsPath) {
 function atomicJson(filePath, value) {
   const temporary = `${filePath}.partial`;
   fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`);
-  fs.renameSync(temporary, filePath);
+  renameWithRetry(temporary, filePath);
 }
 
 function flushShard(outputDir, shardNumber, rowsByBucket) {
@@ -54,8 +71,17 @@ function flushShard(outputDir, shardNumber, rowsByBucket) {
     fs.mkdirSync(directory, { recursive: true });
     const finalPath = path.join(directory, `part-${String(shardNumber).padStart(6, '0')}.jsonl`);
     const temporary = `${finalPath}.partial`;
-    fs.writeFileSync(temporary, `${rows.map(serializeJsonLine).join('\n')}\n`);
-    fs.renameSync(temporary, finalPath);
+    const payload = Buffer.from(`${rows.map(serializeJsonLine).join('\n')}\n`);
+    fs.writeFileSync(temporary, payload);
+    if (fs.existsSync(finalPath)) {
+      const existing = fs.readFileSync(finalPath);
+      if (!existing.equals(payload)) {
+        throw new Error(`Existing shard conflicts with resumed output: ${finalPath}`);
+      }
+      fs.rmSync(temporary, { force: true });
+    } else {
+      renameWithRetry(temporary, finalPath);
+    }
     files.push({ bucket, path: finalPath, rows: rows.length, bytes: fs.statSync(finalPath).size });
   }
   return files;

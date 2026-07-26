@@ -40,3 +40,48 @@ test('streams shards and resumes without duplicating normalized children', async
   assert.equal(new Set(outputFiles).size, outputFiles.length);
   assert.equal(outputFiles.length, 2);
 });
+
+test('reuses an identical shard when the checkpoint rename lagged behind it', async t => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-full-unbundle-recovery-'));
+  t.after(() => fs.rmSync(directory, { recursive: true, force: true }));
+  const listings = path.join(directory, 'listings.csv');
+  const parents = path.join(directory, 'parents.csv');
+  const output = path.join(directory, 'output');
+  fs.writeFileSync(listings, [
+    'listing_id,source_record_id,candidate_index,brand,reference,raw_line,listing_type,dial_color,price_raw,price_currency,price_usd',
+    'source-1_000,source-1,0,Rolex,116500LN,116500LN White 283K HKD,WTS,White,283000,HKD,36282',
+  ].join('\n'));
+  fs.writeFileSync(parents, [
+    'source_record_id,raw_message,listing_type,created_at,seller_name,seller_phone,dealer',
+    'source-1,116500LN White 283K HKD,WTS,2026-07-01T00:00:00Z,Alice,123,Dealer A',
+  ].join('\n'));
+
+  await normalizeBatch({
+    listingsPath: listings,
+    parentsPath: parents,
+    outputDir: output,
+    shardSize: 1,
+  });
+  fs.writeFileSync(path.join(output, 'checkpoint.json'), JSON.stringify({
+    processedRows: 0,
+    completedShards: 0,
+    counts: {
+      status: {},
+      bucket: {},
+      intent: {},
+      blockers: {},
+      reviewReasons: {},
+      sellerCoverage: { sellerName: 0, sellerPhone: 0, dealer: 0 },
+    },
+    files: [],
+  }));
+
+  const recovered = await normalizeBatch({
+    listingsPath: listings,
+    parentsPath: parents,
+    outputDir: output,
+    shardSize: 1,
+  });
+  assert.equal(recovered.processedRows, 1);
+  assert.equal(recovered.files.length, 1);
+});
