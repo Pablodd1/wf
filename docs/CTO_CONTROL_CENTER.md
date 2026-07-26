@@ -58,8 +58,11 @@ as human-approved, published, or correct.
 | Human-approved identities | 0 | No automatic promotion claim |
 | Verified Trading Floor candidates | 10,864 | Preview canary source only |
 | Bundle parents requiring split | 761,489 | Parent must not display as a child |
-| Image-backed listings | 1,531 | Source-linked does not mean visually verified |
-| Visually verified images | 0 | Customer image release remains blocked |
+| Accepted image-audit cohort | 1,531 | Exact input/output; 0 errors |
+| Manifest-linked image candidates | 1,523 | Lineage link does not mean visually verified |
+| Images requiring visual review | 1,359 | Private human-review scope |
+| Structural image rejects | 172 | Blocked before visual review |
+| Visually verified / auto-approved images | 0 / 0 | Customer image release remains blocked |
 | Private seller candidates | 16,094 | Identity/consent review only |
 | Seller-linked listings | 0 | Do not publish seller/contact data |
 | Unbundled staged children | 70,194 | Review lanes only |
@@ -68,6 +71,28 @@ as human-approved, published, or correct.
 The `2,631,476` eligible rows plus the `107` separately blocked missing-raw rows
 reconcile exactly to `2,631,583` watch records. The 107-row gap is not a parser
 error and must not be normalized without immutable raw evidence.
+
+## Accepted image audit and local reviewer
+
+The exact image audit reconciled `1,531` input rows to `1,531` output rows with
+zero errors. It found `1,523` manifest links and routed `1,359` rows to visual
+review. The remaining `172` were structural rejects:
+
+| Structural reject | Exact rows |
+| --- | ---: |
+| Manifest missing | 8 |
+| Dial conflict | 161 |
+| Brand conflict | 3 |
+| **Total** | **172** |
+
+No image was visually verified or automatically approved.
+
+The accepted private reviewer packet reconciles `50 = 50 + 0`: 50 review rows
+and zero errors. It contains zero reviewer decisions, zero defaulted decisions,
+and caused zero database writes. A named operator is required; the only valid
+decisions are `MATCH` and `NO_MATCH`, each with a reason of at least 12
+characters. The packet and reviewer remain local-only.
+They must not be published or committed.
 
 ## July 26 bounded normalization operations
 
@@ -131,6 +156,7 @@ Current release controls:
 | Change | State | Gate |
 | --- | --- | --- |
 | Stable-key image audit ([PR #138](https://github.com/Pablodd1/wf/pull/138)) | Merged to `main` at `f309fde` | Complete |
+| Count-independent image audit ([PR #142](https://github.com/Pablodd1/wf/pull/142)) | Merged to `main` at `2f38615` | Exact 1,531-row audit accepted; visual decisions remain local |
 | Worker observability and reversible duplicate controls ([PR #132](https://github.com/Pablodd1/wf/pull/132)) | Draft | Query-plan, fail-closed API, restore-idempotency, and rollback canaries |
 | Immutable review packets and Review Queue lane ([PR #133](https://github.com/Pablodd1/wf/pull/133)) | Draft; preview checks passed | No production migration/import |
 | Bounded packet exporter/importer ([PR #134](https://github.com/Pablodd1/wf/pull/134)) | Draft, stacked on #133 | Preview-specific RPC canary and rollback |
@@ -146,7 +172,7 @@ Current release controls:
 | Currency | [`CURRENCY_RULES.md`](CURRENCY_RULES.md) | Explicit evidence only; bare `$` is ambiguous | Audit exact-line evidence and FX provenance |
 | Catalog identity | [`DATA_IDENTITY_INCIDENT_2026-07-24.md`](DATA_IDENTITY_INCIDENT_2026-07-24.md) | Fail closed | Continue bounded identity staging/readback |
 | Bundles | [`BUNDLE_CANARY_V42_2026-07-18.md`](BUNDLE_CANARY_V42_2026-07-18.md) | Split and review before parent suppression | Work priority children in small review batches |
-| Images | [`IMAGE_RECONCILIATION.md`](IMAGE_RECONCILIATION.md) | Exact lineage plus visual review | Signed 50-image review packet |
+| Images | [`IMAGE_RECONCILIATION.md`](IMAGE_RECONCILIATION.md) | Exact audit complete; 1,359 need visual review; 0 verified | Local operator decisions only; no packet publication |
 | Seller/dealer | [`IMAGES_SELLER_UNBUNDLED_STATUS_2026-07-24.md`](IMAGES_SELLER_UNBUNDLED_STATUS_2026-07-24.md) | Private evidence; no consent/verification | Owner review of exact identity groups |
 | Duplicates | [`DUPLICATE_AUDIT_PROTOCOL.md`](DUPLICATE_AUDIT_PROTOCOL.md) | No suppression before bundle decisions | Human review only |
 | Green API | [`GREEN_API_INTEGRATION.md`](GREEN_API_INTEGRATION.md) | Converge into immutable raw pipeline | Preserve event/message/media lineage |
@@ -373,6 +399,8 @@ human remain authoritative.
 - Do not display bundle parents as normalized child listings.
 - Do not infer bundle children or attach images by brand/reference resemblance,
   filename proximity, or visual similarity.
+- Do not publish or commit the private image-review packet or local reviewer
+  state.
 - Do not expose seller identity/contact without verified lineage and consent.
 - Do not treat shadow completion, catalog match, or "review ready" as human
   approval.
