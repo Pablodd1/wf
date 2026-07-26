@@ -5,7 +5,14 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 const { classifyIdentity, scopeSource } = require('../tools/data-quality/stage-identity-review.cjs');
-const { auditImageRows } = require('../tools/data-quality/audit-image-backed-listings.cjs');
+const {
+  auditImageRows,
+  auditImageRowsReconciled,
+  authoritativeImageCounts,
+  exactKeysetScan,
+  keysetPaged,
+  reconcileAuthoritativeCounts,
+} = require('../tools/data-quality/audit-image-backed-listings.cjs');
 const { validateLedger } = require('../tools/data-quality/apply-image-review-canary.cjs');
 const { chunks } = require('../tools/data-quality/verify-recovery-readback.cjs');
 
@@ -52,6 +59,140 @@ test('image audit rejects structural conflicts and leaves clean lineage for visu
   assert.equal(result[0].image_status, 'VISUAL_REVIEW_REQUIRED');
   assert.match(result[1].issues, /CATALOG_BRAND_CONFLICT/);
   assert.match(result[2].issues, /MANIFEST_MISSING/);
+});
+
+test('image audit keyset pagination reconciles more than 1000 rows under changing default order', async () => {
+  const source = Array.from({ length: 1505 }, (_, index) => ({
+    id: `record-${String(index).padStart(4, '0')}`,
+  }));
+  let calls = 0;
+  const fetchPage = async route => {
+    calls += 1;
+    const query = new URL(`https://example.test${route}`).searchParams;
+    assert.equal(query.get('order'), 'id.asc');
+    assert.equal(query.has('offset'), false);
+    const cursor = String(query.get('id') || '').replace(/^gt\./, '');
+    const changingDefaultOrder = calls % 2 ? [...source].reverse() : [...source.slice(17), ...source.slice(0, 17)];
+    return changingDefaultOrder
+      .filter(row => !cursor || row.id > cursor)
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .slice(0, Number(query.get('limit')));
+  };
+  const scan = await exactKeysetScan({
+    table: 'watch_records',
+    select: 'id',
+    key: 'id',
+    fetchPage,
+  });
+  assert.equal(scan.reconciliation.reconciled, true);
+  assert.equal(scan.rows.length, 1505);
+  assert.equal(new Set(scan.rows.map(row => row.id)).size, 1505);
+  assert.equal(scan.reconciliation.first_scan_rows, 1505);
+  assert.equal(scan.reconciliation.second_scan_rows, 1505);
+  assert.equal(scan.reconciliation.ordered_keys_identical, true);
+  assert.equal(
+    scan.reconciliation.first_scan_sha256,
+    scan.reconciliation.second_scan_sha256,
+  );
+});
+
+test('image audit keyset pagination fails closed on duplicate keys', async () => {
+  await assert.rejects(
+    keysetPaged({
+      table: 'watch_records',
+      select: 'id',
+      key: 'id',
+      fetchPage: async () => [{ id: 'a' }, { id: 'a' }],
+    }),
+    /missing or duplicate/,
+  );
+});
+
+test('image audit double keyset fails closed when keys drift between scans', async () => {
+  let fetchCalls = 0;
+  const result = await exactKeysetScan({
+    table: 'watch_records',
+    select: 'id',
+    key: 'id',
+    pageSize: 2000,
+    fetchPage: async () => {
+      fetchCalls += 1;
+      return Array.from({ length: fetchCalls === 1 ? 1505 : 1506 }, (_, index) => ({
+        id: `record-${String(index).padStart(4, '0')}`,
+      }));
+    },
+  });
+  assert.equal(result.reconciliation.reconciled, false);
+  assert.equal(result.reconciliation.first_scan_rows, 1505);
+  assert.equal(result.reconciliation.second_scan_rows, 1506);
+  assert.equal(result.reconciliation.ordered_keys_identical, false);
+});
+
+test('image audit stable double keyset is independent of exact-count failures', async () => {
+  const source = Array.from({ length: 3 }, (_, index) => ({
+    id: `record-${index}`,
+  }));
+  let countCalled = false;
+  const scan = await exactKeysetScan({
+    table: 'watch_records',
+    select: 'id',
+    key: 'id',
+    pageSize: 10,
+    fetchPage: async () => source,
+  }, async () => {
+    countCalled = true;
+    throw new Error('Supabase count 500');
+  });
+  assert.equal(countCalled, false);
+  assert.equal(scan.reconciliation.reconciled, true);
+  assert.equal(scan.reconciliation.first_scan_rows, 3);
+  assert.equal(scan.reconciliation.second_scan_rows, 3);
+  assert.equal(scan.reconciliation.first_scan_unique_keys, 3);
+  assert.equal(scan.reconciliation.second_scan_unique_keys, 3);
+  assert.equal(scan.reconciliation.ordered_keys_identical, true);
+});
+
+test('image audit exact RPC counts prove indexed snapshot completeness', async () => {
+  const counts = await authoritativeImageCounts(async (route, options) => {
+    assert.equal(route, '/rest/v1/rpc/global_data_quality_blocker_counts');
+    assert.equal(options.method, 'POST');
+    return {
+      exact: true,
+      watch_records: { image_backed: 1531 },
+      images: { manifest_linked: 1523 },
+    };
+  });
+  const stable = reconcileAuthoritativeCounts(
+    counts,
+    counts,
+    { first_scan_rows: 1531, second_scan_rows: 1531 },
+    { first_scan_rows: 1523, second_scan_rows: 1523 },
+  );
+  assert.equal(stable.reconciled, true);
+  assert.match(stable.snapshot_completeness_proof, /no thumbnail-only rows were omitted/);
+
+  const incomplete = reconcileAuthoritativeCounts(
+    counts,
+    counts,
+    { first_scan_rows: 1530, second_scan_rows: 1530 },
+    { first_scan_rows: 1523, second_scan_rows: 1523 },
+  );
+  assert.equal(incomplete.reconciled, false);
+});
+
+test('image audit reconciles every input row to output or a bounded error', () => {
+  const broken = { id: 'broken' };
+  Object.defineProperty(broken, 'brand', { get: () => { throw new Error('broken identity'); } });
+  const result = auditImageRowsReconciled([
+    { id: 'clean', brand: 'Patek Philippe', reference: '5712/1A', dial_color: 'Blue' },
+    broken,
+  ], [
+    { source_object_key: 'a', public_url: 'https://img/a.jpg', matched_record_id: 'clean' },
+  ]);
+  assert.equal(result.reconciliation.reconciled, true);
+  assert.equal(result.reconciliation.equation, '2 = 1 + 1');
+  assert.equal(result.errors.length, 1);
+  assert.equal(result.errors[0].record_id, 'broken');
 });
 
 test('image canary requires explicit reviewer evidence', () => {
