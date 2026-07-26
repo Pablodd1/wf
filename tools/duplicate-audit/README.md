@@ -32,6 +32,12 @@ without rebuilding previous pages. Set `DUPLICATE_AUDIT_CHECKPOINT_PAGES` to
 change that interval. Set `DUPLICATE_AUDIT_RESET=true` only when intentionally
 starting a fresh report.
 
+Audit format v2 selects the canonical observation from a valid immutable
+`listing_date`; `created_at` is used only when the source date is unavailable
+and is labeled `CREATED_AT_FALLBACK` in the CSV. Because older checkpoint state
+does not contain `listing_date`, it must be restarted once with
+`DUPLICATE_AUDIT_RESET=true` rather than mixed into a v2 report.
+
 ## Interpretation
 
 - `suppress_from_analytics=true` is a proposal, not an applied production decision.

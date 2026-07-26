@@ -17,6 +17,7 @@ const {
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
 const { classifyDemandEligibility, classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
+const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
 const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
@@ -134,21 +135,6 @@ function summarizeComparableRows(rows) {
   const marketPriceFloorUsd = marketPlausibilityFloor(validPrices);
   const summary = summarizePrices(validPrices.filter(value => value >= marketPriceFloorUsd));
   return { marketPriceFloorUsd, summary };
-}
-
-async function loadAnalyticsSuppressedIds(client) {
-  try {
-    const { data, error } = await client
-      .from('duplicate_review_candidates')
-      .select('duplicate_id')
-      .eq('status', 'SUPPRESSED')
-      .limit(20_000);
-    if (error) return new Set();
-    return new Set((data || []).map(row => String(row.duplicate_id || '')).filter(Boolean));
-  } catch {
-    // Keep analytics available before the duplicate-review migration is deployed.
-    return new Set();
-  }
 }
 
 module.exports = async function handler(req, res) {
@@ -365,7 +351,9 @@ module.exports = async function handler(req, res) {
           price_usd: normalized.analytics_price_usd,
         };
       });
-    const analyticsSuppressedIds = await loadAnalyticsSuppressedIds(client);
+    const analyticsSuppressedIds = sourceTable === 'price_research_verified_source'
+      ? new Set()
+      : await loadAnalyticsSuppressedIds(client, normalizedRows.map(row => row.id));
     const duplicateSuppressedRows = normalizedRows.filter(row => analyticsSuppressedIds.has(String(row.id)));
     const analyticsRows = normalizedRows.filter(row => !analyticsSuppressedIds.has(String(row.id)));
     const bundleParentExcludedCount = analyticsRows.filter(row => row.bundle_candidate_count > 1).length;

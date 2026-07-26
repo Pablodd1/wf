@@ -6,9 +6,34 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { parseCsvLine } = require('../tools/duplicate-audit/stage-review-candidates.cjs');
 const { intentRelation, rawRelation, sellerRelation } = require('../tools/duplicate-audit/audit-review-batch.cjs');
+const {
+  canonicalDateEvidence,
+  chooseCanonical,
+  validImmutableListingDate,
+} = require('../tools/duplicate-audit/audit-brand.cjs');
 
 const migration = fs.readFileSync(
   path.join(__dirname, '..', 'supabase', 'migrations', '20260721170000_duplicate_review_workflow.sql'),
+  'utf8'
+);
+const publicationMigration = fs.readFileSync(
+  path.join(__dirname, '..', 'supabase', 'migrations', '20260726140000_exclude_reviewed_duplicates_from_publication.sql'),
+  'utf8'
+);
+const queueRoute = fs.readFileSync(
+  path.join(__dirname, '..', 'api', 'duplicate-review-queue.js'),
+  'utf8'
+);
+const auditSource = fs.readFileSync(
+  path.join(__dirname, '..', 'tools', 'duplicate-audit', 'audit-brand.cjs'),
+  'utf8'
+);
+const marketMigration = fs.readFileSync(
+  path.join(__dirname, '..', 'supabase', 'migrations', '20260725010000_harden_staging_and_market_contract.sql'),
+  'utf8'
+);
+const verifiedMigration = fs.readFileSync(
+  path.join(__dirname, '..', 'supabase', 'migrations', '20260725033000_harden_verified_publication_gates.sql'),
   'utf8'
 );
 
@@ -40,4 +65,61 @@ test('source-evidence audit detects seller and intent conflicts', () => {
   assert.equal(sellerRelation(left, right), 'CONFLICTING');
   assert.equal(rawRelation(left, right), 'DIFFERENT');
   assert.equal(intentRelation(left, right), 'CONFLICTING');
+});
+
+test('canonical duplicate selection prefers valid immutable listing dates', () => {
+  const withSourceDate = {
+    id: 'source-date',
+    listing_date: '2024-05-01',
+    created_at: '2024-05-02T00:00:00.000Z',
+  };
+  const importOnly = {
+    id: 'import-date',
+    listing_date: 'not-a-source-date',
+    created_at: '2026-07-25T00:00:00.000Z',
+  };
+
+  assert.equal(chooseCanonical(withSourceDate, importOnly).id, 'source-date');
+  assert.deepEqual(canonicalDateEvidence(withSourceDate), {
+    value: '2024-05-01',
+    timestamp: Date.parse('2024-05-01T00:00:00.000Z'),
+    source: 'LISTING_DATE',
+  });
+  assert.equal(canonicalDateEvidence(importOnly).source, 'CREATED_AT_FALLBACK');
+  assert.equal(validImmutableListingDate('2026-02-30'), null);
+  assert.match(auditSource, /select: 'id,brand,reference,dial_color,condition,price_usd,currency,raw_message,listing_date,created_at/);
+  assert.match(auditSource, /canonical_date_source,candidate_date_source,canonical_listing_date,candidate_listing_date,canonical_created_at,candidate_created_at/);
+  assert.match(auditSource, /auditFormatVersion = 2/);
+});
+
+test('reviewed suppression is indexed, reversible, and consistent across publication paths', () => {
+  assert.match(publicationMigration, /WHERE status = 'SUPPRESSED'/);
+  assert.match(publicationMigration, /SELECT NOT EXISTS[\s\S]*d\.duplicate_id = p_record_id[\s\S]*d\.status = 'SUPPRESSED'/);
+  assert.match(publicationMigration, /CREATE OR REPLACE VIEW public\.trading_floor_listings[\s\S]*public\.is_listing_duplicate_eligible\(id\)/);
+  assert.match(publicationMigration, /CREATE OR REPLACE VIEW public\.price_research_verified_source[\s\S]*NOT EXISTS[\s\S]*d\.duplicate_id = w\.id[\s\S]*d\.status = 'SUPPRESSED'/);
+  assert.match(publicationMigration, /WITH \(security_invoker = true\)/);
+  assert.match(publicationMigration, /NOT public\.is_unsplit_bundle_parent/);
+  assert.match(publicationMigration, /GRANT SELECT ON public\.trading_floor_listings TO anon, authenticated/);
+  assert.match(publicationMigration, /GRANT SELECT ON public\.price_research_verified_source TO service_role/);
+  assert.match(marketMigration, /FROM public\.trading_floor_listings/);
+  assert.match(verifiedMigration, /FROM public\.trading_floor_market_listings/);
+  assert.doesNotMatch(publicationMigration, /DELETE\s+FROM\s+public\.watch_records/i);
+  assert.doesNotMatch(publicationMigration, /UPDATE\s+public\.watch_records/i);
+
+  // Publication follows the current reviewed status, so KEEP_BOTH/DEFERRED or
+  // a later reversal restores eligibility without touching source records.
+  assert.doesNotMatch(publicationMigration, /suppress_from_analytics\s*=\s*true/i);
+});
+
+test('strict publication has no client-side 20,000 suppression ceiling', () => {
+  const strictView = publicationMigration.slice(publicationMigration.indexOf('CREATE OR REPLACE VIEW public.price_research_verified_source'));
+  assert.match(strictView, /NOT EXISTS/);
+  assert.doesNotMatch(strictView, /20_?000|LIMIT\s+20000/i);
+});
+
+test('duplicate review queue requests a planned count only for the queue page', () => {
+  assert.match(queueRoute, /countMode[\s\S]*headers\.Prefer = `count=\$\{countMode\}`/);
+  assert.match(queueRoute, /duplicate_review_candidates[\s\S]*'planned'/);
+  assert.match(queueRoute, /totalCountMode: 'planned'/);
+  assert.doesNotMatch(queueRoute, /count=exact/);
 });

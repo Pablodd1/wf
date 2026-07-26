@@ -17,6 +17,7 @@ const outputDir = path.join(outputRoot, slug);
 const reset = String(process.env.DUPLICATE_AUDIT_RESET || 'false').toLowerCase() === 'true';
 const checkpointPages = Math.max(1, Number(process.env.DUPLICATE_AUDIT_CHECKPOINT_PAGES || 25));
 const workerCount = Math.max(1, Math.min(Number(process.env.DUPLICATE_AUDIT_WORKERS || Math.min(8, os.availableParallelism())), 12));
+const auditFormatVersion = 2;
 
 function required(name) {
   const value = process.env[name];
@@ -29,10 +30,40 @@ function csv(value) {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
+function validImmutableListingDate(value) {
+  const match = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})(?:$|[T\s])/);
+  if (!match) return null;
+  const [, year, month, day] = match;
+  const date = new Date(`${year}-${month}-${day}T00:00:00.000Z`);
+  if (
+    Number.isNaN(date.getTime())
+    || date.getUTCFullYear() !== Number(year)
+    || date.getUTCMonth() + 1 !== Number(month)
+    || date.getUTCDate() !== Number(day)
+  ) return null;
+  return `${year}-${month}-${day}`;
+}
+
+function canonicalDateEvidence(row) {
+  const listingDate = validImmutableListingDate(row?.listing_date);
+  if (listingDate) {
+    return { value: listingDate, timestamp: Date.parse(`${listingDate}T00:00:00.000Z`), source: 'LISTING_DATE' };
+  }
+  const createdTimestamp = Date.parse(row?.created_at || '');
+  if (Number.isFinite(createdTimestamp)) {
+    return { value: row.created_at, timestamp: createdTimestamp, source: 'CREATED_AT_FALLBACK' };
+  }
+  return { value: null, timestamp: 0, source: 'MISSING' };
+}
+
 function chooseCanonical(left, right) {
-  const leftDate = Date.parse(left.created_at || '') || 0;
-  const rightDate = Date.parse(right.created_at || '') || 0;
-  if (rightDate !== leftDate) return rightDate > leftDate ? right : left;
+  const leftDate = canonicalDateEvidence(left);
+  const rightDate = canonicalDateEvidence(right);
+  const sourceRank = { MISSING: 0, CREATED_AT_FALLBACK: 1, LISTING_DATE: 2 };
+  const leftRank = sourceRank[leftDate.source];
+  const rightRank = sourceRank[rightDate.source];
+  if (rightRank !== leftRank) return rightRank > leftRank ? right : left;
+  if (rightDate.timestamp !== leftDate.timestamp) return rightDate.timestamp > leftDate.timestamp ? right : left;
   return String(right.id).localeCompare(String(left.id)) > 0 ? right : left;
 }
 
@@ -69,7 +100,7 @@ function createWorkerPool(size) {
 
 async function fetchPage(baseUrl, serviceKey, lastId) {
   const params = new URLSearchParams({
-    select: 'id,brand,reference,dial_color,condition,price_usd,currency,raw_message,created_at,listing_type,source,source_type,seller_phone,seller_name,flags',
+    select: 'id,brand,reference,dial_color,condition,price_usd,currency,raw_message,listing_date,created_at,listing_type,source,source_type,seller_phone,seller_name,flags',
     brand: `eq.${brand}`,
     order: 'id.asc',
     limit: String(pageSize),
@@ -117,6 +148,9 @@ async function main() {
     }
   }
   const checkpoint = fs.existsSync(checkpointPath) ? JSON.parse(fs.readFileSync(checkpointPath, 'utf8')) : null;
+  if (checkpoint && checkpoint.auditFormatVersion !== auditFormatVersion) {
+    throw new Error('Duplicate audit checkpoint predates source-date canonical selection; rerun with DUPLICATE_AUDIT_RESET=true');
+  }
   if (checkpoint?.completed) {
     process.stdout.write(`${JSON.stringify({ event: 'duplicate_audit_already_complete', brand, ...checkpoint.summary })}\n`);
     return;
@@ -131,7 +165,7 @@ async function main() {
   let pendingCsv = '';
   let pagesSinceCheckpoint = 0;
   const workerPool = createWorkerPool(workerCount);
-  const header = 'category,confidence,suppress_from_analytics,canonical_id,candidate_id,canonical_date,candidate_date,reference,dial,condition,canonical_price,candidate_price,source_hash,bundle_risk\n';
+  const header = 'category,confidence,suppress_from_analytics,canonical_id,candidate_id,canonical_date,candidate_date,canonical_date_source,candidate_date_source,canonical_listing_date,candidate_listing_date,canonical_created_at,candidate_created_at,reference,dial,condition,canonical_price,candidate_price,source_hash,bundle_risk\n';
   if (!checkpoint) fs.writeFileSync(csvPath, header);
   else if (Number.isFinite(checkpoint.csvSize) && fs.existsSync(csvPath) && fs.statSync(csvPath).size > checkpoint.csvSize) fs.truncateSync(csvPath, checkpoint.csvSize);
 
@@ -142,7 +176,17 @@ async function main() {
     const nextStatePath = path.join(outputDir, stateFile);
     fs.writeFileSync(nextStatePath, serialized);
     if (pendingCsv) fs.appendFileSync(csvPath, pendingCsv);
-    const nextCheckpoint = { brand, lastId, summary, samples, csvSize, stateFile, completed, updatedAt: new Date().toISOString() };
+    const nextCheckpoint = {
+      auditFormatVersion,
+      brand,
+      lastId,
+      summary,
+      samples,
+      csvSize,
+      stateFile,
+      completed,
+      updatedAt: new Date().toISOString(),
+    };
     fs.writeFileSync(`${checkpointPath}.tmp`, `${JSON.stringify(nextCheckpoint, null, 2)}\n`);
     fs.renameSync(`${checkpointPath}.tmp`, checkpointPath);
     if (activeStatePath !== nextStatePath && fs.existsSync(activeStatePath)) fs.rmSync(activeStatePath, { force: true });
@@ -185,13 +229,17 @@ async function main() {
           const candidate = canonical.id === auditRow.id ? best.match : auditRow;
           const splitLineage = Boolean(auditRow.bundle_parent_id || best.match.bundle_parent_id);
           const safe = best.classification.suppressFromAnalytics && !splitLineage;
+          const canonicalDate = canonicalDateEvidence(canonical);
+          const candidateDate = canonicalDateEvidence(candidate);
           summary.candidateMembers += 1;
           summary.categories[best.classification.type] = (summary.categories[best.classification.type] || 0) + 1;
           if (safe) summary.safeSuppressions += 1; else summary.reviewOnly += 1;
           const sourceHash = hash(sourceIdentity(auditRow)).slice(0, 12);
           pendingCsv += [
             best.classification.type, best.classification.confidence.toFixed(2), safe, canonical.id, candidate.id,
-            canonical.created_at || '', candidate.created_at || '', canonical.reference, canonical.dial_color,
+            canonicalDate.value || '', candidateDate.value || '', canonicalDate.source, candidateDate.source,
+            canonical.listing_date || '', candidate.listing_date || '', canonical.created_at || '', candidate.created_at || '',
+            canonical.reference, canonical.dial_color,
             canonical.condition, canonical.price_usd, candidate.price_usd, sourceHash, splitLineage,
           ].map(csv).join(',') + '\n';
           if (samples.length < 20) samples.push({ type: best.classification.type, canonicalId: canonical.id, candidateId: candidate.id, confidence: best.classification.confidence.toFixed(2), sourceHash });
@@ -215,7 +263,7 @@ async function main() {
   process.stdout.write(`${JSON.stringify({ event: 'duplicate_audit_complete', brand, outputDir, ...summary })}\n`);
 }
 
-module.exports = { createWorkerPool };
+module.exports = { canonicalDateEvidence, chooseCanonical, createWorkerPool, validImmutableListingDate };
 
 if (require.main === module) {
   main().catch(error => {
