@@ -1,14 +1,15 @@
 # WatchFacts CTO Control Center
 
-**Control date:** July 25, 2026
-**Assignment mode:** read-only stabilization
+**Control date:** July 26, 2026
+**Assignment mode:** bounded implementation after read-only stabilization
 **Current release decision:** do not bulk-promote normalization, bundles, images,
 sellers, or duplicates.
 
-**Infrastructure update:** on July 25, 2026, the owner reported that Supabase
-compute was upgraded. The new tier and post-upgrade load metrics have not been
-independently verified under this read-only assignment. The earlier Micro
-constraint is historical evidence; scaling remains gated by a measured canary.
+**Infrastructure update:** the upgraded Supabase and Railway queue path has now
+been measured through two exact 500,000-row cohorts. Four Railway workers with
+batch size 250 are the current validated ceiling. This workload is dominated by
+database round trips and record complexity rather than worker CPU or memory;
+adding a larger machine is not the fastest current move.
 
 This is the single navigation and decision index for the current project state.
 It does not replace immutable evidence, code, migrations, or dated readbacks.
@@ -60,6 +61,57 @@ The following counts are from the July 25 production readback. “Analyzed” or
 | Unbundled staged children | 70,194 | Review lanes only |
 | Unbundled approved/published | 0 | No bulk publication |
 
+## July 26 bounded normalization operations
+
+All results below are deterministic `v4.2-line-condition` shadow analysis.
+They are not human approvals or public promotion.
+
+| Cohort | Input | Output | Errors | Whole-cohort rate | Disposition |
+| --- | ---: | ---: | ---: | ---: | --- |
+| July 26 cohort 1 | 500,000 | 500,000 | 0 | 115.53 rows/sec | Exactly reconciled |
+| July 26 cohort 2 | 500,000 | 500,000 | 0 | 139.09 rows/sec | Exactly reconciled |
+| July 26 cohort 3 | 500,000 | Running | 0 at latest gate | ~162 rows/sec at latest interval | Four workers; bounded |
+
+After cohort 2, exact queue-complete coverage reached 1,895,000 records. The
+remaining archive estimate was 736,583 records. Cohort 3 began only after
+cohort 2 reconciled input IDs to shadow IDs with matching SHA-256 sets and zero
+missing/extra rows.
+
+Current cohort 3 boundary:
+
+```text
+created_at: 2026-07-26T13:38:36.412Z
+after: mysql_auctions_39c7ab3d-545e-48d2-ab48-ee61c5394e50
+first: mysql_auctions_39c7afd6-bba9-4ec9-ba9d-7bfbf4888995
+last: mysql_auctions_c18e37a0-ad41-43ac-a967-c0c914322739
+workers: 4
+batch size: 250
+watch_records writes: 0
+promotion: false
+```
+
+Completed cohort artifacts:
+
+```text
+audit-output/normalization-canary-500k-20260726/
+audit-output/normalization-canary-500k-20260726-2/
+```
+
+The active cohort writes its final reconciled artifacts only after completion:
+
+```text
+audit-output/normalization-canary-500k-20260726-3/
+```
+
+Current release controls:
+
+| Change | State | Gate |
+| --- | --- | --- |
+| Client Trading Floor/Price Research readiness ([PR #131](https://github.com/Pablodd1/wf/pull/131)) | Merged and production-verified | Complete |
+| Worker observability and reversible duplicate controls ([PR #132](https://github.com/Pablodd1/wf/pull/132)) | Draft | Finish active cohort; query-plan and rollback canaries |
+| Immutable review packets and Review Queue lane ([PR #133](https://github.com/Pablodd1/wf/pull/133)) | Draft; Supabase/Vercel previews passed | No production migration/import |
+| Bounded packet exporter/importer ([PR #134](https://github.com/Pablodd1/wf/pull/134)) | Draft, stacked on #133; migrations compiled in disposable preview | Preview-specific RPC canary and rollback |
+
 ## Workstream controls
 
 | Workstream | Authoritative contract | Current disposition | Next bounded gate |
@@ -73,7 +125,8 @@ The following counts are from the July 25 production readback. “Analyzed” or
 | Seller/dealer | [`IMAGES_SELLER_UNBUNDLED_STATUS_2026-07-24.md`](IMAGES_SELLER_UNBUNDLED_STATUS_2026-07-24.md) | Private evidence; no consent/verification | Owner review of exact identity groups |
 | Duplicates | [`DUPLICATE_AUDIT_PROTOCOL.md`](DUPLICATE_AUDIT_PROTOCOL.md) | No suppression before bundle decisions | Human review only |
 | Green API | [`GREEN_API_INTEGRATION.md`](GREEN_API_INTEGRATION.md) | Converge into immutable raw pipeline | Preserve event/message/media lineage |
-| Railway | [`RAILWAY_NORMALIZATION_WORKER.md`](RAILWAY_NORMALIZATION_WORKER.md) | One replica, batch 250 while constrained | Change only after measured DB/lease gate |
+| Railway | [`RAILWAY_NORMALIZATION_WORKER.md`](RAILWAY_NORMALIZATION_WORKER.md) | Four replicas, batch 250, bounded queue cohorts | Reconcile every cohort before seeding another |
+| Human review packets | [`NORMALIZATION_REVIEW_PACKETS.md`](NORMALIZATION_REVIEW_PACKETS.md) | Draft PRs only; no production import | Preview RPC canary with preview-specific key |
 
 ## 100,000-row benchmark
 
@@ -241,7 +294,7 @@ legacy cursor mode retains the global lease.
 Current safe operating point:
 
 ```text
-Railway replicas: 2 after the reviewed change is merged and deployed
+Railway replicas: 4
 SHADOW_BATCH_SIZE: 250
 SHADOW_WORKER_MODE: queue
 Bounded cohorts only
@@ -254,25 +307,28 @@ Measured production shadow results:
 | 1 worker, batch 250 | 79.74 | 10,000/10,000; 0 errors |
 | 1 worker, batch 500 | 81.86 | 25,000/25,000; 0 errors |
 | 2 workers, batch 250 | 178.94 | 50,000/50,000; 0 errors |
+| 4 workers, batch 250, cohort 1 | 115.53 whole-cohort | 500,000/500,000; 0 errors |
+| 4 workers, batch 250, cohort 2 | 139.09 whole-cohort | 500,000/500,000; 0 errors |
 
-Batch 500 added only 2.65%, so 250 remains safer. Two workers added 124.39%
-over the original baseline. The deployed Railway service is still the old,
-stopped build; do not change its replica count before this branch is reviewed,
-merged, and deployed in queue mode.
+Batch 500 added only 2.65%, so 250 remains safer. Four workers are now deployed
+and validated through two exact cohorts. CPU and memory headroom remained
+available, but end-to-end throughput did not scale linearly; do not increase
+above four without a new bounded contention canary.
 
 ## Fastest accurate next move
 
-1. Complete the local 100,000-row benchmark and freeze its output directory.
-2. Review the largest blocker categories and representative changed rows.
-3. Convert stable repeated corrections into tests before changing parser or
+1. Finish and exactly reconcile the active third 500,000-row cohort.
+2. Run the final estimated 236,583-row archive cohort only after that gate.
+3. Review the largest blocker categories and representative changed rows.
+4. Convert stable repeated corrections into tests before changing parser or
    catalog behavior on a separately approved branch.
-4. Route uncertain rows to the existing human-review lanes in small cohorts;
+5. Route uncertain rows to the existing human-review lanes in small cohorts;
    do not create a second source of truth.
-5. Use corrections as labeled fixtures for deterministic rules first and ML
+6. Use corrections as labeled fixtures for deterministic rules first and ML
    suggestions second. ML suggestions never auto-approve price, currency,
    identity, seller, bundle, or image relationships.
-6. After the infrastructure gates pass, run a bounded shadow-only live-ID
-   canary. Reconcile it before considering a larger run.
+7. Keep review-packet storage, exporter, and importer draft-only until the
+   preview-specific RPC canary and rollback complete.
 
 ## Human correction and learning loop
 
@@ -297,10 +353,11 @@ human remain authoritative.
 
 ## Explicit holds
 
-- Do not begin a full-dataset normalization run.
+- Do not run an unbounded full-dataset job; use exact, reconciled cohorts only.
 - Do not write benchmark output to `watch_records`.
-- Do not change parser, catalog, UI, schema, deployment, or production records
-  under this stabilization assignment.
+- Do not change parser/catalog behavior or production review records without a
+  separate reviewed release. Approved UI and private-schema work remains in
+  reviewable branches with production packet import held.
 - Do not display bundle parents as normalized child listings.
 - Do not attach images by brand/reference resemblance or filename proximity.
 - Do not expose seller identity/contact without verified lineage and consent.
