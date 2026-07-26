@@ -45,3 +45,10 @@ does not contain `listing_date`, it must be restarted once with
 - Matches involving a split candidate are always review-only until lineage is approved.
 - Price updates remain in historical Price Research.
 - Matching inventory from different dealers is never auto-collapsed.
+- Customer analytics become unavailable when the reviewed-suppression lookup
+  fails; they never silently re-admit a suppressed row. Before the batch RPC is
+  deployed, the fallback queries only current cohort IDs in batches of 100.
+- Only an administrator may restore `SUPPRESSED` to `KEEP_BOTH`. The restore RPC
+  writes an immutable private event containing the prior decision evidence
+  before changing the reversible ledger status. It never deletes or updates
+  `watch_records`.

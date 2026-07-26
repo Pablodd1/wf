@@ -8,6 +8,7 @@ const {
   DIRECT_BATCH_SIZE,
   MAX_CONCURRENCY,
   RPC_BATCH_SIZE,
+  SUPPRESSION_UNAVAILABLE,
   loadAnalyticsSuppressedIds,
 } = require('../api/_lib/duplicate-suppression.cjs');
 
@@ -102,8 +103,11 @@ test('uses bounded cohort-only direct queries before the RPC migration exists', 
 });
 
 test('has no global 20,000-ID cap or unbounded fallback query', () => {
-  assert.match(priceResearchSource, /loadAnalyticsSuppressedIds\(client, normalizedRows\.map\(row => row\.id\)\)/);
-  assert.match(priceResearchSource, /sourceTable === 'price_research_verified_source'[\s\S]*\? new Set\(\)/);
+  assert.match(
+    priceResearchSource,
+    /const analyticsSuppressedIds = await loadAnalyticsSuppressedIds\(\s*client,\s*normalizedRows\.map\(row => row\.id\)/
+  );
+  assert.doesNotMatch(priceResearchSource, /sourceTable === 'price_research_verified_source'[\s\S]*\? new Set\(\)/);
   assert.doesNotMatch(priceResearchSource, /limit\(20_000\)|limit\(20000\)/);
   assert.match(migration, /reviewed_suppressed_duplicate_ids\(p_duplicate_ids TEXT\[\]\)/);
   assert.match(migration, /cardinality\(COALESCE\(p_duplicate_ids[\s\S]*BETWEEN 1 AND 1000/);
@@ -111,7 +115,7 @@ test('has no global 20,000-ID cap or unbounded fallback query', () => {
   assert.doesNotMatch(migration, /LIMIT\s+20_?000/i);
 });
 
-test('returns an empty set when pre-migration duplicate infrastructure is unavailable', async () => {
+test('fails closed when the pre-migration bounded fallback is unavailable', async () => {
   const client = {
     async rpc() {
       return { data: null, error: { code: 'PGRST202' } };
@@ -120,5 +124,39 @@ test('returns an empty set when pre-migration duplicate infrastructure is unavai
       throw new Error('duplicate table unavailable');
     },
   };
-  assert.deepEqual(await loadAnalyticsSuppressedIds(client, ['current-cohort-id']), new Set());
+  await assert.rejects(
+    loadAnalyticsSuppressedIds(client, ['current-cohort-id']),
+    error => error.code === SUPPRESSION_UNAVAILABLE,
+  );
+});
+
+test('fails closed on an RPC error after the migration is present', async () => {
+  const client = {
+    async rpc() {
+      return { data: null, error: { code: '57014', message: 'statement timeout' } };
+    },
+  };
+  await assert.rejects(
+    loadAnalyticsSuppressedIds(client, ['current-cohort-id']),
+    error => error.code === SUPPRESSION_UNAVAILABLE,
+  );
+});
+
+test('fails closed when a later bounded RPC batch fails', async () => {
+  let call = 0;
+  const client = {
+    async rpc() {
+      call += 1;
+      return call === 1
+        ? { data: [], error: null }
+        : { data: null, error: { code: '57014', message: 'statement timeout' } };
+    },
+  };
+  await assert.rejects(
+    loadAnalyticsSuppressedIds(
+      client,
+      Array.from({ length: RPC_BATCH_SIZE + 1 }, (_, index) => `cohort-${index}`)
+    ),
+    error => error.code === SUPPRESSION_UNAVAILABLE,
+  );
 });

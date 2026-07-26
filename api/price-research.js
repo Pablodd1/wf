@@ -351,9 +351,13 @@ module.exports = async function handler(req, res) {
           price_usd: normalized.analytics_price_usd,
         };
       });
-    const analyticsSuppressedIds = sourceTable === 'price_research_verified_source'
-      ? new Set()
-      : await loadAnalyticsSuppressedIds(client, normalizedRows.map(row => row.id));
+    // The strict view excludes reviewed duplicates in Postgres. Recheck only
+    // this bounded cohort so a deployment-order or lookup failure is
+    // unavailable rather than silently publishing a suppressed observation.
+    const analyticsSuppressedIds = await loadAnalyticsSuppressedIds(
+      client,
+      normalizedRows.map(row => row.id)
+    );
     const duplicateSuppressedRows = normalizedRows.filter(row => analyticsSuppressedIds.has(String(row.id)));
     const analyticsRows = normalizedRows.filter(row => !analyticsSuppressedIds.has(String(row.id)));
     const bundleParentExcludedCount = analyticsRows.filter(row => row.bundle_candidate_count > 1).length;
