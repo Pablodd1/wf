@@ -1,14 +1,15 @@
 # WatchFacts CTO Control Center
 
-**Control date:** July 25, 2026
+**Control date:** July 26, 2026
 **Assignment mode:** read-only stabilization
 **Current release decision:** do not bulk-promote normalization, bundles, images,
 sellers, or duplicates.
 
-**Infrastructure update:** on July 25, 2026, the owner reported that Supabase
-compute was upgraded. The new tier and post-upgrade load metrics have not been
-independently verified under this read-only assignment. The earlier Micro
-constraint is historical evidence; scaling remains gated by a measured canary.
+**Infrastructure update:** Supabase was upgraded and Railway scaling was
+verified through bounded shadow-only canaries. A July 26 cohort started with two
+workers, scaled through three to four, and reconciled exactly at 500,000 outputs
+and zero errors. Four workers and batch 250 are the measured ceiling for the
+next bounded cohort; do not add replicas without another measured gate.
 
 This is the single navigation and decision index for the current project state.
 It does not replace immutable evidence, code, migrations, or dated readbacks.
@@ -59,6 +60,11 @@ The following counts are from the July 25 production readback. “Analyzed” or
 | Seller-linked listings | 0 | Do not publish seller/contact data |
 | Unbundled staged children | 70,194 | Review lanes only |
 | Unbundled approved/published | 0 | No bulk publication |
+
+Queue processing has advanced beyond the July 25 snapshot. As of the completed
+July 26 reconciliation, 1,395,000 queue rows were `COMPLETE`, with zero
+`PENDING`, `LEASED`, or `FAILED` before the next bounded cohort was seeded.
+This is shadow analysis coverage, not human approval or customer publication.
 
 ## Workstream controls
 
@@ -241,7 +247,7 @@ legacy cursor mode retains the global lease.
 Current safe operating point:
 
 ```text
-Railway replicas: 2 after the reviewed change is merged and deployed
+Railway replicas: 4 maximum for a bounded cohort
 SHADOW_BATCH_SIZE: 250
 SHADOW_WORKER_MODE: queue
 Bounded cohorts only
@@ -256,9 +262,27 @@ Measured production shadow results:
 | 2 workers, batch 250 | 178.94 | 50,000/50,000; 0 errors |
 
 Batch 500 added only 2.65%, so 250 remains safer. Two workers added 124.39%
-over the original baseline. The deployed Railway service is still the old,
-stopped build; do not change its replica count before this branch is reviewed,
-merged, and deployed in queue mode.
+over the original baseline.
+
+The July 26 500,000-row cohort then measured the production database path at
+larger scale:
+
+| Measure | Result |
+| --- | ---: |
+| Input / output / errors | 500,000 / 500,000 / 0 |
+| Missing / extra shadow rows | 0 / 0 |
+| Queue and shadow ID hashes | Match |
+| Worker scale | 2 -> 3 -> 4 |
+| Whole-cohort operational rate | 115.53 rows/second |
+| Stable four-worker checkpoint rate | 146.84-151.02 rows/second |
+| Batch size | 250 |
+| `watch_records` writes | 0 |
+
+The full cohort includes two-worker startup time, scale transitions, and a
+four-worker UI-release restart, so 115.53 rows/second is the conservative
+planning rate. The late four-worker intervals are capacity evidence, not a
+promise for every source range. Railway CPU and memory remained well below
+limits; Supabase reads/writes and row complexity are the current bottleneck.
 
 ## Fastest accurate next move
 
