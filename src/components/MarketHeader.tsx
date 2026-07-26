@@ -4,9 +4,13 @@ import { Link, useLocation } from 'react-router-dom';
 const LUXFI_URL = 'https://luxfi.ai/#add-fi';
 
 const HEADER_LINKS = [
-  { label: 'HIRE FI', href: LUXFI_URL, external: true },
-  { label: 'DISCOVER', to: '/trading' },
+  { label: 'HOME', to: '/' },
+  { label: 'TRADING FLOOR', to: '/trading' },
+  { label: 'WANT TO BUY', to: '/trading?type=WTB' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
+  { label: 'POST ITEM', to: '/dealer/post' },
+  { label: 'ACCOUNT', to: '/dealer/account/profile' },
+  { label: 'HIRE FI', href: LUXFI_URL, external: true },
 ];
 
 type MarketHeaderProps = {
@@ -30,11 +34,20 @@ export function MarketHeader({ compact = false, className = '', showLogo = true 
           <span className="sr-only">Curated Luxury</span>
         )}
 
-        <nav className="grid min-w-0 grid-cols-3 items-center gap-1 sm:flex sm:flex-1 sm:justify-end" aria-label="Primary navigation">
+        <nav className="flex min-w-0 items-center gap-1 overflow-x-auto pb-1 sm:flex-1 sm:justify-end sm:pb-0" aria-label="Primary navigation">
           {HEADER_LINKS.map(link => {
-            const active = link.to ? location.pathname.startsWith(link.to) : false;
+            const wantsToBuy = location.pathname === '/trading' && new URLSearchParams(location.search).get('type') === 'WTB';
+            const active = link.to === '/'
+              ? location.pathname === '/'
+              : link.to === '/trading'
+                ? location.pathname === '/trading' && !wantsToBuy
+                : link.to === '/trading?type=WTB'
+                  ? wantsToBuy
+                  : link.to
+                    ? location.pathname.startsWith(link.to.split('?')[0])
+                    : false;
             const className = [
-              'flex h-10 min-w-0 items-center justify-center gap-1 border px-2 text-center text-[10px] font-semibold transition-colors sm:shrink-0 sm:gap-1.5 sm:px-4 sm:text-[11px]',
+              'flex h-11 shrink-0 items-center justify-center gap-1 border px-3 text-center text-[10px] font-semibold transition-colors sm:gap-1.5 sm:px-4 sm:text-[11px]',
               active
                 ? 'border-[#d4b87a] bg-[#d4b87a] text-black'
                 : 'border-white/15 bg-white/[0.03] text-white/78 hover:border-[#d4b87a]/70 hover:text-white',

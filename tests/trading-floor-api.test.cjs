@@ -197,6 +197,7 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.match(floor, /onClose=\{closeListing\}/);
   assert.match(floor, /previousViewKeyRef\.current === viewKey/);
   assert.match(floor, /Back to results/);
-  assert.match(header, /grid-cols-3/);
+  assert.match(header, /overflow-x-auto/);
+  assert.match(header, /h-11 shrink-0/);
   assert.match(header, /sm:flex-row/);
 });

@@ -772,7 +772,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             <h2 className="font-serif text-2xl font-medium tracking-normal" style={{ color: INK }}>{meta.title}</h2>
             <button
               type="button"
-              aria-label="Close listing details"
+              aria-label="Close selected watch"
               title="Close"
               onClick={onClose}
               className="flex h-8 w-8 items-center justify-center rounded-md"
