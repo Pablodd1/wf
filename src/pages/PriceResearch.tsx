@@ -1266,6 +1266,10 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   const [copied, setCopied] = useState(false);
   const images = detail?.image_urls || [];
   const observedAt = detail?.listing_date || summary.listing_date;
+  const sellerLocation = [seller?.dealer_city, seller?.dealer_country]
+    .map(value => String(value || '').trim())
+    .filter(value => value && !/^unknown$/i.test(value))
+    .join(', ');
   // The summary price is the exact value used by the comparable-set and
   // outlier calculations. A legacy detail row may still contain an older
   // currency conversion, so it must never replace the analytics value here.
@@ -1408,9 +1412,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                   <>
                     <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>{seller.dealer_name}</div>
                     {seller.dealer_company && <div style={{ color: MUTED, fontSize: 13, marginTop: 3 }}>{seller.dealer_company}</div>}
-                    <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>
-                      {[seller.dealer_city, seller.dealer_country].filter(Boolean).join(', ') || 'Location not published'}
-                    </div>
+                    {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
                     {seller.dealer_stats ? (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }}>
                         <Metric label="For sale" value={Number(seller.dealer_stats.wts_posts).toLocaleString()} />
@@ -1450,12 +1452,12 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
 
               <DetailCard title="Watch details">
                 <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
-                  <DetailField label="Observed" value={observedDate} />
+                  {observedDate && <DetailField label="Observed" value={observedDate} />}
                   <DetailField label="Asking price as posted" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
                   <DetailField label="Condition" value={detail.condition} />
                   <DetailField label="Dial" value={detail.dial_color} />
                   <DetailField label="Year" value={detail.year} />
-                  <DetailField label="Region" value={detail.region} />
+                  {detail.region && !/^unknown$/i.test(detail.region) && <DetailField label="Region" value={detail.region} />}
                 </div>
                 {detail.accessories.length > 0 && <div style={{ marginTop: 20 }}><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Accessories stated in source</div><div className="flex flex-wrap gap-2">{detail.accessories.map(item => <span key={item} style={{ background: LIGHT_GRAY, border: `1px solid ${BORDER}`, padding: '5px 9px', borderRadius: 5, fontSize: 12 }}>{item}</span>)}</div></div>}
               </DetailCard>

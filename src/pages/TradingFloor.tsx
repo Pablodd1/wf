@@ -777,10 +777,10 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
       <div className="mt-4 flex items-center justify-between gap-3">
         <div className="text-[16px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</div>
-        <RegionLabel region={meta.region} />
+        {meta.region && <RegionLabel region={meta.region} />}
       </div>
 
-      <div className="mt-3 text-[15px]" style={{ color: INK }}>Posted: {meta.postedDate}</div>
+      {meta.postedDate && <div className="mt-3 text-[15px]" style={{ color: INK }}>Posted: {meta.postedDate}</div>}
 
       <div className="mt-auto pt-4">
         <ActionButton
@@ -988,9 +988,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </p>
           )}
 
-          <div className="mt-6 text-[15px]" style={{ color: INK }}>
-              <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
-          </div>
+          {meta.postedDate && <div className="mt-6 text-[15px]" style={{ color: INK }}>
+            <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
+          </div>}
         </div>
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
@@ -999,9 +999,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
               <div className="text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>
               {contact.dealer_company && <div className="mt-1 text-sm" style={{ color: MUTED }}>{contact.dealer_company}</div>}
-              <div className="mt-2 text-sm" style={{ color: MUTED }}>
-                {[contact.dealer_city, contact.dealer_country].filter(Boolean).join(', ') || 'Location not published'}
-              </div>
+              {displayLocation(contact.dealer_city, contact.dealer_country) && <div className="mt-2 text-sm" style={{ color: MUTED }}>
+                {displayLocation(contact.dealer_city, contact.dealer_country)}
+              </div>}
               <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs" style={{ color: MUTED }}>
                 <span>{contact.dealer_rating == null ? 'Unrated' : `${Number(contact.dealer_rating).toFixed(2)} rating`}</span>
                 <span>{Number(contact.dealer_review_count || 0).toLocaleString()} reviews</span>
@@ -1243,7 +1243,7 @@ function compactNumber(value: number) {
 }
 
 function formatListingDate(dateStr: string | null) {
-  if (!dateStr) return 'Not listed';
+  if (!dateStr) return null;
   const parsed = new Date(dateStr);
   if (Number.isNaN(parsed.getTime())) return dateStr;
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
@@ -1251,7 +1251,7 @@ function formatListingDate(dateStr: string | null) {
 
 function normalizeRegion(region: string | null) {
   const value = cleanValue(region);
-  if (!value) return 'Location not provided';
+  if (!value) return null;
   if (/north.?america|usa|us|canada/i.test(value)) return 'North America';
   if (/europe|uk|germany|france|italy|swiss/i.test(value)) return 'Europe';
   if (/asia|hong|china|japan|singapore|hk/i.test(value)) return 'Asia';
@@ -1263,6 +1263,13 @@ function cleanValue(value: string | number | null | undefined) {
   const text = String(value).trim();
   if (!text || /^unknown$/i.test(text) || /^null$/i.test(text)) return '';
   return text;
+}
+
+function displayLocation(...values: Array<string | null | undefined>) {
+  return values
+    .map(cleanValue)
+    .filter(Boolean)
+    .join(', ');
 }
 
 function displayDial(value: string | null | undefined) {

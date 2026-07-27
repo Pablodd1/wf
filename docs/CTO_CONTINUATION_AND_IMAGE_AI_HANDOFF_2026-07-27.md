@@ -80,6 +80,34 @@ review UI must also be verified in the deployed preview for working keyset
 pagination; local source contains Previous/Next controls, but deployment must
 be checked rather than assumed.
 
+### July 27 live customer-page check
+
+The deployed Trading Floor and Price Research pages were read without changing
+data. The release scope reports `ALL_REVIEWED`, not the former three-reference
+canary. Evidence includes:
+
+| Read-only live check | Result |
+| --- | --- |
+| Trading Floor first page | 48 customer-visible records and a working **Load more** control |
+| Trading API Rolex first 100 | 0 verified images; 100 missing posting dates; 100 missing locations; more records available |
+| Trading API Patek first 100 | 0 verified images; 97 missing posting dates; 99 missing locations; more records available |
+| Price Research Rolex 116610LN | 71 eligible observations; analytics ready |
+| Price Research Rolex 126500LN | 31 eligible observations; analytics ready |
+| Current Patek Golden Ellipse selection | No approved listing evidence returned |
+
+The page was rendering `Location not provided` and `Posted: Not listed` for
+those source-null values. That wording is misleading to a customer: it is not
+a claimed location or post date, it is a missing field. The continuation change
+therefore omits the location/date block entirely unless the actual source value
+exists. It also removes `Location not published` from seller panels when an
+otherwise verified seller has no published city/country.
+
+The public cards are deliberately bounded (48 on the observed desktop page,
+up to 100 API records) and must use **Load more** to fetch the next page. The
+API does not return a full total in cursor mode, so no honest public count of
+all visible Rolex/Patek cards should be asserted without a dedicated counted
+readback.
+
 ## Current user-facing request, captured
 
 The requested client-ready experience is:
