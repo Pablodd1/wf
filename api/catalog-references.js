@@ -8,6 +8,7 @@
 const { getClient } = require('./_lib/supabase');
 const { listCatalogReferences, lookupCatalog } = require('./_lib/catalog');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
+const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 
@@ -90,7 +91,8 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
-    const catalogReferences = listCatalogReferences(brand, model);
+    const catalogReferences = listCatalogReferences(brand, model)
+      .filter(entry => isPublicationReferenceAllowed(brand, entry.reference));
     const evidence = await mapWithConcurrency(
       catalogReferences,
       LOOKUP_CONCURRENCY,

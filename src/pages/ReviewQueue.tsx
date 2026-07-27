@@ -707,7 +707,7 @@ function ImageReviewLane() {
   useEffect(() => {
     const controller = new AbortController();
     setError(null);
-    fetch('/api/image-review-queue', { credentials: 'include', signal: controller.signal })
+    fetch('/api/image-review-queue?release=true', { credentials: 'include', signal: controller.signal })
       .then(async response => {
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Image review queue is unavailable');
@@ -756,7 +756,7 @@ function ImageReviewLane() {
       <div className="rounded-xl border border-border-default bg-bg-card p-4">
         <h2 className="text-sm font-bold text-text-primary">Exact image-to-listing review</h2>
         <p className="mt-1 text-xs text-text-muted">
-          Compare the actual source image with the preserved raw listing. No image is attached until a reviewer makes an explicit decision.
+          Current three-watch release only. Compare the actual source image with the preserved raw listing. No image is attached until a reviewer makes an explicit decision.
         </p>
         {error && <p className="mt-3 text-xs text-red-400" role="alert">{error}</p>}
       </div>

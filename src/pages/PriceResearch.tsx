@@ -235,13 +235,6 @@ function dialSwatch(color: string) {
   return 'linear-gradient(135deg, #d8dbe0 0%, #f8f9fa 50%, #b9bec5 100%)';
 }
 
-function conditionLabel(condition: string) {
-  const normalized = String(condition || '').trim().toLowerCase();
-  if (!normalized || normalized === 'unknown' || normalized === 'unspecified') return 'Unspecified';
-  if (normalized === 'all' || normalized === 'all conditions') return 'All';
-  return condition;
-}
-
 function dialChartColor(color: string) {
   if (['white', 'white dial', 'silver', 'grey', 'gray', 'mother of pearl', 'mop'].includes(color.trim().toLowerCase())) return NAVY;
   const swatch = dialSwatch(color);
@@ -347,7 +340,7 @@ export default function PriceResearch() {
     finally { setPLoading(''); }
   }, []);
 
-  const fetchData = useCallback(async (ref: string, condition = '', dial = '', brand = '', evidencePage = 1) => {
+  const fetchData = useCallback(async (ref: string, dial = '', brand = '', evidencePage = 1) => {
     const normalizedReference = ref.trim();
     if (!normalizedReference) {
       setError('Enter a reference to search');
@@ -362,7 +355,6 @@ export default function PriceResearch() {
     try {
       const params = new URLSearchParams({ reference: normalizedReference });
       if (brand) params.set('brand', brand);
-      if (condition) params.set('condition', condition);
       if (dial) params.set('dial', dial);
       params.set('evidencePage', String(evidencePage));
       const r = await fetch(`/api/price-research?${params.toString()}`);
@@ -458,7 +450,7 @@ export default function PriceResearch() {
   // former query dependency replaced this page with the loading spinner after
   // every character, which unmounted the input and dropped keyboard focus.
   useEffect(() => {
-    if (initialReference) void fetchData(initialReference, '', '', initialBrand);
+    if (initialReference) void fetchData(initialReference, '', initialBrand);
   }, [fetchData, initialBrand, initialReference]);
 
   // ── Derived stats ─────────────────────────────────────────
@@ -473,10 +465,9 @@ export default function PriceResearch() {
     : null;
 
   const activeDial = data?.selected_cohort.dial_color || '';
-  const activeCondition = conditionLabel(data?.selected_cohort.condition || 'All');
   const selectedDialLine = activeDial ? dialChartColor(activeDial) : BLUE;
   const datedHistory = (data?.monthly || []).length > 0;
-  const priceHistoryTitle = `${activeDial || 'Selected'} Dial ${datedHistory ? 'Price History' : 'Current Comparable Range'} - ${activeCondition === 'All' ? 'All Conditions' : activeCondition}`;
+  const priceHistoryTitle = `${activeDial || 'Selected'} Dial ${datedHistory ? 'Price History' : 'Current Comparable Range'} - All Conditions`;
   const chartData: Array<Record<string, number | string | null>> = (data?.monthly || []).map(m => ({
     month: m.month,
     min: m.min_price,
@@ -559,12 +550,12 @@ export default function PriceResearch() {
                   type="text"
                   value={query}
                   onChange={event => { setQuery(event.target.value); setQueryBrand(''); }}
-                  onKeyDown={event => { if (event.key === 'Enter' && !loading) void fetchData(query, '', '', queryBrand); }}
+                  onKeyDown={event => { if (event.key === 'Enter' && !loading) void fetchData(query, '', queryBrand); }}
                   placeholder="Enter a watch reference"
                   className="h-11 w-full rounded-md border border-white/20 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#c9a03a]"
                 />
               </label>
-              <button type="button" onClick={() => void fetchData(query, '', '', queryBrand)} disabled={loading} className="h-11 min-w-28 rounded-md bg-[#c9a03a] px-5 text-sm font-semibold text-[#09090d] disabled:cursor-wait disabled:opacity-70">
+              <button type="button" onClick={() => void fetchData(query, '', queryBrand)} disabled={loading} className="h-11 min-w-28 rounded-md bg-[#c9a03a] px-5 text-sm font-semibold text-[#09090d] disabled:cursor-wait disabled:opacity-70">
                 {loading ? 'Searching...' : 'Search'}
               </button>
             </div>
@@ -646,7 +637,7 @@ export default function PriceResearch() {
           {pBrand && pModel && pRefs.length > 0 && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {pRefs.map(r => (
-                <button key={r.reference} onClick={() => { setQuery(r.reference); setQueryBrand(pBrand); void fetchData(r.reference, '', '', pBrand); }}
+                <button key={r.reference} onClick={() => { setQuery(r.reference); setQueryBrand(pBrand); void fetchData(r.reference, '', pBrand); }}
                   style={{
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer',
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,
@@ -695,20 +686,17 @@ export default function PriceResearch() {
               <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
-                  Each dial appears once. Condition is shown and filtered separately; unspecified evidence is never assumed to be used.
+                  Each dial appears once. New, Used, and Unspecified listings are combined for analytics; condition remains visible in each listing description.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                   {(data.dial_groups || []).map(group => {
                     const selected = data.selected_cohort.dial_color === group.dial_color;
-                    const conditionSummary = Object.entries(group.condition_counts || {})
-                      .map(([condition, count]) => `${conditionLabel(condition)}: ${count}`)
-                      .join(' | ');
                     return (
                       <button
                         key={group.dial_color}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => void fetchData(data.reference, activeCondition === 'All' ? '' : activeCondition, group.dial_color, data.brand)}
+                        onClick={() => void fetchData(data.reference, group.dial_color, data.brand)}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 12px',
                           borderRadius: 8, cursor: 'pointer', backgroundColor: selected ? '#eef1f6' : WHITE,
@@ -718,28 +706,11 @@ export default function PriceResearch() {
                         <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto', background: dialSwatch(group.dial_color), border: '1px solid rgba(0,0,0,0.18)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.35)' }} />
                         <span style={{ minWidth: 0, flex: 1 }}>
                           <span style={{ display: 'block', color: TEXT, fontSize: 13, fontWeight: 700 }}>{group.dial_color}</span>
-                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{group.count.toLocaleString()} listings</span>
-                          <span style={{ display: 'block', color: MUTED, fontSize: 10, marginTop: 2 }}>{conditionSummary}</span>
+                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{group.count.toLocaleString()} listings · all conditions combined</span>
                         </span>
                         <span style={{ color: GREEN, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
                           {group.avg_price == null ? 'No price' : `$${group.avg_price.toLocaleString()}`}
                         </span>
-                      </button>
-                    );
-                  })}
-                </div>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
-                  {['All', 'New', 'Used', 'Unspecified'].map(condition => {
-                    const selected = conditionLabel(data.selected_cohort.condition) === condition;
-                    return (
-                      <button
-                        key={condition}
-                        type="button"
-                        aria-pressed={selected}
-                        onClick={() => void fetchData(data.reference, condition === 'All' ? '' : condition, data.selected_cohort.dial_color, data.brand)}
-                        style={{ padding: '7px 11px', borderRadius: 6, border: `1px solid ${selected ? NAVY : BORDER}`, background: selected ? NAVY : WHITE, color: selected ? WHITE : TEXT, fontSize: 12, cursor: 'pointer' }}
-                      >
-                        {conditionLabel(condition)}
                       </button>
                     );
                   })}
@@ -762,7 +733,7 @@ export default function PriceResearch() {
                   Final chart set: {data.count.toLocaleString()} observations · {data.outliersRemoved} statistical price outliers removed
                 </div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
-                  Cohort: {data.selected_cohort.condition} / {data.selected_cohort.dial_color}
+                  Cohort: exact {data.selected_cohort.dial_color} dial · all listing conditions combined
                 </div>
                 {data.eligible_observation_count != null && (
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 6, lineHeight: 1.4 }}>
@@ -1023,9 +994,7 @@ export default function PriceResearch() {
                     </div>
                   ) : (
                     <div className="mt-4 border-l-2 border-[#adb5bd] bg-white px-4 py-3 text-xs leading-6" style={{ color: MUTED }}>
-                      {activeCondition === 'All'
-                        ? 'Select New, Used, or Unspecified to view the three-month forecast.'
-                        : `Three-month projection withheld: ${forecastReason(data.forecast?.reasons?.[0])}. Historical observations remain available above.`}
+                      Three-month projection withheld: {forecastReason(data.forecast?.reasons?.[0])}. Historical observations remain available above.
                     </div>
                   )}
                 </div>
@@ -1033,7 +1002,7 @@ export default function PriceResearch() {
             ) : (
               <section aria-label="Insufficient price history evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Not enough comparable listings to display a reliable price history for this selection.</h3>
-                <p style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>Choose another condition or dial color to inspect its independent evidence.</p>
+                <p style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>Choose another dial color to inspect its independent evidence. Listing condition is descriptive and does not split the analytics cohort.</p>
               </section>
             )}
 
@@ -1179,7 +1148,7 @@ export default function PriceResearch() {
                   <button
                     type="button"
                     disabled={(data.evidence?.comparable_page || 1) <= 1 || loading}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.condition, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) - 1)}
+                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) - 1)}
                     style={{ minHeight: 44, justifySelf: 'start', border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) <= 1 ? 0.45 : 1 }}
                   >Previous</button>
                   <span style={{ color: MUTED, fontSize: 12 }}>
@@ -1188,7 +1157,7 @@ export default function PriceResearch() {
                   <button
                     type="button"
                     disabled={(data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) || loading}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.condition, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) + 1)}
+                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) + 1)}
                     style={{ minHeight: 44, justifySelf: 'end', border: `1px solid ${BORDER}`, background: NAVY, color: WHITE, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) ? 0.45 : 1 }}
                   >Next</button>
                 </div>
@@ -1214,7 +1183,6 @@ export default function PriceResearch() {
           comparableCount={data?.count || 0}
           monthly={data?.monthly || []}
           cohortDial={data?.selected_cohort.dial_color || selectedRow.dial_color || ''}
-          cohortCondition={data?.selected_cohort.condition || selectedRow.condition || ''}
         />
       )}
     </div>
@@ -1247,7 +1215,7 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
   );
 }
 
-function ListingDetailModal({ summary, detail, seller, loading, error, onClose, outlierLabel, benchmark, comparableCount, monthly, cohortDial, cohortCondition }: {
+function ListingDetailModal({ summary, detail, seller, loading, error, onClose, outlierLabel, benchmark, comparableCount, monthly, cohortDial }: {
   summary: RowData;
   detail: ListingDetailData | null;
   seller: ListingSellerData | null;
@@ -1259,7 +1227,6 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   comparableCount: number;
   monthly: MonthlyPoint[];
   cohortDial: string;
-  cohortCondition: string;
 }) {
   const [activeImage, setActiveImage] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -1298,7 +1265,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
     comparisonData.sort((a, b) => a.month.localeCompare(b.month));
   }
   const cohortAverage = Number(benchmark?.avg || 0);
-  const cohortLabel = `${cohortDial || 'Unspecified'} dial · ${conditionLabel(cohortCondition || 'Unspecified')}`;
+  const cohortLabel = `${cohortDial || 'Unspecified'} dial · all listing conditions`;
   const comparisonPrices = [
     ...monthly.map(point => Number(point.avg_price)),
     displayPrice,
@@ -1476,7 +1443,6 @@ function DetailField({ label, value }: { label: string; value: string | number |
 
 function forecastReason(reason?: string) {
   const messages: Record<string, string> = {
-    CONDITION_REQUIRED: 'select a specific condition so New, Used, and unstated inventory are not mixed',
     MINIMUM_OFFERS_NOT_MET: 'fewer than 30 clean comparable offers are available',
     MINIMUM_MONTHS_NOT_MET: 'fewer than 12 monthly periods are available',
     MINIMUM_VERIFIED_DEALERS_NOT_MET: 'fewer than five verified dealer identities are linked',

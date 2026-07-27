@@ -30,17 +30,18 @@ test('labels five to nine rows provisional and ten or more robust', () => {
   assert.equal(summarizePrices([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]).sample_quality, 'robust');
 });
 
-test('separates price cohorts by condition and dial', () => {
+test('merges condition variants into one analytics cohort per dial', () => {
   const cohorts = buildComparableCohorts([
     { condition: 'New', dial_color: 'Blue' },
     { condition: 'New', dial_color: 'Blue' },
     { condition: 'Used', dial_color: 'Blue' },
     { condition: 'New', dial_color: 'Green' },
   ]);
-  assert.equal(cohorts.length, 3);
-  assert.equal(cohorts[0].condition, 'New');
+  assert.equal(cohorts.length, 2);
+  assert.equal(cohorts[0].condition, 'All conditions');
   assert.equal(cohorts[0].dial_color, 'Blue');
-  assert.equal(cohorts[0].count, 2);
+  assert.equal(cohorts[0].count, 3);
+  assert.deepEqual(cohorts[0].condition_counts, { New: 2, Used: 1 });
 });
 
 test('merges dial labels that differ only by case', () => {
@@ -75,8 +76,9 @@ test('treats unknown and unspecified condition labels as one non-inferred cohort
   const cohorts = buildComparableCohorts(rows);
   const groups = buildDialGroups(rows);
   assert.equal(cohorts.length, 1);
-  assert.equal(cohorts[0].condition, 'Unspecified');
+  assert.equal(cohorts[0].condition, 'All conditions');
   assert.equal(cohorts[0].count, 3);
+  assert.deepEqual(cohorts[0].condition_counts, { Unspecified: 3 });
   assert.deepEqual(groups[0].condition_counts, { Unspecified: 3 });
 });
 

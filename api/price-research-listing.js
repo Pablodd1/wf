@@ -8,6 +8,7 @@ const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
+const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 
 function normalizeAccessories(value) {
@@ -87,6 +88,9 @@ module.exports = async function handler(req, res) {
         }
       : data;
     if (!isPublicationBrandAllowed(resolvedData.brand)) {
+      return res.status(404).json({ error: 'Listing not included in this release' });
+    }
+    if (!isPublicationReferenceAllowed(resolvedData.brand, resolvedData.reference)) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
     if (!isCustomerIdentitySafe(resolvedData)) return res.status(404).json({ error: 'Listing under identity review' });

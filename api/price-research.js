@@ -24,6 +24,7 @@ const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsp
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
 const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
+const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -40,24 +41,15 @@ function lookupModel(reference, brand) {
 // market_reference_indicators_current has never been queried by live code — if
 // column names differ, we fall back to a live-derived count. REAL DATA ONLY:
 // no invented seller/buyer numbers.
-function normalizeConditionFilter(value) {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (normalized === 'new') return 'New';
-  if (normalized === 'used') return 'Used';
-  if (normalized === 'all' || normalized === 'all conditions' || !normalized) return 'All';
-  return 'Unspecified';
-}
-
 function matchesSelection(row, selection) {
   const dial = String(row.dial_color || '').trim().toLowerCase();
-  if (!dial || (selection.dial && dial !== String(selection.dial).toLowerCase())) return false;
-  return selection.condition === 'All' || normalizeConditionFilter(row.condition) === selection.condition;
+  return Boolean(dial) && (!selection.dial || dial === String(selection.dial).toLowerCase());
 }
 
 async function lookupLiquidity(client, reference, listingCount, demand, selection) {
-  // Reference-level indicators are not valid evidence for a dial/condition
+  // Reference-level indicators are not valid evidence for a dial
   // selection. Use scoped live counts instead of displaying stale aggregates.
-  if (selection?.dial || selection?.condition !== 'All') {
+  if (selection?.dial) {
     return { source: 'live_fallback', listing_count: listingCount, ...demand };
   }
   try {
@@ -214,6 +206,9 @@ module.exports = async function handler(req, res) {
   if (!isPublicationBrandAllowed(brand)) {
     return res.status(404).json({ error: 'Brand is not included in this release' });
   }
+  if (!isPublicationReferenceAllowed(brand, rawRef)) {
+    return res.status(404).json({ error: 'Reference is not included in this release' });
+  }
 
   try {
     const client = getClient();
@@ -323,7 +318,7 @@ module.exports = async function handler(req, res) {
         totalListings: 0, sampledListings: 0, sampleCapped: false, count: 0,
         analytics_ready: false, listing_count: 0,
         sample_quality: 'observational',
-        selected_cohort: { condition: 'Unspecified', dial_color: 'Unspecified', count: 0 },
+        selected_cohort: { condition: 'All conditions', dial_color: 'Unspecified', count: 0 },
         cohorts: [], outliers: [], outlier_rows: [], outliersRemoved: 0, excludedEvidenceCount: 0, rawCount: 0,
         methodology: { method: 'IQR_1_5', minimum_sample: 5, included_count: 0, excluded_count: 0 },
         stats: null, liquidity: null, monthly: [], prices: [], rows: [],
@@ -431,16 +426,14 @@ module.exports = async function handler(req, res) {
 
     const cohorts = buildComparableCohorts(marketRows);
     const dialGroups = buildDialGroups(marketRows);
-    const requestedCondition = String(req.query.condition || '').trim().toLowerCase();
     const requestedDial = String(req.query.dial || '').trim().toLowerCase();
     const selectedDialGroup = dialGroups.find(group =>
       !requestedDial || group.dial_color.toLowerCase() === requestedDial
     ) || dialGroups[0] || { dial_color: 'Unspecified', rows: [], count: 0, condition_counts: {} };
-    const selectedCondition = normalizeConditionFilter(requestedCondition);
-    const selection = { dial: selectedDialGroup.dial_color, condition: selectedCondition };
-    const selectedRows = selectedDialGroup.rows.filter(row => matchesSelection(row, selection));
+    const selection = { dial: selectedDialGroup.dial_color };
+    const selectedRows = selectedDialGroup.rows;
     const selectedCohort = {
-      condition: selectedCondition === 'All' ? 'All conditions' : selectedCondition,
+      condition: 'All conditions',
       dial_color: selectedDialGroup.dial_color,
       rows: selectedRows,
       count: selectedRows.length,
@@ -489,10 +482,10 @@ module.exports = async function handler(req, res) {
       .map(m => ({ month: m.month, count: m.count, avg_price: Math.round(m.sum / m.count), min_price: m.min, max_price: m.max }))
       .sort((a, b) => a.month.localeCompare(b.month));
 
-    // Forecasts are more restrictive than descriptive analytics. A condition
-    // must be selected so New, Used, and unstated inventory never share a
-    // trend line. The helper also enforces sample, identity, recency, and
-    // rolling-backtest gates before returning any future values.
+    // The release cohort is exact brand + reference + dial. Condition remains
+    // descriptive listing evidence and does not split market analytics. The
+    // helper still enforces sample, identity, recency, and rolling-backtest
+    // gates before returning any future values.
     const forecastsDisabled = process.env.ENABLE_PRICE_FORECASTS !== 'true';
     const forecastCandidate = forecastsDisabled
       ? {
@@ -501,21 +494,12 @@ module.exports = async function handler(req, res) {
           offer_count: includedRows.length,
           verified_dealer_count: new Set(includedRows.map(row => row.dealer_id).filter(Boolean)).size,
         }
-      : selectedCondition !== 'All'
-        ? buildMarketForecast(includedRows)
-        : {
-            ready: false,
-            reasons: ['CONDITION_REQUIRED'],
-            offer_count: includedRows.length,
-            verified_dealer_count: new Set(includedRows.map(row => row.dealer_id).filter(Boolean)).size,
-          };
+      : buildMarketForecast(includedRows);
     const forecast = forecastCandidate;
 
     // ── Dial analysis: EVERY dial color found in real listings (rule: all must show) ──
     const dialMap = {};
-    const dialAnalysisRows = selectedCondition === 'All'
-      ? marketRows
-      : marketRows.filter(row => normalizeConditionFilter(row.condition) === selectedCondition);
+    const dialAnalysisRows = marketRows;
     dialAnalysisRows.forEach(r => {
       const dial = r.dial_color || 'Unspecified';
       const key = String(dial).trim().toLowerCase();
@@ -581,6 +565,11 @@ module.exports = async function handler(req, res) {
         unsplit_parent_excluded_count: bundleParentExcludedCount,
         status: bundleParentExcludedCount ? 'excluded_from_analytics' : 'clean',
       },
+      condition_policy: {
+        analytics_dimension: false,
+        cohort: 'All conditions',
+        listing_description_retained: true,
+      },
       totalListings: listedRows.length,
       reference_listing_count: totalListings,
       listing_count: listedRows.length,
@@ -633,6 +622,8 @@ module.exports = async function handler(req, res) {
       }),
       methodology: {
         method: 'PLAUSIBILITY_FLOOR_THEN_IQR_1_5',
+        analytics_dimensions: ['brand', 'reference', 'dial_color'],
+        condition_policy: 'DESCRIPTION_ONLY_NOT_A_COHORT_DIMENSION',
         minimum_sample: 5,
         included_count: includedRows.length,
         excluded_count: outlierRows.length,

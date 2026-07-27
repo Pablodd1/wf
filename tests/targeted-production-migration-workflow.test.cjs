@@ -19,9 +19,10 @@ test("targeted lineage workflow is manual and explicitly confirmed", () => {
   assert.doesNotMatch(workflow, /^\s*push:/m);
 });
 
-test("targeted lineage workflow executes only the two allowlisted migrations", () => {
+test("targeted lineage workflow executes only the three allowlisted private migrations", () => {
   assert.match(workflow, /20260720220000_seller_listing_lineage_staging\.sql/);
   assert.match(workflow, /20260721120000_seller_child_lineage_staging\.sql/);
+  assert.match(workflow, /20260724223000_reviewer_contact_access_audit\.sql/);
   assert.doesNotMatch(workflow, /db push/);
   assert.doesNotMatch(workflow, /--include-all/);
   assert.doesNotMatch(workflow, /supabase\/migrations\/\*/);
@@ -31,7 +32,7 @@ test("targeted lineage workflow fails atomically and verifies private access", (
   assert.match(workflow, /BEGIN;/);
   assert.match(workflow, /COMMIT;/);
   assert.match(workflow, /ON_ERROR_STOP=1/);
-  assert.match(workflow, /test \"\$result\" = \"2\"/);
+  assert.match(workflow, /test \"\$result\" = \"3\"/);
   assert.match(workflow, /has_table_privilege\('anon'/);
   assert.match(workflow, /has_table_privilege\('authenticated'/);
   assert.match(workflow, /has_table_privilege\('service_role'/);

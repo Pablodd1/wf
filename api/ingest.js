@@ -26,6 +26,12 @@ const {
   publicationBrandPostgrestFilter,
   publicationBrands,
 } = require('./_lib/publication-brands.cjs');
+const {
+  isPublicationReferenceAllowed,
+  normalizePublicationReference,
+  publicationReferencePostgrestFilter,
+  publicationReferences,
+} = require('./_lib/publication-references.cjs');
 
 // ============================================================
 // Load Dictionaries (With Safe Fallbacks)
@@ -123,6 +129,8 @@ async function loadStrictIdentityCandidates(supabaseUrl, readKey, cursor, limit 
     status: 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)',
     order: 'updated_at.desc,record_id.desc',
   });
+  const releaseReferenceFilter = publicationReferencePostgrestFilter();
+  if (releaseReferenceFilter) params.set('canonical_reference', releaseReferenceFilter);
   if (cursor?.createdAt) {
     params.set('or', `(updated_at.lt.${cursor.createdAt},and(updated_at.eq.${cursor.createdAt},record_id.lt.${cursor.id}))`);
   }
@@ -175,6 +183,7 @@ function matchesStrictReleaseFilters(record, {
   search,
 }) {
   if (!record || !isPublicationBrandAllowed(record.brand)) return false;
+  if (!isPublicationReferenceAllowed(record.brand, record.reference)) return false;
   if (requestedBrand && String(record.brand).toLowerCase() !== requestedBrand.toLowerCase()) return false;
   if (itemType && !['all', 'watches'].includes(itemType)) return false;
   if (listingType === 'WTB' && !['WTB', 'NTQ'].includes(record.listing_type)) return false;
@@ -281,6 +290,10 @@ async function loadStrictCursorPage({
     records,
     status: 'ok',
     publicationBrands: publicationBrands(),
+    publicationReferences: publicationReferences().map(entry => ({
+      brand: entry.brand || null,
+      reference: entry.reference,
+    })),
     accessMode: 'server_key',
   };
 }
@@ -1146,6 +1159,8 @@ module.exports = async function handler(req, res) {
         const releaseBrandFilter = publicationBrandPostgrestFilter();
         if (releaseBrandFilter) params.set('brand', releaseBrandFilter);
       }
+      const releaseReferenceFilter = publicationReferencePostgrestFilter();
+      if (!search && releaseReferenceFilter) params.set('reference', releaseReferenceFilter);
       // Customer-facing inventory never includes RECYCLE records. The recent
       // view avoids letting undated legacy imports dominate page one, while the
       // all-inventory view and every explicit search still include those rows.
@@ -1168,7 +1183,16 @@ module.exports = async function handler(req, res) {
           // case-insensitive; full-text message search belongs in a dedicated
           // indexed search service/RPC.
           const parsedSearch = parseTradingSearch(search);
-          if (parsedSearch.reference) params.set('reference', `eq.${parsedSearch.reference}`);
+          if (parsedSearch.reference) {
+            const configuredReferences = publicationReferences();
+            const referenceConfigured = !configuredReferences.length || configuredReferences.some(entry =>
+              entry.normalizedReference === normalizePublicationReference(parsedSearch.reference)
+              && (!requestedBrand || !entry.brand || entry.brand.toLowerCase() === requestedBrand.toLowerCase()));
+            if (!referenceConfigured) {
+              return res.status(400).json({ error: 'Reference is not included in this release' });
+            }
+            params.set('reference', `eq.${parsedSearch.reference}`);
+          }
           if (parsedSearch.brand && !requestedBrand) {
             if (!isPublicationBrandAllowed(parsedSearch.brand)) {
               return res.status(400).json({ error: 'Brand is not included in this release' });
@@ -1268,6 +1292,10 @@ module.exports = async function handler(req, res) {
         records: customerRecords,
         status: 'ok',
         publicationBrands: publicationBrands(),
+        publicationReferences: publicationReferences().map(entry => ({
+          brand: entry.brand || null,
+          reference: entry.reference,
+        })),
         accessMode: serviceKey ? 'server_key' : 'publishable_read_only',
       });
     } catch (e) {

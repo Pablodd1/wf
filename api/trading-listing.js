@@ -4,6 +4,7 @@ const { getClient } = require('./_lib/supabase');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
+const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
@@ -56,6 +57,9 @@ module.exports = async function handler(req, res) {
         }
       : data;
     if (!isPublicationBrandAllowed(resolvedData.brand)) {
+      return res.status(404).json({ error: 'Listing not included in this release' });
+    }
+    if (!isPublicationReferenceAllowed(resolvedData.brand, resolvedData.reference)) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
     if (!isCustomerIdentitySafe(resolvedData)) return res.status(404).json({ error: 'Listing under identity review' });

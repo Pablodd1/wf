@@ -1,5 +1,9 @@
 # Rolex and Patek Client Release
 
+> Superseded for customer scope by
+> [`THREE_WATCH_CLIENT_RELEASE_2026-07-27.md`](THREE_WATCH_CLIENT_RELEASE_2026-07-27.md).
+> This document remains the two-brand infrastructure baseline.
+
 **Control date:** July 27, 2026
 **Release brands:** Rolex and Patek Philippe
 **Database mode:** read-only audit; zero production record writes
@@ -73,7 +77,8 @@ human-approved and is not a customer-visible count.
 - Customer detail cards omit record IDs, parser confidence, internal source
   names, and internal status fields.
 - Both detail experiences compare the posted price with the monthly average for
-  the exact selected dial/condition cohort.
+  the exact selected dial cohort. New, Used, and Unspecified are combined for
+  analytics; condition remains visible on the individual listing.
 - Only visually verified image URLs are rendered.
 - Original source evidence remains preserved but public contact-bearing text is
   withheld; reviewer access stays authenticated.

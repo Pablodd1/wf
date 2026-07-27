@@ -15,7 +15,7 @@ function marketPlausibilityFloor(values) {
     .filter(value => Number.isFinite(value) && value > 0)
     .sort((a, b) => a - b);
   const median = sorted.length ? percentile(sorted, 0.5) : 0;
-  // Exact reference + dial + condition offers below one quarter of the cohort
+  // Exact reference + dial offers below one quarter of the cohort
   // median are not comparable luxury-watch prices. Preserve them as excluded
   // evidence so currency/parser errors remain auditable.
   return Math.max(1000, Math.round(median * 0.25));
@@ -93,11 +93,19 @@ function normalizeConditionDimension(value) {
 function buildComparableCohorts(rows) {
   const groups = new Map();
   for (const row of rows) {
-    const condition = normalizeConditionDimension(row.condition);
     const dial_color = normalizeDimension(row.dial_color);
-    const key = `${condition.toLowerCase()}::${dial_color.toLowerCase()}`;
-    if (!groups.has(key)) groups.set(key, { key, condition, dial_color, rows: [] });
-    groups.get(key).rows.push(row);
+    const key = dial_color.toLowerCase();
+    if (!groups.has(key)) groups.set(key, {
+      key,
+      condition: 'All conditions',
+      dial_color,
+      rows: [],
+      condition_counts: {},
+    });
+    const group = groups.get(key);
+    const condition = normalizeConditionDimension(row.condition);
+    group.rows.push(row);
+    group.condition_counts[condition] = (group.condition_counts[condition] || 0) + 1;
   }
   return [...groups.values()]
     .map(group => ({ ...group, count: group.rows.length }))

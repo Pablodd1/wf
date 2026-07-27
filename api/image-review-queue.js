@@ -2,6 +2,8 @@
 
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 const { boundedInteger } = require('./_lib/review-packets.cjs');
+const { publicationBrands } = require('./_lib/publication-brands.cjs');
+const { publicationReferences } = require('./_lib/publication-references.cjs');
 
 const QUEUE_FIELDS = [
   'source_object_key',
@@ -72,6 +74,7 @@ module.exports = async function handler(req, res) {
 
   const limit = boundedInteger(req.query?.limit, 50, 1, 50);
   const after = cursorValue(req.query?.after);
+  const releaseOnly = String(req.query?.release || '').toLowerCase() === 'true';
   if (req.query?.after && !after) return res.status(400).json({ error: 'Valid after cursor required' });
 
   try {
@@ -82,13 +85,24 @@ module.exports = async function handler(req, res) {
       .in('identity_status', VERIFIED_IDENTITY_STATUSES)
       .order('source_object_key', { ascending: true })
       .limit(limit + 1);
-    if (after) pageQuery = pageQuery.gt('source_object_key', after);
-
-    const countQuery = auth.client
+    let countQuery = auth.client
       .from('image_identity_review_queue')
       .select('source_object_key', { count: 'exact', head: true })
       .eq('image_status', 'SOURCE_LINKED')
       .in('identity_status', VERIFIED_IDENTITY_STATUSES);
+    if (releaseOnly) {
+      const brands = publicationBrands();
+      const references = [...new Set(publicationReferences().map(entry => entry.reference))];
+      if (brands.length) {
+        pageQuery = pageQuery.in('brand', brands);
+        countQuery = countQuery.in('brand', brands);
+      }
+      if (references.length) {
+        pageQuery = pageQuery.in('reference', references);
+        countQuery = countQuery.in('reference', references);
+      }
+    }
+    if (after) pageQuery = pageQuery.gt('source_object_key', after);
 
     const [
       { data: rows, error: pageError },
@@ -114,6 +128,7 @@ module.exports = async function handler(req, res) {
       status: 'ok',
       items: page.map(row => reviewItem(row, identityByRecord.get(row.record_id))),
       total: count || 0,
+      releaseOnly,
       nextCursor: (rows || []).length > limit ? page.at(-1)?.source_object_key || null : null,
     });
   } catch (error) {

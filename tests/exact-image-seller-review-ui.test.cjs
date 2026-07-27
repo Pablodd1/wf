@@ -21,7 +21,7 @@ const sellerLane = source.slice(
 test('image lane loads actual evidence and has no default review decision', () => {
   assert.match(source, /'images'/);
   assert.match(source, />\s*Images\s*</);
-  assert.match(imageLane, /fetch\('\/api\/image-review-queue'/);
+  assert.match(imageLane, /fetch\('\/api\/image-review-queue\?release=true'/);
   assert.match(imageLane, /credentials:\s*'include'/);
   assert.match(imageLane, /src=\{item\.public_url\}/);
   assert.match(imageLane, /item\.raw_message/);

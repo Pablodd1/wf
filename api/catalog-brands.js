@@ -1,6 +1,10 @@
 /** CATALOG BRANDS — /api/catalog-brands */
-const { listCatalogBrands } = require('./_lib/catalog');
+const { listCatalogBrands, listCatalogReferences } = require('./_lib/catalog');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
+const {
+  isPublicationReferenceAllowed,
+  publicationReferences,
+} = require('./_lib/publication-references.cjs');
 
 module.exports = function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -9,7 +13,20 @@ module.exports = function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
-    const brands = listCatalogBrands().filter(item => isPublicationBrandAllowed(item.brand));
+    const referenceReleaseConfigured = publicationReferences().length > 0;
+    const brands = listCatalogBrands()
+      .filter(item => isPublicationBrandAllowed(item.brand))
+      .map(item => {
+        if (!referenceReleaseConfigured) return item;
+        const references = listCatalogReferences(item.brand)
+          .filter(entry => isPublicationReferenceAllowed(item.brand, entry.reference));
+        return {
+          ...item,
+          model_count: new Set(references.map(entry => entry.model)).size,
+          reference_count: references.length,
+        };
+      })
+      .filter(item => !referenceReleaseConfigured || item.reference_count > 0);
     return res.status(200).json({
       success: true,
       brand_count: brands.length,

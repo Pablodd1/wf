@@ -874,7 +874,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
     if (!canLoadBenchmark) return () => controller.abort();
     const reference = listing.reference as string;
     const params = new URLSearchParams({ reference, brand: listing.brand });
-    if (listing.condition) params.set('condition', listing.condition);
     if (listing.dial_color) params.set('dial', listing.dial_color);
     fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })
       .then(response => response.json())
@@ -1062,7 +1061,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             <div className="mt-6 border-t pt-5" style={{ borderColor: BORDER }}>
               <h3 className="text-[15px] font-medium" style={{ color: INK }}>Price when posted</h3>
               <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>
-                Selected listing versus monthly averages for the exact {displayDial(detailListing.dial_color) || 'unspecified dial'} / {cleanValue(detailListing.condition) || 'unspecified condition'} cohort.
+                Selected listing versus monthly averages for the exact {displayDial(detailListing.dial_color) || 'unspecified dial'} cohort. New, Used, and Unspecified listings are combined for analytics; condition remains in the listing description.
               </p>
               <div className="mt-4 h-64 w-full" role="img" aria-label={`Selected listing price compared with monthly average prices for ${meta.title}`}>
                 <ResponsiveContainer>

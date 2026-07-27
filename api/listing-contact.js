@@ -1,4 +1,6 @@
 const { getClient } = require('./_lib/supabase');
+const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
+const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
 
 function normalizePhone(value) {
   const digits = String(value || '').replace(/\D/g, '');
@@ -29,6 +31,10 @@ module.exports = async function handler(req, res) {
       .from('watch_records').select('id,brand,reference,listing_type,dealer_id').eq('id', id).maybeSingle();
     if (listingError) throw listingError;
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
+    if (!isPublicationBrandAllowed(listing.brand)
+      || !isPublicationReferenceAllowed(listing.brand, listing.reference)) {
+      return res.status(404).json({ error: 'Listing not included in this release' });
+    }
     if (!listing.dealer_id) return res.status(200).json({ success: true, contact_available: false, reason: 'DEALER_UNRESOLVED' });
     const { data: lineage, error: lineageError } = await client
       .from('seller_listing_lineage_staging')

@@ -8,6 +8,7 @@
  */
 const { listCatalogReferences } = require('./_lib/catalog');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
+const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
 
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
@@ -29,7 +30,8 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    const catalogReferences = listCatalogReferences(brand);
+    const catalogReferences = listCatalogReferences(brand)
+      .filter(entry => isPublicationReferenceAllowed(brand, entry.reference));
     const models = new Map();
     for (const entry of catalogReferences) {
       if (!models.has(entry.model)) models.set(entry.model, new Set());

@@ -1,7 +1,7 @@
 # WatchFacts CTO Control Center
 
 **Control date:** July 27, 2026
-**Assignment mode:** bounded two-brand implementation after final shadow-normalization control readback
+**Assignment mode:** bounded three-watch client implementation after final shadow-normalization control readback
 **Current release decision:** do not bulk-promote normalization, bundles, images,
 sellers, or duplicates.
 
@@ -16,7 +16,21 @@ It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
 
-## July 27 two-brand client release
+## July 27 three-watch client release
+
+The current deadline release is limited to Rolex 116610LN, Patek Philippe
+5712/1A-001, and Rolex 126710BLNR. The exact selection evidence, condition
+aggregation rule, counts, image review gate, seller gate, preview acceptance
+tests, and rollback are in
+[`THREE_WATCH_CLIENT_RELEASE_2026-07-27.md`](THREE_WATCH_CLIENT_RELEASE_2026-07-27.md).
+
+Condition remains part of each immutable listing description but is no longer
+an analytics cohort dimension. Price Research and Trading Floor market
+comparisons aggregate New, Used, and Unspecified observations by exact
+brand/reference/dial.
+
+The earlier two-brand release remains the predecessor and infrastructure
+baseline:
 
 The current deadline release is limited to Rolex and Patek Philippe. The exact
 scope, counts, controls, UI behavior, image gate, seller gate, timing, and

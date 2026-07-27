@@ -6,6 +6,7 @@ const { classifyResearchEligibility } = require('./_lib/price-research-eligibili
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { isPublicationBrandAllowed, publicationBrands } = require('./_lib/publication-brands.cjs');
+const { isPublicationReferenceAllowed } = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 
 module.exports = async function handler(req, res) {
@@ -32,7 +33,8 @@ module.exports = async function handler(req, res) {
     const verifiedMedia = [...verifiedById.values()].filter(row =>
       row.has_images
       && (!requestedBrand || row.brand === requestedBrand)
-      && (!allowedBrands.length || isPublicationBrandAllowed(row.brand)));
+      && (!allowedBrands.length || isPublicationBrandAllowed(row.brand))
+      && isPublicationReferenceAllowed(row.brand, row.reference));
     if (!verifiedMedia.length) {
       return res.status(200).json({ status: 'ok', records: [], source: 'visually_verified_currency_evidence' });
     }
@@ -69,6 +71,7 @@ module.exports = async function handler(req, res) {
     }).filter(row => {
       const catalog = lookupCatalog(row.reference, row.brand);
       return !classifyResearchEligibility(row, catalog)
+        && isPublicationReferenceAllowed(row.brand, row.reference)
         && Number(row.price_usd) >= 1000
         && Number(row.price_usd) <= 2500000
         && Number(row.confidence) >= 85
