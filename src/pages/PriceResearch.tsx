@@ -869,7 +869,7 @@ export default function PriceResearch() {
                   </>
                 ) : (
                   <div style={{ fontSize: 12, color: RED, lineHeight: 1.5 }}>
-                    Analytics are withheld until at least five catalog-consistent observations exist for the same reference, dial, and condition.
+                    Analytics are withheld until at least five catalog-consistent observations exist for the same reference and dial across all listing conditions.
                   </div>
                 )}
               </div>
