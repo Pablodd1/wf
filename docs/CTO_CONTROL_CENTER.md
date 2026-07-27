@@ -18,6 +18,33 @@ It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
 
+## July 27 continuation: image/listing evidence and AI review
+
+The current continuation decision, request summary, verified pending work, and
+the contained AI-assisted image-review design are in
+[`CTO_CONTINUATION_AND_IMAGE_AI_HANDOFF_2026-07-27.md`](CTO_CONTINUATION_AND_IMAGE_AI_HANDOFF_2026-07-27.md).
+
+The important correction is that visual AI may not treat a brand/model/dial
+resemblance, reference prefix, filename, or visual similarity as an image
+match. It reads one already lineage-linked image blindly; only a complete,
+exact visible-reference agreement may be suggested as `MATCH`, and a human
+still records the signed decision. The assistant never attaches media, changes
+listing fields, or publishes a listing.
+
+The prior review queue work remains in effect: PR #171 added bounded
+field-level human identity assistance, and PR #172 fixed the identity queue's
+safe bounded lookup path. Those workflows are advisory and signed respectively;
+they do not replace the independent image, seller, bundle, duplicate, price,
+or currency gates.
+
+**Current live image release readback:** at `2026-07-27T18:21:56Z`, zero images
+were visually verified. Of 580 source-linked Rolex/Patek candidates, 371
+Rolex records (and zero Patek records) had complete evidence ready for human
+image review; 12 candidates were structurally blocked. This narrow operational
+queue is distinct from the historical all-brand audit count. See the
+continuation handoff for its exact scope and the required deployment-variable
+check before review begins.
+
 ## July 27 full Rolex and Patek release
 
 The active customer mission expands the prior three-reference canary to every
@@ -271,7 +298,7 @@ Current release controls:
 | Currency | [`CURRENCY_RULES.md`](CURRENCY_RULES.md) | Explicit evidence only; bare `$` is ambiguous | Audit exact-line evidence and FX provenance |
 | Catalog identity | [`DATA_IDENTITY_INCIDENT_2026-07-24.md`](DATA_IDENTITY_INCIDENT_2026-07-24.md) | Fail closed | Continue bounded identity staging/readback |
 | Bundles | [`BUNDLE_CANARY_V42_2026-07-18.md`](BUNDLE_CANARY_V42_2026-07-18.md) | Split and review before parent suppression | Work priority children in small review batches |
-| Images | [`IMAGE_RECONCILIATION.md`](IMAGE_RECONCILIATION.md) | Exact audit complete; 1,359 need visual review; 0 verified | Local operator decisions only; no packet publication |
+| Images | [`CTO_CONTINUATION_AND_IMAGE_AI_HANDOFF_2026-07-27.md`](CTO_CONTINUATION_AND_IMAGE_AI_HANDOFF_2026-07-27.md) | Exact audit complete; 1,359 need visual review; 0 verified | Review bounded source-lineage packets with blind AI observation and signed human decision |
 | Seller/dealer | [`IMAGES_SELLER_UNBUNDLED_STATUS_2026-07-24.md`](IMAGES_SELLER_UNBUNDLED_STATUS_2026-07-24.md) | Private evidence; no consent/verification | Owner review of exact identity groups |
 | Duplicates | [`DUPLICATE_AUDIT_PROTOCOL.md`](DUPLICATE_AUDIT_PROTOCOL.md) | No suppression before bundle decisions | Human review only |
 | Green API | [`GREEN_API_INTEGRATION.md`](GREEN_API_INTEGRATION.md) | Converge into immutable raw pipeline | Preserve event/message/media lineage |

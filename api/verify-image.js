@@ -1,223 +1,125 @@
 /**
- * Image vs Reference verification.
+ * Bounded image-review advisory.
  *
- * The vision model reads the watch photo BLIND — it is NOT told the
- * text-extracted reference — so it can independently disagree. We then
- * compare what the image shows against what the text claimed.
- *
- * Verdict routing:
- *   MATCH      -> text reference confirmed by image
- *   MISMATCH   -> image shows a DIFFERENT watch than the text says (route to human review, CRITICAL)
- *   UNVERIFIED -> image too unclear to judge (keep text value, low confidence)
- *
- * Tries Gemini Vision first (best price/latency for vision), falls back
- * to Kimi K2.6 Vision (OpenAI-compatible, same key pool used elsewhere).
+ * A vision model sees only the source image. It never receives the raw listing
+ * or claimed identity. Its observation is compared server-side and cannot
+ * attach media, edit a record, or approve publication.
  */
 
 const KIMI_API_URL = 'https://api.moonshot.ai/v1/chat/completions';
 const { fetchPublicImage } = require('./_lib/safe-image-fetch.cjs');
 const { authorizeMutation } = require('./_lib/authorize-mutation.cjs');
+const { consumeAiQuota, rejectForQuota } = require('./_lib/ai-quota.cjs');
+const { sameOrigin } = require('./_lib/review-packets.cjs');
+const { classifyVisualAdvisory } = require('./_lib/image-visual-advisory.cjs');
 
-function normRef(s) {
-  return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-}
+const VISION_PROMPT = `Inspect only this source watch image. Do not infer values that are not visible and do not decide whether it matches any listing.
 
-// Lenient compare: exact, prefix, or shared 4+ digit core counts as match.
-function refsAgree(textRef, imageRef) {
-  const a = normRef(textRef);
-  const b = normRef(imageRef);
-  if (!a || !b || b === 'UNKNOWN' || a === 'UNKNOWN' || b === 'NA' || b === 'NONE') return null; // can't judge
-  if (a === b) return true;
-  if (a.startsWith(b) || b.startsWith(a)) return true;
-  const coreA = (a.match(/\d{4,6}/) || [])[0];
-  const coreB = (b.match(/\d{4,6}/) || [])[0];
-  if (coreA && coreB && coreA === coreB) return true;
-  return false;
-}
-
-const VISION_PROMPT = `You are a luxury watch authentication expert. Look at this watch photo and report ONLY what you can see — do NOT guess to match any expectation.
-
-Return ONLY a JSON object with exactly these keys and concrete values (no angle brackets, no placeholders):
-brand (string, e.g. "Rolex" or "UNKNOWN")
-referenceVisible (string, any reference number printed on the watch/papers, else "UNKNOWN")
-modelGuess (string, model family if recognizable, else "UNKNOWN")
-dialColor (string, e.g. "Blue")
-legible (boolean true or false)
-confidence (number 0-100)
+Return only a JSON object with exactly these keys:
+brand (string or "UNKNOWN")
+referenceVisible (string printed on the watch, papers, or a clearly associated tag; otherwise "UNKNOWN")
+modelGuess (string or "UNKNOWN")
+dialColor (string or "UNKNOWN")
+legible (boolean)
+confidence (number 0-100 for the observation itself)
 notes (short string)
 
-Set legible to false if the image is blurry, cropped, a box/strap only, or otherwise not a clear watch face. Be honest when unsure. Example: {"brand":"Rolex","referenceVisible":"116610LN","modelGuess":"Submariner","dialColor":"Black","legible":true,"confidence":92,"notes":"clear dial"}`;
+Set legible false for a blurry, cropped, unrelated, box-only, strap-only, or otherwise insufficient image. Never guess a reference from a model, design, color, or market knowledge.`;
 
-async function fetchImageBase64(imageUrl) {
-  const image = await fetchPublicImage(imageUrl);
-  return { base64: image.buffer.toString('base64'), mime: image.mime };
+function boundedText(value, maximum) {
+  return String(value || '').trim().slice(0, maximum);
 }
 
-function repairJson(raw) {
-  return raw
-    .replace(/:\s*<true\|false>/gi, ': false')
-    .replace(/:\s*<(\d+)[^>]*>/g, ': $1')
-    .replace(/:\s*<[^>"]*>/g, ': "UNKNOWN"')
-    .replace(/,\s*}/g, '}')
-    .replace(/,\s*]/g, ']');
-}
-
-function extractJson(text) {
-  if (!text) return null;
-  // Kimi K2.6 is a thinking model: it emits reasoning prose, then the JSON.
-  // Find ALL balanced {...} candidates and try them LAST-first (final answer wins).
-  const candidates = [];
-  const stack = [];
-  let start = -1;
-  for (let i = 0; i < text.length; i++) {
-    const c = text[i];
-    if (c === '{') { if (stack.length === 0) start = i; stack.push(c); }
-    else if (c === '}') {
-      stack.pop();
-      if (stack.length === 0 && start >= 0) { candidates.push(text.slice(start, i + 1)); start = -1; }
-    }
+function parseObservation(raw) {
+  if (!raw) return null;
+  const candidates = raw.match(/\{[\s\S]*?\}/g) || [];
+  for (const candidate of candidates.reverse()) {
+    try {
+      const value = JSON.parse(candidate);
+      if (value && typeof value === 'object') return value;
+    } catch { /* Try the next bounded JSON object. */ }
   }
-  for (let k = candidates.length - 1; k >= 0; k--) {
-    const cand = candidates[k];
-    if (!/"(brand|dialColor|referenceVisible|legible)"/.test(cand)) continue; // must look like our schema
-    for (const attempt of [cand, repairJson(cand), repairJson(cand).replace(/<[^>]*>/g, '"UNKNOWN"')]) {
-      try { return JSON.parse(attempt); } catch (e) { /* try next */ }
-    }
-  }
-  // Fallback: greedy first-to-last
-  const m = text.match(/\{[\s\S]*\}/);
-  if (m) { try { return JSON.parse(repairJson(m[0])); } catch (e) { /* noop */ } }
   return null;
 }
 
 async function visionGemini(key, base64, mime) {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${key}`;
-  const r = await fetch(url, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       contents: [{ parts: [{ text: VISION_PROMPT }, { inline_data: { mime_type: mime, data: base64 } }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: 400 },
+      generationConfig: { temperature: 0, maxOutputTokens: 300, responseMimeType: 'application/json' },
     }),
   });
-  if (!r.ok) throw new Error(`Gemini ${r.status}: ${await r.text()}`);
-  const d = await r.json();
-  return { parsed: extractJson(d.candidates?.[0]?.content?.parts?.[0]?.text || ''), source: 'gemini' };
+  if (!response.ok) throw new Error(`Gemini ${response.status}`);
+  const data = await response.json();
+  const raw = data.candidates?.[0]?.content?.parts?.map(part => part.text || '').join('') || '';
+  return { parsed: parseObservation(raw), source: 'gemini' };
 }
 
 async function visionKimi(key, base64, mime) {
-  const r = await fetch(KIMI_API_URL, {
+  const response = await fetch(KIMI_API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model: 'kimi-k2.6',
-      temperature: 1,
-      max_tokens: 2048,
+      temperature: 0,
+      max_tokens: 500,
       messages: [
-        { role: 'system', content: 'You are a luxury watch authentication expert. Return ONLY valid JSON.' },
-        {
-          role: 'user',
-          content: [
-            { type: 'text', text: VISION_PROMPT },
-            { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
-          ],
-        },
+        { role: 'system', content: 'Return only valid JSON. Do not decide a listing match.' },
+        { role: 'user', content: [{ type: 'text', text: VISION_PROMPT }, { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } }] },
       ],
     }),
   });
-  if (!r.ok) throw new Error(`Kimi ${r.status}: ${await r.text()}`);
-  const d = await r.json();
-  const choice = d.choices?.[0]?.message;
-  const rawText = choice?.content || choice?.reasoning_content || '';
-  return { parsed: extractJson(rawText), source: 'kimi', raw: rawText };
+  if (!response.ok) throw new Error(`Kimi ${response.status}`);
+  const data = await response.json();
+  const raw = data.choices?.[0]?.message?.content || data.choices?.[0]?.message?.reasoning_content || '';
+  return { parsed: parseObservation(raw), source: 'kimi' };
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (!sameOrigin(req)) return res.status(403).json({ error: 'Cross-origin requests are not allowed' });
   if (!await authorizeMutation(req, res, new Set(['reviewer', 'admin']))) return;
 
-  const { imageUrl, reference, brand } = req.body || {};
+  const imageUrl = boundedText(req.body?.imageUrl, 2_000);
+  const claim = {
+    reference: boundedText(req.body?.reference, 120),
+    brand: boundedText(req.body?.brand, 120),
+    model: boundedText(req.body?.model, 200),
+    dialColor: boundedText(req.body?.dialColor, 120),
+  };
   if (!imageUrl) return res.status(400).json({ error: 'imageUrl required' });
-  if (!reference) return res.status(400).json({ error: 'reference required (the text-extracted value to verify)' });
+  if (!claim.reference) return res.status(400).json({ error: 'reference required for exact visual comparison' });
 
   const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   const kimiKey = process.env.KIMI_API_KEY || process.env.MOONSHOT_API_KEY;
-  if (!geminiKey && !kimiKey) return res.status(500).json({ error: 'No vision key (GEMINI_API_KEY or KIMI_API_KEY) configured' });
+  if (!geminiKey && !kimiKey) return res.status(503).json({ error: 'Image review assistance is not configured' });
+
+  const quota = await consumeAiQuota(req, { route: 'image-visual-advisory', limit: 20 });
+  if (!quota.allowed) return rejectForQuota(res, quota);
 
   try {
-    const { base64, mime } = await fetchImageBase64(imageUrl);
-
+    const sourceImage = await fetchPublicImage(imageUrl);
+    const base64 = sourceImage.buffer.toString('base64');
     let vision;
     if (geminiKey) {
-      try { vision = await visionGemini(geminiKey, base64, mime); }
-      catch (e) { console.error('[verify-image] gemini failed:', e.message); }
+      try { vision = await visionGemini(geminiKey, base64, sourceImage.mime); } catch (error) { console.error('[verify-image] Gemini unavailable:', error.message); }
     }
-    if (!vision?.parsed && kimiKey) {
-      vision = await visionKimi(kimiKey, base64, mime);
-    }
-    if (!vision?.parsed) return res.status(502).json({ error: 'Vision providers returned no parseable result', rawSample: (vision?.raw || '').slice(0, 300) });
+    if (!vision?.parsed && kimiKey) vision = await visionKimi(kimiKey, base64, sourceImage.mime);
+    if (!vision?.parsed) return res.status(502).json({ error: 'Vision providers returned no structured observation' });
 
-    const img = vision.parsed;
-
-    // Decide verdict. MISMATCH only on a GENUINE conflict, never on missing data.
-    let verdict, flag = null, severity = 'INFO', reason;
-
-    const refAgree = refsAgree(reference, img.referenceVisible); // true | false | null(unknown)
-
-    // Brand conflict: both brands known AND clearly different.
-    const tb = (brand || '').toUpperCase().replace(/[^A-Z]/g, '');
-    const ib = (img.brand || '').toUpperCase().replace(/[^A-Z]/g, '');
-    const brandKnown = tb && ib && ib !== 'UNKNOWN' && tb !== 'UNKNOWN';
-    const brandConflict = brandKnown && !(tb.startsWith(ib.slice(0, 4)) || ib.startsWith(tb.slice(0, 4)));
-
-    if (img.legible === false || (img.confidence ?? 0) < 40) {
-      verdict = 'UNVERIFIED';
-      reason = 'Image not clear enough to verify (blurry, cropped, or box/strap only).';
-    } else if (brandConflict || refAgree === false) {
-      // Genuine disagreement -> route to human review.
-      verdict = 'MISMATCH';
-      flag = 'IMAGE_MISMATCH';
-      severity = 'CRITICAL';
-      const seen = img.brand && img.brand !== 'UNKNOWN' ? img.brand : 'a different watch';
-      const seenRef = img.referenceVisible && img.referenceVisible !== 'UNKNOWN' ? ` ref "${img.referenceVisible}"` : '';
-      reason = `Image shows ${seen}${seenRef}, but the listing claims ${brand || 'reference'} "${reference}".`;
-    } else if (refAgree === true) {
-      verdict = 'MATCH';
-      reason = `Image reference "${img.referenceVisible}" agrees with listed reference "${reference}".`;
-    } else if (brandKnown && !brandConflict) {
-      // Brand confirmed by image, no printed reference to cross-check -> soft match.
-      verdict = 'MATCH';
-      reason = `Image confirms ${img.brand}${img.modelGuess && img.modelGuess !== 'UNKNOWN' ? ` ${img.modelGuess}` : ''}; no printed reference visible to verify exact ref, but brand is consistent.`;
-    } else {
-      verdict = 'UNVERIFIED';
-      reason = 'Image is clear but shows no printed reference or recognizable brand to cross-check.';
-    }
-
+    const advisory = classifyVisualAdvisory(claim, vision.parsed);
     return res.status(200).json({
       success: true,
-      verdict,                 // MATCH | MISMATCH | UNVERIFIED
-      flag,                    // 'IMAGE_MISMATCH' when MISMATCH, else null
-      severity,                // CRITICAL on mismatch -> human review
-      reason,
-      textReference: reference,
-      image: {
-        brand: img.brand || 'UNKNOWN',
-        referenceVisible: img.referenceVisible || 'UNKNOWN',
-        modelGuess: img.modelGuess || 'UNKNOWN',
-        dialColor: img.dialColor || 'UNKNOWN',
-        legible: img.legible !== false,
-        confidence: img.confidence ?? 0,
-        notes: img.notes || '',
-      },
-      source: vision.source,   // 'gemini' | 'kimi'
+      ...advisory,
+      textReference: claim.reference,
+      source: vision.source,
+      policy: 'AI is advisory only. It does not attach images, alter listing fields, approve a review, or publish a listing.',
     });
-  } catch (e) {
-    console.error('[verify-image]', e.message);
-    const status = /image url|private|reserved|disallowed port|10 mb|not an image/i.test(e.message) ? 400 : 502;
-    return res.status(status).json({ error: status === 400 ? e.message : 'Image verification failed' });
+  } catch (error) {
+    console.error('[verify-image]', error.message);
+    const status = /image url|private|reserved|disallowed port|10 mb|not an image/i.test(error.message) ? 400 : 502;
+    return res.status(status).json({ error: status === 400 ? error.message : 'Image review assistance failed' });
   }
-}
+};
