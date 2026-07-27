@@ -38,6 +38,12 @@ test('image lane loads actual evidence and has no default review decision', () =
   assert.match(imageLane, /Image review page \{cursorHistory\.length \+ 1\}/);
   assert.match(imageLane, />\s*Previous\s*</);
   assert.match(imageLane, />\s*Next\s*</);
+  assert.match(imageLane, /AI visual check \(advisory only\)/);
+  assert.match(imageLane, /Compare image to listing identity/);
+  assert.match(imageLane, /Reads only this source image\. It does not receive the raw listing, change fields, attach the image, or make your review decision\./);
+  assert.match(imageLane, /verifyImageReference\(/);
+  assert.match(imageLane, /Visible reference agrees; reviewer decision is still required/);
+  assert.match(imageLane, /Visible conflict; do not attach until a reviewer adjudicates/);
 });
 
 test('image lane sends only an explicit, reasoned match decision', () => {
@@ -52,6 +58,17 @@ test('image lane sends only an explicit, reasoned match decision', () => {
   assert.match(imageLane, /item\.review_blockers\?\.join/);
   assert.match(imageLane, /!inspected\[key\] \|\| !choice \|\| reason\.trim\(\)\.length < 12/);
   assert.match(imageLane, /!item\.public_url/);
+  const visualCheck = imageLane.slice(imageLane.indexOf('const runVisualCheck'), imageLane.indexOf('return ('));
+  assert.doesNotMatch(visualCheck, /setChoices\(/);
+  assert.doesNotMatch(visualCheck, /setInspected\(/);
+});
+
+test('the browser never contains a direct vision key or visual matching policy', () => {
+  const helper = fs.readFileSync(path.join(__dirname, '..', 'src', 'lib', 'verifyImage.ts'), 'utf8');
+  assert.match(helper, /fetch\('\/api\/verify-image'/);
+  assert.match(helper, /credentials: 'include'/);
+  assert.doesNotMatch(helper, /window\.__GEMINI_API_KEY/);
+  assert.doesNotMatch(helper, /generativelanguage\.googleapis\.com/);
 });
 
 test('seller lane shows masked source evidence and proposed verified dealer', () => {

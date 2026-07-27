@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
+import { verifyImageReference, type VerifyImageResult } from '@/lib/verifyImage';
 import {
   CheckCircle2, AlertTriangle, Eye,
   Search, Clock, MessageSquare, Shield, Database, RefreshCw, KeyRound,
@@ -1195,6 +1196,8 @@ function ImageReviewLane() {
   const [choices, setChoices] = useState<Record<string, 'MATCH' | 'NO_MATCH' | undefined>>({});
   const [inspected, setInspected] = useState<Record<string, boolean>>({});
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [visualChecks, setVisualChecks] = useState<Record<string, VerifyImageResult | undefined>>({});
+  const [visualBusy, setVisualBusy] = useState<string | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -1252,6 +1255,24 @@ function ImageReviewLane() {
     }
   };
 
+  const runVisualCheck = async (item: ImageReviewQueueApiItem) => {
+    if (!item.public_url || !item.reference) return;
+    setVisualBusy(item.source_object_key);
+    setError(null);
+    try {
+      const result = await verifyImageReference(
+        item.public_url,
+        item.reference,
+        item.brand || undefined,
+        item.dial_color || undefined,
+        item.model || undefined,
+      );
+      setVisualChecks(current => ({ ...current, [item.source_object_key]: result }));
+    } finally {
+      setVisualBusy(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-border-default bg-bg-card p-4">
@@ -1266,6 +1287,7 @@ function ImageReviewLane() {
         const key = item.source_object_key;
         const choice = choices[key];
         const reason = reasons[key] || '';
+        const visualCheck = visualChecks[key];
         return (
           <article key={key} className="rounded-xl border border-border-default bg-bg-card p-4">
             <div className="grid gap-4 lg:grid-cols-[minmax(240px,360px)_1fr]">
@@ -1302,6 +1324,42 @@ function ImageReviewLane() {
                     {item.raw_message || String(item.evidence?.raw_message || '') || 'Raw listing unavailable. Do not approve.'}
                   </div>
                 </div>
+
+                <section className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-3 text-xs text-text-secondary">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h3 className="font-bold text-text-primary">AI visual check (advisory only)</h3>
+                      <p className="mt-1 max-w-2xl">Reads only this source image. It does not receive the raw listing, change fields, attach the image, or make your review decision.</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void runVisualCheck(item)}
+                      disabled={!item.public_url || !item.reference || visualBusy === key}
+                      className="rounded-lg border border-sky-400/40 px-3 py-2 text-xs font-bold text-sky-200 disabled:opacity-40"
+                    >
+                      {visualBusy === key ? 'Checking image…' : 'Compare image to listing identity'}
+                    </button>
+                  </div>
+                  {!item.reference && <p className="mt-2 text-amber-200">A reference is required before AI can make an exact visual comparison.</p>}
+                  {visualCheck && (
+                    <div className="mt-3 rounded-md border border-border-default bg-bg-elevated p-3">
+                      {visualCheck.success ? (
+                        <>
+                          <p className={visualCheck.verdict === 'MISMATCH' ? 'font-bold text-red-300' : 'font-bold text-text-primary'}>
+                            {visualCheck.verdict === 'MATCH' ? 'Visible reference agrees; reviewer decision is still required.' : visualCheck.verdict === 'MISMATCH' ? 'Visible conflict; do not attach until a reviewer adjudicates.' : 'No exact visual proof; keep this unverified until you inspect it.'}
+                          </p>
+                          <p className="mt-1">{visualCheck.reason}</p>
+                          <dl className="mt-3 grid gap-2 sm:grid-cols-2">
+                            <div><dt className="text-text-muted">Observed brand</dt><dd>{visualCheck.image?.brand || 'UNKNOWN'} ({visualCheck.checks?.brand || 'NOT_VISIBLE'})</dd></div>
+                            <div><dt className="text-text-muted">Observed reference</dt><dd>{visualCheck.image?.referenceVisible || 'UNKNOWN'} ({visualCheck.checks?.reference || 'NOT_VISIBLE'})</dd></div>
+                            <div><dt className="text-text-muted">Observed model</dt><dd>{visualCheck.image?.modelGuess || 'UNKNOWN'} ({visualCheck.checks?.model || 'NOT_VISIBLE'})</dd></div>
+                            <div><dt className="text-text-muted">Observed dial</dt><dd>{visualCheck.image?.dialColor || 'UNKNOWN'} ({visualCheck.checks?.dial || 'NOT_VISIBLE'})</dd></div>
+                          </dl>
+                        </>
+                      ) : <p className="text-red-300">AI visual check unavailable: {visualCheck.error || visualCheck.reason}</p>}
+                    </div>
+                  )}
+                </section>
 
                 {item.review_blocked && (
                   <p className="rounded-lg border border-red-500/30 bg-red-500/5 p-3 text-xs text-red-300">

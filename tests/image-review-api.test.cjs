@@ -10,6 +10,7 @@ const decisionHandler = require('../api/image-review-decision.js');
 const ROOT = path.resolve(__dirname, '..');
 const queueSource = fs.readFileSync(path.join(ROOT, 'api', 'image-review-queue.js'), 'utf8');
 const decisionSource = fs.readFileSync(path.join(ROOT, 'api', 'image-review-decision.js'), 'utf8');
+const advisorySource = fs.readFileSync(path.join(ROOT, 'api', 'verify-image.js'), 'utf8');
 
 test('image review queue is reviewer-only, bounded, keyset-paginated, and approval-safe', () => {
   assert.match(queueSource, /new Set\(\['reviewer', 'admin'\]\)/);
@@ -139,4 +140,15 @@ test('image decisions use the current server-side identity snapshot and the audi
   assert.doesNotMatch(decisionSource, /\.from\('watch_records'\)/);
   assert.doesNotMatch(decisionSource, /\.from\('media_manifest'\)/);
   assert.doesNotMatch(decisionSource, /\.(?:update|insert|delete)\(/);
+});
+
+test('visual assistance is reviewer-only, same-origin, quota-bounded, and cannot write a listing', () => {
+  assert.match(advisorySource, /if \(!sameOrigin\(req\)\)/);
+  assert.match(advisorySource, /new Set\(\['reviewer', 'admin'\]\)/);
+  assert.match(advisorySource, /consumeAiQuota\(req, \{ route: 'image-visual-advisory', limit: 20 \}\)/);
+  assert.match(advisorySource, /classifyVisualAdvisory\(claim, vision\.parsed\)/);
+  assert.match(advisorySource, /does not attach images, alter listing fields, approve a review, or publish a listing/);
+  assert.doesNotMatch(advisorySource, /Access-Control-Allow-Origin/);
+  assert.doesNotMatch(advisorySource, /\.from\('watch_records'\)/);
+  assert.doesNotMatch(advisorySource, /\.(?:update|insert|delete)\(/);
 });
