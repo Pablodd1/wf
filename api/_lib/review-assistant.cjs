@@ -145,7 +145,7 @@ function catalogSuggestions(rawMessage, currentGuess) {
   }
 
   const match = confirmation.match;
-  const evidenceLabel = `Exact ${match.matchType || 'catalog'} match for raw reference ${reference}`;
+  const evidenceLabel = `Exact catalog match (${match.matchType || 'verified'}) for raw reference ${reference}`;
   const suggestions = [];
   const add = (field, value, reason) => {
     const cleaned = cleanValue(value, 160);

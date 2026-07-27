@@ -6,6 +6,12 @@ const {
   rawSupportsExactReference,
 } = require('./_lib/catalog-confirmation.cjs');
 const { sameOrigin, sha256 } = require('./_lib/review-packets.cjs');
+const {
+  loadIdentityRow,
+  loadLedgerBlocks,
+  passesStaticReleaseGates,
+  unresolvedIdentity,
+} = require('./_lib/identity-review-source.cjs');
 
 const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe']);
 const RPC_DECISIONS = {
@@ -54,18 +60,18 @@ module.exports = async function handler(req, res) {
 
   const { recordId, decision, reason, canonical } = validation.value;
   try {
-    const { data: queueRow, error: queueError } = await auth.client
-      .from('two_brand_identity_review_queue')
-      .select('record_id,identity_status,brand,model,reference,dial_color,raw_message,source,source_type,release_blockers,prior_identity_evidence,review_disposition')
-      .eq('record_id', recordId)
-      .maybeSingle();
-    if (queueError) throw queueError;
+    const queueRow = await loadIdentityRow(auth.client, recordId);
     if (!queueRow) {
       return res.status(409).json({ error: 'Identity review item changed or is no longer pending; reload the queue' });
     }
-    if (queueRow.review_disposition !== 'READY_FOR_IDENTITY_REVIEW') {
+    const { bundleIds, duplicateIds } = await loadLedgerBlocks(auth.client, [queueRow]);
+    const reviewReady = unresolvedIdentity(queueRow)
+      && passesStaticReleaseGates(queueRow)
+      && !bundleIds.has(recordId)
+      && !duplicateIds.has(recordId);
+    if (!reviewReady) {
       return res.status(409).json({
-        error: `This item is routed to ${queueRow.review_disposition || 'another review lane'}; resolve that blocker before identity review`,
+        error: 'This item is routed to another review lane; resolve its normalization, bundle, duplicate, or identity-state blocker before identity review',
       });
     }
     if (!text(queueRow.raw_message, 1_000_000)) {
@@ -100,8 +106,8 @@ module.exports = async function handler(req, res) {
       source_type: queueRow.source_type || null,
       prior_identity_status: queueRow.identity_status,
       prior_identity_evidence: queueRow.prior_identity_evidence || {},
-      release_blockers_at_review: queueRow.release_blockers || [],
-      review_disposition_at_review: queueRow.review_disposition,
+      release_blockers_at_review: queueRow.identity_status === 'CONFLICT' ? ['IDENTITY_CONFLICT'] : [],
+      review_disposition_at_review: 'READY_FOR_IDENTITY_REVIEW',
       catalog_confirmation: catalog,
       reviewer_role: auth.role,
     };
@@ -126,7 +132,7 @@ module.exports = async function handler(req, res) {
       result,
       identity_status: RPC_DECISIONS[decision],
       customer_publishable: Boolean(published),
-      remaining_release_blockers: published ? [] : queueRow.release_blockers || [],
+      remaining_release_blockers: published ? [] : ['OTHER_RELEASE_GATES_PENDING'],
     });
   } catch (error) {
     console.error('[identity-review-decision]', error);
