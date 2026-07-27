@@ -16,6 +16,10 @@ PUBLICATION_REFERENCES=Rolex::116610LN|Patek Philippe::5712/1A|Patek Philippe::5
 STRICT_VERIFIED_PUBLICATION=true
 ```
 
+The exact reference list is also the code-level fail-closed default. A missing
+deployment variable therefore cannot reopen unrelated references; a later
+reviewed release must replace the list explicitly.
+
 The two Patek reference spellings are one catalog-equivalent release cohort,
 not two watches.
 

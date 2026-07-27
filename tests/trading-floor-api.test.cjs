@@ -75,10 +75,10 @@ test('all inventory still excludes recycle rows but includes undated imports', a
 });
 
 test('reference search reaches dated and undated eligible market inventory', async () => {
-  const url = await runQuery({ quality: 'market', q: '116500LN' });
+  const url = await runQuery({ quality: 'market', q: '116610LN' });
   assert.equal(url.searchParams.get('or'), '(verdict.neq.RECYCLE,verdict.is.null)');
   assert.equal(url.searchParams.get('id'), 'not.like.preview_demo_*');
-  assert.equal(url.searchParams.get('reference'), 'eq.116500LN');
+  assert.equal(url.searchParams.get('reference'), 'eq.116610LN');
   assert.equal(url.searchParams.has('created_at'), false);
 });
 

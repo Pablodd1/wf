@@ -1,11 +1,21 @@
 'use strict';
 
+const THREE_WATCH_RELEASE_REFERENCES = [
+  'Rolex::116610LN',
+  'Patek Philippe::5712/1A',
+  'Patek Philippe::5712/1A-001',
+  'Rolex::126710BLNR',
+].join('|');
+
 function normalizePublicationReference(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
-  return [...new Map(String(value || '')
+  // This release must fail closed even when a deployment omits its environment
+  // override. A later reviewed release can replace the exact list explicitly.
+  const releaseConfiguration = String(value || '').trim() || THREE_WATCH_RELEASE_REFERENCES;
+  return [...new Map(releaseConfiguration
     .split('|')
     .map(entry => entry.trim())
     .filter(Boolean)
@@ -47,6 +57,7 @@ function publicationReferencePostgrestFilter(value = process.env.PUBLICATION_REF
 }
 
 module.exports = {
+  THREE_WATCH_RELEASE_REFERENCES,
   isPublicationReferenceAllowed,
   normalizePublicationReference,
   publicationReferencePostgrestFilter,

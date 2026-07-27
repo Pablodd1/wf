@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const {
+  THREE_WATCH_RELEASE_REFERENCES,
   isPublicationReferenceAllowed,
   normalizePublicationReference,
   publicationReferencePostgrestFilter,
@@ -38,7 +39,12 @@ test('PostgREST release filter is a bounded exact IN predicate', () => {
   );
 });
 
-test('an unset reference release configuration preserves existing behavior', () => {
-  assert.equal(isPublicationReferenceAllowed('Rolex', '126610LN', ''), true);
-  assert.equal(publicationReferencePostgrestFilter(''), null);
+test('an unset reference release configuration fails closed to the reviewed three-watch release', () => {
+  assert.equal(THREE_WATCH_RELEASE_REFERENCES, configured);
+  assert.equal(isPublicationReferenceAllowed('Rolex', '126710BLNR', ''), true);
+  assert.equal(isPublicationReferenceAllowed('Rolex', '126610LN', ''), false);
+  assert.equal(
+    publicationReferencePostgrestFilter(''),
+    'in.("116610LN","5712/1A","5712/1A-001","126710BLNR")',
+  );
 });
