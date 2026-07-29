@@ -5,6 +5,9 @@ const test = require('node:test');
 const {
   FULL_REVIEWED_BRAND_RELEASE,
   MIN_RELEASE_CONFIDENCE,
+  REVIEWED_PANERAI_RECORD_PREFIX,
+  REVIEWED_PANERAI_REFERENCES,
+  REVIEWED_PANERAI_SOURCE,
   THREE_WATCH_RELEASE_REFERENCES,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
@@ -43,13 +46,13 @@ test('PostgREST release filter is a bounded exact IN predicate', () => {
   );
 });
 
-test('an unset reference release configuration fails closed to the reviewed three-watch release', () => {
-  assert.equal(THREE_WATCH_RELEASE_REFERENCES, configured);
+test('an unset reference release configuration fails closed to the reviewed release', () => {
+  assert.match(THREE_WATCH_RELEASE_REFERENCES, /Audemars Piguet::16202ST/);
   assert.equal(isPublicationReferenceAllowed('Rolex', '126710BLNR', ''), true);
   assert.equal(isPublicationReferenceAllowed('Rolex', '126610LN', ''), false);
   assert.equal(
     publicationReferencePostgrestFilter(''),
-    'in.("116610LN","5712/1A","5712/1A-001","126710BLNR")',
+    'in.("116610LN","5712/1A","5712/1A-001","126710BLNR","16202ST","15500ST","15500","15400")',
   );
 });
 
@@ -76,13 +79,13 @@ test('release eligibility requires approved finite confidence at or above 90', (
   assert.equal(isReleaseListingEligible({ ...base, brand: 'Patek Philippe' }, configured), false);
 });
 
-test('full reviewed scope expands only Rolex and Patek references', () => {
+test('full reviewed scope expands only the approved full-release brands', () => {
   assert.equal(FULL_REVIEWED_BRAND_RELEASE, 'ALL_REVIEWED');
   assert.deepEqual(publicationReferences(FULL_REVIEWED_BRAND_RELEASE), []);
   assert.equal(publicationReferencePostgrestFilter(FULL_REVIEWED_BRAND_RELEASE), null);
   assert.equal(isPublicationReferenceAllowed('Rolex', '126500LN', FULL_REVIEWED_BRAND_RELEASE), true);
   assert.equal(isPublicationReferenceAllowed('Patek Philippe', '5167A-001', FULL_REVIEWED_BRAND_RELEASE), true);
-  assert.equal(isPublicationReferenceAllowed('Audemars Piguet', '15500ST', FULL_REVIEWED_BRAND_RELEASE), false);
+  assert.equal(isPublicationReferenceAllowed('Audemars Piguet', '15500ST', FULL_REVIEWED_BRAND_RELEASE), true);
   assert.equal(isPublicationReferenceAllowed('Rolex', '', FULL_REVIEWED_BRAND_RELEASE), false);
   assert.equal(isReleaseListingEligible({
     brand: 'Rolex',
@@ -90,4 +93,22 @@ test('full reviewed scope expands only Rolex and Patek references', () => {
     verdict: 'APPROVED',
     confidence: 90,
   }, FULL_REVIEWED_BRAND_RELEASE), true);
+});
+
+test('reviewed Panerai release is limited to the exact workbook records', () => {
+  assert.equal(REVIEWED_PANERAI_REFERENCES.length, 71);
+  assert.equal(isPublicationReferenceAllowed('Panerai', 'PAM00590', ''), true);
+  assert.equal(isPublicationReferenceAllowed('Panerai', 'PAM99999', FULL_REVIEWED_BRAND_RELEASE), false);
+  const approved = {
+    id: `${REVIEWED_PANERAI_RECORD_PREFIX}123`,
+    brand: 'Panerai',
+    reference: 'PAM00590',
+    source: REVIEWED_PANERAI_SOURCE,
+    verdict: 'APPROVED',
+    confidence: 100,
+  };
+  assert.equal(isReleaseListingEligible(approved, ''), true);
+  assert.equal(isReleaseListingEligible({ ...approved, id: 'legacy_123' }, ''), false);
+  assert.equal(isReleaseListingEligible({ ...approved, source: 'legacy' }, ''), false);
+  assert.equal(isReleaseListingEligible({ ...approved, reference: 'PAM99999' }, ''), false);
 });

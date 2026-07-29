@@ -124,6 +124,73 @@ test('customer inventory admits an exact APPROVED 90 row only after canonical id
   }
 });
 
+test('Panerai inventory reads only the controlled reviewed workbook release', async () => {
+  const originalFetch = global.fetch;
+  const id = 'reviewed_panerai_auction_1';
+  let initialRequest = null;
+  global.fetch = async url => {
+    const requestUrl = String(url);
+    const parsed = new URL(requestUrl);
+    const select = parsed.searchParams.get('select') || '';
+    let body = [];
+    if (requestUrl.includes('/trading_floor_verified_listings?') && select.includes('model')) {
+      initialRequest = parsed;
+      body = [{
+        id,
+        brand: 'Panerai',
+        model: 'Luminor Marina',
+        reference: 'PAM00590',
+        dial_color: 'Black',
+        condition: 'Used',
+        listing_type: 'WTS',
+        verdict: 'APPROVED',
+        confidence: 100,
+        source: 'PANERAI_REVIEWED_XLSX_20260729',
+        price_usd: 6500,
+        currency: 'USD',
+        created_at: '2026-07-01T00:00:00Z',
+        has_images: true,
+      }];
+    } else if (requestUrl.includes('/listing_identity_reviews?')) {
+      body = [{
+        record_id: id,
+        canonical_brand: 'Panerai',
+        canonical_model: 'Luminor Marina',
+        canonical_reference: 'PAM00590',
+        canonical_dial_color: 'Black',
+        status: 'HUMAN_APPROVED',
+      }];
+    } else if (requestUrl.includes('/trading_floor_verified_listings?')) {
+      body = [{
+        id,
+        has_images: true,
+        thumbnail_url: 'https://images.example/pam00590.jpg',
+        image_urls: ['https://images.example/pam00590.jpg'],
+      }];
+    } else if (requestUrl.includes('/watch_records?')) {
+      body = [{ id, raw_message: 'Panerai PAM00590 Black HKD 50,700' }];
+    }
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { 'content-range': '0-0/1', 'content-type': 'application/json' },
+    });
+  };
+  try {
+    const res = responseRecorder();
+    await handler({ method: 'GET', query: { quality: 'market', brand: 'Panerai' } }, res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(initialRequest.pathname, '/rest/v1/trading_floor_verified_listings');
+    assert.equal(initialRequest.searchParams.get('id'), 'like.reviewed_panerai_*');
+    assert.deepEqual(res.body.records.map(row => row.id), [id]);
+    assert.equal(res.body.records[0].price_usd, 6500);
+    assert.equal(res.body.records[0].price_evidence_status, 'HUMAN_APPROVED_WORKBOOK');
+    assert.equal(res.body.records[0].thumbnail_url, 'https://images.example/pam00590.jpg');
+    assert.equal(res.body.publicationScope, 'REVIEWED_FILE');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
 test('customer inventory counts one deterministic repost from the same verified dealer', async () => {
   const originalFetch = global.fetch;
   const marketRows = ['newest', 'older'].map((id, index) => ({
@@ -295,7 +362,7 @@ test('strict release fails closed when PostgREST returns its 1,000-row ceiling',
 test('recent inventory excludes recycle rows and undated imports', async () => {
   const url = await runQuery({ quality: 'market' });
   assert.equal(url.searchParams.get('status'), 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)');
-  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","5712/1A","5712/1A-001","126710BLNR")');
+  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","5712/1A","5712/1A-001","126710BLNR","16202ST","15500ST","15500","15400")');
   assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
@@ -307,7 +374,7 @@ test('all inventory still excludes recycle rows but includes undated imports', a
 
 test('reference search reaches dated and undated eligible market inventory', async () => {
   const url = await runQuery({ quality: 'market', q: '116610LN' });
-  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","5712/1A","5712/1A-001","126710BLNR")');
+  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","5712/1A","5712/1A-001","126710BLNR","16202ST","15500ST","15500","15400")');
   assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 

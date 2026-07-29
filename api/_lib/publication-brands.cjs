@@ -1,10 +1,17 @@
 'use strict';
 
+const CONTROLLED_FILE_RELEASE_BRANDS = ['Panerai'];
+
 function publicationBrands(value = process.env.PUBLICATION_BRANDS) {
-  return [...new Set(String(value || '')
+  const configured = String(value || '')
     .split(/[|,]/)
     .map(brand => brand.trim())
-    .filter(Boolean))];
+    .filter(Boolean);
+  if (!configured.length) return [];
+  return [...new Set([
+    ...configured,
+    ...CONTROLLED_FILE_RELEASE_BRANDS,
+  ])];
 }
 
 function isPublicationBrandAllowed(brand, value = process.env.PUBLICATION_BRANDS) {
@@ -21,6 +28,7 @@ function publicationBrandPostgrestFilter(value = process.env.PUBLICATION_BRANDS)
 }
 
 module.exports = {
+  CONTROLLED_FILE_RELEASE_BRANDS,
   isPublicationBrandAllowed,
   publicationBrandPostgrestFilter,
   publicationBrands,

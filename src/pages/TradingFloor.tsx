@@ -42,7 +42,7 @@ const INTENT_OPTIONS = [
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
-const RELEASE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet'] as const;
+const RELEASE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai'] as const;
 
 interface ListingRecord {
   id: string;
@@ -432,7 +432,7 @@ export default function TradingFloor() {
 
           <div className="hidden gap-4 md:grid" aria-label="Marketplace filters">
             <FilterGroup label="Release brands">
-              <FilterChoice active={!brandFilter} label="Both brands" onClick={() => {
+              <FilterChoice active={!brandFilter} label="All release brands" onClick={() => {
                 resetResults();
                 updateViewParams({ brand: null });
               }} />
@@ -686,7 +686,7 @@ function MobileFilterSheet({
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
           <FilterGroup label="Release brands">
-            <FilterChoice active={!draftBrand} label="Both brands" onClick={() => setDraftBrand('')} />
+            <FilterChoice active={!draftBrand} label="All release brands" onClick={() => setDraftBrand('')} />
             {RELEASE_BRANDS.map(value => (
               <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
             ))}

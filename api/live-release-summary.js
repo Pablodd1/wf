@@ -4,8 +4,12 @@
  * Floor. It deliberately does not count the narrower Price Research cohort.
  */
 const { getClient } = require('./_lib/supabase');
+const {
+  REVIEWED_PANERAI_RECORD_PREFIX,
+  REVIEWED_PANERAI_SOURCE,
+} = require('./_lib/publication-references.cjs');
 
-const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet'];
+const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai'];
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cached = null;
 
@@ -13,10 +17,18 @@ async function loadSummary() {
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.payload;
   const client = getClient();
   const results = await Promise.all(BRANDS.map(async brand => {
-    const { count, error } = await client
-      .from('two_brand_verified_trading_release_cache')
+    let query = client
+      .from(brand === 'Panerai'
+        ? 'trading_floor_verified_listings'
+        : 'two_brand_verified_trading_release_cache')
       .select('id', { count: 'exact', head: true })
       .eq('brand', brand);
+    if (brand === 'Panerai') {
+      query = query
+        .like('id', `${REVIEWED_PANERAI_RECORD_PREFIX}%`)
+        .eq('source', REVIEWED_PANERAI_SOURCE);
+    }
+    const { count, error } = await query;
     if (error) throw error;
     return { brand, listing_count: Number(count || 0) };
   }));

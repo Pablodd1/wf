@@ -13,6 +13,23 @@ const THREE_WATCH_RELEASE_REFERENCES = [
 const FULL_REVIEWED_BRAND_RELEASE = 'ALL_REVIEWED';
 const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe', 'audemars piguet']);
 const MIN_RELEASE_CONFIDENCE = 90;
+const REVIEWED_PANERAI_RECORD_PREFIX = 'reviewed_panerai_';
+const REVIEWED_PANERAI_SOURCE = 'PANERAI_REVIEWED_XLSX_20260729';
+const REVIEWED_PANERAI_REFERENCES = [
+  'PAM00005', 'PAM00028', 'PAM00048', 'PAM00088', 'PAM00093', 'PAM00104',
+  'PAM00111', 'PAM00112', 'PAM00233', 'PAM00241', 'PAM00292', 'PAM00305',
+  'PAM00307', 'PAM00346', 'PAM00375', 'PAM00380', 'PAM00395', 'PAM00514',
+  'PAM00569', 'PAM00571', 'PAM00590', 'PAM00609', 'PAM00628', 'PAM00660',
+  'PAM00671', 'PAM00676', 'PAM00685', 'PAM00692', 'PAM00741', 'PAM00760',
+  'PAM00774', 'PAM00777', 'PAM00779', 'PAM00904', 'PAM00926', 'PAM00927',
+  'PAM00973', 'PAM01000', 'PAM01005', 'PAM01041', 'PAM01043', 'PAM01046',
+  'PAM01084', 'PAM01085', 'PAM01110', 'PAM01124', 'PAM01229', 'PAM01249',
+  'PAM01250', 'PAM01287', 'PAM01289', 'PAM01291', 'PAM01293', 'PAM01305',
+  'PAM01312', 'PAM01314', 'PAM01321', 'PAM01334', 'PAM01335', 'PAM01359',
+  'PAM01372', 'PAM01392', 'PAM01393', 'PAM01409', 'PAM01441', 'PAM01499',
+  'PAM01518', 'PAM01661', 'PAM01669', 'PAM01697', 'PAM02068',
+];
+const REVIEWED_PANERAI_REFERENCE_SET = new Set(REVIEWED_PANERAI_REFERENCES);
 
 function normalizePublicationReference(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -40,6 +57,24 @@ function parsedReferences(value) {
 
 const REVIEWED_RELEASE_REFERENCES = parsedReferences(THREE_WATCH_RELEASE_REFERENCES);
 
+function isReviewedPaneraiReference(brand, reference) {
+  return String(brand || '').trim().toLowerCase() === 'panerai'
+    && REVIEWED_PANERAI_REFERENCE_SET.has(String(reference || '').trim().toUpperCase());
+}
+
+function isReviewedPaneraiReleaseRecord(record) {
+  const confidence = Number(record?.confidence);
+  return Boolean(
+    record
+    && isReviewedPaneraiReference(record.brand, record.reference)
+    && String(record.id || '').startsWith(REVIEWED_PANERAI_RECORD_PREFIX)
+    && String(record.source || '') === REVIEWED_PANERAI_SOURCE
+    && String(record.verdict || '').trim().toUpperCase() === 'APPROVED'
+    && Number.isFinite(confidence)
+    && confidence >= MIN_RELEASE_CONFIDENCE
+  );
+}
+
 function isFullReviewedBrandRelease(value = process.env.PUBLICATION_REFERENCES) {
   return String(value || '').trim().toUpperCase() === FULL_REVIEWED_BRAND_RELEASE;
 }
@@ -59,6 +94,7 @@ function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
 }
 
 function isPublicationReferenceAllowed(brand, reference, value = process.env.PUBLICATION_REFERENCES) {
+  if (isReviewedPaneraiReference(brand, reference)) return true;
   if (isFullReviewedBrandRelease(value)) {
     return FULL_REVIEWED_BRANDS.has(String(brand || '').trim().toLowerCase())
       && Boolean(normalizePublicationReference(reference));
@@ -73,6 +109,9 @@ function isPublicationReferenceAllowed(brand, reference, value = process.env.PUB
 }
 
 function isReleaseListingEligible(record, value = process.env.PUBLICATION_REFERENCES) {
+  if (String(record?.brand || '').trim().toLowerCase() === 'panerai') {
+    return isReviewedPaneraiReleaseRecord(record);
+  }
   const confidence = Number(record?.confidence);
   return Boolean(
     record
@@ -85,6 +124,7 @@ function isReleaseListingEligible(record, value = process.env.PUBLICATION_REFERE
 
 function publicationReferencesForBrand(brand, value = process.env.PUBLICATION_REFERENCES) {
   const normalizedBrand = String(brand || '').trim().toLowerCase();
+  if (normalizedBrand === 'panerai') return [...REVIEWED_PANERAI_REFERENCES];
   return publicationReferences(value)
     .filter(entry => entry.brand.toLowerCase() === normalizedBrand)
     .map(entry => entry.reference);
@@ -100,10 +140,15 @@ module.exports = {
   FULL_REVIEWED_BRAND_RELEASE,
   FULL_REVIEWED_BRANDS,
   MIN_RELEASE_CONFIDENCE,
+  REVIEWED_PANERAI_RECORD_PREFIX,
+  REVIEWED_PANERAI_REFERENCES,
+  REVIEWED_PANERAI_SOURCE,
   THREE_WATCH_RELEASE_REFERENCES,
   isFullReviewedBrandRelease,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
+  isReviewedPaneraiReference,
+  isReviewedPaneraiReleaseRecord,
   normalizePublicationReference,
   publicationReferencePostgrestFilter,
   publicationReferences,

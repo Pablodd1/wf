@@ -8,13 +8,30 @@ const {
   publicationBrands,
 } = require('../api/_lib/publication-brands.cjs');
 
-test('two-brand release configuration is exact and case-insensitive', () => {
+test('configured release includes the controlled reviewed Panerai file', () => {
   const configured = 'Rolex|Patek Philippe';
-  assert.deepEqual(publicationBrands(configured), ['Rolex', 'Patek Philippe']);
+  assert.deepEqual(publicationBrands(configured), ['Rolex', 'Patek Philippe', 'Panerai']);
   assert.equal(isPublicationBrandAllowed('rolex', configured), true);
   assert.equal(isPublicationBrandAllowed('Patek Philippe', configured), true);
+  assert.equal(isPublicationBrandAllowed('Panerai', configured), true);
   assert.equal(isPublicationBrandAllowed('Audemars Piguet', configured), false);
-  assert.equal(publicationBrandPostgrestFilter(configured), 'in.("Rolex","Patek Philippe")');
+  assert.equal(publicationBrandPostgrestFilter(configured), 'in.("Rolex","Patek Philippe","Panerai")');
+});
+
+test('reviewed Panerai release can be added without opening other brands', () => {
+  const configured = 'Rolex|Patek Philippe|Audemars Piguet|Panerai';
+  assert.deepEqual(publicationBrands(configured), [
+    'Rolex',
+    'Patek Philippe',
+    'Audemars Piguet',
+    'Panerai',
+  ]);
+  assert.equal(isPublicationBrandAllowed('Panerai', configured), true);
+  assert.equal(isPublicationBrandAllowed('Omega', configured), false);
+  assert.equal(
+    publicationBrandPostgrestFilter(configured),
+    'in.("Rolex","Patek Philippe","Audemars Piguet","Panerai")',
+  );
 });
 
 test('an unset release configuration preserves the full catalog', () => {

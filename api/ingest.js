@@ -29,6 +29,8 @@ const {
   publicationBrands,
 } = require('./_lib/publication-brands.cjs');
 const {
+  REVIEWED_PANERAI_RECORD_PREFIX,
+  REVIEWED_PANERAI_REFERENCES,
   isFullReviewedBrandRelease,
   isReleaseListingEligible,
   publicationReferencePostgrestFilter,
@@ -316,6 +318,7 @@ async function loadFullReviewedBrandCursorPage({
   search,
   imagesOnly,
 }) {
+  const controlledPaneraiRelease = String(requestedBrand || '').trim().toLowerCase() === 'panerai';
   if (itemType && !['all', 'watches'].includes(itemType)) {
     return {
       count: 0,
@@ -328,8 +331,8 @@ async function loadFullReviewedBrandCursorPage({
       records: [],
       status: 'ok',
       publicationBrands: publicationBrands(),
-      publicationReferences: [],
-      publicationScope: 'ALL_REVIEWED',
+      publicationReferences: controlledPaneraiRelease ? REVIEWED_PANERAI_REFERENCES : [],
+      publicationScope: controlledPaneraiRelease ? 'REVIEWED_FILE' : 'ALL_REVIEWED',
       accessMode: 'server_key',
     };
   }
@@ -341,6 +344,7 @@ async function loadFullReviewedBrandCursorPage({
     select: 'id,brand,model,reference,dial_color,condition,year,price_raw,price_usd,currency,confidence,verdict,source,source_type,listing_type,listing_date,listing_status,created_at,has_images,thumbnail_url,image_urls,region,identity_review_status',
     order: 'created_at.desc.nullslast,id.desc',
   });
+  if (controlledPaneraiRelease) params.set('id', `like.${REVIEWED_PANERAI_RECORD_PREFIX}*`);
   if (listingType === 'WTB') params.set('listing_type', 'in.(WTB,NTQ)');
   else if (listingType) params.set('listing_type', `eq.${listingType}`);
   if (requestedBrand) params.set('brand', `eq.${requestedBrand}`);
@@ -355,14 +359,14 @@ async function loadFullReviewedBrandCursorPage({
   if (cursorFilter) params.set('and', `(${cursorFilter})`);
 
   const response = await fetch(
-    `${supabaseUrl}/rest/v1/two_brand_verified_trading_release_cache?${params.toString()}`,
+    `${supabaseUrl}/rest/v1/${controlledPaneraiRelease ? 'trading_floor_verified_listings' : 'two_brand_verified_trading_release_cache'}?${params.toString()}`,
     {
       headers: {
         apikey: readKey,
         Authorization: `Bearer ${readKey}`,
         'Range-Unit': 'items',
         Range: `${start}-${end}`,
-        Prefer: 'return=representation',
+        Prefer: 'count=exact',
       },
     },
   );
@@ -406,21 +410,30 @@ async function loadFullReviewedBrandCursorPage({
       },
       listEquivalentReferences(resolved.reference, resolved.brand),
     );
+    const reviewedWorkbookPrice = controlledPaneraiRelease
+      && Number.isFinite(Number(resolved.price_usd))
+      && Number(resolved.price_usd) > 0;
     const priceVerified = resolved.listing_type === 'WTS'
-      && normalized.analytics_currency_status === 'VERIFIED'
-      && Number.isFinite(Number(normalized.analytics_price_usd))
-      && Number(normalized.analytics_price_usd) > 0;
+      && (reviewedWorkbookPrice || (
+        normalized.analytics_currency_status === 'VERIFIED'
+        && Number.isFinite(Number(normalized.analytics_price_usd))
+        && Number(normalized.analytics_price_usd) > 0
+      ));
     const safe = sanitizeTradingRecord({
       ...resolved,
-      price_usd: priceVerified ? normalized.analytics_price_usd : null,
-      price_raw: normalized.source_price_amount || null,
-      currency: priceVerified ? 'USD' : normalized.source_currency || null,
+      price_usd: priceVerified
+        ? (reviewedWorkbookPrice ? Number(resolved.price_usd) : normalized.analytics_price_usd)
+        : null,
+      price_raw: reviewedWorkbookPrice ? resolved.price_raw : normalized.source_price_amount || null,
+      currency: priceVerified
+        ? (reviewedWorkbookPrice ? resolved.currency : 'USD')
+        : normalized.source_currency || null,
     }, { verifiedImages: Boolean(resolved.has_images) });
     if (resolved.listing_type !== 'WTS' || priceVerified) {
       return {
         ...safe,
         price_evidence_status: resolved.listing_type === 'WTS'
-          ? normalized.analytics_currency_status
+          ? (reviewedWorkbookPrice ? 'HUMAN_APPROVED_WORKBOOK' : normalized.analytics_currency_status)
           : null,
       };
     }
@@ -431,7 +444,9 @@ async function loadFullReviewedBrandCursorPage({
         normalized.analytics_currency_status,
       ])],
       data_quality_review_required: true,
-      price_evidence_status: normalized.analytics_currency_status,
+      price_evidence_status: reviewedWorkbookPrice
+        ? 'HUMAN_APPROVED_WORKBOOK'
+        : normalized.analytics_currency_status,
     };
   });
   const contentRange = response.headers.get('content-range') || '';
@@ -451,8 +466,8 @@ async function loadFullReviewedBrandCursorPage({
     records,
     status: 'ok',
     publicationBrands: publicationBrands(),
-    publicationReferences: [],
-    publicationScope: 'ALL_REVIEWED',
+    publicationReferences: controlledPaneraiRelease ? REVIEWED_PANERAI_REFERENCES : [],
+    publicationScope: controlledPaneraiRelease ? 'REVIEWED_FILE' : 'ALL_REVIEWED',
     accessMode: 'server_key',
   };
 }
@@ -471,6 +486,22 @@ async function loadStrictCursorPage({
   search,
   imagesOnly,
 }) {
+  if (String(requestedBrand || '').trim().toLowerCase() === 'panerai') {
+    return loadFullReviewedBrandCursorPage({
+      supabaseUrl,
+      readKey,
+      cursor,
+      page,
+      pageSize,
+      listingType,
+      itemType,
+      requestedBrand: 'Panerai',
+      condition,
+      region,
+      search,
+      imagesOnly,
+    });
+  }
   if (isFullReviewedBrandRelease()) {
     return loadFullReviewedBrandCursorPage({
       supabaseUrl,

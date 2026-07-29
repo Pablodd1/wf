@@ -234,7 +234,7 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
-const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Cartier', 'Omega'];
+const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Cartier', 'Omega'];
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
