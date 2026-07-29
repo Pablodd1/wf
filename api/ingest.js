@@ -341,7 +341,12 @@ async function loadFullReviewedBrandCursorPage({
   const start = cursor ? 0 : (page - 1) * pageSize;
   const end = start + candidateLimit;
   const params = new URLSearchParams({
-    select: 'id,brand,model,reference,dial_color,condition,year,price_raw,price_usd,currency,confidence,verdict,source,source_type,listing_type,listing_date,listing_status,created_at,has_images,thumbnail_url,image_urls,region,identity_review_status',
+    select: [
+      'id,brand,model,reference,dial_color,condition,year,price_raw,price_usd,currency',
+      'confidence,verdict,source,source_type,listing_type,listing_date,listing_status',
+      'created_at,has_images,thumbnail_url,image_urls,region',
+      controlledPaneraiRelease ? '' : 'identity_review_status',
+    ].filter(Boolean).join(','),
     order: 'created_at.desc.nullslast,id.desc',
   });
   if (controlledPaneraiRelease) params.set('id', `like.${REVIEWED_PANERAI_RECORD_PREFIX}*`);

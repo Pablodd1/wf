@@ -181,6 +181,7 @@ test('Panerai inventory reads only the controlled reviewed workbook release', as
     assert.equal(res.statusCode, 200);
     assert.equal(initialRequest.pathname, '/rest/v1/trading_floor_verified_listings');
     assert.equal(initialRequest.searchParams.get('id'), 'like.reviewed_panerai_*');
+    assert.equal(initialRequest.searchParams.get('select').includes('identity_review_status'), false);
     assert.deepEqual(res.body.records.map(row => row.id), [id]);
     assert.equal(res.body.records[0].price_usd, 6500);
     assert.equal(res.body.records[0].price_evidence_status, 'HUMAN_APPROVED_WORKBOOK');
