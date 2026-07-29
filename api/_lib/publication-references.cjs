@@ -15,6 +15,30 @@ const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe', 'audemars pigue
 const MIN_RELEASE_CONFIDENCE = 90;
 const REVIEWED_PANERAI_RECORD_PREFIX = 'reviewed_panerai_';
 const REVIEWED_PANERAI_SOURCE = 'PANERAI_REVIEWED_XLSX_20260729';
+function reviewedPaneraiRecordRange(auctionId, start, end) {
+  return Array.from(
+    { length: end - start + 1 },
+    (_, offset) => `${REVIEWED_PANERAI_RECORD_PREFIX}${auctionId}_${String(start + offset).padStart(3, '0')}`,
+  );
+}
+const REVIEWED_PANERAI_RECORD_IDS = [
+  ...reviewedPaneraiRecordRange('0010e7f0-3af7-420e-a759-487c4ce9cea2', 0, 9),
+  ...reviewedPaneraiRecordRange('00408f57-3edf-42bd-8b7e-75726428cde6', 0, 4),
+  ...reviewedPaneraiRecordRange('00421d4d-1a5b-46f5-9625-0f4a226052f7', 0, 1),
+  ...reviewedPaneraiRecordRange('005dd8fa-4f22-4a2e-b06a-83c60cf1f668', 0, 11),
+  ...reviewedPaneraiRecordRange('0061d229-bcec-416a-8f0f-34ca5e1c222a', 5, 5),
+  ...reviewedPaneraiRecordRange('00694649-2c55-44b7-9678-105d23571e1b', 0, 10),
+  ...reviewedPaneraiRecordRange('006cad5b-bac9-4460-b7ce-bda530f0ac9f', 11, 12),
+  ...reviewedPaneraiRecordRange('00768367-3ece-478c-888f-f8c05f2a6ca5', 0, 12),
+  ...reviewedPaneraiRecordRange('008b63d5-67c9-40a7-8847-604329c1eeb7', 0, 12),
+  ...reviewedPaneraiRecordRange('009cff25-4842-4e7b-b27e-559cf25e2f50', 9, 9),
+  ...reviewedPaneraiRecordRange('00c8c445-d896-436c-affb-e8042082abef', 1, 2),
+  ...reviewedPaneraiRecordRange('00cf534f-9805-4f73-865f-8111226100db', 7, 7),
+  ...reviewedPaneraiRecordRange('01133876-1908-40cf-8498-cd784d868308', 0, 8),
+  ...reviewedPaneraiRecordRange('012f70af-d1bf-48e9-835e-6c3e037cf0e5', 0, 13),
+  ...reviewedPaneraiRecordRange('01afa01f-fe3e-42a8-b527-316b4a7adced', 14, 14),
+  ...reviewedPaneraiRecordRange('01e401c5-ab5b-4970-a848-3f2cd2e884d0', 5, 6),
+];
 const REVIEWED_PANERAI_REFERENCES = [
   'PAM00005', 'PAM00028', 'PAM00048', 'PAM00088', 'PAM00093', 'PAM00104',
   'PAM00111', 'PAM00112', 'PAM00233', 'PAM00241', 'PAM00292', 'PAM00305',
@@ -141,6 +165,7 @@ module.exports = {
   FULL_REVIEWED_BRANDS,
   MIN_RELEASE_CONFIDENCE,
   REVIEWED_PANERAI_RECORD_PREFIX,
+  REVIEWED_PANERAI_RECORD_IDS,
   REVIEWED_PANERAI_REFERENCES,
   REVIEWED_PANERAI_SOURCE,
   THREE_WATCH_RELEASE_REFERENCES,

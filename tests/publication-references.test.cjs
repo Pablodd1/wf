@@ -5,6 +5,7 @@ const test = require('node:test');
 const {
   FULL_REVIEWED_BRAND_RELEASE,
   MIN_RELEASE_CONFIDENCE,
+  REVIEWED_PANERAI_RECORD_IDS,
   REVIEWED_PANERAI_RECORD_PREFIX,
   REVIEWED_PANERAI_REFERENCES,
   REVIEWED_PANERAI_SOURCE,
@@ -96,6 +97,8 @@ test('full reviewed scope expands only the approved full-release brands', () => 
 });
 
 test('reviewed Panerai release is limited to the exact workbook records', () => {
+  assert.equal(REVIEWED_PANERAI_RECORD_IDS.length, 99);
+  assert.equal(new Set(REVIEWED_PANERAI_RECORD_IDS).size, 99);
   assert.equal(REVIEWED_PANERAI_REFERENCES.length, 71);
   assert.equal(isPublicationReferenceAllowed('Panerai', 'PAM00590', ''), true);
   assert.equal(isPublicationReferenceAllowed('Panerai', 'PAM99999', FULL_REVIEWED_BRAND_RELEASE), false);

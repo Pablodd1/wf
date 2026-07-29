@@ -126,16 +126,16 @@ test('customer inventory admits an exact APPROVED 90 row only after canonical id
 
 test('Panerai inventory reads only the controlled reviewed workbook release', async () => {
   const originalFetch = global.fetch;
-  const id = 'reviewed_panerai_auction_1';
+  const id = 'reviewed_panerai_0010e7f0-3af7-420e-a759-487c4ce9cea2_000';
   let initialRequest = null;
   global.fetch = async url => {
     const requestUrl = String(url);
     const parsed = new URL(requestUrl);
     const select = parsed.searchParams.get('select') || '';
     let body = [];
-    if (requestUrl.includes('/trading_floor_verified_listings?') && select.includes('model')) {
+    if (requestUrl.includes('/trading_floor_verified_listings?') && select.includes('verdict')) {
       initialRequest = parsed;
-      body = [{
+      body = (parsed.searchParams.get('id') || '').includes(id) ? [{
         id,
         brand: 'Panerai',
         model: 'Luminor Marina',
@@ -150,7 +150,7 @@ test('Panerai inventory reads only the controlled reviewed workbook release', as
         currency: 'USD',
         created_at: '2026-07-01T00:00:00Z',
         has_images: true,
-      }];
+      }] : [];
     } else if (requestUrl.includes('/listing_identity_reviews?')) {
       body = [{
         record_id: id,
@@ -168,7 +168,9 @@ test('Panerai inventory reads only the controlled reviewed workbook release', as
         image_urls: ['https://images.example/pam00590.jpg'],
       }];
     } else if (requestUrl.includes('/watch_records?')) {
-      body = [{ id, raw_message: 'Panerai PAM00590 Black HKD 50,700' }];
+      body = (parsed.searchParams.get('id') || '').includes(id)
+        ? [{ id, raw_message: 'Panerai PAM00590 Black HKD 50,700' }]
+        : [];
     }
     return new Response(JSON.stringify(body), {
       status: 200,
@@ -178,9 +180,9 @@ test('Panerai inventory reads only the controlled reviewed workbook release', as
   try {
     const res = responseRecorder();
     await handler({ method: 'GET', query: { quality: 'market', brand: 'Panerai' } }, res);
-    assert.equal(res.statusCode, 200);
+    assert.equal(res.statusCode, 200, JSON.stringify(res.body));
     assert.equal(initialRequest.pathname, '/rest/v1/trading_floor_verified_listings');
-    assert.equal(initialRequest.searchParams.get('id'), 'like.reviewed_panerai_*');
+    assert.match(initialRequest.searchParams.get('id'), /^in\.\("reviewed_panerai_/);
     assert.equal(initialRequest.searchParams.get('select').includes('identity_review_status'), false);
     assert.deepEqual(res.body.records.map(row => row.id), [id]);
     assert.equal(res.body.records[0].price_usd, 6500);
