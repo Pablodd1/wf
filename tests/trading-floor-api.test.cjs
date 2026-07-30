@@ -133,7 +133,7 @@ test('Panerai inventory reads only the controlled reviewed workbook release', as
     const parsed = new URL(requestUrl);
     const select = parsed.searchParams.get('select') || '';
     let body = [];
-    if (requestUrl.includes('/trading_floor_verified_listings?') && select.includes('verdict')) {
+    if (requestUrl.includes('/price_research_verified_source?') && select.includes('verdict')) {
       initialRequest = parsed;
       body = (parsed.searchParams.get('id') || '').includes(id) ? [{
         id,
@@ -151,6 +151,13 @@ test('Panerai inventory reads only the controlled reviewed workbook release', as
         created_at: '2026-07-01T00:00:00Z',
         has_images: true,
       }] : [];
+    } else if (requestUrl.includes('/price_research_verified_source?')) {
+      body = [{
+        id,
+        has_images: true,
+        thumbnail_url: 'https://images.example/pam00590.jpg',
+        image_urls: ['https://images.example/pam00590.jpg'],
+      }];
     } else if (requestUrl.includes('/listing_identity_reviews?')) {
       body = [{
         record_id: id,
@@ -181,7 +188,7 @@ test('Panerai inventory reads only the controlled reviewed workbook release', as
     const res = responseRecorder();
     await handler({ method: 'GET', query: { quality: 'market', brand: 'Panerai' } }, res);
     assert.equal(res.statusCode, 200, JSON.stringify(res.body));
-    assert.equal(initialRequest.pathname, '/rest/v1/trading_floor_verified_listings');
+    assert.equal(initialRequest.pathname, '/rest/v1/price_research_verified_source');
     assert.match(initialRequest.searchParams.get('id'), /^in\.\("reviewed_panerai_/);
     assert.equal(initialRequest.searchParams.get('select').includes('identity_review_status'), false);
     assert.deepEqual(res.body.records.map(row => row.id), [id]);

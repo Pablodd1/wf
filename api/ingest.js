@@ -63,7 +63,12 @@ const CURRENCIES = loadJsonSafe('currencies.json', { currencies: {}, price_multi
 const MATERIALS = loadJsonSafe('materials.json', { materials: {}, bracelets: {}, bezels: {} });
 const MASTER_CATALOG = loadJsonSafe('master_catalog.json', {});
 
-async function loadVerifiedPublicListings(supabaseUrl, readKey, ids) {
+async function loadVerifiedPublicListings(
+  supabaseUrl,
+  readKey,
+  ids,
+  mediaSourceTable = 'trading_floor_verified_listings',
+) {
   if (!ids.length) return new Map();
   const batches = [];
   for (let index = 0; index < ids.length; index += 50) {
@@ -113,7 +118,7 @@ async function loadVerifiedPublicListings(supabaseUrl, readKey, ids) {
       });
       try {
         const response = await fetch(
-          `${supabaseUrl}/rest/v1/trading_floor_verified_listings?${params.toString()}`,
+          `${supabaseUrl}/rest/v1/${mediaSourceTable}?${params.toString()}`,
           { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
         );
         if (!response.ok) throw new Error(`verified media read returned ${response.status}`);
@@ -185,20 +190,27 @@ async function loadStrictIdentityCandidates(supabaseUrl, readKey, limit = 999) {
   };
 }
 
-async function loadMarketRowsById(supabaseUrl, readKey, ids) {
+async function loadMarketRowsById(
+  supabaseUrl,
+  readKey,
+  ids,
+  sourceTable = 'trading_floor_verified_listings',
+) {
   const batches = [];
   for (let index = 0; index < ids.length; index += 50) {
     batches.push(ids.slice(index, index + 50));
   }
   const results = await Promise.all(batches.map(async batch => {
     const params = new URLSearchParams({
-      select: 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,region',
+      select: sourceTable === 'price_research_verified_source'
+        ? 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,listing_date,listing_status,created_at,confidence'
+        : 'id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,source_type,listing_date,listing_status,created_at,confidence,region',
       id: `in.(${batch.map(id => `"${String(id).replaceAll('"', '')}"`).join(',')})`,
       verdict: 'eq.APPROVED',
       confidence: 'gte.90',
     });
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/trading_floor_verified_listings?${params.toString()}`,
+      `${supabaseUrl}/rest/v1/${sourceTable}?${params.toString()}`,
       { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
     );
     if (!response.ok) throw new Error(`market listing batch returned ${response.status}`);
@@ -342,7 +354,12 @@ async function loadFullReviewedBrandCursorPage({
   let total;
   let hasMore;
   if (controlledPaneraiRelease) {
-    const exactRows = await loadMarketRowsById(supabaseUrl, readKey, REVIEWED_PANERAI_RECORD_IDS);
+    const exactRows = await loadMarketRowsById(
+      supabaseUrl,
+      readKey,
+      REVIEWED_PANERAI_RECORD_IDS,
+      'price_research_verified_source',
+    );
     const matched = sortTradingItems([...exactRows.values()].map(resolved => ({ resolved })))
       .map(item => item.resolved)
       .filter(record => matchesStrictReleaseFilters(record, {
@@ -417,6 +434,7 @@ async function loadFullReviewedBrandCursorPage({
     supabaseUrl,
     readKey,
     selected.map(row => row.id),
+    controlledPaneraiRelease ? 'price_research_verified_source' : 'trading_floor_verified_listings',
   );
   const current = selected
     .map(row => {
