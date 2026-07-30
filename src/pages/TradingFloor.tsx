@@ -43,6 +43,10 @@ const INTENT_OPTIONS = [
 ] as const;
 
 const RELEASE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'] as const;
+const REVIEWED_WORKBOOK_SOURCES = new Set([
+  'PANERAI_REVIEWED_XLSX_20260729',
+  'ZENITH_REVIEWED_XLSX_20260730',
+]);
 
 interface ListingRecord {
   id: string;
@@ -124,8 +128,12 @@ function priceEvidenceRank(listing: ListingRecord) {
   return 0;
 }
 
-function verifiedUsdPrice(listing: ListingRecord) {
-  return priceEvidenceRank(listing) === 2 ? Number(listing.price_usd) : 0;
+function customerSortPrice(listing: ListingRecord) {
+  const price = Number(listing.price_usd);
+  if (!Number.isFinite(price) || price <= 0) return 0;
+  return listing.currency === 'USD' || REVIEWED_WORKBOOK_SOURCES.has(listing.source)
+    ? price
+    : 0;
 }
 
 function hasListingImage(listing: ListingRecord) {
@@ -138,7 +146,7 @@ function hasListingImage(listing: ListingRecord) {
 function sortListingsForDisplay(listings: ListingRecord[]) {
   return [...listings].sort((left, right) =>
     Number(hasListingImage(right)) - Number(hasListingImage(left))
-    || verifiedUsdPrice(right) - verifiedUsdPrice(left)
+    || customerSortPrice(right) - customerSortPrice(left)
     || priceEvidenceRank(right) - priceEvidenceRank(left)
     || Date.parse(right.created_at || '') - Date.parse(left.created_at || '')
     || String(right.id).localeCompare(String(left.id)));
@@ -522,7 +530,7 @@ export default function TradingFloor() {
               ? ' customer-visible records from verified inventory'
               : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</>}
           </span>
-          <span>Listings with images first; highest verified USD price next.</span>
+          <span>Listings with images first; highest listed price next.</span>
           <span title="Records are fetched in bounded batches from Postgres; search and filters run on the database.">{pageSize} per request keeps mobile memory bounded.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>

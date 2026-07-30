@@ -49,9 +49,10 @@ test('Trading Floor shows image-backed listings before price-ranked rows', () =>
   assert.match(floor, /media\.matches \? 48 : 100/);
   assert.match(floor, /function hasListingImage/);
   assert.match(floor, /function priceEvidenceRank/);
-  assert.match(floor, /function verifiedUsdPrice/);
-  assert.match(floor, /Number\(hasListingImage\(right\)\) - Number\(hasListingImage\(left\)\)[\s\S]*verifiedUsdPrice\(right\) - verifiedUsdPrice\(left\)/);
-  assert.match(floor, /Listings with images first; highest verified USD price next\./);
+  assert.match(floor, /function customerSortPrice/);
+  assert.match(floor, /REVIEWED_WORKBOOK_SOURCES\.has\(listing\.source\)/);
+  assert.match(floor, /Number\(hasListingImage\(right\)\) - Number\(hasListingImage\(left\)\)[\s\S]*customerSortPrice\(right\) - customerSortPrice\(left\)/);
+  assert.match(floor, /Listings with images first; highest listed price next\./);
   assert.doesNotMatch(floor, /Data under review/);
   assert.doesNotMatch(floor, /Price under review/);
   assert.doesNotMatch(floor, /Exact source currency is being verified/);

@@ -367,10 +367,14 @@ function sortTradingItems(items) {
       && (right.resolved?.thumbnail_url || right.resolved?.image_urls?.length),
     );
     if (leftHasImage !== rightHasImage) return Number(rightHasImage) - Number(leftHasImage);
-    const leftPrice = String(left.resolved?.currency || '').toUpperCase() === 'USD'
+    const leftReviewedWorkbook = isReviewedPaneraiReleaseRecord(left.resolved)
+      || isReviewedZenithReleaseRecord(left.resolved);
+    const rightReviewedWorkbook = isReviewedPaneraiReleaseRecord(right.resolved)
+      || isReviewedZenithReleaseRecord(right.resolved);
+    const leftPrice = String(left.resolved?.currency || '').toUpperCase() === 'USD' || leftReviewedWorkbook
       ? Number(left.resolved?.price_usd) || 0
       : 0;
-    const rightPrice = String(right.resolved?.currency || '').toUpperCase() === 'USD'
+    const rightPrice = String(right.resolved?.currency || '').toUpperCase() === 'USD' || rightReviewedWorkbook
       ? Number(right.resolved?.price_usd) || 0
       : 0;
     if (leftPrice !== rightPrice) return rightPrice - leftPrice;
