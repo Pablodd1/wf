@@ -26,6 +26,7 @@ const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
+  REVIEWED_ZENITH_SOURCE,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
 } = require('./_lib/publication-references.cjs');
@@ -90,7 +91,7 @@ async function retainVerifiedIdentityRows(client, rows) {
   }
   const results = await Promise.all(batches.map(batch => client
     .from('listing_identity_reviews')
-    .select('record_id,canonical_brand,canonical_reference,canonical_dial_color,status')
+    .select('record_id,canonical_brand,canonical_model,canonical_reference,canonical_dial_color,status')
     .in('record_id', batch)
     .in('status', ['CATALOG_CONFIRMED', 'HUMAN_APPROVED'])));
   const error = results.find(result => result.error)?.error;
@@ -104,16 +105,22 @@ async function retainVerifiedIdentityRows(client, rows) {
     return [{
       ...row,
       brand: review.canonical_brand || row.brand,
+      model: review.canonical_model || row.model,
       reference: review.canonical_reference || row.reference,
       dial_color: review.canonical_dial_color || row.dial_color,
     }];
   });
 }
 
+function isOwnerReviewedZenithRow(row) {
+  return String(row?.brand || '').trim().toLowerCase() === 'zenith'
+    && String(row?.source || '') === REVIEWED_ZENITH_SOURCE;
+}
+
 async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection) {
   const { data, error } = await client
     .from(sourceTable)
-    .select('id,brand,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id')
+    .select('id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source')
     .eq('brand', brand)
     .in('reference', referenceVariants)
     .in('listing_type', ['WTB', 'NTQ'])
@@ -145,6 +152,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
   const shadowBundleIds = await loadShadowBundleParentIds(client, demandRows);
   const eligibleBeforeReposts = demandRows
     .map(row => ({ ...row, bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds) }))
+    .map(row => ({ ...row, owner_reviewed_identity: isOwnerReviewedZenithRow(row) }))
     .filter(row => !classifyDemandEligibility(row, catalog));
   const { uniqueRows: eligible, repostRows } = deduplicateReposts(eligibleBeforeReposts);
   const grouped = new Map();
@@ -300,7 +308,7 @@ module.exports = async function handler(req, res) {
     // reference does not produce a chart made only from its newest day.
     const pageSize = 1000;
     const sampleLimit = 10000;
-    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict';
+    const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict';
     const buildRowsQuery = (from, to) => client
       .from(sourceTable)
       .select(columns)
@@ -411,6 +419,7 @@ module.exports = async function handler(req, res) {
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {
           ...normalized,
+          owner_reviewed_identity: isOwnerReviewedZenithRow(row),
           bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds),
           dial_color: normalizedDial.known ? normalizedDial.value : normalized.dial_color,
           stored_price_usd: row.price_usd,
@@ -541,7 +550,11 @@ module.exports = async function handler(req, res) {
     const dialColors = dial_analysis.map(d => d.dial_color);
 
     // ── Real model name (catalog decoration) + real liquidity (indicators, no phantom numbers) ──
-    const model = catalogHit?.found ? (catalogHit.model || null) : lookupModel(targetRef, brand);
+    const model = catalogHit?.found
+      ? (catalogHit.model || null)
+      : lookupModel(targetRef, brand)
+        || analyticsRows.map(row => String(row.model || '').trim()).find(Boolean)
+        || null;
     const demand = await lookupDemand(
       client,
       sourceTable,
@@ -595,7 +608,8 @@ module.exports = async function handler(req, res) {
         canonical_identity_review_required: true,
         explicit_currency_evidence_required: true,
         verified_fx_provenance_required: true,
-        catalog_model_and_dial_required: true,
+        catalog_model_and_dial_required: String(brand).toLowerCase() !== 'zenith',
+        catalog_or_owner_reviewed_identity_required: true,
         unsplit_bundles_excluded: true,
         reviewed_duplicates_excluded: true,
       },

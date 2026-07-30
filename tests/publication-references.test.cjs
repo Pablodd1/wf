@@ -9,6 +9,8 @@ const {
   REVIEWED_PANERAI_RECORD_PREFIX,
   REVIEWED_PANERAI_REFERENCES,
   REVIEWED_PANERAI_SOURCE,
+  REVIEWED_ZENITH_RECORD_PREFIX,
+  REVIEWED_ZENITH_SOURCE,
   THREE_WATCH_RELEASE_REFERENCES,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
@@ -114,4 +116,22 @@ test('reviewed Panerai release is limited to the exact workbook records', () => 
   assert.equal(isReleaseListingEligible({ ...approved, id: 'legacy_123' }, ''), false);
   assert.equal(isReleaseListingEligible({ ...approved, source: 'legacy' }, ''), false);
   assert.equal(isReleaseListingEligible({ ...approved, reference: 'PAM99999' }, ''), false);
+});
+
+test('reviewed Zenith release is limited to the hash-locked workbook source and record prefix', () => {
+  const approved = {
+    id: `${REVIEWED_ZENITH_RECORD_PREFIX}000392_wf-example`,
+    brand: 'Zenith',
+    reference: '0331003600',
+    source: REVIEWED_ZENITH_SOURCE,
+    listing_status: 'ACTIVE',
+    verdict: 'APPROVED',
+    confidence: 100,
+  };
+  assert.equal(isPublicationReferenceAllowed('Zenith', '03.3100.3600', ''), true);
+  assert.equal(isReleaseListingEligible(approved, ''), true);
+  assert.equal(isReleaseListingEligible({ ...approved, id: 'legacy_zenith' }, ''), false);
+  assert.equal(isReleaseListingEligible({ ...approved, source: 'legacy' }, ''), false);
+  assert.equal(isReleaseListingEligible({ ...approved, listing_status: 'REJECTED' }, ''), false);
+  assert.equal(isReleaseListingEligible({ ...approved, verdict: 'HUMAN' }, ''), false);
 });

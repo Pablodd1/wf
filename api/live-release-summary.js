@@ -7,9 +7,12 @@ const { getClient } = require('./_lib/supabase');
 const {
   REVIEWED_PANERAI_RECORD_PREFIX,
   REVIEWED_PANERAI_SOURCE,
+  REVIEWED_ZENITH_RECORD_END,
+  REVIEWED_ZENITH_RECORD_START,
+  REVIEWED_ZENITH_SOURCE,
 } = require('./_lib/publication-references.cjs');
 
-const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai'];
+const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'];
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cached = null;
 
@@ -20,13 +23,23 @@ async function loadSummary() {
     let query = client
       .from(brand === 'Panerai'
         ? 'trading_floor_verified_listings'
-        : 'two_brand_verified_trading_release_cache')
+        : brand === 'Zenith'
+          ? 'watch_records'
+          : 'two_brand_verified_trading_release_cache')
       .select('id', { count: 'exact', head: true })
       .eq('brand', brand);
     if (brand === 'Panerai') {
       query = query
         .like('id', `${REVIEWED_PANERAI_RECORD_PREFIX}%`)
         .eq('source', REVIEWED_PANERAI_SOURCE);
+    } else if (brand === 'Zenith') {
+      query = query
+        .gte('id', REVIEWED_ZENITH_RECORD_START)
+        .lt('id', REVIEWED_ZENITH_RECORD_END)
+        .eq('source', REVIEWED_ZENITH_SOURCE)
+        .eq('verdict', 'APPROVED')
+        .gte('confidence', 90)
+        .eq('listing_status', 'ACTIVE');
     }
     const { count, error } = await query;
     if (error) throw error;

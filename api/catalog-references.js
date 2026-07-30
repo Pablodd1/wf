@@ -10,6 +10,9 @@ const { listCatalogReferences, listEquivalentReferences, lookupCatalog } = requi
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
+  REVIEWED_ZENITH_RECORD_END,
+  REVIEWED_ZENITH_RECORD_START,
+  REVIEWED_ZENITH_SOURCE,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
 } = require('./_lib/publication-references.cjs');
@@ -22,6 +25,7 @@ const CACHE_TTL = 5 * 60 * 1000;
 const REFERENCE_SAMPLE_LIMIT = 1000;
 const MINIMUM_ANALYTICS_SAMPLE = 5;
 const LOOKUP_CONCURRENCY = 8;
+const ZENITH_REFERENCE_ONLY_MODEL = 'Reference-only listings';
 
 async function mapWithConcurrency(items, concurrency, mapper) {
   const results = new Array(items.length);
@@ -86,6 +90,76 @@ async function loadReferenceEvidence(client, brand, entry) {
   };
 }
 
+async function loadReviewedZenithReferences(client, requestedModel) {
+  const rows = [];
+  for (let from = 0; ; from += 1000) {
+    const { data, error } = await client
+      .from('price_research_verified_source')
+      .select('id,brand,model,reference,price_raw,price_usd,currency,dial_color,condition,raw_message,flags,confidence,verdict,dealer_id,source,listing_type,listing_status')
+      .gte('id', REVIEWED_ZENITH_RECORD_START)
+      .lt('id', REVIEWED_ZENITH_RECORD_END)
+      .eq('brand', 'Zenith')
+      .eq('source', REVIEWED_ZENITH_SOURCE)
+      .eq('verdict', 'APPROVED')
+      .gte('confidence', MIN_RELEASE_CONFIDENCE)
+      .eq('listing_type', 'WTS')
+      .order('id', { ascending: true })
+      .range(from, from + 999);
+    if (error) throw error;
+    rows.push(...data);
+    if (data.length < 1000) break;
+  }
+  const modelRows = rows.filter(row => (
+    (String(row.model || '').trim() || ZENITH_REFERENCE_ONLY_MODEL) === requestedModel
+    && row.reference
+  ));
+  const grouped = new Map();
+  for (const row of modelRows) {
+    const members = grouped.get(row.reference) || [];
+    members.push(row);
+    grouped.set(row.reference, members);
+  }
+  return [...grouped.entries()].map(([reference, members]) => {
+    const catalog = lookupCatalog(reference, 'Zenith');
+    const eligible = members
+      .filter(row => isReleaseListingEligible(row))
+      .map(row => {
+        const normalized = normalizeMarketRow(
+          row,
+          listEquivalentReferences(reference, 'Zenith'),
+        );
+        return {
+          ...normalized,
+          owner_reviewed_identity: true,
+          price_usd: normalized.analytics_price_usd,
+          bundle_candidate_count: 1,
+        };
+      })
+      .filter(row => !classifyResearchEligibility(row, catalog));
+    const { uniqueRows: qualified } = deduplicateReposts(eligible);
+    const dialCounts = new Map();
+    for (const row of members) {
+      const dial = String(row.dial_color || '').trim();
+      if (dial) dialCounts.set(dial, (dialCounts.get(dial) || 0) + 1);
+    }
+    const sum = qualified.reduce((total, row) => total + Number(row.price_usd), 0);
+    return {
+      reference,
+      listing_count: members.length,
+      eligible_observation_count: qualified.length,
+      analytics_ready: qualified.length >= MINIMUM_ANALYTICS_SAMPLE,
+      sample_capped: false,
+      avg_price: qualified.length >= MINIMUM_ANALYTICS_SAMPLE
+        ? Math.round(sum / qualified.length)
+        : null,
+      dial_colors: [...dialCounts.entries()]
+        .map(([dial_color, count]) => ({ dial_color, count }))
+        .sort((a, b) => b.count - a.count),
+      identity_source: catalog?.found ? 'CATALOG_OR_OWNER_REVIEWED' : 'OWNER_REVIEWED_WORKBOOK',
+    };
+  }).sort((a, b) => b.listing_count - a.listing_count || a.reference.localeCompare(b.reference));
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
@@ -106,6 +180,19 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    if (brand.toLowerCase() === 'zenith') {
+      const out = await loadReviewedZenithReferences(client, model);
+      const payload = {
+        success: true,
+        brand: 'Zenith',
+        model,
+        reference_count: out.length,
+        references: out,
+        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+      };
+      _cache.set(cacheKey, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     const catalogReferences = listCatalogReferences(brand, model)
       .filter(entry => isPublicationReferenceAllowed(brand, entry.reference));
     const evidence = await mapWithConcurrency(

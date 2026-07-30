@@ -14,7 +14,11 @@ test('Price Research distinguishes live Trading Floor inventory from price-eligi
 
   assert.match(api, /two_brand_verified_trading_release_cache/);
   assert.match(api, /count: 'exact', head: true/);
-  assert.match(api, /const BRANDS = \['Rolex', 'Patek Philippe'\]/);
+  assert.match(api, /const BRANDS = \['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'\]/);
+  assert.match(api, /REVIEWED_ZENITH_RECORD_START/);
+  assert.match(api, /REVIEWED_ZENITH_SOURCE/);
+  assert.match(api, /brand === 'Zenith'[\s\S]*\? 'watch_records'/);
+  assert.match(api, /\.eq\('listing_status', 'ACTIVE'\)/);
   assert.match(page, /\/api\/live-release-summary/);
   assert.match(page, /Live verified inventory/);
   assert.match(page, /Price charts use a narrower source-proven WTS subset/);

@@ -42,11 +42,12 @@ const INTENT_OPTIONS = [
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
-const RELEASE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai'] as const;
+const RELEASE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'] as const;
 
 interface ListingRecord {
   id: string;
   brand: string;
+  model?: string | null;
   reference: string | null;
   price_usd: number | null;
   price_raw: number | null;
@@ -94,6 +95,8 @@ interface ListingContact {
   dealer_review_count?: number;
   dealer_group_count?: number;
   dealer_stats?: { total_posts: number; active_listings: number; wts_posts: number; wtb_posts: number; first_post_at: string | null; last_post_at: string | null; posting_years: number } | null;
+  phone_display?: string;
+  contact_source?: string;
   whatsapp_url?: string;
   reason?: string;
 }
@@ -101,7 +104,7 @@ interface ListingContact {
 interface ListingEvidence extends Partial<ListingRecord> {
   id: string;
   brand: string;
-  reference: string;
+  reference: string | null;
   raw_message: string | null;
   raw_message_scope?: 'original_post' | 'stored_source_message' | 'unavailable';
   raw_message_truncated?: boolean;
@@ -840,6 +843,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         ...evidence,
         id: listing.id,
         brand: evidence.brand || listing.brand,
+        model: evidence.model || listing.model,
         reference: evidence.reference || listing.reference,
       }
     : listing, [evidence, listing]);
@@ -877,6 +881,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           ...publicListing,
           id: listing.id,
           brand: publicListing.brand || tradingListing.brand || listing.brand,
+          model: publicListing.model || tradingListing.model || listing.model || null,
           reference: publicListing.reference || tradingListing.reference || listing.reference || '',
           raw_message: publicListing.raw_message || null,
           image_urls: imageUrls,
@@ -975,11 +980,16 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               {displayLocation(contact.dealer_city, contact.dealer_country) && <div className="mt-2 text-sm" style={{ color: MUTED }}>
                 {displayLocation(contact.dealer_city, contact.dealer_country)}
               </div>}
-              <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs" style={{ color: MUTED }}>
-                <span>{contact.dealer_rating == null ? 'Unrated' : `${Number(contact.dealer_rating).toFixed(2)} rating`}</span>
-                <span>{Number(contact.dealer_review_count || 0).toLocaleString()} reviews</span>
-                <span>{Number(contact.dealer_group_count || 0).toLocaleString()} common groups</span>
-              </div>
+              {contact.phone_display && <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
+                {contact.phone_display}
+              </div>}
+              {contact.contact_source !== 'OWNER_APPROVED_WORKBOOK' && (
+                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs" style={{ color: MUTED }}>
+                  <span>{contact.dealer_rating == null ? 'Unrated' : `${Number(contact.dealer_rating).toFixed(2)} rating`}</span>
+                  <span>{Number(contact.dealer_review_count || 0).toLocaleString()} reviews</span>
+                  <span>{Number(contact.dealer_group_count || 0).toLocaleString()} common groups</span>
+                </div>
+              )}
               {contact.dealer_stats && (
                 <div className="mt-4 grid grid-cols-3 gap-2 text-center">
                   <ContactMetric label="For sale" value={contact.dealer_stats.wts_posts} />
@@ -1059,7 +1069,7 @@ function ListingImage({ listing, className, large = false }: { listing: ListingR
         {cleanValue(listing.brand) || 'Watch'}
       </div>
       <div className="mt-3 text-[15px]" style={{ color: MUTED }}>
-        {cleanValue(listing.reference) || (listing.listing_type === 'MULTI' ? 'Multiple items · split pending' : listingKindLabel(listing))}
+        {cleanValue(listing.model) || cleanValue(listing.reference) || (listing.listing_type === 'MULTI' ? 'Multiple items · split pending' : listingKindLabel(listing))}
       </div>
     </div>
   );
@@ -1098,11 +1108,14 @@ function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
   const rawPriceLabel = formatRawPrice(listing);
-  const usdPriceLabel = hasPriceReviewIssue(listing)
-    ? listing.currency && listing.currency !== 'USD'
-      ? 'USD conversion unavailable'
-      : 'Price under review'
-    : formatUsdPrice(listing.price_usd, listing.listing_type);
+  const hasUsdPrice = Number.isFinite(Number(listing.price_usd)) && Number(listing.price_usd) > 0;
+  const usdPriceLabel = hasUsdPrice
+    ? formatUsdPrice(listing.price_usd, listing.listing_type)
+    : hasPriceReviewIssue(listing)
+      ? listing.currency && listing.currency !== 'USD'
+        ? 'USD conversion unavailable'
+        : 'Price under review'
+      : formatUsdPrice(listing.price_usd, listing.listing_type);
   const title = buildListingTitle(listing);
 
   return {
@@ -1118,6 +1131,7 @@ function buildListingTitle(listing: ListingRecord) {
   if (listing.listing_type === 'MULTI' && !cleanValue(listing.reference)) return 'Multi-item dealer listing';
   const parts = [
     cleanValue(listing.brand) === 'Unknown' ? '' : cleanValue(listing.brand),
+    cleanValue(listing.model),
     cleanValue(listing.reference),
     cleanValue(listing.condition),
     listing.year ? `${listing.year}year` : '',

@@ -13,7 +13,12 @@ const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
-const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
+const {
+  MIN_RELEASE_CONFIDENCE,
+  REVIEWED_ZENITH_SOURCE,
+  isReleaseListingEligible,
+  isReviewedZenithReleaseRecord,
+} = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 
 function normalizeAccessories(value) {
@@ -73,14 +78,14 @@ module.exports = async function handler(req, res) {
     }
     const strictResult = await client
       .from('price_research_verified_source')
-      .select('id,brand,reference,dial_color')
+      .select('id,brand,model,reference,dial_color')
       .eq('id', id)
       .maybeSingle();
     if (strictResult.error) throw strictResult.error;
     const strictGate = strictResult.data;
     if (!strictGate && !canReview) return res.status(404).json({ error: 'Listing not found' });
     const sourceTable = 'watch_records';
-    const columns = 'id,brand,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,accessories,image_urls,thumbnail_url,has_images,dealer_photos,region,source_type,listing_status,confidence,verdict';
+    const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,accessories,image_urls,thumbnail_url,has_images,dealer_photos,region,source_type,listing_status,confidence,verdict';
     const { data, error } = await client
       .from(sourceTable)
       .select(columns)
@@ -105,6 +110,7 @@ module.exports = async function handler(req, res) {
       ? {
           ...data,
           brand: canonical.brand,
+          model: canonical.model || data.model,
           reference: canonical.reference,
           dial_color: canonical.dial_color,
           has_images: Boolean(verified?.has_images),
@@ -123,6 +129,7 @@ module.exports = async function handler(req, res) {
     const shadowBundleIds = await loadShadowBundleParentIds(client, [data]);
     const eligibilityRow = {
       ...normalized,
+      owner_reviewed_identity: String(resolvedData.source || '') === REVIEWED_ZENITH_SOURCE,
       price_usd: normalized.analytics_price_usd,
       bundle_candidate_count: bundleCandidateCount(data, shadowBundleIds),
     };
@@ -131,10 +138,11 @@ module.exports = async function handler(req, res) {
       listingCatalog(resolvedData.reference, resolvedData.brand),
     );
     const suppressedIds = await loadAnalyticsSuppressedIds(client, [id]);
+    const controlledZenithListing = isReviewedZenithReleaseRecord(resolvedData);
     const publicEligible = Boolean(strictGate)
-      && !exclusionReason
+      && (!exclusionReason || controlledZenithListing)
       && !suppressedIds.has(id)
-      && isCustomerIdentitySafe(resolvedData);
+      && (controlledZenithListing || isCustomerIdentitySafe(resolvedData));
     if (!publicEligible && !canReview) {
       return res.status(404).json({ error: 'Listing is retained for authorized human review' });
     }
@@ -153,6 +161,7 @@ module.exports = async function handler(req, res) {
       listing: {
         id: customerListing.id,
         brand: customerListing.brand,
+        model: customerListing.model,
         reference: customerListing.reference,
         price_raw: normalized.source_price_amount || null,
         price_usd: priceVerified ? normalized.analytics_price_usd : null,

@@ -52,6 +52,7 @@ interface DialPoint {
 interface ListingDetailData {
   id: string;
   brand: string;
+  model?: string | null;
   reference: string;
   price_raw: number | string | null;
   price_usd: number | null;
@@ -96,6 +97,8 @@ interface ListingSellerData {
     last_post_at: string | null;
     posting_years: number;
   } | null;
+  phone_display?: string;
+  contact_source?: string;
   whatsapp_url?: string;
   reason?: string;
 }
@@ -234,7 +237,7 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
-const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Cartier', 'Omega'];
+const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
@@ -1408,7 +1411,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                 {summary.is_outlier && <span style={{ color: '#7a5900', fontSize: 12 }}>{outlierLabel}</span>}
               </div>
 
-              <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{detail.brand} {detail.reference}</h1>
+              <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{[detail.brand, detail.model, detail.reference].filter((value, index, values) => value && values.indexOf(value) === index).join(' ')}</h1>
               <div style={{ color: GOLD, fontSize: 26, fontWeight: 800, marginBottom: 28 }}>${displayPrice.toLocaleString()} <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>USD asking price</span></div>
 
               <DetailCard title="Price rating">
@@ -1459,12 +1462,22 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                     <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>{seller.dealer_name}</div>
                     {seller.dealer_company && <div style={{ color: MUTED, fontSize: 13, marginTop: 3 }}>{seller.dealer_company}</div>}
                     {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
+                    {seller.phone_display && <div style={{ color: NAVY, fontSize: 13, fontWeight: 800, marginTop: 8 }}>{seller.phone_display}</div>}
                     {seller.dealer_stats ? (
                       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }}>
                         <Metric label="For sale" value={Number(seller.dealer_stats.wts_posts).toLocaleString()} />
                         <Metric label="Looking for" value={Number(seller.dealer_stats.wtb_posts).toLocaleString()} />
-                        <Metric label="Reviews" value={Number(seller.dealer_review_count || 0).toLocaleString()} />
-                        <Metric label="Common groups" value={Number(seller.dealer_group_count || 0).toLocaleString()} />
+                        {seller.contact_source === 'OWNER_APPROVED_WORKBOOK' ? (
+                          <>
+                            <Metric label="Active" value={Number(seller.dealer_stats.active_listings).toLocaleString()} />
+                            <Metric label="Total posts" value={Number(seller.dealer_stats.total_posts).toLocaleString()} />
+                          </>
+                        ) : (
+                          <>
+                            <Metric label="Reviews" value={Number(seller.dealer_review_count || 0).toLocaleString()} />
+                            <Metric label="Common groups" value={Number(seller.dealer_group_count || 0).toLocaleString()} />
+                          </>
+                        )}
                       </div>
                     ) : (
                       <div style={{ marginTop: 16, padding: 12, background: LIGHT_GRAY, color: MUTED, fontSize: 12 }}>
@@ -1501,6 +1514,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                   {observedDate && <DetailField label="Observed" value={observedDate} />}
                   <DetailField label="Asking price as posted" value={detail.price_raw != null ? `${detail.price_raw} ${detail.currency || ''}`.trim() : null} />
                   <DetailField label="Condition" value={detail.condition} />
+                  <DetailField label="Model" value={detail.model || null} />
                   <DetailField label="Dial" value={detail.dial_color} />
                   <DetailField label="Year" value={detail.year} />
                   {detail.region && !/^unknown$/i.test(detail.region) && <DetailField label="Region" value={detail.region} />}

@@ -15,6 +15,10 @@ const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe', 'audemars pigue
 const MIN_RELEASE_CONFIDENCE = 90;
 const REVIEWED_PANERAI_RECORD_PREFIX = 'reviewed_panerai_';
 const REVIEWED_PANERAI_SOURCE = 'PANERAI_REVIEWED_XLSX_20260729';
+const REVIEWED_ZENITH_RECORD_PREFIX = 'reviewed_zenith_';
+const REVIEWED_ZENITH_RECORD_START = 'reviewed_zenith_000000';
+const REVIEWED_ZENITH_RECORD_END = 'reviewed_zenith_999999';
+const REVIEWED_ZENITH_SOURCE = 'ZENITH_REVIEWED_XLSX_20260730';
 function reviewedPaneraiRecordRange(auctionId, start, end) {
   return Array.from(
     { length: end - start + 1 },
@@ -99,6 +103,20 @@ function isReviewedPaneraiReleaseRecord(record) {
   );
 }
 
+function isReviewedZenithReleaseRecord(record) {
+  const confidence = Number(record?.confidence);
+  return Boolean(
+    record
+    && String(record.brand || '').trim().toLowerCase() === 'zenith'
+    && String(record.id || '').startsWith(REVIEWED_ZENITH_RECORD_PREFIX)
+    && String(record.source || '') === REVIEWED_ZENITH_SOURCE
+    && String(record.verdict || '').trim().toUpperCase() === 'APPROVED'
+    && String(record.listing_status || 'ACTIVE').trim().toUpperCase() === 'ACTIVE'
+    && Number.isFinite(confidence)
+    && confidence >= MIN_RELEASE_CONFIDENCE
+  );
+}
+
 function isFullReviewedBrandRelease(value = process.env.PUBLICATION_REFERENCES) {
   return String(value || '').trim().toUpperCase() === FULL_REVIEWED_BRAND_RELEASE;
 }
@@ -119,6 +137,9 @@ function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
 
 function isPublicationReferenceAllowed(brand, reference, value = process.env.PUBLICATION_REFERENCES) {
   if (isReviewedPaneraiReference(brand, reference)) return true;
+  if (String(brand || '').trim().toLowerCase() === 'zenith') {
+    return Boolean(normalizePublicationReference(reference));
+  }
   if (isFullReviewedBrandRelease(value)) {
     return FULL_REVIEWED_BRANDS.has(String(brand || '').trim().toLowerCase())
       && Boolean(normalizePublicationReference(reference));
@@ -136,6 +157,9 @@ function isReleaseListingEligible(record, value = process.env.PUBLICATION_REFERE
   if (String(record?.brand || '').trim().toLowerCase() === 'panerai') {
     return isReviewedPaneraiReleaseRecord(record);
   }
+  if (String(record?.brand || '').trim().toLowerCase() === 'zenith') {
+    return isReviewedZenithReleaseRecord(record);
+  }
   const confidence = Number(record?.confidence);
   return Boolean(
     record
@@ -149,6 +173,7 @@ function isReleaseListingEligible(record, value = process.env.PUBLICATION_REFERE
 function publicationReferencesForBrand(brand, value = process.env.PUBLICATION_REFERENCES) {
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   if (normalizedBrand === 'panerai') return [...REVIEWED_PANERAI_REFERENCES];
+  if (normalizedBrand === 'zenith') return [];
   return publicationReferences(value)
     .filter(entry => entry.brand.toLowerCase() === normalizedBrand)
     .map(entry => entry.reference);
@@ -168,12 +193,17 @@ module.exports = {
   REVIEWED_PANERAI_RECORD_IDS,
   REVIEWED_PANERAI_REFERENCES,
   REVIEWED_PANERAI_SOURCE,
+  REVIEWED_ZENITH_RECORD_END,
+  REVIEWED_ZENITH_RECORD_PREFIX,
+  REVIEWED_ZENITH_RECORD_START,
+  REVIEWED_ZENITH_SOURCE,
   THREE_WATCH_RELEASE_REFERENCES,
   isFullReviewedBrandRelease,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
   isReviewedPaneraiReference,
   isReviewedPaneraiReleaseRecord,
+  isReviewedZenithReleaseRecord,
   normalizePublicationReference,
   publicationReferencePostgrestFilter,
   publicationReferences,

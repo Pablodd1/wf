@@ -5,7 +5,15 @@ const { listEquivalentReferences } = require('./_lib/catalog');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
-const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
+const {
+  MIN_RELEASE_CONFIDENCE,
+  REVIEWED_ZENITH_RECORD_PREFIX,
+  REVIEWED_ZENITH_SOURCE,
+  isReleaseListingEligible,
+  isReviewedPaneraiReleaseRecord,
+  isReviewedZenithReleaseRecord,
+} = require('./_lib/publication-references.cjs');
+const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
@@ -18,17 +26,39 @@ module.exports = async function handler(req, res) {
     // Direct customer access always requires reviewed canonical identity,
     // regardless of deployment configuration.
     const publicTable = 'trading_floor_verified_listings';
-    const { data: publicListing, error: publicError } = await client
+    const { data: strictTradingListing, error: publicError } = await client
       .from(publicTable)
       .select('id,brand,model,reference,dial_color,has_images,thumbnail_url,image_urls')
       .eq('id', id)
       .maybeSingle();
     if (publicError) throw publicError;
+    let publicListing = strictTradingListing;
+    if (!publicListing && id.startsWith(REVIEWED_ZENITH_RECORD_PREFIX)) {
+      const fallback = await client
+        .from('watch_records')
+        .select('id,brand,model,reference,dial_color,source,verdict,confidence,listing_status')
+        .eq('id', id)
+        .eq('source', REVIEWED_ZENITH_SOURCE)
+        .eq('verdict', 'APPROVED')
+        .gte('confidence', MIN_RELEASE_CONFIDENCE)
+        .eq('listing_status', 'ACTIVE')
+        .maybeSingle();
+      if (fallback.error) throw fallback.error;
+      if (fallback.data) {
+        const verifiedMedia = (await loadVerifiedListingRows(client, [id])).get(id);
+        publicListing = {
+          ...fallback.data,
+          has_images: Boolean(verifiedMedia?.has_images),
+          thumbnail_url: verifiedMedia?.thumbnail_url || null,
+          image_urls: verifiedMedia?.image_urls || [],
+        };
+      }
+    }
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
     const verifiedListing = publicListing;
 
     const { data, error } = await client.from('watch_records')
-      .select('id,brand,reference,price_usd,price_raw,currency,dial_color,condition,year,listing_type,verdict,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,image_urls,region,raw_message')
+      .select('id,brand,model,reference,price_usd,price_raw,currency,dial_color,condition,year,listing_type,verdict,source,source_type,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,image_urls,region,raw_message')
       .eq('id', id)
       .eq('verdict', 'APPROVED')
       .gte('confidence', MIN_RELEASE_CONFIDENCE)
@@ -39,6 +69,7 @@ module.exports = async function handler(req, res) {
       ? {
           ...data,
           brand: verifiedListing.brand,
+          model: verifiedListing.model || data.model,
           reference: verifiedListing.reference,
           dial_color: verifiedListing.dial_color,
           has_images: verifiedListing.has_images,
@@ -52,7 +83,11 @@ module.exports = async function handler(req, res) {
     if (!isReleaseListingEligible(resolvedData)) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
-    if (!isCustomerIdentitySafe(resolvedData)) return res.status(404).json({ error: 'Listing under identity review' });
+    const controlledWorkbookListing = isReviewedPaneraiReleaseRecord(resolvedData)
+      || isReviewedZenithReleaseRecord(resolvedData);
+    if (!controlledWorkbookListing && !isCustomerIdentitySafe(resolvedData)) {
+      return res.status(404).json({ error: 'Listing under identity review' });
+    }
     const normalized = normalizeMarketRow(
       resolvedData,
       listEquivalentReferences(resolvedData.reference, resolvedData.brand),
@@ -72,6 +107,7 @@ module.exports = async function handler(req, res) {
       listing: {
         id: listing.id,
         brand: listing.brand,
+        model: listing.model,
         reference: listing.reference,
         price_usd: listing.price_usd,
         price_raw: listing.price_raw,

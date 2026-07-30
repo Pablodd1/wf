@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const XLSX = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
+const { extractPriceObservations } = require('../../api/_lib/normalization-v4.cjs');
 
 const VERSION = 'reviewed-panerai-workbook-v1';
 const SOURCE = 'PANERAI_REVIEWED_XLSX_20260729';
@@ -415,8 +416,10 @@ function watchRecord(row) {
   const flags = new Set(Array.isArray(existing.flags) ? existing.flags : []);
   flags.add('HUMAN_REVIEWED_WORKBOOK');
   flags.add('USER_CONFIRMED_FOR_PUBLICATION_20260729');
+  if (row.seller_phone) flags.add('OWNER_APPROVED_CONTACT_PUBLIC');
   if (row.price_usd == null) flags.add('MISSING_PRICE');
   if (/Partial/i.test(row.verification_status)) flags.add('CATALOG_PARTIAL_HUMAN_APPROVED');
+  const sourcePrice = extractPriceObservations(row.raw_message, {}).find(observation => observation.is_primary) || null;
 
   return {
     id: row.record_id,
@@ -426,9 +429,9 @@ function watchRecord(row) {
     dial_color: row.dial_color,
     condition: row.condition,
     year: null,
-    price_raw: null,
+    price_raw: sourcePrice?.amount_original || null,
     price_usd: row.price_usd,
-    currency: row.currency,
+    currency: sourcePrice?.currency_original || row.currency,
     confidence: 100,
     verdict: 'APPROVED',
     source: existing.source || SOURCE,
@@ -447,6 +450,8 @@ function watchRecord(row) {
       source_row_number: row.row_number,
       source_auction_id: row.auction_id,
       normalized_price_currency: row.price_usd == null ? null : 'USD',
+      source_price_text: sourcePrice?.raw_price_text || null,
+      source_price_currency_evidence: sourcePrice?.currency_evidence || null,
     },
     human_edited: true,
     edit_source: `${SOURCE}:${row.workbook_sha256}:${row.row_number}`,

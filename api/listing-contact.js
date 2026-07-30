@@ -1,10 +1,60 @@
 const { getClient } = require('./_lib/supabase');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
-const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
+const {
+  MIN_RELEASE_CONFIDENCE,
+  REVIEWED_ZENITH_RECORD_PREFIX,
+  REVIEWED_ZENITH_SOURCE,
+  isReleaseListingEligible,
+} = require('./_lib/publication-references.cjs');
 
 function normalizePhone(value) {
   const digits = String(value || '').replace(/\D/g, '');
   return digits.length >= 8 && digits.length <= 15 ? digits : null;
+}
+
+function hasOwnerApprovedPublicContact(flags) {
+  return Array.isArray(flags) && flags.includes('OWNER_APPROVED_CONTACT_PUBLIC');
+}
+
+function whatsappUrl(phone, listing) {
+  const item = [listing.brand, listing.reference].filter(Boolean).join(' ');
+  const isBuyerRequest = ['WTB', 'NTQ'].includes(String(listing.listing_type || '').toUpperCase());
+  const message = encodeURIComponent(isBuyerRequest
+    ? `Hello, I may be able to help with your request for ${item || 'this luxury item'} shown on Curated Luxury. Are you still looking?`
+    : `Hello, I am interested in the ${item || 'luxury listing'} shown on Curated Luxury. Is it still available?`);
+  return `https://wa.me/${phone}?text=${message}`;
+}
+
+async function ownerApprovedContactStats(client, sellerPhone) {
+  const base = () => client
+    .from('watch_records')
+    .select('id', { count: 'exact', head: true })
+    .eq('seller_phone', sellerPhone)
+    .contains('flags', ['OWNER_APPROVED_CONTACT_PUBLIC'])
+    .eq('verdict', 'APPROVED')
+    .gte('confidence', MIN_RELEASE_CONFIDENCE);
+  const [total, wts, wtb, active] = await Promise.all([
+    base(),
+    base().eq('listing_type', 'WTS'),
+    base().in('listing_type', ['WTB', 'NTQ']),
+    base()
+      .eq('listing_type', 'WTS')
+      .or('listing_status.is.null,listing_status.not.in.(SOLD,WITHDRAWN,EXPIRED)'),
+  ]);
+  const error = [total, wts, wtb, active].find(result => result.error)?.error;
+  if (error) {
+    console.warn('[listing-contact] approved workbook activity unavailable:', error.message);
+    return null;
+  }
+  return {
+    total_posts: Number(total.count || 0),
+    active_listings: Number(active.count || 0),
+    wts_posts: Number(wts.count || 0),
+    wtb_posts: Number(wtb.count || 0),
+    first_post_at: null,
+    last_post_at: null,
+    posting_years: 0,
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -22,14 +72,30 @@ module.exports = async function handler(req, res) {
     const publicTable = surface === 'price-research'
       ? 'price_research_verified_source'
       : 'trading_floor_verified_listings';
-    const { data: publicListing, error: publicError } = await client
+    const { data: strictPublicListing, error: publicError } = await client
       .from(publicTable).select('id,brand,reference').eq('id', id).maybeSingle();
     if (publicError) throw publicError;
+    let publicListing = strictPublicListing;
+    if (!publicListing
+      && surface === 'trading-floor'
+      && id.startsWith(REVIEWED_ZENITH_RECORD_PREFIX)) {
+      const fallback = await client
+        .from('watch_records')
+        .select('id,brand,reference')
+        .eq('id', id)
+        .eq('source', REVIEWED_ZENITH_SOURCE)
+        .eq('verdict', 'APPROVED')
+        .gte('confidence', MIN_RELEASE_CONFIDENCE)
+        .eq('listing_status', 'ACTIVE')
+        .maybeSingle();
+      if (fallback.error) throw fallback.error;
+      publicListing = fallback.data;
+    }
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
 
     const { data: listing, error: listingError } = await client
       .from('watch_records')
-      .select('id,brand,reference,listing_type,dealer_id,verdict,confidence')
+      .select('id,brand,reference,listing_type,dealer_id,verdict,confidence,source,seller_name,seller_phone,flags')
       .eq('id', id)
       .eq('verdict', 'APPROVED')
       .gte('confidence', MIN_RELEASE_CONFIDENCE)
@@ -44,6 +110,36 @@ module.exports = async function handler(req, res) {
     if (!isPublicationBrandAllowed(resolvedListing.brand)
       || !isReleaseListingEligible(resolvedListing)) {
       return res.status(404).json({ error: 'Listing not included in this release' });
+    }
+    if (hasOwnerApprovedPublicContact(listing.flags) && listing.seller_phone) {
+      const phone = normalizePhone(listing.seller_phone);
+      const dealerStats = await ownerApprovedContactStats(client, listing.seller_phone);
+      const profile = {
+        dealer_name: listing.seller_name || 'WatchFacts member',
+        dealer_company: null,
+        dealer_country: null,
+        dealer_city: null,
+        dealer_rating: null,
+        dealer_review_count: 0,
+        dealer_group_count: 0,
+        dealer_stats: dealerStats,
+        phone_display: listing.seller_phone,
+        contact_source: 'OWNER_APPROVED_WORKBOOK',
+      };
+      if (!phone) {
+        return res.status(200).json({
+          success: true,
+          contact_available: false,
+          reason: 'APPROVED_PHONE_INVALID',
+          ...profile,
+        });
+      }
+      return res.status(200).json({
+        success: true,
+        contact_available: true,
+        ...profile,
+        whatsapp_url: whatsappUrl(phone, resolvedListing),
+      });
     }
     if (!listing.dealer_id) return res.status(200).json({ success: true, contact_available: false, reason: 'DEALER_UNRESOLVED' });
     const { data: lineage, error: lineageError } = await client
@@ -95,16 +191,12 @@ module.exports = async function handler(req, res) {
     const phone = (identities || []).map(item => normalizePhone(item.source_identity)).find(Boolean);
     if (!phone) return res.status(200).json({ success: true, contact_available: false, reason: 'VERIFIED_PHONE_UNAVAILABLE', ...profile });
 
-    const item = [resolvedListing.brand, resolvedListing.reference].filter(Boolean).join(' ');
-    const isBuyerRequest = ['WTB', 'NTQ'].includes(String(listing.listing_type || '').toUpperCase());
-    const message = encodeURIComponent(isBuyerRequest
-      ? `Hello, I may be able to help with your request for ${item || 'this luxury item'} shown on Curated Luxury. Are you still looking?`
-      : `Hello, I am interested in the ${item || 'luxury listing'} shown on Curated Luxury. Is it still available?`);
     return res.status(200).json({
       success: true,
       contact_available: true,
       ...profile,
-      whatsapp_url: `https://wa.me/${phone}?text=${message}`,
+      phone_display: identities.find(item => normalizePhone(item.source_identity) === phone)?.source_identity || `+${phone}`,
+      whatsapp_url: whatsappUrl(phone, resolvedListing),
     });
   } catch (error) {
     console.error('[listing-contact]', error.message);

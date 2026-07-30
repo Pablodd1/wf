@@ -1,6 +1,6 @@
 'use strict';
 
-const CONTROLLED_FILE_RELEASE_BRANDS = ['Panerai'];
+const CONTROLLED_FILE_RELEASE_BRANDS = ['Panerai', 'Zenith'];
 
 function publicationBrands(value = process.env.PUBLICATION_BRANDS) {
   const configured = String(value || '')

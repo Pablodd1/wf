@@ -31,9 +31,13 @@ const {
 const {
   REVIEWED_PANERAI_RECORD_IDS,
   REVIEWED_PANERAI_REFERENCES,
+  REVIEWED_ZENITH_RECORD_END,
+  REVIEWED_ZENITH_RECORD_START,
+  REVIEWED_ZENITH_SOURCE,
   isFullReviewedBrandRelease,
   isReleaseListingEligible,
   isReviewedPaneraiReleaseRecord,
+  isReviewedZenithReleaseRecord,
   publicationReferencePostgrestFilter,
   publicationReferences,
 } = require('./_lib/publication-references.cjs');
@@ -70,6 +74,9 @@ async function loadVerifiedPublicListings(
   mediaSourceTable = 'trading_floor_verified_listings',
 ) {
   if (!ids.length) return new Map();
+  const verifiedMediaEndpoint = mediaSourceTable === 'trading_floor_verified_listings'
+    ? `${supabaseUrl}/rest/v1/trading_floor_verified_listings`
+    : `${supabaseUrl}/rest/v1/${mediaSourceTable}`;
   const batches = [];
   for (let index = 0; index < ids.length; index += 50) {
     batches.push(ids.slice(index, index + 50));
@@ -118,7 +125,7 @@ async function loadVerifiedPublicListings(
       });
       try {
         const response = await fetch(
-          `${supabaseUrl}/rest/v1/${mediaSourceTable}?${params.toString()}`,
+          `${verifiedMediaEndpoint}?${params.toString()}`,
           { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
         );
         if (!response.ok) throw new Error(`verified media read returned ${response.status}`);
@@ -238,6 +245,74 @@ async function loadMarketRowsById(
   return new Map(results.flat().map(row => [String(row.id), row]));
 }
 
+async function loadReviewedZenithRows(supabaseUrl, readKey) {
+  const pageSize = 1000;
+  const rows = [];
+  for (let from = 0; ; from += pageSize) {
+    const params = new URLSearchParams({
+      select: 'id,brand,model,reference,price_usd,price_raw,currency,dial_color,condition,year,verdict,listing_type,source,listing_date,listing_status,created_at,confidence,has_images,thumbnail_url,image_urls,dealer_id,raw_message',
+      id: `gte.${REVIEWED_ZENITH_RECORD_START}`,
+      brand: 'eq.Zenith',
+      source: `eq.${REVIEWED_ZENITH_SOURCE}`,
+      verdict: 'eq.APPROVED',
+      confidence: 'gte.90',
+      order: 'id.asc',
+    });
+    params.append('id', `lt.${REVIEWED_ZENITH_RECORD_END}`);
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/watch_records?${params.toString()}`,
+      {
+        headers: {
+          apikey: readKey,
+          Authorization: `Bearer ${readKey}`,
+          'Range-Unit': 'items',
+          Range: `${from}-${from + pageSize - 1}`,
+        },
+      },
+    );
+    if (!response.ok) throw new Error(`reviewed Zenith source returned ${response.status}`);
+    const page = await response.json();
+    rows.push(...page);
+    if (page.length < pageSize) break;
+  }
+  return rows;
+}
+
+async function loadReviewedZenithPublicRows(supabaseUrl, readKey, rows) {
+  const approvedImageIds = new Set();
+  for (let index = 0; index < rows.length; index += 50) {
+    const batch = rows.slice(index, index + 50);
+    const params = new URLSearchParams({
+      select: 'record_id',
+      record_id: `in.(${batch.map(row => `"${String(row.id).replaceAll('"', '')}"`).join(',')})`,
+      status: 'eq.VISUALLY_VERIFIED',
+    });
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/listing_image_reviews?${params.toString()}`,
+      { headers: { apikey: readKey, Authorization: `Bearer ${readKey}` } },
+    );
+    if (!response.ok) throw new Error(`reviewed Zenith image gate returned ${response.status}`);
+    for (const review of await response.json()) approvedImageIds.add(String(review.record_id));
+  }
+  return new Map(rows
+    .filter(isReviewedZenithReleaseRecord)
+    .map(row => {
+      const hasVerifiedImage = approvedImageIds.has(String(row.id));
+      return [String(row.id), {
+        id: row.id,
+        brand: row.brand,
+        model: row.model,
+        reference: row.reference,
+        dial_color: row.dial_color,
+        has_images: hasVerifiedImage,
+        thumbnail_url: hasVerifiedImage ? row.thumbnail_url : null,
+        image_urls: hasVerifiedImage && Array.isArray(row.image_urls) ? row.image_urls : [],
+        dealer_id: row.dealer_id || null,
+        raw_message: row.raw_message || null,
+      }];
+    }));
+}
+
 async function loadRepostEvidenceById(supabaseUrl, readKey, ids) {
   if (!ids.length) return new Map();
   const batches = [];
@@ -314,7 +389,9 @@ function matchesStrictReleaseFilters(record, {
     if (parsed.brand && String(record.brand || '').toLowerCase() !== parsed.brand.toLowerCase()) return false;
     if (parsed.dial && String(record.dial_color || '').toLowerCase() !== parsed.dial.toLowerCase()) return false;
   }
-  return isReviewedPaneraiReleaseRecord(record) || isCustomerIdentitySafe(record);
+  return isReviewedPaneraiReleaseRecord(record)
+    || isReviewedZenithReleaseRecord(record)
+    || isCustomerIdentitySafe(record);
 }
 
 async function loadFullReviewedBrandCursorPage({
@@ -331,7 +408,11 @@ async function loadFullReviewedBrandCursorPage({
   search,
   imagesOnly,
 }) {
-  const controlledPaneraiRelease = String(requestedBrand || '').trim().toLowerCase() === 'panerai';
+  const requestedBrandKey = String(requestedBrand || '').trim().toLowerCase();
+  const controlledPaneraiRelease = requestedBrandKey === 'panerai';
+  const controlledZenithRelease = requestedBrandKey === 'zenith';
+  const controlledFileRelease = controlledPaneraiRelease || controlledZenithRelease;
+  const controlledReferences = controlledPaneraiRelease ? REVIEWED_PANERAI_REFERENCES : [];
   if (itemType && !['all', 'watches'].includes(itemType)) {
     return {
       count: 0,
@@ -344,23 +425,25 @@ async function loadFullReviewedBrandCursorPage({
       records: [],
       status: 'ok',
       publicationBrands: publicationBrands(),
-      publicationReferences: controlledPaneraiRelease ? REVIEWED_PANERAI_REFERENCES : [],
-      publicationScope: controlledPaneraiRelease ? 'REVIEWED_FILE' : 'ALL_REVIEWED',
+      publicationReferences: controlledReferences,
+      publicationScope: controlledFileRelease ? 'REVIEWED_FILE' : 'ALL_REVIEWED',
       accessMode: 'server_key',
     };
   }
 
   let selected;
-  let total;
+  let totalCount;
   let hasMore;
-  if (controlledPaneraiRelease) {
-    const exactRows = await loadMarketRowsById(
-      supabaseUrl,
-      readKey,
-      REVIEWED_PANERAI_RECORD_IDS,
-      'price_research_verified_source',
-    );
-    const matched = sortTradingItems([...exactRows.values()].map(resolved => ({ resolved })))
+  if (controlledFileRelease) {
+    const controlledRows = controlledPaneraiRelease
+      ? [...(await loadMarketRowsById(
+          supabaseUrl,
+          readKey,
+          REVIEWED_PANERAI_RECORD_IDS,
+          'price_research_verified_source',
+        )).values()]
+      : await loadReviewedZenithRows(supabaseUrl, readKey);
+    const matched = sortTradingItems(controlledRows.map(resolved => ({ resolved })))
       .map(item => item.resolved)
       .filter(record => matchesStrictReleaseFilters(record, {
         listingType,
@@ -371,7 +454,7 @@ async function loadFullReviewedBrandCursorPage({
         search,
       }))
       .filter(record => !imagesOnly || record.has_images !== false);
-    total = matched.length;
+    totalCount = matched.length;
     const available = matched.filter(record => listingIsAfterCursor(record, cursor));
     const offset = cursor ? 0 : (page - 1) * pageSize;
     selected = available.slice(offset, offset + pageSize);
@@ -409,7 +492,6 @@ async function loadFullReviewedBrandCursorPage({
           Authorization: `Bearer ${readKey}`,
           'Range-Unit': 'items',
           Range: `${start}-${end}`,
-          Prefer: 'count=exact',
         },
       },
     );
@@ -427,15 +509,18 @@ async function loadFullReviewedBrandCursorPage({
     const contentRange = response.headers.get('content-range') || '';
     const totalText = contentRange.split('/')[1] || '';
     const parsedTotal = Number.parseInt(totalText, 10);
-    total = Number.isFinite(parsedTotal) ? parsedTotal : null;
+    const total = Number.isFinite(parsedTotal) ? parsedTotal : null;
+    totalCount = total;
     hasMore = matched.length > pageSize || candidateRows.length > pageSize;
   }
-  const verifiedById = await loadVerifiedPublicListings(
-    supabaseUrl,
-    readKey,
-    selected.map(row => row.id),
-    controlledPaneraiRelease ? 'price_research_verified_source' : 'trading_floor_verified_listings',
-  );
+  const verifiedById = controlledZenithRelease
+    ? await loadReviewedZenithPublicRows(supabaseUrl, readKey, selected)
+    : await loadVerifiedPublicListings(
+        supabaseUrl,
+        readKey,
+        selected.map(row => row.id),
+        controlledFileRelease ? 'price_research_verified_source' : 'trading_floor_verified_listings',
+      );
   const current = selected
     .map(row => {
       const verified = verifiedById.get(String(row.id));
@@ -460,7 +545,7 @@ async function loadFullReviewedBrandCursorPage({
       },
       listEquivalentReferences(resolved.reference, resolved.brand),
     );
-    const reviewedWorkbookPrice = controlledPaneraiRelease
+    const reviewedWorkbookPrice = controlledFileRelease
       && Number.isFinite(Number(resolved.price_usd))
       && Number(resolved.price_usd) > 0;
     const priceVerified = resolved.listing_type === 'WTS'
@@ -502,7 +587,7 @@ async function loadFullReviewedBrandCursorPage({
   const cursorRecord = selected.at(-1);
   return {
     count: records.length,
-    total,
+    total: totalCount,
     page,
     pageSize,
     totalIsEstimate: false,
@@ -511,8 +596,8 @@ async function loadFullReviewedBrandCursorPage({
     records,
     status: 'ok',
     publicationBrands: publicationBrands(),
-    publicationReferences: controlledPaneraiRelease ? REVIEWED_PANERAI_REFERENCES : [],
-    publicationScope: controlledPaneraiRelease ? 'REVIEWED_FILE' : 'ALL_REVIEWED',
+    publicationReferences: controlledReferences,
+    publicationScope: controlledFileRelease ? 'REVIEWED_FILE' : 'ALL_REVIEWED',
     accessMode: 'server_key',
   };
 }
