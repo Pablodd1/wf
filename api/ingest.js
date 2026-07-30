@@ -429,6 +429,7 @@ async function loadFullReviewedBrandCursorPage({
   const controlledZenithRelease = requestedBrandKey === 'zenith';
   const controlledFileRelease = controlledPaneraiRelease || controlledZenithRelease;
   const controlledReferences = controlledPaneraiRelease ? REVIEWED_PANERAI_REFERENCES : [];
+  let controlledVerifiedById = null;
   if (itemType && !['all', 'watches'].includes(itemType)) {
     return {
       count: 0,
@@ -452,7 +453,7 @@ async function loadFullReviewedBrandCursorPage({
   let hasMore;
   let nextOffset = null;
   if (controlledFileRelease) {
-    const controlledRows = controlledPaneraiRelease
+    const sourceRows = controlledPaneraiRelease
       ? [...(await loadMarketRowsById(
           supabaseUrl,
           readKey,
@@ -460,6 +461,27 @@ async function loadFullReviewedBrandCursorPage({
           'price_research_verified_source',
         )).values()]
       : await loadReviewedZenithRows(supabaseUrl, readKey);
+    controlledVerifiedById = controlledZenithRelease
+      ? await loadReviewedZenithPublicRows(supabaseUrl, readKey, sourceRows)
+      : await loadVerifiedPublicListings(
+          supabaseUrl,
+          readKey,
+          sourceRows.map(row => row.id),
+          'price_research_verified_source',
+        );
+    const controlledRows = sourceRows.map(row => {
+      const verified = controlledVerifiedById.get(String(row.id));
+      return {
+        ...row,
+        brand: verified?.brand || row.brand,
+        model: verified?.model || row.model,
+        reference: verified?.reference || row.reference,
+        dial_color: verified?.dial_color || row.dial_color,
+        has_images: Boolean(verified?.has_images),
+        thumbnail_url: verified?.thumbnail_url || null,
+        image_urls: verified?.image_urls || [],
+      };
+    });
     const matched = sortTradingItems(controlledRows.map(resolved => ({ resolved })))
       .map(item => item.resolved)
       .filter(record => matchesStrictReleaseFilters(record, {
@@ -532,9 +554,7 @@ async function loadFullReviewedBrandCursorPage({
     totalCount = total;
     hasMore = matched.length > pageSize || candidateRows.length > pageSize;
   }
-  const verifiedById = controlledZenithRelease
-    ? await loadReviewedZenithPublicRows(supabaseUrl, readKey, selected)
-    : await loadVerifiedPublicListings(
+  const verifiedById = controlledVerifiedById || await loadVerifiedPublicListings(
         supabaseUrl,
         readKey,
         selected.map(row => row.id),
