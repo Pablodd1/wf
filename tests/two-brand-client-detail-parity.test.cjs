@@ -31,6 +31,10 @@ test('Trading Floor uses the same safe listing evidence source as Price Research
   assert.match(trading, /Array\.isArray\(publicListing\.image_urls\)/);
   assert.doesNotMatch(trading, /tradingListing\.image_urls/);
   assert.match(research, /detail\?\.image_urls/);
+  for (const api of [tradingApi, researchDetailApi]) {
+    assert.match(api, /rpc\('verified_listing_thumbnail'/);
+    assert.match(api, /p_record_id: id/);
+  }
 });
 
 test('both customer details show contact-redacted original evidence and display-safe seller data', () => {

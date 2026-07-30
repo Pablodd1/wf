@@ -104,7 +104,26 @@ module.exports = async function handler(req, res) {
     } catch (verifiedError) {
       console.warn('[price-research-listing] verified media unavailable; image withheld:', verifiedError.message);
     }
-    const verified = verifiedById.get(id);
+    let verified = verifiedById.get(id);
+    if (!verified?.has_images && isReviewedZenithReleaseRecord(data)) {
+      const verifiedThumbnail = await client.rpc('verified_listing_thumbnail', {
+        p_record_id: id,
+      });
+      if (verifiedThumbnail.error) {
+        console.warn('[price-research-listing] reviewed Zenith image unavailable; image withheld:', verifiedThumbnail.error.message);
+      } else if (verifiedThumbnail.data) {
+        verified = {
+          id,
+          brand: strictGate?.brand || data.brand,
+          model: strictGate?.model || data.model,
+          reference: strictGate?.reference || data.reference,
+          dial_color: strictGate?.dial_color || data.dial_color,
+          has_images: true,
+          thumbnail_url: verifiedThumbnail.data,
+          image_urls: [verifiedThumbnail.data],
+        };
+      }
+    }
     const canonical = strictGate || verified;
     const resolvedData = canonical
       ? {

@@ -13,7 +13,6 @@ const {
   isReviewedPaneraiReleaseRecord,
   isReviewedZenithReleaseRecord,
 } = require('./_lib/publication-references.cjs');
-const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
@@ -45,12 +44,18 @@ module.exports = async function handler(req, res) {
         .maybeSingle();
       if (fallback.error) throw fallback.error;
       if (fallback.data) {
-        const verifiedMedia = (await loadVerifiedListingRows(client, [id])).get(id);
+        const verifiedThumbnail = await client.rpc('verified_listing_thumbnail', {
+          p_record_id: id,
+        });
+        if (verifiedThumbnail.error) {
+          console.warn('[trading-listing] verified Zenith image unavailable; image withheld:', verifiedThumbnail.error.message);
+        }
+        const thumbnailUrl = verifiedThumbnail.error ? null : verifiedThumbnail.data;
         publicListing = {
           ...fallback.data,
-          has_images: Boolean(verifiedMedia?.has_images),
-          thumbnail_url: verifiedMedia?.thumbnail_url || null,
-          image_urls: verifiedMedia?.image_urls || [],
+          has_images: Boolean(thumbnailUrl),
+          thumbnail_url: thumbnailUrl || null,
+          image_urls: thumbnailUrl ? [thumbnailUrl] : [],
         };
       }
     }
