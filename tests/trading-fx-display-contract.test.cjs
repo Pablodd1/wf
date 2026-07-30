@@ -51,8 +51,9 @@ test('Listing detail uses reference aliases and preserves exact source currency'
   assert.match(detail, /price_raw:\s*normalized\.source_price_amount/);
   assert.match(detail, /currency:\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
   assert.match(tradingDetail, /listEquivalentReferences\(resolvedData\.reference,\s*resolvedData\.brand\)/);
-  assert.match(tradingDetail, /listing\.price_raw\s*=\s*normalized\.source_price_amount/);
-  assert.match(tradingDetail, /listing\.currency\s*=\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
+  assert.match(tradingDetail, /listing\.price_raw\s*=\s*reviewedWorkbookPrice/);
+  assert.match(tradingDetail, /listing\.currency\s*=\s*reviewedWorkbookPrice/);
+  assert.match(tradingDetail, /priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
 });
 
 test('all customer price surfaces use equivalent reference evidence', () => {

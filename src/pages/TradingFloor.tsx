@@ -899,6 +899,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           brand: publicListing.brand || tradingListing.brand || listing.brand,
           model: publicListing.model || tradingListing.model || listing.model || null,
           reference: publicListing.reference || tradingListing.reference || listing.reference || '',
+          price_usd: tradingListing.price_usd ?? listing.price_usd,
+          price_raw: tradingListing.price_raw ?? listing.price_raw,
+          currency: tradingListing.currency ?? listing.currency,
           raw_message: publicListing.raw_message || null,
           image_urls: imageUrls,
         });

@@ -61,12 +61,14 @@ test('only Price Research renders cohort analytics for the selected listing', ()
   assert.match(research, /condition/i);
 });
 
-test('customer detail prices require exact raw-line currency evidence', () => {
+test('customer detail prices require exact evidence or an owner-reviewed workbook price', () => {
   for (const api of [tradingApi, researchDetailApi]) {
     assert.match(api, /analytics_currency_status === 'VERIFIED'/);
-    assert.match(api, /priceVerified \? normalized\.analytics_price_usd : null/);
     assert.match(api, /price_evidence_status/);
   }
+  assert.match(tradingApi, /reviewedWorkbookPrice/);
+  assert.match(tradingApi, /HUMAN_APPROVED_WORKBOOK/);
+  assert.match(trading, /price_usd: tradingListing\.price_usd \?\? listing\.price_usd/);
   assert.doesNotMatch(trading, /Price under review/);
   assert.match(trading, /Price on request/);
   assert.match(trading, /getListingMeta\(detailListing\)/);

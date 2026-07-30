@@ -100,12 +100,26 @@ module.exports = async function handler(req, res) {
       listEquivalentReferences(resolvedData.reference, resolvedData.brand),
     );
     const listing = sanitizeTradingRecord(resolvedData, { verifiedImages: Boolean(verifiedListing?.has_images) });
-    const priceVerified = normalized.analytics_currency_status === 'VERIFIED'
+    const reviewedWorkbookPrice = (
+      isReviewedPaneraiReleaseRecord(resolvedData)
+      || isReviewedZenithReleaseRecord(resolvedData)
+    )
+      && Number.isFinite(Number(resolvedData.price_usd))
+      && Number(resolvedData.price_usd) > 0;
+    const priceVerified = reviewedWorkbookPrice || (
+      normalized.analytics_currency_status === 'VERIFIED'
       && Number.isFinite(Number(normalized.analytics_price_usd))
-      && Number(normalized.analytics_price_usd) > 0;
-    listing.price_usd = priceVerified ? normalized.analytics_price_usd : null;
-    listing.price_raw = normalized.source_price_amount || null;
-    listing.currency = priceVerified ? 'USD' : normalized.source_currency || null;
+      && Number(normalized.analytics_price_usd) > 0
+    );
+    listing.price_usd = priceVerified
+      ? (reviewedWorkbookPrice ? Number(resolvedData.price_usd) : normalized.analytics_price_usd)
+      : null;
+    listing.price_raw = reviewedWorkbookPrice
+      ? resolvedData.price_raw
+      : normalized.source_price_amount || null;
+    listing.currency = reviewedWorkbookPrice
+      ? resolvedData.currency
+      : priceVerified ? 'USD' : normalized.source_currency || null;
     const priceIssues = priceVerified
       ? listing.data_quality_issues
       : [...new Set([...(listing.data_quality_issues || []), normalized.analytics_currency_status])];
@@ -137,7 +151,9 @@ module.exports = async function handler(req, res) {
         region: listing.region,
         data_quality_issues: priceIssues,
         data_quality_review_required: priceIssues.length > 0,
-        price_evidence_status: normalized.analytics_currency_status,
+        price_evidence_status: reviewedWorkbookPrice
+          ? 'HUMAN_APPROVED_WORKBOOK'
+          : normalized.analytics_currency_status,
         source_message_available_to_reviewers: Boolean(data.raw_message),
       },
     });
