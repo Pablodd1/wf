@@ -358,6 +358,22 @@ function listingIsAfterCursor(record, cursor) {
 
 function sortTradingItems(items) {
   return [...items].sort((left, right) => {
+    const leftHasImage = Boolean(
+      left.resolved?.has_images
+      && (left.resolved?.thumbnail_url || left.resolved?.image_urls?.length),
+    );
+    const rightHasImage = Boolean(
+      right.resolved?.has_images
+      && (right.resolved?.thumbnail_url || right.resolved?.image_urls?.length),
+    );
+    if (leftHasImage !== rightHasImage) return Number(rightHasImage) - Number(leftHasImage);
+    const leftPrice = String(left.resolved?.currency || '').toUpperCase() === 'USD'
+      ? Number(left.resolved?.price_usd) || 0
+      : 0;
+    const rightPrice = String(right.resolved?.currency || '').toUpperCase() === 'USD'
+      ? Number(right.resolved?.price_usd) || 0
+      : 0;
+    if (leftPrice !== rightPrice) return rightPrice - leftPrice;
     const leftTime = Date.parse(left.resolved?.created_at || '') || Number.NEGATIVE_INFINITY;
     const rightTime = Date.parse(right.resolved?.created_at || '') || Number.NEGATIVE_INFINITY;
     if (leftTime !== rightTime) return rightTime - leftTime;
@@ -434,6 +450,7 @@ async function loadFullReviewedBrandCursorPage({
   let selected;
   let totalCount;
   let hasMore;
+  let nextOffset = null;
   if (controlledFileRelease) {
     const controlledRows = controlledPaneraiRelease
       ? [...(await loadMarketRowsById(
@@ -455,21 +472,25 @@ async function loadFullReviewedBrandCursorPage({
       }))
       .filter(record => !imagesOnly || record.has_images !== false);
     totalCount = matched.length;
-    const available = matched.filter(record => listingIsAfterCursor(record, cursor));
-    const offset = cursor ? 0 : (page - 1) * pageSize;
-    selected = available.slice(offset, offset + pageSize);
-    hasMore = offset + pageSize < available.length;
+    const offset = Number.isSafeInteger(cursor?.offset)
+      ? cursor.offset
+      : (page - 1) * pageSize;
+    selected = matched.slice(offset, offset + pageSize);
+    nextOffset = offset + selected.length;
+    hasMore = nextOffset < matched.length;
   } else {
     const candidateLimit = Math.min(Math.max(pageSize * 5, 50), 500);
-    const start = cursor ? 0 : (page - 1) * pageSize;
-    const end = start + candidateLimit;
+    const start = Number.isSafeInteger(cursor?.offset)
+      ? cursor.offset
+      : (page - 1) * pageSize;
+    const end = start + candidateLimit - 1;
     const params = new URLSearchParams({
       select: [
         'id,brand,model,reference,dial_color,condition,year,price_raw,price_usd,currency',
         'confidence,verdict,source,source_type,listing_type,listing_date,listing_status',
         'created_at,has_images,thumbnail_url,image_urls,region,identity_review_status',
       ].join(','),
-      order: 'created_at.desc.nullslast,id.desc',
+      order: 'has_images.desc,price_usd.desc.nullslast,created_at.desc.nullslast,id.desc',
     });
     if (listingType === 'WTB') params.set('listing_type', 'in.(WTB,NTQ)');
     else if (listingType) params.set('listing_type', `eq.${listingType}`);
@@ -481,9 +502,6 @@ async function loadFullReviewedBrandCursorPage({
     if (parsedSearch.reference) params.set('reference', `eq.${parsedSearch.reference}`);
     if (parsedSearch.brand && !requestedBrand) params.set('brand', `ilike.${parsedSearch.brand}`);
     if (parsedSearch.dial) params.set('dial_color', `ilike.${parsedSearch.dial}`);
-    const cursorFilter = tradingCursorFilter(cursor);
-    if (cursorFilter) params.set('and', `(${cursorFilter})`);
-
     const response = await fetch(
       `${supabaseUrl}/rest/v1/two_brand_verified_trading_release_cache?${params.toString()}`,
       {
@@ -506,6 +524,7 @@ async function loadFullReviewedBrandCursorPage({
       search,
     }));
     selected = matched.slice(0, pageSize);
+    nextOffset = start + selected.length;
     const contentRange = response.headers.get('content-range') || '';
     const totalText = contentRange.split('/')[1] || '';
     const parsedTotal = Number.parseInt(totalText, 10);
@@ -591,7 +610,9 @@ async function loadFullReviewedBrandCursorPage({
     page,
     pageSize,
     totalIsEstimate: false,
-    nextCursor: hasMore && cursorRecord ? encodeTradingCursor(cursorRecord) : null,
+    nextCursor: hasMore && cursorRecord
+      ? encodeTradingCursor({ ...cursorRecord, offset: nextOffset })
+      : null,
     hasMore,
     records,
     status: 'ok',

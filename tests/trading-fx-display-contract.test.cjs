@@ -22,7 +22,7 @@ test('Trading Floor canonical Patek references retain the claimed reference for 
   assert.equal(normalized.analytics_currency_status, 'CURRENCY_RATE_UNVERIFIED');
 });
 
-test('Trading Floor publishes exact source HKD separately from an unverified USD conversion', () => {
+test('Trading Floor publishes exact source HKD without customer-facing review language', () => {
   const ingest = fs.readFileSync(path.join(root, 'api', 'ingest.js'), 'utf8');
   const trading = fs.readFileSync(path.join(root, 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
 
@@ -30,7 +30,8 @@ test('Trading Floor publishes exact source HKD separately from an unverified USD
   assert.match(ingest, /price_raw:\s*normalized\.source_price_amount/);
   assert.match(ingest, /currency:\s*priceVerified\s*\?\s*'USD'\s*:\s*normalized\.source_currency/);
   assert.match(trading, /Source price: \$\{listing\.currency\}/);
-  assert.match(trading, /USD conversion unavailable/);
+  assert.doesNotMatch(trading, /USD conversion unavailable/);
+  assert.doesNotMatch(trading, /Exact source currency is being verified/);
 });
 
 test('Price Research labels excluded HKD evidence in its source currency', () => {

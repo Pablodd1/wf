@@ -43,14 +43,18 @@ test('Trading Floor watch view does not render internal listing labels or identi
   assert.match(floor, /aria-label="Close selected watch"/);
 });
 
-test('Trading Floor shows bounded price evidence before unresolved release rows', () => {
+test('Trading Floor shows image-backed listings before price-ranked rows', () => {
   const floor = read('src/pages/TradingFloor.tsx');
 
   assert.match(floor, /media\.matches \? 48 : 100/);
+  assert.match(floor, /function hasListingImage/);
   assert.match(floor, /function priceEvidenceRank/);
   assert.match(floor, /function verifiedUsdPrice/);
-  assert.match(floor, /verifiedUsdPrice\(right\) - verifiedUsdPrice\(left\)/);
-  assert.match(floor, /Highest verified USD price first; unpriced listings follow\./);
+  assert.match(floor, /Number\(hasListingImage\(right\)\) - Number\(hasListingImage\(left\)\)[\s\S]*verifiedUsdPrice\(right\) - verifiedUsdPrice\(left\)/);
+  assert.match(floor, /Listings with images first; highest verified USD price next\./);
+  assert.doesNotMatch(floor, /Data under review/);
+  assert.doesNotMatch(floor, /Price under review/);
+  assert.doesNotMatch(floor, /Exact source currency is being verified/);
   assert.match(floor, /setListings\(current => sortListingsForDisplay/);
 });
 

@@ -66,6 +66,7 @@ interface ListingRecord {
   confidence: number;
   has_images: boolean;
   thumbnail_url: string | null;
+  image_urls?: string[];
   region: string | null;
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
@@ -127,9 +128,17 @@ function verifiedUsdPrice(listing: ListingRecord) {
   return priceEvidenceRank(listing) === 2 ? Number(listing.price_usd) : 0;
 }
 
+function hasListingImage(listing: ListingRecord) {
+  return Boolean(
+    listing.has_images
+    && (listing.thumbnail_url || listing.image_urls?.some(Boolean)),
+  );
+}
+
 function sortListingsForDisplay(listings: ListingRecord[]) {
   return [...listings].sort((left, right) =>
-    verifiedUsdPrice(right) - verifiedUsdPrice(left)
+    Number(hasListingImage(right)) - Number(hasListingImage(left))
+    || verifiedUsdPrice(right) - verifiedUsdPrice(left)
     || priceEvidenceRank(right) - priceEvidenceRank(left)
     || Date.parse(right.created_at || '') - Date.parse(left.created_at || '')
     || String(right.id).localeCompare(String(left.id)));
@@ -513,7 +522,7 @@ export default function TradingFloor() {
               ? ' customer-visible records from verified inventory'
               : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</>}
           </span>
-          <span>Highest verified USD price first; unpriced listings follow.</span>
+          <span>Listings with images first; highest verified USD price next.</span>
           <span title="Records are fetched in bounded batches from Postgres; search and filters run on the database.">{pageSize} per request keeps mobile memory bounded.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
@@ -801,7 +810,6 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       <div className="mt-5 min-h-[56px]">
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
           <span>{listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}</span>
-          {listing.data_quality_review_required && <span className="rounded-full border px-2 py-0.5" style={{ borderColor: '#B7791F', color: '#F6C453' }}>Data under review</span>}
         </div>
         <button
           type="button"
@@ -950,8 +958,8 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>
 
           <div className="mt-6">
-            <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</div>
-            <div className="mt-1 text-sm" style={{ color: MUTED }}>{meta.rawPriceLabel}</div>
+            {meta.usdPriceLabel && <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</div>}
+            {meta.rawPriceLabel && <div className="mt-1 text-sm" style={{ color: MUTED }}>{meta.rawPriceLabel}</div>}
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
@@ -959,12 +967,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: BORDER }}>{value}</span>
             ))}
           </div>
-
-          {detailListing.data_quality_review_required && (
-            <p className="mt-5 border-l-2 pl-3 text-sm leading-6" style={{ borderColor: '#B7791F', color: '#F6C453' }}>
-              One or more normalized fields were withheld because they conflict with the source data. The original listing remains preserved for review.
-            </p>
-          )}
 
           {meta.postedDate && <div className="mt-6 text-[15px]" style={{ color: INK }}>
             <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
@@ -1026,7 +1028,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{evidence.raw_message}</pre>
               {evidence.raw_message_truncated && (
                 <p className="mt-3 text-xs leading-5" style={{ color: MUTED }}>
-                  Long source text is shortened in this customer view; the immutable original remains preserved for review.
+                  Long source text is shortened in this customer view.
                 </p>
               )}
             </>
@@ -1111,10 +1113,8 @@ function getListingMeta(listing: ListingRecord) {
   const hasUsdPrice = Number.isFinite(Number(listing.price_usd)) && Number(listing.price_usd) > 0;
   const usdPriceLabel = hasUsdPrice
     ? formatUsdPrice(listing.price_usd, listing.listing_type)
-    : hasPriceReviewIssue(listing)
-      ? listing.currency && listing.currency !== 'USD'
-        ? 'USD conversion unavailable'
-        : 'Price under review'
+    : listing.price_raw && listing.currency
+      ? ''
       : formatUsdPrice(listing.price_usd, listing.listing_type);
   const title = buildListingTitle(listing);
 
@@ -1153,18 +1153,8 @@ function formatRawPrice(listing: ListingRecord) {
   if (listing.price_raw && listing.currency) {
     return `Source price: ${listing.currency} ${Math.round(listing.price_raw).toLocaleString('en-US')}`;
   }
-  if (hasPriceReviewIssue(listing)) return 'Exact source currency is being verified';
   if (listing.price_usd) return `${compactNumber(listing.price_usd)}USD`;
   return isBuyerIntent(listing.listing_type) ? 'Buyer budget not stated' : 'Price on request';
-}
-
-function hasPriceReviewIssue(listing: ListingRecord) {
-  return (listing.data_quality_issues || []).some(issue =>
-    issue === 'REFERENCE_TOKEN_AS_PRICE'
-    || issue === 'PRICE_EVIDENCE_LOAD_REQUIRED'
-    || issue === 'MISSING_PRICE'
-    || issue.startsWith('CURRENCY_')
-  );
 }
 
 function formatUsdPrice(value: number | null, listingType: string) {

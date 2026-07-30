@@ -67,7 +67,8 @@ test('customer detail prices require exact raw-line currency evidence', () => {
     assert.match(api, /priceVerified \? normalized\.analytics_price_usd : null/);
     assert.match(api, /price_evidence_status/);
   }
-  assert.match(trading, /Price under review/);
+  assert.doesNotMatch(trading, /Price under review/);
+  assert.match(trading, /Price on request/);
   assert.match(trading, /getListingMeta\(detailListing\)/);
 });
 

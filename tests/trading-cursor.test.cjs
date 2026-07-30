@@ -24,3 +24,16 @@ test('keeps null-date history reachable before moving into dated records', () =>
     'or(and(created_at.is.null,id.lt.row_2),created_at.not.is.null)',
   );
 });
+
+test('round trips a bounded offset for image-first marketplace ordering', () => {
+  const encoded = encodeTradingCursor({
+    id: 'reviewed_zenith_000100_source',
+    created_at: '2026-07-20T18:30:00Z',
+    offset: 100,
+  });
+  assert.deepEqual(decodeTradingCursor(encoded), {
+    id: 'reviewed_zenith_000100_source',
+    createdAt: '2026-07-20T18:30:00.000Z',
+    offset: 100,
+  });
+});
