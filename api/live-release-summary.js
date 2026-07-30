@@ -4,6 +4,7 @@
  * Floor. It deliberately does not count the narrower Price Research cohort.
  */
 const { getClient } = require('./_lib/supabase');
+const { publicationBrands } = require('./_lib/publication-brands.cjs');
 const {
   REVIEWED_PANERAI_RECORD_PREFIX,
   REVIEWED_PANERAI_SOURCE,
@@ -12,14 +13,16 @@ const {
   REVIEWED_ZENITH_SOURCE,
 } = require('./_lib/publication-references.cjs');
 
-const BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'];
+const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'];
 const CACHE_TTL_MS = 5 * 60 * 1000;
 let cached = null;
 
 async function loadSummary() {
   if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.payload;
   const client = getClient();
-  const results = await Promise.all(BRANDS.map(async brand => {
+  const configuredBrands = publicationBrands();
+  const brands = configuredBrands.length ? configuredBrands : DEFAULT_BRANDS;
+  const results = await Promise.all(brands.map(async brand => {
     let query = client
       .from(['Panerai', 'Zenith'].includes(brand)
         ? 'watch_records'

@@ -616,7 +616,7 @@ export default function PriceResearch() {
               <div>
                 <div className="text-sm font-bold" style={{ color: NAVY }}>Live verified inventory</div>
                 <p className="mt-1 text-xs" style={{ color: MUTED }}>
-                  {liveReleaseSummary.total_listing_count.toLocaleString()} customer-visible Rolex and Patek listings on the Trading Floor.
+                  {liveReleaseSummary.total_listing_count.toLocaleString()} customer-visible listings on the Trading Floor.
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1090,7 +1090,7 @@ export default function PriceResearch() {
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    The release starts with canonical-identity-reviewed Rolex and Patek Philippe records that are APPROVED at confidence 90 or higher. Confidence is a parser score, not a probability. Explicit source currency, verified FX provenance when conversion is required, catalog model and dial, bundle, and duplicate checks run before a cohort with five or more observations uses the market plausibility floor and standard 1.5 x IQR method.
+                    The release starts with canonical-identity-reviewed records that are APPROVED at confidence 90 or higher. Confidence is a parser score, not a probability. Explicit source currency, verified FX provenance when conversion is required, catalog model and dial, bundle, and duplicate checks run before a cohort with five or more observations uses the market plausibility floor and standard 1.5 x IQR method.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[

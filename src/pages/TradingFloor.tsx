@@ -42,7 +42,7 @@ const INTENT_OPTIONS = [
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
-const RELEASE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'] as const;
+const INITIAL_RELEASE_BRANDS = ['Panerai', 'Zenith'];
 const REVIEWED_WORKBOOK_SOURCES = new Set([
   'PANERAI_REVIEWED_XLSX_20260729',
   'ZENITH_REVIEWED_XLSX_20260730',
@@ -84,6 +84,7 @@ interface TradingFloorResponse {
   totalIsEstimate?: boolean;
   nextCursor?: string | null;
   hasMore?: boolean;
+  publicationBrands?: string[];
 }
 
 interface ListingContact {
@@ -120,7 +121,7 @@ type ViewMode = 'grid' | 'list';
 type InventoryScope = 'market' | 'archive';
 type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
-type BrandFilter = '' | typeof RELEASE_BRANDS[number];
+type BrandFilter = string;
 
 function priceEvidenceRank(listing: ListingRecord) {
   if (Number(listing.price_usd) > 0 && listing.currency === 'USD') return 2;
@@ -164,8 +165,9 @@ export default function TradingFloor() {
     : '';
   const search = searchParams.get('q') || '';
   const requestedBrand = searchParams.get('brand') || '';
-  const brandFilter: BrandFilter = RELEASE_BRANDS.includes(requestedBrand as typeof RELEASE_BRANDS[number])
-    ? requestedBrand as BrandFilter
+  const [releaseBrands, setReleaseBrands] = useState<string[]>(INITIAL_RELEASE_BRANDS);
+  const brandFilter: BrandFilter = releaseBrands.some(brand => brand.toLowerCase() === requestedBrand.toLowerCase())
+    ? requestedBrand
     : '';
   const conditionFilter = searchParams.get('condition') || '';
   const regionFilter = searchParams.get('region') || '';
@@ -313,7 +315,7 @@ export default function TradingFloor() {
           data = { status: 'error' };
         }
 
-        if (data.status === 'supabase_not_configured' || data.status === 'error' || !data.records || data.records.length === 0) {
+        if (data.status === 'supabase_not_configured') {
           const fallbackRes = await fetch('/top_watches_trading_floor.json', { signal: controller.signal });
           const fallbackData = await fallbackRes.json();
           const mapped = fallbackData.map((item: any) => ({
@@ -357,8 +359,13 @@ export default function TradingFloor() {
             records: filtered,
             total: filtered.length
           };
+        } else if (!response.ok || data.status === 'error' || !Array.isArray(data.records)) {
+          throw new Error(data.error || 'Failed to load listings');
         }
 
+        if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
+          setReleaseBrands(data.publicationBrands);
+        }
         const nextListings = data.records || [];
         setListings(current => sortListingsForDisplay(
           cursor
@@ -456,7 +463,7 @@ export default function TradingFloor() {
                 resetResults();
                 updateViewParams({ brand: null });
               }} />
-              {RELEASE_BRANDS.map(brand => (
+              {releaseBrands.map(brand => (
                 <FilterChoice key={brand} active={brandFilter === brand} label={brand} onClick={() => {
                   resetResults();
                   updateViewParams({ brand });
@@ -496,6 +503,7 @@ export default function TradingFloor() {
       {filtersOpen && (
         <MobileFilterSheet
           brand={brandFilter}
+          releaseBrands={releaseBrands}
           category={categoryFilter}
           intent={intentFilter}
           condition={conditionFilter}
@@ -663,6 +671,7 @@ function InventoryScopeControl({ value, onChange }: { value: InventoryScope; onC
 
 function MobileFilterSheet({
   brand,
+  releaseBrands,
   category,
   intent,
   condition,
@@ -672,6 +681,7 @@ function MobileFilterSheet({
   onClose,
 }: {
   brand: BrandFilter;
+  releaseBrands: string[];
   category: CategoryFilter;
   intent: IntentFilter;
   condition: string;
@@ -707,7 +717,7 @@ function MobileFilterSheet({
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
           <FilterGroup label="Release brands">
             <FilterChoice active={!draftBrand} label="All release brands" onClick={() => setDraftBrand('')} />
-            {RELEASE_BRANDS.map(value => (
+            {releaseBrands.map(value => (
               <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
             ))}
           </FilterGroup>
