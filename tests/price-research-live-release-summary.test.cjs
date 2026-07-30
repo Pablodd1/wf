@@ -17,7 +17,8 @@ test('Price Research distinguishes live Trading Floor inventory from price-eligi
   assert.match(api, /const BRANDS = \['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'\]/);
   assert.match(api, /REVIEWED_ZENITH_RECORD_START/);
   assert.match(api, /REVIEWED_ZENITH_SOURCE/);
-  assert.match(api, /brand === 'Zenith'[\s\S]*\? 'watch_records'/);
+  assert.match(api, /\['Panerai', 'Zenith'\]\.includes\(brand\)[\s\S]*\? 'watch_records'/);
+  assert.match(api, /brand === 'Panerai'[\s\S]*REVIEWED_PANERAI_SOURCE[\s\S]*listing_status\.is\.null,listing_status\.eq\.ACTIVE/);
   assert.match(api, /\.eq\('listing_status', 'ACTIVE'\)/);
   assert.match(page, /\/api\/live-release-summary/);
   assert.match(page, /Live verified inventory/);

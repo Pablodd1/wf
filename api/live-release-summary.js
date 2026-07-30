@@ -21,17 +21,18 @@ async function loadSummary() {
   const client = getClient();
   const results = await Promise.all(BRANDS.map(async brand => {
     let query = client
-      .from(brand === 'Panerai'
-        ? 'trading_floor_verified_listings'
-        : brand === 'Zenith'
-          ? 'watch_records'
-          : 'two_brand_verified_trading_release_cache')
+      .from(['Panerai', 'Zenith'].includes(brand)
+        ? 'watch_records'
+        : 'two_brand_verified_trading_release_cache')
       .select('id', { count: 'exact', head: true })
       .eq('brand', brand);
     if (brand === 'Panerai') {
       query = query
         .like('id', `${REVIEWED_PANERAI_RECORD_PREFIX}%`)
-        .eq('source', REVIEWED_PANERAI_SOURCE);
+        .eq('source', REVIEWED_PANERAI_SOURCE)
+        .eq('verdict', 'APPROVED')
+        .gte('confidence', 90)
+        .or('listing_status.is.null,listing_status.eq.ACTIVE');
     } else if (brand === 'Zenith') {
       query = query
         .gte('id', REVIEWED_ZENITH_RECORD_START)
