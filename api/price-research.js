@@ -437,10 +437,15 @@ module.exports = async function handler(req, res) {
     const analyticsRows = normalizedRows.filter(row => !analyticsSuppressedIds.has(String(row.id)));
     const bundleParentExcludedCount = analyticsRows.filter(row => row.bundle_candidate_count > 1).length;
     const totalListings = analyticsRows.length - bundleParentExcludedCount;
+    const requestedDial = String(req.query.dial || '').trim().toLowerCase();
     const requiredFieldExclusions = analyticsRows
       .map(row => ({ row, reason: classifyResearchEligibility(row, catalogHit) }))
       .filter(item => item.reason)
       .map(({ row, reason }) => ({ ...row, is_outlier: true, outlier_reason: reason }));
+    const retainedEvidenceRows = requiredFieldExclusions.filter(row => (
+      isOwnerReviewedZenithRow(row)
+      && (!requestedDial || String(row.dial_color || '').trim().toLowerCase() === requestedDial)
+    ));
     const eligibleMarketRows = analyticsRows.filter(row => !classifyResearchEligibility(row, catalogHit));
     // Reposts remain immutable evidence, but the same dealer repeatedly offering
     // the same configuration at the same price is one market observation.
@@ -453,7 +458,6 @@ module.exports = async function handler(req, res) {
 
     const cohorts = buildComparableCohorts(marketRows);
     const dialGroups = buildDialGroups(marketRows);
-    const requestedDial = String(req.query.dial || '').trim().toLowerCase();
     const selectedDialGroup = dialGroups.find(group =>
       !requestedDial || group.dial_color.toLowerCase() === requestedDial
     ) || dialGroups[0] || { dial_color: 'Unspecified', rows: [], count: 0, condition_counts: {} };
@@ -569,6 +573,11 @@ module.exports = async function handler(req, res) {
     const serializedOutliers = outlierRows.slice(0, outlierEvidenceLimit);
     const comparableOffset = (evidencePage - 1) * evidencePageSize;
     const serializedComparables = includedRows.slice(comparableOffset, comparableOffset + evidencePageSize);
+    const retainedOffset = (evidencePage - 1) * evidencePageSize;
+    const serializedRetainedEvidence = retainedEvidenceRows.slice(
+      retainedOffset,
+      retainedOffset + evidencePageSize,
+    );
 
     res.status(200).json({
       success: true, brand, reference: rawRef,
@@ -625,6 +634,7 @@ module.exports = async function handler(req, res) {
       rawCount: validPriceRows.length,
       outliersRemoved: statisticalOutlierRows.length,
       excludedEvidenceCount: outlierRows.length,
+      retained_evidence_count: retainedEvidenceRows.length,
       outliers: canReviewExcludedEvidence ? statisticalOutlierRows.map(row => row.price_usd) : [],
       outlier_rows: canReviewExcludedEvidence ? serializedOutliers.map(r => ({
         id: r.id,
@@ -694,6 +704,20 @@ module.exports = async function handler(req, res) {
       },
       liquidity,
       monthly, prices, forecast,
+      retained_rows: serializedRetainedEvidence.map(r => ({
+        id: r.id,
+        price_usd: null,
+        created_at: r.created_at,
+        listing_date: r.listing_date,
+        dial_color: r.dial_color,
+        condition: r.condition,
+        source: r.source,
+        year: r.year,
+        is_outlier: true,
+        outlier_reason: r.outlier_reason,
+        source_price_amount: r.source_price_amount || null,
+        source_currency: r.source_currency || null,
+      })),
       rows: serializedComparables.map(r => ({
         id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,

@@ -11,7 +11,7 @@ import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating'
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
   id: string;
-  price_usd: number;
+  price_usd: number | null;
   created_at: string;
   listing_date?: string | null;
   dial_color: string | null;
@@ -180,6 +180,7 @@ interface PriceData {
   rawCount: number;
   outliersRemoved: number;
   excludedEvidenceCount?: number;
+  retained_evidence_count?: number;
   analytics_ready: boolean;
   sample_quality: 'observational' | 'provisional' | 'robust';
   selected_cohort: { condition: string; dial_color: string; count: number };
@@ -194,6 +195,7 @@ interface PriceData {
   forecast?: ForecastData;
   prices: number[];
   rows: RowData[];
+  retained_rows?: RowData[];
   outlier_rows: RowData[];
   evidence?: {
     comparable_returned: number;
@@ -541,6 +543,7 @@ export default function PriceResearch() {
   const displayRef = data?.resolvedRef || data?.reference || query;
 
   const listings = (data?.rows || []).filter(r => !r.is_outlier);
+  const retainedListings = data?.retained_rows || [];
   const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
   const visibleBrands = showAllBrands
     ? pBrands
@@ -1209,6 +1212,25 @@ export default function PriceResearch() {
               </section>
             )}
 
+            {retainedListings.length > 0 && (
+              <section style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 24 }}>
+                <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}` }}>
+                  <h3 style={{ color: NAVY, fontSize: 15, fontWeight: 700 }}>Reviewed listing evidence</h3>
+                  <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
+                    These exact Zenith listings remain available for their image, seller, dial, condition, and original post. Their prices are excluded from averages until the raw message provides explicit currency evidence.
+                  </p>
+                </div>
+                {retainedListings.map(row => (
+                  <ListingRow
+                    key={row.id}
+                    row={row}
+                    title={`${data?.brand || ''} ${displayRef}`.trim()}
+                    onOpen={() => void openListing(row)}
+                  />
+                ))}
+              </section>
+            )}
+
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
               <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
                 Qualified Comparable Sample ({listings.length} shown of {data.count.toLocaleString()} included)
@@ -1276,8 +1298,17 @@ export default function PriceResearch() {
 
 function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
   const date = row.listing_date;
+  const hasUsdPrice = Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0;
+  const hasSourcePrice = Number.isFinite(Number(row.source_price_amount))
+    && Number(row.source_price_amount) > 0
+    && Boolean(row.source_currency);
+  const priceLabel = hasUsdPrice
+    ? `$${Number(row.price_usd).toLocaleString()}`
+    : hasSourcePrice
+      ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
+      : 'Price under review';
   return (
-    <button type="button" onClick={onOpen} aria-label={`View source detail for ${title} at $${row.price_usd.toLocaleString()}`}
+    <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}`}
       className="min-h-16"
       style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
@@ -1291,7 +1322,8 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
         </div>
       </div>
       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: GOLD }}>${row.price_usd.toLocaleString()}</div>
+        <div style={{ fontSize: 14, fontWeight: 600, color: hasUsdPrice ? GOLD : '#8a6500' }}>{priceLabel}</div>
+        {!hasUsdPrice && <div style={{ color: MUTED, fontSize: 10, marginTop: 2 }}>Excluded from averages</div>}
       </div>
       <Eye className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
     </button>
@@ -1322,10 +1354,12 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   // The summary price is the exact value used by the comparable-set and
   // outlier calculations. A legacy detail row may still contain an older
   // currency conversion, so it must never replace the analytics value here.
-  const displayPrice = Number.isFinite(Number(summary.price_usd)) && Number(summary.price_usd) > 0
+  const resolvedDisplayPrice = Number.isFinite(Number(summary.price_usd)) && Number(summary.price_usd) > 0
     ? Number(summary.price_usd)
     : Number(detail?.price_usd || 0);
-  const rating = rateMarketPrice(displayPrice, benchmark || null, comparableCount);
+  const hasDisplayPrice = Number.isFinite(resolvedDisplayPrice) && resolvedDisplayPrice > 0;
+  const displayPrice = hasDisplayPrice ? resolvedDisplayPrice : null;
+  const rating = rateMarketPrice(displayPrice || 0, benchmark || null, comparableCount);
   const observedDate = observedAt ? observedAt.split('T')[0] : null;
   const observedMonth = observedDate?.slice(0, 7) || '';
   const comparisonData: Array<{
@@ -1338,10 +1372,10 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
     month: point.month,
     avg_price: point.avg_price,
     count: point.count,
-    selected_price: point.month === observedMonth ? displayPrice : null,
+    selected_price: point.month === observedMonth && hasDisplayPrice ? displayPrice : null,
     observed_date: point.month === observedMonth ? observedDate : null,
   }));
-  if (observedMonth && !comparisonData.some(point => point.month === observedMonth)) {
+  if (hasDisplayPrice && observedMonth && !comparisonData.some(point => point.month === observedMonth)) {
     comparisonData.push({
       month: observedMonth,
       avg_price: null,
@@ -1357,9 +1391,9 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
     ...monthly.map(point => Number(point.avg_price)),
     displayPrice,
     cohortAverage,
-  ].filter(value => Number.isFinite(value) && value > 0);
-  const comparisonMin = Math.min(...comparisonPrices);
-  const comparisonMax = Math.max(...comparisonPrices);
+  ].map(Number).filter(value => Number.isFinite(value) && value > 0);
+  const comparisonMin = comparisonPrices.length ? Math.min(...comparisonPrices) : 0;
+  const comparisonMax = comparisonPrices.length ? Math.max(...comparisonPrices) : 1;
   const comparisonPadding = Math.max(1000, (comparisonMax - comparisonMin) * 0.15);
   const comparisonDomain: [number, number] = [
     Math.max(0, Math.floor((comparisonMin - comparisonPadding) / 1000) * 1000),
@@ -1412,8 +1446,19 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
               </div>
 
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{[detail.brand, detail.model, detail.reference].filter((value, index, values) => value && values.indexOf(value) === index).join(' ')}</h1>
-              <div style={{ color: GOLD, fontSize: 26, fontWeight: 800, marginBottom: 28 }}>${displayPrice.toLocaleString()} <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>USD asking price</span></div>
+              <div style={{ color: hasDisplayPrice ? GOLD : '#8a6500', fontSize: 26, fontWeight: 800, marginBottom: 28 }}>
+                {hasDisplayPrice
+                  ? `$${Number(displayPrice).toLocaleString()}`
+                  : detail.price_raw != null && detail.currency
+                    ? `${detail.currency} ${Number(detail.price_raw).toLocaleString()}`
+                    : 'Price under review'}
+                <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>
+                  {hasDisplayPrice ? ' USD asking price' : ' · excluded from averages'}
+                </span>
+              </div>
 
+              {hasDisplayPrice ? (
+                <>
               <DetailCard title="Price rating">
                 <div className="flex items-start gap-4">
                   <div style={{ minWidth: 88, borderRadius: 8, padding: '11px 10px', textAlign: 'center', background: `${rating.color}18`, color: rating.color, border: `1px solid ${rating.color}55`, fontWeight: 800, fontSize: 13 }}>{rating.label}</div>
@@ -1455,6 +1500,14 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                   <div style={{ padding: 16, background: LIGHT_GRAY, color: MUTED, fontSize: 13 }}>A posting date is not available, so this listing cannot be placed on the price timeline yet.</div>
                 )}
               </DetailCard>
+                </>
+              ) : (
+                <DetailCard title="Price evidence">
+                  <div style={{ color: MUTED, fontSize: 13, lineHeight: 1.6 }}>
+                    This reviewed listing is displayed for its source post, image, seller, and watch identity. Its price is not used in averages because the raw message does not provide enough explicit currency evidence for a verified USD observation.
+                  </div>
+                </DetailCard>
+              )}
 
               <DetailCard title="Posted by">
                 {seller?.dealer_name ? (
