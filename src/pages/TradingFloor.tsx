@@ -166,9 +166,8 @@ export default function TradingFloor() {
   const search = searchParams.get('q') || '';
   const requestedBrand = searchParams.get('brand') || '';
   const [releaseBrands, setReleaseBrands] = useState<string[]>(INITIAL_RELEASE_BRANDS);
-  const brandFilter: BrandFilter = releaseBrands.some(brand => brand.toLowerCase() === requestedBrand.toLowerCase())
-    ? requestedBrand
-    : '';
+  const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
+  const brandFilter: BrandFilter = matchedBrand || (releaseBrands.length <= 2 ? releaseBrands[0] || '' : '');
   const conditionFilter = searchParams.get('condition') || '';
   const regionFilter = searchParams.get('region') || '';
   const inventoryScope: InventoryScope = searchParams.get('scope') === 'archive' ? 'archive' : 'market';
@@ -459,10 +458,12 @@ export default function TradingFloor() {
 
           <div className="hidden gap-4 md:grid" aria-label="Marketplace filters">
             <FilterGroup label="Release brands">
-              <FilterChoice active={!brandFilter} label="All release brands" onClick={() => {
-                resetResults();
-                updateViewParams({ brand: null });
-              }} />
+              {releaseBrands.length > 2 && (
+                <FilterChoice active={!brandFilter} label="All release brands" onClick={() => {
+                  resetResults();
+                  updateViewParams({ brand: null });
+                }} />
+              )}
               {releaseBrands.map(brand => (
                 <FilterChoice key={brand} active={brandFilter === brand} label={brand} onClick={() => {
                   resetResults();
@@ -716,7 +717,9 @@ function MobileFilterSheet({
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
           <FilterGroup label="Release brands">
-            <FilterChoice active={!draftBrand} label="All release brands" onClick={() => setDraftBrand('')} />
+            {releaseBrands.length > 2 && (
+              <FilterChoice active={!draftBrand} label="All release brands" onClick={() => setDraftBrand('')} />
+            )}
             {releaseBrands.map(value => (
               <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
             ))}

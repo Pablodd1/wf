@@ -26,4 +26,5 @@ test('Trading Floor accepts an empty release response without loading sample inv
   assert.doesNotMatch(page, /data\.records\.length === 0/);
   assert.match(page, /data\.publicationBrands/);
   assert.match(page, /releaseBrands\.map/);
+  assert.match(page, /releaseBrands\.length <= 2 \? releaseBrands\[0\]/);
 });
