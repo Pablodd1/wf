@@ -14,6 +14,7 @@ const {
   THREE_WATCH_RELEASE_REFERENCES,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
+  isReviewedZenithIdentityCorrectionRecord,
   normalizePublicationReference,
   publicationReferencePostgrestFilter,
   publicationReferences,
@@ -134,4 +135,24 @@ test('reviewed Zenith release is limited to the hash-locked workbook source and 
   assert.equal(isReleaseListingEligible({ ...approved, source: 'legacy' }, ''), false);
   assert.equal(isReleaseListingEligible({ ...approved, listing_status: 'REJECTED' }, ''), false);
   assert.equal(isReleaseListingEligible({ ...approved, verdict: 'HUMAN' }, ''), false);
+});
+
+test('reviewed Zenith cross-brand corrections are limited to exact source rows', () => {
+  const approved = {
+    id: `${REVIEWED_ZENITH_RECORD_PREFIX}001020_wf-example`,
+    brand: 'Rolex',
+    model: 'Daytona',
+    reference: '16520',
+    dial_color: 'Black',
+    source: REVIEWED_ZENITH_SOURCE,
+    listing_status: 'ACTIVE',
+    verdict: 'APPROVED',
+    confidence: 100,
+  };
+  assert.equal(isReviewedZenithIdentityCorrectionRecord(approved), true);
+  assert.equal(isReleaseListingEligible(approved, ''), true);
+  assert.equal(isReviewedZenithIdentityCorrectionRecord({ ...approved, id: `${REVIEWED_ZENITH_RECORD_PREFIX}001019_wf-example` }), false);
+  assert.equal(isReviewedZenithIdentityCorrectionRecord({ ...approved, brand: 'Zenith' }), false);
+  assert.equal(isReviewedZenithIdentityCorrectionRecord({ ...approved, dial_color: null }), false);
+  assert.equal(isReviewedZenithIdentityCorrectionRecord({ ...approved, source: 'legacy' }), false);
 });

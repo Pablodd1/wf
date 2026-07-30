@@ -7,7 +7,7 @@ const XLSX = require('xlsx');
 const { createClient } = require('@supabase/supabase-js');
 const { extractPriceObservations } = require('../../api/_lib/normalization-v4.cjs');
 
-const VERSION = 'reviewed-zenith-workbook-v1';
+const VERSION = 'reviewed-zenith-workbook-v2';
 const SOURCE = 'ZENITH_REVIEWED_XLSX_20260730';
 const EXPECTED_SHA256 = '108f1383d5ef23e6ac938008b9cb702cd07525cc940015a35a573ac963eda8ae';
 const EXPECTED_ROWS = 1403;
@@ -138,6 +138,7 @@ function normalizeRows(sourceRows, workbookSha256, decisions) {
     const rowNumber = index + 2;
     const auctionId = text(source['Auction ID']);
     const rawMessage = text(source.raw_line);
+    const identityOverride = decisions.identity_overrides_by_worksheet_row[String(rowNumber)] || null;
     const sourceDial = nullable(source['Catalog Dial'] || source['Dial Color']);
     const imageUrl = nullable(source['Final Image URL']);
     const visualDial = Object.prototype.hasOwnProperty.call(
@@ -171,21 +172,28 @@ function normalizeRows(sourceRows, workbookSha256, decisions) {
       seller_name: nullable(source['Posted By']),
       seller_phone: nullable(source['Phone Number']),
       listing_type: normalizeIntent(source['Intent / Type']),
-      brand: 'Zenith',
-      model: nullable(source['Catalog Model'] || source.Model),
+      brand: nullable(identityOverride?.brand) || 'Zenith',
+      model: nullable(identityOverride?.model) || nullable(source['Catalog Model'] || source.Model),
       source_model: nullable(source.Model),
       raw_reference: nullable(source['Raw Reference']),
-      reference: normalizeReference(source['Catalog Reference'] || source['Normalized Reference']),
+      reference: normalizeReference(
+        identityOverride?.reference || source['Catalog Reference'] || source['Normalized Reference'],
+      ),
       normalized_reference: normalizeReference(source['Normalized Reference']),
       source_dial: nullable(source['Dial Color']),
       workbook_dial: sourceDial,
-      dial_color: sourceDial || visualDial || null,
+      dial_color: nullable(identityOverride?.dial_color) || sourceDial || visualDial || null,
       visual_dial_color: visualDial === undefined ? null : visualDial,
       condition: nullable(source.Condition),
       workbook_price_usd: positiveNumber(source['Price ($ USD)']),
       verification_tier: nullable(source['Verification Tier']),
       source_confidence: parseConfidence(source['Confidence %']),
-      verification_status: nullable(source['Verification Status']),
+      verification_status: nullable(identityOverride?.verification_status)
+        || nullable(source['Verification Status']),
+      catalog_confirmed: identityOverride
+        ? identityOverride.catalog_confirmed === true
+        : /^Catalog Confirmed$/i.test(text(source['Verification Status'])),
+      identity_correction_basis: nullable(identityOverride?.basis),
       user_image_url: nullable(source['User Image URL']),
       catalog_image_url: nullable(source['Catalog Image URL']),
       final_image_url: imageUrl,
@@ -274,6 +282,7 @@ function watchRecord(row, duplicate) {
   ]);
   if (row.seller_phone) flags.add('OWNER_APPROVED_CONTACT_PUBLIC');
   if (row.visual_dial_color) flags.add('DIAL_VISUALLY_CONFIRMED_20260730');
+  if (row.identity_correction_basis) flags.add('IDENTITY_CORRECTED_FROM_SOURCE_EVIDENCE_20260730');
   if (!row.reference) flags.add('MISSING_REFERENCE');
   if (!row.model) flags.add('MISSING_MODEL');
   if (!row.dial_color) flags.add('MISSING_DIAL');
@@ -316,8 +325,10 @@ function watchRecord(row, duplicate) {
       source_row_sha256: row.source_row_sha256,
       source_row_number: row.row_number,
       source_auction_id: row.auction_id,
-      catalog_confirmed: /^Catalog Confirmed$/i.test(row.verification_status || ''),
+      catalog_confirmed: row.catalog_confirmed,
       visual_dial_confirmed: Boolean(row.visual_dial_color),
+      identity_corrected_from_source_evidence: Boolean(row.identity_correction_basis),
+      identity_correction_basis: row.identity_correction_basis,
       visual_review_status: row.publishable ? 'MATCH_OR_OWNER_CONFIRMED' : 'REJECTED',
       workbook_price_usd: row.workbook_price_usd,
       price_research_currency_status: sourcePrice?.currency_evidence === 'EXPLICIT'
@@ -336,7 +347,7 @@ function watchRecord(row, duplicate) {
     source_type: 'reviewed_workbook',
     listing_date: row.listing_date,
     listing_status: row.publishable ? 'ACTIVE' : 'REJECTED',
-    catalog_confirmed: /^Catalog Confirmed$/i.test(row.verification_status || ''),
+    catalog_confirmed: row.catalog_confirmed,
     catalog_match: {
       brand: row.brand,
       model: row.model,
@@ -359,8 +370,9 @@ function identityEvidence(row) {
     verification_status: row.verification_status,
     verification_tier: row.verification_tier,
     visual_dial_color: row.visual_dial_color,
+    identity_correction_basis: row.identity_correction_basis,
     visual_blockers: row.blocked_reasons,
-    user_instruction: 'Zenith workbook confirmed for publication; missing dials visually reviewed.',
+    user_instruction: 'Owner supplied the Zenith workbook for publication; source-evidence conflicts are corrected or separated.',
   };
 }
 
@@ -481,6 +493,9 @@ async function run() {
       images: rows.filter(row => row.final_image_url).length,
       reachable_images: imageChecks.filter(check => check.reachable).length,
       visual_dials_added: rows.filter(row => row.visual_dial_color).length,
+      identity_overrides: rows.filter(row => row.identity_correction_basis).length,
+      canonical_zenith: publishableRows.filter(row => row.brand === 'Zenith').length,
+      canonical_other_brands: publishableRows.filter(row => row.brand !== 'Zenith').length,
       complete_identity: completeIdentityRows.length,
       incomplete_identity_controlled_floor_only: incompleteIdentityRows.length,
       missing_dial_without_image: missingDialWithoutImage.length,
@@ -623,8 +638,10 @@ async function run() {
       p_operator_id: 'jaismel_reviewed_zenith_workbook_20260730',
       p_reason: imagePublishable
         ? (row.visual_dial_color
-            ? 'Source image visually reviewed against the Zenith listing; missing dial color recorded.'
-            : 'Owner supplied this exact final image with the reviewed Zenith workbook.')
+            ? 'Source image visually reviewed against the listing; missing dial color recorded.'
+            : (row.identity_correction_basis
+                ? 'Source image visually reviewed against the corrected listing identity.'
+                : 'Owner supplied this exact final image with the reviewed workbook.'))
         : `Image withheld after visual review: ${[
             ...row.blocked_reasons,
             ...row.image_withheld_reasons,
@@ -639,7 +656,9 @@ async function run() {
       p_evidence: {
         visual_match: imagePublishable ? 'MATCH' : 'NO_MATCH',
         review_basis: imagePublishable
-          ? (row.visual_dial_color ? 'AGENT_VISUAL_MATCH' : 'OWNER_CONFIRMED_WORKBOOK')
+          ? (row.visual_dial_color || row.identity_correction_basis
+              ? 'AGENT_VISUAL_MATCH'
+              : 'OWNER_CONFIRMED_WORKBOOK')
           : 'REJECTED_MISMATCH_NON_LISTING_MEDIA_OR_INCOMPLETE_IDENTITY',
         source: SOURCE,
         workbook_sha256: row.workbook_sha256,

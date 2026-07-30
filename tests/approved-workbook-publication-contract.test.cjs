@@ -51,7 +51,14 @@ test('Zenith workbook importer is hash locked and separates visual conflicts', (
   assert.match(importer, /CONTROLLED_FLOOR_IDENTITY_INCOMPLETE/);
   assert.match(importer, /visual_match: imagePublishable \? 'MATCH' : 'NO_MATCH'/);
   assert.match(importer, /p_decision: decision/);
+  assert.match(importer, /identity_overrides_by_worksheet_row/);
+  assert.match(importer, /IDENTITY_CORRECTED_FROM_SOURCE_EVIDENCE_20260730/);
   assert.equal(decisions.reviewed_image_count, 176);
-  assert.equal(Object.keys(decisions.blocked_by_worksheet_row).length, 16);
-  assert.equal(Object.keys(decisions.image_withheld_by_worksheet_row).length, 1);
+  assert.equal(Object.keys(decisions.identity_overrides_by_worksheet_row).length, 24);
+  assert.equal(decisions.identity_overrides_by_worksheet_row['1020'].brand, 'Rolex');
+  assert.equal(decisions.identity_overrides_by_worksheet_row['1020'].model, 'Daytona');
+  assert.equal(decisions.identity_overrides_by_worksheet_row['1159'].dial_color, 'White');
+  assert.equal(decisions.identity_overrides_by_worksheet_row['587'].model, 'Defy Classic');
+  assert.equal(Object.keys(decisions.blocked_by_worksheet_row).length, 23);
+  assert.equal(Object.keys(decisions.image_withheld_by_worksheet_row).length, 2);
 });

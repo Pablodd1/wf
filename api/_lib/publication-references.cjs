@@ -19,6 +19,11 @@ const REVIEWED_ZENITH_RECORD_PREFIX = 'reviewed_zenith_';
 const REVIEWED_ZENITH_RECORD_START = 'reviewed_zenith_000000';
 const REVIEWED_ZENITH_RECORD_END = 'reviewed_zenith_999999';
 const REVIEWED_ZENITH_SOURCE = 'ZENITH_REVIEWED_XLSX_20260730';
+const REVIEWED_ZENITH_IDENTITY_CORRECTION_ROWS = new Set([
+  168, 169, 170, 171, 172, 173, 174,
+  287, 288, 289, 290, 291, 292, 293,
+  1020, 1107, 1116, 1117, 1139, 1159,
+]);
 function reviewedPaneraiRecordRange(auctionId, start, end) {
   return Array.from(
     { length: end - start + 1 },
@@ -117,6 +122,27 @@ function isReviewedZenithReleaseRecord(record) {
   );
 }
 
+function isReviewedZenithIdentityCorrectionRecord(record) {
+  const confidence = Number(record?.confidence);
+  const rowNumber = Number(
+    String(record?.id || '').match(/^reviewed_zenith_(\d{6})_/)?.[1],
+  );
+  return Boolean(
+    record
+    && REVIEWED_ZENITH_IDENTITY_CORRECTION_ROWS.has(rowNumber)
+    && String(record.brand || '').trim().toLowerCase() === 'rolex'
+    && String(record.id || '').startsWith(REVIEWED_ZENITH_RECORD_PREFIX)
+    && String(record.source || '') === REVIEWED_ZENITH_SOURCE
+    && String(record.model || '').trim()
+    && String(record.reference || '').trim()
+    && String(record.dial_color || '').trim()
+    && String(record.verdict || '').trim().toUpperCase() === 'APPROVED'
+    && String(record.listing_status || 'ACTIVE').trim().toUpperCase() === 'ACTIVE'
+    && Number.isFinite(confidence)
+    && confidence >= MIN_RELEASE_CONFIDENCE
+  );
+}
+
 function isFullReviewedBrandRelease(value = process.env.PUBLICATION_REFERENCES) {
   return String(value || '').trim().toUpperCase() === FULL_REVIEWED_BRAND_RELEASE;
 }
@@ -154,6 +180,7 @@ function isPublicationReferenceAllowed(brand, reference, value = process.env.PUB
 }
 
 function isReleaseListingEligible(record, value = process.env.PUBLICATION_REFERENCES) {
+  if (isReviewedZenithIdentityCorrectionRecord(record)) return true;
   if (String(record?.brand || '').trim().toLowerCase() === 'panerai') {
     return isReviewedPaneraiReleaseRecord(record);
   }
@@ -196,6 +223,7 @@ module.exports = {
   REVIEWED_ZENITH_RECORD_END,
   REVIEWED_ZENITH_RECORD_PREFIX,
   REVIEWED_ZENITH_RECORD_START,
+  REVIEWED_ZENITH_IDENTITY_CORRECTION_ROWS,
   REVIEWED_ZENITH_SOURCE,
   THREE_WATCH_RELEASE_REFERENCES,
   isFullReviewedBrandRelease,
@@ -203,6 +231,7 @@ module.exports = {
   isReleaseListingEligible,
   isReviewedPaneraiReference,
   isReviewedPaneraiReleaseRecord,
+  isReviewedZenithIdentityCorrectionRecord,
   isReviewedZenithReleaseRecord,
   normalizePublicationReference,
   publicationReferencePostgrestFilter,

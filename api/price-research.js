@@ -29,6 +29,7 @@ const {
   REVIEWED_ZENITH_SOURCE,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
+  isReviewedZenithIdentityCorrectionRecord,
 } = require('./_lib/publication-references.cjs');
 
 // Look up a human model name for a reference from the PROVEN file catalog
@@ -113,8 +114,10 @@ async function retainVerifiedIdentityRows(client, rows) {
 }
 
 function isOwnerReviewedZenithRow(row) {
-  return String(row?.brand || '').trim().toLowerCase() === 'zenith'
-    && String(row?.source || '') === REVIEWED_ZENITH_SOURCE;
+  return (
+    String(row?.brand || '').trim().toLowerCase() === 'zenith'
+      && String(row?.source || '') === REVIEWED_ZENITH_SOURCE
+  ) || isReviewedZenithIdentityCorrectionRecord(row);
 }
 
 async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection) {

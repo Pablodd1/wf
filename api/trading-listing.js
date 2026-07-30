@@ -11,6 +11,7 @@ const {
   REVIEWED_ZENITH_SOURCE,
   isReleaseListingEligible,
   isReviewedPaneraiReleaseRecord,
+  isReviewedZenithIdentityCorrectionRecord,
   isReviewedZenithReleaseRecord,
 } = require('./_lib/publication-references.cjs');
 
@@ -89,7 +90,8 @@ module.exports = async function handler(req, res) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
     const controlledWorkbookListing = isReviewedPaneraiReleaseRecord(resolvedData)
-      || isReviewedZenithReleaseRecord(resolvedData);
+      || isReviewedZenithReleaseRecord(resolvedData)
+      || isReviewedZenithIdentityCorrectionRecord(resolvedData);
     if (!controlledWorkbookListing && !isCustomerIdentitySafe(resolvedData)) {
       return res.status(404).json({ error: 'Listing under identity review' });
     }

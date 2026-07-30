@@ -17,6 +17,7 @@ const {
   MIN_RELEASE_CONFIDENCE,
   REVIEWED_ZENITH_SOURCE,
   isReleaseListingEligible,
+  isReviewedZenithIdentityCorrectionRecord,
   isReviewedZenithReleaseRecord,
 } = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
@@ -157,11 +158,12 @@ module.exports = async function handler(req, res) {
       listingCatalog(resolvedData.reference, resolvedData.brand),
     );
     const suppressedIds = await loadAnalyticsSuppressedIds(client, [id]);
-    const controlledZenithListing = isReviewedZenithReleaseRecord(resolvedData);
+    const controlledWorkbookListing = isReviewedZenithReleaseRecord(resolvedData)
+      || isReviewedZenithIdentityCorrectionRecord(resolvedData);
     const publicEligible = Boolean(strictGate)
-      && (!exclusionReason || controlledZenithListing)
+      && (!exclusionReason || controlledWorkbookListing)
       && !suppressedIds.has(id)
-      && (controlledZenithListing || isCustomerIdentitySafe(resolvedData));
+      && (controlledWorkbookListing || isCustomerIdentitySafe(resolvedData));
     if (!publicEligible && !canReview) {
       return res.status(404).json({ error: 'Listing is retained for authorized human review' });
     }

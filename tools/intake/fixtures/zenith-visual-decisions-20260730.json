@@ -180,10 +180,209 @@
     "1366": "Skeleton",
     "1404": null
   },
+  "identity_overrides_by_worksheet_row": {
+    "168": {
+      "brand": "Rolex",
+      "model": "Datejust",
+      "reference": "16234",
+      "dial_color": "White",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing identifies Rolex reference 16234 and a white Jubilee configuration."
+    },
+    "169": {
+      "brand": "Rolex",
+      "model": "Daytona",
+      "reference": "16520",
+      "dial_color": "White",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "The phrase Zenith Watch identifies the Zenith-movement Rolex Daytona, not the watch brand."
+    },
+    "170": {
+      "brand": "Rolex",
+      "model": "Daytona",
+      "reference": "16523",
+      "dial_color": "White",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing identifies Rolex Daytona reference 16523 with a white dial."
+    },
+    "171": {
+      "brand": "Rolex",
+      "model": "Submariner",
+      "reference": "16610LV",
+      "dial_color": "Black",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing explicitly identifies the Rolex Kermit reference 16610LV."
+    },
+    "172": {
+      "brand": "Rolex",
+      "model": "Submariner",
+      "reference": "16613",
+      "dial_color": "Champagne",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing identifies Rolex reference 16613 and a champagne Serti dial."
+    },
+    "173": {
+      "brand": "Rolex",
+      "model": "Lady-Datejust",
+      "reference": "69173",
+      "dial_color": "Champagne",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing identifies Rolex reference 69173 with a champagne Jubilee configuration."
+    },
+    "174": {
+      "brand": "Rolex",
+      "model": "Lady-Datejust",
+      "reference": "69173",
+      "dial_color": "Silver",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing identifies Rolex reference 69173 with a silver Jubilee configuration."
+    },
+    "287": {
+      "brand": "Rolex",
+      "model": "Datejust",
+      "reference": "16234",
+      "dial_color": "White",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing identifies Rolex reference 16234 and a white Jubilee configuration."
+    },
+    "288": {
+      "brand": "Rolex",
+      "model": "Daytona",
+      "reference": "16520",
+      "dial_color": "White",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "The phrase Zenith Watch identifies the Zenith-movement Rolex Daytona, not the watch brand."
+    },
+    "289": {
+      "brand": "Rolex",
+      "model": "Daytona",
+      "reference": "16523",
+      "dial_color": "White",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing identifies Rolex Daytona reference 16523 with a white dial."
+    },
+    "290": {
+      "brand": "Rolex",
+      "model": "Submariner",
+      "reference": "16610LV",
+      "dial_color": "Black",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing explicitly identifies the Rolex Kermit reference 16610LV."
+    },
+    "291": {
+      "brand": "Rolex",
+      "model": "Submariner",
+      "reference": "16613",
+      "dial_color": "Champagne",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing identifies Rolex reference 16613 and a champagne Serti dial."
+    },
+    "292": {
+      "brand": "Rolex",
+      "model": "Lady-Datejust",
+      "reference": "69173",
+      "dial_color": "Champagne",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing identifies Rolex reference 69173 with a champagne Jubilee configuration."
+    },
+    "293": {
+      "brand": "Rolex",
+      "model": "Lady-Datejust",
+      "reference": "69173",
+      "dial_color": "Silver",
+      "verification_status": "RAW_REFERENCE_CORRECTED",
+      "basis": "Raw listing identifies Rolex reference 69173 with a silver Jubilee configuration."
+    },
+    "587": {
+      "brand": "Zenith",
+      "model": "Defy Classic",
+      "reference": "33.9002.670/96.R587",
+      "dial_color": "Skeleton",
+      "verification_status": "IMAGE_AND_WARRANTY_CARD_CONFIRMED",
+      "basis": "Exact source image shows a Zenith Defy Classic and its warranty card prints this reference."
+    },
+    "746": {
+      "brand": "Zenith",
+      "model": "Defy Classic",
+      "reference": "13184",
+      "dial_color": "Skeleton",
+      "verification_status": "IMAGE_CONFIRMED_MODEL",
+      "basis": "Exact source image shows a Zenith Defy Classic; the Piaget catalog collision is rejected."
+    },
+    "756": {
+      "brand": "Zenith",
+      "model": "Defy Classic",
+      "reference": "13184",
+      "dial_color": "Skeleton",
+      "verification_status": "IMAGE_CONFIRMED_MODEL",
+      "basis": "Exact source image shows a Zenith Defy Classic; the Piaget catalog collision is rejected."
+    },
+    "861": {
+      "brand": "Zenith",
+      "model": "Defy Classic",
+      "reference": "13184",
+      "dial_color": "Skeleton",
+      "verification_status": "IMAGE_CONFIRMED_MODEL",
+      "basis": "Exact source image shows a Zenith Defy Classic; the Piaget catalog collision is rejected."
+    },
+    "1020": {
+      "brand": "Rolex",
+      "model": "Daytona",
+      "reference": "16520",
+      "dial_color": "Black",
+      "verification_status": "IMAGE_AND_RAW_REFERENCE_CONFIRMED",
+      "basis": "Exact source image visibly shows a black-dial Rolex Daytona and the raw listing gives reference 16520."
+    },
+    "1107": {
+      "brand": "Rolex",
+      "model": "Daytona",
+      "reference": "116520",
+      "dial_color": "White",
+      "verification_status": "IMAGE_AND_RAW_REFERENCE_CONFIRMED",
+      "basis": "Exact source image visibly shows a white-dial Rolex Daytona and the raw listing gives reference 116520."
+    },
+    "1116": {
+      "brand": "Rolex",
+      "model": "Daytona",
+      "reference": "16518",
+      "dial_color": "Champagne",
+      "verification_status": "IMAGE_AND_RAW_REFERENCE_CONFIRMED",
+      "basis": "Exact source image visibly shows a champagne-dial yellow-gold Rolex Daytona and the raw listing gives reference 16518."
+    },
+    "1117": {
+      "brand": "Rolex",
+      "model": "Daytona",
+      "reference": "16518",
+      "dial_color": "Champagne",
+      "verification_status": "IMAGE_AND_RAW_REFERENCE_CONFIRMED",
+      "basis": "Exact source image visibly shows a champagne-dial yellow-gold Rolex Daytona and the raw listing gives reference 16518."
+    },
+    "1139": {
+      "brand": "Rolex",
+      "model": "Yacht-Master",
+      "reference": "169622",
+      "dial_color": "Silver",
+      "verification_status": "CATALOG_AND_RAW_REFERENCE_CONFIRMED",
+      "catalog_confirmed": true,
+      "basis": "Local catalog and raw listing agree on Rolex Yacht-Master reference 169622; the collage image is withheld."
+    },
+    "1159": {
+      "brand": "Rolex",
+      "model": "Daytona",
+      "reference": "16520",
+      "dial_color": "White",
+      "verification_status": "IMAGE_AND_RAW_REFERENCE_CONFIRMED",
+      "basis": "Exact source image visibly shows a white-dial Rolex Daytona and the raw listing gives reference 16520."
+    }
+  },
   "image_withheld_by_worksheet_row": {
     "395": [
       "DIAL_NOT_VISIBLE",
       "EXACT_CONFIGURATION_NOT_VISUALLY_VERIFIABLE"
+    ],
+    "1139": [
+      "MULTIPLE_WATCHES_DETECTED",
+      "EXACT_LISTING_IMAGE_NOT_ISOLATED"
     ]
   },
   "blocked_by_worksheet_row": {
@@ -193,6 +392,10 @@
     ],
     "404": [
       "MULTIPLE_WATCHES_DETECTED"
+    ],
+    "431": [
+      "IMAGE_BRAND_CONFLICT_MOVADO",
+      "RAW_IMAGE_CATALOG_IDENTITY_CONFLICT"
     ],
     "435": [
       "NON_WRISTWATCH_ITEM"
@@ -204,11 +407,27 @@
       "IMAGE_BRAND_CONFLICT",
       "NON_WATCH_COMPONENT"
     ],
+    "492": [
+      "GENERATED_BUNDLE_PLACEHOLDER",
+      "MULTIPLE_WATCHES_DETECTED"
+    ],
+    "495": [
+      "GENERATED_BUNDLE_PLACEHOLDER",
+      "MULTIPLE_WATCHES_DETECTED"
+    ],
+    "500": [
+      "GENERATED_BUNDLE_PLACEHOLDER",
+      "MULTIPLE_WATCHES_DETECTED"
+    ],
     "593": [
       "MOVEMENT_ONLY"
     ],
     "710": [
       "MOVEMENT_ONLY"
+    ],
+    "811": [
+      "MULTIPLE_WATCHES_DETECTED",
+      "RAW_IMAGE_CATALOG_IDENTITY_CONFLICT"
     ],
     "812": [
       "BRACELET_ONLY"
@@ -219,11 +438,19 @@
     "1057": [
       "PACKAGING_ONLY"
     ],
+    "1099": [
+      "GENERATED_BUNDLE_PLACEHOLDER",
+      "MULTIPLE_WATCHES_DETECTED"
+    ],
     "1109": [
       "MULTIPLE_WATCHES_DETECTED"
     ],
     "1110": [
       "PACKAGING_ONLY"
+    ],
+    "1118": [
+      "GENERATED_BUNDLE_PLACEHOLDER",
+      "MULTIPLE_WATCHES_DETECTED"
     ],
     "1129": [
       "GENERATED_BUNDLE_PLACEHOLDER",

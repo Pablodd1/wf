@@ -12,6 +12,7 @@ const page = fs.readFileSync(path.join(root, 'src', 'pages', 'PriceResearch.tsx'
 test('reviewed Zenith listings remain inspectable without entering price analytics', () => {
   assert.match(api, /retainedEvidenceRows = requiredFieldExclusions\.filter/);
   assert.match(api, /isOwnerReviewedZenithRow\(row\)/);
+  assert.match(api, /isReviewedZenithIdentityCorrectionRecord\(row\)/);
   assert.match(api, /retained_rows: serializedRetainedEvidence\.map/);
   assert.match(api, /price_usd: null/);
   assert.match(api, /source_price_amount: r\.source_price_amount \|\| null/);

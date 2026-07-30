@@ -1,0 +1,99 @@
+name: Refresh reviewed two-brand release cache
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type REFRESH_REVIEWED_TWO_BRAND_CACHE to continue
+        required: true
+        type: string
+
+concurrency:
+  group: refresh-reviewed-two-brand-release-cache
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: ${{ inputs.confirmation == 'REFRESH_REVIEWED_TWO_BRAND_CACHE' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PGPASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+
+      - name: Refresh customer cache
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          SET statement_timeout = '1800s';
+          REFRESH MATERIALIZED VIEW CONCURRENTLY public.two_brand_verified_trading_release_cache;
+          ANALYZE public.two_brand_verified_trading_release_cache;
+          SQL
+
+      - name: Verify corrected workbook release
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          {
+            echo "## Reviewed workbook cache refresh"
+            echo
+            echo '```text'
+            psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --field-separator=' | ' <<'SQL'
+          SET statement_timeout = '120s';
+          DO $$
+          DECLARE
+            corrected_count bigint;
+          BEGIN
+            SELECT count(*)
+            INTO corrected_count
+            FROM public.two_brand_verified_trading_release_cache
+            WHERE source = 'ZENITH_REVIEWED_XLSX_20260730'
+              AND brand = 'Rolex'
+              AND id ~ '^reviewed_zenith_(000168|000169|000170|000171|000172|000173|000174|000287|000288|000289|000290|000291|000292|000293|001020|001107|001116|001117|001139|001159)_';
+            IF corrected_count <> 12 THEN
+              RAISE EXCEPTION 'Expected 12 deduplicated corrected Rolex offers, found %', corrected_count;
+            END IF;
+          END
+          $$;
+
+          SELECT
+            brand,
+            count(*) AS trading_floor_rows,
+            count(*) FILTER (WHERE has_images) AS visually_verified_image_rows,
+            count(*) FILTER (WHERE identity_review_status = 'HUMAN_APPROVED') AS human_approved_rows
+          FROM public.two_brand_verified_trading_release_cache
+          GROUP BY brand
+          ORDER BY brand;
+          SQL
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
