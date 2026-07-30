@@ -1217,7 +1217,7 @@ export default function PriceResearch() {
                 <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}` }}>
                   <h3 style={{ color: NAVY, fontSize: 15, fontWeight: 700 }}>Reviewed listing evidence</h3>
                   <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
-                    These exact Zenith listings remain available for their image, seller, dial, condition, and original post. Their prices are excluded from averages until the raw message provides explicit currency evidence.
+                    These reviewed workbook listings remain available for their image, seller, dial, condition, and original post. Their prices are excluded from averages until the raw message provides explicit currency evidence.
                   </p>
                 </div>
                 {retainedListings.map(row => (
