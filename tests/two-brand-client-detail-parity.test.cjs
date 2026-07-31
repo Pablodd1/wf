@@ -27,10 +27,12 @@ test('Trading Floor uses the same safe listing evidence source as Price Research
   assert.match(research, /\/api\/price-research-listing\?id=/);
   assert.match(trading, /publicListing\.id !== listing\.id/);
   assert.match(research, /payload\.listing\?\.id !== row\.id/);
-  assert.match(trading, /evidence\.has_images/);
+  assert.match(trading, /hasEmbeddedWorkbookEvidence/);
+  assert.match(trading, /\/api\/reviewed-seller-summary\?id=/);
   assert.match(trading, /Array\.isArray\(publicListing\.image_urls\)/);
   assert.match(trading, /const imageSource = Array\.isArray\(publicListing\.image_urls\)/);
   assert.match(trading, /image_evidence_notice: imageSource\.image_evidence_notice/);
+  assert.match(trading, /SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE/);
   assert.match(research, /detail\?\.image_urls/);
   for (const api of [tradingApi, researchDetailApi]) {
     assert.match(api, /rpc\('verified_listing_thumbnail'/);
@@ -38,15 +40,16 @@ test('Trading Floor uses the same safe listing evidence source as Price Research
   }
 });
 
-test('both customer details show contact-redacted original evidence and display-safe seller data', () => {
+test('customer details show original evidence and only explicitly approved workbook contacts', () => {
   for (const page of [trading, research]) {
     assert.match(page, /Original listing/);
-    assert.match(page, /contact redacted|CONTACT REDACTED/i);
     assert.match(page, /dealer_name/);
     assert.match(page, /dealer_company/);
     assert.match(page, /dealer_profile_url/);
-    assert.doesNotMatch(page, /seller_phone/);
+    assert.match(page, /seller_phone/);
   }
+  assert.match(trading, /sourcePosterContact/);
+  assert.match(research, /reviewed-seller-summary/);
 });
 
 test('only Price Research renders cohort analytics for the selected listing', () => {
@@ -75,8 +78,9 @@ test('customer detail prices require exact evidence or an owner-reviewed workboo
   assert.match(trading, /getListingMeta\(detailListing\)/);
 });
 
-test('Price Research never fabricates brand buttons outside the API catalog', () => {
-  assert.match(research, /useState<\{ brand: string; model_count\?: number; reference_count\?: number \}\[]>\(\[]\)/);
+test('Price Research sources every brand button from the reviewed inventory API', () => {
+  assert.match(research, /fetch\('\/api\/reviewed-market-inventory\?page=1&pageSize=12'/);
+  assert.match(research, /payload\.summary\?\.brands/);
   assert.match(research, /pBrands\.filter\(item => POPULAR_BRANDS\.includes\(item\.brand\)\)/);
   assert.doesNotMatch(research, /pBrands\.find\(item => item\.brand === brand\) \|\| \{ brand \}/);
 });

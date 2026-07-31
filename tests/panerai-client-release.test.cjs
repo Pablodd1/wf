@@ -33,9 +33,12 @@ test('Panerai Price Research reads only exact reviewed IDs and retains workbook 
 test('Panerai public floor deduplicates reposts without changing raw records', () => {
   const ingest = read('api/ingest.js');
   const floor = read('src/pages/TradingFloor.tsx');
+  const reviewedMarket = read('api/reviewed-market-inventory.js');
 
   assert.match(ingest, /const controlledItems = sortTradingItems[\s\S]*const matched = deduplicateTradingItems\(controlledItems\)/);
-  assert.match(floor, /unsupportedRequestedBrand/);
-  assert.match(floor, /is not included in the current reviewed release/);
+  assert.match(floor, /fetch\(`\/api\/reviewed-market-inventory\?/);
+  assert.match(floor, /releaseBrands\.map/);
+  assert.match(reviewedMarket, /summary\.canonical_listings/);
+  assert.doesNotMatch(reviewedMarket, /\.(?:insert|upsert|update|delete)\s*\(/);
   assert.doesNotMatch(ingest, /\.from\('watch_records'\)\.(?:update|upsert|insert|delete)/);
 });

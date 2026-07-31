@@ -26,7 +26,8 @@ test('Trading Floor accepts an empty release response without loading sample inv
   assert.doesNotMatch(page, /data\.records\.length === 0/);
   assert.match(page, /data\.publicationBrands/);
   assert.match(page, /releaseBrands\.map/);
-  assert.match(page, /unsupportedRequestedBrand/);
-  assert.match(page, /!requestedBrand \? releaseBrands\[0\]/);
+  assert.match(page, /const nextListings = data\.records \|\| \[\]/);
+  assert.match(page, /setListings\(nextListings\)/);
+  assert.doesNotMatch(page, /releaseBrands\[0\]/);
   assert.doesNotMatch(page, /top_watches_trading_floor\.json/);
 });

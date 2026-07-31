@@ -131,6 +131,86 @@ interface LiveReleaseSummary {
   brands: Array<{ brand: string; listing_count: number }>;
 }
 
+interface ReviewedMarketRecord {
+  id: string;
+  source_file?: string | null;
+  source_row_number?: number | null;
+  source_record_id?: string | null;
+  posting_date?: string | null;
+  listing_date?: string | null;
+  posted_by?: string | null;
+  seller_name?: string | null;
+  phone_number?: string | null;
+  seller_phone?: string | null;
+  raw_message?: string | null;
+  listing_type?: string | null;
+  brand?: string | null;
+  brand_scope?: string | null;
+  canonical_brand?: string | null;
+  supplied_brand?: string | null;
+  model?: string | null;
+  reference?: string | null;
+  raw_reference?: string | null;
+  normalized_reference?: string | null;
+  catalog_reference?: string | null;
+  dial_color?: string | null;
+  condition?: string | null;
+  source_price_amount?: number | null;
+  source_price_text?: string | null;
+  source_currency?: string | null;
+  price_raw?: number | string | null;
+  price_usd?: number | null;
+  currency?: string | null;
+  workbook_price_usd?: number | null;
+  price_evidence_status?: string | null;
+  display_image_url?: string | null;
+  thumbnail_url?: string | null;
+  image_url?: string | null;
+  image_urls?: string[] | null;
+  review_reasons?: string[] | null;
+  seller_analytics?: {
+    total_posts?: number | null;
+    active_listings?: number | null;
+    wts_posts?: number | null;
+    wtb_posts?: number | null;
+  } | null;
+}
+
+interface ReviewedMarketResponse {
+  success?: boolean;
+  status?: string;
+  page: number;
+  pageSize: number;
+  total: number;
+  totalIsEstimate?: boolean;
+  hasMore: boolean;
+  records?: ReviewedMarketRecord[];
+  listings?: ReviewedMarketRecord[];
+  publicationBrands?: Array<string | { brand: string; listing_count?: number; canonical_listings?: number; model_count?: number; reference_count?: number }>;
+  summary?: {
+    publicationBrands?: Array<string | { brand: string; listing_count?: number; canonical_listings?: number; model_count?: number; reference_count?: number }>;
+    brands?: Array<{ brand: string; listing_count?: number; canonical_listings?: number; model_count?: number; reference_count?: number }>;
+  };
+  error?: string;
+}
+
+interface ReviewedSellerAnalytics {
+  first_post_at?: string | null;
+  last_post_at?: string | null;
+  total_posts?: number | null;
+  wts_posts?: number | null;
+  wtb_posts?: number | null;
+  other_posts?: number | null;
+}
+
+interface ReviewedSellerResponse {
+  status: string;
+  contact_available?: boolean;
+  seller?: { name?: string | null; phone?: string | null } | null;
+  analytics?: ReviewedSellerAnalytics | null;
+  error?: string;
+}
+
 // Real liquidity — either precomputed indicators or a live-derived fallback.
 // NO invented seller/buyer numbers (every field traces to real data).
 interface LiquidityData {
@@ -337,9 +417,15 @@ export default function PriceResearch() {
   const [showAllBrands, setShowAllBrands] = useState(false);
   const [viewerRole, setViewerRole] = useState('public');
   const [liveReleaseSummary, setLiveReleaseSummary] = useState<LiveReleaseSummary | null>(null);
+  const [reviewedInventory, setReviewedInventory] = useState<ReviewedMarketResponse | null>(null);
+  const [reviewedLoading, setReviewedLoading] = useState(false);
+  const [reviewedError, setReviewedError] = useState('');
+  const [analyticsNotice, setAnalyticsNotice] = useState('');
+  const [reviewedFilter, setReviewedFilter] = useState({ brand: '', reference: '' });
+  const reviewedRequestRef = useRef<AbortController | null>(null);
 
   // ── Drill-down picker state (brand → model → reference) ──
-  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number }[]>([]);
+  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
   const [pBrand, setPBrand] = useState('');
   const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
@@ -348,8 +434,43 @@ export default function PriceResearch() {
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
   const [pickerError, setPickerError] = useState('');
 
+  const fetchReviewedInventory = useCallback(async (ref: string, brand = '', page = 1) => {
+    const reference = ref.trim();
+    if (!reference) return;
+    reviewedRequestRef.current?.abort();
+    const controller = new AbortController();
+    reviewedRequestRef.current = controller;
+    setReviewedLoading(true);
+    setReviewedError('');
+    setReviewedInventory(null);
+    setReviewedFilter({ brand, reference });
+    try {
+      const params = new URLSearchParams({ reference, page: String(page), pageSize: '24' });
+      if (brand) params.set('brand', brand);
+      const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal: controller.signal });
+      const payload = await response.json() as ReviewedMarketResponse;
+      if (!response.ok || payload.status === 'error' || payload.success === false) {
+        throw new Error(payload.error || 'Reviewed listing evidence is temporarily unavailable');
+      }
+      setReviewedInventory({
+        ...payload,
+        page: Number(payload.page || page),
+        pageSize: Number(payload.pageSize || 24),
+        total: Number(payload.total || 0),
+        hasMore: Boolean(payload.hasMore),
+        records: Array.isArray(payload.records) ? payload.records : (payload.listings || []),
+      });
+    } catch (requestError) {
+      if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
+      setReviewedError(requestError instanceof Error ? requestError.message : 'Reviewed listing evidence is temporarily unavailable');
+      setReviewedInventory(null);
+    } finally {
+      if (reviewedRequestRef.current === controller) setReviewedLoading(false);
+    }
+  }, []);
+
   const loadModels = useCallback(async (brand: string) => {
-    setPBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setPickerError('');
+    setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setPickerError('');
     if (!brand) return;
     setPLoading('models');
     try {
@@ -387,10 +508,12 @@ export default function PriceResearch() {
     }
     setLoading(true);
     setError('');
+    setAnalyticsNotice('');
     setData(null);
     setSelectedRow(null);
     setListingDetail(null);
     setListingSeller(null);
+    if (evidencePage === 1) void fetchReviewedInventory(normalizedReference, brand, 1);
     try {
       const params = new URLSearchParams({ reference: normalizedReference });
       if (brand) params.set('brand', brand);
@@ -400,22 +523,40 @@ export default function PriceResearch() {
       const d = await r.json();
       if (d.success) {
         setData(d);
-        setQuery(d.resolvedRef || d.reference || normalizedReference);
+        const resolvedReference = d.resolvedRef || d.reference || normalizedReference;
+        setQuery(resolvedReference);
         if (d.brand) setQueryBrand(d.brand);
+        if (evidencePage === 1 && (d.brand !== brand || resolvedReference !== normalizedReference)) {
+          void fetchReviewedInventory(resolvedReference, d.brand || brand, 1);
+        }
       }
-      else setError(d.error || 'No data for this reference');
-    } catch { setError('Failed to fetch'); }
+      else setAnalyticsNotice(brand
+        ? 'Qualified price analytics are pending for this reference. Listings remain available below.'
+        : 'Qualified price analytics could not resolve a brand. All exact-reference listings remain available below.');
+    } catch { setAnalyticsNotice(brand
+      ? 'Qualified price analytics are temporarily unavailable. Listings remain available below.'
+      : 'Qualified price analytics could not resolve a brand. All exact-reference listings remain available below.'); }
     finally { setLoading(false); }
-  }, []);
+  }, [fetchReviewedInventory]);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/catalog-brands', { signal: controller.signal })
+    fetch('/api/reviewed-market-inventory?page=1&pageSize=12', { signal: controller.signal })
       .then(response => response.json())
       .then(payload => {
-        if (payload.success && Array.isArray(payload.brands) && payload.brands.length) setPBrands(payload.brands);
+        const brands = payload.summary?.brands || payload.summary?.publicationBrands || payload.publicationBrands || [];
+        if (Array.isArray(brands) && brands.length) {
+          setPBrands(brands.map((item: string | { brand: string; listing_count?: number; canonical_listings?: number; model_count?: number; reference_count?: number }) => typeof item === 'string'
+            ? { brand: item }
+            : {
+                brand: item.brand,
+                listing_count: Number(item.listing_count ?? item.canonical_listings ?? 0),
+                model_count: item.model_count,
+                reference_count: item.reference_count,
+              }));
+        }
       })
-      .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load catalog brands:', error); });
+      .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load reviewed inventory brands:', error); });
     return () => controller.abort();
   }, []);
 
@@ -481,6 +622,7 @@ export default function PriceResearch() {
   }, []);
 
   useEffect(() => () => listingRequestRef.current.controller?.abort(), []);
+  useEffect(() => () => reviewedRequestRef.current?.abort(), []);
 
   useEffect(() => {
     if (!selectedRow) return;
@@ -555,6 +697,8 @@ export default function PriceResearch() {
 
   const listings = (data?.rows || []).filter(r => !r.is_outlier);
   const retainedListings = data?.retained_rows || [];
+  const reviewedListings = reviewedInventory?.records || reviewedInventory?.listings || [];
+  const reviewedPageCount = Math.max(1, Math.ceil(Number(reviewedInventory?.total || 0) / Number(reviewedInventory?.pageSize || 24)));
   const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
   const visibleBrands = showAllBrands
     ? pBrands
@@ -597,7 +741,19 @@ export default function PriceResearch() {
               <h1 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
               <p className="mt-1 max-w-xl text-sm text-white/60">Search catalog-backed market evidence by watch reference.</p>
             </div>
-            <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="grid gap-2 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
+              <label className="block">
+                <span className="sr-only">Watch brand</span>
+                <select
+                  aria-label="Watch brand"
+                  value={queryBrand}
+                  onChange={event => setQueryBrand(event.target.value)}
+                  className="h-11 w-full rounded-md border border-white/20 bg-[#1a1a20] px-3 text-sm text-white outline-none focus:border-[#c9a03a]"
+                >
+                  <option value="">Select brand</option>
+                  {pBrands.map(item => <option key={item.brand} value={item.brand}>{item.brand}</option>)}
+                </select>
+              </label>
               <label className="relative block">
                 <span className="sr-only">Watch reference</span>
                 <Search aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45" />
@@ -606,7 +762,7 @@ export default function PriceResearch() {
                   aria-label="Watch reference"
                   type="text"
                   value={query}
-                  onChange={event => { setQuery(event.target.value); setQueryBrand(''); }}
+                  onChange={event => setQuery(event.target.value)}
                   onKeyDown={event => { if (event.key === 'Enter' && !loading) void fetchData(query, '', queryBrand); }}
                   placeholder="Enter a watch reference"
                   className="h-11 w-full rounded-md border border-white/20 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#c9a03a]"
@@ -656,7 +812,7 @@ export default function PriceResearch() {
           )}
           <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${pBrand} model` : 'Choose a brand'}</h3>
           <div style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-            Every reference shown here has real approved listing evidence. Five comparable observations are required before price analytics are published.
+            Brands come from the complete available inventory. Five source-qualified comparable observations are required before price analytics are published.
           </div>
 
           {/* Brand chips */}
@@ -668,6 +824,9 @@ export default function PriceResearch() {
                   backgroundColor: WHITE, color: TEXT, fontWeight: 600, textAlign: 'left',
                 }}>
                 {item.brand}
+                {item.listing_count != null && (
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 3 }}>{item.listing_count.toLocaleString()} listings</div>
+                )}
                 {liveListingCount(item.brand) !== null && (
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 3 }}>{liveListingCount(item.brand)?.toLocaleString()} live Trading Floor listings</div>
                 )}
@@ -739,6 +898,61 @@ export default function PriceResearch() {
           <div style={{ padding: 16, borderRadius: 8, marginBottom: 24, backgroundColor: '#fff5f5', border: '1px solid #fecaca', color: RED, fontSize: 14 }}>
             {error}
           </div>
+        )}
+
+        {analyticsNotice && (
+          <div style={{ padding: 16, borderRadius: 8, marginBottom: 24, backgroundColor: '#fffaf0', border: '1px solid #ead9a2', color: '#7a5900', fontSize: 13 }}>
+            {analyticsNotice}
+          </div>
+        )}
+
+        {(reviewedLoading || reviewedError || reviewedInventory) && (
+          <section aria-label="Listing evidence" style={{ marginBottom: 30, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', background: '#fbfaf7' }}>
+            <div style={{ padding: '18px clamp(14px, 3vw, 24px)', borderBottom: `1px solid ${BORDER}` }}>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 style={{ color: NAVY, fontSize: 18, fontWeight: 800 }}>Available listings</h2>
+                  <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4, maxWidth: 780 }}>
+                    Exact listing evidence for {reviewedFilter.brand ? `${reviewedFilter.brand} ` : ''}{reviewedFilter.reference}. Original seller images appear first, followed by the highest supplied prices. Prices without explicit source currency remain separate from market averages.
+                  </p>
+                </div>
+                {reviewedInventory && (
+                  <div style={{ color: NAVY, fontSize: 13, fontWeight: 800 }}>
+                    {reviewedInventory.totalIsEstimate ? '~' : ''}{reviewedInventory.total.toLocaleString()} listing{reviewedInventory.total === 1 ? '' : 's'}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {reviewedLoading && <div style={{ padding: 30, color: MUTED, textAlign: 'center' }}>Loading listings…</div>}
+            {!reviewedLoading && reviewedError && <div role="alert" style={{ padding: 20, color: RED }}>{reviewedError}</div>}
+            {!reviewedLoading && !reviewedError && reviewedInventory && reviewedListings.length === 0 && (
+              <div style={{ padding: 30, color: MUTED, textAlign: 'center' }}>No listing matches this exact brand and reference.</div>
+            )}
+            {!reviewedLoading && reviewedListings.length > 0 && (
+              <div className="grid gap-4 p-4 md:grid-cols-2">
+                {reviewedListings.map(record => <ReviewedEvidenceCard key={record.id} record={record} />)}
+              </div>
+            )}
+
+            {!reviewedLoading && reviewedInventory && reviewedInventory.total > reviewedInventory.pageSize && (
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" style={{ padding: '14px clamp(12px, 3vw, 24px)', borderTop: `1px solid ${BORDER}` }}>
+                <button
+                  type="button"
+                  disabled={reviewedInventory.page <= 1}
+                  onClick={() => void fetchReviewedInventory(reviewedFilter.reference, reviewedFilter.brand, reviewedInventory.page - 1)}
+                  style={{ minHeight: 44, justifySelf: 'start', border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '8px 14px', borderRadius: 6, opacity: reviewedInventory.page <= 1 ? 0.45 : 1 }}
+                >Previous</button>
+                <span style={{ color: MUTED, fontSize: 12 }}>Page {reviewedInventory.page.toLocaleString()} of {reviewedPageCount.toLocaleString()}</span>
+                <button
+                  type="button"
+                  disabled={!reviewedInventory.hasMore}
+                  onClick={() => void fetchReviewedInventory(reviewedFilter.reference, reviewedFilter.brand, reviewedInventory.page + 1)}
+                  style={{ minHeight: 44, justifySelf: 'end', border: `1px solid ${BORDER}`, background: NAVY, color: WHITE, padding: '8px 14px', borderRadius: 6, opacity: reviewedInventory.hasMore ? 1 : 0.45 }}
+                >Next</button>
+              </div>
+            )}
+          </section>
         )}
 
         {data && (
@@ -1227,9 +1441,9 @@ export default function PriceResearch() {
             {retainedListings.length > 0 && (
               <section style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 24 }}>
                 <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}` }}>
-                  <h3 style={{ color: NAVY, fontSize: 15, fontWeight: 700 }}>Reviewed listing evidence</h3>
+                  <h3 style={{ color: NAVY, fontSize: 15, fontWeight: 700 }}>Listing evidence</h3>
                   <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
-                    These reviewed workbook listings remain available for their image, seller, dial, condition, and original post. Their prices are excluded from averages until source currency and dated FX provenance pass the deterministic eligibility checks.
+                    These listings remain available with their image, seller, dial, condition, and original post. Prices stay outside averages until source currency and dated FX provenance pass the deterministic eligibility checks.
                   </p>
                 </div>
                 {retainedListings.map(row => (
@@ -1307,6 +1521,144 @@ export default function PriceResearch() {
 }
 
 // ── Sub-Components ─────────────────────────────────────────────
+
+function ReviewedEvidenceImage({ src, alt }: { src: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return null;
+  return (
+    <div style={{ height: 270, background: '#f1f3f5', overflow: 'hidden', borderRadius: 8, marginBottom: 16 }}>
+      <img
+        src={src}
+        alt={alt}
+        loading="lazy"
+        onError={() => setFailed(true)}
+        style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }}
+      />
+    </div>
+  );
+}
+
+function reviewedPriceLabel(record: ReviewedMarketRecord) {
+  const sourceText = String(record.source_price_text || '').trim();
+  if (sourceText) return sourceText;
+  if (record.currency && record.price_raw != null && String(record.price_raw).trim()) {
+    return `${record.currency} ${record.price_raw}`;
+  }
+  if (record.source_currency && Number.isFinite(Number(record.source_price_amount)) && Number(record.source_price_amount) > 0) {
+    return `${record.source_currency} ${Number(record.source_price_amount).toLocaleString()}`;
+  }
+  if (record.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
+    && Number.isFinite(Number(record.price_usd ?? record.workbook_price_usd))
+    && Number(record.price_usd ?? record.workbook_price_usd) > 0) {
+    return `USD ${Number(record.price_usd ?? record.workbook_price_usd).toLocaleString()}`;
+  }
+  return '';
+}
+
+function reviewedPriceEvidenceLabel(status?: string | null) {
+  if (status === 'SOURCE_EXPLICIT_USD_MATCH') return 'Source-supported USD evidence; all remaining analytics gates still apply.';
+  if (status === 'DATED_FX_PROVENANCE_REQUIRED') return 'Not used in averages: dated FX provenance is required.';
+  if (status === 'EXPLICIT_USD_PRICE_CONFLICT') return 'Not used in averages: the source USD value conflicts with the workbook value.';
+  return 'Not used in averages: source currency evidence is unresolved.';
+}
+
+function ReviewedEvidenceCard({ record }: { record: ReviewedMarketRecord }) {
+  const [sellerOpen, setSellerOpen] = useState(false);
+  const [sellerSummary, setSellerSummary] = useState<ReviewedSellerResponse | null>(null);
+  const [sellerLoading, setSellerLoading] = useState(false);
+  const [sellerError, setSellerError] = useState('');
+  const sellerRequestRef = useRef<AbortController | null>(null);
+  const brand = record.brand || record.canonical_brand || record.brand_scope || record.supplied_brand || 'Watch';
+  const reference = record.reference || record.normalized_reference || record.catalog_reference || record.raw_reference || '';
+  const title = [brand, record.model, reference].filter((value, index, values) => value && values.indexOf(value) === index).join(' ');
+  const imageUrl = record.display_image_url || record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
+  const poster = sellerSummary?.seller?.name || record.posted_by || record.seller_name || '';
+  const phone = sellerSummary?.seller?.phone || record.phone_number || record.seller_phone || '';
+  const price = reviewedPriceLabel(record);
+  const analytics = sellerSummary?.analytics;
+  const sellerMetrics: Array<[string, number]> = [
+    ['For sale', analytics?.wts_posts ?? record.seller_analytics?.wts_posts],
+    ['Looking for', analytics?.wtb_posts ?? record.seller_analytics?.wtb_posts],
+    ['Other posts', analytics?.other_posts],
+    ['Active', record.seller_analytics?.active_listings],
+    ['Total posts', analytics?.total_posts ?? record.seller_analytics?.total_posts],
+  ].flatMap(([label, value]) => value != null && Number.isFinite(Number(value))
+    ? [[String(label), Number(value)] as [string, number]]
+    : []);
+
+  useEffect(() => () => sellerRequestRef.current?.abort(), []);
+
+  const toggleSeller = async () => {
+    if (sellerOpen) {
+      setSellerOpen(false);
+      return;
+    }
+    setSellerOpen(true);
+    if (sellerSummary || sellerLoading) return;
+    sellerRequestRef.current?.abort();
+    const controller = new AbortController();
+    sellerRequestRef.current = controller;
+    setSellerLoading(true);
+    setSellerError('');
+    try {
+      const response = await fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(record.id)}`, { signal: controller.signal });
+      const payload = await response.json() as ReviewedSellerResponse;
+      if (!response.ok || payload.status !== 'ok') throw new Error(payload.error || 'Seller activity is unavailable');
+      setSellerSummary(payload);
+    } catch (requestError) {
+      if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
+      setSellerError(requestError instanceof Error ? requestError.message : 'Seller activity is unavailable');
+    } finally {
+      if (sellerRequestRef.current === controller) setSellerLoading(false);
+    }
+  };
+
+  return (
+    <article style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 18, background: WHITE, minWidth: 0 }}>
+      <ReviewedEvidenceImage src={imageUrl} alt={`${title} original listing image`} />
+      <div style={{ color: GOLD, fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>
+        {record.listing_type || 'Listing'}{record.condition ? ` · ${record.condition}` : ''}
+      </div>
+      <h3 style={{ color: NAVY, fontSize: 17, fontWeight: 800, marginTop: 7 }}>{title}</h3>
+      {record.dial_color && <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>Dial: {record.dial_color}</div>}
+      {price && <div style={{ color: GOLD, fontSize: 18, fontWeight: 800, marginTop: 10 }}>{price}</div>}
+      <div style={{ color: record.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH' ? GREEN : '#7a5900', fontSize: 11, lineHeight: 1.5, marginTop: 5 }}>
+        {reviewedPriceEvidenceLabel(record.price_evidence_status)}
+      </div>
+
+      {(poster || phone || record.listing_date || record.posting_date) && (
+        <div style={{ marginTop: 14, padding: 12, background: LIGHT_GRAY, borderRadius: 7, fontSize: 12, color: TEXT }}>
+          {poster && <div><strong>Posted by:</strong> {poster}</div>}
+          {phone && <div style={{ marginTop: 3 }}><strong>Contact:</strong> {phone}</div>}
+          {(record.listing_date || record.posting_date) && <div style={{ marginTop: 3, color: MUTED }}>{String(record.listing_date || record.posting_date).split('T')[0]}</div>}
+          <button type="button" onClick={() => void toggleSeller()} style={{ marginTop: 10, border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, borderRadius: 6, minHeight: 38, padding: '7px 10px', fontSize: 11, fontWeight: 800 }}>
+            {sellerOpen ? 'Hide seller activity' : 'View seller activity'}
+          </button>
+          {sellerOpen && sellerLoading && <div style={{ marginTop: 10, color: MUTED }}>Loading seller activity…</div>}
+          {sellerOpen && sellerError && <div style={{ marginTop: 10, color: RED }}>{sellerError}</div>}
+          {sellerOpen && sellerSummary && !sellerSummary.contact_available && (
+            <div style={{ marginTop: 10, color: MUTED }}>No seller identity or activity can be linked without guessing.</div>
+          )}
+          {sellerOpen && sellerMetrics.length > 0 && (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {sellerMetrics.map(([label, value]) => <Metric key={label} label={label} value={Number(value).toLocaleString()} />)}
+            </div>
+          )}
+          {sellerOpen && analytics?.first_post_at && <div style={{ marginTop: 10, color: MUTED }}>First observed: {analytics.first_post_at.split('T')[0]}</div>}
+          {sellerOpen && analytics?.last_post_at && <div style={{ marginTop: 3, color: MUTED }}>Last observed: {analytics.last_post_at.split('T')[0]}</div>}
+        </div>
+      )}
+
+      {record.raw_message && (
+        <div style={{ marginTop: 14 }}>
+          <div style={{ color: MUTED, fontSize: 10, fontWeight: 800, letterSpacing: '.07em', marginBottom: 6 }}>ORIGINAL LISTING</div>
+          <pre style={{ margin: 0, padding: 12, background: '#111827', color: '#e5e7eb', borderRadius: 7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 260, overflowY: 'auto', fontSize: 11, lineHeight: 1.5 }}>{record.raw_message}</pre>
+        </div>
+      )}
+
+    </article>
+  );
+}
 
 function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
   const date = row.listing_date;

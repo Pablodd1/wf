@@ -42,7 +42,7 @@ test('reviewed workbook importer retains original currency beside approved USD',
   assert.match(importer, /p_decision: 'VISUALLY_VERIFIED'[\s\S]*public_image_evidence_type: 'REFERENCE_IMAGE'/);
 });
 
-test('Panerai reference images are disclosed on both customer surfaces', () => {
+test('Trading Floor withholds reference-only images while preserving provenance elsewhere', () => {
   const provenance = read('api/_lib/public-image-provenance.cjs');
   const ingest = read('api/ingest.js');
   const detail = read('api/price-research-listing.js');
@@ -53,7 +53,9 @@ test('Panerai reference images are disclosed on both customer surfaces', () => {
   assert.match(provenance, /not the seller’s original listing photo/);
   assert.match(ingest, /publicImageProvenance\(resolved\)/);
   assert.match(detail, /publicImageProvenance\(customerListing\)/);
-  assert.match(floor, /Reference image · not seller photo/);
+  assert.match(floor, /'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'/);
+  assert.doesNotMatch(floor, /Reference image · not seller photo/);
+  assert.match(floor, /onError=\{onUnavailable\}/);
   assert.match(floor, /const imageSource = Array\.isArray\(publicListing\.image_urls\) && publicListing\.image_urls\.length/);
   assert.match(floor, /image_evidence_notice: imageSource\.image_evidence_notice/);
   assert.match(research, /detail\.image_evidence_notice/);

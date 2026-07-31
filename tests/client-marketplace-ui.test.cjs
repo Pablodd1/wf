@@ -43,21 +43,28 @@ test('Trading Floor watch view does not render internal listing labels or identi
   assert.match(floor, /aria-label="Close selected watch"/);
 });
 
-test('Trading Floor shows image-backed listings before price-ranked rows', () => {
+test('Trading Floor uses the server-ranked reviewed release and fails closed on images', () => {
   const floor = read('src/pages/TradingFloor.tsx');
 
   assert.match(floor, /media\.matches \? 24 : 100/);
   assert.match(floor, /function hasListingImage/);
-  assert.match(floor, /function priceEvidenceRank/);
-  assert.match(floor, /function customerSortPrice/);
-  assert.match(floor, /REVIEWED_WORKBOOK_SOURCES\.has\(listing\.source\)/);
-  assert.match(floor, /Number\(hasListingImage\(right\)\) - Number\(hasListingImage\(left\)\)[\s\S]*customerSortPrice\(right\) - customerSortPrice\(left\)/);
+  assert.match(floor, /'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'/);
+  assert.match(floor, /fetch\(`\/api\/reviewed-market-inventory\?/);
+  assert.doesNotMatch(floor, /fetch\(`\/api\/ingest\?/);
   assert.match(floor, /Listings with images first; highest listed price next\./);
   assert.doesNotMatch(floor, /Data under review/);
   assert.doesNotMatch(floor, /Price under review/);
   assert.doesNotMatch(floor, /Exact source currency is being verified/);
-  assert.match(floor, /setListings\(current => sortListingsForDisplay/);
-  assert.match(floor, /REFERENCE_IMAGE[\s\S]*Reference image · not seller photo/);
+  assert.match(floor, /setListings\(nextListings\)/);
+  assert.match(floor, /aria-label="Trading Floor pages"/);
+  assert.match(floor, /Page \{cursorHistory\.length \+ 1\}/);
+  assert.match(floor, /onUnavailable=\{\(\) => setImageAvailable\(false\)\}/);
+  assert.match(floor, /onError=\{onUnavailable\}/);
+  assert.doesNotMatch(floor, /Reference image · not seller photo/);
+  assert.doesNotMatch(floor, /\/api\/featured-listings/);
+  assert.match(floor, /fetch\(`\/api\/reviewed-seller-summary\?id=/);
+  assert.match(floor, /Raw source message/);
+  assert.match(floor, /Source poster activity/);
   assert.doesNotMatch(floor, /per request keeps mobile memory bounded/);
   assert.doesNotMatch(floor, /top_watches_trading_floor\.json/);
 });

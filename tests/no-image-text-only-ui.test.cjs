@@ -12,8 +12,10 @@ const card = trading.slice(trading.indexOf('function ListingCard'), trading.inde
 const detail = trading.slice(trading.indexOf('function ListingDetails'), trading.indexOf('function ContactMetric'));
 
 test('confirmed image-less Trading Floor listings render as text-only cards and details', () => {
-  assert.match(card, /const cardHasImage = hasListingImage\(listing\)/);
+  assert.match(card, /const \[imageAvailable, setImageAvailable\] = useState/);
+  assert.match(card, /const cardHasImage = imageAvailable && hasListingImage\(listing\)/);
   assert.match(card, /\{cardHasImage && \(/);
+  assert.match(card, /onUnavailable=\{\(\) => setImageAvailable\(false\)\}/);
   assert.match(detail, /\{images\.length > 0 && \(/);
   assert.match(detail, /images\.length > 0 \? 'lg:grid-cols/);
   assert.doesNotMatch(trading, /linear-gradient\(145deg, #181820, #0E0E14\)/);

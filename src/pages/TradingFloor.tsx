@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { isCustomerSafeFeaturedListing } from '../lib/featuredListings';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -42,12 +41,6 @@ const INTENT_OPTIONS = [
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
-const INITIAL_RELEASE_BRANDS = ['Panerai', 'Zenith'];
-const REVIEWED_WORKBOOK_SOURCES = new Set([
-  'PANERAI_REVIEWED_XLSX_20260729',
-  'ZENITH_REVIEWED_XLSX_20260730',
-]);
-
 interface ListingRecord {
   id: string;
   brand: string;
@@ -77,6 +70,13 @@ interface ListingRecord {
   region: string | null;
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
+  raw_message?: string | null;
+  raw_message_scope?: 'original_post' | 'stored_source_message' | 'unavailable';
+  raw_message_truncated?: boolean;
+  seller_name?: string | null;
+  seller_phone?: string | null;
+  source_file?: string | null;
+  source_row_number?: number | null;
 }
 
 interface TradingFloorResponse {
@@ -110,6 +110,22 @@ interface ListingContact {
   reason?: string;
 }
 
+interface ReviewedSellerAnalytics {
+  total_posts: number;
+  wts_posts: number;
+  wtb_posts: number;
+  other_posts: number;
+  first_post_at: string | null;
+  last_post_at: string | null;
+}
+
+interface ReviewedSellerSummaryResponse {
+  status?: string;
+  contact_available?: boolean;
+  seller?: { name?: string | null; phone?: string | null } | null;
+  analytics?: ReviewedSellerAnalytics | null;
+}
+
 interface ListingEvidence extends Partial<ListingRecord> {
   id: string;
   brand: string;
@@ -121,39 +137,17 @@ interface ListingEvidence extends Partial<ListingRecord> {
 }
 
 type ViewMode = 'grid' | 'list';
-type InventoryScope = 'market' | 'archive';
 type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
-function priceEvidenceRank(listing: ListingRecord) {
-  if (Number(listing.price_usd) > 0 && listing.currency === 'USD') return 2;
-  if (Number(listing.price_raw) > 0 && listing.currency) return 1;
-  return 0;
-}
-
-function customerSortPrice(listing: ListingRecord) {
-  const price = Number(listing.price_usd);
-  if (!Number.isFinite(price) || price <= 0) return 0;
-  return listing.currency === 'USD' || REVIEWED_WORKBOOK_SOURCES.has(listing.source)
-    ? price
-    : 0;
-}
-
 function hasListingImage(listing: ListingRecord) {
   return Boolean(
+    ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(String(listing.image_evidence_type || ''))
+    &&
     listing.has_images
     && (listing.thumbnail_url || listing.image_urls?.some(Boolean)),
   );
-}
-
-function sortListingsForDisplay(listings: ListingRecord[]) {
-  return [...listings].sort((left, right) =>
-    Number(hasListingImage(right)) - Number(hasListingImage(left))
-    || customerSortPrice(right) - customerSortPrice(left)
-    || priceEvidenceRank(right) - priceEvidenceRank(left)
-    || Date.parse(right.created_at || '') - Date.parse(left.created_at || '')
-    || String(right.id).localeCompare(String(left.id)));
 }
 
 export default function TradingFloor() {
@@ -168,23 +162,18 @@ export default function TradingFloor() {
     : '';
   const search = searchParams.get('q') || '';
   const requestedBrand = searchParams.get('brand') || '';
-  const [releaseBrands, setReleaseBrands] = useState<string[]>(INITIAL_RELEASE_BRANDS);
+  const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
-  const unsupportedRequestedBrand = Boolean(requestedBrand && !matchedBrand);
-  const brandFilter: BrandFilter = matchedBrand || (!requestedBrand ? releaseBrands[0] || '' : '');
-  const conditionFilter = searchParams.get('condition') || '';
-  const regionFilter = searchParams.get('region') || '';
-  const inventoryScope: InventoryScope = searchParams.get('scope') === 'archive' ? 'archive' : 'market';
+  const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
   const [listings, setListings] = useState<ListingRecord[]>([]);
-  const [featuredListings, setFeaturedListings] = useState<ListingRecord[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [totalIsEstimate, setTotalIsEstimate] = useState(false);
   const [cursor, setCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
-  const [regionInput, setRegionInput] = useState(regionFilter);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -192,19 +181,17 @@ export default function TradingFloor() {
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 100);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search, conditionFilter, regionFilter, inventoryScope].join('\u001f');
+  const viewKey = [brandFilter, categoryFilter, intentFilter, search].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
     categoryFilter !== 'all',
     Boolean(intentFilter),
-    Boolean(conditionFilter),
-    Boolean(regionFilter),
-    inventoryScope === 'archive',
   ].filter(Boolean).length;
 
   const resetResults = useCallback(() => {
     setCursor(null);
+    setCursorHistory([]);
     setNextCursor(null);
     setHasMore(false);
     setListings([]);
@@ -257,20 +244,18 @@ export default function TradingFloor() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const nextSearch = searchInput.trim();
-      const nextRegion = regionInput.trim();
-      if (nextSearch !== search || nextRegion !== regionFilter) {
+      if (nextSearch !== search) {
         resetResults();
-        updateViewParams({ q: nextSearch || null, region: nextRegion || null });
+        updateViewParams({ q: nextSearch || null });
       }
     }, 300);
 
     return () => window.clearTimeout(timer);
-  }, [regionFilter, regionInput, resetResults, search, searchInput, updateViewParams]);
+  }, [resetResults, search, searchInput, updateViewParams]);
 
   useEffect(() => {
     setSearchInput(search);
-    setRegionInput(regionFilter);
-  }, [regionFilter, search]);
+  }, [search]);
 
   useEffect(() => {
     if (previousViewKeyRef.current === viewKey) return;
@@ -300,26 +285,22 @@ export default function TradingFloor() {
       setError('');
 
       try {
-        if (unsupportedRequestedBrand) {
+        if (!['all', 'watches'].includes(categoryFilter)) {
           setListings([]);
           setTotal(0);
           setTotalIsEstimate(false);
           setHasMore(false);
           setNextCursor(null);
-          setError(`${requestedBrand} is not included in the current reviewed release.`);
+          setError('The current inventory contains watches only.');
           return;
         }
         const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
-        params.set('quality', inventoryScope);
         if (cursor) params.set('cursor', cursor);
-        params.set('item', categoryFilter);
         if (brandFilter) params.set('brand', brandFilter);
         if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
-        if (conditionFilter) params.set('condition', conditionFilter);
-        if (regionFilter.trim()) params.set('region', regionFilter.trim());
 
-        const response = await fetch(`/api/ingest?${params.toString()}`, { signal: controller.signal });
+        const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal: controller.signal });
         let data: TradingFloorResponse;
         try {
           data = await response.json() as TradingFloorResponse;
@@ -328,7 +309,7 @@ export default function TradingFloor() {
         }
 
         if (data.status === 'supabase_not_configured') {
-          throw new Error('Verified inventory is temporarily unavailable.');
+          throw new Error('Inventory is temporarily unavailable.');
         } else if (!response.ok || data.status === 'error' || !Array.isArray(data.records)) {
           throw new Error(data.error || 'Failed to load listings');
         }
@@ -337,16 +318,10 @@ export default function TradingFloor() {
           setReleaseBrands(data.publicationBrands);
         }
         const nextListings = data.records || [];
-        setListings(current => sortListingsForDisplay(
-          cursor
-            ? [...current, ...nextListings.filter(row => !current.some(existing => existing.id === row.id))]
-            : nextListings,
-        ));
-        if (!cursor) {
-          const parsedTotal = data.total == null ? null : Number(data.total);
-          setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
-          setTotalIsEstimate(parsedTotal !== null && Boolean(data.totalIsEstimate));
-        }
+        setListings(nextListings);
+        const parsedTotal = data.total == null ? null : Number(data.total);
+        setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
+        setTotalIsEstimate(parsedTotal !== null && Boolean(data.totalIsEstimate));
         setNextCursor(data.nextCursor || null);
         setHasMore(Boolean(data.hasMore && data.nextCursor));
         if (!cursor) setSelectedListing(null);
@@ -361,26 +336,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [brandFilter, categoryFilter, conditionFilter, cursor, intentFilter, inventoryScope, pageSize, regionFilter, requestedBrand, search, unsupportedRequestedBrand]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    async function loadFeatured() {
-      try {
-        const params = new URLSearchParams({ limit: '18' });
-        if (brandFilter) params.set('brand', brandFilter);
-        const response = await fetch(`/api/featured-listings?${params.toString()}`, { signal: controller.signal });
-        const data = await response.json() as TradingFloorResponse;
-        if (response.ok && data.status === 'ok') {
-          setFeaturedListings((data.records || []).filter(isCustomerSafeFeaturedListing));
-        }
-      } catch (caught) {
-        if ((caught as Error).name !== 'AbortError') console.warn('Image showcase unavailable:', caught);
-      }
-    }
-    void loadFeatured();
-    return () => controller.abort();
-  }, [brandFilter]);
+  }, [brandFilter, categoryFilter, cursor, intentFilter, pageSize, search]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -392,7 +348,7 @@ export default function TradingFloor() {
             <div>
               <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {total === null ? 'Verified customer-visible inventory' : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} customer-visible listings`}
+                {total === null ? 'Watch inventory' : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings`}
               </p>
             </div>
 
@@ -409,7 +365,7 @@ export default function TradingFloor() {
                 type="search"
                 value={searchInput}
                 onChange={event => setSearchInput(event.target.value)}
-                placeholder="Search brand, reference, or dial"
+                placeholder="Search exact reference"
                 className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
               />
@@ -428,9 +384,9 @@ export default function TradingFloor() {
           </div>
 
           <div className="hidden gap-4 md:grid" aria-label="Marketplace filters">
-            <FilterGroup label="Release brands">
-              {releaseBrands.length > 2 && (
-                <FilterChoice active={!brandFilter} label="All release brands" onClick={() => {
+            <FilterGroup label="Brands">
+              {releaseBrands.length > 0 && (
+                <FilterChoice active={!brandFilter} label="All brands" onClick={() => {
                   resetResults();
                   updateViewParams({ brand: null });
                 }} />
@@ -461,11 +417,6 @@ export default function TradingFloor() {
                 }} />
               ))}
             </FilterGroup>
-            <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
-              <ConditionSelect value={conditionFilter} onChange={value => { resetResults(); updateViewParams({ condition: value || null }); }} />
-              <LocationInput value={regionInput} onChange={setRegionInput} />
-            </div>
-            <InventoryScopeControl value={inventoryScope} onChange={value => { resetResults(); updateViewParams({ scope: value === 'archive' ? 'archive' : null }); }} />
           </div>
 
           <CurrencyConverter compact />
@@ -478,20 +429,13 @@ export default function TradingFloor() {
           releaseBrands={releaseBrands}
           category={categoryFilter}
           intent={intentFilter}
-          condition={conditionFilter}
-          region={regionInput}
-          inventoryScope={inventoryScope}
           onApply={next => {
-            setRegionInput(next.region);
             setFiltersOpen(false);
             resetResults();
             updateViewParams({
               brand: next.brand || null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
-              condition: next.condition || null,
-              region: next.region.trim() || null,
-              scope: next.inventoryScope === 'archive' ? 'archive' : null,
             });
           }}
           onClose={() => setFiltersOpen(false)}
@@ -499,16 +443,12 @@ export default function TradingFloor() {
       )}
 
       <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-5">
-        {featuredListings.length > 0 && !selectedListing && !cursor && !search && ['all', 'watches'].includes(categoryFilter) && ['', 'WTS'].includes(intentFilter) && (
-          <FeaturedImageRail listings={featuredListings} onSelect={openListing} />
-        )}
-
         <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
             Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong>
             {total === null
-              ? ' customer-visible records from verified inventory'
-              : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> customer-visible records</>}
+              ? ' listings'
+              : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> listings</>}
           </span>
           <span>Listings with images first; highest listed price next.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
@@ -543,18 +483,36 @@ export default function TradingFloor() {
           </div>
         )}
 
-        {hasMore && nextCursor && !selectedListing && (
-          <div className="flex items-center justify-center pt-8">
+        {(cursorHistory.length > 0 || (hasMore && nextCursor)) && !selectedListing && (
+          <nav className="flex items-center justify-center gap-3 pt-8" aria-label="Trading Floor pages">
             <button
               type="button"
-              onClick={() => setCursor(nextCursor)}
-              disabled={loading}
-              className="h-11 min-w-[160px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
+              onClick={() => {
+                const previousCursor = cursorHistory[cursorHistory.length - 1] ?? null;
+                setCursorHistory(history => history.slice(0, -1));
+                setCursor(previousCursor);
+              }}
+              disabled={loading || cursorHistory.length === 0}
+              className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
+              style={{ borderColor: GOLD, background: SURFACE, color: GOLD_BRIGHT }}
+            >
+              Previous
+            </button>
+            <span className="text-sm" style={{ color: MUTED }}>Page {cursorHistory.length + 1}</span>
+            <button
+              type="button"
+              onClick={() => {
+                if (!nextCursor) return;
+                setCursorHistory(history => [...history, cursor]);
+                setCursor(nextCursor);
+              }}
+              disabled={loading || !hasMore || !nextCursor}
+              className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
               style={{ borderColor: GOLD, background: GOLD, color: '#09090D' }}
             >
-              {loading ? 'Loading...' : 'Load more'}
+              {loading ? 'Loading...' : 'Next'}
             </button>
-          </div>
+          </nav>
         )}
 
         <div className="pt-10">
@@ -589,65 +547,11 @@ function FilterChoice({ active, disabled = false, label, onClick }: { active: bo
   );
 }
 
-function ConditionSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return (
-    <label className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>
-      Condition
-      <select
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        className="mt-2 h-11 w-full rounded-md border px-3 text-sm font-normal normal-case tracking-normal outline-none"
-        style={{ borderColor: BORDER, background: PANEL, color: INK }}
-      >
-        <option value="">All conditions</option>
-        <option value="New">New</option>
-        <option value="Used">Used</option>
-        <option value="Unknown">Condition not stated</option>
-      </select>
-    </label>
-  );
-}
-
-function LocationInput({ value, onChange }: { value: string; onChange: (value: string) => void }) {
-  return (
-    <label className="min-w-0 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>
-      Location
-      <input
-        type="search"
-        value={value}
-        onChange={event => onChange(event.target.value)}
-        placeholder="City, country, or region"
-        className="mt-2 h-11 w-full rounded-md border px-3 text-sm font-normal normal-case tracking-normal outline-none"
-        style={{ borderColor: BORDER, background: PANEL, color: INK }}
-      />
-    </label>
-  );
-}
-
-function InventoryScopeControl({ value, onChange }: { value: InventoryScope; onChange: (value: InventoryScope) => void }) {
-  return (
-    <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-      <FilterGroup label="Coverage">
-        <FilterChoice active={value === 'market'} label="Main inventory" onClick={() => onChange('market')} />
-        <FilterChoice active={value === 'archive'} label="Full archive" onClick={() => onChange('archive')} />
-      </FilterGroup>
-      <p className="max-w-xl text-xs leading-5" style={{ color: MUTED }}>
-        {value === 'market'
-          ? 'Main indexed inventory first. Searches still include the complete historical archive.'
-          : 'Includes historical records whose original posting date or fields may be incomplete.'}
-      </p>
-    </div>
-  );
-}
-
 function MobileFilterSheet({
   brand,
   releaseBrands,
   category,
   intent,
-  condition,
-  region,
-  inventoryScope,
   onApply,
   onClose,
 }: {
@@ -655,18 +559,12 @@ function MobileFilterSheet({
   releaseBrands: string[];
   category: CategoryFilter;
   intent: IntentFilter;
-  condition: string;
-  region: string;
-  inventoryScope: InventoryScope;
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; condition: string; region: string; inventoryScope: InventoryScope }) => void;
+  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
-  const [draftCondition, setDraftCondition] = useState(condition);
-  const [draftRegion, setDraftRegion] = useState(region);
-  const [draftInventoryScope, setDraftInventoryScope] = useState(inventoryScope);
 
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="presentation">
@@ -686,9 +584,9 @@ function MobileFilterSheet({
         </header>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
-          <FilterGroup label="Release brands">
-            {releaseBrands.length > 2 && (
-              <FilterChoice active={!draftBrand} label="All release brands" onClick={() => setDraftBrand('')} />
+          <FilterGroup label="Brands">
+            {releaseBrands.length > 0 && (
+              <FilterChoice active={!draftBrand} label="All brands" onClick={() => setDraftBrand('')} />
             )}
             {releaseBrands.map(value => (
               <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
@@ -710,9 +608,6 @@ function MobileFilterSheet({
           {!['all', 'watches'].includes(draftCategory) && (
             <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
           )}
-          <ConditionSelect value={draftCondition} onChange={setDraftCondition} />
-          <LocationInput value={draftRegion} onChange={setDraftRegion} />
-          <InventoryScopeControl value={draftInventoryScope} onChange={setDraftInventoryScope} />
         </div>
 
         <footer className="grid shrink-0 grid-cols-2 gap-3 border-t p-4" style={{ borderColor: BORDER, background: SURFACE }}>
@@ -720,53 +615,11 @@ function MobileFilterSheet({
             setDraftBrand('');
             setDraftCategory('all');
             setDraftIntent('');
-            setDraftCondition('');
-            setDraftRegion('');
-            setDraftInventoryScope('market');
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, condition: draftCondition, region: draftRegion.trim(), inventoryScope: draftInventoryScope })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
         </footer>
       </section>
     </div>
-  );
-}
-
-function FeaturedImageRail({ listings, onSelect }: { listings: ListingRecord[]; onSelect: (listing: ListingRecord) => void }) {
-  return (
-    <section className="mb-8" aria-labelledby="featured-listings-heading">
-      <div className="mb-4 flex items-end justify-between gap-4">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Visual inventory</div>
-          <h2 id="featured-listings-heading" className="mt-1 text-xl font-semibold" style={{ color: INK }}>Featured watches with reviewed imagery</h2>
-          <p className="mt-1 max-w-2xl text-xs leading-5" style={{ color: MUTED }}>Original listing photos and clearly labeled model-reference images from the reviewed release.</p>
-        </div>
-        <span className="text-xs" style={{ color: MUTED }}>{listings.length} linked listings</span>
-      </div>
-      <div className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 hide-scrollbar">
-        {listings.map(listing => {
-          const meta = getListingMeta(listing);
-          return (
-            <button
-              key={`featured-${listing.id}`}
-              type="button"
-              onClick={() => onSelect(listing)}
-              className="group w-[220px] shrink-0 snap-start overflow-hidden rounded-md border text-left transition hover:-translate-y-0.5 sm:w-[250px]"
-              style={{ borderColor: BORDER, background: SURFACE }}
-            >
-              <img src={listing.thumbnail_url || ''} alt={meta.title} className="h-[250px] w-full object-cover sm:h-[286px]" loading="lazy" />
-              <span className="block min-h-[92px] px-4 py-3">
-                <span className="block truncate text-sm font-medium" style={{ color: INK }}>{meta.title}</span>
-                {listing.image_evidence_type === 'REFERENCE_IMAGE' && (
-                  <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>Reference image</span>
-                )}
-                <span className="mt-1 block text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</span>
-                <span className="mt-2 block text-[11px] uppercase tracking-[0.12em]" style={{ color: MUTED }}>View listing</span>
-              </span>
-            </button>
-          );
-        })}
-      </div>
-    </section>
   );
 }
 
@@ -791,7 +644,8 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
 
 function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
-  const cardHasImage = hasListingImage(listing);
+  const [imageAvailable, setImageAvailable] = useState(() => hasListingImage(listing));
+  const cardHasImage = imageAvailable && hasListingImage(listing);
 
   return (
     <article
@@ -799,14 +653,9 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       style={{ borderColor: selected ? GOLD : BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.28)' }}
     >
       {cardHasImage && (
-        <>
-          <button type="button" onClick={onSelect} className="block text-left">
-            <ListingImage listing={listing} className="h-[338px] w-full" />
-          </button>
-          {listing.image_evidence_type === 'REFERENCE_IMAGE' && (
-            <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>Reference image · not seller photo</div>
-          )}
-        </>
+        <button type="button" onClick={onSelect} className="block text-left">
+          <ListingImage listing={listing} className="h-[338px] w-full" onUnavailable={() => setImageAvailable(false)} />
+        </button>
       )}
 
       <div className={`${cardHasImage ? 'mt-5' : ''} min-h-[56px]`}>
@@ -842,11 +691,14 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 }
 
 function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
+  const hasEmbeddedWorkbookEvidence = Object.prototype.hasOwnProperty.call(listing, 'raw_message');
   const canLoadPublicEvidence = Boolean(listing.reference && listing.brand);
-  const [contact, setContact] = useState<ListingContact | null>(null);
-  const [evidence, setEvidence] = useState<ListingEvidence | null>(null);
+  const [contact, setContact] = useState<ListingContact | null>(() => hasEmbeddedWorkbookEvidence ? sourcePosterContact(listing) : null);
+  const [sellerAnalytics, setSellerAnalytics] = useState<ReviewedSellerAnalytics | null>(null);
+  const [evidence, setEvidence] = useState<ListingEvidence | null>(() => hasEmbeddedWorkbookEvidence ? { ...listing, raw_message: listing.raw_message || null } : null);
   const [evidenceError, setEvidenceError] = useState('');
   const [activeImage, setActiveImage] = useState(0);
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const detailListing = useMemo<ListingRecord>(() => evidence
     ? {
         ...listing,
@@ -859,19 +711,35 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
     : listing, [evidence, listing]);
   const meta = useMemo(() => getListingMeta(detailListing), [detailListing]);
   const images = useMemo(() => {
-    const candidates = evidence
-      ? evidence.has_images && evidence.image_urls?.length
-        ? evidence.image_urls
-        : []
-      : hasListingImage(listing)
-        ? listing.image_urls?.length
-          ? listing.image_urls
-          : [listing.thumbnail_url]
-        : [];
-    return candidates.map(value => String(value || '').trim()).filter(Boolean);
-  }, [evidence, listing]);
+    if (!hasListingImage(detailListing)) return [];
+    const candidates = detailListing.image_urls?.length
+      ? detailListing.image_urls
+      : [detailListing.thumbnail_url];
+    return [...new Set(candidates
+      .map(value => String(value || '').trim())
+      .filter(value => value && !failedImages.has(value)))];
+  }, [detailListing, failedImages]);
+
+  const visibleImageIndex = activeImage < images.length ? activeImage : 0;
 
   useEffect(() => {
+    if (hasEmbeddedWorkbookEvidence) {
+      const controller = new AbortController();
+      fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
+        .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
+        .then(payload => {
+          if (!payload || payload.status !== 'ok') return;
+          const sourceContact = sourcePosterContact({
+            ...listing,
+            seller_name: payload.seller?.name ?? listing.seller_name,
+            seller_phone: payload.seller?.phone ?? listing.seller_phone,
+          });
+          setContact({ ...sourceContact, contact_available: Boolean(payload.contact_available && sourceContact.phone_display) });
+          setSellerAnalytics(payload.analytics || null);
+        })
+        .catch(error => { if (error?.name !== 'AbortError') setSellerAnalytics(null); });
+      return () => controller.abort();
+    }
     const controller = new AbortController();
     fetch(`/api/listing-contact?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
       .then(response => response.json())
@@ -924,7 +792,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       });
 
     return () => controller.abort();
-  }, [canLoadPublicEvidence, listing]);
+  }, [canLoadPublicEvidence, hasEmbeddedWorkbookEvidence, listing]);
 
   return (
     <section className={`mb-8 grid gap-8 ${images.length > 0 ? 'lg:grid-cols-[minmax(320px,504px)_1fr]' : ''}`} aria-label="Selected listing">
@@ -940,9 +808,10 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       {images.length > 0 && (
         <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
           <img
-            src={images[activeImage]}
-            alt={`${meta.title} ${detailListing.image_evidence_type === 'REFERENCE_IMAGE' ? 'reference' : 'listing'} image`}
+            src={images[visibleImageIndex]}
+            alt={`${meta.title} source listing image`}
             className="h-[420px] w-full rounded-sm object-contain sm:h-[540px] lg:h-[648px]"
+            onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
           />
           {detailListing.image_evidence_notice && (
             <p className="px-2 py-3 text-xs leading-5" style={{ color: MUTED }}>{detailListing.image_evidence_notice}</p>
@@ -956,9 +825,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
                   onClick={() => setActiveImage(index)}
                   aria-label={`Show listing image ${index + 1}`}
                   className="h-16 w-16 shrink-0 overflow-hidden rounded-sm border p-0.5"
-                  style={{ borderColor: index === activeImage ? GOLD : BORDER, background: PANEL }}
+                  style={{ borderColor: index === visibleImageIndex ? GOLD : BORDER, background: PANEL }}
                 >
-                  <img src={url} alt="" className="h-full w-full object-cover" />
+                  <img src={url} alt="" className="h-full w-full object-cover" onError={() => setFailedImages(current => new Set(current).add(url))} />
                 </button>
               ))}
             </div>
@@ -1000,9 +869,12 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(detailListing.listing_type) ? 'Buyer request contact' : 'Check availability'}</h2>
-          {contact?.dealer_name && (
+          {(contact?.dealer_name || contact?.phone_display) && (
             <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
-              <div className="text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
+                {contact.contact_source === 'OWNER_APPROVED_WORKBOOK' ? 'Source poster' : 'Dealer'}
+              </div>
+              {contact.dealer_name && <div className="mt-1 text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>}
               {contact.dealer_company && <div className="mt-1 text-sm" style={{ color: MUTED }}>{contact.dealer_company}</div>}
               {displayLocation(contact.dealer_city, contact.dealer_country) && <div className="mt-2 text-sm" style={{ color: MUTED }}>
                 {displayLocation(contact.dealer_city, contact.dealer_country)}
@@ -1024,6 +896,22 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
                   <ContactMetric label="Active" value={contact.dealer_stats.active_listings} />
                 </div>
               )}
+              {contact.contact_source === 'OWNER_APPROVED_WORKBOOK' && sellerAnalytics && (
+                <div className="mt-4" aria-label="Source poster activity">
+                  <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+                    <ContactMetric label="Total posts" value={sellerAnalytics.total_posts} />
+                    <ContactMetric label="For sale" value={sellerAnalytics.wts_posts} />
+                    <ContactMetric label="Want to buy" value={sellerAnalytics.wtb_posts} />
+                    <ContactMetric label="Other" value={sellerAnalytics.other_posts} />
+                  </div>
+                  {(sellerAnalytics.first_post_at || sellerAnalytics.last_post_at) && (
+                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: MUTED }}>
+                      {sellerAnalytics.first_post_at && <span>First post: {formatListingDate(sellerAnalytics.first_post_at)}</span>}
+                      {sellerAnalytics.last_post_at && <span>Latest post: {formatListingDate(sellerAnalytics.last_post_at)}</span>}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           {contact?.dealer_profile_url && (
@@ -1033,20 +921,32 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           )}
           {contact?.contact_available && contact.whatsapp_url ? (
             <>
-              <p className="mt-3 text-sm" style={{ color: MUTED }}>{isBuyerIntent(detailListing.listing_type) ? `Contact ${contact.dealer_name || 'the verified buyer'} about this request.` : `Contact ${contact.dealer_name || 'the verified dealer'} directly about this item.`}</p>
+              <p className="mt-3 text-sm" style={{ color: MUTED }}>
+                {contact.contact_source === 'OWNER_APPROVED_WORKBOOK'
+                  ? `Contact ${contact.dealer_name || 'the source poster'} using the phone supplied with this listing.`
+                  : isBuyerIntent(detailListing.listing_type)
+                    ? `Contact ${contact.dealer_name || 'the verified buyer'} about this request.`
+                    : `Contact ${contact.dealer_name || 'the verified dealer'} directly about this item.`}
+              </p>
               <a href={contact.whatsapp_url} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
                 <MessageCircle size={18} /> {isBuyerIntent(detailListing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
               </a>
             </>
           ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>{contact?.dealer_profile_url ? 'This dealer profile is verified; direct WhatsApp contact is awaiting consent or a verified phone.' : 'Dealer identity has not yet been verified for this historical listing.'}</p>
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+              {contact?.contact_source === 'OWNER_APPROVED_WORKBOOK'
+                ? 'The source did not supply a usable phone number for this listing.'
+                : contact?.dealer_profile_url
+                  ? 'This dealer profile is verified; direct WhatsApp contact is awaiting consent or a verified phone.'
+                  : 'Dealer identity has not yet been verified for this historical listing.'}
+            </p>
           )}
         </div>
 
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Original listing</h2>
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
-            Raw source message · contact redacted
+            Raw source message
           </div>
           {evidence?.raw_message ? (
             <>
@@ -1059,7 +959,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </>
           ) : (
             <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-              {evidenceError || 'Contact-redacted source evidence is unavailable for this record.'}
+              {evidenceError || 'Source evidence is unavailable for this record.'}
             </p>
           )}
         </div>
@@ -1073,7 +973,20 @@ function ContactMetric({ label, value }: { label: string; value: number }) {
   return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{Number(value || 0).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
 }
 
-function ListingImage({ listing, className }: { listing: ListingRecord; className: string }) {
+function sourcePosterContact(listing: ListingRecord): ListingContact {
+  const phone = String(listing.seller_phone || '').trim();
+  const digits = phone.replace(/[^\d]/g, '');
+  return {
+    contact_available: digits.length >= 7,
+    dealer_name: cleanValue(listing.seller_name) || undefined,
+    phone_display: phone || undefined,
+    contact_source: 'OWNER_APPROVED_WORKBOOK',
+    whatsapp_url: digits.length >= 7 ? `https://wa.me/${digits}` : undefined,
+    reason: digits.length >= 7 ? undefined : 'SOURCE_PHONE_UNAVAILABLE',
+  };
+}
+
+function ListingImage({ listing, className, onUnavailable }: { listing: ListingRecord; className: string; onUnavailable: () => void }) {
   const meta = getListingMeta(listing);
   const imageUrl = listing.thumbnail_url || listing.image_urls?.find(Boolean);
 
@@ -1083,6 +996,7 @@ function ListingImage({ listing, className }: { listing: ListingRecord; classNam
       alt={meta.title}
       className={`${className} rounded-sm object-cover`}
       loading="lazy"
+      onError={onUnavailable}
     />
   ) : null;
 }

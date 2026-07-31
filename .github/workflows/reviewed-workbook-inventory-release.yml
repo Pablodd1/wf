@@ -17,7 +17,7 @@ jobs:
     if: ${{ inputs.confirmation == 'APPLY_REVIEWED_WORKBOOK_INVENTORY' }}
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 30
+    timeout-minutes: 120
     permissions:
       contents: read
     env:
@@ -53,9 +53,29 @@ jobs:
         run: |
           set -euo pipefail
           db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
-          index_migration="supabase/migrations/20260731150000_reviewed_workbook_source_file_index.sql"
-          test -f "$index_migration"
-          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$index_migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          SELECT format('DROP INDEX CONCURRENTLY IF EXISTS public.%I;', index_class.relname)
+          FROM pg_index index_state
+          JOIN pg_class index_class ON index_class.oid = index_state.indexrelid
+          JOIN pg_namespace index_schema ON index_schema.oid = index_class.relnamespace
+          WHERE index_schema.nspname = 'public'
+            AND index_class.relname IN (
+              'idx_reviewed_workbook_inventory_approved_phone_activity',
+              'idx_reviewed_workbook_inventory_type_order',
+              'idx_reviewed_workbook_inventory_brand_type_order',
+              'idx_reviewed_workbook_inventory_reference_order'
+            )
+            AND NOT (index_state.indisvalid AND index_state.indisready)
+          \gexec
+          SQL
+          readonly allowlisted_migrations=(
+            "supabase/migrations/20260731150000_reviewed_workbook_source_file_index.sql"
+            "supabase/migrations/20260731160000_reviewed_workbook_market_indexes.sql"
+          )
+          for migration in "${allowlisted_migrations[@]}"; do
+            test -f "$migration"
+            psql "$db_url" --set=ON_ERROR_STOP=1 --file="$migration"
+          done
 
       - name: Verify isolation, reconciliation, and indexes
         shell: bash
@@ -83,17 +103,25 @@ jobs:
             END IF;
             IF (
               SELECT count(*)
-              FROM pg_indexes
-              WHERE schemaname = 'public'
-                AND indexname IN (
+              FROM pg_index index_state
+              JOIN pg_class index_class ON index_class.oid = index_state.indexrelid
+              JOIN pg_namespace index_schema ON index_schema.oid = index_class.relnamespace
+              WHERE index_schema.nspname = 'public'
+                AND index_state.indisvalid
+                AND index_state.indisready
+                AND index_class.relname IN (
                   'idx_reviewed_workbook_inventory_brand_image_price',
                   'idx_reviewed_workbook_inventory_global_image_price',
                   'idx_reviewed_workbook_inventory_reference',
                   'idx_reviewed_workbook_inventory_source',
                   'idx_reviewed_workbook_inventory_source_file_order',
+                  'idx_reviewed_workbook_inventory_approved_phone_activity',
+                  'idx_reviewed_workbook_inventory_type_order',
+                  'idx_reviewed_workbook_inventory_brand_type_order',
+                  'idx_reviewed_workbook_inventory_reference_order',
                   'idx_reviewed_workbook_checkpoints_brand_status'
                 )
-            ) <> 6 THEN
+            ) <> 10 THEN
               RAISE EXCEPTION 'Reviewed workbook indexes are incomplete';
             END IF;
           END
@@ -108,5 +136,7 @@ jobs:
             echo "- watch_records writes: 0."
             echo "- Global Source Review order index: ready."
             echo "- Exact source-workbook review index: ready."
+            echo "- Exact approved-contact activity index: ready."
+            echo "- Listing-type and exact-reference publication indexes: ready."
             echo "- Ready for the checkpointed local importer."
           } >> "$GITHUB_STEP_SUMMARY"
