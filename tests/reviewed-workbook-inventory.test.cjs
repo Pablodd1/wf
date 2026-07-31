@@ -31,6 +31,7 @@ test('importer is fail-closed to the allowlisted review table', () => {
   assert.match(importer, /REVIEWED_WORKBOOK_INVENTORY_TABLE/);
   assert.match(importer, /APPLY_REVIEWED_WORKBOOK_IMPORT === 'true'/);
   assert.match(importer, /error\.code === '40P01'/);
+  assert.match(importer, /\.upsert\(unique, \{ onConflict: 'id', ignoreDuplicates: true \}\)/);
   assert.doesNotMatch(importer, /\.from\(['"]watch_records['"]\)/);
 });
 

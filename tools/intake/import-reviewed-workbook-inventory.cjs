@@ -313,7 +313,7 @@ async function importBatch(client, rows) {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     const { data, error } = await client
       .from(INVENTORY_TABLE)
-      .upsert(unique, { onConflict: 'content_hash', ignoreDuplicates: true })
+      .upsert(unique, { onConflict: 'id', ignoreDuplicates: true })
       .select('id');
     if (!error) {
       const inserted = (data || []).length;
