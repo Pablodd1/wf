@@ -69,7 +69,12 @@ jobs:
               'idx_reviewed_workbook_market_brand_evidence_order',
               'idx_reviewed_workbook_market_type_evidence_order',
               'idx_reviewed_workbook_market_brand_type_evidence_order',
-              'idx_reviewed_workbook_market_reference_evidence_order'
+              'idx_reviewed_workbook_market_reference_evidence_order',
+              'idx_reviewed_workbook_market_evidence_order_v2',
+              'idx_reviewed_workbook_market_brand_evidence_order_v2',
+              'idx_reviewed_workbook_market_type_evidence_order_v2',
+              'idx_reviewed_workbook_market_brand_type_evidence_order_v2',
+              'idx_reviewed_workbook_market_reference_evidence_order_v2'
             )
             AND NOT (index_state.indisvalid AND index_state.indisready)
           \gexec
@@ -128,11 +133,11 @@ jobs:
                   'idx_reviewed_workbook_inventory_type_order',
                   'idx_reviewed_workbook_inventory_brand_type_order',
                   'idx_reviewed_workbook_inventory_reference_order',
-                  'idx_reviewed_workbook_market_evidence_order',
-                  'idx_reviewed_workbook_market_brand_evidence_order',
-                  'idx_reviewed_workbook_market_type_evidence_order',
-                  'idx_reviewed_workbook_market_brand_type_evidence_order',
-                  'idx_reviewed_workbook_market_reference_evidence_order',
+                  'idx_reviewed_workbook_market_evidence_order_v2',
+                  'idx_reviewed_workbook_market_brand_evidence_order_v2',
+                  'idx_reviewed_workbook_market_type_evidence_order_v2',
+                  'idx_reviewed_workbook_market_brand_type_evidence_order_v2',
+                  'idx_reviewed_workbook_market_reference_evidence_order_v2',
                   'idx_reviewed_workbook_checkpoints_brand_status'
                 )
             ) <> 15 THEN
@@ -144,6 +149,16 @@ jobs:
             END IF;
             IF NOT has_table_privilege('service_role', 'public.reviewed_workbook_market_source', 'SELECT') THEN
               RAISE EXCEPTION 'Service role cannot read customer market source view';
+            END IF;
+            IF to_regprocedure('public.reviewed_workbook_reference_key_v2(text)') IS NULL
+              OR to_regprocedure('public.reviewed_workbook_reference_is_price_token_v2(text,numeric,text)') IS NULL
+              OR to_regprocedure('public.reviewed_workbook_identity_complete_v2(text,text,text,text,numeric,text)') IS NULL THEN
+              RAISE EXCEPTION 'Reviewed workbook identity evidence functions are incomplete';
+            END IF;
+            IF has_function_privilege('anon', 'public.reviewed_workbook_identity_complete_v2(text,text,text,text,numeric,text)', 'EXECUTE')
+              OR has_function_privilege('authenticated', 'public.reviewed_workbook_identity_complete_v2(text,text,text,text,numeric,text)', 'EXECUTE')
+              OR NOT has_function_privilege('service_role', 'public.reviewed_workbook_identity_complete_v2(text,text,text,text,numeric,text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'Reviewed workbook identity evidence function privileges are unsafe';
             END IF;
             IF to_regprocedure('public.reviewed_workbook_seller_activity(text)') IS NULL THEN
               RAISE EXCEPTION 'Reviewed seller activity function is missing';
@@ -169,7 +184,7 @@ jobs:
             echo "- Exact source-workbook review index: ready."
             echo "- Exact approved-contact activity index: ready."
             echo "- Exact approved seller activity aggregate: service-only and ready."
-            echo "- Customer evidence ordering view and indexes: service-only and ready."
+            echo "- Customer evidence ordering v2: source image, complete identity, verified USD, price, date, and id."
             echo "- Listing-type and exact-reference publication indexes: ready."
             echo "- Ready for the checkpointed local importer."
           } >> "$GITHUB_STEP_SUMMARY"

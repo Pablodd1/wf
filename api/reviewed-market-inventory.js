@@ -15,6 +15,7 @@ const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source';
 const EVIDENCE_CONTRACT = Object.freeze({
   scope: 'returned_page',
   identity_fields: ['brand', 'model', 'reference', 'dial_color'],
+  identity: 'All four identity fields must be present and the reference cannot be a price/currency token.',
   contact: 'Exact supplied contact is public only when owner-approved.',
   image: 'Only an exact supplied HTTP(S) source URL is image-eligible.',
   price: 'Only an exact explicit-source USD match is analytics-eligible.',
@@ -40,6 +41,34 @@ function referenceComparisonKey(value) {
   return cleanExactText(value, 80).toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function amountComparisonKey(value) {
+  const amount = positiveNumber(value);
+  return amount === null ? '' : String(amount).replace(/[^0-9]/g, '');
+}
+
+function currencyComparisonKey(value) {
+  return cleanExactText(value, 12).toUpperCase().replace(/[^A-Z]/g, '');
+}
+
+function referenceIsPriceToken(reference, sourceAmount, sourceCurrency) {
+  const referenceKey = referenceComparisonKey(reference);
+  if (!referenceKey) return false;
+  if (/^(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|JPY|CNY|RMB)[0-9]+$/.test(referenceKey)) {
+    return true;
+  }
+  if (/^[0-9]+(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|JPY|CNY|RMB)$/.test(referenceKey)) {
+    return true;
+  }
+  const amountKey = amountComparisonKey(sourceAmount);
+  const currencyKey = currencyComparisonKey(sourceCurrency);
+  return Boolean(
+    amountKey
+    && currencyKey
+    && (referenceKey === `${amountKey}${currencyKey}`
+      || referenceKey === `${currencyKey}${amountKey}`),
+  );
+}
+
 function evidenceValuePresent(value) {
   return value !== null
     && value !== undefined
@@ -58,7 +87,9 @@ function recordEvidenceCoverage({
   exactImageUrl,
   sourceAmount,
   sourceCurrency,
-  verifiedUsd,
+  hasCompleteIdentity,
+  invalidReferenceReason,
+  priceEligible,
 }) {
   const identity = { brand, model, reference, dial_color: dialColor };
   const presentFields = Object.entries(identity)
@@ -67,9 +98,10 @@ function recordEvidenceCoverage({
   const missingFields = Object.keys(identity).filter(field => !presentFields.includes(field));
   return {
     identity: {
-      complete: missingFields.length === 0,
+      complete: hasCompleteIdentity,
       present_fields: presentFields,
       missing_fields: missingFields,
+      invalid_reference_reason: invalidReferenceReason,
     },
     contact: {
       name_present: evidenceValuePresent(sellerName),
@@ -84,7 +116,7 @@ function recordEvidenceCoverage({
     price: {
       source_amount_present: sourceAmount !== null,
       source_currency_present: evidenceValuePresent(sourceCurrency),
-      analytics_eligible: verifiedUsd !== null,
+      analytics_eligible: priceEligible,
     },
   };
 }
@@ -120,7 +152,10 @@ function mapReviewedRecord(row) {
     : null;
   const brand = row.supplied_brand || row.canonical_brand || row.brand_scope;
   const model = row.model || row.catalog_model || null;
-  const reference = row.normalized_reference || row.raw_reference || row.catalog_reference || null;
+  const sourceReference = row.normalized_reference || row.raw_reference || row.catalog_reference || null;
+  const invalidReference = row.reference_is_price_token === true
+    || referenceIsPriceToken(sourceReference, sourceAmount, row.source_currency);
+  const reference = invalidReference ? null : (row.public_reference || sourceReference);
   const dialColor = row.dial_color || row.catalog_dial || null;
   const sellerName = contactApproved && evidenceValuePresent(row.posted_by)
     ? row.posted_by
@@ -131,6 +166,12 @@ function mapReviewedRecord(row) {
   const referenceSearchKey = row.reference_search_key
     || referenceComparisonKey(reference)
     || null;
+  const locallyCompleteIdentity = [brand, model, reference, dialColor]
+    .every(evidenceValuePresent);
+  const hasCompleteIdentity = row.has_complete_identity === true
+    && locallyCompleteIdentity
+    && !invalidReference;
+  const priceEligible = hasCompleteIdentity && verifiedUsd !== null;
   const evidenceCoverage = recordEvidenceCoverage({
     brand,
     model,
@@ -142,7 +183,9 @@ function mapReviewedRecord(row) {
     exactImageUrl,
     sourceAmount,
     sourceCurrency: row.source_currency,
-    verifiedUsd,
+    hasCompleteIdentity,
+    invalidReferenceReason: invalidReference ? 'PRICE_CURRENCY_TOKEN' : null,
+    priceEligible,
   });
 
   return {
@@ -150,7 +193,12 @@ function mapReviewedRecord(row) {
     brand,
     model,
     reference,
-    reference_search_key: referenceSearchKey,
+    reference_search_key: invalidReference ? null : referenceSearchKey,
+    raw_reference: row.raw_reference || null,
+    normalized_reference: row.normalized_reference || null,
+    catalog_reference: row.catalog_reference || null,
+    reference_invalid_reason: invalidReference ? 'PRICE_CURRENCY_TOKEN' : null,
+    has_complete_identity: hasCompleteIdentity,
     dial_color: dialColor,
     condition: row.condition || null,
     listing_type: row.listing_type || 'OTHER',
@@ -168,7 +216,7 @@ function mapReviewedRecord(row) {
     source_price_text: row.source_price_text || null,
     source_currency: row.source_currency || null,
     price_evidence_status: row.price_evidence_status,
-    price_research_eligible: verifiedUsd !== null,
+    price_research_eligible: priceEligible,
     confidence: row.confidence == null ? null : Number(row.confidence),
     verdict: row.verification_status || null,
     listing_status: row.verification_status || null,
@@ -303,6 +351,7 @@ module.exports = async function handler(req, res) {
       'workbook_price_usd,source_price_amount,source_price_text,source_currency',
       'price_evidence_status,confidence,verification_status,user_image_url,imported_at',
       'has_exact_source_image,has_verified_usd_price,verified_price_usd,reference_search_key',
+      'public_reference,reference_is_price_token,has_complete_identity',
     ].join(',');
     let query = client
       .from(MARKET_SOURCE_VIEW)
@@ -312,12 +361,14 @@ module.exports = async function handler(req, res) {
     query = pageWindow.reverse
       ? query
         .order('has_exact_source_image', { ascending: true })
+        .order('has_complete_identity', { ascending: true })
         .order('has_verified_usd_price', { ascending: true })
         .order('verified_price_usd', { ascending: true, nullsFirst: true })
         .order('posting_date', { ascending: true, nullsFirst: true })
         .order('id', { ascending: false })
       : query
         .order('has_exact_source_image', { ascending: false })
+        .order('has_complete_identity', { ascending: false })
         .order('has_verified_usd_price', { ascending: false })
         .order('verified_price_usd', { ascending: false, nullsFirst: false })
         .order('posting_date', { ascending: false, nullsFirst: false })
@@ -371,6 +422,7 @@ module.exports.MARKET_SOURCE_VIEW = MARKET_SOURCE_VIEW;
 module.exports.EVIDENCE_CONTRACT = EVIDENCE_CONTRACT;
 module.exports.exactHttpUrl = exactHttpUrl;
 module.exports.referenceComparisonKey = referenceComparisonKey;
+module.exports.referenceIsPriceToken = referenceIsPriceToken;
 module.exports.recordEvidenceCoverage = recordEvidenceCoverage;
 module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.mapReviewedRecord = mapReviewedRecord;
