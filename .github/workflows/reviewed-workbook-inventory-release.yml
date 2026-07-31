@@ -53,11 +53,8 @@ jobs:
         run: |
           set -euo pipefail
           db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
-          schema_migration="supabase/migrations/20260731120000_reviewed_workbook_live_review.sql"
           index_migration="supabase/migrations/20260731140000_reviewed_workbook_global_review_index.sql"
-          test -f "$schema_migration"
           test -f "$index_migration"
-          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$schema_migration"
           psql "$db_url" --set=ON_ERROR_STOP=1 --file="$index_migration"
 
       - name: Verify isolation, reconciliation, and indexes
