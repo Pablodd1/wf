@@ -64,6 +64,14 @@ async function loadSummary(client) {
   };
 }
 
+function resolveTotal({ count, summary, brand, reference, sourceFile, imagesOnly }) {
+  if (reference || sourceFile || imagesOnly) return Number(count || 0);
+  if (!brand) return Number(summary.canonical_listings || 0);
+  return Number(
+    summary.brands.find(item => item.brand === brand)?.canonical_listings || 0,
+  );
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 's-maxage=30, stale-while-revalidate=120');
@@ -113,13 +121,21 @@ module.exports = async function handler(req, res) {
       loadSummary(client),
     ]);
     if (error) throw error;
+    const total = resolveTotal({
+      count,
+      summary,
+      brand,
+      reference,
+      sourceFile,
+      imagesOnly,
+    });
     return res.status(200).json({
       status: 'ok',
       page,
       pageSize,
       count: (data || []).length,
-      total: Number(count || 0),
-      hasMore: start + (data || []).length < Number(count || 0),
+      total,
+      hasMore: start + (data || []).length < total,
       records: data || [],
       summary,
       priceResearchRule:
@@ -137,3 +153,4 @@ module.exports = async function handler(req, res) {
 module.exports.cleanFilter = cleanFilter;
 module.exports.loadSummary = loadSummary;
 module.exports.normalizeReference = normalizeReference;
+module.exports.resolveTotal = resolveTotal;

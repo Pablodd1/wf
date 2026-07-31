@@ -80,3 +80,20 @@ test('public API normalizes exact-reference filters without broad wildcards', ()
   assert.equal(api.normalizeReference(' 5712/1a-001 '), '5712/1A001');
   assert.equal(api.cleanFilter('Rolex,*', 80), 'Rolex  ');
 });
+
+test('public API uses reconciled totals for unfiltered and brand review pages', () => {
+  const summary = {
+    canonical_listings: 100,
+    brands: [{ brand: 'Rolex', canonical_listings: 40 }],
+  };
+  const common = {
+    count: 999,
+    summary,
+    reference: '',
+    sourceFile: '',
+    imagesOnly: false,
+  };
+  assert.equal(api.resolveTotal({ ...common, brand: '' }), 100);
+  assert.equal(api.resolveTotal({ ...common, brand: 'Rolex' }), 40);
+  assert.equal(api.resolveTotal({ ...common, brand: '', imagesOnly: true }), 999);
+});
