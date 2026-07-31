@@ -27,12 +27,15 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /const LANDING_LINKS = \[[\s\S]*label: 'TRADING FLOOR'[\s\S]*label: 'HIRE FI'[\s\S]*label: 'LOGIN'/);
   assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
   assert.match(home, /to="\/dealer\/post"[\s\S]*Post an offer/);
-  assert.doesNotMatch(home, /luxuryapp-wf/);
+  assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
   assert.match(postItem, /const LUXURY_APP_URL = 'https:\/\/luxuryapp-wf\.vercel\.app\/'/);
   assert.match(postItem, /WatchFacts form/);
   assert.match(postItem, /Luxury App/);
   assert.match(postItem, /<iframe[\s\S]*src=\{LUXURY_APP_URL\}[\s\S]*title="Luxury App posting experience"/);
   assert.match(postItem, /Open full page/);
+  assert.match(home, /const LUXURY_MARKETPLACE_URL = 'https:\/\/luxuryapp-wf-w5o1\.vercel\.app\/marketplace\/'/);
+  assert.match(home, /Luxury item marketplace/);
+  assert.match(home, /href=\{LUXURY_MARKETPLACE_URL\}[\s\S]*target="_blank"[\s\S]*rel="noreferrer"/);
   assert.match(home, /to="\/admin-login"[\s\S]*Admin login/);
   assert.match(header, /src="\/images\/curated-luxury-logo-dark\.png"/);
   assert.match(header, /alt="Curated Luxury"/);
