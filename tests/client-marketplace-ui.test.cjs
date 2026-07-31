@@ -13,6 +13,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   const floor = read('src/pages/TradingFloor.tsx');
   const research = read('src/pages/PriceResearch.tsx');
   const home = read('src/pages/LandingPage.tsx');
+  const styles = read('src/index.css');
 
   assert.match(header, /label: 'HOME', to: '\/'/);
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
@@ -32,6 +33,10 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(banner, /href="https:\/\/luxfi\.ai\/#add-fi"/);
   assert.match(floor, /<MarketNav \/>[\s\S]*<LuxFiBanner \/>/);
   assert.match(research, /<MarketNav \/>[\s\S]*<LuxFiBanner \/>/);
+  assert.match(home, /className="luxury-wordmark/);
+  assert.match(styles, /@keyframes luxury-gold-flow-down/);
+  assert.match(styles, /animation: luxury-gold-flow-down 6s ease-in-out infinite/);
+  assert.match(styles, /prefers-reduced-motion: reduce/);
   assert.match(home, /Curated Luxury marketplace · WatchFacts market intelligence/);
 });
 

@@ -124,7 +124,7 @@ export default function LandingPage() {
 
         <div className="relative z-10 max-w-full text-center">
           <h1
-            className="px-2 font-serif text-[clamp(2.5rem,8vw,8.5rem)] font-semibold leading-[0.9] text-[#d8bd80]"
+            className="luxury-wordmark px-2 font-serif text-[clamp(2.5rem,8vw,8.5rem)] font-semibold leading-[0.9]"
             style={{ letterSpacing: '0.06em' }}
           >
             CURATED LUXURY

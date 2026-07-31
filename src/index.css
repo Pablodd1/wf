@@ -5,11 +5,39 @@
 @layer utilities {
   .luxury-wordmark {
     color: #d8bd80;
-    background: linear-gradient(180deg, #fff4c9 0%, #d9b768 38%, #9a6a22 100%);
+    background-image: linear-gradient(
+      180deg,
+      #fff8dc 0%,
+      #efd78e 18%,
+      #c99a3d 38%,
+      #fff0ad 50%,
+      #b77b22 72%,
+      #6f420e 100%
+    );
+    background-position: 50% 0%;
+    background-size: 100% 220%;
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
-    text-shadow: 0 1px 0 rgba(255, 245, 207, 0.28), 0 2px 0 rgba(91, 57, 13, 0.82), 0 5px 14px rgba(213, 174, 86, 0.24);
+    text-shadow:
+      0 1px 0 rgba(255, 248, 218, 0.42),
+      0 2px 0 rgba(122, 80, 18, 0.9),
+      0 3px 0 rgba(75, 42, 7, 0.72),
+      0 8px 22px rgba(213, 174, 86, 0.28);
+    animation: luxury-gold-flow-down 6s ease-in-out infinite;
+    will-change: background-position;
+  }
+
+  @keyframes luxury-gold-flow-down {
+    0%, 18% { background-position: 50% 0%; }
+    72%, 100% { background-position: 50% 100%; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .luxury-wordmark {
+      animation: none;
+      background-position: 50% 42%;
+    }
   }
 }
 
