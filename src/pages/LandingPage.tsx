@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { ArrowDown, ArrowRight, BarChart3, Boxes, ExternalLink, Gem, Search, ShieldCheck, Store } from 'lucide-react';
+import { ArrowDown, ArrowRight, BarChart3, Boxes, Gem, Search, ShieldCheck, Store } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { SocialShareRail } from '@/components/SocialShareRail';
 import { MarketHeader } from '@/components/MarketHeader';
@@ -76,8 +76,6 @@ const accessPoints = [
   { icon: Search, label: 'Watch intelligence', detail: 'Reference-level pricing and market evidence', to: '/price-research' },
   { icon: ShieldCheck, label: 'Private access', detail: 'Secure workspace for dealers and partners', to: '/dealer-login' },
 ];
-
-const POST_OFFER_URL = 'https://luxuryapp-wf-w5o1.vercel.app/';
 
 export default function LandingPage() {
   const navigate = useNavigate();
@@ -290,9 +288,7 @@ export default function LandingPage() {
           {['tools', 'apps', 'community', 'company'].map(page => <Link key={page} to={`/info/${page}`} className="text-white/60 transition-colors hover:text-white">{page}</Link>)}
         </nav>
         <div className="flex flex-wrap gap-x-4 gap-y-2">
-          <a href={POST_OFFER_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#d8bd80] transition-colors hover:text-white">
-            Post an offer <ExternalLink size={11} aria-hidden="true" />
-          </a>
+          <Link to="/dealer/post" className="text-[#d8bd80] transition-colors hover:text-white">Post an offer</Link>
           <Link to="/admin-login" className="text-white/70 transition-colors hover:text-white">Admin login</Link>
         </div>
       </footer>

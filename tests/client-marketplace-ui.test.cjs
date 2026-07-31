@@ -13,6 +13,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   const floor = read('src/pages/TradingFloor.tsx');
   const research = read('src/pages/PriceResearch.tsx');
   const home = read('src/pages/LandingPage.tsx');
+  const postItem = read('src/pages/DealerSubmitListing.tsx');
   const styles = read('src/index.css');
 
   assert.match(header, /label: 'HOME', to: '\/'/);
@@ -25,8 +26,13 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /label: 'HIRE FI'/);
   assert.match(header, /const LANDING_LINKS = \[[\s\S]*label: 'TRADING FLOOR'[\s\S]*label: 'HIRE FI'[\s\S]*label: 'LOGIN'/);
   assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
-  assert.match(home, /Post an offer/);
-  assert.match(home, /https:\/\/luxuryapp-wf-w5o1\.vercel\.app\//);
+  assert.match(home, /to="\/dealer\/post"[\s\S]*Post an offer/);
+  assert.doesNotMatch(home, /luxuryapp-wf/);
+  assert.match(postItem, /const LUXURY_APP_URL = 'https:\/\/luxuryapp-wf\.vercel\.app\/'/);
+  assert.match(postItem, /WatchFacts form/);
+  assert.match(postItem, /Luxury App/);
+  assert.match(postItem, /<iframe[\s\S]*src=\{LUXURY_APP_URL\}[\s\S]*title="Luxury App posting experience"/);
+  assert.match(postItem, /Open full page/);
   assert.match(home, /to="\/admin-login"[\s\S]*Admin login/);
   assert.match(header, /src="\/images\/curated-luxury-logo-dark\.png"/);
   assert.match(header, /alt="Curated Luxury"/);

@@ -1,4 +1,4 @@
-import { ArrowLeft, CheckCircle2, Send, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, ExternalLink, Send, ShieldCheck } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -8,6 +8,7 @@ const CATEGORIES = [
   ['ACCESSORY', 'Other accessory'], ['OTHER', 'Other luxury item'],
 ] as const;
 const CURRENCIES = ['USD', 'HKD', 'EUR', 'GBP', 'CHF', 'CNY', 'JPY', 'SGD', 'USDT'];
+const LUXURY_APP_URL = 'https://luxuryapp-wf.vercel.app/';
 
 interface Submission {
   id: string;
@@ -19,6 +20,7 @@ interface Submission {
 }
 
 export default function DealerSubmitListing() {
+  const [postingMode, setPostingMode] = useState<'watchfacts' | 'luxury-app'>('watchfacts');
   const [intent, setIntent] = useState<'WTS' | 'WTB'>('WTS');
   const [category, setCategory] = useState('WATCH');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -63,7 +65,27 @@ export default function DealerSubmitListing() {
           <span className="flex items-center gap-2 text-xs text-[#c9a96e]"><ShieldCheck size={15} /> Credential required</span>
         </header>
 
-        <section className="grid gap-10 py-9 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <nav aria-label="Posting applications" className="mt-7 grid grid-cols-2 gap-2 border-b border-white/10 pb-4 sm:flex">
+          <button
+            type="button"
+            onClick={() => setPostingMode('watchfacts')}
+            aria-pressed={postingMode === 'watchfacts'}
+            className={`h-11 border px-5 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${postingMode === 'watchfacts' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#09090d]' : 'border-white/15 text-white/65 hover:border-white/35 hover:text-white'}`}
+          >
+            WatchFacts form
+          </button>
+          <button
+            type="button"
+            onClick={() => setPostingMode('luxury-app')}
+            aria-pressed={postingMode === 'luxury-app'}
+            className={`h-11 border px-5 text-xs font-semibold uppercase tracking-[0.12em] transition-colors ${postingMode === 'luxury-app' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#09090d]' : 'border-white/15 text-white/65 hover:border-white/35 hover:text-white'}`}
+          >
+            Luxury App
+          </button>
+        </nav>
+
+        {postingMode === 'watchfacts' ? (
+          <section className="grid gap-10 py-9 lg:grid-cols-[minmax(0,1fr)_340px]">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Moderated submission</p>
             <h1 className="mt-3 font-serif text-4xl sm:text-5xl">Post an offer or request.</h1>
@@ -127,7 +149,27 @@ export default function DealerSubmitListing() {
               ))}
             </div>
           </aside>
-        </section>
+          </section>
+        ) : (
+          <section className="py-9">
+            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Luxury App</p>
+                <h1 className="mt-3 font-serif text-4xl sm:text-5xl">Post an item.</h1>
+                <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">Use the connected Luxury App without leaving WatchFacts.</p>
+              </div>
+              <a href={LUXURY_APP_URL} target="_blank" rel="noreferrer" className="inline-flex h-11 shrink-0 items-center justify-center gap-2 border border-white/20 px-4 text-xs font-semibold text-white/75 transition-colors hover:border-[#c9a96e] hover:text-white">
+                Open full page <ExternalLink size={14} aria-hidden="true" />
+              </a>
+            </div>
+            <iframe
+              src={LUXURY_APP_URL}
+              title="Luxury App posting experience"
+              className="min-h-[820px] w-full border border-white/12 bg-white"
+              allow="camera; microphone; clipboard-write"
+            />
+          </section>
+        )}
       </div>
     </main>
   );
