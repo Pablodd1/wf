@@ -17,7 +17,10 @@ jobs:
     if: ${{ inputs.confirmation == 'APPLY_REVIEWED_WORKBOOK_INVENTORY' }}
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 120
+    # Five concurrent expression indexes scan the 8.5M-row reviewed inventory.
+    # A continuation run reuses valid completed indexes, but needs enough time
+    # to clean and rebuild any index interrupted by the previous runner ceiling.
+    timeout-minutes: 240
     permissions:
       contents: read
     env:
