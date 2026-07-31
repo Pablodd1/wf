@@ -79,6 +79,10 @@ test('row conversion preserves raw evidence and holds non-USD Price Research adm
 test('public API normalizes exact-reference filters without broad wildcards', () => {
   assert.equal(api.normalizeReference(' 5712/1a-001 '), '5712/1A001');
   assert.equal(api.cleanFilter('Rolex,*', 80), 'Rolex  ');
+  assert.equal(
+    api.cleanExactText(' Panerai_Normalized_FINAL- Jaismel Ready.xlsx ', 180),
+    'Panerai_Normalized_FINAL- Jaismel Ready.xlsx',
+  );
 });
 
 test('public API uses reconciled totals for unfiltered and brand review pages', () => {

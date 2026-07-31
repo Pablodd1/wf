@@ -10,6 +10,10 @@ function cleanFilter(value, maxLength) {
     .replace(/[(),.%*]/g, ' ');
 }
 
+function cleanExactText(value, maxLength) {
+  return String(value || '').trim().slice(0, maxLength);
+}
+
 function normalizeReference(value) {
   return cleanFilter(value, 80).toUpperCase().replace(/[\s-]+/g, '');
 }
@@ -117,7 +121,7 @@ module.exports = async function handler(req, res) {
       : DEFAULT_PAGE_SIZE;
     const brand = cleanFilter(req.query?.brand, 80);
     const reference = normalizeReference(req.query?.reference || req.query?.q);
-    const sourceFile = cleanFilter(req.query?.sourceFile, 180);
+    const sourceFile = cleanExactText(req.query?.sourceFile, 180);
     const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
     const summary = await loadSummary(client);
     const canReverse = !reference && !sourceFile && !imagesOnly;
@@ -204,6 +208,7 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.cleanFilter = cleanFilter;
+module.exports.cleanExactText = cleanExactText;
 module.exports.loadSummary = loadSummary;
 module.exports.normalizeReference = normalizeReference;
 module.exports.resolvePageWindow = resolvePageWindow;
