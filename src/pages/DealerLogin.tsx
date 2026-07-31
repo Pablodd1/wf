@@ -28,12 +28,13 @@ function canOpenRequestedDestination(role?: string, path?: string) {
 export default function DealerLogin() {
   const navigate = useNavigate();
   const location = useLocation();
-  const requestedDestination = (location.state as { from?: string } | null)?.from;
+  const adminEntry = location.pathname === '/admin-login';
+  const requestedDestination = (location.state as { from?: string } | null)?.from || (adminEntry ? '/admin' : undefined);
   const destination = requestedDestination || '/dealer';
-  const betaSkipLabel = requestedDestination === '/price-research'
-    ? 'Continue without login to Price Research'
+  const betaSkipLabel = destination === '/dealer'
+    ? 'Continue to dealer preview'
     : 'Continue without login to Trading Floor';
-  const betaDestinations = new Set(['/dealer', '/trading', '/price-research']);
+  const betaDestinations = new Set(['/dealer', '/trading']);
   const protectedDestination = !betaDestinations.has(destination);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -43,7 +44,13 @@ export default function DealerLogin() {
   const [currentRole, setCurrentRole] = useState<string | null>(null);
   // Demo access is deliberately limited by DealerGate to browse-only routes.
   // Keep the entry point visible regardless of stale deployment variables.
-  const betaSkipEnabled = true;
+  const betaSkipEnabled = !protectedDestination;
+
+  const accessMessage = destination === '/price-research'
+    ? 'Sign in is required to access Price Research.'
+    : destination === '/admin' || destination === '/dashboard' || destination === '/multi-listings'
+      ? 'Administrator sign-in is required for the Admin Panel.'
+      : 'Secure sign-in is required to continue.';
 
   useEffect(() => {
     const controller = new AbortController();
@@ -110,10 +117,10 @@ export default function DealerLogin() {
         <Link to="/" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> Curated Luxury</Link>
         <div className="flex flex-1 items-center justify-center py-10">
           <section className="w-full max-w-[420px] border border-white/12 bg-[#111118] p-6 sm:p-8">
-            <div className="mb-6 flex items-center gap-3"><LockKeyhole size={20} className="text-[#c9a96e]" /><h2 className="text-lg font-semibold">Dealer login</h2></div>
+            <div className="mb-6 flex items-center gap-3"><LockKeyhole size={20} className="text-[#c9a96e]" /><h2 className="text-lg font-semibold">{adminEntry ? 'Admin login' : 'Login'}</h2></div>
             {protectedDestination && (
               <div className="mb-5 border-l-2 border-[#c9a96e] bg-[#c9a96e]/10 px-3 py-2 text-xs leading-5 text-[#ead7ae]">
-                Administrator sign-in is required for Mission Control and Human Review. Existing secure sessions open automatically.
+                {accessMessage} Existing secure sessions open automatically.
               </div>
             )}
             <form onSubmit={login} className="space-y-4">
@@ -126,7 +133,7 @@ export default function DealerLogin() {
               {error && <div role="alert" className="border-l-2 border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</div>}
               {currentRole && protectedDestination && (
                 <div className="border-l-2 border-white/20 bg-white/5 px-3 py-2 text-xs leading-5 text-white/65">
-                  Current role: <strong className="text-white">{currentRole}</strong>. Review Queue accepts reviewer or admin. Mission Control accepts admin.
+                  Current role: <strong className="text-white">{currentRole}</strong>. Price Research accepts provisioned users. Review Queue accepts reviewer or admin. The Admin Panel accepts administrators only.
                 </div>
               )}
               <button type="submit" disabled={loading || checkingSession} className="h-11 w-full bg-[#c9a96e] text-sm font-semibold text-[#09090d] transition-colors hover:bg-[#d4b87a] disabled:opacity-60">{checkingSession ? 'Checking existing access...' : loading ? 'Signing in...' : 'Sign in securely'}</button>

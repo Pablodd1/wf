@@ -100,6 +100,17 @@ test('browser routes mirror backend authorization for review and demo tools', ()
   assert.match(app, /path="\/reprocess"[\s\S]*allowedRoles=\{\['reviewer', 'admin'\]\}/);
   assert.match(app, /path="\/demo"[\s\S]*allowedRoles=\{\['admin'\]\}/);
   assert.match(app, /path="\/demo-mode"[\s\S]*allowedRoles=\{\['admin'\]\}/);
+  assert.match(app, /path="\/price-research" element=\{<DealerGate><PriceResearch \/><\/DealerGate>\}/);
+  assert.doesNotMatch(app, /path="\/price-research"[^\n]*allowBetaSkip/);
+  assert.match(app, /path="\/admin-login" element=\{<DealerLogin \/>\}/);
   assert.match(login, /route === '\/review-queue' \|\| route === '\/reprocess'/);
   assert.match(login, /route === '\/demo' \|\| route === '\/demo-mode'/);
+});
+
+test('Price Research analytics API requires a provisioned session', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
+  assert.match(source, /authorizeDealer\(req, res\)/);
+  assert.match(source, /Sign in is required to access Price Research/);
+  assert.match(source, /Cache-Control', 'no-store'/);
+  assert.doesNotMatch(source, /Access-Control-Allow-Origin', '\*'/);
 });

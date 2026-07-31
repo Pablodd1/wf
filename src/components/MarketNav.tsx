@@ -2,10 +2,6 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { MarketHeader } from './MarketHeader';
 
-const PUBLIC_LINKS = [
-  { to: '/dealer-login', label: 'Dealer Login' },
-];
-
 export function MarketNav() {
   const location = useLocation();
   const [role, setRole] = useState('');
@@ -20,9 +16,9 @@ export function MarketNav() {
   }, []);
 
   const links = [
-    ...PUBLIC_LINKS,
+    ...(!role ? [{ to: '/dealer-login', label: 'Login' }] : []),
     ...(role ? [{ to: '/dealers', label: 'Dealers' }] : []),
-    ...(role === 'admin' ? [{ to: '/dashboard', label: 'Dashboard' }] : []),
+    ...(role === 'admin' ? [{ to: '/admin', label: 'Admin Panel' }] : []),
   ];
 
   return (

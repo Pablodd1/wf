@@ -14,14 +14,22 @@ const HEADER_LINKS = [
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
 ];
 
+const LANDING_LINKS = [
+  { label: 'TRADING FLOOR', to: '/trading' },
+  { label: 'HIRE FI', href: LUXFI_URL, external: true },
+  { label: 'LOGIN', to: '/dealer-login' },
+];
+
 type MarketHeaderProps = {
   compact?: boolean;
   className?: string;
+  landing?: boolean;
   showLogo?: boolean;
 };
 
-export function MarketHeader({ compact = false, className = '', showLogo = true }: MarketHeaderProps) {
+export function MarketHeader({ compact = false, className = '', landing = false, showLogo = true }: MarketHeaderProps) {
   const location = useLocation();
+  const links = landing ? LANDING_LINKS : HEADER_LINKS;
 
   return (
     <header className={`relative z-40 border-b border-white/10 bg-[#070708]/95 text-white backdrop-blur-md ${className}`}>
@@ -39,7 +47,7 @@ export function MarketHeader({ compact = false, className = '', showLogo = true 
         )}
 
         <nav className="flex min-w-0 items-center gap-1 overflow-x-auto pb-1 sm:flex-1 sm:justify-end sm:pb-0" aria-label="Primary navigation">
-          {HEADER_LINKS.map(link => {
+          {links.map(link => {
             const wantsToBuy = location.pathname === '/trading' && new URLSearchParams(location.search).get('type') === 'WTB';
             const active = link.to === '/'
               ? location.pathname === '/'

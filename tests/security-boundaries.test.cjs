@@ -153,7 +153,7 @@ test('Price Research only returns excluded observation rows to reviewers and adm
   const fs = require('node:fs');
   const path = require('node:path');
   const route = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
-  assert.match(route, /\['admin', 'reviewer'\]\.includes\(userRole\(sessionUser\)\)/);
+  assert.match(route, /\['admin', 'reviewer'\]\.includes\(auth\.role\)/);
   assert.match(route, /outlier_rows: canReviewExcludedEvidence \?/);
   assert.match(route, /Cache-Control', 'no-store/);
   assert.match(route, /Vary', 'Cookie/);

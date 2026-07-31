@@ -511,7 +511,7 @@ export default function PriceResearch() {
       if (brand) params.set('brand', brand);
       if (dial) params.set('dial', dial);
       params.set('evidencePage', String(evidencePage));
-      const r = await fetch(`/api/price-research?${params.toString()}`);
+      const r = await fetch(`/api/price-research?${params.toString()}`, { credentials: 'include' });
       const d = await r.json();
       if (d.success) {
         setData(d);

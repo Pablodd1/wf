@@ -22,7 +22,7 @@ const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
-const { authClient, resolveSession, userRole } = require('./_lib/dealer-auth.cjs');
+const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
@@ -224,19 +224,15 @@ function summarizeComparableRows(rows) {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Vary', 'Cookie');
-  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed.' });
 
-  let canReviewExcludedEvidence = false;
-  try {
-    const sessionClient = authClient();
-    const sessionUser = sessionClient ? await resolveSession(sessionClient, req, res) : null;
-    canReviewExcludedEvidence = ['admin', 'reviewer'].includes(userRole(sessionUser));
-  } catch {
-    // Public research remains available when optional session resolution fails.
+  const auth = await authorizeDealer(req, res);
+  if (auth.error) {
+    return res.status(auth.status).json({ error: auth.status === 503 ? 'Price Research authentication is unavailable.' : 'Sign in is required to access Price Research.' });
   }
+  const canReviewExcludedEvidence = ['admin', 'reviewer'].includes(auth.role);
 
   const rawRef = (req.query.reference || '').trim();
   let brand = (req.query.brand || '').trim();

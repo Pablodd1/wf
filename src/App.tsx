@@ -31,6 +31,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/dealer-login" element={<DealerLogin />} />
+        <Route path="/admin-login" element={<DealerLogin />} />
         <Route path="/dealer" element={<DealerGate allowBetaSkip><DealerPortal /></DealerGate>} />
         <Route path="/dealer/post" element={<DealerGate><DealerSubmitListing /></DealerGate>} />
         <Route path="/dealer/account/:section" element={<DealerGate><DealerAccount /></DealerGate>} />
@@ -52,7 +53,7 @@ export default function App() {
         <Route path="/multi-listings" element={<DealerGate allowedRoles={['admin']}><MultiListings /></DealerGate>} />
         <Route path="/dealers" element={<DealerGate><DealerDirectory /></DealerGate>} />
         <Route path="/dealers/:dealerId" element={<DealerProfile />} />
-        <Route path="/price-research" element={<DealerGate allowBetaSkip><PriceResearch /></DealerGate>} />
+        <Route path="/price-research" element={<DealerGate><PriceResearch /></DealerGate>} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
         <Route path="/info/:page" element={<PublicInfo />} />

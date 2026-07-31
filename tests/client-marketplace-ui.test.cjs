@@ -23,6 +23,11 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.doesNotMatch(header, /luxuryapp-wf-w5o1/);
   assert.match(header, /label: 'ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'HIRE FI'/);
+  assert.match(header, /const LANDING_LINKS = \[[\s\S]*label: 'TRADING FLOOR'[\s\S]*label: 'HIRE FI'[\s\S]*label: 'LOGIN'/);
+  assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
+  assert.match(home, /Post an offer/);
+  assert.match(home, /https:\/\/luxuryapp-wf-w5o1\.vercel\.app\//);
+  assert.match(home, /to="\/admin-login"[\s\S]*Admin login/);
   assert.match(header, /src="\/images\/curated-luxury-logo-dark\.png"/);
   assert.match(header, /alt="Curated Luxury"/);
   assert.doesNotMatch(header, />CL<\/span>/);
@@ -82,6 +87,10 @@ test('dealer login keeps authentication but omits the removed marketing panel', 
 
   assert.match(login, /<form onSubmit=\{login\}/);
   assert.match(login, /fetch\('\/api\/dealer-auth'/);
+  assert.match(login, /location\.pathname === '\/admin-login'/);
+  assert.match(login, /Sign in is required to access Price Research/);
+  assert.match(login, /const betaDestinations = new Set\(\['\/dealer', '\/trading'\]\)/);
+  assert.doesNotMatch(login, /Continue without login to Price Research/);
   assert.doesNotMatch(login, /Controlled dealer access/i);
   assert.doesNotMatch(login, /Your market operations workspace/i);
   assert.doesNotMatch(login, /Accounts are provisioned by WatchFacts/i);
