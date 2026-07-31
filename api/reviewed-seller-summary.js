@@ -10,48 +10,22 @@ function approvedPhone(listing) {
   return listing.phone_number;
 }
 
-function activityQuery(client, phone, { type, dated, ascending } = {}) {
-  let query = client
-    .from('reviewed_workbook_inventory')
-    .select(dated ? 'posting_date,id' : 'id', dated
-      ? undefined
-      : { count: 'exact', head: true })
-    .eq('contact_publication_approved', true)
-    .eq('phone_number', phone);
-  if (type) query = query.eq('listing_type', type);
-  if (dated) {
-    query = query
-      .not('posting_date', 'is', null)
-      .order('posting_date', { ascending })
-      .order('id', { ascending })
-      .limit(1)
-      .maybeSingle();
-  }
-  return query;
-}
-
 async function loadSellerAnalytics(client, phone) {
-  const [total, wts, wtb, first, last] = await Promise.all([
-    activityQuery(client, phone),
-    activityQuery(client, phone, { type: 'WTS' }),
-    activityQuery(client, phone, { type: 'WTB' }),
-    activityQuery(client, phone, { dated: true, ascending: true }),
-    activityQuery(client, phone, { dated: true, ascending: false }),
-  ]);
-  const failed = [total, wts, wtb, first, last].find(result => result.error);
-  if (failed) throw failed.error;
-  const totalPosts = Number(total.count || 0);
-  const wtsPosts = Number(wts.count || 0);
-  const wtbPosts = Number(wtb.count || 0);
+  const { data, error } = await client.rpc('reviewed_workbook_seller_activity', {
+    p_phone: phone,
+  });
+  if (error) throw error;
+  const activity = Array.isArray(data) ? data[0] : data;
+  const totalPosts = Number(activity?.total_posts || 0);
+  const wtsPosts = Number(activity?.wts_posts || 0);
+  const wtbPosts = Number(activity?.wtb_posts || 0);
   return {
     total_posts: totalPosts,
     wts_posts: wtsPosts,
     wtb_posts: wtbPosts,
-    // The table permits only WTS, WTB, OTHER, or null. The remainder is the
-    // exact OTHER/unspecified activity count; no intent is inferred.
-    other_posts: Math.max(0, totalPosts - wtsPosts - wtbPosts),
-    first_post_at: first.data?.posting_date || null,
-    last_post_at: last.data?.posting_date || null,
+    other_posts: Number(activity?.other_posts || 0),
+    first_post_at: activity?.first_post_at || null,
+    last_post_at: activity?.last_post_at || null,
   };
 }
 

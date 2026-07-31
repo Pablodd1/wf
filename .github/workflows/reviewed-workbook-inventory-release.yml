@@ -72,6 +72,7 @@ jobs:
           readonly allowlisted_migrations=(
             "supabase/migrations/20260731150000_reviewed_workbook_source_file_index.sql"
             "supabase/migrations/20260731160000_reviewed_workbook_market_indexes.sql"
+            "supabase/migrations/20260731170000_reviewed_workbook_seller_activity.sql"
           )
           for migration in "${allowlisted_migrations[@]}"; do
             test -f "$migration"
@@ -125,6 +126,16 @@ jobs:
             ) <> 10 THEN
               RAISE EXCEPTION 'Reviewed workbook indexes are incomplete';
             END IF;
+            IF to_regprocedure('public.reviewed_workbook_seller_activity(text)') IS NULL THEN
+              RAISE EXCEPTION 'Reviewed seller activity function is missing';
+            END IF;
+            IF has_function_privilege('anon', 'public.reviewed_workbook_seller_activity(text)', 'EXECUTE')
+              OR has_function_privilege('authenticated', 'public.reviewed_workbook_seller_activity(text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'Reviewed seller activity function is publicly executable';
+            END IF;
+            IF NOT has_function_privilege('service_role', 'public.reviewed_workbook_seller_activity(text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'Service role cannot execute reviewed seller activity function';
+            END IF;
           END
           $$;
           SQL
@@ -138,6 +149,7 @@ jobs:
             echo "- Global Source Review order index: ready."
             echo "- Exact source-workbook review index: ready."
             echo "- Exact approved-contact activity index: ready."
+            echo "- Exact approved seller activity aggregate: service-only and ready."
             echo "- Listing-type and exact-reference publication indexes: ready."
             echo "- Ready for the checkpointed local importer."
           } >> "$GITHUB_STEP_SUMMARY"

@@ -12,6 +12,10 @@ const migration = fs.readFileSync(
   path.join(root, 'supabase/migrations/20260731160000_reviewed_workbook_market_indexes.sql'),
   'utf8',
 );
+const sellerMigration = fs.readFileSync(
+  path.join(root, 'supabase/migrations/20260731170000_reviewed_workbook_seller_activity.sql'),
+  'utf8',
+);
 const workflow = fs.readFileSync(
   path.join(root, '.github/workflows/reviewed-workbook-inventory-release.yml'),
   'utf8',
@@ -36,53 +40,27 @@ test('requires exact reviewed IDs and explicit approved phone evidence', () => {
 
 test('seller analytics query is exact, approved, read-only, and workbook-only', () => {
   assert.match(source, /\.from\('reviewed_workbook_inventory'\)/);
-  assert.match(source, /count: 'exact', head: true/);
-  assert.match(source, /\.eq\('contact_publication_approved', true\)/);
-  assert.match(source, /\.eq\('phone_number', phone\)/);
-  assert.match(source, /other_posts: Math\.max\(0, totalPosts - wtsPosts - wtbPosts\)/);
+  assert.match(source, /\.rpc\('reviewed_workbook_seller_activity'/);
   assert.doesNotMatch(source, /watch_records/);
   assert.doesNotMatch(source, /\.(?:insert|upsert|update|delete)\s*\(/);
 });
 
 test('seller analytics reconcile WTS, WTB, and the exact remaining activity', async () => {
-  const seen = [];
   const client = {
-    from(table) {
-      assert.equal(table, 'reviewed_workbook_inventory');
-      const state = { type: null, dated: false, ascending: true, phone: null, approved: false };
-      const builder = {
-        select(columns, options) {
-          state.dated = columns === 'posting_date,id';
-          if (!state.dated) assert.deepEqual(options, { count: 'exact', head: true });
-          return builder;
-        },
-        eq(field, value) {
-          if (field === 'listing_type') state.type = value;
-          if (field === 'phone_number') state.phone = value;
-          if (field === 'contact_publication_approved') state.approved = value;
-          return builder;
-        },
-        not() { return builder; },
-        order(field, options) {
-          if (field === 'posting_date') state.ascending = options.ascending;
-          return builder;
-        },
-        limit() { return builder; },
-        maybeSingle() {
-          seen.push({ ...state });
-          return Promise.resolve({
-            data: { posting_date: state.ascending ? '2020-01-01T00:00:00Z' : '2026-07-31T00:00:00Z' },
-            error: null,
-          });
-        },
-        then(resolve, reject) {
-          seen.push({ ...state });
-          const counts = { WTS: 5, WTB: 2 };
-          return Promise.resolve({ count: state.type ? counts[state.type] : 8, error: null })
-            .then(resolve, reject);
-        },
-      };
-      return builder;
+    rpc(name, params) {
+      assert.equal(name, 'reviewed_workbook_seller_activity');
+      assert.deepEqual(params, { p_phone: '+1 555 0100' });
+      return Promise.resolve({
+        data: [{
+          total_posts: 8,
+          wts_posts: 5,
+          wtb_posts: 2,
+          other_posts: 1,
+          first_post_at: '2020-01-01T00:00:00Z',
+          last_post_at: '2026-07-31T00:00:00Z',
+        }],
+        error: null,
+      });
     },
   };
 
@@ -94,8 +72,18 @@ test('seller analytics reconcile WTS, WTB, and the exact remaining activity', as
     first_post_at: '2020-01-01T00:00:00Z',
     last_post_at: '2026-07-31T00:00:00Z',
   });
-  assert.equal(seen.length, 5);
-  assert.ok(seen.every(query => query.phone === '+1 555 0100' && query.approved === true));
+});
+
+test('seller activity aggregate is exact, approved-contact only, and service-only', () => {
+  assert.match(sellerMigration, /count\(\*\)::bigint AS total_posts/);
+  assert.match(sellerMigration, /count\(\*\) FILTER \(WHERE listing_type = 'WTS'\)/);
+  assert.match(sellerMigration, /contact_publication_approved IS TRUE/);
+  assert.match(sellerMigration, /phone_number = p_phone/);
+  assert.match(sellerMigration, /REVOKE ALL[\s\S]*FROM anon/);
+  assert.match(sellerMigration, /REVOKE ALL[\s\S]*FROM authenticated/);
+  assert.match(sellerMigration, /GRANT EXECUTE[\s\S]*TO service_role/);
+  assert.doesNotMatch(sellerMigration, /watch_records/);
+  assert.doesNotMatch(sellerMigration, /\b(?:INSERT|UPDATE|DELETE)\b/i);
 });
 
 test('market indexes are concurrent, partial, and transaction-free', () => {
@@ -109,6 +97,7 @@ test('market indexes are concurrent, partial, and transaction-free', () => {
 
 test('dedicated release workflow explicitly applies and verifies every new index', () => {
   assert.match(workflow, /allowlisted_migrations[\s\S]*20260731160000_reviewed_workbook_market_indexes\.sql/);
+  assert.match(workflow, /allowlisted_migrations[\s\S]*20260731170000_reviewed_workbook_seller_activity\.sql/);
   assert.match(workflow, /timeout-minutes: 120/);
   assert.match(workflow, /SET lock_timeout = '30s'/);
   assert.match(workflow, /DROP INDEX IF EXISTS[\s\S]*indisvalid[\s\S]*indisready/);
@@ -121,4 +110,6 @@ test('dedicated release workflow explicitly applies and verifies every new index
   ]) {
     assert.match(workflow, new RegExp(name));
   }
+  assert.match(workflow, /to_regprocedure\('public\.reviewed_workbook_seller_activity\(text\)'\)/);
+  assert.match(workflow, /has_function_privilege\('service_role'[\s\S]*reviewed_workbook_seller_activity/);
 });
