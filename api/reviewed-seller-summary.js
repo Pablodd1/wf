@@ -99,7 +99,12 @@ module.exports = async function handler(req, res) {
       analytics,
     });
   } catch (error) {
-    console.error('[reviewed-seller-summary] error:', error.message);
+    console.error('[reviewed-seller-summary] error:', JSON.stringify({
+      code: String(error?.code || ''),
+      message: String(error?.message || error || ''),
+      details: String(error?.details || ''),
+      hint: String(error?.hint || ''),
+    }));
     return res.status(503).json({
       status: 'error',
       error: 'Seller activity is temporarily unavailable',
