@@ -97,3 +97,30 @@ test('public API uses reconciled totals for unfiltered and brand review pages', 
   assert.equal(api.resolveTotal({ ...common, brand: 'Rolex' }), 40);
   assert.equal(api.resolveTotal({ ...common, brand: '', imagesOnly: true }), 999);
 });
+
+test('public API reads deep exact pages from the nearest end of the index', () => {
+  assert.deepEqual(api.resolvePageWindow({
+    page: 1,
+    pageSize: 48,
+    total: 8_532_220,
+    canReverse: true,
+  }), {
+    reverse: false,
+    empty: false,
+    start: 0,
+    end: 47,
+    requestedStart: 0,
+  });
+  assert.deepEqual(api.resolvePageWindow({
+    page: 177_755,
+    pageSize: 48,
+    total: 8_532_220,
+    canReverse: true,
+  }), {
+    reverse: true,
+    empty: false,
+    start: 0,
+    end: 27,
+    requestedStart: 8_532_192,
+  });
+});

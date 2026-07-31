@@ -117,6 +117,8 @@ export default function ReviewedWorkbookInventory() {
   const [brand, setBrand] = useState('');
   const [referenceInput, setReferenceInput] = useState('');
   const [reference, setReference] = useState('');
+  const [sourceFileInput, setSourceFileInput] = useState('');
+  const [sourceFile, setSourceFile] = useState('');
   const [imagesOnly, setImagesOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -126,6 +128,7 @@ export default function ReviewedWorkbookInventory() {
     const params = new URLSearchParams({ page: String(page), pageSize: '48' });
     if (brand) params.set('brand', brand);
     if (reference) params.set('reference', reference);
+    if (sourceFile) params.set('sourceFile', sourceFile);
     if (imagesOnly) params.set('images', 'true');
     fetch(`/api/reviewed-workbook-inventory?${params.toString()}`, {
       signal: controller.signal,
@@ -146,7 +149,7 @@ export default function ReviewedWorkbookInventory() {
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [brand, imagesOnly, page, reference]);
+  }, [brand, imagesOnly, page, reference, sourceFile]);
 
   const summary = payload?.summary;
   const rows = payload?.records || [];
@@ -190,7 +193,7 @@ export default function ReviewedWorkbookInventory() {
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="grid gap-3 rounded-md border p-4 lg:grid-cols-[1fr_1fr_auto]" style={{ borderColor: BORDER, background: PANEL }}>
+        <div className="grid gap-3 rounded-md border p-4 lg:grid-cols-[1fr_1fr_1fr_auto]" style={{ borderColor: BORDER, background: PANEL }}>
           <select
             value={brand}
             onChange={event => {
@@ -224,6 +227,25 @@ export default function ReviewedWorkbookInventory() {
               value={referenceInput}
               onChange={event => setReferenceInput(event.target.value)}
               placeholder="Exact reference"
+              className="h-11 w-full rounded-md border pl-10 pr-3 text-sm"
+              style={{ borderColor: BORDER, background: PAGE, color: INK }}
+            />
+          </form>
+          <form
+            className="relative"
+            onSubmit={event => {
+              event.preventDefault();
+              setLoading(true);
+              setError('');
+              setSourceFile(sourceFileInput.trim());
+              setPage(1);
+            }}
+          >
+            <Search size={16} className="absolute left-3 top-3.5" style={{ color: MUTED }} />
+            <input
+              value={sourceFileInput}
+              onChange={event => setSourceFileInput(event.target.value)}
+              placeholder="Exact source workbook"
               className="h-11 w-full rounded-md border pl-10 pr-3 text-sm"
               style={{ borderColor: BORDER, background: PAGE, color: INK }}
             />
