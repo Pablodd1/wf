@@ -143,6 +143,7 @@ interface ReviewedMarketRecord {
   supplied_brand?: string | null;
   model?: string | null;
   reference?: string | null;
+  reference_search_key?: string | null;
   raw_reference?: string | null;
   normalized_reference?: string | null;
   catalog_reference?: string | null;
@@ -156,6 +157,7 @@ interface ReviewedMarketRecord {
   currency?: string | null;
   workbook_price_usd?: number | null;
   price_evidence_status?: string | null;
+  price_research_eligible?: boolean;
   display_image_url?: string | null;
   thumbnail_url?: string | null;
   image_url?: string | null;
@@ -867,7 +869,7 @@ export default function PriceResearch() {
                 <div>
                   <h2 style={{ color: NAVY, fontSize: 18, fontWeight: 800 }}>Available listings</h2>
                   <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4, maxWidth: 780 }}>
-                    Exact listing evidence for {reviewedFilter.brand ? `${reviewedFilter.brand} ` : ''}{reviewedFilter.reference}. Original seller images appear first, followed by the highest supplied prices. Prices without explicit source currency remain separate from market averages.
+                    Exact listing evidence for {reviewedFilter.brand ? `${reviewedFilter.brand} ` : ''}{reviewedFilter.reference}. Source-supplied images appear first, followed by source-confirmed USD prices. Prices without explicit source currency remain separate from market averages.
                   </p>
                 </div>
                 {reviewedInventory && (
@@ -885,7 +887,7 @@ export default function PriceResearch() {
             )}
             {!reviewedLoading && reviewedListings.length > 0 && (
               <div className="grid gap-4 p-4 md:grid-cols-2">
-                {reviewedListings.map(record => <ReviewedEvidenceCard key={record.id} record={record} />)}
+                {reviewedListings.map(record => <ReviewedEvidenceCard key={record.id} record={record} analytics={data} />)}
               </div>
             )}
 
@@ -1501,22 +1503,141 @@ function reviewedPriceLabel(record: ReviewedMarketRecord) {
   if (record.source_currency && Number.isFinite(Number(record.source_price_amount)) && Number(record.source_price_amount) > 0) {
     return `${record.source_currency} ${Number(record.source_price_amount).toLocaleString()}`;
   }
-  if (record.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
-    && Number.isFinite(Number(record.price_usd ?? record.workbook_price_usd))
-    && Number(record.price_usd ?? record.workbook_price_usd) > 0) {
-    return `USD ${Number(record.price_usd ?? record.workbook_price_usd).toLocaleString()}`;
-  }
   return '';
 }
 
 function reviewedPriceEvidenceLabel(status?: string | null) {
-  if (status === 'SOURCE_EXPLICIT_USD_MATCH') return 'Source-supported USD evidence; all remaining analytics gates still apply.';
-  if (status === 'DATED_FX_PROVENANCE_REQUIRED') return 'Not used in averages: dated FX provenance is required.';
-  if (status === 'EXPLICIT_USD_PRICE_CONFLICT') return 'Not used in averages: the source USD value conflicts with the workbook value.';
-  return 'Not used in averages: source currency evidence is unresolved.';
+  if (status === 'SOURCE_EXPLICIT_USD_MATCH') return 'Currency basis: USD stated in the original listing.';
+  if (status === 'DATED_FX_PROVENANCE_REQUIRED') return 'Market comparison unavailable: this price does not have a verified dated USD conversion.';
+  if (status === 'EXPLICIT_USD_PRICE_CONFLICT') return 'Market comparison unavailable: the posted and supplied USD values conflict.';
+  return 'Market comparison unavailable: currency is not explicit in the original listing.';
 }
 
-function ReviewedEvidenceCard({ record }: { record: ReviewedMarketRecord }) {
+function sameEvidenceValue(left?: string | null, right?: string | null) {
+  return Boolean(left && right && left.trim().toLowerCase() === right.trim().toLowerCase());
+}
+
+function referenceComparisonKey(value?: string | null) {
+  return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function ReviewedPriceContext({ record, analytics }: { record: ReviewedMarketRecord; analytics: PriceData | null }) {
+  const [chartOpen, setChartOpen] = useState(false);
+  const recordBrand = record.brand || record.canonical_brand || record.brand_scope || record.supplied_brand || '';
+  const recordReference = record.reference || record.normalized_reference || record.catalog_reference || record.raw_reference || '';
+  const analyticsReference = analytics?.resolvedRef || analytics?.reference || '';
+  const sameReference = record.reference_search_key
+    ? record.reference_search_key === referenceComparisonKey(analyticsReference)
+    : sameEvidenceValue(recordReference, analyticsReference);
+  const sameIdentityAndDial = Boolean(
+    analytics
+    && sameEvidenceValue(recordBrand, analytics.brand)
+    && sameReference
+    && sameEvidenceValue(record.dial_color, analytics.selected_cohort.dial_color),
+  );
+  const exactCohort = Boolean(
+    sameIdentityAndDial
+    && analytics
+    && analytics.analytics_ready
+    && analytics.stats
+    && analytics.count >= Math.max(5, Number(analytics.methodology.minimum_sample || 5)),
+  );
+  const eligibleUsd = record.price_research_eligible === true
+    && record.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
+    && record.listing_type === 'WTS'
+    && Number.isFinite(Number(record.price_usd))
+    && Number(record.price_usd) > 0;
+  if (!eligibleUsd) return null;
+  if (!exactCohort || !analytics?.stats) {
+    return (
+      <div style={{ marginTop: 12, padding: 10, border: `1px solid ${BORDER}`, borderRadius: 7, color: MUTED, fontSize: 11, lineHeight: 1.5 }}>
+        Price rating and timeline require at least five verified USD comparable offers for this exact reference and dial. Projections remain unavailable unless the separate historical validation also passes.
+        {sameIdentityAndDial && analytics ? ` ${analytics.count.toLocaleString()} are available now.` : ''}
+      </div>
+    );
+  }
+
+  const price = Number(record.price_usd);
+  const rating = rateMarketPrice(price, analytics.stats, analytics.count);
+  const postedAt = record.listing_date || record.posting_date || null;
+  const postedDate = postedAt ? postedAt.split('T')[0] : null;
+  const postedMonth = postedDate?.slice(0, 7) || '';
+  const chartRows: Array<{
+    month: string;
+    avg_price: number | null;
+    count: number;
+    selected_price: number | null;
+    observed_date: string | null;
+  }> = analytics.monthly.map(point => ({
+    month: point.month,
+    avg_price: point.avg_price,
+    count: point.count,
+    selected_price: point.month === postedMonth ? price : null,
+    observed_date: point.month === postedMonth ? postedDate : null,
+  }));
+  if (postedMonth && !chartRows.some(point => point.month === postedMonth)) {
+    chartRows.push({
+      month: postedMonth,
+      avg_price: null,
+      count: 0,
+      selected_price: price,
+      observed_date: postedDate,
+    });
+    chartRows.sort((left, right) => left.month.localeCompare(right.month));
+  }
+  const chartReady = Boolean(postedMonth && chartRows.length > 0);
+  const chartValues = [
+    ...analytics.monthly.map(point => Number(point.avg_price)),
+    price,
+  ].filter(value => Number.isFinite(value) && value > 0);
+  const chartMin = chartValues.length ? Math.min(...chartValues) : 0;
+  const chartMax = chartValues.length ? Math.max(...chartValues) : 1;
+  const chartPadding = Math.max(1000, (chartMax - chartMin) * 0.15);
+  const chartDomain: [number, number] = [
+    Math.max(0, Math.floor((chartMin - chartPadding) / 1000) * 1000),
+    Math.ceil((chartMax + chartPadding) / 1000) * 1000,
+  ];
+
+  return (
+    <div style={{ marginTop: 14, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 12, background: '#fbfaf7' }}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div style={{ color: rating.color, fontWeight: 800, fontSize: 13 }}>{rating.label}</div>
+          <div style={{ color: MUTED, fontSize: 11, lineHeight: 1.5, marginTop: 3 }}>{rating.reason}</div>
+        </div>
+        <div style={{ color: NAVY, fontSize: 11, fontWeight: 700 }}>{analytics.count.toLocaleString()} verified USD comparables</div>
+      </div>
+      <div style={{ color: MUTED, fontSize: 10, marginTop: 8 }}>
+        Exact {analytics.brand} {analyticsReference} · {analytics.selected_cohort.dial_color} dial · all listing conditions
+      </div>
+      {chartReady ? (
+        <>
+          <button type="button" onClick={() => setChartOpen(value => !value)} style={{ marginTop: 10, minHeight: 38, border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, borderRadius: 6, padding: '7px 10px', fontSize: 11, fontWeight: 800 }}>
+            {chartOpen ? 'Hide price timeline' : 'Compare price when posted'}
+          </button>
+          {chartOpen && (
+            <div style={{ width: '100%', height: 230, marginTop: 12 }} role="img" aria-label={`Posted USD price compared with verified monthly averages for the exact ${analytics.selected_cohort.dial_color} dial cohort`}>
+              <ResponsiveContainer>
+                <ComposedChart data={chartRows} margin={{ top: 8, right: 12, left: 0, bottom: 2 }}>
+                  <CartesianGrid stroke="#e5e7eb" strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="month" stroke={MUTED} fontSize={9} tickFormatter={month => String(month).replace(/^(\d{4})-(\d{2})$/, '$2/$1')} />
+                  <YAxis domain={chartDomain} stroke={MUTED} fontSize={9} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} width={48} />
+                  <Tooltip content={<ListingComparisonTooltip />} />
+                  <Line type="monotone" dataKey="avg_price" name="Verified monthly average" stroke={NAVY} strokeWidth={2.5} dot={{ r: 3, fill: NAVY }} connectNulls />
+                  <Scatter dataKey="selected_price" name="Posted listing" fill={GOLD} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </>
+      ) : (
+        <div style={{ color: MUTED, fontSize: 11, marginTop: 9 }}>A price timeline is unavailable because the original posting date is not present.</div>
+      )}
+    </div>
+  );
+}
+
+function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRecord; analytics: PriceData | null }) {
   const [sellerOpen, setSellerOpen] = useState(false);
   const [sellerSummary, setSellerSummary] = useState<ReviewedSellerResponse | null>(null);
   const [sellerLoading, setSellerLoading] = useState(false);
@@ -1529,13 +1650,13 @@ function ReviewedEvidenceCard({ record }: { record: ReviewedMarketRecord }) {
   const poster = sellerSummary?.seller?.name || record.posted_by || record.seller_name || '';
   const phone = sellerSummary?.seller?.phone || record.phone_number || record.seller_phone || '';
   const price = reviewedPriceLabel(record);
-  const analytics = sellerSummary?.analytics;
+  const sellerAnalytics = sellerSummary?.analytics;
   const sellerMetrics: Array<[string, number]> = [
-    ['For sale', analytics?.wts_posts ?? record.seller_analytics?.wts_posts],
-    ['Looking for', analytics?.wtb_posts ?? record.seller_analytics?.wtb_posts],
-    ['Other posts', analytics?.other_posts],
+    ['For sale', sellerAnalytics?.wts_posts ?? record.seller_analytics?.wts_posts],
+    ['Looking for', sellerAnalytics?.wtb_posts ?? record.seller_analytics?.wtb_posts],
+    ['Other posts', sellerAnalytics?.other_posts],
     ['Active', record.seller_analytics?.active_listings],
-    ['Total posts', analytics?.total_posts ?? record.seller_analytics?.total_posts],
+    ['Total posts', sellerAnalytics?.total_posts ?? record.seller_analytics?.total_posts],
   ].flatMap(([label, value]) => value != null && Number.isFinite(Number(value))
     ? [[String(label), Number(value)] as [string, number]]
     : []);
@@ -1579,6 +1700,7 @@ function ReviewedEvidenceCard({ record }: { record: ReviewedMarketRecord }) {
       <div style={{ color: record.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH' ? GREEN : '#7a5900', fontSize: 11, lineHeight: 1.5, marginTop: 5 }}>
         {reviewedPriceEvidenceLabel(record.price_evidence_status)}
       </div>
+      <ReviewedPriceContext record={record} analytics={analytics} />
 
       {(poster || phone || record.listing_date || record.posting_date) && (
         <div style={{ marginTop: 14, padding: 12, background: LIGHT_GRAY, borderRadius: 7, fontSize: 12, color: TEXT }}>
@@ -1598,8 +1720,8 @@ function ReviewedEvidenceCard({ record }: { record: ReviewedMarketRecord }) {
               {sellerMetrics.map(([label, value]) => <Metric key={label} label={label} value={Number(value).toLocaleString()} />)}
             </div>
           )}
-          {sellerOpen && analytics?.first_post_at && <div style={{ marginTop: 10, color: MUTED }}>First observed: {analytics.first_post_at.split('T')[0]}</div>}
-          {sellerOpen && analytics?.last_post_at && <div style={{ marginTop: 3, color: MUTED }}>Last observed: {analytics.last_post_at.split('T')[0]}</div>}
+          {sellerOpen && sellerAnalytics?.first_post_at && <div style={{ marginTop: 10, color: MUTED }}>First observed: {sellerAnalytics.first_post_at.split('T')[0]}</div>}
+          {sellerOpen && sellerAnalytics?.last_post_at && <div style={{ marginTop: 3, color: MUTED }}>Last observed: {sellerAnalytics.last_post_at.split('T')[0]}</div>}
         </div>
       )}
 
@@ -1624,7 +1746,7 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
     ? `$${Number(row.price_usd).toLocaleString()}`
     : hasSourcePrice
       ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
-      : 'Price under review';
+      : 'Price not available';
   return (
     <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}`}
       className="min-h-16"

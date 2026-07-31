@@ -20,14 +20,16 @@ test('owner-approved workbook contacts are public only through the explicit reco
   assert.match(route, /whatsappUrl\(phone, resolvedListing\)/);
 });
 
-test('Trading Floor keeps USD primary when a reviewed USD value exists', () => {
+test('Trading Floor shows USD only for source-confirmed eligible evidence', () => {
   const page = read('src/pages/TradingFloor.tsx');
-  assert.match(page, /const hasUsdPrice = Number\.isFinite\(Number\(listing\.price_usd\)\)/);
-  assert.match(page, /const usdPriceLabel = hasUsdPrice[\s\S]*formatUsdPrice/);
-  assert.match(page, /meta\.usdPriceLabel[\s\S]*meta\.rawPriceLabel/);
+  assert.match(page, /listing\.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH'/);
+  assert.match(page, /listing\.price_research_eligible !== true/);
+  assert.match(page, /verifiedUsd !== null[\s\S]*formatUsdPrice\(verifiedUsd\)/);
+  assert.match(page, /sourcePrice \|\| 'Price on request'/);
+  assert.match(page, /Original source price · no USD conversion/);
   assert.match(page, /contact\.phone_display/);
-  assert.match(page, /contact\.dealer_stats\.wts_posts/);
-  assert.match(page, /contact\.dealer_stats\.wtb_posts/);
+  assert.match(page, /sellerAnalytics\.wts_posts/);
+  assert.match(page, /sellerAnalytics\.wtb_posts/);
 });
 
 test('reviewed workbook importer retains original currency beside approved USD', () => {
@@ -56,8 +58,8 @@ test('Trading Floor withholds reference-only images while preserving provenance 
   assert.match(floor, /'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'/);
   assert.doesNotMatch(floor, /Reference image · not seller photo/);
   assert.match(floor, /onError=\{onUnavailable\}/);
-  assert.match(floor, /const imageSource = Array\.isArray\(publicListing\.image_urls\) && publicListing\.image_urls\.length/);
-  assert.match(floor, /image_evidence_notice: imageSource\.image_evidence_notice/);
+  assert.doesNotMatch(floor, /publicListing\.image_urls|tradingListing\.image_urls/);
+  assert.match(floor, /listing\.image_evidence_notice/);
   assert.match(research, /detail\.image_evidence_notice/);
 });
 

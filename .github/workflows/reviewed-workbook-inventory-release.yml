@@ -64,7 +64,12 @@ jobs:
               'idx_reviewed_workbook_inventory_approved_phone_activity',
               'idx_reviewed_workbook_inventory_type_order',
               'idx_reviewed_workbook_inventory_brand_type_order',
-              'idx_reviewed_workbook_inventory_reference_order'
+              'idx_reviewed_workbook_inventory_reference_order',
+              'idx_reviewed_workbook_market_evidence_order',
+              'idx_reviewed_workbook_market_brand_evidence_order',
+              'idx_reviewed_workbook_market_type_evidence_order',
+              'idx_reviewed_workbook_market_brand_type_evidence_order',
+              'idx_reviewed_workbook_market_reference_evidence_order'
             )
             AND NOT (index_state.indisvalid AND index_state.indisready)
           \gexec
@@ -73,6 +78,7 @@ jobs:
             "supabase/migrations/20260731150000_reviewed_workbook_source_file_index.sql"
             "supabase/migrations/20260731160000_reviewed_workbook_market_indexes.sql"
             "supabase/migrations/20260731170000_reviewed_workbook_seller_activity.sql"
+            "supabase/migrations/20260731180000_reviewed_workbook_evidence_order.sql"
           )
           for migration in "${allowlisted_migrations[@]}"; do
             test -f "$migration"
@@ -89,7 +95,8 @@ jobs:
           DO $$
           BEGIN
             IF to_regclass('public.reviewed_workbook_inventory') IS NULL
-              OR to_regclass('public.reviewed_workbook_import_checkpoints') IS NULL THEN
+              OR to_regclass('public.reviewed_workbook_import_checkpoints') IS NULL
+              OR to_regclass('public.reviewed_workbook_market_source') IS NULL THEN
               RAISE EXCEPTION 'Reviewed workbook source-review schema is incomplete';
             END IF;
             IF has_table_privilege('anon', 'public.reviewed_workbook_inventory', 'SELECT')
@@ -121,10 +128,22 @@ jobs:
                   'idx_reviewed_workbook_inventory_type_order',
                   'idx_reviewed_workbook_inventory_brand_type_order',
                   'idx_reviewed_workbook_inventory_reference_order',
+                  'idx_reviewed_workbook_market_evidence_order',
+                  'idx_reviewed_workbook_market_brand_evidence_order',
+                  'idx_reviewed_workbook_market_type_evidence_order',
+                  'idx_reviewed_workbook_market_brand_type_evidence_order',
+                  'idx_reviewed_workbook_market_reference_evidence_order',
                   'idx_reviewed_workbook_checkpoints_brand_status'
                 )
-            ) <> 10 THEN
+            ) <> 15 THEN
               RAISE EXCEPTION 'Reviewed workbook indexes are incomplete';
+            END IF;
+            IF has_table_privilege('anon', 'public.reviewed_workbook_market_source', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.reviewed_workbook_market_source', 'SELECT') THEN
+              RAISE EXCEPTION 'Customer market source view is directly readable';
+            END IF;
+            IF NOT has_table_privilege('service_role', 'public.reviewed_workbook_market_source', 'SELECT') THEN
+              RAISE EXCEPTION 'Service role cannot read customer market source view';
             END IF;
             IF to_regprocedure('public.reviewed_workbook_seller_activity(text)') IS NULL THEN
               RAISE EXCEPTION 'Reviewed seller activity function is missing';
@@ -150,6 +169,7 @@ jobs:
             echo "- Exact source-workbook review index: ready."
             echo "- Exact approved-contact activity index: ready."
             echo "- Exact approved seller activity aggregate: service-only and ready."
+            echo "- Customer evidence ordering view and indexes: service-only and ready."
             echo "- Listing-type and exact-reference publication indexes: ready."
             echo "- Ready for the checkpointed local importer."
           } >> "$GITHUB_STEP_SUMMARY"

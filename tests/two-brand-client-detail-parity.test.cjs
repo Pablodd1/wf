@@ -22,16 +22,13 @@ const researchDetailApi = fs.readFileSync(
   'utf8',
 );
 
-test('Trading Floor uses the same safe listing evidence source as Price Research', () => {
-  assert.match(trading, /\/api\/price-research-listing\?id=/);
+test('Trading Floor uses only the reviewed inventory evidence returned for its page', () => {
+  assert.match(trading, /\/api\/reviewed-market-inventory\?/);
   assert.match(research, /\/api\/price-research-listing\?id=/);
-  assert.match(trading, /publicListing\.id !== listing\.id/);
+  assert.doesNotMatch(trading, /\/api\/(?:price-research-listing|trading-listing|listing-contact)\?id=/);
   assert.match(research, /payload\.listing\?\.id !== row\.id/);
-  assert.match(trading, /hasEmbeddedWorkbookEvidence/);
   assert.match(trading, /\/api\/reviewed-seller-summary\?id=/);
-  assert.match(trading, /Array\.isArray\(publicListing\.image_urls\)/);
-  assert.match(trading, /const imageSource = Array\.isArray\(publicListing\.image_urls\)/);
-  assert.match(trading, /image_evidence_notice: imageSource\.image_evidence_notice/);
+  assert.match(trading, /listing\.image_evidence_notice/);
   assert.match(trading, /SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE/);
   assert.match(research, /detail\?\.image_urls/);
   for (const api of [tradingApi, researchDetailApi]) {
@@ -41,14 +38,12 @@ test('Trading Floor uses the same safe listing evidence source as Price Research
 });
 
 test('customer details show original evidence and only explicitly approved workbook contacts', () => {
-  for (const page of [trading, research]) {
-    assert.match(page, /Original listing/);
-    assert.match(page, /dealer_name/);
-    assert.match(page, /dealer_company/);
-    assert.match(page, /dealer_profile_url/);
-    assert.match(page, /seller_phone/);
-  }
+  assert.match(trading, /Original listing/);
+  assert.match(trading, /dealer_name/);
+  assert.match(trading, /seller_phone/);
   assert.match(trading, /sourcePosterContact/);
+  assert.match(trading, /Source-supplied contact/);
+  assert.doesNotMatch(trading, /dealer_company|dealer_profile_url|verified dealer/);
   assert.match(research, /reviewed-seller-summary/);
 });
 
@@ -65,17 +60,18 @@ test('only Price Research renders cohort analytics for the selected listing', ()
   assert.match(research, /condition/i);
 });
 
-test('customer detail prices require exact evidence or an owner-reviewed workbook price', () => {
+test('Trading Floor detail prices require verified USD or preserve the source price', () => {
   for (const api of [tradingApi, researchDetailApi]) {
     assert.match(api, /analytics_currency_status === 'VERIFIED'/);
     assert.match(api, /price_evidence_status/);
   }
-  assert.match(tradingApi, /reviewedWorkbookPrice/);
-  assert.match(tradingApi, /HUMAN_APPROVED_WORKBOOK/);
-  assert.match(trading, /price_usd: tradingListing\.price_usd \?\? listing\.price_usd/);
+  assert.match(trading, /listing\.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH'/);
+  assert.match(trading, /listing\.price_research_eligible !== true/);
+  assert.match(trading, /function formatSourcePrice/);
+  assert.doesNotMatch(trading, /price_usd: tradingListing\.price_usd/);
   assert.doesNotMatch(trading, /Price under review/);
   assert.match(trading, /Price on request/);
-  assert.match(trading, /getListingMeta\(detailListing\)/);
+  assert.match(trading, /getListingMeta\(listing\)/);
 });
 
 test('Price Research sources every brand button from the reviewed inventory API', () => {

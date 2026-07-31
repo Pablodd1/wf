@@ -3,15 +3,22 @@
 const { getClient } = require('./_lib/supabase');
 const {
   cleanExactText,
-  cleanFilter,
   loadSummary,
-  normalizeReference,
   resolvePageWindow,
 } = require('./reviewed-workbook-inventory.js');
 
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const EXPLICIT_USD_STATUS = 'SOURCE_EXPLICIT_USD_MATCH';
+const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source';
+
+const EVIDENCE_CONTRACT = Object.freeze({
+  scope: 'returned_page',
+  identity_fields: ['brand', 'model', 'reference', 'dial_color'],
+  contact: 'Exact supplied contact is public only when owner-approved.',
+  image: 'Only an exact supplied HTTP(S) source URL is image-eligible.',
+  price: 'Only an exact explicit-source USD match is analytics-eligible.',
+});
 
 function positiveNumber(value) {
   const parsed = Number(value);
@@ -29,28 +36,129 @@ function exactHttpUrl(value) {
   }
 }
 
+function referenceComparisonKey(value) {
+  return cleanExactText(value, 80).toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function evidenceValuePresent(value) {
+  return value !== null
+    && value !== undefined
+    && !/^(?:unknown|null|n\/a)$/i.test(String(value).trim())
+    && String(value).trim() !== '';
+}
+
+function recordEvidenceCoverage({
+  brand,
+  model,
+  reference,
+  dialColor,
+  sellerName,
+  sellerPhone,
+  contactApproved,
+  exactImageUrl,
+  sourceAmount,
+  sourceCurrency,
+  verifiedUsd,
+}) {
+  const identity = { brand, model, reference, dial_color: dialColor };
+  const presentFields = Object.entries(identity)
+    .filter(([, value]) => evidenceValuePresent(value))
+    .map(([field]) => field);
+  const missingFields = Object.keys(identity).filter(field => !presentFields.includes(field));
+  return {
+    identity: {
+      complete: missingFields.length === 0,
+      present_fields: presentFields,
+      missing_fields: missingFields,
+    },
+    contact: {
+      name_present: evidenceValuePresent(sellerName),
+      phone_present: evidenceValuePresent(sellerPhone),
+      publication_approved: contactApproved,
+      available: contactApproved && evidenceValuePresent(sellerPhone),
+    },
+    image: {
+      available: exactImageUrl !== null,
+      provenance: exactImageUrl ? 'EXACT_SOURCE_URL' : 'NONE',
+    },
+    price: {
+      source_amount_present: sourceAmount !== null,
+      source_currency_present: evidenceValuePresent(sourceCurrency),
+      analytics_eligible: verifiedUsd !== null,
+    },
+  };
+}
+
+function summarizeCoverage(records) {
+  const totals = {
+    scope: 'returned_page',
+    record_count: records.length,
+    identity_complete: 0,
+    contact_available: 0,
+    exact_source_image: 0,
+    price_analytics_eligible: 0,
+  };
+  for (const record of records) {
+    totals.identity_complete += Number(record.evidence_coverage.identity.complete);
+    totals.contact_available += Number(record.evidence_coverage.contact.available);
+    totals.exact_source_image += Number(record.evidence_coverage.image.available);
+    totals.price_analytics_eligible += Number(record.evidence_coverage.price.analytics_eligible);
+  }
+  return totals;
+}
+
 function mapReviewedRecord(row) {
-  const exactImageUrl = exactHttpUrl(row.user_image_url);
+  const exactImageUrl = row.has_exact_source_image === true
+    ? exactHttpUrl(row.user_image_url)
+    : null;
   const contactApproved = row.contact_publication_approved === true;
   const sourceAmount = positiveNumber(row.source_price_amount);
   const workbookUsd = positiveNumber(row.workbook_price_usd);
-  const verifiedUsd = row.price_evidence_status === EXPLICIT_USD_STATUS
-    ? workbookUsd
+  const verifiedUsd = row.has_verified_usd_price === true
+    && row.price_evidence_status === EXPLICIT_USD_STATUS
+    ? positiveNumber(row.verified_price_usd)
     : null;
+  const brand = row.supplied_brand || row.canonical_brand || row.brand_scope;
+  const model = row.model || row.catalog_model || null;
+  const reference = row.normalized_reference || row.raw_reference || row.catalog_reference || null;
+  const dialColor = row.dial_color || row.catalog_dial || null;
+  const sellerName = contactApproved && evidenceValuePresent(row.posted_by)
+    ? row.posted_by
+    : null;
+  const sellerPhone = contactApproved && evidenceValuePresent(row.phone_number)
+    ? row.phone_number
+    : null;
+  const referenceSearchKey = row.reference_search_key
+    || referenceComparisonKey(reference)
+    || null;
+  const evidenceCoverage = recordEvidenceCoverage({
+    brand,
+    model,
+    reference,
+    dialColor,
+    sellerName,
+    sellerPhone,
+    contactApproved,
+    exactImageUrl,
+    sourceAmount,
+    sourceCurrency: row.source_currency,
+    verifiedUsd,
+  });
 
   return {
     id: row.id,
-    brand: row.supplied_brand || row.canonical_brand || row.brand_scope,
-    model: row.model || row.catalog_model || null,
-    reference: row.normalized_reference || row.raw_reference || row.catalog_reference || null,
-    dial_color: row.dial_color || row.catalog_dial || null,
+    brand,
+    model,
+    reference,
+    reference_search_key: referenceSearchKey,
+    dial_color: dialColor,
     condition: row.condition || null,
     listing_type: row.listing_type || 'OTHER',
     listing_date: row.posting_date || null,
     created_at: row.posting_date || row.imported_at || null,
     raw_message: row.raw_message || null,
-    seller_name: contactApproved ? row.posted_by || null : null,
-    seller_phone: contactApproved ? row.phone_number || null : null,
+    seller_name: sellerName,
+    seller_phone: sellerPhone,
     contact_publication_approved: contactApproved,
     price_usd: verifiedUsd,
     price_raw: sourceAmount,
@@ -74,10 +182,11 @@ function mapReviewedRecord(row) {
     thumbnail_url: exactImageUrl,
     image_urls: exactImageUrl ? [exactImageUrl] : [],
     image_evidence_type: exactImageUrl ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
-    image_evidence_label: exactImageUrl ? 'Original listing image' : null,
+    image_evidence_label: exactImageUrl ? 'Source-supplied listing image' : null,
     image_evidence_notice: exactImageUrl
-      ? 'Original image supplied with this listing.'
+      ? 'Exact image URL supplied with this source listing.'
       : null,
+    evidence_coverage: evidenceCoverage,
   };
 }
 
@@ -138,7 +247,8 @@ module.exports = async function handler(req, res) {
       ? cursorPage
       : (Number.isInteger(requestedPage) ? Math.max(1, requestedPage) : 1);
     const requestedBrand = cleanExactText(req.query?.brand, 80);
-    const reference = normalizeReference(req.query?.reference || req.query?.q);
+    const requestedReference = cleanExactText(req.query?.reference || req.query?.q, 80);
+    const reference = referenceComparisonKey(requestedReference);
     const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
     const listingType = cleanExactText(req.query?.type, 12).toUpperCase();
     const condition = cleanExactText(req.query?.condition, 80);
@@ -146,7 +256,10 @@ module.exports = async function handler(req, res) {
     if (listingType && !['WTS', 'WTB', 'OTHER'].includes(listingType)) {
       return res.status(400).json({ status: 'error', error: 'Invalid listing type' });
     }
-    if (condition && !(brand && reference)) {
+    if (requestedReference && !reference) {
+      return res.status(400).json({ status: 'error', error: 'Invalid exact reference' });
+    }
+    if (condition && !(requestedBrand && reference)) {
       return res.status(400).json({
         status: 'error',
         error: 'Condition filters require an exact brand and reference until a dedicated publication index is available',
@@ -177,6 +290,8 @@ module.exports = async function handler(req, res) {
         status: 'ok', count: 0, total: summaryTotal, page, pageSize,
         totalIsEstimate: false, hasMore: false, nextCursor: null,
         records: [], summary, publicationBrands,
+        evidenceContract: EVIDENCE_CONTRACT,
+        coverage: summarizeCoverage([]),
       });
     }
 
@@ -187,24 +302,29 @@ module.exports = async function handler(req, res) {
       'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
       'workbook_price_usd,source_price_amount,source_price_text,source_currency',
       'price_evidence_status,confidence,verification_status,user_image_url,imported_at',
+      'has_exact_source_image,has_verified_usd_price,verified_price_usd,reference_search_key',
     ].join(',');
     let query = client
-      .from('reviewed_workbook_inventory')
+      .from(MARKET_SOURCE_VIEW)
       .select(columns, {
         count: preciseCount ? 'exact' : scopedFilter ? 'estimated' : undefined,
       });
     query = pageWindow.reverse
       ? query
-        .order('has_image', { ascending: true })
-        .order('workbook_price_usd', { ascending: true, nullsFirst: true })
+        .order('has_exact_source_image', { ascending: true })
+        .order('has_verified_usd_price', { ascending: true })
+        .order('verified_price_usd', { ascending: true, nullsFirst: true })
+        .order('posting_date', { ascending: true, nullsFirst: true })
         .order('id', { ascending: false })
       : query
-        .order('has_image', { ascending: false })
-        .order('workbook_price_usd', { ascending: false, nullsFirst: false })
+        .order('has_exact_source_image', { ascending: false })
+        .order('has_verified_usd_price', { ascending: false })
+        .order('verified_price_usd', { ascending: false, nullsFirst: false })
+        .order('posting_date', { ascending: false, nullsFirst: false })
         .order('id', { ascending: true });
     if (brand) query = query.eq('brand_scope', brand);
-    if (reference) query = query.eq('normalized_reference', reference);
-    if (imagesOnly) query = query.eq('has_image', true);
+    if (reference) query = query.eq('reference_search_key', reference);
+    if (imagesOnly) query = query.eq('has_exact_source_image', true);
     if (listingType) query = query.eq('listing_type', listingType);
     if (condition) query = query.eq('condition', condition);
     query = query.range(
@@ -234,6 +354,8 @@ module.exports = async function handler(req, res) {
       records,
       summary,
       publicationBrands,
+      evidenceContract: EVIDENCE_CONTRACT,
+      coverage: summarizeCoverage(records),
     });
   } catch (error) {
     console.error('[reviewed-market-inventory] error:', error.message);
@@ -245,7 +367,12 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.EXPLICIT_USD_STATUS = EXPLICIT_USD_STATUS;
+module.exports.MARKET_SOURCE_VIEW = MARKET_SOURCE_VIEW;
+module.exports.EVIDENCE_CONTRACT = EVIDENCE_CONTRACT;
 module.exports.exactHttpUrl = exactHttpUrl;
+module.exports.referenceComparisonKey = referenceComparisonKey;
+module.exports.recordEvidenceCoverage = recordEvidenceCoverage;
+module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.parseCursorPage = parseCursorPage;
 module.exports.publicationBrandsFromSummary = publicationBrandsFromSummary;

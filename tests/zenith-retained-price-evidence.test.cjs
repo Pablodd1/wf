@@ -22,6 +22,6 @@ test('reviewed Zenith listings remain inspectable without entering price analyti
   assert.match(page, /Listing evidence/);
   assert.match(page, /Prices stay outside averages until source currency and dated FX provenance pass the deterministic eligibility checks/);
   assert.match(page, /data\.retained_evidence_count \?\? data\.excludedEvidenceCount/);
-  assert.match(page, /Price under review/);
+  assert.match(page, /Price not available/);
   assert.match(page, /This reviewed listing is displayed for its source post, image, seller, and watch identity/);
 });

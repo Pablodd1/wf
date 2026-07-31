@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -49,6 +49,11 @@ interface ListingRecord {
   price_usd: number | null;
   price_raw: number | null;
   currency: string | null;
+  source_price_amount?: number | null;
+  source_price_text?: string | null;
+  source_currency?: string | null;
+  price_evidence_status?: string | null;
+  price_research_eligible?: boolean;
   dial_color: string | null;
   condition: string | null;
   year: number | null;
@@ -92,18 +97,7 @@ interface TradingFloorResponse {
 
 interface ListingContact {
   contact_available: boolean;
-  dealer_id?: string;
   dealer_name?: string;
-  dealer_company?: string | null;
-  dealer_country?: string | null;
-  dealer_city?: string | null;
-  dealer_avatar_url?: string | null;
-  dealer_profile_summary?: string | null;
-  dealer_profile_url?: string;
-  dealer_rating?: number | null;
-  dealer_review_count?: number;
-  dealer_group_count?: number;
-  dealer_stats?: { total_posts: number; active_listings: number; wts_posts: number; wtb_posts: number; first_post_at: string | null; last_post_at: string | null; posting_years: number } | null;
   phone_display?: string;
   contact_source?: string;
   whatsapp_url?: string;
@@ -124,16 +118,6 @@ interface ReviewedSellerSummaryResponse {
   contact_available?: boolean;
   seller?: { name?: string | null; phone?: string | null } | null;
   analytics?: ReviewedSellerAnalytics | null;
-}
-
-interface ListingEvidence extends Partial<ListingRecord> {
-  id: string;
-  brand: string;
-  reference: string | null;
-  raw_message: string | null;
-  raw_message_scope?: 'original_post' | 'stored_source_message' | 'unavailable';
-  raw_message_truncated?: boolean;
-  image_urls?: string[];
 }
 
 type ViewMode = 'grid' | 'list';
@@ -162,6 +146,7 @@ export default function TradingFloor() {
     : '';
   const search = searchParams.get('q') || '';
   const requestedBrand = searchParams.get('brand') || '';
+  const imagesOnly = searchParams.get('images') === 'true';
   const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
@@ -181,12 +166,13 @@ export default function TradingFloor() {
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 100);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search].join('\u001f');
+  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
     categoryFilter !== 'all',
     Boolean(intentFilter),
+    imagesOnly,
   ].filter(Boolean).length;
 
   const resetResults = useCallback(() => {
@@ -299,6 +285,7 @@ export default function TradingFloor() {
         if (brandFilter) params.set('brand', brandFilter);
         if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
+        if (imagesOnly) params.set('images', 'true');
 
         const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal: controller.signal });
         let data: TradingFloorResponse;
@@ -336,7 +323,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [brandFilter, categoryFilter, cursor, intentFilter, pageSize, search]);
+  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, pageSize, search]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -417,6 +404,12 @@ export default function TradingFloor() {
                 }} />
               ))}
             </FilterGroup>
+            <FilterGroup label="Evidence">
+              <FilterChoice active={imagesOnly} label="Source images only" onClick={() => {
+                resetResults();
+                updateViewParams({ images: imagesOnly ? null : 'true' });
+              }} />
+            </FilterGroup>
           </div>
 
           <CurrencyConverter compact />
@@ -429,6 +422,7 @@ export default function TradingFloor() {
           releaseBrands={releaseBrands}
           category={categoryFilter}
           intent={intentFilter}
+          imagesOnly={imagesOnly}
           onApply={next => {
             setFiltersOpen(false);
             resetResults();
@@ -436,6 +430,7 @@ export default function TradingFloor() {
               brand: next.brand || null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
+              images: next.imagesOnly ? 'true' : null,
             });
           }}
           onClose={() => setFiltersOpen(false)}
@@ -450,7 +445,7 @@ export default function TradingFloor() {
               ? ' listings'
               : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> listings</>}
           </span>
-          <span>Listings with images first; highest listed price next.</span>
+          <span>Source images first; highest source-confirmed USD price next.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
@@ -552,6 +547,7 @@ function MobileFilterSheet({
   releaseBrands,
   category,
   intent,
+  imagesOnly,
   onApply,
   onClose,
 }: {
@@ -559,12 +555,14 @@ function MobileFilterSheet({
   releaseBrands: string[];
   category: CategoryFilter;
   intent: IntentFilter;
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter }) => void;
+  imagesOnly: boolean;
+  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
+  const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
 
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="presentation">
@@ -605,6 +603,9 @@ function MobileFilterSheet({
               <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
             ))}
           </FilterGroup>
+          <FilterGroup label="Evidence">
+            <FilterChoice active={draftImagesOnly} label="Source images only" onClick={() => setDraftImagesOnly(value => !value)} />
+          </FilterGroup>
           {!['all', 'watches'].includes(draftCategory) && (
             <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
           )}
@@ -615,8 +616,9 @@ function MobileFilterSheet({
             setDraftBrand('');
             setDraftCategory('all');
             setDraftIntent('');
+            setDraftImagesOnly(false);
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
         </footer>
       </section>
     </div>
@@ -670,11 +672,11 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         >
           {meta.title}
         </button>
-        {meta.rawPriceLabel && <div className="mt-1 text-[15px] leading-6" style={{ color: INK }}>{meta.rawPriceLabel}</div>}
+        <EvidenceIndicators listing={listing} imageVisible={cardHasImage} priceEvidenceLabel={meta.priceEvidenceLabel} />
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3">
-        <div className="text-[16px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</div>
+        <div className="text-[16px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
         {meta.region && <RegionLabel region={meta.region} />}
       </div>
 
@@ -691,108 +693,41 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 }
 
 function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
-  const hasEmbeddedWorkbookEvidence = Object.prototype.hasOwnProperty.call(listing, 'raw_message');
-  const canLoadPublicEvidence = Boolean(listing.reference && listing.brand);
-  const [contact, setContact] = useState<ListingContact | null>(() => hasEmbeddedWorkbookEvidence ? sourcePosterContact(listing) : null);
+  const [contact, setContact] = useState<ListingContact | null>(() => sourcePosterContact(listing));
   const [sellerAnalytics, setSellerAnalytics] = useState<ReviewedSellerAnalytics | null>(null);
-  const [evidence, setEvidence] = useState<ListingEvidence | null>(() => hasEmbeddedWorkbookEvidence ? { ...listing, raw_message: listing.raw_message || null } : null);
-  const [evidenceError, setEvidenceError] = useState('');
   const [activeImage, setActiveImage] = useState(0);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
-  const detailListing = useMemo<ListingRecord>(() => evidence
-    ? {
-        ...listing,
-        ...evidence,
-        id: listing.id,
-        brand: evidence.brand || listing.brand,
-        model: evidence.model || listing.model,
-        reference: evidence.reference || listing.reference,
-      }
-    : listing, [evidence, listing]);
-  const meta = useMemo(() => getListingMeta(detailListing), [detailListing]);
+  const meta = useMemo(() => getListingMeta(listing), [listing]);
   const images = useMemo(() => {
-    if (!hasListingImage(detailListing)) return [];
-    const candidates = detailListing.image_urls?.length
-      ? detailListing.image_urls
-      : [detailListing.thumbnail_url];
+    if (!hasListingImage(listing)) return [];
+    const candidates = listing.image_urls?.length
+      ? listing.image_urls
+      : [listing.thumbnail_url];
     return [...new Set(candidates
       .map(value => String(value || '').trim())
       .filter(value => value && !failedImages.has(value)))];
-  }, [detailListing, failedImages]);
+  }, [failedImages, listing]);
 
   const visibleImageIndex = activeImage < images.length ? activeImage : 0;
 
   useEffect(() => {
-    if (hasEmbeddedWorkbookEvidence) {
-      const controller = new AbortController();
-      fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
-        .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
-        .then(payload => {
-          if (!payload || payload.status !== 'ok') return;
-          const sourceContact = sourcePosterContact({
-            ...listing,
-            seller_name: payload.seller?.name ?? listing.seller_name,
-            seller_phone: payload.seller?.phone ?? listing.seller_phone,
-          });
-          setContact({ ...sourceContact, contact_available: Boolean(payload.contact_available && sourceContact.phone_display) });
-          setSellerAnalytics(payload.analytics || null);
-        })
-        .catch(error => { if (error?.name !== 'AbortError') setSellerAnalytics(null); });
-      return () => controller.abort();
-    }
     const controller = new AbortController();
-    fetch(`/api/listing-contact?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
-      .then(response => response.json())
-      .then(payload => setContact(payload))
-      .catch(error => { if (error?.name !== 'AbortError') setContact({ contact_available: false, reason: 'CONTACT_UNAVAILABLE' }); });
-
-    const tradingDetail = fetch(`/api/trading-listing?id=${encodeURIComponent(listing.id)}`, {
-      credentials: 'include',
-      signal: controller.signal,
-    }).then(async response => response.ok ? response.json() : null);
-    const publicEvidence = canLoadPublicEvidence
-      ? fetch(`/api/price-research-listing?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
-        .then(async response => response.ok ? response.json() : null)
-      : Promise.resolve(null);
-    Promise.all([tradingDetail, publicEvidence])
-      .then(([tradingPayload, evidencePayload]) => {
-        const tradingListing = tradingPayload?.listing || {};
-        const publicListing = evidencePayload?.listing || {};
-        if (publicListing.id && publicListing.id !== listing.id) {
-          setEvidenceError('Listing evidence did not match the selected record.');
-          return;
-        }
-        const imageSource = Array.isArray(publicListing.image_urls) && publicListing.image_urls.length
-          ? publicListing
-          : Array.isArray(tradingListing.image_urls) && tradingListing.image_urls.length
-            ? tradingListing
-            : listing;
-        const imageUrls = imageSource.image_urls || [];
-        setEvidence({
+    fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
+      .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
+      .then(payload => {
+        if (!payload || payload.status !== 'ok' || !payload.contact_available) return;
+        const sourceContact = sourcePosterContact({
           ...listing,
-          ...tradingListing,
-          ...publicListing,
-          id: listing.id,
-          brand: publicListing.brand || tradingListing.brand || listing.brand,
-          model: publicListing.model || tradingListing.model || listing.model || null,
-          reference: publicListing.reference || tradingListing.reference || listing.reference || '',
-          price_usd: tradingListing.price_usd ?? listing.price_usd,
-          price_raw: tradingListing.price_raw ?? listing.price_raw,
-          currency: tradingListing.currency ?? listing.currency,
-          raw_message: publicListing.raw_message || null,
-          has_images: imageUrls.length > 0,
-          image_urls: imageUrls,
-          image_evidence_type: imageSource.image_evidence_type,
-          image_evidence_label: imageSource.image_evidence_label,
-          image_evidence_notice: imageSource.image_evidence_notice,
+          seller_name: payload.seller?.name ?? listing.seller_name,
+          seller_phone: payload.seller?.phone ?? listing.seller_phone,
         });
+        setContact(sourceContact);
+        setSellerAnalytics(payload.analytics || null);
       })
-      .catch(error => {
-        if (error?.name !== 'AbortError') setEvidenceError('Listing evidence is unavailable.');
-      });
+      .catch(error => { if (error?.name !== 'AbortError') setSellerAnalytics(null); });
 
     return () => controller.abort();
-  }, [canLoadPublicEvidence, hasEmbeddedWorkbookEvidence, listing]);
+  }, [listing]);
 
   return (
     <section className={`mb-8 grid gap-8 ${images.length > 0 ? 'lg:grid-cols-[minmax(320px,504px)_1fr]' : ''}`} aria-label="Selected listing">
@@ -813,8 +748,8 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             className="h-[420px] w-full rounded-sm object-contain sm:h-[540px] lg:h-[648px]"
             onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
           />
-          {detailListing.image_evidence_notice && (
-            <p className="px-2 py-3 text-xs leading-5" style={{ color: MUTED }}>{detailListing.image_evidence_notice}</p>
+          {listing.image_evidence_notice && (
+            <p className="px-2 py-3 text-xs leading-5" style={{ color: MUTED }}>{listing.image_evidence_notice}</p>
           )}
           {images.length > 1 && (
             <div className="mt-2 flex gap-2 overflow-x-auto">
@@ -852,12 +787,12 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>
 
           <div className="mt-6">
-            {meta.usdPriceLabel && <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.usdPriceLabel}</div>}
-            {meta.rawPriceLabel && <div className="mt-1 text-sm" style={{ color: MUTED }}>{meta.rawPriceLabel}</div>}
+            <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
+            <EvidenceIndicators listing={listing} imageVisible={images.length > 0} priceEvidenceLabel={meta.priceEvidenceLabel} />
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
-            {[displayDial(detailListing.dial_color), cleanValue(detailListing.condition), detailListing.year ? String(detailListing.year) : ''].filter(Boolean).map(value => (
+            {[displayDial(listing.dial_color), cleanValue(listing.condition), listing.year ? String(listing.year) : ''].filter(Boolean).map(value => (
               <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: BORDER }}>{value}</span>
             ))}
           </div>
@@ -868,35 +803,17 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
 
         <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(detailListing.listing_type) ? 'Buyer request contact' : 'Check availability'}</h2>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(listing.listing_type) ? 'Buyer source contact' : 'Source contact'}</h2>
           {(contact?.dealer_name || contact?.phone_display) && (
             <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
               <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
-                {contact.contact_source === 'OWNER_APPROVED_WORKBOOK' ? 'Source poster' : 'Dealer'}
+                Source-supplied contact
               </div>
               {contact.dealer_name && <div className="mt-1 text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>}
-              {contact.dealer_company && <div className="mt-1 text-sm" style={{ color: MUTED }}>{contact.dealer_company}</div>}
-              {displayLocation(contact.dealer_city, contact.dealer_country) && <div className="mt-2 text-sm" style={{ color: MUTED }}>
-                {displayLocation(contact.dealer_city, contact.dealer_country)}
-              </div>}
               {contact.phone_display && <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
                 {contact.phone_display}
               </div>}
-              {contact.contact_source !== 'OWNER_APPROVED_WORKBOOK' && (
-                <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs" style={{ color: MUTED }}>
-                  <span>{contact.dealer_rating == null ? 'Unrated' : `${Number(contact.dealer_rating).toFixed(2)} rating`}</span>
-                  <span>{Number(contact.dealer_review_count || 0).toLocaleString()} reviews</span>
-                  <span>{Number(contact.dealer_group_count || 0).toLocaleString()} common groups</span>
-                </div>
-              )}
-              {contact.dealer_stats && (
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                  <ContactMetric label="For sale" value={contact.dealer_stats.wts_posts} />
-                  <ContactMetric label="Looking for" value={contact.dealer_stats.wtb_posts} />
-                  <ContactMetric label="Active" value={contact.dealer_stats.active_listings} />
-                </div>
-              )}
-              {contact.contact_source === 'OWNER_APPROVED_WORKBOOK' && sellerAnalytics && (
+              {sellerAnalytics && (
                 <div className="mt-4" aria-label="Source poster activity">
                   <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
                     <ContactMetric label="Total posts" value={sellerAnalytics.total_posts} />
@@ -914,31 +831,18 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               )}
             </div>
           )}
-          {contact?.dealer_profile_url && (
-            <Link to={contact.dealer_profile_url} className="mt-4 block text-sm" style={{ color: GOLD_BRIGHT }}>
-              View full dealer profile
-            </Link>
-          )}
           {contact?.contact_available && contact.whatsapp_url ? (
             <>
               <p className="mt-3 text-sm" style={{ color: MUTED }}>
-                {contact.contact_source === 'OWNER_APPROVED_WORKBOOK'
-                  ? `Contact ${contact.dealer_name || 'the source poster'} using the phone supplied with this listing.`
-                  : isBuyerIntent(detailListing.listing_type)
-                    ? `Contact ${contact.dealer_name || 'the verified buyer'} about this request.`
-                    : `Contact ${contact.dealer_name || 'the verified dealer'} directly about this item.`}
+                Contact {contact.dealer_name || 'the source poster'} using the phone supplied with this listing.
               </p>
               <a href={contact.whatsapp_url} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
-                <MessageCircle size={18} /> {isBuyerIntent(detailListing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
+                <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
               </a>
             </>
           ) : (
             <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-              {contact?.contact_source === 'OWNER_APPROVED_WORKBOOK'
-                ? 'The source did not supply a usable phone number for this listing.'
-                : contact?.dealer_profile_url
-                  ? 'This dealer profile is verified; direct WhatsApp contact is awaiting consent or a verified phone.'
-                  : 'Dealer identity has not yet been verified for this historical listing.'}
+              A publishable source contact was not supplied for this listing.
             </p>
           )}
         </div>
@@ -948,10 +852,10 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
             Raw source message
           </div>
-          {evidence?.raw_message ? (
+          {listing.raw_message ? (
             <>
-              <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{evidence.raw_message}</pre>
-              {evidence.raw_message_truncated && (
+              <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{listing.raw_message}</pre>
+              {listing.raw_message_truncated && (
                 <p className="mt-3 text-xs leading-5" style={{ color: MUTED }}>
                   Long source text is shortened in this customer view.
                 </p>
@@ -959,7 +863,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </>
           ) : (
             <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-              {evidenceError || 'Source evidence is unavailable for this record.'}
+              Source evidence is unavailable for this record.
             </p>
           )}
         </div>
@@ -973,12 +877,31 @@ function ContactMetric({ label, value }: { label: string; value: number }) {
   return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{Number(value || 0).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
 }
 
-function sourcePosterContact(listing: ListingRecord): ListingContact {
+function EvidenceIndicators({ listing, imageVisible, priceEvidenceLabel }: { listing: ListingRecord; imageVisible: boolean; priceEvidenceLabel: string }) {
+  const labels = [
+    priceEvidenceLabel,
+    imageVisible ? 'Source-supplied listing image' : '',
+    cleanValue(listing.seller_name) || cleanValue(listing.seller_phone) ? 'Source contact supplied' : '',
+  ].filter(Boolean);
+  return labels.length > 0 ? (
+    <div className="mt-3 flex flex-wrap gap-2" aria-label="Listing evidence">
+      {labels.map(label => (
+        <span key={label} className="rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ borderColor: BORDER, color: MUTED }}>
+          {label}
+        </span>
+      ))}
+    </div>
+  ) : null;
+}
+
+function sourcePosterContact(listing: ListingRecord): ListingContact | null {
   const phone = String(listing.seller_phone || '').trim();
+  const name = cleanValue(listing.seller_name);
+  if (!phone && !name) return null;
   const digits = phone.replace(/[^\d]/g, '');
   return {
     contact_available: digits.length >= 7,
-    dealer_name: cleanValue(listing.seller_name) || undefined,
+    dealer_name: name || undefined,
     phone_display: phone || undefined,
     contact_source: 'OWNER_APPROVED_WORKBOOK',
     whatsapp_url: digits.length >= 7 ? `https://wa.me/${digits}` : undefined,
@@ -1033,19 +956,22 @@ function RegionLabel({ region }: { region: string }) {
 function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
-  const rawPriceLabel = formatRawPrice(listing);
-  const hasUsdPrice = Number.isFinite(Number(listing.price_usd)) && Number(listing.price_usd) > 0;
-  const usdPriceLabel = hasUsdPrice
-    ? formatUsdPrice(listing.price_usd, listing.listing_type)
-    : listing.price_raw && listing.currency
-      ? ''
-      : formatUsdPrice(listing.price_usd, listing.listing_type);
+  const verifiedUsd = verifiedUsdPrice(listing);
+  const sourcePrice = formatSourcePrice(listing);
+  const priceLabel = verifiedUsd !== null
+    ? formatUsdPrice(verifiedUsd)
+    : sourcePrice || 'Price on request';
+  const priceEvidenceLabel = verifiedUsd !== null
+    ? 'Source-confirmed USD'
+    : sourcePrice
+      ? 'Original source price · no USD conversion'
+      : 'Price not supplied';
   const title = buildListingTitle(listing);
 
   return {
     title,
-    rawPriceLabel,
-    usdPriceLabel,
+    priceLabel,
+    priceEvidenceLabel,
     region,
     postedDate,
   };
@@ -1073,19 +999,35 @@ function listingKindLabel(listing: ListingRecord) {
   return 'Watch';
 }
 
-function formatRawPrice(listing: ListingRecord) {
-  if (listing.price_raw && listing.currency) {
-    const sameVerifiedUsd = String(listing.currency).toUpperCase() === 'USD'
-      && Number(listing.price_usd) > 0
-      && Math.round(Number(listing.price_raw)) === Math.round(Number(listing.price_usd));
-    if (sameVerifiedUsd) return '';
-    return `Posted price: ${listing.currency} ${Math.round(listing.price_raw).toLocaleString('en-US')}`;
-  }
-  return '';
+function verifiedUsdPrice(listing: ListingRecord) {
+  if (listing.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH' || listing.price_research_eligible !== true) return null;
+  const value = Number(listing.price_usd);
+  return Number.isFinite(value) && value > 0 ? value : null;
 }
 
-function formatUsdPrice(value: number | null, listingType: string) {
-  if (value == null || value <= 0) return isBuyerIntent(listingType) ? 'Buyer budget not stated' : 'Price on request';
+function sourceTextIncludesCurrency(sourceText: string, currency: string) {
+  const text = sourceText.toUpperCase();
+  const normalizedCurrency = currency.toUpperCase();
+  if (text.includes(normalizedCurrency)) return true;
+  if (normalizedCurrency === 'USD') return /(?:US\$|USD|USDT|\$)/.test(text);
+  if (normalizedCurrency === 'HKD') return /(?:HKD|HK\$|HDK)/.test(text);
+  return false;
+}
+
+function formatSourcePrice(listing: ListingRecord) {
+  const currency = cleanValue(listing.source_currency) || cleanValue(listing.currency);
+  const sourceText = cleanValue(listing.source_price_text);
+  if (sourceText && currency) {
+    return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
+  }
+  if (sourceText) return sourceText;
+
+  const amount = Number(listing.source_price_amount ?? listing.price_raw);
+  if (!currency || !Number.isFinite(amount) || amount <= 0) return '';
+  return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
+}
+
+function formatUsdPrice(value: number) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency: 'USD',
@@ -1114,13 +1056,6 @@ function cleanValue(value: string | number | null | undefined) {
   const text = String(value).trim();
   if (!text || /^unknown$/i.test(text) || /^null$/i.test(text)) return '';
   return text;
-}
-
-function displayLocation(...values: Array<string | null | undefined>) {
-  return values
-    .map(cleanValue)
-    .filter(Boolean)
-    .join(', ');
 }
 
 function displayDial(value: string | null | undefined) {
