@@ -2,7 +2,9 @@
 -- activity. This migration intentionally has no transaction: PostgreSQL does
 -- not permit CREATE INDEX CONCURRENTLY inside a transaction block.
 
-SET lock_timeout = '5s';
+-- Concurrent builds still need two brief table-lock phases. Allow active API
+-- reads to finish instead of discarding a completed multi-million-row build.
+SET lock_timeout = '2min';
 SET statement_timeout = '0';
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS

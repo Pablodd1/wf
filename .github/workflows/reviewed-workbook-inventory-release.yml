@@ -54,7 +54,8 @@ jobs:
           set -euo pipefail
           db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
           psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
-          SELECT format('DROP INDEX CONCURRENTLY IF EXISTS public.%I;', index_class.relname)
+          SET lock_timeout = '30s';
+          SELECT format('DROP INDEX IF EXISTS public.%I;', index_class.relname)
           FROM pg_index index_state
           JOIN pg_class index_class ON index_class.oid = index_state.indexrelid
           JOIN pg_namespace index_schema ON index_schema.oid = index_class.relnamespace

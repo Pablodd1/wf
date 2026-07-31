@@ -100,6 +100,7 @@ test('seller analytics reconcile WTS, WTB, and the exact remaining activity', as
 
 test('market indexes are concurrent, partial, and transaction-free', () => {
   assert.doesNotMatch(migration, /\bBEGIN\b|\bCOMMIT\b/i);
+  assert.match(migration, /SET lock_timeout = '2min'/);
   assert.match(migration, /CREATE INDEX CONCURRENTLY IF NOT EXISTS[\s\S]*idx_reviewed_workbook_inventory_approved_phone_activity[\s\S]*phone_number,[\s\S]*posting_date,[\s\S]*listing_type,[\s\S]*WHERE contact_publication_approved IS TRUE[\s\S]*phone_number IS NOT NULL/);
   assert.match(migration, /idx_reviewed_workbook_inventory_type_order[\s\S]*listing_type,[\s\S]*has_image DESC,[\s\S]*workbook_price_usd DESC NULLS LAST/);
   assert.match(migration, /idx_reviewed_workbook_inventory_brand_type_order[\s\S]*brand_scope,[\s\S]*listing_type,[\s\S]*has_image DESC/);
@@ -109,7 +110,9 @@ test('market indexes are concurrent, partial, and transaction-free', () => {
 test('dedicated release workflow explicitly applies and verifies every new index', () => {
   assert.match(workflow, /allowlisted_migrations[\s\S]*20260731160000_reviewed_workbook_market_indexes\.sql/);
   assert.match(workflow, /timeout-minutes: 120/);
-  assert.match(workflow, /DROP INDEX CONCURRENTLY IF EXISTS[\s\S]*indisvalid[\s\S]*indisready/);
+  assert.match(workflow, /SET lock_timeout = '30s'/);
+  assert.match(workflow, /DROP INDEX IF EXISTS[\s\S]*indisvalid[\s\S]*indisready/);
+  assert.doesNotMatch(workflow, /DROP INDEX CONCURRENTLY IF EXISTS/);
   for (const name of [
     'idx_reviewed_workbook_inventory_approved_phone_activity',
     'idx_reviewed_workbook_inventory_type_order',
