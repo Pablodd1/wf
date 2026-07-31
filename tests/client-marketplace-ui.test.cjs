@@ -22,6 +22,9 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.doesNotMatch(header, /luxuryapp-wf-w5o1/);
   assert.match(header, /label: 'ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'HIRE FI'/);
+  assert.match(header, /src="\/images\/curated-luxury-logo-dark\.png"/);
+  assert.match(header, /alt="Curated Luxury"/);
+  assert.doesNotMatch(header, />CL<\/span>/);
   assert.match(header, /overflow-x-auto/);
   assert.match(header, /h-11 shrink-0/);
   assert.match(header, /location\.pathname === '\/trading' && !wantsToBuy/);
