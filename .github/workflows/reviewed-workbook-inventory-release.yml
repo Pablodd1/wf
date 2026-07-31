@@ -17,7 +17,7 @@ jobs:
     if: ${{ inputs.confirmation == 'APPLY_REVIEWED_WORKBOOK_INVENTORY' }}
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
     env:
@@ -53,9 +53,12 @@ jobs:
         run: |
           set -euo pipefail
           db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
-          migration="supabase/migrations/20260731120000_reviewed_workbook_live_review.sql"
-          test -f "$migration"
-          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$migration"
+          schema_migration="supabase/migrations/20260731120000_reviewed_workbook_live_review.sql"
+          index_migration="supabase/migrations/20260731140000_reviewed_workbook_global_review_index.sql"
+          test -f "$schema_migration"
+          test -f "$index_migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$schema_migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$index_migration"
 
       - name: Verify isolation, reconciliation, and indexes
         shell: bash
@@ -87,11 +90,12 @@ jobs:
               WHERE schemaname = 'public'
                 AND indexname IN (
                   'idx_reviewed_workbook_inventory_brand_image_price',
+                  'idx_reviewed_workbook_inventory_global_image_price',
                   'idx_reviewed_workbook_inventory_reference',
                   'idx_reviewed_workbook_inventory_source',
                   'idx_reviewed_workbook_checkpoints_brand_status'
                 )
-            ) <> 4 THEN
+            ) <> 5 THEN
               RAISE EXCEPTION 'Reviewed workbook indexes are incomplete';
             END IF;
           END
@@ -104,5 +108,6 @@ jobs:
             echo "- Service-only evidence tables created."
             echo "- Direct anon/authenticated access: denied."
             echo "- watch_records writes: 0."
+            echo "- Global Source Review order index: ready."
             echo "- Ready for the checkpointed local importer."
           } >> "$GITHUB_STEP_SUMMARY"
