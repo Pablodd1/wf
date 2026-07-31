@@ -8,7 +8,7 @@ const test = require('node:test');
 const root = path.join(__dirname, '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 
-test('Price Research distinguishes live Trading Floor inventory from price-eligible evidence', () => {
+test('legacy release summary remains isolated from the complete Price Research inventory', () => {
   const api = read('api/live-release-summary.js');
   const page = read('src/pages/PriceResearch.tsx');
 
@@ -24,8 +24,8 @@ test('Price Research distinguishes live Trading Floor inventory from price-eligi
   assert.match(api, /brand === 'Panerai'[\s\S]*REVIEWED_PANERAI_RECORD_IDS[\s\S]*REVIEWED_PANERAI_SOURCE/);
   assert.match(api, /new Set\(rows\.map\(repostSignature\)\)\.size/);
   assert.match(api, /\.filter\(isReleaseListingEligible\)/);
-  assert.match(page, /\/api\/live-release-summary/);
-  assert.match(page, /Live verified inventory/);
-  assert.match(page, /Price charts use a narrower source-proven WTS subset/);
-  assert.match(page, /live Trading Floor listings/);
+  assert.doesNotMatch(page, /\/api\/live-release-summary/);
+  assert.doesNotMatch(page, /Live verified inventory/);
+  assert.match(page, /\/api\/reviewed-market-inventory\?page=1&pageSize=12/);
+  assert.match(page, /Brands come from the complete available inventory/);
 });

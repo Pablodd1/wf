@@ -124,13 +124,6 @@ interface DialGroupPoint {
   max_price: number | null;
 }
 
-interface LiveReleaseSummary {
-  success: boolean;
-  surface: 'Trading Floor';
-  total_listing_count: number;
-  brands: Array<{ brand: string; listing_count: number }>;
-}
-
 interface ReviewedMarketRecord {
   id: string;
   source_file?: string | null;
@@ -416,7 +409,6 @@ export default function PriceResearch() {
   });
   const [showAllBrands, setShowAllBrands] = useState(false);
   const [viewerRole, setViewerRole] = useState('public');
-  const [liveReleaseSummary, setLiveReleaseSummary] = useState<LiveReleaseSummary | null>(null);
   const [reviewedInventory, setReviewedInventory] = useState<ReviewedMarketResponse | null>(null);
   const [reviewedLoading, setReviewedLoading] = useState(false);
   const [reviewedError, setReviewedError] = useState('');
@@ -562,17 +554,6 @@ export default function PriceResearch() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/live-release-summary', { signal: controller.signal })
-      .then(response => response.ok ? response.json() : null)
-      .then(payload => {
-        if (payload?.success && Array.isArray(payload.brands)) setLiveReleaseSummary(payload);
-      })
-      .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load live release summary:', error); });
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
     fetch('/api/dealer-auth', { credentials: 'include', signal: controller.signal })
       .then(response => response.ok ? response.json() : null)
       .then(payload => setViewerRole(payload?.authenticated ? String(payload?.user?.role || 'dealer') : 'public'))
@@ -703,8 +684,6 @@ export default function PriceResearch() {
   const visibleBrands = showAllBrands
     ? pBrands
     : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
-  const liveListingCount = (brand: string) => liveReleaseSummary?.brands
-    .find(item => item.brand === brand)?.listing_count ?? null;
   const canReviewExcludedEvidence = viewerRole === 'admin' || viewerRole === 'reviewer';
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
@@ -777,28 +756,6 @@ export default function PriceResearch() {
       </header>
 
       <div className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:py-8">
-        {!data && liveReleaseSummary && (
-          <section aria-label="Live verified inventory" className="mb-6 rounded-xl border p-4" style={{ borderColor: BORDER, background: '#fbfaf7' }}>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <div className="text-sm font-bold" style={{ color: NAVY }}>Live verified inventory</div>
-                <p className="mt-1 text-xs" style={{ color: MUTED }}>
-                  {liveReleaseSummary.total_listing_count.toLocaleString()} customer-visible listings on the Trading Floor.
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {liveReleaseSummary.brands.map(item => (
-                  <Link key={item.brand} to={`/trading?brand=${encodeURIComponent(item.brand)}`} className="rounded-md border px-3 py-2 text-xs font-semibold" style={{ borderColor: BORDER, color: NAVY }}>
-                    {item.brand}: {item.listing_count.toLocaleString()} live
-                  </Link>
-                ))}
-              </div>
-            </div>
-            <p className="mt-3 text-xs" style={{ color: MUTED }}>
-              Price charts use a narrower source-proven WTS subset. Listings with unverified currency, FX, bundle, duplicate, or identity evidence are never averaged.
-            </p>
-          </section>
-        )}
         {/* ── Drill-down: Browse by Model (real listings only) ─────── */}
         <div className="mb-6 border-y py-5" style={{ borderColor: BORDER, display: data ? 'none' : undefined }}>
           {(pBrand || pModel) && (
@@ -826,9 +783,6 @@ export default function PriceResearch() {
                 {item.brand}
                 {item.listing_count != null && (
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 3 }}>{item.listing_count.toLocaleString()} listings</div>
-                )}
-                {liveListingCount(item.brand) !== null && (
-                  <div style={{ fontSize: 11, color: MUTED, marginTop: 3 }}>{liveListingCount(item.brand)?.toLocaleString()} live Trading Floor listings</div>
                 )}
               </button>
             ))}

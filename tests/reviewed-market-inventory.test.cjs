@@ -83,6 +83,12 @@ test('removes the entire image contract when no exact supplied image exists', ()
   assert.doesNotMatch(JSON.stringify(mapped), /catalog\.example\.test/);
 });
 
+test('customer image copy contains no internal review-process labels', () => {
+  const mapped = api.mapReviewedRecord(record());
+  assert.equal(mapped.image_evidence_notice, 'Original image supplied with this listing.');
+  assert.doesNotMatch(mapped.image_evidence_notice, /review/i);
+});
+
 test('never promotes unresolved workbook USD values into verified USD price', () => {
   const mapped = api.mapReviewedRecord(record({
     workbook_price_usd: '38461',

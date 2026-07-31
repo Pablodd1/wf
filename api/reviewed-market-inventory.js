@@ -76,7 +76,7 @@ function mapReviewedRecord(row) {
     image_evidence_type: exactImageUrl ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
     image_evidence_label: exactImageUrl ? 'Original listing image' : null,
     image_evidence_notice: exactImageUrl
-      ? 'Exact image URL supplied with the reviewed listing.'
+      ? 'Original image supplied with this listing.'
       : null,
   };
 }

@@ -102,7 +102,7 @@ module.exports = async function handler(req, res) {
     console.error('[reviewed-seller-summary] error:', error.message);
     return res.status(503).json({
       status: 'error',
-      error: 'Reviewed seller analytics are temporarily unavailable',
+      error: 'Seller activity is temporarily unavailable',
     });
   }
 };
