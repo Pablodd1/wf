@@ -70,6 +70,7 @@ export default function FlashSaleDetail() {
   const [listing, setListing] = useState<any>(() => (location.state as any)?.listing || null);
   const [loading, setLoading] = useState(!listing);
   const [error, setError] = useState<string | null>(null);
+  const [dealerStats, setDealerStats] = useState<{ dealer: string | null; wts: number; wtb: number } | null>(null);
 
   useEffect(() => {
     if (!id || listing) return;
@@ -91,6 +92,19 @@ export default function FlashSaleDetail() {
     };
     fetchDetail();
   }, [id]);
+
+  // Fetch real per-dealer WTS/WTB counts once we have the listing
+  useEffect(() => {
+    if (!listing) return;
+    const qs = new URLSearchParams({
+      raw_message: listing.raw_message || '',
+      source: listing.source || '',
+    });
+    fetch(`/api/dealer-stats?${qs}`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setDealerStats({ dealer: d.dealer, wts: d.wts || 0, wtb: d.wtb || 0 }); })
+      .catch(() => {});
+  }, [listing]);
 
   if (loading) return (
     <div className="min-h-screen bg-[#0A0A0F]">
@@ -223,10 +237,10 @@ export default function FlashSaleDetail() {
             <div className="bg-[#111118] border border-white/5 rounded-xl p-5 space-y-3">
               <h3 className="text-xs uppercase tracking-[0.12em] text-white/40 font-semibold">User Information</h3>
               
-              {/* Dealer Name */}
+              {/* Dealer Name — prefer real dealer from stats endpoint */}
               <div className="flex items-center gap-2">
                 <User size={14} className="text-[#D4AF37]" />
-                <span className="text-sm font-medium text-white">{dealerName}</span>
+                <span className="text-sm font-medium text-white">{dealerStats?.dealer || dealerName}</span>
               </div>
 
               {/* Region */}
@@ -243,14 +257,14 @@ export default function FlashSaleDetail() {
                 </span>
               </div>
 
-              {/* WTS/WTB counts */}
+              {/* WTS/WTB counts — real per-dealer counts */}
               <div className="grid grid-cols-2 gap-3 pt-1">
                 <div className="border border-white/5 rounded-lg p-3 text-center">
-                  <div className="text-lg font-bold text-white">0</div>
+                  <div className="text-lg font-bold text-white">{dealerStats ? dealerStats.wts.toLocaleString() : '—'}</div>
                   <div className="text-[10px] text-white/30 uppercase tracking-wider">WTS Listings</div>
                 </div>
                 <div className="border border-white/5 rounded-lg p-3 text-center">
-                  <div className="text-lg font-bold text-white">0</div>
+                  <div className="text-lg font-bold text-white">{dealerStats ? dealerStats.wtb.toLocaleString() : '—'}</div>
                   <div className="text-[10px] text-white/30 uppercase tracking-wider">WTB Listing</div>
                 </div>
               </div>
