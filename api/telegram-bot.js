@@ -10,6 +10,7 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET;
 const TELEGRAM_API = 'https://api.telegram.org/bot';
 const { requireServiceToken, tokensMatch } = require('./_lib/require-service-token.cjs');
+const { captureTelegramUpdate, telegramEvent } = require('./_lib/telegram-shadow.cjs');
 
 async function sendMessage(chatId, text) {
   if (!TELEGRAM_BOT_TOKEN) return;
@@ -55,15 +56,29 @@ module.exports = async function handler(req, res) {
 
   const body = req.body || {};
 
-  // Handle Telegram webhook update
-  if (body.message) {
+  // Handle Telegram webhook updates. Normal group posts are captured silently
+  // in an allowlisted shadow table; commands keep the existing bot behavior.
+  const event = telegramEvent(body);
+  if (event) {
     if (!TELEGRAM_WEBHOOK_SECRET) return res.status(503).json({ error: 'Telegram webhook authentication is not configured' });
     const suppliedSecret = req.headers?.['x-telegram-bot-api-secret-token'];
     if (!tokensMatch(suppliedSecret, TELEGRAM_WEBHOOK_SECRET)) return res.status(401).json({ error: 'Unauthorized' });
 
-    const chatId = body.message.chat.id;
-    const text = body.message.text || '';
+    let capture = { accepted: false, reason: 'SHADOW_CAPTURE_DISABLED' };
+    try {
+      capture = await captureTelegramUpdate(body);
+    } catch (error) {
+      console.error('[telegram-shadow] capture failed:', error.message);
+      return res.status(503).json({ error: 'Telegram shadow capture unavailable' });
+    }
+
+    const chatId = event.message.chat.id;
+    const text = event.message.text || '';
     const command = text.split(' ')[0];
+
+    if (!text.startsWith('/') || event.kind !== 'message') {
+      return res.status(200).json({ ok: true, shadow: capture });
+    }
 
     switch (command) {
       case '/stats': {
@@ -101,6 +116,11 @@ module.exports = async function handler(req, res) {
         break;
       }
 
+      case '/chatid': {
+        await sendMessage(chatId, `Telegram chat ID: \`${chatId}\``);
+        break;
+      }
+
       case '/start':
       case '/help':
       default: {
@@ -112,6 +132,8 @@ module.exports = async function handler(req, res) {
 /alert — Configure alerts
 /help — Show this message
 
+/chatid - Show this group's numeric ID
+
 [Open Admin Panel](https://watchfacts-poc.vercel.app/#/admin)
         `.trim();
         await sendMessage(chatId, help);
@@ -119,7 +141,7 @@ module.exports = async function handler(req, res) {
       }
     }
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, shadow: capture });
   }
 
   // Handle manual trigger (for cron jobs)
