@@ -69,7 +69,8 @@ test('reviewed inventory images are source-supplied-only and remove their frame 
 
 test('brand browsing is sourced from the reviewed publication inventory', () => {
   assert.match(source, /fetch\('\/api\/reviewed-market-inventory\?page=1&pageSize=12'/);
-  assert.match(source, /payload\.summary\?\.brands \|\| payload\.summary\?\.publicationBrands \|\| payload\.publicationBrands/);
+  assert.match(source, /payload\.publicationBrands \|\| payload\.summary\?\.publicationBrands/);
+  assert.doesNotMatch(source, /payload\.summary\?\.brands \|\|/);
   assert.match(source, /typeof item === 'string'/);
   assert.match(source, /item\.listing_count\.toLocaleString\(\)\} listings/);
 });

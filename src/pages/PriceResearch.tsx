@@ -538,7 +538,12 @@ export default function PriceResearch() {
     fetch('/api/reviewed-market-inventory?page=1&pageSize=12', { signal: controller.signal })
       .then(response => response.json())
       .then(payload => {
-        const brands = payload.summary?.brands || payload.summary?.publicationBrands || payload.publicationBrands || [];
+        // The checkpoint summary includes pre-publication rows, so its per-brand
+        // totals are not customer-safe after the strict identity gate. Use only
+        // the API's publication brand names here; exact counts are shown after
+        // the customer selects a reference and the service performs an exact
+        // count against the gated market view.
+        const brands = payload.publicationBrands || payload.summary?.publicationBrands || [];
         if (Array.isArray(brands) && brands.length) {
           setPBrands(brands.map((item: string | { brand: string; listing_count?: number; canonical_listings?: number; model_count?: number; reference_count?: number }) => typeof item === 'string'
             ? { brand: item }

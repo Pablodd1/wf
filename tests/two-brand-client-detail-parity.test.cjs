@@ -76,7 +76,8 @@ test('Trading Floor detail prices require verified USD or preserve the source pr
 
 test('Price Research sources every brand button from the reviewed inventory API', () => {
   assert.match(research, /fetch\('\/api\/reviewed-market-inventory\?page=1&pageSize=12'/);
-  assert.match(research, /payload\.summary\?\.brands/);
+  assert.match(research, /payload\.publicationBrands/);
+  assert.doesNotMatch(research, /payload\.summary\?\.brands \|\|/);
   assert.match(research, /pBrands\.filter\(item => POPULAR_BRANDS\.includes\(item\.brand\)\)/);
   assert.doesNotMatch(research, /pBrands\.find\(item => item\.brand === brand\) \|\| \{ brand \}/);
 });
