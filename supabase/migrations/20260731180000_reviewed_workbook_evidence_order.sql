@@ -154,23 +154,11 @@ SELECT
     THEN inventory.workbook_price_usd
     ELSE NULL
   END AS verified_price_usd,
-  public.reviewed_workbook_reference_key_v2(
-    CASE
-      WHEN public.reviewed_workbook_reference_is_price_token_v2(
-        COALESCE(
-          inventory.normalized_reference,
-          inventory.raw_reference,
-          inventory.catalog_reference
-        ),
-        inventory.source_price_amount,
-        inventory.source_currency
-      ) THEN NULL
-      ELSE COALESCE(
-        inventory.normalized_reference,
-        inventory.raw_reference,
-        inventory.catalog_reference
-      )
-    END
+  regexp_replace(
+    upper(COALESCE(inventory.normalized_reference, '')),
+    '[^A-Z0-9]',
+    '',
+    'g'
   ) AS reference_search_key,
   CASE
     WHEN public.reviewed_workbook_reference_is_price_token_v2(
@@ -216,123 +204,17 @@ REVOKE ALL ON public.reviewed_workbook_market_source
 GRANT SELECT ON public.reviewed_workbook_market_source TO service_role;
 
 COMMENT ON VIEW public.reviewed_workbook_market_source IS
-  'Service-only customer projection. Exact source images, complete identity, and source-verified USD are the only image/price ordering evidence.';
+  'Service-only customer projection. Identity and price eligibility fail closed without rebuilding the existing customer-order indexes.';
 
--- The v2 names make a production rerun additive. The first evidence indexes
--- remain usable until all v2 builds finish, then are dropped concurrently.
+-- Reuse the already-built v1 customer-order indexes. Remove only abandoned v2
+-- artifacts; never rebuild or drop the production v1 indexes in this migration.
 SET lock_timeout = '2min';
 SET statement_timeout = '0';
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
-  idx_reviewed_workbook_market_evidence_order_v2
-  ON public.reviewed_workbook_inventory (
-    (COALESCE(NULLIF(btrim(user_image_url), '') ~* '^https?://[^[:space:]]+$', false)) DESC,
-    (public.reviewed_workbook_identity_complete_v2(
-      COALESCE(supplied_brand, canonical_brand, brand_scope),
-      COALESCE(model, catalog_model),
-      COALESCE(normalized_reference, raw_reference, catalog_reference),
-      COALESCE(dial_color, catalog_dial),
-      source_price_amount,
-      source_currency
-    )) DESC,
-    (COALESCE(price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH' AND workbook_price_usd > 0, false)) DESC,
-    (CASE WHEN price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH' AND workbook_price_usd > 0 THEN workbook_price_usd ELSE NULL END) DESC NULLS LAST,
-    posting_date DESC NULLS LAST,
-    id
-  );
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
-  idx_reviewed_workbook_market_brand_evidence_order_v2
-  ON public.reviewed_workbook_inventory (
-    brand_scope,
-    (COALESCE(NULLIF(btrim(user_image_url), '') ~* '^https?://[^[:space:]]+$', false)) DESC,
-    (public.reviewed_workbook_identity_complete_v2(
-      COALESCE(supplied_brand, canonical_brand, brand_scope),
-      COALESCE(model, catalog_model),
-      COALESCE(normalized_reference, raw_reference, catalog_reference),
-      COALESCE(dial_color, catalog_dial),
-      source_price_amount,
-      source_currency
-    )) DESC,
-    (COALESCE(price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH' AND workbook_price_usd > 0, false)) DESC,
-    (CASE WHEN price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH' AND workbook_price_usd > 0 THEN workbook_price_usd ELSE NULL END) DESC NULLS LAST,
-    posting_date DESC NULLS LAST,
-    id
-  );
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
-  idx_reviewed_workbook_market_type_evidence_order_v2
-  ON public.reviewed_workbook_inventory (
-    listing_type,
-    (COALESCE(NULLIF(btrim(user_image_url), '') ~* '^https?://[^[:space:]]+$', false)) DESC,
-    (public.reviewed_workbook_identity_complete_v2(
-      COALESCE(supplied_brand, canonical_brand, brand_scope),
-      COALESCE(model, catalog_model),
-      COALESCE(normalized_reference, raw_reference, catalog_reference),
-      COALESCE(dial_color, catalog_dial),
-      source_price_amount,
-      source_currency
-    )) DESC,
-    (COALESCE(price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH' AND workbook_price_usd > 0, false)) DESC,
-    (CASE WHEN price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH' AND workbook_price_usd > 0 THEN workbook_price_usd ELSE NULL END) DESC NULLS LAST,
-    posting_date DESC NULLS LAST,
-    id
-  )
-  WHERE listing_type IS NOT NULL;
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
-  idx_reviewed_workbook_market_brand_type_evidence_order_v2
-  ON public.reviewed_workbook_inventory (
-    brand_scope,
-    listing_type,
-    (COALESCE(NULLIF(btrim(user_image_url), '') ~* '^https?://[^[:space:]]+$', false)) DESC,
-    (public.reviewed_workbook_identity_complete_v2(
-      COALESCE(supplied_brand, canonical_brand, brand_scope),
-      COALESCE(model, catalog_model),
-      COALESCE(normalized_reference, raw_reference, catalog_reference),
-      COALESCE(dial_color, catalog_dial),
-      source_price_amount,
-      source_currency
-    )) DESC,
-    (COALESCE(price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH' AND workbook_price_usd > 0, false)) DESC,
-    (CASE WHEN price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH' AND workbook_price_usd > 0 THEN workbook_price_usd ELSE NULL END) DESC NULLS LAST,
-    posting_date DESC NULLS LAST,
-    id
-  )
-  WHERE listing_type IS NOT NULL;
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS
-  idx_reviewed_workbook_market_reference_evidence_order_v2
-  ON public.reviewed_workbook_inventory (
-    (public.reviewed_workbook_reference_key_v2(
-      CASE
-        WHEN public.reviewed_workbook_reference_is_price_token_v2(
-          COALESCE(normalized_reference, raw_reference, catalog_reference),
-          source_price_amount,
-          source_currency
-        ) THEN NULL
-        ELSE COALESCE(normalized_reference, raw_reference, catalog_reference)
-      END
-    )),
-    (COALESCE(NULLIF(btrim(user_image_url), '') ~* '^https?://[^[:space:]]+$', false)) DESC,
-    (public.reviewed_workbook_identity_complete_v2(
-      COALESCE(supplied_brand, canonical_brand, brand_scope),
-      COALESCE(model, catalog_model),
-      COALESCE(normalized_reference, raw_reference, catalog_reference),
-      COALESCE(dial_color, catalog_dial),
-      source_price_amount,
-      source_currency
-    )) DESC,
-    (COALESCE(price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH' AND workbook_price_usd > 0, false)) DESC,
-    (CASE WHEN price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH' AND workbook_price_usd > 0 THEN workbook_price_usd ELSE NULL END) DESC NULLS LAST,
-    posting_date DESC NULLS LAST,
-    id
-  );
-
-DROP INDEX CONCURRENTLY IF EXISTS public.idx_reviewed_workbook_market_evidence_order;
-DROP INDEX CONCURRENTLY IF EXISTS public.idx_reviewed_workbook_market_brand_evidence_order;
-DROP INDEX CONCURRENTLY IF EXISTS public.idx_reviewed_workbook_market_type_evidence_order;
-DROP INDEX CONCURRENTLY IF EXISTS public.idx_reviewed_workbook_market_brand_type_evidence_order;
-DROP INDEX CONCURRENTLY IF EXISTS public.idx_reviewed_workbook_market_reference_evidence_order;
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_reviewed_workbook_market_evidence_order_v2;
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_reviewed_workbook_market_brand_evidence_order_v2;
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_reviewed_workbook_market_type_evidence_order_v2;
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_reviewed_workbook_market_brand_type_evidence_order_v2;
+DROP INDEX CONCURRENTLY IF EXISTS public.idx_reviewed_workbook_market_reference_evidence_order_v2;
 
 NOTIFY pgrst, 'reload schema';

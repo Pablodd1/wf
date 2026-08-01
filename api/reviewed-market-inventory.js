@@ -361,14 +361,12 @@ module.exports = async function handler(req, res) {
     query = pageWindow.reverse
       ? query
         .order('has_exact_source_image', { ascending: true })
-        .order('has_complete_identity', { ascending: true })
         .order('has_verified_usd_price', { ascending: true })
         .order('verified_price_usd', { ascending: true, nullsFirst: true })
         .order('posting_date', { ascending: true, nullsFirst: true })
         .order('id', { ascending: false })
       : query
         .order('has_exact_source_image', { ascending: false })
-        .order('has_complete_identity', { ascending: false })
         .order('has_verified_usd_price', { ascending: false })
         .order('verified_price_usd', { ascending: false, nullsFirst: false })
         .order('posting_date', { ascending: false, nullsFirst: false })

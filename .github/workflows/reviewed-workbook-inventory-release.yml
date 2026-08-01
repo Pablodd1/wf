@@ -17,10 +17,9 @@ jobs:
     if: ${{ inputs.confirmation == 'APPLY_REVIEWED_WORKBOOK_INVENTORY' }}
     runs-on: ubuntu-latest
     environment: production
-    # Five concurrent expression indexes scan the 8.5M-row reviewed inventory.
-    # A continuation run reuses valid completed indexes, but needs enough time
-    # to clean and rebuild any index interrupted by the previous runner ceiling.
-    timeout-minutes: 240
+    # The evidence gate reuses completed v1 indexes; only lightweight view,
+    # function, privilege, and abandoned-v2 cleanup work remains.
+    timeout-minutes: 30
     permissions:
       contents: read
     env:
@@ -67,17 +66,7 @@ jobs:
               'idx_reviewed_workbook_inventory_approved_phone_activity',
               'idx_reviewed_workbook_inventory_type_order',
               'idx_reviewed_workbook_inventory_brand_type_order',
-              'idx_reviewed_workbook_inventory_reference_order',
-              'idx_reviewed_workbook_market_evidence_order',
-              'idx_reviewed_workbook_market_brand_evidence_order',
-              'idx_reviewed_workbook_market_type_evidence_order',
-              'idx_reviewed_workbook_market_brand_type_evidence_order',
-              'idx_reviewed_workbook_market_reference_evidence_order',
-              'idx_reviewed_workbook_market_evidence_order_v2',
-              'idx_reviewed_workbook_market_brand_evidence_order_v2',
-              'idx_reviewed_workbook_market_type_evidence_order_v2',
-              'idx_reviewed_workbook_market_brand_type_evidence_order_v2',
-              'idx_reviewed_workbook_market_reference_evidence_order_v2'
+              'idx_reviewed_workbook_inventory_reference_order'
             )
             AND NOT (index_state.indisvalid AND index_state.indisready)
           \gexec
@@ -136,11 +125,11 @@ jobs:
                   'idx_reviewed_workbook_inventory_type_order',
                   'idx_reviewed_workbook_inventory_brand_type_order',
                   'idx_reviewed_workbook_inventory_reference_order',
-                  'idx_reviewed_workbook_market_evidence_order_v2',
-                  'idx_reviewed_workbook_market_brand_evidence_order_v2',
-                  'idx_reviewed_workbook_market_type_evidence_order_v2',
-                  'idx_reviewed_workbook_market_brand_type_evidence_order_v2',
-                  'idx_reviewed_workbook_market_reference_evidence_order_v2',
+                  'idx_reviewed_workbook_market_evidence_order',
+                  'idx_reviewed_workbook_market_brand_evidence_order',
+                  'idx_reviewed_workbook_market_type_evidence_order',
+                  'idx_reviewed_workbook_market_brand_type_evidence_order',
+                  'idx_reviewed_workbook_market_reference_evidence_order',
                   'idx_reviewed_workbook_checkpoints_brand_status'
                 )
             ) <> 15 THEN
@@ -187,7 +176,8 @@ jobs:
             echo "- Exact source-workbook review index: ready."
             echo "- Exact approved-contact activity index: ready."
             echo "- Exact approved seller activity aggregate: service-only and ready."
-            echo "- Customer evidence ordering v2: source image, complete identity, verified USD, price, date, and id."
+            echo "- Existing customer evidence ordering v1 indexes: preserved and ready."
+            echo "- Identity and Price Research eligibility: fail closed through the service-only view and API."
             echo "- Listing-type and exact-reference publication indexes: ready."
             echo "- Ready for the checkpointed local importer."
           } >> "$GITHUB_STEP_SUMMARY"

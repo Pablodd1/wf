@@ -260,30 +260,34 @@ test('public brand filters preserve punctuation and exact references use exact c
   assert.match(source, /count: preciseCount \? 'exact' : scopedFilter \? 'estimated' : undefined/);
 });
 
-test('endpoint is read-only and orders exact images, complete identity, then verified USD', () => {
+test('endpoint is read-only and reuses the exact-image then verified-USD v1 order', () => {
   assert.match(source, /\.from\(MARKET_SOURCE_VIEW\)/);
   assert.doesNotMatch(source, /\.from\(['"]watch_records['"]\)/);
   assert.doesNotMatch(source, /\.(?:insert|upsert|update|delete)\s*\(/);
-  assert.match(source, /order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('has_complete_identity', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
+  assert.match(source, /order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
+  assert.doesNotMatch(source, /order\('has_complete_identity'/);
   assert.doesNotMatch(source, /order\('workbook_price_usd'/);
   assert.doesNotMatch(source, /catalog_image_url|final_image_url|display_image_url/);
 });
 
-test('service-only evidence view and concurrent indexes match customer ordering', () => {
+test('service-only evidence view keeps strict identity while reusing v1 indexes', () => {
   assert.match(migration, /CREATE OR REPLACE VIEW public\.reviewed_workbook_market_source[\s\S]*security_invoker = true/);
   assert.match(migration, /REVOKE ALL ON public\.reviewed_workbook_market_source[\s\S]*PUBLIC, anon, authenticated/);
   assert.match(migration, /GRANT SELECT ON public\.reviewed_workbook_market_source TO service_role/);
   assert.match(migration, /reviewed_workbook_reference_is_price_token_v2[\s\S]*USD\|USDT\|HKD/);
   assert.match(migration, /reviewed_workbook_identity_complete_v2[\s\S]*p_brand[\s\S]*p_model[\s\S]*p_reference[\s\S]*p_dial/);
   assert.match(migration, /reference_search_key[\s\S]*public_reference[\s\S]*reference_is_price_token[\s\S]*has_complete_identity/);
-  assert.match(migration, /CREATE INDEX CONCURRENTLY IF NOT EXISTS[\s\S]*idx_reviewed_workbook_market_evidence_order_v2/);
-  assert.match(migration, /idx_reviewed_workbook_market_reference_evidence_order_v2[\s\S]*reviewed_workbook_reference_key_v2/);
-  assert.match(migration, /idx_reviewed_workbook_market_evidence_order_v2[\s\S]*user_image_url[\s\S]*reviewed_workbook_identity_complete_v2[\s\S]*SOURCE_EXPLICIT_USD_MATCH[\s\S]*workbook_price_usd[\s\S]*posting_date[\s\S]*id/);
-  assert.match(migration, /DROP INDEX CONCURRENTLY IF EXISTS public\.idx_reviewed_workbook_market_evidence_order;/);
+  assert.match(migration, /regexp_replace\([\s\S]*upper\(COALESCE\(inventory\.normalized_reference, ''\)\)[\s\S]*AS reference_search_key/);
+  assert.doesNotMatch(migration, /CREATE INDEX CONCURRENTLY/);
+  assert.match(migration, /DROP INDEX CONCURRENTLY IF EXISTS public\.idx_reviewed_workbook_market_evidence_order_v2;/);
+  assert.match(migration, /DROP INDEX CONCURRENTLY IF EXISTS public\.idx_reviewed_workbook_market_reference_evidence_order_v2;/);
+  assert.doesNotMatch(migration, /DROP INDEX CONCURRENTLY IF EXISTS public\.idx_reviewed_workbook_market_evidence_order;/);
   assert.match(migration, /price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH'[\s\S]*workbook_price_usd > 0/);
   assert.doesNotMatch(migration, /\bBEGIN\b|\bCOMMIT\b/i);
   assert.match(workflow, /20260731180000_reviewed_workbook_evidence_order\.sql/);
-  assert.match(workflow, /idx_reviewed_workbook_market_reference_evidence_order_v2/);
+  assert.match(workflow, /idx_reviewed_workbook_market_reference_evidence_order'/);
+  assert.doesNotMatch(workflow, /idx_reviewed_workbook_market_reference_evidence_order_v2/);
+  assert.match(workflow, /timeout-minutes: 30/);
   assert.match(workflow, /to_regprocedure\('public\.reviewed_workbook_identity_complete_v2\(text,text,text,text,numeric,text\)'\)/);
   assert.match(workflow, /to_regclass\('public\.reviewed_workbook_market_source'\)/);
 });

@@ -98,7 +98,7 @@ test('market indexes are concurrent, partial, and transaction-free', () => {
 test('dedicated release workflow explicitly applies and verifies every new index', () => {
   assert.match(workflow, /allowlisted_migrations[\s\S]*20260731160000_reviewed_workbook_market_indexes\.sql/);
   assert.match(workflow, /allowlisted_migrations[\s\S]*20260731170000_reviewed_workbook_seller_activity\.sql/);
-  assert.match(workflow, /timeout-minutes: 120/);
+  assert.match(workflow, /timeout-minutes: 30/);
   assert.match(workflow, /SET lock_timeout = '30s'/);
   assert.match(workflow, /DROP INDEX IF EXISTS[\s\S]*indisvalid[\s\S]*indisready/);
   assert.doesNotMatch(workflow, /DROP INDEX CONCURRENTLY IF EXISTS/);
