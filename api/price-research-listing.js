@@ -90,7 +90,7 @@ module.exports = async function handler(req, res) {
     const strictGate = strictResult.data;
     if (!strictGate) {
       const workbookListing = await loadReviewedWorkbookListing(client, id);
-      if (workbookListing && isPublicationBrandAllowed(workbookListing.brand)) {
+      if (workbookListing) {
         const redactedSource = redactPublicSource(workbookListing.raw_message || '').trim();
         const publicSource = redactedSource.slice(0, 12_000);
         return res.status(200).json({

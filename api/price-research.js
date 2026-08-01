@@ -259,10 +259,25 @@ module.exports = async function handler(req, res) {
       });
     }
   }
-  if (!isPublicationBrandAllowed(brand)) {
+  // A reviewed workbook cohort is already constrained to complete identity and
+  // source-explicit USD evidence. It may authorize its exact brand/reference
+  // even when an older deployment allowlist has not yet been expanded.
+  let preloadedReviewedWorkbookRows = [];
+  try {
+    preloadedReviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(getClient(), {
+      brand,
+      referenceKeys: listEquivalentReferences(rawRef, brand).map(normRef),
+      limit: 10000,
+    });
+  } catch {
+    // The legacy release gates below remain fail-closed when the reviewed view
+    // is temporarily unavailable.
+  }
+  const exactReviewedWorkbookRelease = preloadedReviewedWorkbookRows.length > 0;
+  if (!exactReviewedWorkbookRelease && !isPublicationBrandAllowed(brand)) {
     return res.status(404).json({ error: 'Brand is not included in this release' });
   }
-  if (!isPublicationReferenceAllowed(brand, rawRef)) {
+  if (!exactReviewedWorkbookRelease && !isPublicationReferenceAllowed(brand, rawRef)) {
     return res.status(404).json({ error: 'Reference is not included in this release' });
   }
 
@@ -392,13 +407,15 @@ module.exports = async function handler(req, res) {
     // Reviewed workbooks are the customer-visible canonical inventory. When an
     // exact reference has source-explicit USD evidence there, use that same
     // evidence for analytics. Legacy watch_records remains a fallback only.
-    let reviewedWorkbookRows = [];
+    let reviewedWorkbookRows = preloadedReviewedWorkbookRows;
     try {
-      reviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
-        brand,
-        referenceKeys: referenceVariants.map(normRef),
-        limit: sampleLimit,
-      });
+      if (!reviewedWorkbookRows.length) {
+        reviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
+          brand,
+          referenceKeys: referenceVariants.map(normRef),
+          limit: sampleLimit,
+        });
+      }
     } catch (workbookError) {
       console.warn('[price-research] reviewed workbook analytics unavailable; using legacy cohort:', workbookError.message);
     }

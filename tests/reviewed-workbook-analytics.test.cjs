@@ -44,6 +44,9 @@ test('Price Research prefers verified reviewed-workbook cohorts and keeps legacy
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
   assert.match(source, /loadReviewedWorkbookAnalyticsRows/);
   assert.match(source, /const usingReviewedWorkbook = reviewedWorkbookRows\.length > 0/);
+  assert.match(source, /const exactReviewedWorkbookRelease = preloadedReviewedWorkbookRows\.length > 0/);
+  assert.match(source, /!exactReviewedWorkbookRelease && !isPublicationBrandAllowed\(brand\)/);
+  assert.match(source, /!exactReviewedWorkbookRelease && !isPublicationReferenceAllowed\(brand, rawRef\)/);
   assert.match(source, /if \(usingReviewedWorkbook\) rows = reviewedWorkbookRows/);
   assert.match(source, /reviewed workbook analytics unavailable; using legacy cohort/);
   assert.match(source, /analytics_source: usingReviewedWorkbook/);
