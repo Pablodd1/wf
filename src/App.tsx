@@ -18,6 +18,7 @@ import BatchReview from '@/pages/BatchReview';
 import CreateBatch from '@/pages/CreateBatch';
 import MonitorDashboard from '@/pages/MonitorDashboard';
 import PipelineDashboard from '@/pages/PipelineDashboard';
+import FlashSaleDetail from '@/pages/FlashSaleDetail';
 import { AuthProvider } from '@/hooks/useAuth';
 import { ThemeProvider } from '@/hooks/useTheme';
 
@@ -45,6 +46,7 @@ export default function App() {
           <Route path="/pipeline/batch/:batchId" element={<BatchReview />} />
           <Route path="/pipeline/create" element={<CreateBatch />} />
           <Route path="/monitor" element={<MonitorDashboard />} />
+          <Route path="/flash-sales/:id" element={<FlashSaleDetail />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>
