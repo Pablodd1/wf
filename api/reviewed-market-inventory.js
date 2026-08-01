@@ -319,7 +319,9 @@ module.exports = async function handler(req, res) {
     const matchedBrand = summary.brands.find(item =>
       item.brand?.toLocaleLowerCase() === requestedBrand.toLocaleLowerCase());
     const brand = matchedBrand?.brand || requestedBrand;
-    const scopedFilter = Boolean(reference || imagesOnly || listingType || condition);
+    // Customer floors publish only complete source-backed watch identities.
+    // Incomplete rows remain preserved in reviewed_workbook_inventory for review.
+    const scopedFilter = true;
     const preciseCount = Boolean(reference);
     const canReverse = !scopedFilter;
     const summaryTotal = brand
@@ -373,6 +375,7 @@ module.exports = async function handler(req, res) {
         .order('id', { ascending: true });
     if (brand) query = query.eq('brand_scope', brand);
     if (reference) query = query.eq('reference_search_key', reference);
+    query = query.eq('has_complete_identity', true);
     if (imagesOnly) query = query.eq('has_exact_source_image', true);
     if (listingType) query = query.eq('listing_type', listingType);
     if (condition) query = query.eq('condition', condition);
