@@ -22,6 +22,7 @@ const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
+const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
@@ -388,6 +389,21 @@ module.exports = async function handler(req, res) {
       if (pageError) throw pageError;
       rows = sampledPages.flatMap(page => page.data || []);
     }
+    // Reviewed workbooks are the customer-visible canonical inventory. When an
+    // exact reference has source-explicit USD evidence there, use that same
+    // evidence for analytics. Legacy watch_records remains a fallback only.
+    let reviewedWorkbookRows = [];
+    try {
+      reviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
+        brand,
+        referenceKeys: referenceVariants.map(normRef),
+        limit: sampleLimit,
+      });
+    } catch (workbookError) {
+      console.warn('[price-research] reviewed workbook analytics unavailable; using legacy cohort:', workbookError.message);
+    }
+    const usingReviewedWorkbook = reviewedWorkbookRows.length > 0;
+    if (usingReviewedWorkbook) rows = reviewedWorkbookRows;
     const baseSampleCount = rows.length;
 
     if (!rows || rows.length === 0) {
@@ -439,7 +455,7 @@ module.exports = async function handler(req, res) {
         || (baseSampleCount >= sampleLimit && observedDialCounts.get(dial.value.toLowerCase()) < 1000)
       ))
       .map(dial => dial.value);
-    if (!controlledPaneraiRelease && supplementalCatalogDials.length) {
+    if (!controlledPaneraiRelease && !usingReviewedWorkbook && supplementalCatalogDials.length) {
       const supplementalPages = await Promise.all(supplementalCatalogDials.map(dial => client
         .from(sourceTable)
         .select(columns)
@@ -459,26 +475,30 @@ module.exports = async function handler(req, res) {
       for (const row of supplementalPages.flatMap(page => page.data || [])) rowsById.set(row.id, row);
       rows = [...rowsById.values()];
     }
-    rows = controlledPaneraiRelease
+    rows = usingReviewedWorkbook
+      ? rows
+      : controlledPaneraiRelease
       ? rows.filter(isOwnerReviewedWorkbookRow)
       : await retainVerifiedIdentityRows(client, rows);
     const equivalentKeys = new Set(referenceVariants.map(normRef));
     rows = rows.filter(row =>
-      isReleaseListingEligible(row)
+      (usingReviewedWorkbook || isReleaseListingEligible(row))
       && String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
       && equivalentKeys.has(normRef(row.reference)));
-    const shadowBundleIds = controlledPaneraiRelease
+    const shadowBundleIds = controlledPaneraiRelease || usingReviewedWorkbook
       ? new Set()
       : await loadShadowBundleParentIds(client, rows);
 
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
-        const normalized = normalizeMarketRow(row, referenceVariants);
+        const normalized = usingReviewedWorkbook
+          ? { ...row, analytics_price_usd: row.price_usd, price_normalization: null }
+          : normalizeMarketRow(row, referenceVariants);
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {
           ...normalized,
-          owner_reviewed_identity: isOwnerReviewedWorkbookRow(row),
+          owner_reviewed_identity: row.owner_reviewed_identity === true || isOwnerReviewedWorkbookRow(row),
           bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds),
           dial_color: normalizedDial.known ? normalizedDial.value : normalized.dial_color,
           stored_price_usd: row.price_usd,
@@ -488,7 +508,7 @@ module.exports = async function handler(req, res) {
     // The strict view excludes reviewed duplicates in Postgres. Recheck only
     // this bounded cohort so a deployment-order or lookup failure is
     // unavailable rather than silently publishing a suppressed observation.
-    const analyticsSuppressedIds = controlledPaneraiRelease
+    const analyticsSuppressedIds = controlledPaneraiRelease || usingReviewedWorkbook
       ? new Set()
       : await loadAnalyticsSuppressedIds(
           client,
@@ -644,6 +664,9 @@ module.exports = async function handler(req, res) {
       success: true, brand, reference: rawRef,
       resolvedRef: targetRef !== rawRef ? targetRef : null,
       model, dialColors,
+      analytics_source: usingReviewedWorkbook
+        ? 'reviewed_workbook_market_source'
+        : sourceTable,
       dial_analysis,
       dial_data_quality: {
         known_count: analyticsRows.length - unknownDialCount,

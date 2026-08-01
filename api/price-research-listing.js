@@ -24,6 +24,7 @@ const {
 } = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
+const { loadReviewedWorkbookListing } = require('./_lib/reviewed-workbook-analytics.cjs');
 
 function normalizeAccessories(value) {
   if (!value) return [];
@@ -87,7 +88,47 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
     if (strictResult.error) throw strictResult.error;
     const strictGate = strictResult.data;
-    if (!strictGate && !canReview) return res.status(404).json({ error: 'Listing not found' });
+    if (!strictGate) {
+      const workbookListing = await loadReviewedWorkbookListing(client, id);
+      if (workbookListing && isPublicationBrandAllowed(workbookListing.brand)) {
+        const redactedSource = redactPublicSource(workbookListing.raw_message || '').trim();
+        const publicSource = redactedSource.slice(0, 12_000);
+        return res.status(200).json({
+          success: true,
+          listing: {
+            id: workbookListing.id,
+            brand: workbookListing.brand,
+            model: workbookListing.model,
+            reference: workbookListing.reference,
+            dial_color: workbookListing.dial_color,
+            condition: workbookListing.condition,
+            price_raw: workbookListing.source_price_amount,
+            price_usd: workbookListing.price_usd,
+            price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
+            currency: workbookListing.source_currency || 'USD',
+            raw_message: publicSource || null,
+            raw_message_scope: publicSource ? 'reviewed_workbook_source' : 'unavailable',
+            raw_message_truncated: redactedSource.length > publicSource.length,
+            source_message_available_to_reviewers: Boolean(workbookListing.raw_message),
+            created_at: workbookListing.created_at,
+            listing_date: workbookListing.listing_date,
+            source: workbookListing.source,
+            source_type: workbookListing.source_type,
+            listing_type: workbookListing.listing_type,
+            listing_status: workbookListing.listing_status,
+            confidence: workbookListing.confidence,
+            image_urls: workbookListing.image_urls,
+            thumbnail_url: workbookListing.thumbnail_url,
+            has_images: workbookListing.has_images,
+            image_provenance: workbookListing.has_images ? 'source_supplied' : 'none',
+            data_quality_issues: [],
+            data_quality_review_required: false,
+            human_review_available: canReview,
+          },
+        });
+      }
+      if (!canReview) return res.status(404).json({ error: 'Listing not found' });
+    }
     const sourceTable = 'watch_records';
     const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,accessories,image_urls,thumbnail_url,has_images,dealer_photos,region,source_type,listing_status,confidence,verdict';
     const { data, error } = await client
