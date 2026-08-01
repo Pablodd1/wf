@@ -1,0 +1,160 @@
+/**
+ * GET /api/model-stats?brand=Rolex&model=Datejust
+ *
+ * Per-model market stats for Price Research drill-down:
+ *   - total listings, WTS count, WTB count
+ *   - avg / median / min / max price (IQR-filtered, min-5 gate)
+ *   - date range covered (first_seen → last_seen)
+ *   - per-reference breakdown (only refs with >= 5 priced listings exposed)
+ *
+ * "min-5 exposure": any aggregate bucket (model or reference) is only
+ * returned when backed by >= 5 real priced listings — matches the
+ * Price Research min-bucket rule so no stat is shown on thin data.
+ */
+const fs = require('fs');
+const path = require('path');
+const { getClient } = require('./_lib/supabase');
+const { setCorsHeaders } = require('./_lib/cors');
+
+const MIN_BUCKET = 5;
+const SANITY_FLOOR = 500;
+
+let catalog = null;
+function loadCatalog() {
+  if (!catalog) {
+    catalog = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', 'catalog.json'), 'utf-8'));
+  }
+  return catalog;
+}
+
+function stats(prices) {
+  if (!prices.length) return null;
+  const sorted = [...prices].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median = sorted.length % 2 === 0
+    ? Math.round((sorted[mid - 1] + sorted[mid]) / 2)
+    : sorted[mid];
+  const avg = Math.round(prices.reduce((a, b) => a + b, 0) / prices.length);
+  return { avg, median, min: sorted[0], max: sorted[sorted.length - 1] };
+}
+
+function iqrFilter(prices) {
+  if (prices.length < 4) return prices.filter(p => p >= SANITY_FLOOR);
+  const sorted = [...prices].sort((a, b) => a - b);
+  const q1 = sorted[Math.floor(sorted.length * 0.25)];
+  const q3 = sorted[Math.floor(sorted.length * 0.75)];
+  const iqr = q3 - q1;
+  const lo = Math.max(q1 - 1.5 * iqr, SANITY_FLOOR);
+  const hi = q3 + 1.5 * iqr;
+  return sorted.filter(p => p >= lo && p <= hi);
+}
+
+module.exports = async function handler(req, res) {
+  if (setCorsHeaders(res, req)) return;
+  if (req.method === 'OPTIONS') return res.status(200).end();
+
+  const { brand, model } = req.query;
+  if (!brand || !model) return res.status(400).json({ error: 'brand and model required' });
+
+  try {
+    const cat = loadCatalog();
+    const brandLower = brand.toLowerCase();
+    const modelLower = model.toLowerCase();
+
+    // All references belonging to this brand+model per catalog
+    const refs = cat
+      .filter(e => e.brand && e.brand.toLowerCase().includes(brandLower)
+                && e.model && e.model.toLowerCase() === modelLower
+                && e.reference)
+      .map(e => e.reference);
+
+    if (refs.length === 0) {
+      return res.status(200).json({ success: true, brand, model, total: 0, references: [] });
+    }
+
+    const client = getClient();
+
+    // Pull priced rows for these refs in chunks (.in() has URL length limits)
+    const CHUNK = 50;
+    const rows = [];
+    for (let i = 0; i < refs.length; i += CHUNK) {
+      const chunk = refs.slice(i, i + CHUNK);
+      const { data, error } = await client
+        .from('watch_records')
+        .select('reference, price_usd, created_at, listing_type, verdict')
+        .eq('brand', brand)
+        .in('reference', chunk)
+        .not('verdict', 'eq', 'RECYCLE')
+        .order('created_at', { ascending: true })
+        .limit(20000);
+      if (error) throw error;
+      if (data) rows.push(...data);
+    }
+
+    if (rows.length === 0) {
+      return res.status(200).json({ success: true, brand, model, total: 0, references: [] });
+    }
+
+    // Split WTS / WTB
+    let wts = 0, wtb = 0;
+    for (const r of rows) {
+      if ((r.listing_type || '').toUpperCase() === 'WTB') wtb++;
+      else wts++;
+    }
+
+    // Model-level price stats (WTS priced rows only, IQR-filtered)
+    const priced = rows.filter(r => (r.listing_type || '').toUpperCase() !== 'WTB'
+                                 && r.price_usd != null && r.price_usd > 0);
+    const modelPrices = iqrFilter(priced.map(r => r.price_usd));
+    const modelStats = modelPrices.length >= MIN_BUCKET ? stats(modelPrices) : null;
+
+    // Date range
+    const dates = rows.map(r => r.created_at).filter(Boolean).sort();
+    const first_seen = dates[0] || null;
+    const last_seen = dates[dates.length - 1] || null;
+
+    // Per-reference breakdown with min-5 gate
+    const byRef = {};
+    for (const r of priced) {
+      if (!byRef[r.reference]) byRef[r.reference] = { prices: [], dates: [] };
+      byRef[r.reference].prices.push(r.price_usd);
+      if (r.created_at) byRef[r.reference].dates.push(r.created_at);
+    }
+    const references = Object.entries(byRef)
+      .filter(([, v]) => v.prices.length >= MIN_BUCKET)
+      .map(([reference, v]) => {
+        const cleaned = iqrFilter(v.prices);
+        const s = stats(cleaned);
+        const ds = v.dates.sort();
+        return {
+          reference,
+          count: v.prices.length,
+          avg_price: s?.avg || 0,
+          median_price: s?.median || 0,
+          min_price: s?.min || 0,
+          max_price: s?.max || 0,
+          first_seen: ds[0] || null,
+          last_seen: ds[ds.length - 1] || null,
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+
+    res.status(200).json({
+      success: true,
+      brand,
+      model,
+      total: rows.length,
+      wts,
+      wtb,
+      priced_count: priced.length,
+      stats: modelStats,
+      first_seen,
+      last_seen,
+      references,
+      meta: { min_bucket: MIN_BUCKET, iqr_filter: true },
+    });
+  } catch (err) {
+    console.error('model-stats error:', err);
+    res.status(500).json({ error: err.message });
+  }
+};
