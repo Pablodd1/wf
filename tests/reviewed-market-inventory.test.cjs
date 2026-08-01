@@ -134,8 +134,9 @@ test('reference punctuation variants share one exact key without changing displa
   assert.equal(api.referenceComparisonKey('57121A'), '57121A');
   assert.equal(api.referenceComparisonKey('5712'), '5712');
   const mapped = api.mapReviewedRecord(record({
-    normalized_reference: '5712/1A',
-    public_reference: '5712/1A',
+    raw_reference: '5712/1A',
+    normalized_reference: '57121A',
+    public_reference: '57121A',
     reference_search_key: '57121A',
   }));
   assert.equal(mapped.reference, '5712/1A');

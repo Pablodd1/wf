@@ -155,7 +155,12 @@ function mapReviewedRecord(row) {
   const sourceReference = row.normalized_reference || row.raw_reference || row.catalog_reference || null;
   const invalidReference = row.reference_is_price_token === true
     || referenceIsPriceToken(sourceReference, sourceAmount, row.source_currency);
-  const reference = invalidReference ? null : (row.public_reference || sourceReference);
+  const approvedReference = invalidReference ? null : (row.public_reference || sourceReference);
+  const reference = !invalidReference
+    && evidenceValuePresent(row.raw_reference)
+    && referenceComparisonKey(row.raw_reference) === referenceComparisonKey(approvedReference)
+    ? row.raw_reference
+    : approvedReference;
   const dialColor = row.dial_color || row.catalog_dial || null;
   const sellerName = contactApproved && evidenceValuePresent(row.posted_by)
     ? row.posted_by
