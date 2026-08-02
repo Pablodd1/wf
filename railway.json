@@ -4,7 +4,7 @@
     "builder": "RAILPACK"
   },
   "deploy": {
-    "startCommand": "node tools/shadow-reprocess/railway-worker.cjs",
+    "startCommand": "sh -c 'exec ${WF_START_COMMAND:-node tools/shadow-reprocess/railway-worker.cjs}'",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
   }
