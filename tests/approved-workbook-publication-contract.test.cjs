@@ -56,12 +56,14 @@ test('Trading Floor withholds reference-only images while preserving provenance 
   assert.match(provenance, /not the seller’s original listing photo/);
   assert.match(ingest, /publicImageProvenance\(resolved\)/);
   assert.match(detail, /publicImageProvenance\(customerListing\)/);
+  assert.match(detail, /image_evidence_type: workbookListing\.has_images \? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE'/);
   assert.match(floor, /'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'/);
   assert.doesNotMatch(floor, /Reference image · not seller photo/);
   assert.match(floor, /onError=\{onUnavailable\}/);
   assert.doesNotMatch(floor, /publicListing\.image_urls|tradingListing\.image_urls/);
   assert.match(floor, /listing\.image_evidence_notice/);
   assert.match(research, /detail\.image_evidence_notice/);
+  assert.match(research, /sourceImageEvidence = \['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'\]/);
 });
 
 test('Zenith workbook importer is hash locked and separates visual conflicts', () => {

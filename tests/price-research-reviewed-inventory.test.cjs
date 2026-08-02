@@ -17,7 +17,15 @@ test('Price Research renders analytics before a compact comparable sample', () =
     'analysis must render before listing evidence',
   );
   assert.match(pageRender, /\.slice\(0, COMPARABLE_LISTING_PREVIEW_LIMIT\)/);
+  assert.match(pageRender, /\.sort\(\(left, right\) =>[\s\S]*Number\(left\.price_usd\) - Number\(right\.price_usd\)/);
   assert.doesNotMatch(pageRender, /Available listings|reviewedInventory\.total|fetchReviewedInventory/);
+});
+
+test('qualified comparable listings are ordered from lowest to highest verified USD price', () => {
+  const sortIndex = pageRender.indexOf('.sort((left, right) =>');
+  const sliceIndex = pageRender.indexOf('.slice(0, COMPARABLE_LISTING_PREVIEW_LIMIT)');
+  assert.ok(sortIndex > -1 && sortIndex < sliceIndex, 'price ordering must happen before the compact preview is sliced');
+  assert.match(pageRender, /Number\(left\.price_usd\) - Number\(right\.price_usd\)/);
 });
 
 test('customer listing rows contain included comparables only', () => {

@@ -22,8 +22,11 @@ test('confirmed image-less Trading Floor listings render as text-only cards and 
 });
 
 test('confirmed image-less Price Research details omit the entire media frame', () => {
+  assert.match(research, /sourceImageEvidence = \['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'\]/);
+  assert.match(research, /const \[failedImages, setFailedImages\] = useState/);
   assert.match(research, /images\.length > 0 \? 'grid lg:grid-cols/);
   assert.match(research, /\{images\.length > 0 && \(/);
+  assert.match(research, /onError=\{\(\) => setFailedImages/);
   assert.doesNotMatch(research, /No linked image for this record/);
   assert.doesNotMatch(research, /<ImageOff/);
 });

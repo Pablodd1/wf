@@ -88,17 +88,15 @@ interface ListingSellerData {
   dealer_country?: string | null;
   dealer_city?: string | null;
   dealer_profile_url?: string;
-  dealer_rating?: number | null;
-  dealer_review_count?: number;
-  dealer_group_count?: number;
   dealer_stats?: {
     total_posts: number;
-    active_listings: number;
+    active_listings?: number | null;
     wts_posts: number;
     wtb_posts: number;
+    other_posts?: number | null;
     first_post_at: string | null;
     last_post_at: string | null;
-    posting_years: number;
+    posting_years?: number;
   } | null;
   phone_display?: string;
   contact_source?: string;
@@ -320,6 +318,7 @@ const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
 const COMPARABLE_LISTING_PREVIEW_LIMIT = 12;
+const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
 const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
 
 const DIAL_SWATCHES: Record<string, string> = {
@@ -551,15 +550,37 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     setDetailError('');
     setDetailLoading(true);
     try {
+      const workbookListing = REVIEWED_WORKBOOK_ID.test(row.id);
+      const contactEndpoint = workbookListing
+        ? `/api/reviewed-seller-summary?id=${encodeURIComponent(row.id)}`
+        : `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research`;
       const [response, contactResponse] = await Promise.all([
         fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`, { signal: controller.signal }),
-        fetch(`/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research`, { signal: controller.signal }),
+        fetch(contactEndpoint, { signal: controller.signal }),
       ]);
       const [payload, contactPayload] = await Promise.all([response.json(), contactResponse.json()]);
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Listing detail is unavailable');
       if (listingRequestRef.current.sequence !== sequence || payload.listing?.id !== row.id) return;
       setListingDetail(payload.listing);
-      if (contactResponse.ok && contactPayload.success) setListingSeller(contactPayload);
+      if (contactResponse.ok && workbookListing && contactPayload.status === 'ok') {
+        const analytics = contactPayload.analytics as ReviewedSellerAnalytics | null | undefined;
+        setListingSeller({
+          contact_available: Boolean(contactPayload.contact_available),
+          dealer_name: contactPayload.seller?.name || undefined,
+          phone_display: contactPayload.seller?.phone || undefined,
+          contact_source: 'OWNER_APPROVED_WORKBOOK',
+          dealer_stats: analytics ? {
+            total_posts: Number(analytics.total_posts || 0),
+            wts_posts: Number(analytics.wts_posts || 0),
+            wtb_posts: Number(analytics.wtb_posts || 0),
+            other_posts: Number(analytics.other_posts || 0),
+            first_post_at: analytics.first_post_at || null,
+            last_post_at: analytics.last_post_at || null,
+          } : null,
+        });
+      } else if (contactResponse.ok && contactPayload.success) {
+        setListingSeller(contactPayload);
+      }
     } catch (requestError) {
       if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
       if (listingRequestRef.current.sequence !== sequence) return;
@@ -654,8 +675,14 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   const displayRef = data?.resolvedRef || data?.reference || query;
 
-  const listings = (data?.rows || [])
+  const listings = [...(data?.rows || [])]
     .filter(row => !row.is_outlier)
+    .sort((left, right) => {
+      const priceDifference = Number(left.price_usd) - Number(right.price_usd);
+      if (Number.isFinite(priceDifference) && priceDifference !== 0) return priceDifference;
+      return String(left.listing_date || left.created_at || '').localeCompare(String(right.listing_date || right.created_at || ''))
+        || left.id.localeCompare(right.id);
+    })
     .slice(0, COMPARABLE_LISTING_PREVIEW_LIMIT);
   const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
   const visibleBrands = showAllBrands
@@ -1661,8 +1688,14 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
   cohortDial: string;
 }) {
   const [activeImage, setActiveImage] = useState(0);
+  const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const [copied, setCopied] = useState(false);
-  const images = detail?.image_urls || [];
+  const sourceImageEvidence = ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
+    .includes(String(detail?.image_evidence_type || ''));
+  const images = sourceImageEvidence
+    ? [...new Set((detail?.image_urls || []).map(url => String(url || '').trim()).filter(url => url && !failedImages.has(url)))]
+    : [];
+  const visibleImageIndex = activeImage < images.length ? activeImage : 0;
   const observedAt = detail?.listing_date || summary.listing_date;
   const sellerLocation = [seller?.dealer_city, seller?.dealer_country]
     .map(value => String(value || '').trim())
@@ -1741,14 +1774,19 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
               <section style={{ background: '#f1f3f5', minHeight: 600, padding: 20 }}>
                 <div style={{ position: 'sticky', top: 84 }}>
                   <div style={{ minHeight: 500, height: 'min(68vh, 680px)', background: '#e5e7eb', display: 'grid', placeItems: 'center', overflow: 'hidden', borderRadius: 10 }}>
-                    <img src={images[activeImage]} alt={`${detail.brand} ${detail.reference} ${detail.image_evidence_type === 'REFERENCE_IMAGE' ? 'reference' : 'listing'} image`} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
+                    <img
+                      src={images[visibleImageIndex]}
+                      alt={`${detail.brand} ${detail.reference} source listing image`}
+                      onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
+                      style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }}
+                    />
                   </div>
                   {detail.image_evidence_notice && (
                     <div style={{ marginTop: 10, color: MUTED, fontSize: 12, lineHeight: 1.5 }}>
                       <strong style={{ color: NAVY }}>{detail.image_evidence_label || 'Image evidence'}:</strong> {detail.image_evidence_notice}
                     </div>
                   )}
-                  {images.length > 1 && <div className="flex gap-2" style={{ marginTop: 10, overflowX: 'auto' }}>{images.map((url, index) => <button type="button" key={url} onClick={() => setActiveImage(index)} aria-label={`Show image ${index + 1}`} style={{ width: 64, height: 64, border: `2px solid ${index === activeImage ? GOLD : 'transparent'}`, background: WHITE, padding: 2, flexShrink: 0, cursor: 'pointer' }}><img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></button>)}</div>}
+                  {images.length > 1 && <div className="flex gap-2" style={{ marginTop: 10, overflowX: 'auto' }}>{images.map((url, index) => <button type="button" key={url} onClick={() => setActiveImage(index)} aria-label={`Show image ${index + 1}`} style={{ width: 64, height: 64, border: `2px solid ${index === visibleImageIndex ? GOLD : 'transparent'}`, background: WHITE, padding: 2, flexShrink: 0, cursor: 'pointer' }}><img src={url} alt="" onError={() => setFailedImages(current => new Set(current).add(url))} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></button>)}</div>}
                 </div>
               </section>
             )}
@@ -1833,21 +1871,23 @@ function ListingDetailModal({ summary, detail, seller, loading, error, onClose, 
                     {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
                     {seller.phone_display && <div style={{ color: NAVY, fontSize: 13, fontWeight: 800, marginTop: 8 }}>{seller.phone_display}</div>}
                     {seller.dealer_stats ? (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }}>
-                        <Metric label="For sale" value={Number(seller.dealer_stats.wts_posts).toLocaleString()} />
-                        <Metric label="Looking for" value={Number(seller.dealer_stats.wtb_posts).toLocaleString()} />
-                        {seller.contact_source === 'OWNER_APPROVED_WORKBOOK' ? (
-                          <>
-                            <Metric label="Active" value={Number(seller.dealer_stats.active_listings).toLocaleString()} />
-                            <Metric label="Total posts" value={Number(seller.dealer_stats.total_posts).toLocaleString()} />
-                          </>
-                        ) : (
-                          <>
-                            <Metric label="Reviews" value={Number(seller.dealer_review_count || 0).toLocaleString()} />
-                            <Metric label="Common groups" value={Number(seller.dealer_group_count || 0).toLocaleString()} />
-                          </>
+                      <>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3" style={{ marginTop: 16 }} aria-label="Source poster activity">
+                          <Metric label="Total posts" value={Number(seller.dealer_stats.total_posts).toLocaleString()} />
+                          <Metric label="For sale" value={Number(seller.dealer_stats.wts_posts).toLocaleString()} />
+                          <Metric label="Looking for" value={Number(seller.dealer_stats.wtb_posts).toLocaleString()} />
+                          <Metric
+                            label={seller.dealer_stats.active_listings != null ? 'Active' : 'Other posts'}
+                            value={Number(seller.dealer_stats.active_listings ?? seller.dealer_stats.other_posts ?? 0).toLocaleString()}
+                          />
+                        </div>
+                        {(seller.dealer_stats.first_post_at || seller.dealer_stats.last_post_at) && (
+                          <div className="flex flex-wrap gap-x-4 gap-y-1" style={{ color: MUTED, fontSize: 11, marginTop: 10 }}>
+                            {seller.dealer_stats.first_post_at && <span>First observed: {seller.dealer_stats.first_post_at.split('T')[0]}</span>}
+                            {seller.dealer_stats.last_post_at && <span>Last observed: {seller.dealer_stats.last_post_at.split('T')[0]}</span>}
+                          </div>
                         )}
-                      </div>
+                      </>
                     ) : (
                       <div style={{ marginTop: 16, padding: 12, background: LIGHT_GRAY, color: MUTED, fontSize: 12 }}>
                         Dealer activity is not available until an applied-lineage aggregate is verified.

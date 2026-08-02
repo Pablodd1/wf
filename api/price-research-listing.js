@@ -120,6 +120,11 @@ module.exports = async function handler(req, res) {
             image_urls: workbookListing.image_urls,
             thumbnail_url: workbookListing.thumbnail_url,
             has_images: workbookListing.has_images,
+            image_evidence_type: workbookListing.has_images ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
+            image_evidence_label: workbookListing.has_images ? 'Source-supplied listing image' : null,
+            image_evidence_notice: workbookListing.has_images
+              ? 'Exact image URL retained with this reviewed source listing.'
+              : null,
             image_provenance: workbookListing.has_images ? 'source_supplied' : 'none',
             data_quality_issues: [],
             data_quality_review_required: false,

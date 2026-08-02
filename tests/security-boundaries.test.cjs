@@ -143,6 +143,12 @@ test('Price Research shows contact-redacted source evidence and only verified se
   assert.match(page, /Posted by/);
   assert.match(page, /No identity or contact data is guessed/);
   assert.match(page, /api\/listing-contact/);
+  assert.match(page, /api\/reviewed-seller-summary/);
+  assert.match(page, /Source poster activity/);
+  assert.match(page, /Total posts/);
+  assert.match(page, /For sale/);
+  assert.match(page, /Looking for/);
+  assert.doesNotMatch(page, /dealer_review_count|dealer_group_count|Common groups/);
   assert.doesNotMatch(page, /title\.startsWith\('Raw source'\)/);
   assert.match(page, /seller\.dealer_stats \?/);
   assert.doesNotMatch(page, /seller\.dealer_stats\?\.wts_posts \|\| 0/);
