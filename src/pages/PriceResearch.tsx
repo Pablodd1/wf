@@ -319,6 +319,7 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
+const COMPARABLE_LISTING_PREVIEW_LIMIT = 12;
 const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
 
 const DIAL_SWATCHES: Record<string, string> = {
@@ -412,13 +413,7 @@ export default function PriceResearch() {
     controller: null,
   });
   const [showAllBrands, setShowAllBrands] = useState(false);
-  const [viewerRole, setViewerRole] = useState('public');
-  const [reviewedInventory, setReviewedInventory] = useState<ReviewedMarketResponse | null>(null);
-  const [reviewedLoading, setReviewedLoading] = useState(false);
-  const [reviewedError, setReviewedError] = useState('');
   const [analyticsNotice, setAnalyticsNotice] = useState('');
-  const [reviewedFilter, setReviewedFilter] = useState({ brand: '', reference: '' });
-  const reviewedRequestRef = useRef<AbortController | null>(null);
 
   // ── Drill-down picker state (brand → model → reference) ──
   const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
@@ -429,41 +424,6 @@ export default function PriceResearch() {
   const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; analytics_ready?: boolean; sample_capped?: boolean; avg_price: number | null }[]>([]);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
   const [pickerError, setPickerError] = useState('');
-
-  const fetchReviewedInventory = useCallback(async (ref: string, brand = '', page = 1) => {
-    const reference = ref.trim();
-    if (!reference) return;
-    reviewedRequestRef.current?.abort();
-    const controller = new AbortController();
-    reviewedRequestRef.current = controller;
-    setReviewedLoading(true);
-    setReviewedError('');
-    setReviewedInventory(null);
-    setReviewedFilter({ brand, reference });
-    try {
-      const params = new URLSearchParams({ reference, page: String(page), pageSize: '24' });
-      if (brand) params.set('brand', brand);
-      const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal: controller.signal });
-      const payload = await response.json() as ReviewedMarketResponse;
-      if (!response.ok || payload.status === 'error' || payload.success === false) {
-        throw new Error(payload.error || 'Reviewed listing evidence is temporarily unavailable');
-      }
-      setReviewedInventory({
-        ...payload,
-        page: Number(payload.page || page),
-        pageSize: Number(payload.pageSize || 24),
-        total: Number(payload.total || 0),
-        hasMore: Boolean(payload.hasMore),
-        records: Array.isArray(payload.records) ? payload.records : (payload.listings || []),
-      });
-    } catch (requestError) {
-      if (requestError instanceof DOMException && requestError.name === 'AbortError') return;
-      setReviewedError(requestError instanceof Error ? requestError.message : 'Reviewed listing evidence is temporarily unavailable');
-      setReviewedInventory(null);
-    } finally {
-      if (reviewedRequestRef.current === controller) setReviewedLoading(false);
-    }
-  }, []);
 
   // ── Per-model market stats (min-5 exposure, avg + date range) ──
   interface ModelStats {
@@ -524,7 +484,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     setSelectedRow(null);
     setListingDetail(null);
     setListingSeller(null);
-    if (evidencePage === 1) void fetchReviewedInventory(normalizedReference, brand, 1);
     try {
       const params = new URLSearchParams({ reference: normalizedReference });
       if (brand) params.set('brand', brand);
@@ -537,18 +496,15 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         const resolvedReference = d.resolvedRef || d.reference || normalizedReference;
         setQuery(resolvedReference);
         if (d.brand) setQueryBrand(d.brand);
-        if (evidencePage === 1 && (d.brand !== brand || resolvedReference !== normalizedReference)) {
-          void fetchReviewedInventory(resolvedReference, d.brand || brand, 1);
-        }
       }
       else setAnalyticsNotice(brand
-        ? 'Qualified price analytics are pending for this reference. Listings remain available below.'
-        : 'Qualified price analytics could not resolve a brand. All exact-reference listings remain available below.');
+        ? 'Qualified price analytics are pending for this reference.'
+        : 'Qualified price analytics could not resolve a brand. Select a brand to run the exact comparable analysis.');
     } catch { setAnalyticsNotice(brand
-      ? 'Qualified price analytics are temporarily unavailable. Listings remain available below.'
-      : 'Qualified price analytics could not resolve a brand. All exact-reference listings remain available below.'); }
+      ? 'Qualified price analytics are temporarily unavailable.'
+      : 'Qualified price analytics could not resolve a brand. Select a brand to run the exact comparable analysis.'); }
     finally { setLoading(false); }
-  }, [fetchReviewedInventory]);
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -573,15 +529,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         }
       })
       .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load reviewed inventory brands:', error); });
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/dealer-auth', { credentials: 'include', signal: controller.signal })
-      .then(response => response.ok ? response.json() : null)
-      .then(payload => setViewerRole(payload?.authenticated ? String(payload?.user?.role || 'dealer') : 'public'))
-      .catch(error => { if (error?.name !== 'AbortError') setViewerRole('public'); });
     return () => controller.abort();
   }, []);
 
@@ -627,7 +574,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   }, []);
 
   useEffect(() => () => listingRequestRef.current.controller?.abort(), []);
-  useEffect(() => () => reviewedRequestRef.current?.abort(), []);
 
   useEffect(() => {
     if (!selectedRow) return;
@@ -700,15 +646,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   const displayRef = data?.resolvedRef || data?.reference || query;
 
-  const listings = (data?.rows || []).filter(r => !r.is_outlier);
-  const retainedListings = data?.retained_rows || [];
-  const reviewedListings = reviewedInventory?.records || reviewedInventory?.listings || [];
-  const reviewedPageCount = Math.max(1, Math.ceil(Number(reviewedInventory?.total || 0) / Number(reviewedInventory?.pageSize || 24)));
+  const listings = (data?.rows || [])
+    .filter(row => !row.is_outlier)
+    .slice(0, COMPARABLE_LISTING_PREVIEW_LIMIT);
   const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
   const visibleBrands = showAllBrands
     ? pBrands
     : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
-  const canReviewExcludedEvidence = viewerRole === 'admin' || viewerRole === 'reviewer';
 
   const outlierReason = (reason: RowData['outlier_reason']) => {
     if (reason === 'BELOW_MARKET_PLAUSIBILITY_FLOOR') return 'Below market plausibility floor';
@@ -931,55 +875,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           <div style={{ padding: 16, borderRadius: 8, marginBottom: 24, backgroundColor: '#fffaf0', border: '1px solid #ead9a2', color: '#7a5900', fontSize: 13 }}>
             {analyticsNotice}
           </div>
-        )}
-
-        {(reviewedLoading || reviewedError || reviewedInventory) && (
-          <section aria-label="Listing evidence" style={{ marginBottom: 30, border: `1px solid ${BORDER}`, borderRadius: 12, overflow: 'hidden', background: '#fbfaf7' }}>
-            <div style={{ padding: '18px clamp(14px, 3vw, 24px)', borderBottom: `1px solid ${BORDER}` }}>
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                  <h2 style={{ color: NAVY, fontSize: 18, fontWeight: 800 }}>Available listings</h2>
-                  <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4, maxWidth: 780 }}>
-                    Exact listing evidence for {reviewedFilter.brand ? `${reviewedFilter.brand} ` : ''}{reviewedFilter.reference}. Source-supplied images appear first, followed by source-confirmed USD prices. Prices without explicit source currency remain separate from market averages.
-                  </p>
-                </div>
-                {reviewedInventory && (
-                  <div style={{ color: NAVY, fontSize: 13, fontWeight: 800 }}>
-                    {reviewedInventory.totalIsEstimate ? '~' : ''}{reviewedInventory.total.toLocaleString()} listing{reviewedInventory.total === 1 ? '' : 's'}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {reviewedLoading && <div style={{ padding: 30, color: MUTED, textAlign: 'center' }}>Loading listings…</div>}
-            {!reviewedLoading && reviewedError && <div role="alert" style={{ padding: 20, color: RED }}>{reviewedError}</div>}
-            {!reviewedLoading && !reviewedError && reviewedInventory && reviewedListings.length === 0 && (
-              <div style={{ padding: 30, color: MUTED, textAlign: 'center' }}>No listing matches this exact brand and reference.</div>
-            )}
-            {!reviewedLoading && reviewedListings.length > 0 && (
-              <div className="grid gap-4 p-4 md:grid-cols-2">
-                {reviewedListings.map(record => <ReviewedEvidenceCard key={record.id} record={record} analytics={data} />)}
-              </div>
-            )}
-
-            {!reviewedLoading && reviewedInventory && reviewedInventory.total > reviewedInventory.pageSize && (
-              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" style={{ padding: '14px clamp(12px, 3vw, 24px)', borderTop: `1px solid ${BORDER}` }}>
-                <button
-                  type="button"
-                  disabled={reviewedInventory.page <= 1}
-                  onClick={() => void fetchReviewedInventory(reviewedFilter.reference, reviewedFilter.brand, reviewedInventory.page - 1)}
-                  style={{ minHeight: 44, justifySelf: 'start', border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '8px 14px', borderRadius: 6, opacity: reviewedInventory.page <= 1 ? 0.45 : 1 }}
-                >Previous</button>
-                <span style={{ color: MUTED, fontSize: 12 }}>Page {reviewedInventory.page.toLocaleString()} of {reviewedPageCount.toLocaleString()}</span>
-                <button
-                  type="button"
-                  disabled={!reviewedInventory.hasMore}
-                  onClick={() => void fetchReviewedInventory(reviewedFilter.reference, reviewedFilter.brand, reviewedInventory.page + 1)}
-                  style={{ minHeight: 44, justifySelf: 'end', border: `1px solid ${BORDER}`, background: NAVY, color: WHITE, padding: '8px 14px', borderRadius: 6, opacity: reviewedInventory.hasMore ? 1 : 0.45 }}
-                >Next</button>
-              </div>
-            )}
-          </section>
         )}
 
         {data && (
@@ -1332,9 +1227,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
             {/* ── Listings Table ──────────────────────────────── */}
             {data.analytics_ready ? (
-            <details style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '18px 0', marginBottom: 24 }}>
+            <details open style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}`, padding: '18px 0', marginBottom: 24 }}>
               <summary style={{ cursor: 'pointer', color: NAVY, fontWeight: 700, fontSize: 14, marginBottom: 16 }}>
-                How this price was calculated
+                Analysis outcome and methodology
               </summary>
               <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-6">
                 <div style={{ flex: 1 }}>
@@ -1401,99 +1296,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </section>
             )}
 
-            {canReviewExcludedEvidence && data.outlier_rows.length > 0 && (
-              <section style={{ marginBottom: 28 }}>
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" style={{ marginBottom: 10 }}>
-                  <div>
-                    <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Excluded evidence for human review</h3>
-                    <p style={{ fontSize: 12, color: MUTED, marginTop: 3 }}>
-                      These rows are preserved, not discarded. Most require a currency, dial, bundle, or duplicate decision; only rows labeled with an IQR or plausibility reason are statistical price outliers.
-                    </p>
-                  </div>
-                  <Link
-                    to="/review-queue"
-                    className="inline-flex min-h-10 shrink-0 items-center justify-center rounded-md px-4 text-xs font-bold"
-                    style={{ background: NAVY, color: WHITE }}
-                  >
-                    Open Human Review Queue
-                  </Link>
-                </div>
-                <div style={{ overflowX: 'auto', borderTop: `1px solid ${BORDER}` }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760, fontSize: 13 }}>
-                    <thead><tr style={{ textAlign: 'left', color: MUTED, borderBottom: `1px solid ${BORDER}` }}>
-                      <th style={{ padding: '10px 8px' }}>Price</th><th style={{ padding: '10px 8px' }}>Date</th>
-                      <th style={{ padding: '10px 8px' }}>Reason</th><th style={{ padding: '10px 8px' }}>Condition</th>
-                      <th style={{ padding: '10px 8px' }}>Dial</th><th style={{ padding: '10px 8px' }}>Source</th>
-                    </tr></thead>
-                    <tbody>
-                      {data.outlier_rows.slice(0, 100).map((row, index) => (
-                        <tr
-                          key={row.id || `${row.created_at}-${row.price_usd}-${index}`}
-                          tabIndex={0}
-                          role="button"
-                          aria-label={`View source detail for excluded observation${row.source_price_amount && row.source_currency ? ` at ${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}` : Number.isFinite(Number(row.price_usd)) ? ` at $${Number(row.price_usd).toLocaleString()}` : ''}`}
-                          onClick={() => void openListing(row)}
-                          onKeyDown={event => {
-                            if (event.key === 'Enter' || event.key === ' ') {
-                              event.preventDefault();
-                              void openListing(row);
-                            }
-                          }}
-                          style={{ borderBottom: `1px solid ${BORDER}`, cursor: 'pointer' }}
-                          onMouseEnter={event => (event.currentTarget.style.backgroundColor = '#fff9e8')}
-                          onMouseLeave={event => (event.currentTarget.style.backgroundColor = WHITE)}
-                        >
-                          <td style={{ padding: '11px 8px', color: RED, fontWeight: 700 }}>
-                            {row.source_price_amount && row.source_currency
-                              ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
-                              : Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0
-                                ? `$${Number(row.price_usd).toLocaleString()}`
-                                : 'No price'}
-                          </td>
-                          <td style={{ padding: '11px 8px' }}>{row.listing_date ? row.listing_date.split('T')[0] : 'Unknown'}</td>
-                          <td style={{ padding: '11px 8px', color: '#8a6500' }}>{outlierReason(row.outlier_reason)}</td>
-                          <td style={{ padding: '11px 8px' }}>{row.condition || 'Unspecified'}</td>
-                          <td style={{ padding: '11px 8px' }}>{row.dial_color || 'Unspecified'}</td>
-                          <td style={{ padding: '11px 8px', color: MUTED }}>
-                            <span className="flex items-center gap-2">{row.source || 'Unknown'} <Eye size={14} aria-hidden="true" /></span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </section>
-            )}
-
-            {retainedListings.length > 0 && (
-              <section style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 24 }}>
-                <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}` }}>
-                  <h3 style={{ color: NAVY, fontSize: 15, fontWeight: 700 }}>Listing evidence</h3>
-                  <p style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
-                    These listings remain available with their image, seller, dial, condition, and original post. Prices stay outside averages until source currency and dated FX provenance pass the deterministic eligibility checks.
-                  </p>
-                </div>
-                {retainedListings.map(row => (
-                  <ListingRow
-                    key={row.id}
-                    row={row}
-                    title={`${data?.brand || ''} ${displayRef}`.trim()}
-                    onOpen={() => void openListing(row)}
-                  />
-                ))}
-              </section>
-            )}
-
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
               <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
-                Qualified Comparable Sample ({listings.length} shown of {data.count.toLocaleString()} included)
+                Qualified comparable listings ({listings.length} shown of {data.count.toLocaleString()} included)
               </div>
               {listings.length === 0 && (
                 <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: 14 }}>
                   No qualified comparable listings are available for this cohort.
                 </div>
               )}
-              {listings.slice(0, 100).map(row => (
+              {listings.map(row => (
                 <ListingRow
                   key={row.id}
                   row={row}
@@ -1501,23 +1313,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   onOpen={() => void openListing(row)}
                 />
               ))}
-              {(data.evidence?.comparable_pages || 1) > 1 && (
-                <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2" style={{ padding: '14px clamp(12px, 3vw, 24px)', borderTop: `1px solid ${BORDER}` }}>
-                  <button
-                    type="button"
-                    disabled={(data.evidence?.comparable_page || 1) <= 1 || loading}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) - 1)}
-                    style={{ minHeight: 44, justifySelf: 'start', border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) <= 1 ? 0.45 : 1 }}
-                  >Previous</button>
-                  <span style={{ color: MUTED, fontSize: 12 }}>
-                    Page {data.evidence?.comparable_page || 1} of {data.evidence?.comparable_pages || 1}
-                  </span>
-                  <button
-                    type="button"
-                    disabled={(data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) || loading}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, (data.evidence?.comparable_page || 1) + 1)}
-                    style={{ minHeight: 44, justifySelf: 'end', border: `1px solid ${BORDER}`, background: NAVY, color: WHITE, padding: '8px 14px', borderRadius: 6, opacity: (data.evidence?.comparable_page || 1) >= (data.evidence?.comparable_pages || 1) ? 0.45 : 1 }}
-                  >Next</button>
+              {data.count > COMPARABLE_LISTING_PREVIEW_LIMIT && (
+                <div style={{ padding: '12px 24px', borderTop: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
+                  Showing a compact source-evidence sample for speed. Outliers and other exclusions are summarized above and are not displayed as watch listings.
                 </div>
               )}
             </div>

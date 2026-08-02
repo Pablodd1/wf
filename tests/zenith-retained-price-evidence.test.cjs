@@ -9,7 +9,7 @@ const root = path.join(__dirname, '..');
 const api = fs.readFileSync(path.join(root, 'api', 'price-research.js'), 'utf8');
 const page = fs.readFileSync(path.join(root, 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
 
-test('reviewed Zenith listings remain inspectable without entering price analytics', () => {
+test('reviewed Zenith exclusions remain retained for audit but are not customer comparable cards', () => {
   assert.match(api, /retainedEvidenceRows = requiredFieldExclusions\.filter/);
   assert.match(api, /isOwnerReviewedWorkbookRow\(row\)/);
   assert.match(api, /isReviewedPaneraiReleaseRecord\(row\)/);
@@ -19,9 +19,8 @@ test('reviewed Zenith listings remain inspectable without entering price analyti
   assert.match(api, /source_price_amount: r\.source_price_amount \|\| null/);
   const retainedBlock = api.split('retained_rows:')[1].split('rows: serializedComparables')[0];
   assert.doesNotMatch(retainedBlock, /stored_price_usd/);
-  assert.match(page, /Listing evidence/);
-  assert.match(page, /Prices stay outside averages until source currency and dated FX provenance pass the deterministic eligibility checks/);
+  assert.doesNotMatch(page, /retainedListings\.map/);
+  assert.match(page, /\.filter\(row => !row\.is_outlier\)/);
+  assert.match(page, /Outliers and other exclusions are summarized above and are not displayed as watch listings/);
   assert.match(page, /data\.retained_evidence_count \?\? data\.excludedEvidenceCount/);
-  assert.match(page, /Price not available/);
-  assert.match(page, /This reviewed listing is displayed for its source post, image, seller, and watch identity/);
 });
