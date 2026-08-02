@@ -96,6 +96,22 @@ test('maps exact reviewed evidence to the Trading Floor-compatible contract', ()
   assert.equal(mapped.evidence_coverage.price.analytics_eligible, true);
 });
 
+test('labels generated workbook text as a summary rather than an original post', () => {
+  const generated = api.mapReviewedRecord(record({ raw_message: 'WTS Rolex 126500LN White 30000.00' }));
+  assert.equal(generated.raw_message_scope, 'normalized_summary');
+  assert.equal(generated.raw_message_evidence_type, 'WORKBOOK_NORMALIZED_SUMMARY');
+  const recovered = api.mapReviewedRecord(record({
+    raw_message: 'NTQ - 5821/1a green',
+    listing_type: 'WTB',
+    model: 'Cubitus',
+    raw_reference: '5821/1a',
+    normalized_reference: '5821/1A',
+    source_price_amount: null,
+  }));
+  assert.equal(recovered.raw_message_scope, 'stored_source_message');
+  assert.equal(recovered.raw_message_evidence_type, 'SOURCE_RAW_MESSAGE');
+});
+
 test('removes the entire image contract when no exact supplied image exists', () => {
   const mapped = api.mapReviewedRecord(record({
     user_image_url: null,
@@ -272,6 +288,7 @@ test('endpoint is read-only and reuses the exact-image then verified-USD v1 orde
   assert.doesNotMatch(source, /\.from\(['"]watch_records['"]\)/);
   assert.doesNotMatch(source, /\.(?:insert|upsert|update|delete)\s*\(/);
   assert.match(source, /query = query\.eq\('has_complete_identity', true\)/);
+  assert.match(source, /query = query\.neq\('verification_status', 'QUARANTINED_SOURCE_CONFLICT'\)/);
   assert.match(source, /order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
   assert.doesNotMatch(source, /order\('has_complete_identity'/);
   assert.doesNotMatch(source, /order\('workbook_price_usd'/);

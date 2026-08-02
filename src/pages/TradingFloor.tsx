@@ -76,7 +76,8 @@ interface ListingRecord {
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
   raw_message?: string | null;
-  raw_message_scope?: 'original_post' | 'stored_source_message' | 'unavailable';
+  raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
+  raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
   raw_message_truncated?: boolean;
   seller_name?: string | null;
   seller_phone?: string | null;
@@ -849,9 +850,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
 
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Original listing</h2>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{listing.raw_message_scope === 'normalized_summary' ? 'Listing summary' : 'Original listing'}</h2>
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
-            Raw source message
+            {listing.raw_message_scope === 'normalized_summary' ? 'Normalized workbook text · original source pending' : 'Raw source message'}
           </div>
           {listing.raw_message ? (
             <>

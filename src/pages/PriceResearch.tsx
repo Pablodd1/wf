@@ -136,6 +136,8 @@ interface ReviewedMarketRecord {
   phone_number?: string | null;
   seller_phone?: string | null;
   raw_message?: string | null;
+  raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
+  raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
   listing_type?: string | null;
   brand?: string | null;
   brand_scope?: string | null;
@@ -1796,7 +1798,7 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
 
       {record.raw_message && (
         <div style={{ marginTop: 14 }}>
-          <div style={{ color: MUTED, fontSize: 10, fontWeight: 800, letterSpacing: '.07em', marginBottom: 6 }}>ORIGINAL LISTING</div>
+          <div style={{ color: MUTED, fontSize: 10, fontWeight: 800, letterSpacing: '.07em', marginBottom: 6 }}>{record.raw_message_scope === 'normalized_summary' ? 'LISTING SUMMARY · ORIGINAL SOURCE PENDING' : 'ORIGINAL LISTING'}</div>
           <pre style={{ margin: 0, padding: 12, background: '#111827', color: '#e5e7eb', borderRadius: 7, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 260, overflowY: 'auto', fontSize: 11, lineHeight: 1.5 }}>{record.raw_message}</pre>
         </div>
       )}

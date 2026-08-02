@@ -77,6 +77,23 @@ function evidenceValuePresent(value) {
     && String(value).trim() !== '';
 }
 
+function isNormalizedWorkbookSummary(row) {
+  const raw = cleanExactText(row.raw_message, 10_000).replace(/\s+/g, ' ');
+  if (!raw || !row.source_file || !/\.xlsx$/i.test(String(row.source_file))) return false;
+  const brand = cleanExactText(row.supplied_brand || row.canonical_brand || row.brand_scope, 80);
+  const reference = cleanExactText(row.normalized_reference || row.raw_reference || row.catalog_reference, 80);
+  const dial = cleanExactText(row.dial_color || row.catalog_dial, 80);
+  const type = cleanExactText(row.listing_type || 'OTHER', 12).toUpperCase();
+  const amount = positiveNumber(row.source_price_amount);
+  const base = [type, brand, reference, dial].filter(Boolean).join(' ');
+  const candidates = new Set([base]);
+  if (amount !== null) {
+    candidates.add(`${base} ${amount.toFixed(2)}`);
+    candidates.add(`${base} ${amount}`);
+  }
+  return candidates.has(raw);
+}
+
 function recordEvidenceCoverage({
   brand,
   model,
@@ -178,6 +195,7 @@ function mapReviewedRecord(row) {
     && locallyCompleteIdentity
     && !invalidReference;
   const priceEligible = hasCompleteIdentity && verifiedUsd !== null;
+  const normalizedSummary = isNormalizedWorkbookSummary(row);
   const evidenceCoverage = recordEvidenceCoverage({
     brand,
     model,
@@ -211,6 +229,8 @@ function mapReviewedRecord(row) {
     listing_date: row.posting_date || null,
     created_at: row.posting_date || row.imported_at || null,
     raw_message: row.raw_message || null,
+    raw_message_scope: normalizedSummary ? 'normalized_summary' : 'stored_source_message',
+    raw_message_evidence_type: normalizedSummary ? 'WORKBOOK_NORMALIZED_SUMMARY' : 'SOURCE_RAW_MESSAGE',
     seller_name: sellerName,
     seller_phone: sellerPhone,
     contact_publication_approved: contactApproved,
@@ -388,6 +408,7 @@ module.exports = async function handler(req, res) {
     if (brand) query = query.eq('brand_scope', brand);
     if (reference) query = query.eq('reference_search_key', reference);
     if (exactDial) query = query.eq('dial_color', exactDial);
+    query = query.neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT');
     query = query.eq('has_complete_identity', true);
     if (imagesOnly) query = query.eq('has_exact_source_image', true);
     if (listingType) query = query.eq('listing_type', listingType);
@@ -440,6 +461,7 @@ module.exports.referenceIsPriceToken = referenceIsPriceToken;
 module.exports.recordEvidenceCoverage = recordEvidenceCoverage;
 module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.mapReviewedRecord = mapReviewedRecord;
+module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;
 module.exports.parseCursorPage = parseCursorPage;
 module.exports.publicationBrandsFromSummary = publicationBrandsFromSummary;
 module.exports.boundedPage = boundedPage;
