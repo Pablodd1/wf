@@ -1289,7 +1289,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                       Price statistics and charts require at least five approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
-                      {data.sampledListings.toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · 0 qualified comparables
+                      {data.sampledListings.toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · {data.count.toLocaleString()} qualified comparable{data.count === 1 ? '' : 's'}
                     </div>
                   </div>
                 </div>

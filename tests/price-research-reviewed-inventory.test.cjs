@@ -34,6 +34,11 @@ test('outliers remain visible as aggregate methodology, never as customer watch 
   assert.doesNotMatch(pageRender, /Excluded evidence for human review|View source detail for excluded observation/);
 });
 
+test('sub-five cohorts report their real qualified comparable count', () => {
+  assert.match(pageRender, /data\.count\.toLocaleString\(\)\} qualified comparable/);
+  assert.doesNotMatch(pageRender, /0 qualified comparables/);
+});
+
 test('brand browsing still comes from the gated reviewed publication inventory', () => {
   assert.match(source, /fetch\('\/api\/reviewed-market-inventory\?page=1&pageSize=12'/);
   assert.match(source, /payload\.publicationBrands \|\| payload\.summary\?\.publicationBrands/);
