@@ -11,8 +11,10 @@ const {
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const EXPLICIT_USD_STATUS = 'SOURCE_EXPLICIT_USD_MATCH';
-const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source';
+const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
 const MULTIPLE_LISTING_IDENTITY_VALUES = ['multiple', 'multi', 'mixed'];
+const MIN_PUBLIC_WORKBOOK_PRICE_USD = 1_000;
+const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
 
 const EVIDENCE_CONTRACT = Object.freeze({
   scope: 'returned_page',
@@ -26,6 +28,14 @@ const EVIDENCE_CONTRACT = Object.freeze({
 function positiveNumber(value) {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function workbookPriceReviewReason(value) {
+  const price = positiveNumber(value);
+  if (price === null) return null;
+  if (price < MIN_PUBLIC_WORKBOOK_PRICE_USD) return 'WORKBOOK_PRICE_BELOW_PUBLIC_PLAUSIBILITY';
+  if (price > MAX_PUBLIC_WORKBOOK_PRICE_USD) return 'WORKBOOK_PRICE_ABOVE_PUBLIC_PLAUSIBILITY';
+  return null;
 }
 
 function exactHttpUrl(value) {
@@ -168,6 +178,7 @@ function mapReviewedRecord(row) {
   const contactApproved = row.contact_publication_approved === true;
   const sourceAmount = positiveNumber(row.source_price_amount);
   const workbookUsd = positiveNumber(row.workbook_price_usd);
+  const workbookPriceReview = workbookPriceReviewReason(row.workbook_price_usd);
   const verifiedUsd = row.has_verified_usd_price === true
     && row.price_evidence_status === EXPLICIT_USD_STATUS
     ? positiveNumber(row.verified_price_usd)
@@ -242,6 +253,7 @@ function mapReviewedRecord(row) {
     price_raw: sourceAmount,
     currency: row.source_currency || null,
     workbook_price_usd: workbookUsd,
+    workbook_price_review_reason: workbookPriceReview,
     source_price_amount: sourceAmount,
     source_price_text: row.source_price_text || null,
     source_currency: row.source_currency || null,
@@ -393,7 +405,7 @@ module.exports = async function handler(req, res) {
       'workbook_price_usd,source_price_amount,source_price_text,source_currency',
       'price_evidence_status,confidence,verification_status,user_image_url,imported_at',
       'has_exact_source_image,has_verified_usd_price,verified_price_usd,reference_search_key',
-      'public_reference,reference_is_price_token,has_complete_identity',
+      'public_reference,reference_is_price_token,has_complete_identity,has_supplied_price',
     ].join(',');
     let query = client
       .from(MARKET_SOURCE_VIEW)
@@ -402,19 +414,17 @@ module.exports = async function handler(req, res) {
       });
     query = pageWindow.reverse
       ? query
-        .order('workbook_price_usd', { ascending: true, nullsFirst: true })
-        .order('source_price_amount', { ascending: true, nullsFirst: true })
-        .order('has_exact_source_image', { ascending: true })
+        .order('has_supplied_price', { ascending: true })
         .order('has_verified_usd_price', { ascending: true })
         .order('verified_price_usd', { ascending: true, nullsFirst: true })
+        .order('has_exact_source_image', { ascending: true })
         .order('posting_date', { ascending: true, nullsFirst: true })
         .order('id', { ascending: false })
       : query
-        .order('workbook_price_usd', { ascending: false, nullsFirst: false })
-        .order('source_price_amount', { ascending: false, nullsFirst: false })
-        .order('has_exact_source_image', { ascending: false })
+        .order('has_supplied_price', { ascending: false })
         .order('has_verified_usd_price', { ascending: false })
         .order('verified_price_usd', { ascending: false, nullsFirst: false })
+        .order('has_exact_source_image', { ascending: false })
         .order('posting_date', { ascending: false, nullsFirst: false })
         .order('id', { ascending: true });
     if (brand) query = query.eq('brand_scope', brand);

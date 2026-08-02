@@ -164,6 +164,22 @@ test('never promotes unresolved workbook USD values into verified USD price', ()
   assert.equal(mapped.price_research_eligible, false);
 });
 
+test('holds implausible workbook-only amounts for review instead of displaying them as USD', () => {
+  const mapped = api.mapReviewedRecord(record({
+    workbook_price_usd: '25000000000',
+    source_price_amount: null,
+    source_price_text: null,
+    source_currency: null,
+    price_evidence_status: 'CURRENCY_AMBIGUOUS_OR_MISSING',
+    has_verified_usd_price: false,
+    verified_price_usd: null,
+  }));
+  assert.equal(mapped.workbook_price_usd, 25000000000);
+  assert.equal(mapped.workbook_price_review_reason, 'WORKBOOK_PRICE_ABOVE_PUBLIC_PLAUSIBILITY');
+  assert.equal(mapped.price_usd, null);
+  assert.equal(mapped.price_research_eligible, false);
+});
+
 test('reference punctuation variants share one exact key without changing display reference', () => {
   assert.equal(api.referenceComparisonKey('5712/1A'), '57121A');
   assert.equal(api.referenceComparisonKey('5712-1A'), '57121A');
@@ -297,8 +313,9 @@ test('public brand filters preserve punctuation and exact references use exact c
   assert.match(source, /count: preciseCount \? 'exact' : scopedFilter \? 'estimated' : undefined/);
 });
 
-test('endpoint is read-only and globally places supplied-price rows before no-price rows', () => {
+test('endpoint is read-only and orders by price evidence without ranking ambiguous workbook amounts', () => {
   assert.match(source, /\.from\(MARKET_SOURCE_VIEW\)/);
+  assert.match(source, /const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2'/);
   assert.doesNotMatch(source, /\.from\(['"]watch_records['"]\)/);
   assert.doesNotMatch(source, /\.(?:insert|upsert|update|delete)\s*\(/);
   assert.match(source, /query = query\.eq\('has_complete_identity', true\)/);
@@ -306,7 +323,9 @@ test('endpoint is read-only and globally places supplied-price rows before no-pr
   assert.match(source, /query = query\.not\('dial_color', 'ilike', value\)/);
   assert.match(source, /query = query\.not\('model', 'ilike', value\)/);
   assert.match(source, /query = query\.neq\('verification_status', 'QUARANTINED_SOURCE_CONFLICT'\)/);
-  assert.match(source, /order\('workbook_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('source_price_amount', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
+  assert.match(source, /order\('has_supplied_price', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
+  assert.doesNotMatch(source, /order\('workbook_price_usd'/);
+  assert.doesNotMatch(source, /order\('source_price_amount'/);
   assert.doesNotMatch(source, /order\('has_complete_identity'/);
   assert.doesNotMatch(source, /catalog_image_url|final_image_url|display_image_url/);
 });

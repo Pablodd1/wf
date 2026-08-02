@@ -48,6 +48,7 @@ interface ListingRecord {
   reference: string | null;
   price_usd: number | null;
   workbook_price_usd?: number | null;
+  workbook_price_review_reason?: string | null;
   price_raw: number | null;
   currency: string | null;
   source_price_amount?: number | null;
@@ -447,7 +448,7 @@ export default function TradingFloor() {
               ? ' listings'
               : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> listings</>}
           </span>
-          <span>Highest supplied prices first; listings without a supplied price last.</span>
+          <span>Source-confirmed USD first; other supplied prices next; no-price requests last.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
@@ -970,16 +971,21 @@ function getListingMeta(listing: ListingRecord) {
   const postedDate = formatListingDate(listing.listing_date);
   const verifiedUsd = verifiedUsdPrice(listing);
   const reviewedWorkbookUsd = reviewedWorkbookUsdPrice(listing);
+  const workbookPriceNeedsReview = Boolean(cleanValue(listing.workbook_price_review_reason));
   const sourcePrice = formatSourcePrice(listing);
   const priceLabel = verifiedUsd !== null
     ? formatUsdPrice(verifiedUsd)
-    : sourcePrice || (reviewedWorkbookUsd !== null
-      ? `Reviewed price: ${formatUsdPrice(reviewedWorkbookUsd)}`
-      : 'Price not provided');
+    : sourcePrice || (workbookPriceNeedsReview
+      ? 'Price requires review'
+      : reviewedWorkbookUsd !== null
+        ? `Reviewed price: ${formatUsdPrice(reviewedWorkbookUsd)}`
+        : 'Price not provided');
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'
     : sourcePrice
       ? 'Original source price · no USD conversion'
+      : workbookPriceNeedsReview
+        ? 'Workbook price anomaly - held for review'
       : reviewedWorkbookUsd !== null
         ? 'Workbook-reviewed USD - not in averages'
         : 'Price not provided';
