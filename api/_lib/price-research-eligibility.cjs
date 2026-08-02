@@ -3,10 +3,15 @@
 const { comparisonKey, normalizeDialValue, uniqueCatalogDials } = require('./dial-normalization.cjs');
 const { isLikelyYearAsPrice, isReferencePriceCollision } = require('./trading-record-safety.cjs');
 
+function isMultiListingSentinel(value) {
+  return /^(?:multiple|multi|mixed)$/i.test(String(value || '').trim());
+}
+
 function classifyResearchEligibility(row, catalog) {
   const price = Number(row?.price_usd);
   const ownerReviewedIdentity = row?.owner_reviewed_identity === true;
   if (Number(row?.bundle_candidate_count || 0) > 1) return 'BUNDLE_SOURCE_UNSPLIT';
+  if ([row?.model, row?.dial_color].some(isMultiListingSentinel)) return 'BUNDLE_SOURCE_UNSPLIT';
   if (!row?.brand || String(row.brand).trim().toUpperCase() === 'UNKNOWN') return 'MISSING_BRAND';
   if (!row?.reference) return 'MISSING_REFERENCE';
   if ((!catalog?.found || !catalog.model) && !ownerReviewedIdentity) return 'CATALOG_MODEL_UNCONFIRMED';
@@ -30,4 +35,4 @@ function classifyDemandEligibility(row, catalog) {
   return classifyResearchEligibility({ ...row, price_raw: null, price_usd: 1 }, catalog);
 }
 
-module.exports = { classifyDemandEligibility, classifyResearchEligibility };
+module.exports = { classifyDemandEligibility, classifyResearchEligibility, isMultiListingSentinel };

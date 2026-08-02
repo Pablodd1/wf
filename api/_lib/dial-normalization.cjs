@@ -4,6 +4,7 @@ const UNKNOWN_DIALS = new Set([
   '', '-', '--', 'N/A', 'N A', 'NA', 'NONE', 'NULL', 'UNKNOWN', 'UNK', 'UNSPECIFIED',
   'NOT SPECIFIED', 'NOT AVAILABLE', 'NOT KNOWN', 'NO COLOR', 'UNKNOWN COLOR', 'UNKNOW',
   'UNKNOWS', 'UNKNOWS COLOR', 'OTHER', 'COLOR DIAL', 'DIAL COLOR',
+  'MULTIPLE', 'MULTI', 'MIXED',
 ]);
 
 // Only spelling and dealer-shorthand aliases belong here. Market-significant

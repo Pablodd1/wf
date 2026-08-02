@@ -70,6 +70,25 @@ test('rejects unsplit bundle source rows from price analytics', () => {
   );
 });
 
+test('rejects multi-listing identity sentinels even for owner-reviewed rows', () => {
+  const ownerReviewed = {
+    ...valid,
+    owner_reviewed_identity: true,
+  };
+  assert.equal(
+    classifyResearchEligibility({ ...ownerReviewed, dial_color: 'multiple' }, { found: false }),
+    'BUNDLE_SOURCE_UNSPLIT',
+  );
+  assert.equal(
+    classifyResearchEligibility({ ...ownerReviewed, model: 'mixed' }, { found: false }),
+    'BUNDLE_SOURCE_UNSPLIT',
+  );
+  assert.equal(
+    classifyDemandEligibility({ ...ownerReviewed, dial_color: 'multi', price_usd: null }, { found: false }),
+    'BUNDLE_SOURCE_UNSPLIT',
+  );
+});
+
 test('rejects a numeric reference copied into the market price', () => {
   assert.equal(
     classifyResearchEligibility(
