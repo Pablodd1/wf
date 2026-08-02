@@ -294,6 +294,9 @@ test('endpoint is read-only and reuses the exact-image then verified-USD v1 orde
   assert.doesNotMatch(source, /\.from\(['"]watch_records['"]\)/);
   assert.doesNotMatch(source, /\.(?:insert|upsert|update|delete)\s*\(/);
   assert.match(source, /query = query\.eq\('has_complete_identity', true\)/);
+  assert.match(source, /MULTIPLE_LISTING_IDENTITY_VALUES/);
+  assert.match(source, /query = query\.not\('dial_color', 'ilike', value\)/);
+  assert.match(source, /query = query\.not\('model', 'ilike', value\)/);
   assert.match(source, /query = query\.neq\('verification_status', 'QUARANTINED_SOURCE_CONFLICT'\)/);
   assert.match(source, /order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
   assert.doesNotMatch(source, /order\('has_complete_identity'/);

@@ -25,7 +25,9 @@ test('Trading Floor shows USD only for source-confirmed eligible evidence', () =
   assert.match(page, /listing\.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH'/);
   assert.match(page, /listing\.price_research_eligible !== true/);
   assert.match(page, /verifiedUsd !== null[\s\S]*formatUsdPrice\(verifiedUsd\)/);
-  assert.match(page, /sourcePrice \|\| 'Price on request'/);
+  assert.doesNotMatch(page, /Price on request/);
+  assert.match(page, /Reviewed price:/);
+  assert.match(page, /Workbook-reviewed USD - not in averages/);
   assert.match(page, /Original source price · no USD conversion/);
   assert.match(page, /contact\.phone_display/);
   assert.match(page, /sellerAnalytics\.wts_posts/);

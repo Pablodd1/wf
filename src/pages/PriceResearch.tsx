@@ -1643,9 +1643,12 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
 function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
   const date = row.listing_date;
   const hasUsdPrice = Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0;
-  const hasSourcePrice = Number.isFinite(Number(row.source_price_amount))
-    && Number(row.source_price_amount) > 0
-    && Boolean(row.source_currency);
+  const hasSourcePrice = Boolean(
+    row.source_price_amount
+    && row.source_currency
+    && Number.isFinite(Number(row.source_price_amount))
+    && Number(row.source_price_amount) > 0,
+  );
   const priceLabel = hasUsdPrice
     ? `$${Number(row.price_usd).toLocaleString()}`
     : hasSourcePrice

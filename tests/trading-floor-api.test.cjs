@@ -376,7 +376,7 @@ test('strict release fails closed when PostgREST returns its 1,000-row ceiling',
 test('recent inventory excludes recycle rows and undated imports', async () => {
   const url = await runQuery({ quality: 'market' });
   assert.equal(url.searchParams.get('status'), 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)');
-  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","5712/1A","5712/1A-001","126710BLNR","16202ST","15500ST","15500","15400")');
+  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","116500LN","52506","5712/1A","5712/1A-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")');
   assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
@@ -388,7 +388,7 @@ test('all inventory still excludes recycle rows but includes undated imports', a
 
 test('reference search reaches dated and undated eligible market inventory', async () => {
   const url = await runQuery({ quality: 'market', q: '116610LN' });
-  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","5712/1A","5712/1A-001","126710BLNR","16202ST","15500ST","15500","15400")');
+  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","116500LN","52506","5712/1A","5712/1A-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")');
   assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 

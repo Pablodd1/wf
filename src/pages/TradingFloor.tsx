@@ -47,6 +47,7 @@ interface ListingRecord {
   model?: string | null;
   reference: string | null;
   price_usd: number | null;
+  workbook_price_usd?: number | null;
   price_raw: number | null;
   currency: string | null;
   source_price_amount?: number | null;
@@ -674,6 +675,11 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
           {meta.title}
         </button>
         <EvidenceIndicators listing={listing} imageVisible={cardHasImage} priceEvidenceLabel={meta.priceEvidenceLabel} />
+        {cleanValue(listing.seller_name) && (
+          <div className="mt-3 text-sm" style={{ color: MUTED }}>
+            Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name)}</span>
+          </div>
+        )}
       </div>
 
       <div className="mt-4 flex items-center justify-between gap-3">
@@ -963,15 +969,20 @@ function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
   const verifiedUsd = verifiedUsdPrice(listing);
+  const reviewedWorkbookUsd = reviewedWorkbookUsdPrice(listing);
   const sourcePrice = formatSourcePrice(listing);
   const priceLabel = verifiedUsd !== null
     ? formatUsdPrice(verifiedUsd)
-    : sourcePrice || 'Price on request';
+    : sourcePrice || (reviewedWorkbookUsd !== null
+      ? `Reviewed price: ${formatUsdPrice(reviewedWorkbookUsd)}`
+      : 'Price not provided');
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'
     : sourcePrice
       ? 'Original source price · no USD conversion'
-      : 'Price not supplied';
+      : reviewedWorkbookUsd !== null
+        ? 'Workbook-reviewed USD - not in averages'
+        : 'Price not provided';
   const title = buildListingTitle(listing);
 
   return {
@@ -1008,6 +1019,11 @@ function listingKindLabel(listing: ListingRecord) {
 function verifiedUsdPrice(listing: ListingRecord) {
   if (listing.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH' || listing.price_research_eligible !== true) return null;
   const value = Number(listing.price_usd);
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function reviewedWorkbookUsdPrice(listing: ListingRecord) {
+  const value = Number(listing.workbook_price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 

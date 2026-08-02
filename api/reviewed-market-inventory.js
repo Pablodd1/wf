@@ -12,6 +12,7 @@ const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const EXPLICIT_USD_STATUS = 'SOURCE_EXPLICIT_USD_MATCH';
 const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source';
+const MULTIPLE_LISTING_IDENTITY_VALUES = ['multiple', 'multi', 'mixed'];
 
 const EVIDENCE_CONTRACT = Object.freeze({
   scope: 'returned_page',
@@ -417,6 +418,12 @@ module.exports = async function handler(req, res) {
     if (exactDialVariants.length) query = query.in('dial_color', exactDialVariants);
     query = query.neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT');
     query = query.eq('has_complete_identity', true);
+    // Sentinel identity values describe a bundle/multi-listing, not a single
+    // watch configuration. Preserve them in reviewed inventory for correction.
+    for (const value of MULTIPLE_LISTING_IDENTITY_VALUES) {
+      query = query.not('dial_color', 'ilike', value);
+      query = query.not('model', 'ilike', value);
+    }
     if (imagesOnly) query = query.eq('has_exact_source_image', true);
     if (listingType) query = query.eq('listing_type', listingType);
     if (condition) query = query.eq('condition', condition);
@@ -461,6 +468,7 @@ module.exports = async function handler(req, res) {
 
 module.exports.EXPLICIT_USD_STATUS = EXPLICIT_USD_STATUS;
 module.exports.MARKET_SOURCE_VIEW = MARKET_SOURCE_VIEW;
+module.exports.MULTIPLE_LISTING_IDENTITY_VALUES = MULTIPLE_LISTING_IDENTITY_VALUES;
 module.exports.EVIDENCE_CONTRACT = EVIDENCE_CONTRACT;
 module.exports.exactHttpUrl = exactHttpUrl;
 module.exports.referenceComparisonKey = referenceComparisonKey;
