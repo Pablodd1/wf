@@ -1,7 +1,9 @@
 'use strict';
 
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const zlib = require('node:zlib');
 const mysql = require('mysql2/promise');
 const { SELECT_COLUMNS } = require('./collect.cjs');
 const {
@@ -14,27 +16,32 @@ const {
 } = require('./lib.cjs');
 const { normalizeSourceRecord } = require('./normalize-local.cjs');
 
-const WORKER_CONTRACT = 'wf-mariadb-continuous-shadow-v1';
+const WORKER_CONTRACT = 'wf-mariadb-continuous-shadow-v2';
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-function append(filePath, lines) {
-  if (lines.length) fs.appendFileSync(filePath, lines.join(''));
+function countSeed(name) {
+  return boundedInteger(process.env[name], 0, 0, Number.MAX_SAFE_INTEGER, name);
 }
 
-function byteSize(filePath) {
-  return fs.existsSync(filePath) ? fs.statSync(filePath).size : 0;
+function atomicGzip(filePath, lines) {
+  if (!lines.length) return null;
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const temporary = `${filePath}.${process.pid}.tmp`;
+  fs.writeFileSync(temporary, zlib.gzipSync(lines.join(''), { level: 6 }));
+  fs.renameSync(temporary, filePath);
+  return fs.statSync(filePath).size;
 }
 
-function prepareOutput(output, startAt) {
+function prepareOutput(output, startAt, startId = '') {
   fs.mkdirSync(output, { recursive: true });
   const paths = {
-    raw: path.join(output, 'raw-records.jsonl'),
-    proposals: path.join(output, 'normalization-proposals.jsonl'),
-    collectionErrors: path.join(output, 'collection-errors.csv'),
-    normalizationErrors: path.join(output, 'normalization-errors.csv'),
+    raw: path.join(output, 'raw'),
+    proposals: path.join(output, 'proposals'),
+    collectionErrors: path.join(output, 'collection-errors'),
+    normalizationErrors: path.join(output, 'normalization-errors'),
     checkpoint: path.join(output, 'checkpoint.json'),
     status: path.join(output, 'status.json'),
   };
@@ -44,35 +51,25 @@ function prepareOutput(output, startAt) {
     if (state.contract !== WORKER_CONTRACT || state.source_contract !== CONTRACT) {
       throw new Error('Continuous worker checkpoint contract mismatch');
     }
-    for (const [key, bytes] of Object.entries(state.file_bytes || {})) {
-      if (paths[key] && fs.existsSync(paths[key])) fs.truncateSync(paths[key], bytes);
-    }
   } else {
-    if ([paths.raw, paths.proposals, paths.collectionErrors, paths.normalizationErrors]
-      .some(filePath => fs.existsSync(filePath))) {
-      throw new Error('Continuous output exists without a checkpoint');
-    }
-    fs.writeFileSync(paths.collectionErrors, 'source_id,error_name,error_message\n');
-    fs.writeFileSync(paths.normalizationErrors, 'source_record_id,error_name,error_message\n');
     state = {
       contract: WORKER_CONTRACT,
       source_contract: CONTRACT,
       started_at: new Date().toISOString(),
       last_created_on: startAt,
-      last_id: '',
-      source_input_rows: 0,
-      raw_output_rows: 0,
-      collection_error_rows: 0,
-      normalization_output_rows: 0,
-      normalization_error_rows: 0,
-      file_bytes: {},
+      last_id: startId,
+      batch_sequence: 0,
+      source_input_rows: countSeed('MARIADB_CONTINUOUS_SEED_SOURCE_ROWS'),
+      raw_output_rows: countSeed('MARIADB_CONTINUOUS_SEED_RAW_ROWS'),
+      collection_error_rows: countSeed('MARIADB_CONTINUOUS_SEED_COLLECTION_ERRORS'),
+      normalization_output_rows: countSeed('MARIADB_CONTINUOUS_SEED_PROPOSAL_ROWS'),
+      normalization_error_rows: countSeed('MARIADB_CONTINUOUS_SEED_NORMALIZATION_ERRORS'),
+      compressed_bytes: 0,
     };
-    state.file_bytes = {
-      raw: 0,
-      proposals: 0,
-      collectionErrors: byteSize(paths.collectionErrors),
-      normalizationErrors: byteSize(paths.normalizationErrors),
-    };
+    const reconciled = reconciliation(state);
+    if (!reconciled.source_reconciled || !reconciled.normalization_reconciled) {
+      throw new Error('Continuous worker seed counts do not reconcile');
+    }
     atomicJson(paths.checkpoint, state);
   }
   return { paths, state };
@@ -87,16 +84,59 @@ function reconciliation(state) {
   };
 }
 
+function writeBatchSegments(paths, state, rows) {
+  const rawLines = [];
+  const proposalLines = [];
+  const collectionErrorLines = [];
+  const normalizationErrorLines = [];
+  for (const row of rows) {
+    state.source_input_rows += 1;
+    state.last_created_on = row.created_on;
+    state.last_id = String(row.id);
+    let source;
+    try {
+      source = sourceRecord(row);
+      rawLines.push(`${JSON.stringify(source)}\n`);
+      state.raw_output_rows += 1;
+    } catch (error) {
+      collectionErrorLines.push(`${csv(row.id)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`);
+      state.collection_error_rows += 1;
+      continue;
+    }
+    try {
+      proposalLines.push(`${JSON.stringify(normalizeSourceRecord(source))}\n`);
+      state.normalization_output_rows += 1;
+    } catch (error) {
+      normalizationErrorLines.push(`${csv(source.source_record_id)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`);
+      state.normalization_error_rows += 1;
+    }
+  }
+  const sequence = String(state.batch_sequence + 1).padStart(9, '0');
+  const cursorHash = crypto.createHash('sha256')
+    .update(`${state.last_created_on}\n${state.last_id}`)
+    .digest('hex').slice(0, 12);
+  const name = `${sequence}-${cursorHash}.jsonl.gz`;
+  const written = [
+    atomicGzip(path.join(paths.raw, name), rawLines),
+    atomicGzip(path.join(paths.proposals, name), proposalLines),
+    atomicGzip(path.join(paths.collectionErrors, name), collectionErrorLines),
+    atomicGzip(path.join(paths.normalizationErrors, name), normalizationErrorLines),
+  ].filter(value => value !== null);
+  state.batch_sequence += 1;
+  state.compressed_bytes += written.reduce((sum, value) => sum + value, 0);
+}
+
 async function run() {
   const required = ['MARIADB_HOST', 'MARIADB_USER', 'MARIADB_PASSWORD'];
   const missing = required.filter(name => !process.env[name]);
   if (missing.length) throw new Error(`Missing required secret environment variables: ${missing.join(', ')}`);
-  const output = path.resolve(process.env.MARIADB_CONTINUOUS_OUTPUT || '/data/mariadb-live');
+  const output = path.resolve(process.env.MARIADB_CONTINUOUS_OUTPUT || '/data/mariadb-live-v2');
   const startAt = process.env.MARIADB_CONTINUOUS_START_AT || '1970-01-01 00:00:00';
+  const startId = process.env.MARIADB_CONTINUOUS_START_ID || '';
   const batchSize = boundedInteger(process.env.MARIADB_CONTINUOUS_BATCH_SIZE, 1000, 10, 5000, 'MARIADB_CONTINUOUS_BATCH_SIZE');
   const pollMs = boundedInteger(process.env.MARIADB_CONTINUOUS_POLL_MS, 30000, 5000, 3600000, 'MARIADB_CONTINUOUS_POLL_MS');
   const exitWhenCaughtUp = process.env.MARIADB_CONTINUOUS_EXIT_WHEN_CAUGHT_UP === 'true';
-  const { paths, state } = prepareOutput(output, startAt);
+  const { paths, state } = prepareOutput(output, startAt, startId);
   const db = await mysql.createConnection({
     host: process.env.MARIADB_HOST,
     port: boundedInteger(process.env.MARIADB_PORT, 3306, 1, 65535, 'MARIADB_PORT'),
@@ -134,42 +174,7 @@ async function run() {
         await sleep(pollMs);
         continue;
       }
-      const rawLines = [];
-      const proposalLines = [];
-      const collectionErrorLines = [];
-      const normalizationErrorLines = [];
-      for (const row of rows) {
-        state.source_input_rows += 1;
-        state.last_created_on = row.created_on;
-        state.last_id = String(row.id);
-        let source;
-        try {
-          source = sourceRecord(row);
-          rawLines.push(`${JSON.stringify(source)}\n`);
-          state.raw_output_rows += 1;
-        } catch (error) {
-          collectionErrorLines.push(`${csv(row.id)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`);
-          state.collection_error_rows += 1;
-          continue;
-        }
-        try {
-          proposalLines.push(`${JSON.stringify(normalizeSourceRecord(source))}\n`);
-          state.normalization_output_rows += 1;
-        } catch (error) {
-          normalizationErrorLines.push(`${csv(source.source_record_id)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`);
-          state.normalization_error_rows += 1;
-        }
-      }
-      append(paths.raw, rawLines);
-      append(paths.proposals, proposalLines);
-      append(paths.collectionErrors, collectionErrorLines);
-      append(paths.normalizationErrors, normalizationErrorLines);
-      state.file_bytes = {
-        raw: byteSize(paths.raw),
-        proposals: byteSize(paths.proposals),
-        collectionErrors: byteSize(paths.collectionErrors),
-        normalizationErrors: byteSize(paths.normalizationErrors),
-      };
+      writeBatchSegments(paths, state, rows);
       state.updated_at = new Date().toISOString();
       const reconciled = reconciliation(state);
       atomicJson(paths.checkpoint, state);
@@ -201,7 +206,7 @@ async function supervise() {
     } catch (error) {
       consecutiveFailures += 1;
       const retryDelayMs = Math.min(300000, 30000 * (2 ** Math.min(4, consecutiveFailures - 1)));
-      const output = path.resolve(process.env.MARIADB_CONTINUOUS_OUTPUT || '/data/mariadb-live');
+      const output = path.resolve(process.env.MARIADB_CONTINUOUS_OUTPUT || '/data/mariadb-live-v2');
       const report = {
         contract: WORKER_CONTRACT,
         checked_at: new Date().toISOString(),
@@ -228,4 +233,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { prepareOutput, reconciliation, run, supervise };
+module.exports = { atomicGzip, prepareOutput, reconciliation, run, supervise, writeBatchSegments };

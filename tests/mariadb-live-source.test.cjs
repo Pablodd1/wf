@@ -11,6 +11,7 @@ const {
   sourceRecord,
 } = require('../tools/mariadb-live/lib.cjs');
 const {
+  atomicGzip,
   prepareOutput: prepareContinuousOutput,
   reconciliation,
 } = require('../tools/mariadb-live/continuous-worker.cjs');
@@ -79,6 +80,19 @@ test('continuous worker checkpoints local shadow files and reconciles both stage
       source_difference: 0,
       normalization_difference: 0,
     });
+  } finally {
+    fs.rmSync(output, { recursive: true, force: true });
+  }
+});
+
+test('continuous worker writes compact atomic gzip segments', () => {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-mariadb-gzip-'));
+  try {
+    const filePath = path.join(output, 'raw', '000000001-test.jsonl.gz');
+    const bytes = atomicGzip(filePath, ['{"id":1}\n', '{"id":2}\n']);
+    assert.equal(bytes > 0, true);
+    assert.equal(fs.existsSync(filePath), true);
+    assert.equal(fs.existsSync(`${filePath}.${process.pid}.tmp`), false);
   } finally {
     fs.rmSync(output, { recursive: true, force: true });
   }
