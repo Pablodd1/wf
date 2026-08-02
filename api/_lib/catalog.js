@@ -325,7 +325,10 @@ function listEquivalentReferences(reference, expectedBrand = null) {
   }
 
   const match = lookupCatalog(reference, expectedBrand);
-  if (!match?.found) return [...references].sort();
+  // Partial catalog matches are suggestions, not equivalent identities. A
+  // partial token such as 5711 must not inherit 5711/110P-001 here because
+  // downstream market queries treat this list as exact evidence.
+  if (!match?.found || match.matchType === 'partial') return [...references].sort();
 
   loadCuration();
   const canonical = normalizeRef(match.aliasOf || match.matchedRef || match.reference || reference);

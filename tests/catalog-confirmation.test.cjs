@@ -169,6 +169,8 @@ test('price research never silently expands a partial reference', () => {
   assert.match(source, /Enter an exact reference\. Prefix matches require an explicit selection\./);
   assert.doesNotMatch(source, /else if \(foundRefs\.length === 1\)[\s\S]*targetRef = foundRefs\[0\]/);
   assert.match(page, /Partial references are not expanded automatically/);
+  assert.deepEqual(listEquivalentReferences('5711', 'Patek Philippe'), ['5711']);
+  assert.match(source, /catalogHit\.matchType !== 'partial'/);
 });
 
 test('confirms a proposed dial only when it agrees with the exact catalog reference', () => {

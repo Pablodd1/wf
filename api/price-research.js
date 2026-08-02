@@ -343,7 +343,9 @@ module.exports = async function handler(req, res) {
         const exact = exactVariants[0];
         if (exact) {
           const catalogHit = lookupCatalog(rawRef, brand || null);
-          targetRef = catalogHit?.found && catalogHit.reference ? catalogHit.reference : exact;
+          targetRef = catalogHit?.found && catalogHit.matchType !== 'partial' && catalogHit.reference
+            ? catalogHit.reference
+            : exact;
           referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
         }
         else {
