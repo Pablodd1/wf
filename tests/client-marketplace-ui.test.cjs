@@ -75,7 +75,7 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.doesNotMatch(floor, /fetch\(`\/api\/ingest\?/);
   assert.match(floor, /Source images only/);
   assert.match(floor, /params\.set\('images', 'true'\)/);
-  assert.match(floor, /Source images first; highest source-confirmed USD price next\./);
+  assert.match(floor, /Highest supplied prices first; listings without a supplied price last\./);
   assert.doesNotMatch(floor, /Data under review/);
   assert.doesNotMatch(floor, /Price under review/);
   assert.doesNotMatch(floor, /Exact source currency is being verified/);

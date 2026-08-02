@@ -66,7 +66,11 @@ jobs:
               'idx_reviewed_workbook_inventory_approved_phone_activity',
               'idx_reviewed_workbook_inventory_type_order',
               'idx_reviewed_workbook_inventory_brand_type_order',
-              'idx_reviewed_workbook_inventory_reference_order'
+              'idx_reviewed_workbook_inventory_reference_order',
+              'idx_reviewed_workbook_inventory_price_first',
+              'idx_reviewed_workbook_inventory_type_price_first',
+              'idx_reviewed_workbook_inventory_brand_price_first',
+              'idx_reviewed_workbook_inventory_brand_type_price_first'
             )
             AND NOT (index_state.indisvalid AND index_state.indisready)
           \gexec
@@ -76,6 +80,7 @@ jobs:
             "supabase/migrations/20260731160000_reviewed_workbook_market_indexes.sql"
             "supabase/migrations/20260731170000_reviewed_workbook_seller_activity.sql"
             "supabase/migrations/20260731180000_reviewed_workbook_evidence_order.sql"
+            "supabase/migrations/20260802170000_reviewed_workbook_price_first_indexes.sql"
           )
           for migration in "${allowlisted_migrations[@]}"; do
             test -f "$migration"
@@ -130,9 +135,13 @@ jobs:
                   'idx_reviewed_workbook_market_type_evidence_order',
                   'idx_reviewed_workbook_market_brand_type_evidence_order',
                   'idx_reviewed_workbook_market_reference_evidence_order',
+                  'idx_reviewed_workbook_inventory_price_first',
+                  'idx_reviewed_workbook_inventory_type_price_first',
+                  'idx_reviewed_workbook_inventory_brand_price_first',
+                  'idx_reviewed_workbook_inventory_brand_type_price_first',
                   'idx_reviewed_workbook_checkpoints_brand_status'
                 )
-            ) <> 15 THEN
+            ) <> 19 THEN
               RAISE EXCEPTION 'Reviewed workbook indexes are incomplete';
             END IF;
             IF has_table_privilege('anon', 'public.reviewed_workbook_market_source', 'SELECT')
@@ -177,6 +186,7 @@ jobs:
             echo "- Exact approved-contact activity index: ready."
             echo "- Exact approved seller activity aggregate: service-only and ready."
             echo "- Existing customer evidence ordering v1 indexes: preserved and ready."
+            echo "- Supplied-price-first Trading Floor indexes: ready; no-price rows sort last."
             echo "- Identity and Price Research eligibility: fail closed through the service-only view and API."
             echo "- Listing-type and exact-reference publication indexes: ready."
             echo "- Ready for the checkpointed local importer."

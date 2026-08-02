@@ -14,6 +14,10 @@ const migration = fs.readFileSync(
   path.join(__dirname, '../supabase/migrations/20260731180000_reviewed_workbook_evidence_order.sql'),
   'utf8',
 );
+const priceOrderMigration = fs.readFileSync(
+  path.join(__dirname, '../supabase/migrations/20260802170000_reviewed_workbook_price_first_indexes.sql'),
+  'utf8',
+);
 const workflow = fs.readFileSync(
   path.join(__dirname, '../.github/workflows/reviewed-workbook-inventory-release.yml'),
   'utf8',
@@ -289,7 +293,7 @@ test('public brand filters preserve punctuation and exact references use exact c
   assert.match(source, /count: preciseCount \? 'exact' : scopedFilter \? 'estimated' : undefined/);
 });
 
-test('endpoint is read-only and reuses the exact-image then verified-USD v1 order', () => {
+test('endpoint is read-only and globally places supplied-price rows before no-price rows', () => {
   assert.match(source, /\.from\(MARKET_SOURCE_VIEW\)/);
   assert.doesNotMatch(source, /\.from\(['"]watch_records['"]\)/);
   assert.doesNotMatch(source, /\.(?:insert|upsert|update|delete)\s*\(/);
@@ -298,10 +302,18 @@ test('endpoint is read-only and reuses the exact-image then verified-USD v1 orde
   assert.match(source, /query = query\.not\('dial_color', 'ilike', value\)/);
   assert.match(source, /query = query\.not\('model', 'ilike', value\)/);
   assert.match(source, /query = query\.neq\('verification_status', 'QUARANTINED_SOURCE_CONFLICT'\)/);
-  assert.match(source, /order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
+  assert.match(source, /order\('workbook_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('source_price_amount', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
   assert.doesNotMatch(source, /order\('has_complete_identity'/);
-  assert.doesNotMatch(source, /order\('workbook_price_usd'/);
   assert.doesNotMatch(source, /catalog_image_url|final_image_url|display_image_url/);
+});
+
+test('price-first indexes cover global, intent, brand, and brand-intent floor orders', () => {
+  assert.doesNotMatch(priceOrderMigration, /\bBEGIN\b|\bCOMMIT\b/i);
+  assert.match(priceOrderMigration, /CREATE INDEX CONCURRENTLY IF NOT EXISTS[\s\S]*idx_reviewed_workbook_inventory_price_first/);
+  assert.match(priceOrderMigration, /idx_reviewed_workbook_inventory_type_price_first[\s\S]*listing_type,[\s\S]*workbook_price_usd DESC NULLS LAST/);
+  assert.match(priceOrderMigration, /idx_reviewed_workbook_inventory_brand_price_first[\s\S]*brand_scope,[\s\S]*workbook_price_usd DESC NULLS LAST/);
+  assert.match(priceOrderMigration, /idx_reviewed_workbook_inventory_brand_type_price_first[\s\S]*brand_scope,[\s\S]*listing_type,[\s\S]*workbook_price_usd DESC NULLS LAST/);
+  assert.match(workflow, /20260802170000_reviewed_workbook_price_first_indexes\.sql/);
 });
 
 test('service-only evidence view keeps strict identity while reusing v1 indexes', () => {
