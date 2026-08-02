@@ -1,13 +1,15 @@
 # WatchFacts CTO Control Center
 
-**Control date:** August 1, 2026
+**Control date:** August 2, 2026
 **Assignment mode:** controlled customer publication plus continuous,
 read-only MariaDB shadow capture and deterministic normalization
-**Current release decision:** keep the exact owner-reviewed Panerai workbook
-cohort and reviewed Zenith cohort live through bounded, deduplicated customer
-reads. Do not reuse the discarded Rolex/Patek release. Do not bulk-publish the
-new three-brand workbooks until their signed canary is persisted to an
-explicitly configured shadow target and reconciled by readback.
+**Current release decision:** keep the exact owner-reviewed Panerai and Zenith
+cohorts plus the reviewed Rolex, Patek Philippe, and Audemars Piguet scope live
+only through the existing approval, confidence, catalog, currency, bundle,
+duplicate, outlier, image, and seller gates. PR #242 reopened the reviewed
+Rolex/Patek cohorts; it did not approve every raw archive row. Do not
+bulk-publish any workbook or incoming-source row without source-backed,
+reconciled evidence.
 
 **Infrastructure update:** the upgraded Supabase and Railway queue path has now
 exactly reconciled every raw-evidence-eligible record. Four Railway workers with
@@ -19,6 +21,36 @@ This is the single navigation and decision index for the current project state.
 It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
+
+## August 2 permanent error register and source accountability
+
+The permanent mistake, evidence, remediation, and regression record is
+[`DATA_QUALITY_INCIDENT_REGISTER_2026-08-02.md`](DATA_QUALITY_INCIDENT_REGISTER_2026-08-02.md).
+It records the NTQ/WTB error, wrong-image risk, missing seller lineage, release
+configuration failure, sub-five comparable-count defect, outlier presentation,
+currency/FX risk, bundle ordering, unverified workbook image claims, and the
+incoming MariaDB visibility gap.
+
+PRs #241, #242, and #243 are merged. Price Research now shows analysis before
+a compact included-listing sample, reopens reviewed Rolex/Patek cohorts without
+bypassing evidence gates, and reports the real qualified count for cohorts with
+fewer than five observations. The five recurring John references were checked
+in the live browser. Patek 3712/1A has three qualified observations and remains
+correctly below the analytics threshold.
+
+The exact Natan David message `NTQ - 5821/1a green` was verified live as a
+Patek Cubitus buyer request with price on request, exact source image, supplied
+contact, source-poster activity, and the preserved raw message. The remaining
+5821/1A search rows are countable records but are not collectively claimed as
+visually verified.
+
+This release also introduces a service-only source-pipeline accountability
+ledger and owner-dashboard readback. It stores counts, cursors, freshness,
+reconciliation, and errors only. It is not a listing table and cannot publish
+or modify `watch_records`. Telegram shadow outcomes can be counted directly;
+the MariaDB Railway worker reports only after the migration is applied and
+`PIPELINE_ACCOUNTABILITY_ENABLED=true` is configured with server-side Supabase
+credentials.
 
 ## August 1 continuous source stabilization
 

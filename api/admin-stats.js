@@ -9,6 +9,76 @@ async function plannedCount(client, configure) {
   return count || 0;
 }
 
+async function exactCount(client, table, configure) {
+  let query = client.from(table).select('*', { count: 'exact', head: true });
+  if (configure) query = configure(query);
+  const { count, error } = await query;
+  if (error) throw error;
+  return count || 0;
+}
+
+async function incomingPipelineStats(client) {
+  let telegram;
+  try {
+    const [captured, readyForReview, processingErrors, reviewPending, approved, rejected, deferred, latest] = await Promise.all([
+      exactCount(client, 'telegram_ingest_shadow_events'),
+      exactCount(client, 'telegram_ingest_shadow_results', query => query.eq('processing_status', 'READY_FOR_REVIEW')),
+      exactCount(client, 'telegram_ingest_shadow_results', query => query.eq('processing_status', 'ERROR')),
+      exactCount(client, 'telegram_ingest_shadow_results', query => query.eq('review_status', 'PENDING')),
+      exactCount(client, 'telegram_ingest_shadow_results', query => query.eq('review_status', 'APPROVED')),
+      exactCount(client, 'telegram_ingest_shadow_results', query => query.eq('review_status', 'REJECTED')),
+      exactCount(client, 'telegram_ingest_shadow_results', query => query.eq('review_status', 'DEFERRED')),
+      client.from('telegram_ingest_shadow_events')
+        .select('message_date,received_at')
+        .order('received_at', { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+    if (latest.error) throw latest.error;
+    telegram = {
+      available: true,
+      captured,
+      readyForReview,
+      processingErrors,
+      reviewPending,
+      approved,
+      rejected,
+      deferred,
+      latestMessageAt: latest.data?.message_date || null,
+      latestReceivedAt: latest.data?.received_at || null,
+      customerRecordWrites: 0,
+    };
+  } catch {
+    telegram = {
+      available: false,
+      captured: 0,
+      readyForReview: 0,
+      processingErrors: 0,
+      reviewPending: 0,
+      approved: 0,
+      rejected: 0,
+      deferred: 0,
+      latestMessageAt: null,
+      latestReceivedAt: null,
+      customerRecordWrites: 0,
+    };
+  }
+
+  let sources = [];
+  try {
+    const { data, error } = await client.from('source_pipeline_accountability')
+      .select('source_key,source_platform,source_table,pipeline_status,observed_at,source_input_rows,immutable_raw_rows,normalization_proposal_rows,collection_error_rows,normalization_error_rows,source_reconciled,normalization_reconciled,parser_version,customer_record_writes')
+      .order('observed_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    sources = data || [];
+  } catch {
+    sources = [];
+  }
+
+  return { telegram, sources };
+}
+
 async function lineageStats(client) {
   async function lineageCount(configure) {
     let query = client.from('seller_listing_lineage_staging').select('id', { count: 'planned', head: true });
@@ -48,7 +118,7 @@ module.exports = async function handler(req, res) {
 
   try {
     const types = ['WTS', 'WTB', 'NTQ', 'TRADE', 'MULTI', 'OTHER'];
-    const [totalRecords, approved, human, recycle, typeEstimates, sampleResult, patekRecords, patekWts, patekImages, sellerLineage] = await Promise.all([
+    const [totalRecords, approved, human, recycle, typeEstimates, sampleResult, patekRecords, patekWts, patekImages, sellerLineage, incoming] = await Promise.all([
       plannedCount(client),
       plannedCount(client, query => query.eq('verdict', 'APPROVED')),
       plannedCount(client, query => query.eq('verdict', 'HUMAN')),
@@ -62,6 +132,7 @@ module.exports = async function handler(req, res) {
       plannedCount(client, query => query.eq('brand', 'Patek Philippe').eq('verdict', 'APPROVED').eq('listing_type', 'WTS')),
       plannedCount(client, query => query.eq('brand', 'Patek Philippe').eq('has_images', true)),
       lineageStats(client),
+      incomingPipelineStats(client),
     ]);
     if (sampleResult.error) throw sampleResult.error;
 
@@ -90,6 +161,7 @@ module.exports = async function handler(req, res) {
       typeCounts,
       patek: { records: patekRecords, approvedWts: patekWts, imageBacked: patekImages, countsEstimated: true },
       sellerLineage,
+      incoming,
       qualitySampleSize: sample.length,
       missingRef: sample.filter(row => missing(row.reference)).length,
       missingPrice: sample.filter(row => !Number.isFinite(Number(row.price_usd)) || Number(row.price_usd) <= 0).length,

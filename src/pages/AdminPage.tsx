@@ -41,6 +41,37 @@ interface StatsData {
     withOriginalDate: number;
     withImage: number;
   };
+  incoming: {
+    telegram: {
+      available: boolean;
+      captured: number;
+      readyForReview: number;
+      processingErrors: number;
+      reviewPending: number;
+      approved: number;
+      rejected: number;
+      deferred: number;
+      latestMessageAt: string | null;
+      latestReceivedAt: string | null;
+      customerRecordWrites: number;
+    };
+    sources: Array<{
+      source_key: string;
+      source_platform: string;
+      source_table: string | null;
+      pipeline_status: string;
+      observed_at: string;
+      source_input_rows: number;
+      immutable_raw_rows: number;
+      normalization_proposal_rows: number;
+      collection_error_rows: number;
+      normalization_error_rows: number;
+      source_reconciled: boolean;
+      normalization_reconciled: boolean;
+      parser_version: string | null;
+      customer_record_writes: number;
+    }>;
+  };
 }
 
 /* ------------------------------------------------------------------ */
@@ -141,6 +172,10 @@ export default function AdminPage() {
     countsEstimated: true, qualitySampleSize: 0, lastUpdatedAt: null,
     patek: { records: 0, approvedWts: 0, imageBacked: 0, countsEstimated: true },
     sellerLineage: { available: false, total: 0, matchReady: 0, reviewRequired: 0, applied: 0, withName: 0, withPhone: 0, withOriginalDate: 0, withImage: 0 },
+    incoming: {
+      telegram: { available: false, captured: 0, readyForReview: 0, processingErrors: 0, reviewPending: 0, approved: 0, rejected: 0, deferred: 0, latestMessageAt: null, latestReceivedAt: null, customerRecordWrites: 0 },
+      sources: [],
+    },
   };
   const totalDenominator = Math.max(1, statsMock.totalRecords);
   const qualityDenominator = Math.max(1, statsMock.qualitySampleSize);
@@ -206,6 +241,76 @@ export default function AdminPage() {
             <div className="text-xs text-text-muted">Private seller-lineage staging is not available in this deployment. No contact fields are inferred or published.</div>
           )}
           <div className="text-[10px] text-text-muted mt-3">Names, phones, original dates, and image filenames are review evidence only until an authorized reviewer approves the lineage.</div>
+        </div>
+
+        <div className="rounded-xl border border-gold-primary/20 bg-bg-card px-4 py-4 mb-8">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+            <div>
+              <div className="text-xs font-bold uppercase tracking-wider text-gold-primary">Incoming source accountability</div>
+              <div className="text-[10px] text-text-muted mt-1">Every captured row must reconcile to immutable evidence, a proposal, or a declared error. Capture never equals customer publication.</div>
+            </div>
+            <span className="text-[10px] font-mono text-text-muted">Customer writes from monitored shadow sources: 0</span>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-lg border border-border-default bg-bg-elevated/20 p-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-bold text-text-primary">Telegram shadow intake</span>
+                <span className={`text-[10px] font-mono ${statsMock.incoming.telegram.available ? 'text-emerald-400' : 'text-amber-400'}`}>
+                  {statsMock.incoming.telegram.available ? 'COUNTED' : 'NOT REPORTING'}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 mt-3">
+                {[
+                  ['Captured', statsMock.incoming.telegram.captured],
+                  ['Ready', statsMock.incoming.telegram.readyForReview],
+                  ['Pending review', statsMock.incoming.telegram.reviewPending],
+                  ['Errors', statsMock.incoming.telegram.processingErrors],
+                  ['Approved', statsMock.incoming.telegram.approved],
+                  ['Rejected', statsMock.incoming.telegram.rejected],
+                  ['Deferred', statsMock.incoming.telegram.deferred],
+                  ['Customer writes', statsMock.incoming.telegram.customerRecordWrites],
+                ].map(([label, value]) => (
+                  <div key={String(label)}>
+                    <div className="text-base font-bold text-text-primary">{Number(value).toLocaleString()}</div>
+                    <div className="text-[9px] uppercase tracking-wider text-text-muted">{label}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="text-[10px] text-text-muted mt-3">
+                Latest source message: {statsMock.incoming.telegram.latestMessageAt ? new Date(statsMock.incoming.telegram.latestMessageAt).toLocaleString() : 'not available'}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {statsMock.incoming.sources.length === 0 ? (
+                <div className="rounded-lg border border-border-default bg-bg-elevated/20 p-3 text-xs text-text-muted">
+                  No external source checkpoint is reporting to the accountability ledger yet. MariaDB capture may still be running on its Railway volume, but it is not countable from this dashboard until the service-only status bridge is enabled.
+                </div>
+              ) : statsMock.incoming.sources.map(source => (
+                <div key={source.source_key} className="rounded-lg border border-border-default bg-bg-elevated/20 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="text-xs font-bold text-text-primary">{source.source_platform} · {source.source_table || source.source_key}</div>
+                      <div className="text-[10px] text-text-muted">{source.parser_version || 'parser version unavailable'} · checked {new Date(source.observed_at).toLocaleString()}</div>
+                    </div>
+                    <span className={`text-[10px] font-mono ${source.pipeline_status === 'ERROR' || source.pipeline_status === 'ERROR_RETRYING' ? 'text-red-400' : 'text-emerald-400'}`}>{source.pipeline_status}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 mt-3">
+                    <div><div className="text-base font-bold text-text-primary">{Number(source.source_input_rows).toLocaleString()}</div><div className="text-[9px] uppercase text-text-muted">Source rows</div></div>
+                    <div><div className="text-base font-bold text-text-primary">{Number(source.immutable_raw_rows).toLocaleString()}</div><div className="text-[9px] uppercase text-text-muted">Raw evidence</div></div>
+                    <div><div className="text-base font-bold text-text-primary">{Number(source.normalization_proposal_rows).toLocaleString()}</div><div className="text-[9px] uppercase text-text-muted">Proposals</div></div>
+                    <div><div className="text-base font-bold text-text-primary">{Number(source.collection_error_rows).toLocaleString()}</div><div className="text-[9px] uppercase text-text-muted">Capture errors</div></div>
+                    <div><div className="text-base font-bold text-text-primary">{Number(source.normalization_error_rows).toLocaleString()}</div><div className="text-[9px] uppercase text-text-muted">Normalize errors</div></div>
+                    <div><div className="text-base font-bold text-text-primary">{Number(source.customer_record_writes).toLocaleString()}</div><div className="text-[9px] uppercase text-text-muted">Customer writes</div></div>
+                  </div>
+                  <div className={`text-[10px] mt-3 ${source.source_reconciled && source.normalization_reconciled ? 'text-emerald-400' : 'text-red-400'}`}>
+                    Source reconciliation: {source.source_reconciled ? 'PASS' : 'FAIL'} · normalization reconciliation: {source.normalization_reconciled ? 'PASS' : 'FAIL'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
 
         {message && (

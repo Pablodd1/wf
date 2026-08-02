@@ -97,10 +97,26 @@ MARIADB_CONTINUOUS_BATCH_SIZE=1000
 MARIADB_CONTINUOUS_POLL_MS=30000
 ```
 
+After applying `20260802160000_source_pipeline_accountability.sql`, the same
+service may publish counts and reconciliation only to the owner dashboard:
+
+```text
+PIPELINE_ACCOUNTABILITY_ENABLED=true
+SUPABASE_URL=<server secret>
+SUPABASE_SERVICE_ROLE_KEY=<server secret>
+```
+
+These values belong only in Railway's secret store. The status payload contains
+no raw message, media, seller, price, or listing row and always declares zero
+customer-record writes.
+
 The worker copies immutable source rows and writes deterministic normalization
 proposals to the volume. Its checkpoint records exact source and normalization
-reconciliation. It never publishes, calls vision, or writes to Supabase or
-`watch_records`. When caught up it polls for new listings every 30 seconds.
+reconciliation. It never publishes, calls vision, or writes to `watch_records`.
+When the optional accountability bridge is enabled, its only Supabase write is
+an upsert of counts, cursor, freshness, and errors to
+`source_pipeline_accountability`. When caught up it polls for new listings
+every 30 seconds.
 
 Only one replica may write to a given volume. Scale normalization later through
 the existing four-worker Supabase shadow queue after the raw-volume checkpoint

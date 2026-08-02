@@ -17,6 +17,8 @@ const {
 const { normalizeSourceRecord } = require('./normalize-local.cjs');
 
 const WORKER_CONTRACT = 'wf-mariadb-continuous-shadow-v2';
+const ACCOUNTABILITY_SOURCE_KEY = 'mariadb-thecollective-inventory-auctions';
+const PARSER_VERSION = 'v4.2-line-condition';
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -82,6 +84,77 @@ function reconciliation(state) {
     source_difference: state.source_input_rows - state.raw_output_rows - state.collection_error_rows,
     normalization_difference: state.raw_output_rows - state.normalization_output_rows - state.normalization_error_rows,
   };
+}
+
+async function publishAccountability(report, fetchImpl = fetch) {
+  if (process.env.PIPELINE_ACCOUNTABILITY_ENABLED !== 'true') {
+    return { enabled: false, published: false };
+  }
+  const baseUrl = String(process.env.SUPABASE_URL || '').replace(/\/$/, '');
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY;
+  if (!baseUrl || !key) throw new Error('Pipeline accountability requires Supabase server credentials');
+
+  const payload = {
+    source_key: ACCOUNTABILITY_SOURCE_KEY,
+    source_platform: 'mariadb',
+    source_table: 'thecollective_inventory.auctions',
+    pipeline_status: report.status,
+    observed_at: report.checked_at,
+    source_cursor: {
+      created_on: report.last_created_on || null,
+      source_id: report.last_id || null,
+      batch_sequence: report.batch_sequence || 0,
+    },
+    parser_version: PARSER_VERSION,
+    customer_record_writes: 0,
+    details: {
+      worker_contract: WORKER_CONTRACT,
+      source_contract: CONTRACT,
+      compressed_bytes: report.compressed_bytes || 0,
+      declared_errors: report.declared_errors || [],
+    },
+    updated_at: report.checked_at,
+  };
+  if (Number.isFinite(Number(report.source_input_rows))) {
+    Object.assign(payload, {
+      source_input_rows: report.source_input_rows,
+      immutable_raw_rows: report.raw_output_rows || 0,
+      normalization_proposal_rows: report.normalization_output_rows || 0,
+      collection_error_rows: report.collection_error_rows || 0,
+      normalization_error_rows: report.normalization_error_rows || 0,
+      source_reconciled: report.source_reconciled === true,
+      normalization_reconciled: report.normalization_reconciled === true,
+    });
+  }
+
+  const response = await fetchImpl(`${baseUrl}/rest/v1/source_pipeline_accountability?on_conflict=source_key`, {
+    method: 'POST',
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      'Content-Type': 'application/json',
+      Prefer: 'resolution=merge-duplicates,return=minimal',
+    },
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(`Pipeline accountability publish failed (${response.status})`);
+  return { enabled: true, published: true, published_at: report.checked_at };
+}
+
+async function withAccountability(report) {
+  try {
+    return { ...report, accountability: await publishAccountability(report) };
+  } catch (error) {
+    return {
+      ...report,
+      accountability: {
+        enabled: true,
+        published: false,
+        error_code: 'ACCOUNTABILITY_PUBLISH_FAILED',
+        error_message: String(error.message || error).slice(0, 300),
+      },
+    };
+  }
 }
 
 function writeBatchSegments(paths, state, rows) {
@@ -159,7 +232,7 @@ async function run() {
         [state.last_created_on, state.last_created_on, state.last_id],
       );
       if (!rows.length) {
-        const report = {
+        let report = {
           contract: WORKER_CONTRACT,
           checked_at: new Date().toISOString(),
           status: 'CAUGHT_UP',
@@ -168,6 +241,7 @@ async function run() {
           production_writes: 0,
           watch_records_writes: 0,
         };
+        report = await withAccountability(report);
         atomicJson(paths.status, report);
         process.stdout.write(`${JSON.stringify({ event: 'mariadb_continuous_idle', ...report })}\n`);
         if (exitWhenCaughtUp) break;
@@ -178,7 +252,7 @@ async function run() {
       state.updated_at = new Date().toISOString();
       const reconciled = reconciliation(state);
       atomicJson(paths.checkpoint, state);
-      atomicJson(paths.status, {
+      const statusReport = await withAccountability({
         contract: WORKER_CONTRACT,
         checked_at: state.updated_at,
         status: reconciled.source_reconciled && reconciled.normalization_reconciled ? 'PROCESSING' : 'ERROR',
@@ -187,7 +261,8 @@ async function run() {
         production_writes: 0,
         watch_records_writes: 0,
       });
-      process.stdout.write(`${JSON.stringify({ event: 'mariadb_continuous_checkpoint', batch_rows: rows.length, ...state, ...reconciled })}\n`);
+      atomicJson(paths.status, statusReport);
+      process.stdout.write(`${JSON.stringify({ event: 'mariadb_continuous_checkpoint', batch_rows: rows.length, ...statusReport })}\n`);
       if (!reconciled.source_reconciled || !reconciled.normalization_reconciled) {
         throw new Error('Continuous worker reconciliation failed');
       }
@@ -207,7 +282,7 @@ async function supervise() {
       consecutiveFailures += 1;
       const retryDelayMs = Math.min(300000, 30000 * (2 ** Math.min(4, consecutiveFailures - 1)));
       const output = path.resolve(process.env.MARIADB_CONTINUOUS_OUTPUT || '/data/mariadb-live-v2');
-      const report = {
+      let report = {
         contract: WORKER_CONTRACT,
         checked_at: new Date().toISOString(),
         status: 'ERROR_RETRYING',
@@ -219,6 +294,7 @@ async function supervise() {
         production_writes: 0,
         watch_records_writes: 0,
       };
+      report = await withAccountability(report);
       atomicJson(path.join(output, 'status.json'), report);
       process.stderr.write(`${JSON.stringify({ event: 'mariadb_continuous_error', ...report })}\n`);
       await sleep(retryDelayMs);
@@ -233,4 +309,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { atomicGzip, prepareOutput, reconciliation, run, supervise, writeBatchSegments };
+module.exports = { atomicGzip, prepareOutput, publishAccountability, reconciliation, run, supervise, withAccountability, writeBatchSegments };

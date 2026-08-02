@@ -12,9 +12,69 @@ const {
 } = require('../tools/mariadb-live/lib.cjs');
 const {
   atomicGzip,
+  publishAccountability,
   prepareOutput: prepareContinuousOutput,
   reconciliation,
 } = require('../tools/mariadb-live/continuous-worker.cjs');
+
+test('accountability publisher sends counts only to the service ledger', async () => {
+  const previousEnabled = process.env.PIPELINE_ACCOUNTABILITY_ENABLED;
+  const previousUrl = process.env.SUPABASE_URL;
+  const previousKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  process.env.PIPELINE_ACCOUNTABILITY_ENABLED = 'true';
+  process.env.SUPABASE_URL = 'https://shadow.example';
+  process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-only-key';
+  let request;
+  try {
+    const result = await publishAccountability({
+      status: 'PROCESSING',
+      checked_at: '2026-08-02T16:00:00.000Z',
+      last_created_on: '2026-08-02 11:59:00',
+      last_id: 'source-9',
+      batch_sequence: 9,
+      source_input_rows: 100,
+      raw_output_rows: 99,
+      collection_error_rows: 1,
+      normalization_output_rows: 98,
+      normalization_error_rows: 1,
+      source_reconciled: true,
+      normalization_reconciled: true,
+      watch_records_writes: 0,
+    }, async (url, options) => {
+      request = { url, options };
+      return { ok: true };
+    });
+    const body = JSON.parse(request.options.body);
+    assert.equal(result.published, true);
+    assert.equal(request.url, 'https://shadow.example/rest/v1/source_pipeline_accountability?on_conflict=source_key');
+    assert.equal(body.source_input_rows, 100);
+    assert.equal(body.immutable_raw_rows, 99);
+    assert.equal(body.normalization_proposal_rows, 98);
+    assert.equal(body.customer_record_writes, 0);
+    assert.equal('raw_message' in body, false);
+    assert.doesNotMatch(request.url, /watch_records/);
+
+    let errorRequest;
+    await publishAccountability({
+      status: 'ERROR_RETRYING',
+      checked_at: '2026-08-02T16:01:00.000Z',
+      declared_errors: ['WORKER_EXECUTION_FAILED'],
+    }, async (url, options) => {
+      errorRequest = { url, options };
+      return { ok: true };
+    });
+    const errorBody = JSON.parse(errorRequest.options.body);
+    assert.equal(errorBody.pipeline_status, 'ERROR_RETRYING');
+    assert.equal('source_input_rows' in errorBody, false, 'transient errors must not erase the last reconciled counts');
+  } finally {
+    if (previousEnabled === undefined) delete process.env.PIPELINE_ACCOUNTABILITY_ENABLED;
+    else process.env.PIPELINE_ACCOUNTABILITY_ENABLED = previousEnabled;
+    if (previousUrl === undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL = previousUrl;
+    if (previousKey === undefined) delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    else process.env.SUPABASE_SERVICE_ROLE_KEY = previousKey;
+  }
+});
 
 test('MariaDB source wrapper preserves immutable evidence and stable lineage', () => {
   const row = {
