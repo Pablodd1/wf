@@ -19,6 +19,12 @@ const workflow = fs.readFileSync(
   'utf8',
 );
 
+test('parses a combined exact-reference and dial search into indexed filters', () => {
+  assert.match(source, /parseTradingSearch\(search\)/);
+  assert.match(source, /req\.query\?\.reference \|\| parsedSearch\.reference/);
+  assert.match(source, /query\.eq\('dial_color', exactDial\)/);
+});
+
 function record(overrides = {}) {
   return {
     id: 'workbook_1',
@@ -255,7 +261,7 @@ test('publication brands are derived from populated reviewed checkpoints', () =>
 });
 
 test('public brand filters preserve punctuation and exact references use exact counts', () => {
-  assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand, 80\)/);
+  assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand \|\| parsedSearch\.brand, 80\)/);
   assert.match(source, /item\.brand\?\.toLocaleLowerCase\(\) === requestedBrand\.toLocaleLowerCase\(\)/);
   assert.match(source, /const preciseCount = Boolean\(reference\)/);
   assert.match(source, /count: preciseCount \? 'exact' : scopedFilter \? 'estimated' : undefined/);

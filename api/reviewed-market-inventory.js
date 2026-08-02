@@ -1,6 +1,7 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
+const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -299,9 +300,15 @@ module.exports = async function handler(req, res) {
     const page = pagination === 'cursor' && cursorPage !== null
       ? cursorPage
       : (Number.isInteger(requestedPage) ? Math.max(1, requestedPage) : 1);
-    const requestedBrand = cleanExactText(req.query?.brand, 80);
-    const requestedReference = cleanExactText(req.query?.reference || req.query?.q, 80);
+    const search = cleanExactText(req.query?.q, 120);
+    const parsedSearch = parseTradingSearch(search);
+    const requestedBrand = cleanExactText(req.query?.brand || parsedSearch.brand, 80);
+    const requestedReference = cleanExactText(req.query?.reference || parsedSearch.reference, 80);
     const reference = referenceComparisonKey(requestedReference);
+    const requestedDial = cleanExactText(parsedSearch.dial, 40);
+    const exactDial = requestedDial
+      ? `${requestedDial[0].toUpperCase()}${requestedDial.slice(1).toLowerCase()}`
+      : '';
     const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
     const listingType = cleanExactText(req.query?.type, 12).toUpperCase();
     const condition = cleanExactText(req.query?.condition, 80);
@@ -380,6 +387,7 @@ module.exports = async function handler(req, res) {
         .order('id', { ascending: true });
     if (brand) query = query.eq('brand_scope', brand);
     if (reference) query = query.eq('reference_search_key', reference);
+    if (exactDial) query = query.eq('dial_color', exactDial);
     query = query.eq('has_complete_identity', true);
     if (imagesOnly) query = query.eq('has_exact_source_image', true);
     if (listingType) query = query.eq('listing_type', listingType);
