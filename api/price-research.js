@@ -288,7 +288,9 @@ module.exports = async function handler(req, res) {
       ? 'price_research_verified_source'
       : 'watch_records';
 
-    // Resolve reference — support prefix matching (3712 -> 3712/1A)
+    // Resolve exact stored spellings only. Prefix matches are suggestions for
+    // an explicit customer choice; they must never silently become a specific
+    // full reference (for example 5711 -> 5711/110P-001).
     let targetRef = rawRef;
     let referenceVariants = [rawRef];
     if (controlledPaneraiRelease) {
@@ -344,14 +346,10 @@ module.exports = async function handler(req, res) {
           targetRef = catalogHit?.found && catalogHit.reference ? catalogHit.reference : exact;
           referenceVariants = [...new Set([...equivalentReferences, ...exactVariants])];
         }
-        else if (foundRefs.length === 1) {
-          targetRef = foundRefs[0];
-          referenceVariants = [foundRefs[0]];
-        }
         else {
           return res.status(200).json({
             success: false,
-            error: 'Multiple references match. Select an exact reference.',
+            error: 'Enter an exact reference. Prefix matches require an explicit selection.',
             requires_resolution: true,
             candidates: foundRefs.slice(0, 50),
           });

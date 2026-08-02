@@ -30,6 +30,7 @@ test('Trading Floor shows USD only for source-confirmed eligible evidence', () =
   assert.match(page, /contact\.phone_display/);
   assert.match(page, /sellerAnalytics\.wts_posts/);
   assert.match(page, /sellerAnalytics\.wtb_posts/);
+  assert.match(page, /raw_message_scope === 'normalized_summary'[\s\S]*Unverified workbook summary text is withheld from the customer view/);
 });
 
 test('reviewed workbook importer retains original currency beside approved USD', () => {

@@ -162,6 +162,15 @@ test('price research normalizes every resolved reference variant', () => {
   assert.match(source, /\.order\('created_at', \{ ascending: false \}\)\s*\.order\('id', \{ ascending: false \}\)/);
 });
 
+test('price research never silently expands a partial reference', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
+  assert.match(source, /Prefix matches are suggestions for[\s\S]*must never silently become a specific/);
+  assert.match(source, /Enter an exact reference\. Prefix matches require an explicit selection\./);
+  assert.doesNotMatch(source, /else if \(foundRefs\.length === 1\)[\s\S]*targetRef = foundRefs\[0\]/);
+  assert.match(page, /Partial references are not expanded automatically/);
+});
+
 test('confirms a proposed dial only when it agrees with the exact catalog reference', () => {
   const black = confirmCatalogCandidate({ brand: 'Rolex', reference: '116500LN', dial_color: 'Black' });
   const white = confirmCatalogCandidate({ brand: 'Rolex', reference: '116500LN', dial_color: 'White' });

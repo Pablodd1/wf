@@ -850,11 +850,15 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         </div>
 
         <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{listing.raw_message_scope === 'normalized_summary' ? 'Listing summary' : 'Original listing'}</h2>
+          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{listing.raw_message_scope === 'normalized_summary' ? 'Source evidence' : 'Original listing'}</h2>
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
-            {listing.raw_message_scope === 'normalized_summary' ? 'Normalized workbook text · original source pending' : 'Raw source message'}
+            {listing.raw_message_scope === 'normalized_summary' ? 'Original source pending verification' : 'Raw source message'}
           </div>
-          {listing.raw_message ? (
+          {listing.raw_message_scope === 'normalized_summary' ? (
+            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
+              The original source listing is pending verification. Unverified workbook summary text is withheld from the customer view.
+            </p>
+          ) : listing.raw_message ? (
             <>
               <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{listing.raw_message}</pre>
               {listing.raw_message_truncated && (

@@ -497,6 +497,14 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         setQuery(resolvedReference);
         if (d.brand) setQueryBrand(d.brand);
       }
+      else if (d.requires_resolution) {
+        const candidates = Array.isArray(d.candidates)
+          ? d.candidates.filter((candidate: unknown): candidate is string => typeof candidate === 'string').slice(0, 12)
+          : [];
+        setError(candidates.length
+          ? `Enter an exact reference. Matching references: ${candidates.join(', ')}.`
+          : 'Enter an exact reference. Partial references are not expanded automatically.');
+      }
       else setAnalyticsNotice(brand
         ? 'Qualified price analytics are pending for this reference.'
         : 'Qualified price analytics could not resolve a brand. Select a brand to run the exact comparable analysis.');
