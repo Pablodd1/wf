@@ -2,8 +2,11 @@
 
 const THREE_WATCH_RELEASE_REFERENCES = [
   'Rolex::116610LN',
+  'Rolex::116500LN',
+  'Rolex::52506',
   'Patek Philippe::5712/1A',
   'Patek Philippe::5712/1A-001',
+  'Patek Philippe::3712/1A',
   'Rolex::126710BLNR',
   'Audemars Piguet::16202ST',
   'Audemars Piguet::15500ST',

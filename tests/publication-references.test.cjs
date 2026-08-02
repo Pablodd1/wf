@@ -52,11 +52,14 @@ test('PostgREST release filter is a bounded exact IN predicate', () => {
 
 test('an unset reference release configuration fails closed to the reviewed release', () => {
   assert.match(THREE_WATCH_RELEASE_REFERENCES, /Audemars Piguet::16202ST/);
+  assert.equal(isPublicationReferenceAllowed('Rolex', '116500LN', ''), true);
+  assert.equal(isPublicationReferenceAllowed('Rolex', '52506', ''), true);
+  assert.equal(isPublicationReferenceAllowed('Patek Philippe', '3712/1A', ''), true);
   assert.equal(isPublicationReferenceAllowed('Rolex', '126710BLNR', ''), true);
   assert.equal(isPublicationReferenceAllowed('Rolex', '126610LN', ''), false);
   assert.equal(
     publicationReferencePostgrestFilter(''),
-    'in.("116610LN","5712/1A","5712/1A-001","126710BLNR","16202ST","15500ST","15500","15400")',
+    'in.("116610LN","116500LN","52506","5712/1A","5712/1A-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")',
   );
 });
 
