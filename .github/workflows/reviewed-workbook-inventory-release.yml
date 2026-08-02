@@ -70,7 +70,9 @@ jobs:
               'idx_reviewed_workbook_inventory_price_first',
               'idx_reviewed_workbook_inventory_type_price_first',
               'idx_reviewed_workbook_inventory_brand_price_first',
-              'idx_reviewed_workbook_inventory_brand_type_price_first'
+              'idx_reviewed_workbook_inventory_brand_type_price_first',
+              'idx_reviewed_workbook_market_price_evidence_order',
+              'idx_reviewed_workbook_market_type_price_evidence_order'
             )
             AND NOT (index_state.indisvalid AND index_state.indisready)
           \gexec
@@ -81,6 +83,7 @@ jobs:
             "supabase/migrations/20260731170000_reviewed_workbook_seller_activity.sql"
             "supabase/migrations/20260731180000_reviewed_workbook_evidence_order.sql"
             "supabase/migrations/20260802170000_reviewed_workbook_price_first_indexes.sql"
+            "supabase/migrations/20260802173000_reviewed_workbook_price_evidence_order.sql"
           )
           for migration in "${allowlisted_migrations[@]}"; do
             test -f "$migration"
@@ -135,18 +138,22 @@ jobs:
                   'idx_reviewed_workbook_market_type_evidence_order',
                   'idx_reviewed_workbook_market_brand_type_evidence_order',
                   'idx_reviewed_workbook_market_reference_evidence_order',
-                  'idx_reviewed_workbook_inventory_price_first',
-                  'idx_reviewed_workbook_inventory_type_price_first',
-                  'idx_reviewed_workbook_inventory_brand_price_first',
-                  'idx_reviewed_workbook_inventory_brand_type_price_first',
+                  'idx_reviewed_workbook_market_price_evidence_order',
+                  'idx_reviewed_workbook_market_type_price_evidence_order',
                   'idx_reviewed_workbook_checkpoints_brand_status'
                 )
-            ) <> 19 THEN
+            ) <> 17 THEN
               RAISE EXCEPTION 'Reviewed workbook indexes are incomplete';
             END IF;
             IF has_table_privilege('anon', 'public.reviewed_workbook_market_source', 'SELECT')
               OR has_table_privilege('authenticated', 'public.reviewed_workbook_market_source', 'SELECT') THEN
               RAISE EXCEPTION 'Customer market source view is directly readable';
+            END IF;
+            IF to_regclass('public.reviewed_workbook_market_source_v2') IS NULL
+              OR has_table_privilege('anon', 'public.reviewed_workbook_market_source_v2', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.reviewed_workbook_market_source_v2', 'SELECT')
+              OR NOT has_table_privilege('service_role', 'public.reviewed_workbook_market_source_v2', 'SELECT') THEN
+              RAISE EXCEPTION 'Evidence-aware customer market source view is unsafe';
             END IF;
             IF NOT has_table_privilege('service_role', 'public.reviewed_workbook_market_source', 'SELECT') THEN
               RAISE EXCEPTION 'Service role cannot read customer market source view';
@@ -186,7 +193,7 @@ jobs:
             echo "- Exact approved-contact activity index: ready."
             echo "- Exact approved seller activity aggregate: service-only and ready."
             echo "- Existing customer evidence ordering v1 indexes: preserved and ready."
-            echo "- Supplied-price-first Trading Floor indexes: ready; no-price rows sort last."
+            echo "- Evidence-aware Trading Floor indexes: supplied prices first, confirmed USD ranked safely, no-price rows last."
             echo "- Identity and Price Research eligibility: fail closed through the service-only view and API."
             echo "- Listing-type and exact-reference publication indexes: ready."
             echo "- Ready for the checkpointed local importer."
