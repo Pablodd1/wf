@@ -190,8 +190,10 @@ RM35-03 blue N11/25 HKD 3.51m
 
 test('classifies looking-for listings as WTB without changing inventory defaults', () => {
   const wtb = segmentDealerMessage('Looking for 126500LN white dial');
+  const ntq = segmentDealerMessage('NTQ - 5821/1a green');
   const wts = segmentDealerMessage('126610LN N6/26 HKD 114000');
   assert.equal(wtb[0].context.intent_context, 'WTB');
+  assert.equal(ntq[0].context.intent_context, 'WTB');
   assert.equal(wts[0].context.intent_context, 'WTS');
 });
 

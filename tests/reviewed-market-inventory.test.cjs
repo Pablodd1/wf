@@ -100,6 +100,12 @@ test('labels generated workbook text as a summary rather than an original post',
   const generated = api.mapReviewedRecord(record({ raw_message: 'WTS Rolex 126500LN White 30000.00' }));
   assert.equal(generated.raw_message_scope, 'normalized_summary');
   assert.equal(generated.raw_message_evidence_type, 'WORKBOOK_NORMALIZED_SUMMARY');
+  const generatedWithoutSourcePrice = api.mapReviewedRecord(record({
+    raw_message: 'WTS Rolex 126500LN White 30000.00',
+    source_price_amount: null,
+  }));
+  assert.equal(generatedWithoutSourcePrice.raw_message_scope, 'normalized_summary');
+  assert.equal(generatedWithoutSourcePrice.raw_message_evidence_type, 'WORKBOOK_NORMALIZED_SUMMARY');
   const recovered = api.mapReviewedRecord(record({
     raw_message: 'NTQ - 5821/1a green',
     listing_type: 'WTB',

@@ -84,7 +84,10 @@ function isNormalizedWorkbookSummary(row) {
   const reference = cleanExactText(row.normalized_reference || row.raw_reference || row.catalog_reference, 80);
   const dial = cleanExactText(row.dial_color || row.catalog_dial, 80);
   const type = cleanExactText(row.listing_type || 'OTHER', 12).toUpperCase();
-  const amount = positiveNumber(row.source_price_amount);
+  // Workbook-generated summaries can contain the normalized workbook amount even
+  // when no source-backed price was retained. Use it only to identify the
+  // summary text; publication eligibility still depends on source evidence.
+  const amount = positiveNumber(row.source_price_amount) ?? positiveNumber(row.workbook_price_usd);
   const base = [type, brand, reference, dial].filter(Boolean).join(' ');
   const candidates = new Set([base]);
   if (amount !== null) {

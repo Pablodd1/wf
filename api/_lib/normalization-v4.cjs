@@ -354,7 +354,7 @@ function looksLikeHeader(line, reference) {
     Boolean(detectBrandHeader(text))
     || /\b(?:brand\s+new|new|used|coming\s+stock|without\s+box|watch\s+only|full\s+set|only\s+watch\s+and\s+card)\b/i.test(text)
     || /\b(?:HKD|USD|USDT|HK\$)\b|\u6e2f\u5e01|\u6e2f\u5e63/i.test(text)
-    || /(?:\bWTB\b|want\s+to\s+buy|looking\s+for|seeking|wanted|\bLF\b|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)|^\u6536[\uff1a:\s]/i.test(text)
+    || /(?:\bWTB\b|\bNTQ\b|want\s+to\s+buy|looking\s+for|seeking|wanted|\bLF\b|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)|^\u6536[\uff1a:\s]/i.test(text)
   );
 }
 
@@ -370,12 +370,12 @@ function applyHeaderContext(context, line) {
   if (/only\s+watch\s+and\s+card|watch\s+only/i.test(line)) next.set_status_context = 'Watch Only';
   if (/full\s+set/i.test(line)) next.set_status_context = 'Full Set';
   if (/coming\s+stock/i.test(line)) next.listing_status_context = 'COMING';
-  if (/(?:\bWTB\b|want\s+to\s+buy|looking\s+for|seeking|wanted|\bLF\b|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)|^\s*\u6536[\uff1a:\s]/i.test(line)) next.intent_context = 'WTB';
+  if (/(?:\bWTB\b|\bNTQ\b|want\s+to\s+buy|looking\s+for|seeking|wanted|\bLF\b|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)|^\s*\u6536[\uff1a:\s]/i.test(line)) next.intent_context = 'WTB';
   return next;
 }
 
 function inferIntent(line, inherited = null) {
-  if (/(?:\bWTB\b|want\s+to\s+buy|looking\s+for|seeking|wanted|\bLF\b|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)|^\s*\u6536[\uff1a:\s]/i.test(line)) return 'WTB';
+  if (/(?:\bWTB\b|\bNTQ\b|want\s+to\s+buy|looking\s+for|seeking|wanted|\bLF\b|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)|^\s*\u6536[\uff1a:\s]/i.test(line)) return 'WTB';
   if (/\b(?:sold|withdrawn)\b/i.test(line)) return 'WITHDRAWN';
   return inherited || 'WTS';
 }
