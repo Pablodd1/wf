@@ -54,7 +54,6 @@ interface ListingRecord {
   source_currency?: string | null;
   price_evidence_status?: string | null;
   price_research_eligible?: boolean;
-  workbook_price_usd?: number | null;
   dial_color: string | null;
   condition: string | null;
   year: number | null;
@@ -694,6 +693,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 }
 
 function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
+  const detailListing = listing;
   const [contact, setContact] = useState<ListingContact | null>(() => sourcePosterContact(listing));
   const [sellerAnalytics, setSellerAnalytics] = useState<ReviewedSellerAnalytics | null>(null);
   const [activeImage, setActiveImage] = useState(0);
@@ -793,7 +793,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           </div>
 
           <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
-            {[displayDial(listing.dial_color), cleanValue(listing.condition), listing.year ? String(listing.year) : ''].filter(Boolean).map(value => (
+            {[displayDial(detailListing.dial_color), cleanValue(detailListing.condition), detailListing.year ? String(detailListing.year) : ''].filter(Boolean).map(value => (
               <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: BORDER }}>{value}</span>
             ))}
           </div>
@@ -958,20 +958,15 @@ function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
   const verifiedUsd = verifiedUsdPrice(listing);
-  const workbookUsd = workbookUsdPrice(listing);
   const sourcePrice = formatSourcePrice(listing);
   const priceLabel = verifiedUsd !== null
     ? formatUsdPrice(verifiedUsd)
-    : workbookUsd !== null
-      ? formatUsdPrice(workbookUsd)
-      : sourcePrice || 'Price on request';
+    : sourcePrice || 'Price on request';
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'
-    : workbookUsd !== null
-      ? 'Dealer-listed USD'
-      : sourcePrice
-        ? 'Original source price · no USD conversion'
-        : 'Price not supplied';
+    : sourcePrice
+      ? 'Original source price · no USD conversion'
+      : 'Price not supplied';
   const title = buildListingTitle(listing);
 
   return {
@@ -1008,11 +1003,6 @@ function listingKindLabel(listing: ListingRecord) {
 function verifiedUsdPrice(listing: ListingRecord) {
   if (listing.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH' || listing.price_research_eligible !== true) return null;
   const value = Number(listing.price_usd);
-  return Number.isFinite(value) && value > 0 ? value : null;
-}
-
-function workbookUsdPrice(listing: ListingRecord) {
-  const value = Number(listing.workbook_price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 

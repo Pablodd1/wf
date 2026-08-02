@@ -1,28 +1,32 @@
 'use strict';
 
-// Controlled release is now OPEN — all brands are publicly accessible.
-// Set PUBLICATION_BRANDS env var to re-enable per-brand gating if needed
-// for a future controlled rollout (comma or pipe separated).
-// When PUBLICATION_BRANDS is unset/empty, ALL brands are allowed.
-
-const CONTROLLED_FILE_RELEASE_BRANDS = [];
+// These workbook releases remain available even when deployment configuration
+// is empty. Other brands must be named explicitly by the deployment.
+const CONTROLLED_FILE_RELEASE_BRANDS = ['Panerai', 'Zenith'];
 
 function publicationBrands(value = process.env.PUBLICATION_BRANDS) {
   const configured = String(value || '')
     .split(/[|,]/)
     .map(brand => brand.trim())
     .filter(Boolean);
-  return [...new Set([...configured, ...CONTROLLED_FILE_RELEASE_BRANDS])];
+  const unique = new Map();
+  for (const brand of [...configured, ...CONTROLLED_FILE_RELEASE_BRANDS]) {
+    const key = brand.toLowerCase();
+    if (!unique.has(key)) unique.set(key, brand);
+  }
+  return [...unique.values()];
 }
 
 function isPublicationBrandAllowed(brand, value = process.env.PUBLICATION_BRANDS) {
-  // OPEN ACCESS — all brands are publicly searchable regardless of env var.
-  return true;
+  const normalized = String(brand || '').trim().toLowerCase();
+  return Boolean(normalized) && publicationBrands(value)
+    .some(allowed => allowed.toLowerCase() === normalized);
 }
 
 function publicationBrandPostgrestFilter(value = process.env.PUBLICATION_BRANDS) {
-  // OPEN ACCESS — no brand filter applied.
-  return null;
+  const brands = publicationBrands(value);
+  if (!brands.length) return null;
+  return `in.(${brands.map(brand => `"${brand.replaceAll('"', '')}"`).join(',')})`;
 }
 
 module.exports = {

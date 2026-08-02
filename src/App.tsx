@@ -52,7 +52,7 @@ export default function App() {
         <Route path="/multi-listings" element={<DealerGate allowedRoles={['admin']}><MultiListings /></DealerGate>} />
         <Route path="/dealers" element={<DealerGate><DealerDirectory /></DealerGate>} />
         <Route path="/dealers/:dealerId" element={<DealerProfile />} />
-        <Route path="/price-research" element={<PriceResearch />} />
+        <Route path="/price-research" element={<DealerGate><PriceResearch /></DealerGate>} />
         <Route path="/demand" element={<DemandSignals />} />
         <Route path="/insight" element={<InsightDetails />} />
         <Route path="/info/:page" element={<PublicInfo />} />

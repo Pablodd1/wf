@@ -162,14 +162,40 @@ function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
 }
 
 function isPublicationReferenceAllowed(brand, reference, value = process.env.PUBLICATION_REFERENCES) {
-  // OPEN ACCESS — all brands and references are publicly searchable.
-  // Brand/reference gating is disabled regardless of env var configuration.
-  return true;
+  const normalizedBrand = String(brand || '').trim().toLowerCase();
+  const exactReference = String(reference || '').trim().toUpperCase();
+  if (!normalizedBrand || !exactReference) return false;
+  if (normalizedBrand === 'panerai') {
+    return isReviewedPaneraiReference(brand, reference);
+  }
+  if (normalizedBrand === 'zenith') return true;
+  if (isFullReviewedBrandRelease(value)) {
+    return FULL_REVIEWED_BRANDS.has(normalizedBrand);
+  }
+  return publicationReferences(value).some(entry => (
+    entry.brand.toLowerCase() === normalizedBrand
+    && entry.reference.toUpperCase() === exactReference
+  ));
 }
 
 function isReleaseListingEligible(record, value = process.env.PUBLICATION_REFERENCES) {
-  // OPEN ACCESS — all listings are eligible for public display.
-  return true;
+  if (isReviewedZenithIdentityCorrectionRecord(record)) return true;
+  if (String(record?.brand || '').trim().toLowerCase() === 'panerai') {
+    return isReviewedPaneraiReleaseRecord(record);
+  }
+  if (String(record?.brand || '').trim().toLowerCase() === 'zenith') {
+    return isReviewedZenithReleaseRecord(record);
+  }
+  const confidence = Number(record?.confidence);
+  const status = String(record?.listing_status || 'ACTIVE').trim().toUpperCase();
+  return Boolean(
+    record
+    && isPublicationReferenceAllowed(record.brand, record.reference, value)
+    && String(record.verdict || '').trim().toUpperCase() === 'APPROVED'
+    && Number.isFinite(confidence)
+    && confidence >= MIN_RELEASE_CONFIDENCE
+    && !['HIDDEN', 'REJECTED', 'DELETED'].includes(status)
+  );
 }
 
 function publicationReferencesForBrand(brand, value = process.env.PUBLICATION_REFERENCES) {

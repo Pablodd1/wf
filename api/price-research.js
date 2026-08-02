@@ -229,6 +229,12 @@ module.exports = async function handler(req, res) {
   res.setHeader('Vary', 'Cookie');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed.' });
 
+  const auth = await authorizeDealer(req, res);
+  if (auth.error) {
+    return res.status(auth.status).json({ error: auth.status === 503 ? 'Price Research authentication is unavailable.' : 'Sign in is required to access Price Research.' });
+  }
+  const canReviewExcludedEvidence = ['admin', 'reviewer'].includes(auth.role);
+
   const rawRef = (req.query.reference || '').trim();
   let brand = (req.query.brand || '').trim();
   const evidencePage = Math.max(1, Number.parseInt(String(req.query.evidencePage || '1'), 10) || 1);
@@ -768,8 +774,8 @@ module.exports = async function handler(req, res) {
       outliersRemoved: statisticalOutlierRows.length,
       excludedEvidenceCount: outlierRows.length,
       retained_evidence_count: retainedEvidenceRows.length,
-      outliers: false ? statisticalOutlierRows.map(row => row.price_usd) : [],
-      outlier_rows: false ? serializedOutliers.map(r => ({
+      outliers: canReviewExcludedEvidence ? statisticalOutlierRows.map(row => row.price_usd) : [],
+      outlier_rows: canReviewExcludedEvidence ? serializedOutliers.map(r => ({
         id: r.id,
         price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
         dial_color: r.dial_color, condition: r.condition,
