@@ -22,7 +22,7 @@ const workflow = fs.readFileSync(
 test('parses a combined exact-reference and dial search into indexed filters', () => {
   assert.match(source, /parseTradingSearch\(search\)/);
   assert.match(source, /req\.query\?\.reference \|\| parsedSearch\.reference/);
-  assert.match(source, /query\.eq\('dial_color', exactDial\)/);
+  assert.match(source, /query\.in\('dial_color', exactDialVariants\)/);
 });
 
 function record(overrides = {}) {

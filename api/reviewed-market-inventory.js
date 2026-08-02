@@ -326,9 +326,13 @@ module.exports = async function handler(req, res) {
     const requestedReference = cleanExactText(req.query?.reference || parsedSearch.reference, 80);
     const reference = referenceComparisonKey(requestedReference);
     const requestedDial = cleanExactText(parsedSearch.dial, 40);
-    const exactDial = requestedDial
-      ? `${requestedDial[0].toUpperCase()}${requestedDial.slice(1).toLowerCase()}`
-      : '';
+    const exactDialVariants = requestedDial
+      ? [...new Set([
+          requestedDial.toLowerCase(),
+          `${requestedDial[0].toUpperCase()}${requestedDial.slice(1).toLowerCase()}`,
+          requestedDial.toUpperCase(),
+        ])]
+      : [];
     const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
     const listingType = cleanExactText(req.query?.type, 12).toUpperCase();
     const condition = cleanExactText(req.query?.condition, 80);
@@ -407,7 +411,7 @@ module.exports = async function handler(req, res) {
         .order('id', { ascending: true });
     if (brand) query = query.eq('brand_scope', brand);
     if (reference) query = query.eq('reference_search_key', reference);
-    if (exactDial) query = query.eq('dial_color', exactDial);
+    if (exactDialVariants.length) query = query.in('dial_color', exactDialVariants);
     query = query.neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT');
     query = query.eq('has_complete_identity', true);
     if (imagesOnly) query = query.eq('has_exact_source_image', true);
