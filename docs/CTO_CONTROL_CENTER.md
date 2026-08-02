@@ -1,9 +1,8 @@
 # WatchFacts CTO Control Center
 
-**Control date:** July 30, 2026
-**Assignment mode:** Panerai/Zenith production remains controlled; the new
-owner-reviewed Patek, Rolex, and Audemars workbook collection is in
-shadow-canary release preparation
+**Control date:** August 1, 2026
+**Assignment mode:** controlled customer publication plus continuous,
+read-only MariaDB shadow capture and deterministic normalization
 **Current release decision:** keep the exact owner-reviewed Panerai workbook
 cohort and reviewed Zenith cohort live through bounded, deduplicated customer
 reads. Do not reuse the discarded Rolex/Patek release. Do not bulk-publish the
@@ -20,6 +19,69 @@ This is the single navigation and decision index for the current project state.
 It does not replace immutable evidence, code, migrations, or dated readbacks.
 When documents conflict, use the authority order below and record the conflict;
 do not choose the more optimistic number.
+
+## August 1 continuous source stabilization
+
+PRs [#233](https://github.com/Pablodd1/wf/pull/233),
+[#234](https://github.com/Pablodd1/wf/pull/234), and
+[#235](https://github.com/Pablodd1/wf/pull/235) are merged. They restore the
+reviewed publication boundary after an unsafe open-access change, protect Price
+Research with dealer authentication, require explicit verified USD for market
+analytics, require exact source-image lineage, keep seller contact private
+without publication consent, and keep excluded observations reviewer-only.
+The full repository safety suite passed `617/617`; the production build passed.
+
+The live upstream `thecollective_inventory.auctions` monitor reported:
+
+| Source measure | Verified result |
+| --- | ---: |
+| Total rows | 1,353,529 |
+| Rows in the latest 24 hours | 6,722 |
+| Freshness lag at check | 265 seconds |
+| Source account mode | SELECT-only |
+| Production writes from monitor/canaries | 0 |
+
+The dedicated Railway service `wf-mariadb-shadow` is active with one replica
+and a persistent 5 GB volume mounted at `/data`. Its source cursor begins at
+the historical start, copies immutable raw evidence, runs deterministic
+`v4.2-line-condition` normalization, checkpoints both stages, and then polls
+for new rows every 30 seconds. It does not call AI/vision, Supabase, or any
+customer publication path.
+
+The first self-healing production readback after deployment reconciled exactly:
+
+| Worker measure | Verified result |
+| --- | ---: |
+| Source input rows | 22,000 |
+| Immutable raw outputs | 22,000 |
+| Collection errors | 0 |
+| Normalization proposals | 22,000 |
+| Normalization errors | 0 |
+| `watch_records` writes | 0 |
+
+Observed throughput is approximately 52 rows/second. The initial full catch-up
+is estimated at about 7.2 hours from worker start, after which the same worker
+continues as the live tail. Current row-size extrapolation is approximately 4.0
+GB against the 5 GB volume; volume use must be watched during catch-up.
+
+Declared and corrected stabilization errors:
+
+- The first bounded canary found that legacy `auctions.year` does not exist;
+  the collector stopped before output and now uses the verified source schema.
+- The first isolated Railway deployment inherited the old Supabase worker
+  command, crashed without writes, and was removed. Railway now keeps the old
+  service default while allowing an explicit per-service command.
+- Eight legacy scripts contained embedded database credentials and unsafe
+  direct-import/FX behavior. Those paths are disabled and known literals were
+  removed. The exposed credentials still require rotation.
+- Repository lint still reports 169 pre-existing issues. This is declared
+  technical debt; build and the 617 safety/contract tests pass.
+
+Continuous capture and normalization proposals do **not** mean automatic
+publication. Bundle parents, incomplete catalog identity, ambiguous currency,
+unverified images, unapproved contacts, duplicates, and outliers remain held or
+routed to review. Promotion to Trading Floor or Price Research requires a
+separate signed, reconciled publication decision.
 
 ## July 30 three-brand reviewed workbook intake
 
