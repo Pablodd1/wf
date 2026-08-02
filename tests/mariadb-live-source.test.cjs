@@ -83,3 +83,14 @@ test('continuous worker checkpoints local shadow files and reconciles both stage
     fs.rmSync(output, { recursive: true, force: true });
   }
 });
+
+test('continuous worker declares failures and retries under an internal supervisor', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '..', 'tools', 'mariadb-live', 'continuous-worker.cjs'),
+    'utf8',
+  );
+  assert.match(source, /async function supervise\(\)/);
+  assert.match(source, /status: 'ERROR_RETRYING'/);
+  assert.match(source, /declared_errors: \['WORKER_EXECUTION_FAILED'\]/);
+  assert.match(source, /await sleep\(retryDelayMs\)/);
+});

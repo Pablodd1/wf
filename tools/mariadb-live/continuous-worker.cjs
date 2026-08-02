@@ -192,11 +192,40 @@ async function run() {
   }
 }
 
+async function supervise() {
+  let consecutiveFailures = 0;
+  for (;;) {
+    try {
+      await run();
+      return;
+    } catch (error) {
+      consecutiveFailures += 1;
+      const retryDelayMs = Math.min(300000, 30000 * (2 ** Math.min(4, consecutiveFailures - 1)));
+      const output = path.resolve(process.env.MARIADB_CONTINUOUS_OUTPUT || '/data/mariadb-live');
+      const report = {
+        contract: WORKER_CONTRACT,
+        checked_at: new Date().toISOString(),
+        status: 'ERROR_RETRYING',
+        declared_errors: ['WORKER_EXECUTION_FAILED'],
+        error_name: error.name || 'Error',
+        error_message: error.message || String(error),
+        consecutive_failures: consecutiveFailures,
+        retry_delay_ms: retryDelayMs,
+        production_writes: 0,
+        watch_records_writes: 0,
+      };
+      atomicJson(path.join(output, 'status.json'), report);
+      process.stderr.write(`${JSON.stringify({ event: 'mariadb_continuous_error', ...report })}\n`);
+      await sleep(retryDelayMs);
+    }
+  }
+}
+
 if (require.main === module) {
-  run().catch(error => {
-    process.stderr.write(`${JSON.stringify({ event: 'mariadb_continuous_error', status: 'ERROR', declared_errors: ['WORKER_EXECUTION_FAILED'], error_name: error.name || 'Error', error_message: error.message || String(error), production_writes: 0 })}\n`);
+  supervise().catch(error => {
+    process.stderr.write(`${JSON.stringify({ event: 'mariadb_supervisor_error', status: 'FATAL', declared_errors: ['SUPERVISOR_FAILED'], error_name: error.name || 'Error', error_message: error.message || String(error), production_writes: 0 })}\n`);
     process.exitCode = 1;
   });
 }
 
-module.exports = { prepareOutput, reconciliation, run };
+module.exports = { prepareOutput, reconciliation, run, supervise };
