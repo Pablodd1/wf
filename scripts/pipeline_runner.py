@@ -188,13 +188,38 @@ def generate_deterministic_uuid(namespace_str, key_str):
     return str(uuid.uuid5(ns, str(key_str)))
 
 def compute_transport_checksum(source_platform, source_group_id, source_message_id):
-    """Computes transport duplicate checksum based strictly on source platform, group, and message ID."""
-    raw_str = f"{source_platform}:{source_group_id}:{source_message_id}"
+    """
+    1. Transport message identity: platform + group + message_id.
+    Never falls back to raw message text alone.
+    """
+    platform = str(source_platform or 'auction').strip()
+    group = str(source_group_id or 'default_group').strip()
+    msg_id = str(source_message_id or '').strip()
+    if not msg_id:
+        raise ValueError("Transport message ID or stable provider identifier is required for transport checksum computation.")
+    raw_str = f"{platform}:{group}:{msg_id}"
     return hashlib.sha256(raw_str.encode('utf-8')).hexdigest()
 
-def compute_repost_signature(sender_id, brand_normalized, reference_normalized, price_usd):
-    """Computes repost/history signature based on seller, normalized item identity, and price."""
-    raw_str = f"{sender_id}:{brand_normalized}:{reference_normalized}:{price_usd}"
+def compute_seller_item_signature(seller_id, category, brand_normalized, reference_normalized):
+    """
+    2. Seller/item identity: seller + normalized category/brand/reference.
+    """
+    s_id = str(seller_id or 'unknown_seller').strip()
+    cat = str(category or 'WATCH').strip()
+    b = str(brand_normalized or 'OTHER').strip()
+    r = str(reference_normalized or 'UNKNOWN').strip()
+    raw_str = f"{s_id}:{cat}:{b}:{r}"
+    return hashlib.sha256(raw_str.encode('utf-8')).hexdigest()
+
+def compute_listing_event_signature(seller_item_sig, message_text, price_usd, posting_timestamp):
+    """
+    3. Listing-event identity: seller/item identity + exact raw-message hash + price/currency + posting timestamp.
+    Ensures changed price, date, or message remains a separate historical event.
+    """
+    msg_hash = hashlib.sha256(str(message_text or '').encode('utf-8')).hexdigest()
+    p_str = str(price_usd or 0)
+    ts_str = str(posting_timestamp or '')
+    raw_str = f"{seller_item_sig}:{msg_hash}:{p_str}:{ts_str}"
     return hashlib.sha256(raw_str.encode('utf-8')).hexdigest()
 
 def check_duplicate_payload(cur, checksum, current_payload_id, batch_seen_checksums):

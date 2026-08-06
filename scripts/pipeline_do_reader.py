@@ -53,8 +53,14 @@ def get_target_db():
     conn.row_factory = sqlite3.Row
     return (conn, True)
 
-def calculate_checksum(text):
-    return hashlib.sha256(text.encode('utf-8', errors='ignore')).hexdigest()
+def calculate_checksum(source_platform, source_group_id, source_message_id):
+    platform = str(source_platform or 'auction').strip()
+    group = str(source_group_id or 'default_group').strip()
+    msg_id = str(source_message_id or '').strip()
+    if not msg_id:
+        raise ValueError("Transport message ID or stable provider identifier is required for payload checksum computation.")
+    raw_str = f"{platform}:{group}:{msg_id}"
+    return hashlib.sha256(raw_str.encode('utf-8')).hexdigest()
 
 def db_exec(cur, is_sqlite, query, args=None):
     if is_sqlite:
@@ -107,7 +113,9 @@ def fetch_and_enqueue_source_messages(batch_size=100):
             continue
 
         source_msg_id = str(r['id'])
-        checksum = calculate_checksum(msg_text)
+        platform_val = r.get('type') or 'auction'
+        group_val = r.get('region') or 'default_group'
+        checksum = calculate_checksum(platform_val, group_val, source_msg_id)
         payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{source_msg_id}"))
         job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{source_msg_id}"))
         orig_ts = str(r['created_on']) if r.get('created_on') else datetime.utcnow().isoformat() + "Z"

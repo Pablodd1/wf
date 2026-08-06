@@ -56,13 +56,13 @@ class TestWatchFactsPipeline(unittest.TestCase):
         self.assertEqual(res2["trading_floor_status"], "published")
         self.assertEqual(res2["price_research_status"], "ineligible_no_price")
 
-        # 3. WTB Request
+        # 3. WTB Request (Unpriced WTB demand signal)
         j3 = {"id": "3", "message_text": "WTB Patek 5711 Blue Dial", "type": "buy"}
         res3 = self.processor.process_job(j3)
         self.assertEqual(res3["category"], "WATCH")
         self.assertEqual(res3["intent"], "WTB")
         self.assertEqual(res3["trading_floor_status"], "published")
-        self.assertEqual(res3["price_research_status"], "ineligible_no_price")
+        self.assertEqual(res3["price_research_status"], "eligible")
 
     def test_bundle_splitting(self):
         from pipeline_bundle_splitter import split_bundle_listing

@@ -298,12 +298,15 @@ class WatchFactsPipelineProcessor:
             price_research_status = "ineligible_non_watch"
         elif is_bundle:
             price_research_status = "ineligible_bundle"
+        elif not has_brand or not has_ref:
+            price_research_status = "ineligible_identity"
+        elif intent == "WTB":
+            # WTB buyer demand requests (priced or unpriced) are eligible as demand signals
+            price_research_status = "eligible"
         elif not has_price:
             price_research_status = "ineligible_no_price"
         elif not known_currency:
             price_research_status = "ineligible_currency"
-        elif not has_brand or not has_ref:
-            price_research_status = "ineligible_identity"
         elif not price_plausible:
             price_research_status = "provisional_needs_review"
         else:
@@ -384,10 +387,8 @@ class WatchFactsPipelineProcessor:
 
         if is_bundle:
             listing_type = "MULTI_LISTING"
-        elif intent == "WTB":
-            listing_type = "WTB"
         else:
-            listing_type = "SINGLE"
+            listing_type = intent
 
         from_name = job_data.get("from_name") or job_data.get("user_name") or "Anonymous Dealer"
         from_number = job_data.get("from_number") or job_data.get("contact_number") or None

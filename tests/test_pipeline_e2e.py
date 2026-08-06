@@ -46,7 +46,7 @@ class TestPipelineEndToEnd(unittest.TestCase):
         # 3. Assert parent listing outputs
         self.assertEqual(result["category"], "WATCH")
         self.assertEqual(result["intent"], "WTS")
-        self.assertEqual(result["listing_type"], "SINGLE")
+        self.assertEqual(result["listing_type"], "WTS")
         self.assertFalse(result["is_bundle"])
         self.assertEqual(result["brand_normalized"], "Rolex")
         self.assertEqual(result["reference_normalized"], "116508")
