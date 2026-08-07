@@ -23,7 +23,7 @@ module.exports = async function handler(req, res) {
 
     // Use a targeted query — NEVER count(*) on 2.39M rows
     let query = client
-      .from('watch_records')
+      .from('trading_floor_view')
       .select('*')
       .limit(pageSize);
 

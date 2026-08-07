@@ -133,7 +133,7 @@ module.exports = async function handler(req, res) {
 
     // 1. Pull ALL records for this brand+reference (no verdict filter — analytics filters client-side)
     const { data: rows, error } = await client
-      .from('watch_records')
+      .from('price_research_verified_source')
       .select('price_usd, currency, created_at, condition, source, dial_color, raw_message, listing_type, verdict')
       .eq('brand', brand)
       .eq('reference', reference)
