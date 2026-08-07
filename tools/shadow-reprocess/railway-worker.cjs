@@ -3,6 +3,10 @@
 // Long-running, single-concurrency worker for Railway/Render. It processes
 // only shadow proposals and uses a Postgres lease so it cannot race Vercel.
 
+console.log("CRITICAL: Worker paused for wf-mariadb-shadow-volume expansion.");
+setInterval(() => {}, 60000);
+return;
+
 const { randomUUID } = require('node:crypto');
 const { performance } = require('node:perf_hooks');
 const { analyzeRecord } = require('./shadow-reprocess.cjs');

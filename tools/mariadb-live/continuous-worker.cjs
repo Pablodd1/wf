@@ -5,6 +5,9 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const mysql = require('mysql2/promise');
+console.log("CRITICAL: Worker paused for wf-mariadb-shadow-volume expansion.");
+setInterval(() => {}, 60000);
+return;
 const { SELECT_COLUMNS } = require('./collect.cjs');
 const {
   CONTRACT,
