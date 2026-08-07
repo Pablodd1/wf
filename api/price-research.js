@@ -327,9 +327,7 @@ module.exports = async function handler(req, res) {
   try {
     const client = getClient();
     const controlledPaneraiRelease = brand.toLowerCase() === 'panerai';
-    const sourceTable = controlledPaneraiRelease
-      ? 'price_research_verified_source'
-      : 'watch_records';
+    const sourceTable = 'price_research_verified_source';
 
     // Resolve exact stored spellings only. Prefix matches are suggestions for
     // an explicit customer choice; they must never silently become a specific
@@ -437,7 +435,7 @@ module.exports = async function handler(req, res) {
       .select(columns)
       .eq('brand', brand)
       .in('reference', referenceVariants)
-      .in('listing_type', ['WTS', 'SINGLE'])
+      .eq('listing_type', 'WTS')
       .gt('price_usd', 0)
       .order('created_at', { ascending: false })
       .range(from, to);

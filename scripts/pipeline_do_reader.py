@@ -115,60 +115,70 @@ def fetch_and_enqueue_source_messages(batch_size=100):
         source_msg_id = str(r['id'])
         platform_val = 'mysql_thecollective'
         group_val = str(r.get('source_group_id') or r.get('channel_id') or 'auctions')
-        batch_id_val = getattr(args, 'batch_id', 'canary_500_20260806')
+        source_intent_val = str(r.get('type') or 'sale').lower().strip()
+        batch_id_val = getattr(args, 'batch_id', None) or f"batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        orig_ts = str(r['created_on']) if r.get('created_on') else datetime.utcnow().isoformat() + "Z"
         
         checksum = calculate_checksum(platform_val, group_val, source_msg_id)
         content_hash = hashlib.sha256(f"{msg_text}:{orig_ts}".encode('utf-8')).hexdigest()
         version_checksum = hashlib.sha256(f"{checksum}:{content_hash}".encode('utf-8')).hexdigest()
         
         payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{checksum}"))
+        payload_version_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload_version.{version_checksum}"))
         job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{version_checksum}"))
-        orig_ts = str(r['created_on']) if r.get('created_on') else datetime.utcnow().isoformat() + "Z"
 
+        versions_table = "payload_versions" if is_sqlite else "raw.payload_versions"
         if is_sqlite:
-            payload_query = f"""
+            cur_tgt.execute(f"""
             INSERT OR IGNORE INTO {payload_table} (
                 id, source_platform, source_group_id, source_group_name, source_message_id,
-                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum, version_checksum, batch_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """
-            cur_tgt.execute(payload_query, (
+                source_sender_id, source_sender_name, source_intent, payload_checksum, batch_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, (
                 payload_id, platform_val, group_val, r.get('region'),
-                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum, version_checksum, batch_id_val
+                source_msg_id, r.get('from_number'), r.get('from_name'), source_intent_val, checksum, batch_id_val
+            ))
+
+            cur_tgt.execute(f"""
+            INSERT OR IGNORE INTO {versions_table} (
+                id, raw_payload_id, version_checksum, source_intent, original_message_text, original_timestamp, batch_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?);
+            """, (
+                payload_version_id, payload_id, version_checksum, source_intent_val, msg_text, orig_ts, batch_id_val
             ))
             
-            job_query = f"""
-            INSERT OR IGNORE INTO {jobs_table} (id, raw_payload_id, status, batch_id)
-            VALUES (?, ?, 'queued', ?);
-            """
-            cur_tgt.execute(job_query, (job_id, payload_id, batch_id_val))
+            cur_tgt.execute(f"""
+            INSERT OR IGNORE INTO {jobs_table} (id, raw_payload_id, payload_version_id, status, batch_id)
+            VALUES (?, ?, ?, 'queued', ?);
+            """, (job_id, payload_id, payload_version_id, batch_id_val))
         else:
-            payload_query = f"""
+            cur_tgt.execute(f"""
             INSERT INTO {payload_table} (
                 id, source_platform, source_group_id, source_group_name, source_message_id,
-                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum, version_checksum, batch_id
+                source_sender_id, source_sender_name, source_intent, payload_checksum, batch_id
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            ) ON CONFLICT (payload_checksum) DO UPDATE SET 
-                original_message_text = EXCLUDED.original_message_text,
-                original_timestamp = EXCLUDED.original_timestamp,
-                version_checksum = EXCLUDED.version_checksum,
-                record_version = '1.0'
-            RETURNING id;
-            """
-            cur_tgt.execute(payload_query, (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            ) ON CONFLICT (payload_checksum) DO NOTHING;
+            """, (
                 payload_id, platform_val, group_val, r.get('region'),
-                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum, version_checksum, batch_id_val
+                source_msg_id, r.get('from_number'), r.get('from_name'), source_intent_val, checksum, batch_id_val
             ))
-            res = cur_tgt.fetchone()
-            actual_payload_id = res[0] if res else payload_id
 
-            job_query = f"""
-            INSERT INTO {jobs_table} (id, raw_payload_id, status, batch_id)
-            VALUES (%s, %s, 'queued'::jobs.processing_status, %s)
+            cur_tgt.execute(f"""
+            INSERT INTO {versions_table} (
+                id, raw_payload_id, version_checksum, source_intent, original_message_text, original_timestamp, batch_id
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s
+            ) ON CONFLICT (version_checksum) DO NOTHING;
+            """, (
+                payload_version_id, payload_id, version_checksum, source_intent_val, msg_text, orig_ts, batch_id_val
+            ))
+
+            cur_tgt.execute(f"""
+            INSERT INTO {jobs_table} (id, raw_payload_id, payload_version_id, status, batch_id)
+            VALUES (%s, %s, %s, 'queued'::jobs.processing_status, %s)
             ON CONFLICT (id) DO NOTHING;
-            """
-            cur_tgt.execute(job_query, (job_id, actual_payload_id, batch_id_val))
+            """, (job_id, payload_id, payload_version_id, batch_id_val))
 
         enqueued_count += 1
 

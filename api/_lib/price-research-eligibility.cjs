@@ -8,8 +8,8 @@ function isMultiListingSentinel(value) {
 }
 
 function classifyResearchEligibility(row, catalog) {
-  const type = String(row?.listing_type || row?.intent || '').trim().toUpperCase();
-  if (type !== 'WTS' && type !== 'SINGLE') return 'NOT_WTS_SALE';
+  const type = String(row.listing_type || row.intent || '').toUpperCase().trim();
+  if (type !== 'WTS') return 'NOT_WTS_SALE';
   const price = Number(row?.price_usd);
   const ownerReviewedIdentity = row?.owner_reviewed_identity === true;
   if (Number(row?.bundle_candidate_count || 0) > 1) return 'BUNDLE_SOURCE_UNSPLIT';

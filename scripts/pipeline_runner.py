@@ -74,10 +74,20 @@ def setup_sqlite_schema(conn):
         source_message_id TEXT,
         source_sender_id TEXT,
         source_sender_name TEXT,
+        source_intent TEXT,
+        payload_checksum TEXT UNIQUE,
+        batch_id TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS payload_versions (
+        id TEXT PRIMARY KEY,
+        raw_payload_id TEXT,
+        version_checksum TEXT UNIQUE,
+        source_intent TEXT,
         original_message_text TEXT,
         original_timestamp TEXT,
-        payload_checksum TEXT UNIQUE,
-        version_checksum TEXT,
         batch_id TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -86,6 +96,7 @@ def setup_sqlite_schema(conn):
     CREATE TABLE IF NOT EXISTS processing_jobs (
         id TEXT PRIMARY KEY,
         raw_payload_id TEXT,
+        payload_version_id TEXT,
         status TEXT,
         batch_id TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
@@ -176,11 +187,12 @@ def setup_sqlite_schema(conn):
         completed_at TEXT
     );
     """)
-    for col in ["version_checksum TEXT", "batch_id TEXT"]:
+    for col in ["source_intent TEXT", "batch_id TEXT"]:
         try:
             cur.execute(f"ALTER TABLE payloads ADD COLUMN {col};")
         except Exception:
             pass
+    for col in ["payload_version_id TEXT", "batch_id TEXT"]:
         try:
             cur.execute(f"ALTER TABLE processing_jobs ADD COLUMN {col};")
         except Exception:
@@ -193,7 +205,7 @@ def setup_sqlite_schema(conn):
     conn.commit()
 
 def db_execute(cur, query, args=None):
-    if IS_SQLITE:
+    if IS_SQLITE or str(type(cur)).lower().find("sqlite") != -1:
         query = query.replace("%s", "?")
     if args:
         cur.execute(query, args)
@@ -247,29 +259,20 @@ def compute_listing_event_signature(seller_item_sig, message_text, price_usd, cu
 def check_duplicate_payload(cur, checksum, current_payload_id, batch_seen_checksums):
     if checksum in batch_seen_checksums:
         return True
-    payloads_table = "payloads" if IS_SQLITE else "raw.payloads"
-    jobs_table = "processing_jobs" if IS_SQLITE else "jobs.processing_jobs"
+    is_sqlite = IS_SQLITE or "sqlite" in str(type(cur)).lower()
+    payloads_table = "payloads" if is_sqlite else "raw.payloads"
+    jobs_table = "processing_jobs" if is_sqlite else "jobs.processing_jobs"
     try:
-        if IS_SQLITE:
-            db_execute(cur, f"""
-                SELECT 1 
-                FROM {payloads_table} p 
-                JOIN {jobs_table} j ON p.id = j.raw_payload_id 
-                WHERE p.payload_checksum = %s 
-                  AND p.id != %s 
-                  AND j.status IN ('normalized', 'processing', 'extracted', 'validated', 'approved')
-                LIMIT 1;
-            """, (checksum, current_payload_id))
-        else:
-            db_execute(cur, f"""
-                SELECT 1 
-                FROM {payloads_table} p 
-                JOIN {jobs_table} j ON p.id = j.raw_payload_id 
-                WHERE p.payload_checksum = %s 
-                  AND p.id != %s 
-                  AND j.status::text IN ('normalized', 'processing', 'extracted', 'validated', 'approved')
-                LIMIT 1;
-            """, (checksum, current_payload_id))
+        query = f"""
+            SELECT 1 
+            FROM {payloads_table} p 
+            JOIN {jobs_table} j ON p.id = j.raw_payload_id 
+            WHERE p.payload_checksum = %s 
+              AND p.id != %s 
+              AND j.status IN ('normalized', 'processing', 'extracted', 'validated', 'approved')
+            LIMIT 1;
+        """
+        db_execute(cur, query, (checksum, current_payload_id))
         row = cur.fetchone()
         return bool(row)
     except Exception as e:
@@ -285,13 +288,18 @@ def run_pipeline_step(limit=50):
     # Atomic CTE job claiming with FOR UPDATE SKIP LOCKED on PostgreSQL
     if IS_SQLITE:
         db_execute(cur, """
-            SELECT j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
+            SELECT j.id as job_id, p.id as payload_id,
+                   COALESCE(pv.original_message_text, p.original_message_text) as message_text,
                    p.source_sender_name as from_name, p.source_sender_id as from_number,
-                   p.source_group_name as region, p.source_platform as type,
-                   p.payload_checksum, p.original_timestamp, p.source_platform, p.source_group_id, p.source_message_id,
-                   p.batch_id
+                   p.source_group_name as region,
+                   COALESCE(pv.source_intent, p.source_platform) as type,
+                   p.payload_checksum,
+                   COALESCE(pv.original_timestamp, p.original_timestamp) as original_timestamp,
+                   p.source_platform, p.source_group_id, p.source_message_id,
+                   COALESCE(pv.batch_id, j.batch_id, p.batch_id) as batch_id
             FROM processing_jobs j
             JOIN payloads p ON j.raw_payload_id = p.id
+            LEFT JOIN payload_versions pv ON j.payload_version_id = pv.id
             WHERE j.status = 'received' OR j.status = 'queued'
             LIMIT %s;
         """, (limit,))
@@ -303,7 +311,7 @@ def run_pipeline_step(limit=50):
     else:
         db_execute(cur, """
             WITH target_jobs AS (
-                SELECT j.id, j.raw_payload_id
+                SELECT j.id, j.raw_payload_id, j.payload_version_id, j.batch_id
                 FROM jobs.processing_jobs j
                 WHERE j.status IN ('received'::jobs.processing_status, 'queued'::jobs.processing_status)
                 ORDER BY j.created_at ASC
@@ -315,12 +323,17 @@ def run_pipeline_step(limit=50):
                 updated_at = NOW()
             FROM target_jobs t
             JOIN raw.payloads p ON t.raw_payload_id = p.id
+            LEFT JOIN raw.payload_versions pv ON t.payload_version_id = pv.id
             WHERE j.id = t.id
-            RETURNING j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
+            RETURNING j.id as job_id, p.id as payload_id,
+                      COALESCE(pv.original_message_text, p.original_message_text) as message_text,
                       p.source_sender_name as from_name, p.source_sender_id as from_number,
-                      p.source_group_name as region, p.source_platform as type,
-                      p.payload_checksum, p.original_timestamp, p.source_platform, p.source_group_id, p.source_message_id,
-                      p.batch_id;
+                      p.source_group_name as region,
+                      COALESCE(pv.source_intent, p.source_platform) as type,
+                      p.payload_checksum,
+                      COALESCE(pv.original_timestamp, p.original_timestamp) as original_timestamp,
+                      p.source_platform, p.source_group_id, p.source_message_id,
+                      COALESCE(pv.batch_id, t.batch_id, p.batch_id) as batch_id;
         """, (limit,))
         raw_jobs = cur.fetchall()
         jobs = []
@@ -330,7 +343,7 @@ def run_pipeline_step(limit=50):
                 "from_name": r[3], "from_number": r[4], "region": r[5], "type": r[6],
                 "payload_checksum": r[7], "original_timestamp": r[8],
                 "source_platform": r[9], "source_group_id": r[10], "source_message_id": r[11],
-                "batch_id": r[12] if len(r) > 12 else "canary_500_20260806"
+                "batch_id": r[12] if len(r) > 12 else None
             })
         conn.commit()
 
@@ -343,12 +356,13 @@ def run_pipeline_step(limit=50):
     for job in jobs:
         job_id = job["job_id"]
         payload_id = job["payload_id"]
+        batch_id_val = job.get("batch_id")
         checksum = job.get("payload_checksum") or compute_transport_checksum(job.get("source_platform"), job.get("source_group_id"), job.get("source_message_id"))
 
         job_data = {
             "id": job_id,
             "message_text": job["message_text"],
-            "type": "sale" if "sale" in str(job["type"]).lower() or "wts" in str(job["message_text"]).lower() else "buy",
+            "type": "buy" if str(job.get("type", "")).lower() in ("buy", "wtb") else "sale",
             "from_name": job["from_name"],
             "from_number": job["from_number"],
             "region": job["region"]
@@ -384,12 +398,12 @@ def run_pipeline_step(limit=50):
                 phone_code, location, rating, dealer_rating, is_verified_user, is_paid_user, is_seller_approved, company_id,
                 contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
                 normalization_status, trading_floor_status, price_research_status,
-                transport_checksum, seller_item_signature, listing_event_signature
+                transport_checksum, seller_item_signature, listing_event_signature, batch_id
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s
+                %s, %s, %s, %s
             )
             """
             if IS_SQLITE:
@@ -417,7 +431,7 @@ def run_pipeline_step(limit=50):
                 res["company_id"], bool_val(res["contact_consent"]), bool_val(res["catalog_confirmed"]),
                 res["overall_confidence"], prov_json, res["verdict"], res["normalization_status"],
                 res["trading_floor_status"], res["price_research_status"],
-                checksum, p_seller_item_sig, p_listing_event_sig
+                checksum, p_seller_item_sig, p_listing_event_sig, batch_id_val
             )
             db_execute(cur, parent_query, parent_args)
 
@@ -439,12 +453,12 @@ def run_pipeline_step(limit=50):
                     phone_code, location, rating, dealer_rating, is_verified_user, is_paid_user, is_seller_approved, company_id,
                     contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
                     normalization_status, trading_floor_status, price_research_status,
-                    transport_checksum, seller_item_signature, listing_event_signature
+                    transport_checksum, seller_item_signature, listing_event_signature, batch_id
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s
+                    %s, %s, %s, %s
                 )
                 """
                 if IS_SQLITE:
@@ -467,7 +481,7 @@ def run_pipeline_step(limit=50):
                     res["company_id"], bool_val(False), bool_val(False),
                     child["overall_confidence"], c_prov_json, child["verdict"], child["normalization_status"],
                     child["trading_floor_status"], child["price_research_status"],
-                    checksum, c_seller_item_sig, c_listing_event_sig
+                    checksum, c_seller_item_sig, c_listing_event_sig, batch_id_val
                 )
                 db_execute(cur, child_query, child_args)
 
