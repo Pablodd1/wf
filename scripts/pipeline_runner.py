@@ -375,12 +375,12 @@ def run_pipeline_step(limit=50):
             LEFT JOIN raw.payload_versions pv ON t.payload_version_id = pv.id
             WHERE j.id = t.id
             RETURNING j.id as job_id, p.id as payload_id,
-                      COALESCE(pv.original_message_text, p.original_message_text) as message_text,
+                      COALESCE(pv.message_text, p.original_message_text) as message_text,
                       p.source_sender_name as from_name, p.source_sender_id as from_number,
                       p.source_group_name as region,
                       COALESCE(pv.source_intent, p.source_platform) as type,
-                      p.payload_checksum,
-                      COALESCE(pv.original_timestamp, p.original_timestamp) as original_timestamp,
+                      COALESCE(pv.version_checksum, p.version_checksum) as payload_checksum,
+                      COALESCE(pv.timestamp, p.original_timestamp) as original_timestamp,
                       p.source_platform, p.source_group_id, p.source_message_id,
                       COALESCE(pv.batch_id, t.batch_id, p.batch_id) as batch_id,
                       COALESCE(pv.front_image, p.front_image) as front_image,

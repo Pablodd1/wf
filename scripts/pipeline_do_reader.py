@@ -163,7 +163,9 @@ def process_source_records(rows, batch_id=None):
     conn_tgt, is_sqlite = get_target_db()
     cur_tgt = conn_tgt.cursor()
 
-    enqueued_count = 0
+    attempted_count = 0
+    inserted_jobs = 0
+    existing_jobs = 0
     payload_table = "payloads" if is_sqlite else "raw.payloads"
     jobs_table = "processing_jobs" if is_sqlite else "jobs.processing_jobs"
 
@@ -174,6 +176,7 @@ def process_source_records(rows, batch_id=None):
         if not msg_text.strip():
             continue
 
+        attempted_count += 1
         source_msg_id = str(r['id'])
         platform_val = 'mysql_thecollective'
         group_val = str(r.get('source_group_id') or r.get('channel_id') or 'auctions')
@@ -252,6 +255,11 @@ def process_source_records(rows, batch_id=None):
             INSERT OR IGNORE INTO {jobs_table} (id, raw_payload_id, payload_version_id, status, batch_id)
             VALUES (?, ?, ?, 'queued', ?);
             """, (job_id, payload_id, payload_version_id, batch_id_val))
+            
+            if cur_tgt.rowcount > 0:
+                inserted_jobs += 1
+            else:
+                existing_jobs += 1
         else:
             cur_tgt.execute(f"""
             INSERT INTO {payload_table} (
@@ -285,13 +293,21 @@ def process_source_records(rows, batch_id=None):
             VALUES (%s, %s, %s, 'queued'::jobs.processing_status, %s)
             ON CONFLICT (id) DO NOTHING;
             """, (job_id, payload_id, payload_version_id, batch_id_val))
-
-        enqueued_count += 1
+            
+            if cur_tgt.rowcount > 0:
+                inserted_jobs += 1
+            else:
+                existing_jobs += 1
 
     conn_tgt.commit()
     conn_tgt.close()
-    print(f"Successfully enqueued {enqueued_count} payloads into {jobs_table}.")
-    return enqueued_count
+    
+    print(f"Reader Summary:")
+    print(f"  Attempted records: {attempted_count}")
+    print(f"  Inserted new jobs: {inserted_jobs}")
+    print(f"  Existing/Suppressed (Conflict): {existing_jobs}")
+    
+    return inserted_jobs
 
 if __name__ == "__main__":
     fetch_and_enqueue_source_messages(batch_size=100)

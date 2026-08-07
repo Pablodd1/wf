@@ -43,9 +43,9 @@ class TestGenuinePostgresCanary(unittest.TestCase):
             cur.execute("""
                 INSERT INTO raw.payloads (
                     id, source_platform, source_group_id, source_group_name, source_message_id,
-                    source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum, batch_id
+                    source_sender_id, source_sender_name, original_message_text, original_timestamp, version_checksum, batch_id
                 ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW(), %s, 'canary_gate_batch')
-                ON CONFLICT (payload_checksum) DO NOTHING;
+                ON CONFLICT (version_checksum) DO NOTHING;
             """, (payload_id, "canary_platform", "canary_gate_group", "Canary Gate Group", source_msg_id, "canary_sender", "Canary Tester", msg_text, checksum))
 
             cur.execute("""

@@ -60,6 +60,12 @@ jobs:
       - name: Install dependencies
         run: pip install psycopg2-binary pymysql
         
+      - name: Apply Supabase Migrations
+        run: python scripts/apply_migrations.py
+        
+      - name: Run 10-Case Canary
+        run: python scripts/run_10_case_canary.py
+        
       - name: Run Python Integration Tests
         run: |
           python -m unittest discover tests
