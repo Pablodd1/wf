@@ -437,6 +437,8 @@ module.exports = async function handler(req, res) {
       .select(columns)
       .eq('brand', brand)
       .in('reference', referenceVariants)
+      .neq('listing_type', 'WTB')
+      .gt('price_usd', 0)
       .order('created_at', { ascending: false })
       .range(from, to);
 

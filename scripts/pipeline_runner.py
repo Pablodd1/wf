@@ -215,15 +215,20 @@ def compute_seller_item_signature(seller_id, category, brand_normalized, referen
     raw_str = f"{s_id}:{cat}:{b}:{r}"
     return hashlib.sha256(raw_str.encode('utf-8')).hexdigest()
 
-def compute_listing_event_signature(seller_item_sig, message_text, price_usd, posting_timestamp):
+def compute_listing_event_signature(seller_item_sig, message_text, price_usd, currency, posting_timestamp, record_kind="parent", bundle_position=0):
     """
-    3. Listing-event identity: seller/item identity + exact raw-message hash + price/currency + posting timestamp.
-    Ensures changed price, date, or message remains a separate historical event.
+    Listing-event identity: seller/item identity + exact raw-message hash + price + currency + posting timestamp + record_kind + bundle_position.
+    Ensures changed price, currency, timestamp, or message text remains a separate historical event,
+    and identical items within a bundle do not collide with each other or the parent.
     """
     msg_hash = hashlib.sha256(str(message_text or '').encode('utf-8')).hexdigest()
     p_str = str(price_usd or 0)
+    curr_str = str(currency or 'USD').upper().strip()
     ts_str = str(posting_timestamp or '')
-    raw_str = f"{seller_item_sig}:{msg_hash}:{p_str}:{ts_str}"
+    kind_str = str(record_kind or 'parent').lower().strip()
+    pos_str = str(bundle_position or 0)
+    
+    raw_str = f"{seller_item_sig}:{msg_hash}:{p_str}:{curr_str}:{ts_str}:{kind_str}:{pos_str}"
     return hashlib.sha256(raw_str.encode('utf-8')).hexdigest()
 
 def check_duplicate_payload(cur, checksum, current_payload_id, batch_seen_checksums):
@@ -270,7 +275,7 @@ def run_pipeline_step(limit=50):
             SELECT j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
                    p.source_sender_name as from_name, p.source_sender_id as from_number,
                    p.source_group_name as region, p.source_platform as type,
-                   p.payload_checksum
+                   p.payload_checksum, p.original_timestamp, p.source_platform, p.source_group_id, p.source_message_id
             FROM processing_jobs j
             JOIN payloads p ON j.raw_payload_id = p.id
             WHERE j.status = 'received' OR j.status = 'queued'
@@ -300,7 +305,7 @@ def run_pipeline_step(limit=50):
             RETURNING j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
                       p.source_sender_name as from_name, p.source_sender_id as from_number,
                       p.source_group_name as region, p.source_platform as type,
-                      p.payload_checksum;
+                      p.payload_checksum, p.original_timestamp, p.source_platform, p.source_group_id, p.source_message_id;
         """, (limit,))
         raw_jobs = cur.fetchall()
         jobs = []
@@ -308,7 +313,8 @@ def run_pipeline_step(limit=50):
             jobs.append({
                 "job_id": r[0], "payload_id": r[1], "message_text": r[2],
                 "from_name": r[3], "from_number": r[4], "region": r[5], "type": r[6],
-                "payload_checksum": r[7]
+                "payload_checksum": r[7], "original_timestamp": r[8],
+                "source_platform": r[9], "source_group_id": r[10], "source_message_id": r[11]
             })
         conn.commit()
 
@@ -321,7 +327,7 @@ def run_pipeline_step(limit=50):
     for job in jobs:
         job_id = job["job_id"]
         payload_id = job["payload_id"]
-        checksum = job.get("payload_checksum") or hashlib.sha256(job["message_text"].encode('utf-8')).hexdigest()
+        checksum = job.get("payload_checksum") or compute_transport_checksum(job.get("source_platform"), job.get("source_group_id"), job.get("source_message_id"))
 
         job_data = {
             "id": job_id,
@@ -329,8 +335,7 @@ def run_pipeline_step(limit=50):
             "type": "sale" if "sale" in str(job["type"]).lower() or "wts" in str(job["message_text"]).lower() else "buy",
             "from_name": job["from_name"],
             "from_number": job["from_number"],
-            "region": job["region"],
-            "dealer_rating": 5.0
+            "region": job["region"]
         }
 
         try:
@@ -346,7 +351,7 @@ def run_pipeline_step(limit=50):
             posting_ts = job.get("original_timestamp") or job.get("created_at") or ""
             
             p_seller_item_sig = compute_seller_item_signature(seller_id, res["category"], res["brand_normalized"], res["reference_normalized"])
-            p_listing_event_sig = compute_listing_event_signature(p_seller_item_sig, res["raw_message_text"], res["price_usd"], posting_ts)
+            p_listing_event_sig = compute_listing_event_signature(p_seller_item_sig, res["raw_message_text"], res["price_usd"], res["currency_normalized"], posting_ts, "parent", 0)
 
             parent_uuid = generate_deterministic_uuid("watchfacts.listing.parent", p_listing_event_sig)
             listings_table = "listings" if IS_SQLITE else "staging.listings"
@@ -402,7 +407,7 @@ def run_pipeline_step(limit=50):
 
             for idx, child in enumerate(res.get("child_listings", [])):
                 c_seller_item_sig = compute_seller_item_signature(seller_id, "WATCH", child["brand_normalized"], child["reference_normalized"])
-                c_listing_event_sig = compute_listing_event_signature(c_seller_item_sig, child["raw_text_segment"], child["price_usd"], posting_ts)
+                c_listing_event_sig = compute_listing_event_signature(c_seller_item_sig, child["raw_text_segment"], child["price_usd"], child["currency_normalized"], posting_ts, "child", idx)
                 child_uuid = generate_deterministic_uuid("watchfacts.listing.child", c_listing_event_sig)
                 c_prov_json = json.dumps(child.get("provenance_metadata", {}))
 

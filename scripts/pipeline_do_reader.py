@@ -114,10 +114,11 @@ def fetch_and_enqueue_source_messages(batch_size=100):
 
         source_msg_id = str(r['id'])
         platform_val = r.get('type') or 'auction'
-        group_val = r.get('region') or 'default_group'
+        group_val = r.get('source_group_id') or r.get('channel_id') or r.get('type') or 'default_group'
+        
         checksum = calculate_checksum(platform_val, group_val, source_msg_id)
-        payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{source_msg_id}"))
-        job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{source_msg_id}"))
+        payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{checksum}"))
+        job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{checksum}"))
         orig_ts = str(r['created_on']) if r.get('created_on') else datetime.utcnow().isoformat() + "Z"
 
         if is_sqlite:
@@ -128,7 +129,7 @@ def fetch_and_enqueue_source_messages(batch_size=100):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """
             cur_tgt.execute(payload_query, (
-                payload_id, r.get('type') or 'auction', r.get('region'), r.get('region'),
+                payload_id, platform_val, group_val, r.get('region'),
                 source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum
             ))
             
@@ -148,7 +149,7 @@ def fetch_and_enqueue_source_messages(batch_size=100):
             RETURNING id;
             """
             cur_tgt.execute(payload_query, (
-                payload_id, r.get('type') or 'auction', r.get('region'), r.get('region'),
+                payload_id, platform_val, group_val, r.get('region'),
                 source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum
             ))
             res = cur_tgt.fetchone()

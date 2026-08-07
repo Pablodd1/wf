@@ -108,8 +108,8 @@ class TestIdentityAndWtsWtbSeparation(unittest.TestCase):
         """A changed price or timestamp produces a distinct listing-event signature."""
         seller_item_sig = compute_seller_item_signature("seller_a", "WATCH", "Rolex", "126610LN")
 
-        evt1 = compute_listing_event_signature(seller_item_sig, "Rolex 126610LN $14000", 14000.0, "2026-08-01T10:00:00Z")
-        evt2 = compute_listing_event_signature(seller_item_sig, "Rolex 126610LN $13500", 13500.0, "2026-08-05T10:00:00Z")
+        evt1 = compute_listing_event_signature(seller_item_sig, "Rolex 126610LN $14000", 14000.0, "USD", "2026-08-01T10:00:00Z")
+        evt2 = compute_listing_event_signature(seller_item_sig, "Rolex 126610LN $13500", 13500.0, "USD", "2026-08-05T10:00:00Z")
 
         self.assertNotEqual(evt1, evt2, "Changed price or timestamp must yield a distinct historical event signature")
 
