@@ -100,6 +100,9 @@ def fetch_and_enqueue_source_messages(batch_size=100):
         print("No source messages found.")
         return 0
 
+    return process_source_records(rows)
+
+def process_source_records(rows, batch_id=None):
     conn_tgt, is_sqlite = get_target_db()
     cur_tgt = conn_tgt.cursor()
 
@@ -107,8 +110,10 @@ def fetch_and_enqueue_source_messages(batch_size=100):
     payload_table = "payloads" if is_sqlite else "raw.payloads"
     jobs_table = "processing_jobs" if is_sqlite else "jobs.processing_jobs"
 
+    run_batch_id = batch_id or f"batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+
     for r in rows:
-        msg_text = r['description'] or r['title'] or r['comments'] or ''
+        msg_text = r.get('description') or r.get('title') or r.get('comments') or r.get('message') or ''
         if not msg_text.strip():
             continue
 
@@ -116,7 +121,7 @@ def fetch_and_enqueue_source_messages(batch_size=100):
         platform_val = 'mysql_thecollective'
         group_val = str(r.get('source_group_id') or r.get('channel_id') or 'auctions')
         source_intent_val = str(r.get('type') or 'sale').lower().strip()
-        batch_id_val = getattr(args, 'batch_id', None) or f"batch_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}"
+        batch_id_val = run_batch_id
         orig_ts = str(r['created_on']) if r.get('created_on') else datetime.utcnow().isoformat() + "Z"
         
         checksum = calculate_checksum(platform_val, group_val, source_msg_id)

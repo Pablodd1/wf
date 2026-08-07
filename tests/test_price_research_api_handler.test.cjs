@@ -16,9 +16,9 @@ async function runNodeApiTests() {
   // Test 1: classifyDemandEligibility MUST NOT reject genuine WTB records
   const wtbRow = {
     brand: 'Rolex',
-    reference: '126610LN',
-    model: 'Submariner',
-    dial_color: 'Black',
+    reference: '126334',
+    model: 'Datejust',
+    dial_color: 'Silver',
     intent: 'WTB',
     listing_type: 'WTB',
     price_usd: null,
@@ -26,8 +26,8 @@ async function runNodeApiTests() {
   };
   const mockCatalog = {
     found: true,
-    model: 'Submariner',
-    dialColors: ['Black']
+    model: 'Datejust 41',
+    dialColors: ['Silver', 'Black', 'Blue', 'Green']
   };
 
   const demandEligibility = classifyDemandEligibility(wtbRow, mockCatalog);
@@ -42,19 +42,19 @@ async function runNodeApiTests() {
   // Test 3: classifyResearchEligibility MUST accept genuine WTS sales record
   const wtsRow = {
     brand: 'Rolex',
-    reference: '126610LN',
-    model: 'Submariner',
-    dial_color: 'Black',
+    reference: '126334',
+    model: 'Datejust',
+    dial_color: 'Silver',
     intent: 'WTS',
     listing_type: 'WTS',
-    price_usd: 14000,
-    price_raw: 14000,
+    price_usd: 12500,
+    price_raw: 12500,
   };
   const researchEligibilityForWTS = classifyResearchEligibility(wtsRow, mockCatalog);
   assert.strictEqual(researchEligibilityForWTS, null, `classifyResearchEligibility MUST return null for valid WTS row, got: ${researchEligibilityForWTS}`);
   console.log('[PASS] Test 3: classifyResearchEligibility accepts genuine WTS sale record.');
 
-  // Test 4: Invoke the ACTUAL handler exported by api/price-research.js
+  // Test 4: Invoke the ACTUAL handler exported by api/price-research.js for Rolex 126334 (Silver dial)
   if (ANON_KEY) {
     let statusCode = null;
     let jsonResult = null;
@@ -65,7 +65,8 @@ async function runNodeApiTests() {
       headers: {},
       query: {
         brand: 'Rolex',
-        reference: '126610LN',
+        reference: '126334',
+        dial: 'Silver'
       }
     };
 
@@ -89,20 +90,23 @@ async function runNodeApiTests() {
     assert.strictEqual(statusCode, 200, `Handler must return HTTP status 200, got: ${statusCode}`);
     assert.strictEqual(jsonResult.success, true, 'Handler response must indicate success');
 
-    // Assert exact required fields in handler output
+    // Assert NON-ZERO populated analytics for Rolex 126334
     assert(Array.isArray(jsonResult.rows), 'Handler output MUST contain rows array');
     assert(Array.isArray(jsonResult.demand_rows), 'Handler output MUST contain demand_rows array');
-    assert(typeof jsonResult.wtb_demand_count === 'number', 'Handler output MUST contain wtb_demand_count number');
-    assert(typeof jsonResult.wts_eligible_analytics_count === 'number', 'Handler output MUST contain wts_eligible_analytics_count number');
-    assert(jsonResult.stats !== undefined, 'Handler output MUST contain stats object/null');
+    
+    assert(jsonResult.wts_eligible_analytics_count > 0, `wts_eligible_analytics_count MUST be > 0, got: ${jsonResult.wts_eligible_analytics_count}`);
+    assert(jsonResult.wtb_demand_count > 0, `wtb_demand_count MUST be > 0, got: ${jsonResult.wtb_demand_count}`);
+    assert(jsonResult.rows.length > 0, `rows count MUST be > 0, got: ${jsonResult.rows.length}`);
+    assert(jsonResult.demand_rows.length > 0, `demand_rows count MUST be > 0, got: ${jsonResult.demand_rows.length}`);
+    assert(jsonResult.stats !== null && typeof jsonResult.stats === 'object', 'Handler output MUST contain populated stats object');
 
-    console.log(`[PASS] Test 4: Genuine api/price-research.js handler invoked successfully!`);
+    console.log(`[PASS] Test 4: Genuine api/price-research.js handler returned NON-ZERO analytics!`);
     console.log(`       - wts_eligible_analytics_count: ${jsonResult.wts_eligible_analytics_count}`);
     console.log(`       - wtb_demand_count: ${jsonResult.wtb_demand_count}`);
-    console.log(`       - rows count: ${jsonResult.rows.length}`);
-    console.log(`       - demand_rows count: ${jsonResult.demand_rows.length}`);
+    console.log(`       - rows count (sales comparables): ${jsonResult.rows.length}`);
+    console.log(`       - demand_rows count (buyer requests): ${jsonResult.demand_rows.length}`);
 
-    // Verify rows contain strictly WTS listings (no WTB or SINGLE)
+    // Test 5: Verify rows contain strictly WTS listings (no WTB or SINGLE)
     for (const r of jsonResult.rows) {
       if (r.listing_type) {
         assert.strictEqual(r.listing_type, 'WTS', `Sales comparables MUST strictly be WTS, got: ${r.listing_type}`);
@@ -111,7 +115,7 @@ async function runNodeApiTests() {
     console.log('[PASS] Test 5: All returned sales comparable rows are strictly WTS.');
   }
 
-  console.log('=== ALL NODE API HANDLER INTEGRATION TESTS PASSED CLEANLY ===');
+  console.log('=== ALL NODE API HANDLER INTEGRATION TESTS PASSED CLEANLY WITH NON-ZERO POPULATED RESULTS ===');
 }
 
 runNodeApiTests().catch(err => {

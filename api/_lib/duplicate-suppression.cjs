@@ -96,8 +96,8 @@ async function loadAnalyticsSuppressedIds(client, cohortIdValues) {
     // to IDs already present in the current Price Research cohort.
     return await loadDirect(client, cohortIds);
   } catch (error) {
-    console.warn('[duplicate-suppression] duplicate suppression lookup unavailable, returning empty set:', error.message);
-    return new Set();
+    if (error?.code === SUPPRESSION_UNAVAILABLE) throw error;
+    throw unavailable();
   }
 }
 

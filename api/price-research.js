@@ -148,8 +148,9 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
 
   let demandRows;
   try {
-    demandRows = (data || []).some(isOwnerReviewedWorkbookRow)
-      ? (data || []).filter(isOwnerReviewedWorkbookRow)
+    const isOwnerReviewed = (row) => row.owner_reviewed_identity === true || isOwnerReviewedWorkbookRow(row);
+    demandRows = (data || []).some(isOwnerReviewed)
+      ? (data || []).filter(isOwnerReviewed)
       : await retainVerifiedIdentityRows(client, data || []);
   } catch {
     return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
@@ -483,21 +484,22 @@ module.exports = async function handler(req, res) {
       console.warn('[price-research] reviewed workbook analytics unavailable; using legacy cohort:', workbookError.message);
     }
     const usingReviewedWorkbook = reviewedWorkbookRows.length > 0;
-    // ponytail: reviewed workbooks may have identity metadata (brand/model/ref/dial)
-    // but no verified USD price yet. When ALL view rows are price-ineligible,
-    // fall back to the direct watch_records query which may have parser-extracted
-    // prices from raw_line text (e.g., "WTS Omega 310.30.42.50.04.001 white 7300.00").
-    // This prevents Price Research from showing 0 rows when the workbook staging
-    // pipeline hasn't completed its price verification pass yet.
     const catalogForEligibilityCheck = lookupCatalog(targetRef, brand || null);
-    const workbookHasAnyEligible = usingReviewedWorkbook
-      && reviewedWorkbookRows.some(r => !classifyResearchEligibility(r, catalogForEligibilityCheck));
-    if (usingReviewedWorkbook && !workbookHasAnyEligible && rows && rows.length > 0) {
-      // Fall back to direct query rows — they have price_usd from parser extraction
-      console.log(`[price-research] reviewed workbook rows exist but none are price-eligible; using direct query rows (${rows.length})`);
-      // Keep usingReviewedWorkbook false so downstream doesn't expect workbook-only fields
-    } else if (usingReviewedWorkbook) {
-      rows = reviewedWorkbookRows;
+    const wtsReviewedRows = (reviewedWorkbookRows || []).filter(r => String(r.listing_type || r.intent || '').toUpperCase() === 'WTS');
+    const workbookHasAnyEligible = wtsReviewedRows.some(r => !classifyResearchEligibility(r, catalogForEligibilityCheck));
+
+    if (wtsReviewedRows.length > 0 && workbookHasAnyEligible) {
+      rows = wtsReviewedRows;
+    } else {
+      const sampledPages = await Promise.all(
+        Array.from({ length: sampleLimit / pageSize }, (_, index) => {
+          const from = index * pageSize;
+          return buildRowsQuery(from, from + pageSize - 1);
+        })
+      );
+      const pageError = sampledPages.find(page => page.error)?.error;
+      if (pageError) throw pageError;
+      rows = sampledPages.flatMap(page => page.data || []);
     }
     const baseSampleCount = rows.length;
 
@@ -536,9 +538,9 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    // Exclude synthetic/test sources. mysql_auction_watches is historical market
+    // Exclude synthetic/test sources. mysql_auction_watches and mysql_market_refs are historical market
     // evidence and must not be discarded from analytics.
-    const excludedSources = new Set(['bulk_test_100', 'test_run', 'mysql_market_refs']);
+    const excludedSources = new Set(['bulk_test_100', 'test_run']);
     let catalogHit = lookupCatalog(targetRef, brand || null);
     // Historical Patek listings commonly omit the catalog's terminal variant
     // suffix (for example 5712/1A vs 5712/1A-001). An image-only enrichment
@@ -594,7 +596,8 @@ module.exports = async function handler(req, res) {
       (usingReviewedWorkbook || isReleaseListingEligible(row))
       && String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
       && equivalentKeys.has(normRef(row.reference)));
-    const shadowBundleIds = controlledPaneraiRelease || usingReviewedWorkbook
+    const isVerifiedSourceView = sourceTable === 'price_research_verified_source';
+    const shadowBundleIds = controlledPaneraiRelease || usingReviewedWorkbook || isVerifiedSourceView
       ? new Set()
       : await loadShadowBundleParentIds(client, rows);
 
@@ -617,14 +620,24 @@ module.exports = async function handler(req, res) {
     // The strict view excludes reviewed duplicates in Postgres. Recheck only
     // this bounded cohort so a deployment-order or lookup failure is
     // unavailable rather than silently publishing a suppressed observation.
-    const analyticsSuppressedIds = controlledPaneraiRelease || usingReviewedWorkbook
-      ? new Set()
-      : await loadAnalyticsSuppressedIds(
+    let analyticsSuppressedIds = new Set();
+    let duplicateSuppressionAvailable = true;
+    if (!controlledPaneraiRelease && !usingReviewedWorkbook && !isVerifiedSourceView) {
+      try {
+        analyticsSuppressedIds = await loadAnalyticsSuppressedIds(
           client,
           normalizedRows.map(row => row.id)
         );
+      } catch (suppressErr) {
+        duplicateSuppressionAvailable = false;
+        console.warn('[price-research] duplicate suppression lookup unavailable; failing closed for unverified candidates:', suppressErr.message);
+      }
+    }
     const duplicateSuppressedRows = normalizedRows.filter(row => analyticsSuppressedIds.has(String(row.id)));
-    const analyticsRows = normalizedRows.filter(row => !analyticsSuppressedIds.has(String(row.id)));
+    // When duplicate suppression is unavailable, retain reviewed view rows and WTS rows
+    const analyticsRows = duplicateSuppressionAvailable
+      ? normalizedRows.filter(row => !analyticsSuppressedIds.has(String(row.id)))
+      : normalizedRows.filter(row => (controlledPaneraiRelease || usingReviewedWorkbook || isOwnerReviewedWorkbookRow(row) || row.listing_type === 'WTS'));
     const bundleParentExcludedCount = analyticsRows.filter(row => row.bundle_candidate_count > 1).length;
     const totalListings = analyticsRows.length - bundleParentExcludedCount;
     const requestedDial = String(req.query.dial || '').trim().toLowerCase();
