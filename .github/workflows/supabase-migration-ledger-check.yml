@@ -29,37 +29,29 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       
-      - uses: supabase/setup-cli@v1
-        with:
-          version: latest
-          
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           
-      - name: Link production project locally
+      - name: Fetch Supabase ANON_KEY via API
         shell: bash
         run: |
           set -euo pipefail
-          supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
-          
-      - name: Export Supabase Status
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Fetch status as JSON (or parse it) to get keys
-          ANON_KEY=$(supabase status -o json | jq -r '.anon_key')
-          if [ "$ANON_KEY" = "null" ] || [ -z "$ANON_KEY" ]; then
-             # Try falling back if the CLI doesn't support json output for status of linked projects
-             # For linked projects, we might need to get it via API or it might be in .env
-             # Actually, supabase status for a remote project doesn't output anon key. 
-             # We can get it via `supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json`
-             ANON_KEY=$(supabase projects api-keys --project-ref "$SUPABASE_PROJECT_REF" -o json | jq -r '.[] | select(.name == "anon") | .api_key')
+          KEYS_JSON=$(curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_REF/api-keys")
+          ANON_KEY=$(echo "$KEYS_JSON" | jq -r '.[] | select(.name == "anon" or .name == "anon_key") | .api_key')
+          if [ -z "$ANON_KEY" ] || [ "$ANON_KEY" = "null" ]; then
+             echo "Failed to extract ANON_KEY. Response was:"
+             echo "$KEYS_JSON"
+             exit 1
           fi
           echo "SUPABASE_ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
           echo "ANON_KEY=$ANON_KEY" >> "$GITHUB_ENV"
           
+      - name: Resolve IPv4 pooler target and Database URL
+        shell: bash
+        run: |
+          set -euo pipefail
           HOST="aws-1-us-west-2.pooler.supabase.com"
           USER="postgres.${SUPABASE_PROJECT_REF}"
           PORT="5432"
