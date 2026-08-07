@@ -28,9 +28,13 @@ for migration in migrations:
     cur.execute("SELECT 1 FROM supabase_migrations.schema_migrations WHERE version = %s", (version,))
     if not cur.fetchone():
         print(f"Applying migration: {migration.name}")
-        sql = migration.read_text(encoding="utf-8")
+        import subprocess
         try:
-            cur.execute(sql)
+            print(f"Applying migration via psql: {migration.name}")
+            result = subprocess.run(["psql", db_url, "-f", str(migration), "-v", "ON_ERROR_STOP=1"], capture_output=True, text=True)
+            if result.returncode != 0:
+                print(f"Failed to apply {migration.name}:\n{result.stderr}")
+                sys.exit(1)
             cur.execute("INSERT INTO supabase_migrations.schema_migrations (version, name) VALUES (%s, %s)", (version, migration.name))
             print(f"Successfully applied {version}")
         except Exception as e:
