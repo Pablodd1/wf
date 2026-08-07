@@ -127,6 +127,18 @@ def process_source_records(rows, batch_id=None):
         checksum = calculate_checksum(platform_val, group_val, source_msg_id)
         
         front_image_val = str(r.get('front_image') or '').strip() or None
+        storage_key_val = str(r.get('storage_key') or front_image_val or '').strip() or None
+        attachment_keys_list = r.get('attachment_keys') or r.get('attachments') or []
+        if isinstance(attachment_keys_list, str):
+            try:
+                attachment_keys_list = json.loads(attachment_keys_list)
+            except Exception:
+                attachment_keys_list = [attachment_keys_list]
+        attachment_keys_val = json.dumps(attachment_keys_list)
+
+        price_val = str(r.get('price') or r.get('price_usd') or r.get('price_original') or '').strip()
+        currency_val = str(r.get('currency') or r.get('currency_original') or 'USD').upper().strip()
+
         if front_image_val:
             if front_image_val.startswith('http://') or front_image_val.startswith('https://'):
                 image_url_val = front_image_val
@@ -134,14 +146,20 @@ def process_source_records(rows, batch_id=None):
                 clean_path = front_image_val.lstrip('/')
                 image_url_val = f"https://thecollective-inventory.sfo3.cdn.digitaloceanspaces.com/auctions/{clean_path}"
             image_urls_val = json.dumps([image_url_val])
+            source_image_preserved_val = True
+            image_url_resolvable_val = True
             has_exact_source_image_val = True
         else:
             image_url_val = None
             image_urls_val = json.dumps([])
+            source_image_preserved_val = False
+            image_url_resolvable_val = False
             has_exact_source_image_val = False
 
-        image_fingerprint = hashlib.sha256((front_image_val or '').encode('utf-8')).hexdigest()
-        content_hash = hashlib.sha256(f"{msg_text}:{orig_ts}:{image_fingerprint}".encode('utf-8')).hexdigest()
+        visually_verified_val = False
+
+        media_fingerprint = hashlib.sha256(f"{front_image_val or ''}:{attachment_keys_val}".encode('utf-8')).hexdigest()
+        content_hash = hashlib.sha256(f"{msg_text}:{orig_ts}:{price_val}:{currency_val}:{media_fingerprint}".encode('utf-8')).hexdigest()
         version_checksum = hashlib.sha256(f"{checksum}:{content_hash}".encode('utf-8')).hexdigest()
         
         payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{checksum}"))

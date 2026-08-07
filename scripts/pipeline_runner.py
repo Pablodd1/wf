@@ -197,12 +197,12 @@ def setup_sqlite_schema(conn):
             cur.execute(f"ALTER TABLE processing_jobs ADD COLUMN {col};")
         except Exception:
             pass
-    for col in ["provenance_metadata TEXT", "transport_checksum TEXT", "seller_item_signature TEXT", "listing_event_signature TEXT", "batch_id TEXT", "front_image TEXT", "image_urls TEXT", "has_exact_source_image INTEGER", "image_provenance TEXT"]:
+    for col in ["provenance_metadata TEXT", "transport_checksum TEXT", "seller_item_signature TEXT", "listing_event_signature TEXT", "batch_id TEXT", "front_image TEXT", "image_urls TEXT", "has_exact_source_image INTEGER", "image_provenance TEXT", "storage_key TEXT", "attachment_keys TEXT", "mime_type TEXT", "media_fingerprint TEXT", "source_image_preserved INTEGER", "image_url_resolvable INTEGER", "visually_verified INTEGER", "first_posted_at TEXT", "reposted_at TEXT"]:
         try:
             cur.execute(f"ALTER TABLE listings ADD COLUMN {col};")
         except Exception:
             pass
-    for col in ["front_image TEXT", "image_url TEXT", "image_urls TEXT", "has_exact_source_image INTEGER"]:
+    for col in ["front_image TEXT", "image_url TEXT", "image_urls TEXT", "has_exact_source_image INTEGER", "storage_key TEXT", "attachment_keys TEXT", "media_fingerprint TEXT"]:
         try:
             cur.execute(f"ALTER TABLE payloads ADD COLUMN {col};")
         except Exception:
@@ -412,9 +412,8 @@ def run_pipeline_step(limit=50):
                 res["price_research_status"] = "BUNDLE_PENDING_SEPARATION"
                 res["child_listings"] = []
 
-            # Compute explicit 3-tier identities
             seller_id = res.get("contact_number") or res.get("from_number") or res.get("user_name") or res.get("from_name") or "unknown_seller"
-            posting_ts = job.get("original_timestamp") or job.get("created_at") or ""
+            posting_ts = job.get("original_timestamp") or job.get("created_at") or datetime.utcnow().isoformat() + "Z"
             
             p_seller_item_sig = compute_seller_item_signature(seller_id, res["category"], res["brand_normalized"], res["reference_normalized"])
             p_listing_event_sig = compute_listing_event_signature(p_seller_item_sig, res["raw_message_text"], res["price_usd"], res["currency_normalized"], posting_ts, "parent", 0)
@@ -422,6 +421,32 @@ def run_pipeline_step(limit=50):
             parent_uuid = generate_deterministic_uuid("watchfacts.listing.parent", p_listing_event_sig)
             listings_table = "listings" if IS_SQLITE else "staging.listings"
             
+            # Check for reposts by same seller & reference
+            first_posted_at = posting_ts
+            reposted_at = None
+            if not is_exact_duplicate and res["category"] == "WATCH" and res["brand_normalized"] and res["reference_normalized"]:
+                try:
+                    check_repost_query = f"SELECT id, created_at, first_posted_at FROM {listings_table} WHERE seller_item_signature = %s AND id != %s ORDER BY created_at ASC;"
+                    db_execute(cur, check_repost_query, (p_seller_item_sig, parent_uuid))
+                    prior_reposts = cur.fetchall()
+                    if prior_reposts:
+                        reposted_at = posting_ts
+                        row_dict = dict(prior_reposts[0])
+                        first_posted_at = row_dict.get("first_posted_at") or row_dict.get("created_at") or posting_ts
+                        # Suppress prior reposts for this seller/item signature
+                        suppress_query = f"UPDATE {listings_table} SET trading_floor_status = 'suppressed_repost', price_research_status = 'SUPPRESSED_REPOST' WHERE seller_item_signature = %s AND id != %s;"
+                        db_execute(cur, suppress_query, (p_seller_item_sig, parent_uuid))
+                except Exception as e:
+                    print(f"Warning during repost check: {e}")
+
+            storage_key_val = str(job.get("storage_key") or front_img or '').strip() or None
+            attachment_keys_val = job.get("attachment_keys") if isinstance(job.get("attachment_keys"), str) else json.dumps(job.get("attachment_keys") or [])
+            mime_type_val = job.get("mime_type") or ("image/jpeg" if front_img else None)
+            media_fp = hashlib.sha256(f"{front_img or ''}:{attachment_keys_val}".encode('utf-8')).hexdigest()
+            source_img_preserved = bool(front_img or img_url)
+            img_resolvable = bool(img_url)
+            visually_verified = False
+
             parent_query = f"""
             INSERT INTO {listings_table} (
                 id, job_id, parent_id, bundle_position, raw_message_text, category, intent, listing_type, is_bundle,
@@ -435,12 +460,16 @@ def run_pipeline_step(limit=50):
                 contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
                 normalization_status, trading_floor_status, price_research_status,
                 transport_checksum, seller_item_signature, listing_event_signature, batch_id,
-                front_image, image_urls, has_exact_source_image, image_provenance
+                front_image, image_urls, has_exact_source_image, image_provenance,
+                storage_key, attachment_keys, mime_type, media_fingerprint,
+                source_image_preserved, image_url_resolvable, visually_verified,
+                first_posted_at, reposted_at
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """
             if IS_SQLITE:
@@ -469,7 +498,10 @@ def run_pipeline_step(limit=50):
                 res["overall_confidence"], prov_json, res["verdict"], res["normalization_status"],
                 res["trading_floor_status"], res["price_research_status"],
                 checksum, p_seller_item_sig, p_listing_event_sig, batch_id_val,
-                res["front_image"], res["image_urls"], bool_val(res["has_exact_source_image"]), "exact_source"
+                res["front_image"], res["image_urls"], bool_val(res["has_exact_source_image"]), "exact_source",
+                storage_key_val, attachment_keys_val, mime_type_val, media_fp,
+                bool_val(source_img_preserved), bool_val(img_resolvable), bool_val(visually_verified),
+                first_posted_at, reposted_at
             )
             db_execute(cur, parent_query, parent_args)
 
