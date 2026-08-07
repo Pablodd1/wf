@@ -197,9 +197,18 @@ def setup_sqlite_schema(conn):
             cur.execute(f"ALTER TABLE processing_jobs ADD COLUMN {col};")
         except Exception:
             pass
-    for col in ["provenance_metadata TEXT", "transport_checksum TEXT", "seller_item_signature TEXT", "listing_event_signature TEXT", "batch_id TEXT"]:
+    for col in ["provenance_metadata TEXT", "transport_checksum TEXT", "seller_item_signature TEXT", "listing_event_signature TEXT", "batch_id TEXT", "front_image TEXT", "image_urls TEXT", "has_exact_source_image INTEGER", "image_provenance TEXT"]:
         try:
             cur.execute(f"ALTER TABLE listings ADD COLUMN {col};")
+        except Exception:
+            pass
+    for col in ["front_image TEXT", "image_url TEXT", "image_urls TEXT", "has_exact_source_image INTEGER"]:
+        try:
+            cur.execute(f"ALTER TABLE payloads ADD COLUMN {col};")
+        except Exception:
+            pass
+        try:
+            cur.execute(f"ALTER TABLE payload_versions ADD COLUMN {col};")
         except Exception:
             pass
     conn.commit()
@@ -296,7 +305,11 @@ def run_pipeline_step(limit=50):
                    p.payload_checksum,
                    COALESCE(pv.original_timestamp, p.original_timestamp) as original_timestamp,
                    p.source_platform, p.source_group_id, p.source_message_id,
-                   COALESCE(pv.batch_id, j.batch_id, p.batch_id) as batch_id
+                   COALESCE(pv.batch_id, j.batch_id, p.batch_id) as batch_id,
+                   COALESCE(pv.front_image, p.front_image) as front_image,
+                   COALESCE(pv.image_url, p.image_url) as image_url,
+                   COALESCE(pv.image_urls, p.image_urls) as image_urls,
+                   COALESCE(pv.has_exact_source_image, p.has_exact_source_image) as has_exact_source_image
             FROM processing_jobs j
             JOIN payloads p ON j.raw_payload_id = p.id
             LEFT JOIN payload_versions pv ON j.payload_version_id = pv.id
@@ -333,7 +346,11 @@ def run_pipeline_step(limit=50):
                       p.payload_checksum,
                       COALESCE(pv.original_timestamp, p.original_timestamp) as original_timestamp,
                       p.source_platform, p.source_group_id, p.source_message_id,
-                      COALESCE(pv.batch_id, t.batch_id, p.batch_id) as batch_id;
+                      COALESCE(pv.batch_id, t.batch_id, p.batch_id) as batch_id,
+                      COALESCE(pv.front_image, p.front_image) as front_image,
+                      COALESCE(pv.image_url, p.image_url) as image_url,
+                      COALESCE(pv.image_urls, p.image_urls) as image_urls,
+                      COALESCE(pv.has_exact_source_image, p.has_exact_source_image) as has_exact_source_image;
         """, (limit,))
         raw_jobs = cur.fetchall()
         jobs = []
@@ -343,7 +360,11 @@ def run_pipeline_step(limit=50):
                 "from_name": r[3], "from_number": r[4], "region": r[5], "type": r[6],
                 "payload_checksum": r[7], "original_timestamp": r[8],
                 "source_platform": r[9], "source_group_id": r[10], "source_message_id": r[11],
-                "batch_id": r[12] if len(r) > 12 else None
+                "batch_id": r[12] if len(r) > 12 else None,
+                "front_image": r[13] if len(r) > 13 else None,
+                "image_url": r[14] if len(r) > 14 else None,
+                "image_urls": r[15] if len(r) > 15 else None,
+                "has_exact_source_image": r[16] if len(r) > 16 else None
             })
         conn.commit()
 
@@ -371,11 +392,21 @@ def run_pipeline_step(limit=50):
         try:
             res = processor.process_job(job_data)
             
-            is_exact_duplicate = check_duplicate_payload(cur, checksum, payload_id, batch_seen_checksums)
-            batch_seen_checksums.add(checksum)
-            if is_exact_duplicate:
-                res["trading_floor_status"] = "suppressed_exact_duplicate"
-            
+            front_img = job.get("front_image")
+            img_url = job.get("image_url") or (f"https://thecollective-inventory.sfo3.cdn.digitaloceanspaces.com/auctions/{front_img.lstrip('/')}" if front_img else None)
+            img_urls = job.get("image_urls") if isinstance(job.get("image_urls"), str) else json.dumps(job.get("image_urls") or ([img_url] if img_url else []))
+            has_exact = bool(job.get("has_exact_source_image") or img_url or front_img)
+
+            res["front_image"] = front_img
+            res["image_url"] = img_url or res.get("image_url")
+            res["image_urls"] = img_urls
+            res["has_exact_source_image"] = has_exact
+
+            if res.get("is_bundle"):
+                res["trading_floor_status"] = "bundle_pending_separation"
+                res["price_research_status"] = "BUNDLE_PENDING_SEPARATION"
+                res["child_listings"] = []
+
             # Compute explicit 3-tier identities
             seller_id = res.get("contact_number") or res.get("from_number") or res.get("user_name") or res.get("from_name") or "unknown_seller"
             posting_ts = job.get("original_timestamp") or job.get("created_at") or ""
@@ -398,12 +429,13 @@ def run_pipeline_step(limit=50):
                 phone_code, location, rating, dealer_rating, is_verified_user, is_paid_user, is_seller_approved, company_id,
                 contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
                 normalization_status, trading_floor_status, price_research_status,
-                transport_checksum, seller_item_signature, listing_event_signature, batch_id
+                transport_checksum, seller_item_signature, listing_event_signature, batch_id,
+                front_image, image_urls, has_exact_source_image, image_provenance
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s
             )
             """
             if IS_SQLITE:
@@ -431,7 +463,8 @@ def run_pipeline_step(limit=50):
                 res["company_id"], bool_val(res["contact_consent"]), bool_val(res["catalog_confirmed"]),
                 res["overall_confidence"], prov_json, res["verdict"], res["normalization_status"],
                 res["trading_floor_status"], res["price_research_status"],
-                checksum, p_seller_item_sig, p_listing_event_sig, batch_id_val
+                checksum, p_seller_item_sig, p_listing_event_sig, batch_id_val,
+                res["front_image"], res["image_urls"], bool_val(res["has_exact_source_image"]), "exact_source"
             )
             db_execute(cur, parent_query, parent_args)
 

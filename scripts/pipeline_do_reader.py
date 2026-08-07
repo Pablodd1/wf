@@ -132,24 +132,42 @@ def process_source_records(rows, batch_id=None):
         payload_version_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload_version.{version_checksum}"))
         job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{version_checksum}"))
 
+        front_image_val = str(r.get('front_image') or '').strip() or None
+        if front_image_val:
+            if front_image_val.startswith('http://') or front_image_val.startswith('https://'):
+                image_url_val = front_image_val
+            else:
+                clean_path = front_image_val.lstrip('/')
+                image_url_val = f"https://thecollective-inventory.sfo3.cdn.digitaloceanspaces.com/auctions/{clean_path}"
+            image_urls_val = json.dumps([image_url_val])
+            has_exact_source_image_val = True
+        else:
+            image_url_val = None
+            image_urls_val = json.dumps([])
+            has_exact_source_image_val = False
+
         versions_table = "payload_versions" if is_sqlite else "raw.payload_versions"
         if is_sqlite:
             cur_tgt.execute(f"""
             INSERT OR IGNORE INTO {payload_table} (
                 id, source_platform, source_group_id, source_group_name, source_message_id,
-                source_sender_id, source_sender_name, source_intent, payload_checksum, batch_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                source_sender_id, source_sender_name, source_intent, payload_checksum, batch_id,
+                front_image, image_url, image_urls, has_exact_source_image
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, (
                 payload_id, platform_val, group_val, r.get('region'),
-                source_msg_id, r.get('from_number'), r.get('from_name'), source_intent_val, checksum, batch_id_val
+                source_msg_id, r.get('from_number'), r.get('from_name'), source_intent_val, checksum, batch_id_val,
+                front_image_val, image_url_val, image_urls_val, 1 if has_exact_source_image_val else 0
             ))
 
             cur_tgt.execute(f"""
             INSERT OR IGNORE INTO {versions_table} (
-                id, raw_payload_id, version_checksum, source_intent, original_message_text, original_timestamp, batch_id
-            ) VALUES (?, ?, ?, ?, ?, ?, ?);
+                id, raw_payload_id, version_checksum, source_intent, original_message_text, original_timestamp, batch_id,
+                front_image, image_url, image_urls, has_exact_source_image
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, (
-                payload_version_id, payload_id, version_checksum, source_intent_val, msg_text, orig_ts, batch_id_val
+                payload_version_id, payload_id, version_checksum, source_intent_val, msg_text, orig_ts, batch_id_val,
+                front_image_val, image_url_val, image_urls_val, 1 if has_exact_source_image_val else 0
             ))
             
             cur_tgt.execute(f"""
@@ -160,23 +178,27 @@ def process_source_records(rows, batch_id=None):
             cur_tgt.execute(f"""
             INSERT INTO {payload_table} (
                 id, source_platform, source_group_id, source_group_name, source_message_id,
-                source_sender_id, source_sender_name, source_intent, payload_checksum, batch_id
+                source_sender_id, source_sender_name, source_intent, payload_checksum, batch_id,
+                front_image, image_url, image_urls, has_exact_source_image
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             ) ON CONFLICT (payload_checksum) DO NOTHING;
             """, (
                 payload_id, platform_val, group_val, r.get('region'),
-                source_msg_id, r.get('from_number'), r.get('from_name'), source_intent_val, checksum, batch_id_val
+                source_msg_id, r.get('from_number'), r.get('from_name'), source_intent_val, checksum, batch_id_val,
+                front_image_val, image_url_val, image_urls_val, has_exact_source_image_val
             ))
 
             cur_tgt.execute(f"""
             INSERT INTO {versions_table} (
-                id, raw_payload_id, version_checksum, source_intent, original_message_text, original_timestamp, batch_id
+                id, raw_payload_id, version_checksum, source_intent, original_message_text, original_timestamp, batch_id,
+                front_image, image_url, image_urls, has_exact_source_image
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             ) ON CONFLICT (version_checksum) DO NOTHING;
             """, (
-                payload_version_id, payload_id, version_checksum, source_intent_val, msg_text, orig_ts, batch_id_val
+                payload_version_id, payload_id, version_checksum, source_intent_val, msg_text, orig_ts, batch_id_val,
+                front_image_val, image_url_val, image_urls_val, has_exact_source_image_val
             ))
 
             cur_tgt.execute(f"""
