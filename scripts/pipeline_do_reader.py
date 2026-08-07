@@ -125,13 +125,7 @@ def process_source_records(rows, batch_id=None):
         orig_ts = str(r['created_on']) if r.get('created_on') else datetime.utcnow().isoformat() + "Z"
         
         checksum = calculate_checksum(platform_val, group_val, source_msg_id)
-        content_hash = hashlib.sha256(f"{msg_text}:{orig_ts}".encode('utf-8')).hexdigest()
-        version_checksum = hashlib.sha256(f"{checksum}:{content_hash}".encode('utf-8')).hexdigest()
         
-        payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{checksum}"))
-        payload_version_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload_version.{version_checksum}"))
-        job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{version_checksum}"))
-
         front_image_val = str(r.get('front_image') or '').strip() or None
         if front_image_val:
             if front_image_val.startswith('http://') or front_image_val.startswith('https://'):
@@ -145,6 +139,14 @@ def process_source_records(rows, batch_id=None):
             image_url_val = None
             image_urls_val = json.dumps([])
             has_exact_source_image_val = False
+
+        image_fingerprint = hashlib.sha256((front_image_val or '').encode('utf-8')).hexdigest()
+        content_hash = hashlib.sha256(f"{msg_text}:{orig_ts}:{image_fingerprint}".encode('utf-8')).hexdigest()
+        version_checksum = hashlib.sha256(f"{checksum}:{content_hash}".encode('utf-8')).hexdigest()
+        
+        payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{checksum}"))
+        payload_version_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload_version.{version_checksum}"))
+        job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{version_checksum}"))
 
         versions_table = "payload_versions" if is_sqlite else "raw.payload_versions"
         if is_sqlite:

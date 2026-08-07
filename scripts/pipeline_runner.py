@@ -402,7 +402,12 @@ def run_pipeline_step(limit=50):
             res["image_urls"] = img_urls
             res["has_exact_source_image"] = has_exact
 
-            if res.get("is_bundle"):
+            is_exact_duplicate = check_duplicate_payload(cur, checksum, payload_id, batch_seen_checksums)
+            batch_seen_checksums.add(checksum)
+            if is_exact_duplicate:
+                res["trading_floor_status"] = "suppressed_exact_duplicate"
+                res["price_research_status"] = "SUPPRESSED_EXACT_DUPLICATE"
+            elif res.get("is_bundle"):
                 res["trading_floor_status"] = "bundle_pending_separation"
                 res["price_research_status"] = "BUNDLE_PENDING_SEPARATION"
                 res["child_listings"] = []
