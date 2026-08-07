@@ -7,12 +7,16 @@ import urllib.request
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../scripts')))
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://qnsafosakvonzgfcsphh.supabase.co")
-ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", os.environ.get("ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuc2Fmb3Nha3ZvbnpnZmNzcGhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMjI3NDEsImV4cCI6MjEwMTU5ODc0MX0.YUxMjnTHtgPsiWiWko3TS1A47Sjk33SuHC2TND0Rxmg"))
+ANON_KEY = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("ANON_KEY")
 
 class TestPriceResearchAPIHandler(unittest.TestCase):
+    def setUp(self):
+        if not ANON_KEY:
+            self.skipTest("SKIPPED: SUPABASE_ANON_KEY / ANON_KEY not set in environment.")
+
     def test_01_wts_only_for_sales_averages(self):
         """Proves sales price research queries reject WTB listings and zero prices."""
-        url = f"{SUPABASE_URL}/rest/v1/price_research_verified_source?brand=eq.Rolex&listing_type=neq.WTB&price_usd=gt.0&limit=50"
+        url = f"{SUPABASE_URL}/rest/v1/price_research_verified_source?brand=eq.Rolex&listing_type=eq.WTS&price_usd=gt.0&limit=50"
         req = urllib.request.Request(url, headers={
             "apikey": ANON_KEY,
             "Authorization": f"Bearer {ANON_KEY}",
@@ -24,7 +28,7 @@ class TestPriceResearchAPIHandler(unittest.TestCase):
                 data = json.loads(resp.read().decode())
                 self.assertGreater(len(data), 0)
                 for row in data:
-                    self.assertNotEqual(row.get("listing_type"), "WTB", "Sales cohort must never contain WTB records")
+                    self.assertEqual(row.get("listing_type"), "WTS", "Sales cohort must only contain WTS records")
                     self.assertGreater(float(row.get("price_usd", 0)), 0, "Sales cohort must contain only positive USD prices")
         except Exception as e:
             self.fail(f"Sales price research query failed: {e}")

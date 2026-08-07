@@ -1,62 +1,73 @@
-# WatchFacts Pipeline — Comprehensive Correction Gate & Batch Reconciliation Report
+# WatchFacts Ingestion Pipeline — Comprehensive Correction Gate Report
 
 > **Branch**: `fix/pipeline-identity-and-wts-wtb-separation`  
-> **Status**: **Correction Gate Implementation & Audit Complete — PR Ready for Review**  
+> **Status**: **Correction Gate Fixes Implemented & Audited — Ready for Final Sign-Off**  
 > **Environment**: Live Supabase PostgreSQL (`db.qnsafosakvonzgfcsphh.supabase.co`)  
 > **Migration Control**: Historical backfill migration remains **PAUSED**. Zero credentials altered.
 
 ---
 
-## 1. Executive Summary of Corrections
+## 1. Executive Summary of Implementation Fixes
 
-### A. Real API Handler & WTS/WTB Separation (`/api/price-research`)
-- **Sales Comparable Cohort**: Updated `api/_lib/price-research-eligibility.cjs` (`classifyResearchEligibility`) to reject WTB records with `BUY_REQUEST_NOT_SALE`.
-- **Query Filter**: Updated `buildRowsQuery` in `api/price-research.js` to enforce `.neq('listing_type', 'WTB')` and `.gt('price_usd', 0)`.
-- **Demand Signals**: Buyer WTB requests (including unpriced requests) are processed separately via `lookupDemand()` for demand signal counts and listing displays.
+### A. WTB Demand & Research Eligibility Repair
+1. **`classifyDemandEligibility(row, catalog)`**:
+   - Fixed bug where `classifyDemandEligibility` was rejecting WTB rows because it called `classifyResearchEligibility` which checked intent type.
+   - Now passes `listing_type: 'WTS'` internally so `classifyResearchEligibility` performs complete quality validation (brand, reference, model, dial, bundle) without rejecting WTB on intent type.
+2. **Sales Analytics Restriction (`api/price-research.js`)**:
+   - `classifyResearchEligibility` rejects every type except `'WTS'` and `'SINGLE'` (`NOT_WTS_SALE`).
+   - `buildRowsQuery` explicitly filters `.in('listing_type', ['WTS', 'SINGLE'])` and `.gt('price_usd', 0)`.
+   - Non-WTS listing types (`WTB`, `TRADE`, `MULTI_LISTING`) can no longer enter sale price statistics or averages.
 
-### B. Transport & Listing Event Signature Fixes
-- **Job Claiming SELECT Query**: Updated `pipeline_runner.py` (both PostgreSQL and SQLite branches) to select `p.original_timestamp`, `p.source_platform`, `p.source_group_id`, `p.source_message_id`.
-- **Complete Listing Event Signature**:
-  ```python
-  compute_listing_event_signature(seller_item_sig, message_text, price_usd, currency, posting_timestamp, record_kind, bundle_position)
-  ```
-  - Includes `currency_normalized`, `posting_timestamp`, `record_kind` (`"parent"` vs `"child"`), and `bundle_position`.
-  - Ensures price updates, currency changes, date changes, or individual bundle items produce distinct, non-colliding event signatures.
-- **Provider Group Identity (`pipeline_do_reader.py`)**:
-  - Uses provider group ID (`source_group_id` / channel ID)—**NOT `region`**.
-  - Derives `payload_id` and `job_id` deterministically from `transport_checksum` using `uuid5`.
-  - All raw-message-only fallbacks removed.
+### B. Transport Identity & Payload Content Versioning
+1. **Stable Transport Source**:
+   - `source_platform = 'mysql_thecollective'`
+   - `source_group_id = r.get('source_group_id') or r.get('channel_id') or 'auctions'`
+   - `source_message_id = str(r['id'])`
+   - Intent (`WTS` vs `WTB`) is kept in a separate field; changing listing intent does not alter transport identity.
+2. **Payload Content Versioning (`version_checksum`)**:
+   - `content_hash = sha256(msg_text + ":" + orig_ts)`
+   - `version_checksum = sha256(transport_checksum + ":" + content_hash)`
+   - `job_id = uuid5(NAMESPACE_DNS, f"watchfacts.job.{version_checksum}")`
+   - Changing raw message text or posting timestamp under the same provider message ID queues a **new content version job** that processes as a **distinct immutable listing event**.
+   - Exact repeated content versions are suppressed as duplicates.
 
-### C. Public View Contract & Removal of Invented Data
-- **Seller Contact Contract**: Added `seller_name` (`COALESCE(user_name, from_name)`) and `seller_phone` (`COALESCE(contact_number, from_number)`) to `public.reviewed_workbook_market_source_v2` in forward migration [`supabase/migrations/20260806150000_single_to_intent_and_view_contract_updates.sql`](file:///c:/Users/Owner/.gemini/antigravity/playground/nascent-glenn/wf_repo/supabase/migrations/20260806150000_single_to_intent_and_view_contract_updates.sql).
-- **Invented Data Removed**: Removed hardcoded `dealer_rating = 5.0` in `pipeline_runner.py`. Missing fields return `NULL` to allow UI to display "not supplied".
-- **Committed Forward Migration**: Applied migration `20260806150000` to migrate legacy `'SINGLE'` listing types to true intent (`'WTS'`, `'WTB'`, `'TRADE'`).
+### C. Migration-Backed Batch ID & Schema Defaults Cleanup
+1. **Committed Migration `20260806160000_batch_id_and_schema_defaults_cleanup.sql`**:
+   - Added `batch_id` and `version_checksum` to `raw.payloads`, `jobs.processing_jobs`, and `staging.listings` with indexes.
+   - Backfilled existing canary batch to `'canary_500_20260806'`.
+   - Propagated `batch_id` through `pipeline_do_reader.py` (CLI `--batch-id`) and `pipeline_runner.py`.
+2. **Invented Defaults Dropped**:
+   - Dropped column defaults on `rating`, `dealer_rating`, `review_count`, `group_count`, `wts_post_count`, `wtb_post_count`.
+   - Updated `pipeline_processor.py` to preserve missing ratings as `None` (`NULL`). Missing reputation metrics are not populated with fake 0.0 or 5.0 values.
 
-### D. Environment-Driven Credentials
-- Updated test files (`test_postgrest_contract_and_analytics.py`, `test_genuine_postgres_canary.py`, `test_api_price_research.py`) to read `SUPABASE_URL` and `SUPABASE_ANON_KEY` from `os.environ`.
+### D. Credential & Test Hardening
+- Removed all hardcoded API key fallbacks from Python and Node test files. Tests read `SUPABASE_URL` and `SUPABASE_ANON_KEY` / `ANON_KEY` from `os.environ` and call `SkipTest` or fail with configuration error when missing.
 
 ---
 
-## 2. Test Execution Output (29/29 Passing)
+## 2. Test Execution Output
 
-Command: `python -m unittest discover -s tests`
+### A. Node API Integration Test Suite (`node tests/test_price_research_api_handler.test.cjs`)
 
 ```text
-............................s.
-----------------------------------------------------------------------
-Ran 29 tests in 2.934s
-
-OK (skipped=1)
+=== RUNNING NODE API PRICE-RESEARCH INTEGRATION TESTS ===
+[PASS] Test 1: classifyDemandEligibility correctly returns null (eligible) for genuine WTB buyer request.
+[PASS] Test 2: classifyResearchEligibility correctly rejects WTB from sales price research.
+[PASS] Test 3: classifyResearchEligibility accepts genuine WTS sale record.
+[PASS] Test 4: Real sales query returned 20 WTS eligible records.
+[PASS] Test 5: Real demand query returned 20 WTB demand records.
+=== ALL NODE API INTEGRATION TESTS PASSED CLEANLY ===
 ```
 
-### Verified Test Suites:
-- `tests/test_identity_and_wts_wtb_separation.py`: **5/5 PASS**
-- `tests/test_api_price_research.py`: **3/3 PASS**
-- `tests/test_postgrest_contract_and_analytics.py`: **4/4 PASS**
-- `tests/test_db_integration.py`: **5/5 PASS**
-- `tests/test_pipeline.py`: **8/8 PASS**
-- `tests/test_pipeline_e2e.py`: **3/3 PASS**
-- `tests/test_genuine_postgres_canary.py`: **PASS / SKIPPED** (Fails closed with `RuntimeError` when DB credentials are absent; runs native PostgreSQL worker step with `IS_SQLITE = False` when credentials are present).
+### B. Python Unittest Suite (`python -m unittest discover -s tests`)
+
+```text
+..............................
+----------------------------------------------------------------------
+Ran 30 tests in 1.957s
+
+OK (skipped=8)
+```
 
 ---
 
@@ -91,26 +102,20 @@ SELECT
        AND NOT EXISTS (SELECT 1 FROM staging.listings c WHERE c.parent_id = p_listing.id)) AS unresolved_bundle_parents_without_children;
 ```
 
-### Exact Immutable Batch-Scoped Results:
+### Exact Immutable Batch Results:
 | Metric | Count | Explanation |
 |---|---:|---|
-| **Total Batch Payloads** | **500** | Total raw payloads in `canary_500_20260806` batch |
+| **Total Batch Payloads** | **500** | Raw payloads in `canary_500_20260806` batch |
 | **Parents with Children** | **208** | Parent bundle listings that produced unbundled child listings |
 | **Total Children Produced** | **7,958** | Total child listings generated across the 208 parents |
 | **Total Bundle Status Parents** | **260** | Parent listings assigned `trading_floor_status = 'bundle_pending_separation'` |
 | **Unresolved Bundle Parents (0 children)** | **52** | Exact count of bundle-status parents with **0 child rows** using `NOT EXISTS` |
 
-#### Explicit 52-Parent Reconciliation:
-- Out of **260** parent listings marked with bundle status:
-  - **208** parent bundles were successfully unbundled into **7,958** child records.
-  - **52** parent listings contained multi-item keywords in text (e.g., `set`, `x2`, `bundle`) but lacked line-item specs or delimiters to safely spawn children.
-  - Using strict `NOT EXISTS (SELECT 1 FROM staging.listings c WHERE c.parent_id = p.id)`, these **52 records** represent the exact set of unresolved bundle parents requiring manual separation.
-
 ---
 
-## 4. Security & Compliance Checklist
+## 4. Security & Operational Confirmations
 
 - ✅ **`public.exec_sql` Count**: **`0`** (`unsafe_exec_sql_functions = 0`).
-- ✅ **No Hardcoded Passwords**: Zero credentials committed to repo.
-- ✅ **Environment-Driven Tests**: All PostgREST and DB test scripts use `os.environ`.
+- ✅ **No Hardcoded Passwords**: Zero credentials committed to repository.
+- ✅ **Environment-Driven Credentials**: All PostgREST and DB test scripts use `os.environ`.
 - ✅ **Historical Migration**: Paused pending final sign-off.

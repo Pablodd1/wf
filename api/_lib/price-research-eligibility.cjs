@@ -9,7 +9,7 @@ function isMultiListingSentinel(value) {
 
 function classifyResearchEligibility(row, catalog) {
   const type = String(row?.listing_type || row?.intent || '').trim().toUpperCase();
-  if (type === 'WTB') return 'BUY_REQUEST_NOT_SALE';
+  if (type !== 'WTS' && type !== 'SINGLE') return 'NOT_WTS_SALE';
   const price = Number(row?.price_usd);
   const ownerReviewedIdentity = row?.owner_reviewed_identity === true;
   if (Number(row?.bundle_candidate_count || 0) > 1) return 'BUNDLE_SOURCE_UNSPLIT';
@@ -34,7 +34,9 @@ function classifyResearchEligibility(row, catalog) {
 }
 
 function classifyDemandEligibility(row, catalog) {
-  return classifyResearchEligibility({ ...row, price_raw: null, price_usd: 1 }, catalog);
+  // Pass temporary listing_type='WTS' so classifyResearchEligibility performs full quality
+  // validation (brand, reference, model, dial, bundle) without rejecting WTB on intent type.
+  return classifyResearchEligibility({ ...row, listing_type: 'WTS', intent: 'WTS', price_raw: null, price_usd: 1 }, catalog);
 }
 
 module.exports = { classifyDemandEligibility, classifyResearchEligibility, isMultiListingSentinel };

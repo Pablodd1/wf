@@ -4,9 +4,13 @@ import json
 import os
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://qnsafosakvonzgfcsphh.supabase.co")
-ANON_KEY = os.environ.get("SUPABASE_ANON_KEY", os.environ.get("ANON_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuc2Fmb3Nha3ZvbnpnZmNzcGhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMjI3NDEsImV4cCI6MjEwMTU5ODc0MX0.YUxMjnTHtgPsiWiWko3TS1A47Sjk33SuHC2TND0Rxmg"))
+ANON_KEY = os.environ.get("SUPABASE_ANON_KEY") or os.environ.get("ANON_KEY")
 
 class TestPostgrestContractAndAnalytics(unittest.TestCase):
+    def setUp(self):
+        if not ANON_KEY:
+            self.skipTest("SKIPPED: SUPABASE_ANON_KEY / ANON_KEY not set in environment.")
+
     def test_01_trading_floor_view_full_ui_contract(self):
         """Proves reviewed_workbook_market_source_v2 returns all required application UI contract fields via PostgREST."""
         url = f"{SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?limit=5"
@@ -22,18 +26,18 @@ class TestPostgrestContractAndAnalytics(unittest.TestCase):
                 self.assertGreater(len(data), 0, "Trading Floor view must return rows")
                 row = data[0]
                 
-                # Assert all required UI fields exist in contract
                 required_fields = [
                     "id", "job_id", "parent_id", "source_file", "posting_date", "posted_by", "phone_number",
-                    "contact_publication_approved", "raw_message", "intent", "listing_type", "brand_scope",
-                    "supplied_brand", "canonical_brand", "model", "catalog_model", "raw_reference",
-                    "normalized_reference", "catalog_reference", "public_reference", "reference_search_key",
-                    "dial_color", "catalog_dial", "condition", "workbook_price_usd", "source_price_amount",
-                    "source_price_text", "source_currency", "price_evidence_status", "confidence",
-                    "user_image_url", "has_exact_source_image", "verified_price_usd", "has_verified_usd_price",
-                    "has_complete_identity", "has_supplied_price", "rating", "review_count", "group_count",
-                    "wts_post_count", "wtb_post_count", "first_post_date", "latest_post_date", "location",
-                    "region", "verdict", "listing_status", "normalization_status", "trading_floor_status", "price_research_status"
+                    "seller_name", "seller_phone", "contact_publication_approved", "raw_message", "intent",
+                    "listing_type", "brand_scope", "supplied_brand", "canonical_brand", "model", "catalog_model",
+                    "raw_reference", "normalized_reference", "catalog_reference", "public_reference",
+                    "reference_search_key", "dial_color", "catalog_dial", "condition", "workbook_price_usd",
+                    "source_price_amount", "source_price_text", "source_currency", "price_evidence_status",
+                    "confidence", "user_image_url", "has_exact_source_image", "verified_price_usd",
+                    "has_verified_usd_price", "has_complete_identity", "has_supplied_price", "rating",
+                    "review_count", "group_count", "wts_post_count", "wtb_post_count", "first_post_date",
+                    "latest_post_date", "location", "region", "verdict", "listing_status", "normalization_status",
+                    "trading_floor_status", "price_research_status"
                 ]
                 for f in required_fields:
                     self.assertIn(f, row, f"Trading Floor View missing contract field: {f}")

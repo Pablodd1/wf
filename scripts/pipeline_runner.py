@@ -77,6 +77,8 @@ def setup_sqlite_schema(conn):
         original_message_text TEXT,
         original_timestamp TEXT,
         payload_checksum TEXT UNIQUE,
+        version_checksum TEXT,
+        batch_id TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
     """)
@@ -85,6 +87,7 @@ def setup_sqlite_schema(conn):
         id TEXT PRIMARY KEY,
         raw_payload_id TEXT,
         status TEXT,
+        batch_id TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
     """)
@@ -149,6 +152,7 @@ def setup_sqlite_schema(conn):
         transport_checksum TEXT,
         seller_item_signature TEXT,
         listing_event_signature TEXT,
+        batch_id TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
     """)
@@ -172,7 +176,16 @@ def setup_sqlite_schema(conn):
         completed_at TEXT
     );
     """)
-    for col in ["provenance_metadata TEXT", "transport_checksum TEXT", "seller_item_signature TEXT", "listing_event_signature TEXT"]:
+    for col in ["version_checksum TEXT", "batch_id TEXT"]:
+        try:
+            cur.execute(f"ALTER TABLE payloads ADD COLUMN {col};")
+        except Exception:
+            pass
+        try:
+            cur.execute(f"ALTER TABLE processing_jobs ADD COLUMN {col};")
+        except Exception:
+            pass
+    for col in ["provenance_metadata TEXT", "transport_checksum TEXT", "seller_item_signature TEXT", "listing_event_signature TEXT", "batch_id TEXT"]:
         try:
             cur.execute(f"ALTER TABLE listings ADD COLUMN {col};")
         except Exception:
@@ -275,7 +288,8 @@ def run_pipeline_step(limit=50):
             SELECT j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
                    p.source_sender_name as from_name, p.source_sender_id as from_number,
                    p.source_group_name as region, p.source_platform as type,
-                   p.payload_checksum, p.original_timestamp, p.source_platform, p.source_group_id, p.source_message_id
+                   p.payload_checksum, p.original_timestamp, p.source_platform, p.source_group_id, p.source_message_id,
+                   p.batch_id
             FROM processing_jobs j
             JOIN payloads p ON j.raw_payload_id = p.id
             WHERE j.status = 'received' OR j.status = 'queued'
@@ -305,7 +319,8 @@ def run_pipeline_step(limit=50):
             RETURNING j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
                       p.source_sender_name as from_name, p.source_sender_id as from_number,
                       p.source_group_name as region, p.source_platform as type,
-                      p.payload_checksum, p.original_timestamp, p.source_platform, p.source_group_id, p.source_message_id;
+                      p.payload_checksum, p.original_timestamp, p.source_platform, p.source_group_id, p.source_message_id,
+                      p.batch_id;
         """, (limit,))
         raw_jobs = cur.fetchall()
         jobs = []
@@ -314,7 +329,8 @@ def run_pipeline_step(limit=50):
                 "job_id": r[0], "payload_id": r[1], "message_text": r[2],
                 "from_name": r[3], "from_number": r[4], "region": r[5], "type": r[6],
                 "payload_checksum": r[7], "original_timestamp": r[8],
-                "source_platform": r[9], "source_group_id": r[10], "source_message_id": r[11]
+                "source_platform": r[9], "source_group_id": r[10], "source_message_id": r[11],
+                "batch_id": r[12] if len(r) > 12 else "canary_500_20260806"
             })
         conn.commit()
 

@@ -392,7 +392,8 @@ class WatchFactsPipelineProcessor:
 
         from_name = job_data.get("from_name") or job_data.get("user_name") or "Anonymous Dealer"
         from_number = job_data.get("from_number") or job_data.get("contact_number") or None
-        rating = float(job_data.get("dealer_rating") or job_data.get("rating") or 0.0)
+        raw_rating = job_data.get("dealer_rating") or job_data.get("rating")
+        rating = float(raw_rating) if raw_rating is not None and str(raw_rating).strip() != "" else None
 
         child_listings = []
         if is_bundle and len(segments) >= 2:
