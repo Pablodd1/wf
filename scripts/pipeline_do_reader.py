@@ -31,6 +31,62 @@ PGDATABASE = os.environ.get("PGDATABASE", "postgres")
 IS_SQLITE = False
 SQLITE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scratch", "pipeline_fallback.db")
 
+def setup_sqlite_schema(conn):
+    cur = conn.cursor()
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS payloads (
+        id TEXT PRIMARY KEY,
+        source_platform TEXT,
+        source_group_id TEXT,
+        source_group_name TEXT,
+        source_message_id TEXT,
+        source_sender_id TEXT,
+        source_sender_name TEXT,
+        source_intent TEXT,
+        original_message_text TEXT,
+        original_timestamp TEXT,
+        payload_checksum TEXT UNIQUE,
+        batch_id TEXT,
+        front_image TEXT,
+        image_url TEXT,
+        image_urls TEXT,
+        has_exact_source_image INTEGER,
+        storage_key TEXT,
+        attachment_keys TEXT,
+        mime_type TEXT,
+        media_fingerprint TEXT
+    );
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS payload_versions (
+        id TEXT PRIMARY KEY,
+        raw_payload_id TEXT,
+        version_checksum TEXT UNIQUE,
+        source_intent TEXT,
+        original_message_text TEXT,
+        original_timestamp TEXT,
+        batch_id TEXT,
+        front_image TEXT,
+        image_url TEXT,
+        image_urls TEXT,
+        has_exact_source_image INTEGER,
+        storage_key TEXT,
+        attachment_keys TEXT,
+        mime_type TEXT,
+        media_fingerprint TEXT
+    );
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS processing_jobs (
+        id TEXT PRIMARY KEY,
+        raw_payload_id TEXT,
+        payload_version_id TEXT,
+        status TEXT,
+        batch_id TEXT
+    );
+    """)
+    conn.commit()
+
 def get_target_db():
     global IS_SQLITE
     if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
@@ -51,6 +107,7 @@ def get_target_db():
     os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
     conn = sqlite3.connect(SQLITE_PATH)
     conn.row_factory = sqlite3.Row
+    setup_sqlite_schema(conn)
     return (conn, True)
 
 def calculate_checksum(source_platform, source_group_id, source_message_id):
@@ -183,11 +240,12 @@ def process_source_records(rows, batch_id=None):
             cur_tgt.execute(f"""
             INSERT OR IGNORE INTO {versions_table} (
                 id, raw_payload_id, version_checksum, source_intent, original_message_text, original_timestamp, batch_id,
-                front_image, image_url, image_urls, has_exact_source_image
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                front_image, image_url, image_urls, has_exact_source_image, storage_key, attachment_keys, mime_type, media_fingerprint
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """, (
                 payload_version_id, payload_id, version_checksum, source_intent_val, msg_text, orig_ts, batch_id_val,
-                front_image_val, image_url_val, image_urls_val, 1 if has_exact_source_image_val else 0
+                front_image_val, image_url_val, image_urls_val, 1 if has_exact_source_image_val else 0,
+                storage_key_val, attachment_keys_val, None, media_fingerprint
             ))
             
             cur_tgt.execute(f"""
@@ -212,13 +270,14 @@ def process_source_records(rows, batch_id=None):
             cur_tgt.execute(f"""
             INSERT INTO {versions_table} (
                 id, raw_payload_id, version_checksum, source_intent, original_message_text, original_timestamp, batch_id,
-                front_image, image_url, image_urls, has_exact_source_image
+                front_image, image_url, image_urls, has_exact_source_image, storage_key, attachment_keys, mime_type, media_fingerprint
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             ) ON CONFLICT (version_checksum) DO NOTHING;
             """, (
                 payload_version_id, payload_id, version_checksum, source_intent_val, msg_text, orig_ts, batch_id_val,
-                front_image_val, image_url_val, image_urls_val, has_exact_source_image_val
+                front_image_val, image_url_val, image_urls_val, has_exact_source_image_val,
+                storage_key_val, attachment_keys_val, None, media_fingerprint
             ))
 
             cur_tgt.execute(f"""

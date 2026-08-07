@@ -207,10 +207,25 @@ def setup_sqlite_schema(conn):
             cur.execute(f"ALTER TABLE payloads ADD COLUMN {col};")
         except Exception:
             pass
-        try:
-            cur.execute(f"ALTER TABLE payload_versions ADD COLUMN {col};")
-        except Exception:
-            pass
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS payload_versions (
+        id TEXT PRIMARY KEY,
+        raw_payload_id TEXT,
+        version_checksum TEXT UNIQUE,
+        source_intent TEXT,
+        original_message_text TEXT,
+        original_timestamp TEXT,
+        batch_id TEXT,
+        front_image TEXT,
+        image_url TEXT,
+        image_urls TEXT,
+        has_exact_source_image INTEGER,
+        storage_key TEXT,
+        attachment_keys TEXT,
+        mime_type TEXT,
+        media_fingerprint TEXT
+    );
+    """)
     conn.commit()
 
 def db_execute(cur, query, args=None):
@@ -265,28 +280,44 @@ def compute_listing_event_signature(seller_item_sig, message_text, price_usd, cu
     raw_str = f"{seller_item_sig}:{msg_hash}:{p_str}:{curr_str}:{ts_str}:{kind_str}:{pos_str}"
     return hashlib.sha256(raw_str.encode('utf-8')).hexdigest()
 
-def check_duplicate_payload(cur, checksum, current_payload_id, batch_seen_checksums):
-    if checksum in batch_seen_checksums:
+def check_duplicate_payload(cur, version_checksum, current_payload_id, batch_seen_checksums):
+    if version_checksum in batch_seen_checksums:
         return True
     is_sqlite = IS_SQLITE or "sqlite" in str(type(cur)).lower()
+    versions_table = "payload_versions" if is_sqlite else "raw.payload_versions"
     payloads_table = "payloads" if is_sqlite else "raw.payloads"
     jobs_table = "processing_jobs" if is_sqlite else "jobs.processing_jobs"
     try:
         query = f"""
             SELECT 1 
-            FROM {payloads_table} p 
-            JOIN {jobs_table} j ON p.id = j.raw_payload_id 
-            WHERE p.payload_checksum = %s 
-              AND p.id != %s 
+            FROM {jobs_table} j
+            JOIN {payloads_table} p ON j.raw_payload_id = p.id
+            LEFT JOIN {versions_table} pv ON j.payload_version_id = pv.id
+            WHERE (pv.version_checksum = %s OR p.payload_checksum = %s)
+              AND j.raw_payload_id != %s 
               AND j.status IN ('normalized', 'processing', 'extracted', 'validated', 'approved')
             LIMIT 1;
         """
-        db_execute(cur, query, (checksum, current_payload_id))
+        db_execute(cur, query, (version_checksum, version_checksum, current_payload_id))
         row = cur.fetchone()
         return bool(row)
-    except Exception as e:
-        print(f"Database error during duplicate check for payload checksum {checksum}: {e}")
-        raise
+    except Exception:
+        try:
+            query_fallback = f"""
+                SELECT 1 
+                FROM {jobs_table} j
+                JOIN {payloads_table} p ON j.raw_payload_id = p.id
+                WHERE p.payload_checksum = %s 
+                  AND j.raw_payload_id != %s 
+                  AND j.status IN ('normalized', 'processing', 'extracted', 'validated', 'approved')
+                LIMIT 1;
+            """
+            db_execute(cur, query_fallback, (version_checksum, current_payload_id))
+            row = cur.fetchone()
+            return bool(row)
+        except Exception as e:
+            print(f"Database error during duplicate check for {version_checksum}: {e}")
+            return False
 
 def run_pipeline_step(limit=50):
     conn = get_db_connection()
@@ -309,7 +340,12 @@ def run_pipeline_step(limit=50):
                    COALESCE(pv.front_image, p.front_image) as front_image,
                    COALESCE(pv.image_url, p.image_url) as image_url,
                    COALESCE(pv.image_urls, p.image_urls) as image_urls,
-                   COALESCE(pv.has_exact_source_image, p.has_exact_source_image) as has_exact_source_image
+                   COALESCE(pv.has_exact_source_image, p.has_exact_source_image) as has_exact_source_image,
+                   pv.version_checksum,
+                   COALESCE(pv.storage_key, p.storage_key) as storage_key,
+                   COALESCE(pv.attachment_keys, p.attachment_keys) as attachment_keys,
+                   COALESCE(pv.mime_type, p.mime_type) as mime_type,
+                   COALESCE(pv.media_fingerprint, p.media_fingerprint) as media_fingerprint
             FROM processing_jobs j
             JOIN payloads p ON j.raw_payload_id = p.id
             LEFT JOIN payload_versions pv ON j.payload_version_id = pv.id
@@ -350,7 +386,12 @@ def run_pipeline_step(limit=50):
                       COALESCE(pv.front_image, p.front_image) as front_image,
                       COALESCE(pv.image_url, p.image_url) as image_url,
                       COALESCE(pv.image_urls, p.image_urls) as image_urls,
-                      COALESCE(pv.has_exact_source_image, p.has_exact_source_image) as has_exact_source_image;
+                      COALESCE(pv.has_exact_source_image, p.has_exact_source_image) as has_exact_source_image,
+                      pv.version_checksum,
+                      COALESCE(pv.storage_key, p.storage_key) as storage_key,
+                      COALESCE(pv.attachment_keys, p.attachment_keys) as attachment_keys,
+                      COALESCE(pv.mime_type, p.mime_type) as mime_type,
+                      COALESCE(pv.media_fingerprint, p.media_fingerprint) as media_fingerprint;
         """, (limit,))
         raw_jobs = cur.fetchall()
         jobs = []
@@ -364,7 +405,12 @@ def run_pipeline_step(limit=50):
                 "front_image": r[13] if len(r) > 13 else None,
                 "image_url": r[14] if len(r) > 14 else None,
                 "image_urls": r[15] if len(r) > 15 else None,
-                "has_exact_source_image": r[16] if len(r) > 16 else None
+                "has_exact_source_image": r[16] if len(r) > 16 else None,
+                "version_checksum": r[17] if len(r) > 17 else None,
+                "storage_key": r[18] if len(r) > 18 else None,
+                "attachment_keys": r[19] if len(r) > 19 else None,
+                "mime_type": r[20] if len(r) > 20 else None,
+                "media_fingerprint": r[21] if len(r) > 21 else None
             })
         conn.commit()
 
@@ -386,7 +432,10 @@ def run_pipeline_step(limit=50):
             "type": "buy" if str(job.get("type", "")).lower() in ("buy", "wtb") else "sale",
             "from_name": job["from_name"],
             "from_number": job["from_number"],
-            "region": job["region"]
+            "region": job["region"],
+            "front_image": job.get("front_image"),
+            "image_url": job.get("image_url"),
+            "has_exact_source_image": job.get("has_exact_source_image")
         }
 
         try:
@@ -401,9 +450,9 @@ def run_pipeline_step(limit=50):
             res["image_url"] = img_url or res.get("image_url")
             res["image_urls"] = img_urls
             res["has_exact_source_image"] = has_exact
-
-            is_exact_duplicate = check_duplicate_payload(cur, checksum, payload_id, batch_seen_checksums)
-            batch_seen_checksums.add(checksum)
+            ver_checksum = job.get("version_checksum") or checksum
+            is_exact_duplicate = check_duplicate_payload(cur, ver_checksum, payload_id, batch_seen_checksums)
+            batch_seen_checksums.add(ver_checksum)
             if is_exact_duplicate:
                 res["trading_floor_status"] = "suppressed_exact_duplicate"
                 res["price_research_status"] = "SUPPRESSED_EXACT_DUPLICATE"
@@ -442,7 +491,7 @@ def run_pipeline_step(limit=50):
             storage_key_val = str(job.get("storage_key") or front_img or '').strip() or None
             attachment_keys_val = job.get("attachment_keys") if isinstance(job.get("attachment_keys"), str) else json.dumps(job.get("attachment_keys") or [])
             mime_type_val = job.get("mime_type") or ("image/jpeg" if front_img else None)
-            media_fp = hashlib.sha256(f"{front_img or ''}:{attachment_keys_val}".encode('utf-8')).hexdigest()
+            media_fp = job.get("media_fingerprint") or hashlib.sha256(f"{front_img or ''}:{attachment_keys_val}".encode('utf-8')).hexdigest()
             source_img_preserved = bool(front_img or img_url)
             img_resolvable = bool(img_url)
             visually_verified = False
