@@ -99,7 +99,24 @@ TEST_RECORDS = [
 ]
 
 def main():
+    run_ts = int(time.time())
     batch_id = f"canary_e2e_{time.strftime('%Y%m%d_%H%M%S')}"
+    
+    # Make IDs unique per test run to prevent "0 jobs processed" due to existing processed jobs
+    # We update source_message_id and from_number (except for exact duplicates which must match)
+    base_mapping = {}
+    for r in TEST_RECORDS:
+        orig_id = r["id"]
+        if orig_id not in base_mapping:
+            base_mapping[orig_id] = f"{orig_id}_{run_ts}"
+        
+        r["id"] = base_mapping[orig_id]
+        r["source_group_id"] = f"{r['source_group_id']}_{run_ts}"
+        if r["from_number"]:
+            r["from_number"] = f"{r['from_number']}_{run_ts}"
+        elif r["from_name"]:
+            r["from_name"] = f"{r['from_name']} {run_ts}"
+
     print(f"=== GENUINE E2E PIPELINE CANARY RUNNER ===")
     print(f"Executing REAL pipeline reader for {len(TEST_RECORDS)} records (batch_id: {batch_id})...")
     
