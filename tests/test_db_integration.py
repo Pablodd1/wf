@@ -87,15 +87,17 @@ class TestDatabaseAndPostgRESTIntegration(unittest.TestCase):
             conn = pipeline_runner.get_db_connection()
             self.assertTrue(pipeline_runner.IS_SQLITE)
             cur = conn.cursor()
-            
+            cur.execute("DELETE FROM listings;")
+            cur.execute("DELETE FROM processing_jobs;")
+            cur.execute("DELETE FROM payloads;")
             payload_id = str(uuid.uuid4())
             job_id = str(uuid.uuid4())
-            checksum = hashlib.sha256(f"SQLite Test Listing Rolex Submariner {payload_id}".encode('utf-8')).hexdigest()
+            checksum = pipeline_runner.compute_transport_checksum("WTS", "g1", f"msg_{payload_id[:8]}")
             
             cur.execute("""
                 INSERT INTO payloads (id, source_platform, source_group_id, source_group_name, source_message_id, source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum)
-                VALUES (?, 'WTS', 'g1', 'Group1', 'm1', 's1', 'Sender1', 'Rolex Submariner 126610LN 2023 New $14000', datetime('now'), ?);
-            """, (payload_id, checksum))
+                VALUES (?, 'WTS', 'g1', 'Group1', ?, 's1', 'Sender1', 'Rolex Submariner 126610LN 2023 New $14000', datetime('now'), ?);
+            """, (payload_id, f"msg_{payload_id[:8]}", checksum))
             cur.execute("""
                 INSERT INTO processing_jobs (id, raw_payload_id, status)
                 VALUES (?, ?, 'queued');

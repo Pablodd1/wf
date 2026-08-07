@@ -146,6 +146,9 @@ def setup_sqlite_schema(conn):
         normalization_status TEXT DEFAULT 'normalized',
         trading_floor_status TEXT DEFAULT 'published',
         price_research_status TEXT DEFAULT 'eligible',
+        transport_checksum TEXT,
+        seller_item_signature TEXT,
+        listing_event_signature TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
     """)
@@ -169,10 +172,11 @@ def setup_sqlite_schema(conn):
         completed_at TEXT
     );
     """)
-    try:
-        cur.execute("ALTER TABLE listings ADD COLUMN provenance_metadata TEXT;")
-    except Exception:
-        pass
+    for col in ["provenance_metadata TEXT", "transport_checksum TEXT", "seller_item_signature TEXT", "listing_event_signature TEXT"]:
+        try:
+            cur.execute(f"ALTER TABLE listings ADD COLUMN {col};")
+        except Exception:
+            pass
     conn.commit()
 
 def db_execute(cur, query, args=None):
@@ -337,7 +341,14 @@ def run_pipeline_step(limit=50):
             if is_exact_duplicate:
                 res["trading_floor_status"] = "suppressed_exact_duplicate"
             
-            parent_uuid = generate_deterministic_uuid("watchfacts.listing.parent", job_id)
+            # Compute explicit 3-tier identities
+            seller_id = res.get("contact_number") or res.get("from_number") or res.get("user_name") or res.get("from_name") or "unknown_seller"
+            posting_ts = job.get("original_timestamp") or job.get("created_at") or ""
+            
+            p_seller_item_sig = compute_seller_item_signature(seller_id, res["category"], res["brand_normalized"], res["reference_normalized"])
+            p_listing_event_sig = compute_listing_event_signature(p_seller_item_sig, res["raw_message_text"], res["price_usd"], posting_ts)
+
+            parent_uuid = generate_deterministic_uuid("watchfacts.listing.parent", p_listing_event_sig)
             listings_table = "listings" if IS_SQLITE else "staging.listings"
             
             parent_query = f"""
@@ -351,11 +362,13 @@ def run_pipeline_step(limit=50):
                 papers_original, papers_normalized, image_url, report_url, user_name, from_name, contact_number, from_number,
                 phone_code, location, rating, dealer_rating, is_verified_user, is_paid_user, is_seller_approved, company_id,
                 contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
-                normalization_status, trading_floor_status, price_research_status
+                normalization_status, trading_floor_status, price_research_status,
+                transport_checksum, seller_item_signature, listing_event_signature
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s
             )
             """
             if IS_SQLITE:
@@ -382,13 +395,17 @@ def run_pipeline_step(limit=50):
                 bool_val(res["is_verified_user"]), bool_val(res["is_paid_user"]), bool_val(res["is_seller_approved"]),
                 res["company_id"], bool_val(res["contact_consent"]), bool_val(res["catalog_confirmed"]),
                 res["overall_confidence"], prov_json, res["verdict"], res["normalization_status"],
-                res["trading_floor_status"], res["price_research_status"]
+                res["trading_floor_status"], res["price_research_status"],
+                checksum, p_seller_item_sig, p_listing_event_sig
             )
             db_execute(cur, parent_query, parent_args)
 
             for idx, child in enumerate(res.get("child_listings", [])):
-                child_uuid = generate_deterministic_uuid("watchfacts.listing.child", f"{job_id}:{idx}")
+                c_seller_item_sig = compute_seller_item_signature(seller_id, "WATCH", child["brand_normalized"], child["reference_normalized"])
+                c_listing_event_sig = compute_listing_event_signature(c_seller_item_sig, child["raw_text_segment"], child["price_usd"], posting_ts)
+                child_uuid = generate_deterministic_uuid("watchfacts.listing.child", c_listing_event_sig)
                 c_prov_json = json.dumps(child.get("provenance_metadata", {}))
+
                 child_query = f"""
                 INSERT INTO {listings_table} (
                     id, job_id, parent_id, bundle_position, raw_message_text, category, intent, listing_type, is_bundle,
@@ -400,11 +417,13 @@ def run_pipeline_step(limit=50):
                     papers_original, papers_normalized, image_url, report_url, user_name, from_name, contact_number, from_number,
                     phone_code, location, rating, dealer_rating, is_verified_user, is_paid_user, is_seller_approved, company_id,
                     contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
-                    normalization_status, trading_floor_status, price_research_status
+                    normalization_status, trading_floor_status, price_research_status,
+                    transport_checksum, seller_item_signature, listing_event_signature
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                    %s, %s, %s
                 )
                 """
                 if IS_SQLITE:
@@ -426,7 +445,8 @@ def run_pipeline_step(limit=50):
                     bool_val(res["is_verified_user"]), bool_val(res["is_paid_user"]), bool_val(res["is_seller_approved"]),
                     res["company_id"], bool_val(False), bool_val(False),
                     child["overall_confidence"], c_prov_json, child["verdict"], child["normalization_status"],
-                    child["trading_floor_status"], child["price_research_status"]
+                    child["trading_floor_status"], child["price_research_status"],
+                    checksum, c_seller_item_sig, c_listing_event_sig
                 )
                 db_execute(cur, child_query, child_args)
 
