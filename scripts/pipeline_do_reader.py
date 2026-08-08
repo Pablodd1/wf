@@ -107,7 +107,11 @@ def fetch_and_enqueue_source_messages(batch_size=100):
             continue
 
         source_msg_id = str(r['id'])
-        checksum = calculate_checksum(msg_text)
+        front_image_val = str(r.get('front_image', '')).strip()
+        do_object_key_val = front_image_val if front_image_val and not front_image_val.lower().startswith('http') else None
+        
+        chk_material = f"{source_msg_id}:{r.get('type') or 'auction'}:{front_image_val}"
+        checksum = hashlib.sha256(chk_material.encode('utf-8', errors='ignore')).hexdigest()
         payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{source_msg_id}"))
         job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{source_msg_id}"))
         orig_ts = str(r['created_on']) if r.get('created_on') else datetime.utcnow().isoformat() + "Z"
@@ -116,12 +120,14 @@ def fetch_and_enqueue_source_messages(batch_size=100):
             payload_query = f"""
             INSERT OR IGNORE INTO {payload_table} (
                 id, source_platform, source_group_id, source_group_name, source_message_id,
-                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum,
+                do_object_key, front_image
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
             """
             cur_tgt.execute(payload_query, (
                 payload_id, r.get('type') or 'auction', r.get('region'), r.get('region'),
-                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum
+                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum,
+                do_object_key_val, front_image_val
             ))
             
             job_query = f"""
@@ -133,15 +139,17 @@ def fetch_and_enqueue_source_messages(batch_size=100):
             payload_query = f"""
             INSERT INTO {payload_table} (
                 id, source_platform, source_group_id, source_group_name, source_message_id,
-                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum
+                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum,
+                do_object_key, front_image
             ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             ) ON CONFLICT (payload_checksum) DO UPDATE SET record_version = '1.0'
             RETURNING id;
             """
             cur_tgt.execute(payload_query, (
                 payload_id, r.get('type') or 'auction', r.get('region'), r.get('region'),
-                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum
+                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum,
+                do_object_key_val, front_image_val
             ))
             res = cur_tgt.fetchone()
             actual_payload_id = res[0] if res else payload_id

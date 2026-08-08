@@ -380,7 +380,11 @@ class WatchFactsPipelineProcessor:
         img_url = ""
         front_image = job_data.get("front_image")
         if front_image and str(front_image) not in ("0", "None", ""):
-            img_url = DO_LISTINGS_BASE + str(front_image)
+            raw_img = str(front_image).strip()
+            if not raw_img.lower().startswith("http"):
+                img_url = DO_LISTINGS_BASE + raw_img
+            else:
+                img_url = raw_img
 
         if is_bundle:
             listing_type = "MULTI_LISTING"

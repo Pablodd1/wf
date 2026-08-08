@@ -77,6 +77,8 @@ def setup_sqlite_schema(conn):
         original_message_text TEXT,
         original_timestamp TEXT,
         payload_checksum TEXT UNIQUE,
+        do_object_key TEXT,
+        front_image TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
     """)
@@ -241,7 +243,7 @@ def run_pipeline_step(limit=50):
             SELECT j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
                    p.source_sender_name as from_name, p.source_sender_id as from_number,
                    p.source_group_name as region, p.source_platform as type,
-                   p.payload_checksum
+                   p.payload_checksum, p.do_object_key, p.front_image
             FROM processing_jobs j
             JOIN payloads p ON j.raw_payload_id = p.id
             WHERE j.status = 'received' OR j.status = 'queued'
@@ -271,7 +273,7 @@ def run_pipeline_step(limit=50):
             RETURNING j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
                       p.source_sender_name as from_name, p.source_sender_id as from_number,
                       p.source_group_name as region, p.source_platform as type,
-                      p.payload_checksum;
+                      p.payload_checksum, p.do_object_key, p.front_image;
         """, (limit,))
         raw_jobs = cur.fetchall()
         jobs = []
@@ -279,7 +281,7 @@ def run_pipeline_step(limit=50):
             jobs.append({
                 "job_id": r[0], "payload_id": r[1], "message_text": r[2],
                 "from_name": r[3], "from_number": r[4], "region": r[5], "type": r[6],
-                "payload_checksum": r[7]
+                "payload_checksum": r[7], "do_object_key": r[8], "front_image": r[9]
             })
         conn.commit()
 
@@ -301,7 +303,9 @@ def run_pipeline_step(limit=50):
             "from_name": job["from_name"],
             "from_number": job["from_number"],
             "region": job["region"],
-            "dealer_rating": 5.0
+            "dealer_rating": 5.0,
+            "front_image": job.get("front_image"),
+            "do_object_key": job.get("do_object_key")
         }
 
         try:
