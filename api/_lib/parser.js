@@ -117,13 +117,13 @@ const LISTING_OVERRIDES = {
 const REF_PATTERNS = [
   // Patek Philippe — e.g. 5712/1A-001, 5236P, 6300A, 7118, 7300, bare 5711
   { regex: /\b([34567]\d{3}[A-Z]?[\/\-]?[0-9A-Z]{0,4}[\-–]?[0-9A-Z]{0,5})\b/i, brandHint: 'Patek Philippe' },
+  // AP Royal Oak / Offshore — e.g. 15210ST, 26420SO, 26240OR
+  { regex: /\b(\d{5}[A-Z]{2,4}\.?\d{0,2})\b/i, brandHint: 'Audemars Piguet' },
   // Rolex — e.g. 126529, 116500LN, 228238, 124060
   // v4.1: Also match "116500 L.N", "116500 L N" (dealer variations with separators)
   // Use [ \t] instead of \s to avoid matching across newlines
-  { regex: /\b(\d{5,6}[ \t]?[A-Z][ \t._]?[A-Z]?)\b/i, brandHint: 'Rolex' },
+  { regex: /\b(\d{6}[ \t]?[A-Z][ \t._]?[A-Z]?)\b/i, brandHint: 'Rolex' },
   { regex: /\b(\d{5,6}[A-Z]{0,4})\b/i, brandHint: 'Rolex' },
-  // AP Royal Oak / Offshore — e.g. 15210ST, 26420SO, 26240OR
-  { regex: /\b(\d{5}[A-Z]{2,4}\.?\d{0,2})\b/i, brandHint: 'Audemars Piguet' },
   // Richard Mille — e.g. RM07-01, RM11-03, RM35-02, RM030-01
   { regex: /\b(RM\s?\d{2,3}[-–]?\d{2,3})(?:\s|$|[A-Z]?\b)/i, brandHint: 'Richard Mille' },
   // Vacheron — e.g. 4300V/220R, 6000V, 85180
@@ -234,7 +234,8 @@ const DIAL_KEYWORDS = {
 /** Dial colour hints from reference suffixes. */
 const REF_DIAL_MAP = {
   BL: 'blue', B: 'blue', BU: 'blue',
-  BK: 'black', K: 'black', BLK: 'black',
+  BK: 'black', K: 'black', BLK: 'black', LN: 'Black',
+  LV: 'Green',
   W: 'white', WH: 'white', WT: 'white',
   G: 'green', GN: 'green', GRN: 'green',
   S: 'silver', SL: 'silver', SI: 'silver',
@@ -251,12 +252,12 @@ const REF_DIAL_MAP = {
 /** Condition keywords and their canonical forms. */
 const CONDITION_MAP = [
   { keywords: ['brand new'],                              canon: 'New',    score: 1.0 },
-  { keywords: ['new', 'bnib'],                            canon: 'New',    score: 1.0 },
-  { keywords: ['n5'],                                     canon: 'New',    score: 0.95 },
-  { keywords: ['like new', 'mint', '99%', '99 new', '98%', '97%', '96%', '95%'], canon: 'Like New', score: 0.95 },
+  { keywords: ['nos', 'new old stock'],                   canon: 'New Old Stock', score: 0.98 },
+  { keywords: ['like new', 'likenew', 'mint', '99%new', '99%', '99 new', '98%new', '98%', '97%', '96%', '95%'], canon: 'Like New', score: 0.95 },
   { keywords: ['n4'],                                     canon: 'Like New', score: 0.90 },
-  { keywords: ['nos', 'new old stock'],                   canon: 'NOS',    score: 0.98 },
-  { keywords: ['unused', 'unworn'],                       canon: 'Unused', score: 0.99 },
+  { keywords: ['new', 'bnib'],                            canon: 'New',    score: 1.0 },
+  { keywords: ['n6', 'n5'],                                 canon: 'New',    score: 0.95 },
+  { keywords: ['unused', 'unworn'],                       canon: 'New',    score: 0.99 },
   { keywords: ['excellent', 'exc', 'great condition', 'very good', 'vgc'], canon: 'Excellent', score: 0.85 },
   { keywords: ['n3'],                                     canon: 'Excellent', score: 0.85 },
   { keywords: ['good', 'good condition', 'gwc'],          canon: 'Good',   score: 0.7 },
@@ -424,10 +425,19 @@ function splitMultiWatch(text) {
  */
 function splitByDelimiters(text) {
   if (!text) return [];
-  return text
-    .split(/(?:\s*\/\/\s*|\s*\|\s*|\s*\\\s*|\s+(?:and|&|\+)\s+(?=\d|[A-Z]{2,}|\$))/i)
+  const parts = text
+    .split(/(?:\s*\/\/\s*|\s*\|\s*|\s*\\\s*|\s+(?:and|&|\+)\s+(?=\d|[A-Z]{2,}|\$)|\s*[\u{1F337}\u{1F338}\u{1F339}\u{1F343}\u{1F342}\u{2753}\u{2757}\u{2022}\u{25AA}\u{25FE}]\s*)/gu)
     .map(p => p.trim())
     .filter(p => p.length > 0);
+
+  if (parts.length > 1) {
+    const hasRef = (s) => /\b[345679]\d{3}[A-Z]?\b/i.test(s) || /\b\d{5,6}[A-Z]{0,4}\b/i.test(s) || /\bRM\d/i.test(s);
+    if (!hasRef(parts[0])) {
+      parts[1] = parts[0] + ' ' + parts[1];
+      parts.shift();
+    }
+  }
+  return parts;
 }
 
 /**
@@ -949,6 +959,9 @@ function inferBrandFromRef(ref) {
   // inferred as Patek). Corrected to properly anchor both alternatives.
   if (/^[3-7]\d{3}([A-Z]|\/)/.test(r)) return 'Patek Philippe';
   
+  // ── AP: 5-digit + 2+ uppercase letters (15210ST, 26240OR) ──
+  if (/^\d{5}[A-Z]{2,4}/.test(r)) return 'Audemars Piguet';
+
   // ── Rolex: 5-digit (10XXX-19XXX) and 6-digit (11XXXX-27XXXX) refs ──
   // v4.4: Also detect 5-digit Rolex refs (e.g. 16700, 16233, 16700A).
   // Letter suffixes like "A" (serial descriptor) are stripped for digit check.
@@ -962,9 +975,6 @@ function inferBrandFromRef(ref) {
       if (first2 >= 11 && first2 <= 27) return 'Rolex';
     }
   }
-  
-  // ── AP: 5-digit + 2+ uppercase letters (15210ST, 26240OR) ──
-  if (/^\d{5}[A-Z]{2,4}/.test(r)) return 'Audemars Piguet';
   
   // ── Hublot: typically has dots (301.SX.130.RX) or MP prefix ──
   if (/^MP\d{5}/.test(r)) return 'Hublot';
@@ -1036,8 +1046,14 @@ function parseYear(text) {
     if (y >= 2020 && y <= 2030) return y;
   }
 
-  // Explicit year mentions: "2021", "year 2022"
-  const explicit = lower.match(/\b(19[5-9]\d|20[0-3]\d)\b/);
+  // N/YY format: "n6/26", "N5/26"
+  const nYear = text.match(/\b[nN]\d\/(2\d)\b/);
+  if (nYear) {
+    return parseInt('20' + nYear[1], 10);
+  }
+
+  // Explicit year mentions: "2021", "2021y", "year 2022"
+  const explicit = lower.match(/\b(19[5-9]\d|20[0-3]\d)[yY]?\b/);
   if (explicit) {
     const y = parseInt(explicit[1], 10);
     if (y >= 1950 && y <= 2030) return y;
@@ -1091,9 +1107,11 @@ function parsePrice(text, ref) {
       return num * 1e6 * 0.128; // HKD to USD conversion
     }},
     // 268000 with currency
-    { regex: /\b(\d{4,7})\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, multiplier: 1 },
+    { regex: /\b(\d{4,7})\s*(?:USDT|USD|HKD|EUR|GBP|CHF|SGD|AUD|CAD|CNY|RMB)\b/gi, multiplier: 1 },
     // v3.4: comma-thousands with currency: "205,000 hkd", "111,500hkd", "3,056,055 HKD"
-    { regex: /\b(\d{1,3}(?:,\d{3})+)\s*(?:USD|USDT|HKD|EUR|GBP|CHF|SGD|AUD|CAD|AED)\b/gi, handler: (m) => parseFloat(m[1].replace(/,/g, '')) },
+    { regex: /\b(\d{1,3}(?:,\d{3})+)\s*(?:USDT|USD|HKD|EUR|GBP|CHF|SGD|AUD|CAD|AED)\b/gi, handler: (m) => parseFloat(m[1].replace(/,/g, '')) },
+    // European dot-thousands with currency: "208.000Usdt"
+    { regex: /\b(\d{1,3}(?:\.\d{3})+)\s*(?:USDT|USD|HKD|EUR|GBP|CHF|SGD|AUD|CAD|AED)\b/gi, handler: (m) => parseInt(m[1].replace(/\./g, ''), 10) },
     // v3.4: $-prefixed comma-thousands: "$34,500", "$16,250+ship"
     { regex: /[$](\d{1,3}(?:,\d{3})+)(?:\.\d+)?\b/g, handler: (m) => parseFloat(m[1].replace(/,/g, '')) },
     // v3.4: dealer k-shorthand with comma decimal: "$17,9 + 🏷" → 17,900
@@ -1142,6 +1160,11 @@ function parsePrice(text, ref) {
 function parseCurrency(text) {
   if (!text) return null;
   const lower = text.toLowerCase();
+  if (lower.includes('hk$')) return 'HKD';
+  if (lower.includes('€')) return 'EUR';
+  if (lower.includes('£')) return 'GBP';
+  if (lower.includes('$') && !lower.includes('hk$')) return 'USD';
+
   const currencies = [
     ['usdt', 'USDT'], ['usd', 'USD'], ['hkd', 'HKD'], ['eur', 'EUR'],
     ['gbp', 'GBP'], ['chf', 'CHF'], ['sgd', 'SGD'], ['aud', 'AUD'],
@@ -1167,31 +1190,54 @@ function toUSD(amount, currency) {
  * Detect box & papers status from the message.
  */
 function parseAccessories(text) {
-  if (!text) return { hasBox: false, hasPapers: false, note: null };
+  if (!text) return { has_box: false, has_papers: false, is_naked: false };
   const lower = text.toLowerCase();
 
+  const is_naked = /\b(naked|only\s?watch|watch\s?only|no\s?box\s?no\s?papers?)\b/i.test(lower);
+  if (is_naked) {
+    return { has_box: false, has_papers: false, hasBox: false, hasPapers: false, is_naked: true };
+  }
+
+  let has_box = false;
+  let has_papers = false;
+  
   if (ACCESSORY_PATTERNS.fullSet.test(lower)) {
-    return { hasBox: true, hasPapers: true, note: 'Full Set' };
+    has_box = true;
+    has_papers = true;
+  } else {
+    const box = ACCESSORY_PATTERNS.box.test(lower);
+    const papers = ACCESSORY_PATTERNS.papers.test(lower);
+    const noBox = ACCESSORY_PATTERNS.noBox.test(lower);
+    const noPapers = ACCESSORY_PATTERNS.noPapers.test(lower);
+    
+    has_box = box && !noBox;
+    has_papers = papers && !noPapers;
   }
 
-  if (ACCESSORY_PATTERNS.noBoxPapers.test(lower)) {
-    return { hasBox: false, hasPapers: false, note: 'No Box/Papers' };
-  }
+  let missing_links = undefined;
+  const linksMatch = lower.match(/-(\d+)\s*links?/);
+  if (linksMatch) missing_links = parseInt(linksMatch[1], 10);
 
-  const hasBox = ACCESSORY_PATTERNS.box.test(lower);
-  const hasPapers = ACCESSORY_PATTERNS.papers.test(lower);
-  const noBox = ACCESSORY_PATTERNS.noBox.test(lower);
-  const noPapers = ACCESSORY_PATTERNS.noPapers.test(lower);
+  let stickers = undefined;
+  if (lower.includes('some stickers')) stickers = 'some';
+  else if (lower.includes('stickers')) stickers = 'present';
 
-  const finalBox = hasBox && !noBox;
-  const finalPapers = hasPapers && !noPapers;
+  const export_only = lower.includes('export only');
+  
+  let bracelet_adjustment = undefined;
+  if (lower.includes('unadjusted')) bracelet_adjustment = 'unadjusted';
 
-  let note = null;
-  if (finalBox && finalPapers) note = 'Box & Papers';
-  else if (finalBox && !finalPapers) note = 'Box Only';
-  else if (!finalBox && finalPapers) note = 'Papers Only';
-
-  return { hasBox: finalBox, hasPapers: finalPapers, note };
+  return { 
+    has_box, 
+    has_papers, 
+    hasBox: has_box,
+    hasPapers: has_papers,
+    is_naked: false,
+    missing_links,
+    stickers,
+    export_only,
+    bracelet_adjustment
+  };
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1608,7 +1654,8 @@ function calculateConfidence(fields) {
   }
 
   const confidence = Math.round(weightedSum / totalWeight);
-  return { confidence, fieldConfidence: fc };
+  fc.overall = confidence;
+  return { confidence, field_confidence: fc };
 }
 
 /**
@@ -1702,7 +1749,7 @@ function parseWTB(text) {
   const dateMonth = parseDateMonth(text);
 
   // Calculate confidence (lower baseline because WTB has less data)
-  let { confidence, fieldConfidence } = calculateConfidence({
+  let { confidence, field_confidence } = calculateConfidence({
     brand: finalBrand,
     reference: ref,
     price,
@@ -1782,9 +1829,11 @@ function parseWTB(text) {
     notes,
     details,
     dateMonth,
+    month_code: (() => { const m = text.match(/\b([Nn]\d)(?:\/|\s)?(\d{2}|\d{4})\b/); return m ? m[1].toUpperCase() : null; })(),
     confidence,
-    fieldConfidence,
+    field_confidence,
     listingType: 'WTB',
+    listing_type: 'WTB',
     accessories,
     flags,
     verdict: finalVerdict,
@@ -1817,9 +1866,10 @@ function parseFull(rawMsg) {
       price: null,
       currency: null,
       confidence: 0,
-      fieldConfidence: {},
+      field_confidence: { overall: 0 },
       listingType: 'GARBAGE',
-      accessories: { hasBox: false, hasPapers: false, note: null },
+      accessories: { has_box: false, has_papers: false, is_naked: false },
+      month_code: null,
     };
   }
 
@@ -1845,9 +1895,9 @@ function parseFull(rawMsg) {
       price: null,
       currency: null,
       confidence: 0,
-      fieldConfidence: {},
+      field_confidence: { overall: 0 },
       listingType: 'GARBAGE',
-      accessories: { hasBox: false, hasPapers: false, note: null },
+      accessories: { has_box: false, has_papers: false, is_naked: false },
       flags: { section_header: true },
       verdict: 'RECYCLE',
     };
@@ -1950,7 +2000,7 @@ function parseFull(rawMsg) {
   const dateMonth = parseDateMonth(text);
 
   // Calculate confidence
-  let { confidence, fieldConfidence } = calculateConfidence({
+  let { confidence, field_confidence } = calculateConfidence({
     brand: finalBrand,
     reference: ref,
     price,
@@ -2059,25 +2109,28 @@ function parseFull(rawMsg) {
 
   return {
     brand: finalBrand,
-    brandExplicit: !!brand,  // true if brand was found in text, false if inferred from ref pattern
+    brandExplicit: !!brand,
     ref,
     dial,
     condition,
-    conditionBucket: normalizeConditionBucket(condition, text), // v3.4: BRAND_NEW | MINT | USED
+    conditionBucket: normalizeConditionBucket(condition, text),
     year,
     price,
     currency,
-    inclusions,   // v3.4: FULL_SET | W_AND_C | BOX_ONLY | PAPERS_ONLY | NAKED
-    notes,        // v3.4: "+label; Ready in HK; USDT OK"
-    details,      // v3.4: "Wimbledon, Pave"
-    dateMonth,    // v3.4: "05/2022"
+    inclusions,
+    notes,
+    details,
+    dateMonth,
+    month_code: (() => { const m = rawMsg.match(/\b([Nn]\d)(?:\/|\s)?(\d{2}|\d{4})\b/); return m ? m[1].toUpperCase() : null; })(),
     confidence,
-    fieldConfidence,
+    field_confidence,
+    fieldConfidence: field_confidence,
     listingType,
+    listing_type: listingType,
     accessories,
     flags,
     verdict: finalVerdictWithTaxonomy,
-    reviewReason,   // v4.3: human-readable explanation when verdict is a taxonomy flag
+    reviewReason,
     catalogMatched,
     catalogEntry,
     catalogImageUrl: catalogEntry?.imageUrl || catalogEntry?.image_url || null,

@@ -78,7 +78,7 @@ export default function ReferenceCheck() {
     setSearched(true);
     try {
       const res = await fetch(
-        `${SUPABASE_URL}/rest/v1/watch_records?select=*&reference=ilike.*${encodeURIComponent(ref)}*&limit=500`,
+        `${SUPABASE_URL}/rest/v1/price_research_verified_source?select=*&reference=ilike.*${encodeURIComponent(ref)}*&limit=500`,
         { headers: REQ_HEADERS }
       );
       const data = await res.json();
