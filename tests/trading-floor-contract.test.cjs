@@ -2,12 +2,17 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { createClient } = require('@supabase/supabase-js');
 
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-
 test('Trading Floor API Database Contract', async (t) => {
+    if (process.env.RUN_LIVE_SUPABASE_TESTS !== '1') {
+        t.skip('Skipping live Supabase tests (RUN_LIVE_SUPABASE_TESTS != 1)');
+        return;
+    }
+
+    const SUPABASE_URL = process.env.SUPABASE_URL;
+    const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
-        assert.fail('Supabase environment variables are missing');
+        assert.fail('Supabase environment variables are missing (SUPABASE_URL, SUPABASE_ANON_KEY)');
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -20,7 +25,7 @@ test('Trading Floor API Database Contract', async (t) => {
         
         if (error) assert.fail(`Query failed: ${error.message}`);
         
-        if (!data || data.length === 0) return; // cannot test columns if empty
+        if (!data || data.length === 0) return;
         
         const row = data[0];
         const requiredColumns = [
@@ -75,28 +80,40 @@ test('Trading Floor API Database Contract', async (t) => {
         assert.strictEqual(data.length, 0, 'Found an exact duplicate exposed on the Trading Floor');
     });
 
-    await t.test('A separated child must hide its images', async () => {
+    await t.test('A separated child must hide its images completely', async () => {
         const { data, error } = await supabase
             .from('reviewed_workbook_market_source_v2')
-            .select('user_image_url, thumbnail_url, image_url, display_image_url, image_urls, has_exact_source_image, has_images')
+            .select('front_image, image_url, user_image_url, thumbnail_url, display_image_url, image_urls, storage_key, attachment_keys, mime_type, has_exact_source_image, has_images, image_url_resolvable, visually_verified')
             .not('parent_id', 'is', null)
             .limit(50);
             
         if (error) assert.fail(`Query failed: ${error.message}`);
         
         for (const row of data) {
-            assert.ok(!row.user_image_url, 'user_image_url must be empty/null');
-            assert.ok(!row.thumbnail_url, 'thumbnail_url must be empty/null');
-            assert.ok(!row.image_url, 'image_url must be empty/null');
-            assert.ok(!row.display_image_url, 'display_image_url must be empty/null');
+            assert.ok(!row.front_image, 'front_image must be null');
+            assert.ok(!row.image_url, 'image_url must be null');
+            assert.ok(!row.user_image_url, 'user_image_url must be null');
+            assert.ok(!row.thumbnail_url, 'thumbnail_url must be null');
+            assert.ok(!row.display_image_url, 'display_image_url must be null');
+            assert.ok(!row.storage_key, 'storage_key must be null');
+            assert.ok(!row.mime_type, 'mime_type must be null');
             assert.strictEqual(row.has_exact_source_image, false, 'has_exact_source_image must be false');
             assert.strictEqual(row.has_images, false, 'has_images must be false');
+            assert.strictEqual(row.image_url_resolvable, false, 'image_url_resolvable must be false');
+            assert.strictEqual(row.visually_verified, false, 'visually_verified must be false');
             
             if (row.image_urls) {
                 if (Array.isArray(row.image_urls)) {
                     assert.strictEqual(row.image_urls.length, 0, 'image_urls must be empty array');
                 } else if (typeof row.image_urls === 'string') {
-                    assert.strictEqual(row.image_urls, '[]', 'image_urls must be [] string');
+                    assert.strictEqual(row.image_urls, '[]', 'image_urls must be empty JSON array string');
+                }
+            }
+            if (row.attachment_keys) {
+                if (Array.isArray(row.attachment_keys)) {
+                    assert.strictEqual(row.attachment_keys.length, 0, 'attachment_keys must be empty array');
+                } else if (typeof row.attachment_keys === 'string') {
+                    assert.strictEqual(row.attachment_keys, '[]', 'attachment_keys must be empty JSON array string');
                 }
             }
         }
@@ -123,30 +140,26 @@ test('Trading Floor API Database Contract', async (t) => {
         }
     });
 
-    // NOTE: Testing "WTB/WTS without prices disappears" isn't fully deterministically testable in isolation
-    // if we don't know the dataset, but we ensure they aren't completely wiped out
     await t.test('WTB and WTS no-price listings should be visible', async () => {
-        const { data: wtbData } = await supabase
+        // Find if a valid source WTB/WTS no-price exists
+        const { data: wtbSource, error: wtbError } = await supabase
             .from('reviewed_workbook_market_source_v2')
             .select('id')
             .eq('intent', 'WTB')
             .is('workbook_price_usd', null)
             .limit(1);
 
-        const { data: wtsData } = await supabase
+        assert.strictEqual(wtbError, null, `WTB query error: ${wtbError?.message}`);
+        assert.ok(wtbSource && wtbSource.length > 0, 'Expected at least one eligible public WTB no-price source.');
+
+        const { data: wtsSource, error: wtsError } = await supabase
             .from('reviewed_workbook_market_source_v2')
             .select('id')
             .eq('intent', 'WTS')
             .is('workbook_price_usd', null)
             .limit(1);
 
-        // We do not strict assert failure here just in case the entire DB has zero records,
-        // but it covers the user's intent to verify they are not aggressively filtered if they exist
-        if (wtbData && wtbData.length > 0) {
-            assert.ok(true, 'WTB no price found');
-        }
-        if (wtsData && wtsData.length > 0) {
-            assert.ok(true, 'WTS no price found');
-        }
+        assert.strictEqual(wtsError, null, `WTS query error: ${wtsError?.message}`);
+        assert.ok(wtsSource && wtsSource.length > 0, 'Expected at least one eligible public WTS no-price source.');
     });
 });
