@@ -90,83 +90,144 @@ def fetch_and_enqueue_source_messages(batch_size=100):
         print(f"Error connecting to source MySQL: {e}")
         return 0
 
-    if not rows:
-        print("No source messages found.")
-        return 0
+    received_count = len(rows)
+    versions_inserted_count = 0
+    jobs_inserted_count = 0
+    suppressed_count = 0
 
     conn_tgt, is_sqlite = get_target_db()
     cur_tgt = conn_tgt.cursor()
 
-    enqueued_count = 0
     payload_table = "payloads" if is_sqlite else "raw.payloads"
+    versions_table = "payload_versions" if is_sqlite else "raw.payload_versions"
     jobs_table = "processing_jobs" if is_sqlite else "jobs.processing_jobs"
 
     for r in rows:
         msg_text = r['description'] or r['title'] or r['comments'] or ''
         if not msg_text.strip():
+            suppressed_count += 1
             continue
 
+        source_platform = r.get('type') or 'auction'
+        source_group_id = str(r.get('region') or 'default')
         source_msg_id = str(r['id'])
-        front_image_val = str(r.get('front_image', '')).strip()
-        do_object_key_val = front_image_val if front_image_val and not front_image_val.lower().startswith('http') else None
-        
-        chk_material = f"{source_msg_id}:{r.get('type') or 'auction'}:{front_image_val}"
-        checksum = hashlib.sha256(chk_material.encode('utf-8', errors='ignore')).hexdigest()
-        payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{source_msg_id}"))
-        job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{source_msg_id}"))
+
+        raw_img = str(r.get('front_image') or '').strip()
+        if raw_img.lower() in ('0', 'none', 'null', ''):
+            raw_img = ''
+
+        orig_img_refs = [raw_img] if raw_img else []
+
+        # Extract normalized DO object key (only if not an http URL and not invalid)
+        if raw_img and not raw_img.lower().startswith('http') and not any(c in raw_img for c in ('..', '/', '\\')):
+            do_object_key = raw_img
+        else:
+            do_object_key = None
+
+        media_fingerprint = hashlib.sha256(raw_img.encode('utf-8')).hexdigest() if raw_img else "no_media"
         orig_ts = str(r['created_on']) if r.get('created_on') else datetime.utcnow().isoformat() + "Z"
 
+        # Stable payload envelope identity (1 row per source message)
+        payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{source_platform}.{source_group_id}.{source_msg_id}"))
+        payload_checksum = hashlib.sha256(f"{source_platform}:{source_group_id}:{source_msg_id}".encode('utf-8')).hexdigest()
+
+        # Immutable version identity (1 row per content version)
+        version_material = f"{source_platform}:{source_group_id}:{source_msg_id}:{msg_text}:{media_fingerprint}"
+        version_checksum = hashlib.sha256(version_material.encode('utf-8')).hexdigest()
+        version_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.version.{version_checksum}"))
+        job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{version_checksum}"))
+
         if is_sqlite:
-            payload_query = f"""
-            INSERT OR IGNORE INTO {payload_table} (
-                id, source_platform, source_group_id, source_group_name, source_message_id,
-                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum,
-                do_object_key, front_image
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """
-            cur_tgt.execute(payload_query, (
-                payload_id, r.get('type') or 'auction', r.get('region'), r.get('region'),
-                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum,
-                do_object_key_val, front_image_val
+            # 1. Envelope
+            cur_tgt.execute(f"""
+                INSERT OR IGNORE INTO {payload_table} (
+                    id, source_platform, source_group_id, source_group_name, source_message_id,
+                    source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum,
+                    original_image_references, do_object_key
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """, (
+                payload_id, source_platform, source_group_id, r.get('region'),
+                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, payload_checksum,
+                json.dumps(orig_img_refs), do_object_key
             ))
-            
-            job_query = f"""
-            INSERT OR IGNORE INTO {jobs_table} (id, raw_payload_id, status)
-            VALUES (?, ?, 'queued');
-            """
-            cur_tgt.execute(job_query, (job_id, payload_id))
+
+            # 2. Version
+            cur_tgt.execute(f"""
+                INSERT OR IGNORE INTO {versions_table} (
+                    id, raw_payload_id, version_checksum, original_message_text, original_timestamp,
+                    original_image_references, do_object_key, media_fingerprint
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+            """, (
+                version_id, payload_id, version_checksum, msg_text, orig_ts,
+                json.dumps(orig_img_refs), do_object_key, media_fingerprint
+            ))
+            if cur_tgt.rowcount > 0:
+                versions_inserted_count += 1
+                # 3. Job (only on new version)
+                cur_tgt.execute(f"""
+                    INSERT OR IGNORE INTO {jobs_table} (id, raw_payload_id, payload_version_id, status)
+                    VALUES (?, ?, ?, 'queued');
+                """, (job_id, payload_id, version_id))
+                if cur_tgt.rowcount > 0:
+                    jobs_inserted_count += 1
+            else:
+                suppressed_count += 1
+
         else:
-            payload_query = f"""
-            INSERT INTO {payload_table} (
-                id, source_platform, source_group_id, source_group_name, source_message_id,
-                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum,
-                do_object_key, front_image
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            ) ON CONFLICT (payload_checksum) DO UPDATE SET record_version = '1.0'
-            RETURNING id;
-            """
-            cur_tgt.execute(payload_query, (
-                payload_id, r.get('type') or 'auction', r.get('region'), r.get('region'),
-                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, checksum,
-                do_object_key_val, front_image_val
+            # 1. Envelope (PostgreSQL)
+            cur_tgt.execute(f"""
+                INSERT INTO {payload_table} (
+                    id, source_platform, source_group_id, source_group_name, source_message_id,
+                    source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum,
+                    original_image_references, do_object_key
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                ) ON CONFLICT (source_platform, source_group_id, source_message_id) DO UPDATE
+                SET original_message_text = EXCLUDED.original_message_text
+                RETURNING id;
+            """, (
+                payload_id, source_platform, source_group_id, r.get('region'),
+                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, payload_checksum,
+                orig_img_refs, do_object_key
             ))
             res = cur_tgt.fetchone()
             actual_payload_id = res[0] if res else payload_id
 
-            job_query = f"""
-            INSERT INTO {jobs_table} (id, raw_payload_id, status)
-            VALUES (%s, %s, 'queued'::jobs.processing_status)
-            ON CONFLICT (id) DO NOTHING;
-            """
-            cur_tgt.execute(job_query, (job_id, actual_payload_id))
+            # 2. Version (PostgreSQL)
+            cur_tgt.execute(f"""
+                INSERT INTO {versions_table} (
+                    id, raw_payload_id, version_checksum, original_message_text, original_timestamp,
+                    original_image_references, do_object_key, media_fingerprint
+                ) VALUES (
+                    %s, %s, %s, %s, %s, %s, %s, %s
+                ) ON CONFLICT (version_checksum) DO NOTHING
+                RETURNING id;
+            """, (
+                version_id, actual_payload_id, version_checksum, msg_text, orig_ts,
+                orig_img_refs, do_object_key, media_fingerprint
+            ))
+            v_res = cur_tgt.fetchone()
 
-        enqueued_count += 1
+            if v_res:
+                versions_inserted_count += 1
+                actual_version_id = v_res[0]
+                # 3. Job (PostgreSQL - only on new version)
+                cur_tgt.execute(f"""
+                    INSERT INTO {jobs_table} (id, raw_payload_id, payload_version_id, status)
+                    VALUES (%s, %s, %s, 'queued'::jobs.processing_status)
+                    ON CONFLICT (id) DO NOTHING
+                    RETURNING id;
+                """, (job_id, actual_payload_id, actual_version_id))
+                j_res = cur_tgt.fetchone()
+                if j_res:
+                    jobs_inserted_count += 1
+            else:
+                suppressed_count += 1
 
     conn_tgt.commit()
     conn_tgt.close()
-    print(f"Successfully enqueued {enqueued_count} payloads into {jobs_table}.")
-    return enqueued_count
+    print(f"Reader Summary: received={received_count}, versions_inserted={versions_inserted_count}, jobs_inserted={jobs_inserted_count}, suppressed={suppressed_count}")
+    return jobs_inserted_count
 
 if __name__ == "__main__":
     fetch_and_enqueue_source_messages(batch_size=100)

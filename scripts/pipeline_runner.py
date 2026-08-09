@@ -77,8 +77,22 @@ def setup_sqlite_schema(conn):
         original_message_text TEXT,
         original_timestamp TEXT,
         payload_checksum TEXT UNIQUE,
+        original_image_references TEXT,
         do_object_key TEXT,
-        front_image TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    """)
+    cur.execute("""
+    CREATE TABLE IF NOT EXISTS payload_versions (
+        id TEXT PRIMARY KEY,
+        raw_payload_id TEXT,
+        version_checksum TEXT UNIQUE,
+        original_message_text TEXT,
+        original_timestamp TEXT,
+        original_image_references TEXT,
+        do_object_key TEXT,
+        attachment_metadata TEXT,
+        media_fingerprint TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
     """)
@@ -86,6 +100,7 @@ def setup_sqlite_schema(conn):
     CREATE TABLE IF NOT EXISTS processing_jobs (
         id TEXT PRIMARY KEY,
         raw_payload_id TEXT,
+        payload_version_id TEXT,
         status TEXT,
         created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
@@ -240,12 +255,15 @@ def run_pipeline_step(limit=50):
     # Atomic CTE job claiming with FOR UPDATE SKIP LOCKED on PostgreSQL
     if IS_SQLITE:
         db_execute(cur, """
-            SELECT j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
+            SELECT j.id as job_id, p.id as payload_id, v.id as version_id,
+                   COALESCE(v.original_message_text, p.original_message_text) as message_text,
                    p.source_sender_name as from_name, p.source_sender_id as from_number,
                    p.source_group_name as region, p.source_platform as type,
-                   p.payload_checksum, p.do_object_key, p.front_image
+                   v.version_checksum, v.do_object_key, v.original_image_references,
+                   v.attachment_metadata, v.media_fingerprint
             FROM processing_jobs j
             JOIN payloads p ON j.raw_payload_id = p.id
+            LEFT JOIN payload_versions v ON j.payload_version_id = v.id
             WHERE j.status = 'received' OR j.status = 'queued'
             LIMIT %s;
         """, (limit,))
@@ -257,7 +275,7 @@ def run_pipeline_step(limit=50):
     else:
         db_execute(cur, """
             WITH target_jobs AS (
-                SELECT j.id, j.raw_payload_id
+                SELECT j.id, j.raw_payload_id, j.payload_version_id
                 FROM jobs.processing_jobs j
                 WHERE j.status IN ('received'::jobs.processing_status, 'queued'::jobs.processing_status)
                 ORDER BY j.created_at ASC
@@ -269,19 +287,23 @@ def run_pipeline_step(limit=50):
                 updated_at = NOW()
             FROM target_jobs t
             JOIN raw.payloads p ON t.raw_payload_id = p.id
+            LEFT JOIN raw.payload_versions v ON t.payload_version_id = v.id
             WHERE j.id = t.id
-            RETURNING j.id as job_id, p.id as payload_id, p.original_message_text as message_text,
+            RETURNING j.id as job_id, p.id as payload_id, v.id as version_id,
+                      COALESCE(v.original_message_text, p.original_message_text) as message_text,
                       p.source_sender_name as from_name, p.source_sender_id as from_number,
                       p.source_group_name as region, p.source_platform as type,
-                      p.payload_checksum, p.do_object_key, p.front_image;
+                      v.version_checksum, v.do_object_key, v.original_image_references,
+                      v.attachment_metadata, v.media_fingerprint;
         """, (limit,))
         raw_jobs = cur.fetchall()
         jobs = []
         for r in raw_jobs:
             jobs.append({
-                "job_id": r[0], "payload_id": r[1], "message_text": r[2],
-                "from_name": r[3], "from_number": r[4], "region": r[5], "type": r[6],
-                "payload_checksum": r[7], "do_object_key": r[8], "front_image": r[9]
+                "job_id": r[0], "payload_id": r[1], "version_id": r[2], "message_text": r[3],
+                "from_name": r[4], "from_number": r[5], "region": r[6], "type": r[7],
+                "version_checksum": r[8], "do_object_key": r[9], "original_image_references": r[10],
+                "attachment_metadata": r[11], "media_fingerprint": r[12]
             })
         conn.commit()
 
@@ -296,16 +318,36 @@ def run_pipeline_step(limit=50):
         payload_id = job["payload_id"]
         checksum = job.get("payload_checksum") or hashlib.sha256(job["message_text"].encode('utf-8')).hexdigest()
 
+        orig_refs = job.get("original_image_references")
+        if isinstance(orig_refs, str):
+            try:
+                orig_refs = json.loads(orig_refs)
+            except Exception:
+                orig_refs = [orig_refs]
+
+        front_image = orig_refs[0] if orig_refs and isinstance(orig_refs, list) and len(orig_refs) > 0 else None
+
         job_data = {
             "id": job_id,
+            "payload_id": payload_id,
+            "version_id": job.get("version_id"),
             "message_text": job["message_text"],
             "type": "sale" if "sale" in str(job["type"]).lower() or "wts" in str(job["message_text"]).lower() else "buy",
             "from_name": job["from_name"],
             "from_number": job["from_number"],
             "region": job["region"],
             "dealer_rating": 5.0,
-            "front_image": job.get("front_image"),
-            "do_object_key": job.get("do_object_key")
+            "front_image": front_image,
+            "original_image_references": orig_refs,
+            "do_object_key": job.get("do_object_key"),
+            "attachment_metadata": job.get("attachment_metadata"),
+            "media_fingerprint": job.get("media_fingerprint"),
+            "provenance": {
+                "source_platform": job["type"],
+                "source_region": job["region"],
+                "payload_id": payload_id,
+                "version_id": job.get("version_id")
+            }
         }
 
         try:

@@ -82,6 +82,38 @@ class WatchFactsPipelineProcessor:
         self.catalog_refs = catalog_refs or {}
         self.version = "2.2.3"
 
+    def resolve_and_validate_image_url(self, raw_img, do_object_key=None):
+        if not raw_img or str(raw_img).strip().lower() in ("0", "none", "null", ""):
+            return ("", False, False)
+
+        raw_str = str(raw_img).strip()
+        lowered = raw_str.lower()
+
+        # Reject unsafe URI schemes
+        if any(lowered.startswith(scheme) for scheme in ("javascript:", "file:", "data:", "ftp:", "vbscript:")):
+            return ("", False, False)
+
+        # Path traversal safety check
+        if ".." in raw_str or "\\" in raw_str:
+            return ("", False, False)
+
+        # If it is a full HTTP(S) URL
+        if lowered.startswith("http://") or lowered.startswith("https://"):
+            # Check for double-prefixing
+            if lowered.count("http://") + lowered.count("https://") > 1:
+                return ("", False, False)
+            return (raw_str, True, True)
+
+        # Use DO object key if available or validate raw_str as key
+        key = do_object_key or raw_str
+        key = key.lstrip("/")
+
+        if "/" in key or ".." in key:
+            return ("", False, False)
+
+        final_url = DO_LISTINGS_BASE + key
+        return (final_url, True, True)
+
     def parse_emoji_numbers(self, text):
         pattern = r'(?:[0-9]️⃣)+'
         def repl(match):
@@ -377,14 +409,9 @@ class WatchFactsPipelineProcessor:
             catalog_confirmed, statuses["price_plausible"]
         )
 
-        img_url = ""
-        front_image = job_data.get("front_image")
-        if front_image and str(front_image) not in ("0", "None", ""):
-            raw_img = str(front_image).strip()
-            if not raw_img.lower().startswith("http"):
-                img_url = DO_LISTINGS_BASE + raw_img
-            else:
-                img_url = raw_img
+        raw_front_img = job_data.get("front_image")
+        do_key = job_data.get("do_object_key")
+        img_url, src_preserved, url_resolvable = self.resolve_and_validate_image_url(raw_front_img, do_key)
 
         if is_bundle:
             listing_type = "MULTI_LISTING"
