@@ -24,6 +24,34 @@ function sum(rows, field) {
   return rows.reduce((total, row) => total + Number(row[field] || 0), 0);
 }
 
+function aggregateCheckpointBrands(rows) {
+  const brands = new Map();
+  for (const row of rows) {
+    const brand = row.brand_scope || 'Unspecified';
+    const current = brands.get(brand) || {
+      brand,
+      files: 0,
+      complete_files: 0,
+      expected_rows: 0,
+      rows_scanned: 0,
+      rows_inserted: 0,
+      duplicate_rows_held: 0,
+      errors: 0,
+    };
+    current.files += 1;
+    current.complete_files += Number(row.status === 'COMPLETE');
+    current.expected_rows += Number(row.expected_rows || 0);
+    current.rows_scanned += Number(row.rows_scanned || 0);
+    current.rows_inserted += Number(row.rows_inserted || 0);
+    current.duplicate_rows_held += Number(row.rows_duplicate_held || 0);
+    current.errors += Number(row.rows_errors || 0);
+    brands.set(brand, current);
+  }
+  return [...brands.values()].sort((left, right) => (
+    right.rows_inserted - left.rows_inserted || left.brand.localeCompare(right.brand)
+  ));
+}
+
 async function runAudit(env = process.env) {
   const baseUrl = String(env.SUPABASE_URL || '').replace(/\/$/, '');
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY || env.SUPABASE_SECRET_KEY;
@@ -92,7 +120,7 @@ async function runAudit(env = process.env) {
       'reviewed_workbook_import_checkpoints',
       'brand_scope,expected_rows,rows_scanned,rows_inserted,rows_duplicate_held,rows_errors,status',
       'brand_scope.asc',
-      100,
+      1_000,
     ),
   ]);
 
@@ -113,15 +141,7 @@ async function runAudit(env = process.env) {
         + sum(checkpointRows, 'rows_duplicate_held')
         + sum(checkpointRows, 'rows_errors')
       ),
-    brands: checkpointRows.map(row => ({
-      brand: row.brand_scope,
-      status: row.status,
-      expected_rows: Number(row.expected_rows || 0),
-      rows_scanned: Number(row.rows_scanned || 0),
-      rows_inserted: Number(row.rows_inserted || 0),
-      duplicate_rows_held: Number(row.rows_duplicate_held || 0),
-      errors: Number(row.rows_errors || 0),
-    })),
+    brands: aggregateCheckpointBrands(checkpointRows),
   };
 
   return {
