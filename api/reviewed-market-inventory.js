@@ -398,7 +398,7 @@ function isTradingFloorSourceRow(row) {
   const reviewedQnsaRelease = row?.publication_lane === 'QNSA_ROLEX_PATEK_REVIEWED_V1'
     && row?.normalization_run_complete === true
     && row?.raw_lineage_verified === true
-    && row?.publication_state === 'PENDING_VERIFICATION';
+    && ['APPROVED', 'PENDING_VERIFICATION'].includes(row?.publication_state);
   const pendingCategoryEligible = itemCategory === 'WATCH'
     ? isPriorityHumanReviewBrand(row?.canonical_brand || row?.supplied_brand || row?.brand_scope)
     : true;
@@ -908,7 +908,12 @@ module.exports = async function handler(req, res) {
     // ponytail: use raw REST instead of Supabase client to avoid client-side issues
     const queryParams = new URLSearchParams();
     queryParams.set('select', columns);
-    queryParams.set('trading_floor_status', 'not.in.(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate)');
+    // The QNSA release view already excludes every blocked status and may carry
+    // a NULL source status. Applying SQL NOT IN again would also reject NULL and
+    // erase otherwise eligible reviewed rows.
+    if (MARKET_SOURCE_VIEW !== 'qnsa_rolex_patek_trading_floor_source') {
+      queryParams.set('trading_floor_status', 'not.in.(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate)');
+    }
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) {
       if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source') {

@@ -181,6 +181,7 @@ test('only reconciled Rolex and Patek pending-review singles enter the Trading F
 
 test('reviewed QNSA release rows and source-backed ratings reach the card contract', () => {
   assert.match(source, /publication_lane === 'QNSA_ROLEX_PATEK_REVIEWED_V1'/);
+  assert.match(source, /\['APPROVED', 'PENDING_VERIFICATION'\]\.includes\(row\?\.publication_state\)/);
   assert.match(source, /reviewedQnsaRelease \|\|/);
   assert.match(source, /seller_rating: positiveNumber\(row\.dealer_rating\)/);
   assert.match(source, /raw_lineage_verified,dealer_rating/);
@@ -550,7 +551,7 @@ test('endpoint is read-only and globally ranks verified source images before pag
   assert.doesNotMatch(source, /\.(?:insert|upsert|update|delete)\s*\(/);
   assert.match(source, /has_complete_identity/);
   assert.match(source, /MULTIPLE_LISTING_IDENTITY_VALUES/);
-  assert.match(source, /trading_floor_status', 'not\.in\.\(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate\)'/);
+  assert.match(source, /MARKET_SOURCE_VIEW !== 'qnsa_rolex_patek_trading_floor_source'[\s\S]*trading_floor_status', 'not\.in\.\(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate\)'/);
   // ponytail: images-first ORDER BY was reverted — it causes a Postgres
   // statement timeout on the unindexed view. Assert the proven indexed order:
   // price evidence primary, images as tiebreaker, newest last.
