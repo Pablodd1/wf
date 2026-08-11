@@ -742,6 +742,18 @@ module.exports = async function handler(req, res) {
       && (usingQnsaReviewedSource && familyPrefix
         ? normRef(row.reference).startsWith(normRef(familyPrefix))
         : equivalentKeys.has(normRef(row.reference))));
+    if (usingQnsaReviewedSource && rows.length === 0) {
+      // A stale dedicated-view row shape can survive the database query yet be
+      // removed by the legacy post-query contract. Recover from the canonical
+      // Trading release after that boundary too; this loader already enforces
+      // brand/reference, WTS, verified USD, bundle, and duplicate gates.
+      rows = await loadQnsaVerifiedTradingPrices(client, {
+        brand,
+        referenceVariants,
+        familyPrefix,
+        limit: pageSize,
+      });
+    }
     const shadowBundleIds = controlledPaneraiRelease || usingReviewedWorkbook || usingQnsaReviewedSource
       ? new Set()
       : await loadShadowBundleParentIds(client, rows);
