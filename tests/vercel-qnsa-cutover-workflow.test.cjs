@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'vercel-qnsa-cutover.yml'), 'utf8');
+const releaseWorkflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'qnsa-rolex-patek-reviewed-release.yml'), 'utf8');
 
 test('cutover is pinned and explicitly authorized', () => {
   assert.match(workflow, /CUTOVER_VERCEL_TO_QNSA/);
@@ -48,4 +49,9 @@ test('post-deploy smoke tests cover QNSA health, Rolex trading and Patek price r
   assert.match(workflow, /rolex\.records/);
   assert.match(workflow, /brand=Rolex&reference=116500LN/);
   assert.match(workflow, /brand=Patek%20Philippe&reference=5712/);
+});
+
+test('reviewed release installs bounded QNSA customer-query indexes', () => {
+  assert.match(releaseWorkflow, /20260811230000_qnsa_release_query_indexes\.sql/);
+  assert.match(releaseWorkflow, /idx_staging_qnsa_release_reference_posted/);
 });

@@ -903,7 +903,14 @@ module.exports = async function handler(req, res) {
     queryParams.set('select', columns);
     queryParams.set('trading_floor_status', 'not.in.(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate)');
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
-    if (reference) queryParams.set('reference_search_key', `eq.${reference}`);
+    if (reference) {
+      if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source') {
+        const exactVariants = listEquivalentReferences(requestedReference, brand || null);
+        queryParams.set('normalized_reference', `in.(${exactVariants.join(',')})`);
+      } else {
+        queryParams.set('reference_search_key', `eq.${reference}`);
+      }
+    }
     if (exactDialVariants.length) queryParams.set('dial_color', `in.(${exactDialVariants.join(',')})`);
     if (listingType) queryParams.set('listing_type', `eq.${listingType}`);
     if (itemCategory === 'WATCH') {
@@ -939,7 +946,14 @@ module.exports = async function handler(req, res) {
     }
     if (!itemCategory) return res.status(400).json({ status: 'error', error: 'Invalid item category' });
     // ponytail: simplified query — ORDER BY with offset times out on large views
-    const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || 'images');
+    // The reconciled QNSA archive currently has no visually-approved historical
+    // images. Start it in the no-image lane so the first customer page does not
+    // scan every reviewed row looking for a true image flag. Direct submissions
+    // with approved images are still merged above this lane.
+    const qnsaNoImageDefault = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      && !imagesOnly
+      && inventoryCursor === null;
+    const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || (qnsaNoImageDefault ? 'no-images' : 'images'));
     const requestedOffset = pagination === 'cursor'
       ? (inventoryCursor?.offset || 0)
       : pageWindow.start;
@@ -958,7 +972,9 @@ module.exports = async function handler(req, res) {
       directRowsPromise = Promise.resolve(directQuery);
     }
     queryParams.set('has_exact_source_image', requestedLane === 'images' ? 'eq.true' : 'eq.false');
-    queryParams.set('order', 'id.desc');
+    queryParams.set('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      ? 'posting_date.desc'
+      : 'id.desc');
     queryParams.set('limit', String(pageSize + 1));
     if (requestedOffset > 0) queryParams.set('offset', String(requestedOffset));
     

@@ -17,6 +17,12 @@ test('QNSA Trading Floor does not depend on legacy workbook checkpoints', () => 
   assert.match(source, /Promise\.resolve\(qnsaReviewedReleaseSummary\(\)\)/);
 });
 
+test('QNSA exact-reference pages use the indexed reference and no-image lane', () => {
+  assert.match(source, /queryParams\.set\('normalized_reference', `in\.\(\$\{exactVariants\.join\(','\)\}\)`\)/);
+  assert.match(source, /qnsaNoImageDefault[\s\S]*'no-images'/);
+  assert.match(source, /\? 'posting_date\.desc'/);
+});
+
 test('same-reference Trading Floor listings place supplied prices before no-price activity', () => {
   const priced = {
     id: 'priced', brand: 'Patek Philippe', reference: '5712/1A-001',
@@ -542,7 +548,8 @@ test('endpoint is read-only and globally ranks verified source images before pag
   // statement timeout on the unindexed view. Assert the proven indexed order:
   // price evidence primary, images as tiebreaker, newest last.
   assert.match(source, /queryParams\.set\('has_exact_source_image', requestedLane === 'images' \? 'eq\.true' : 'eq\.false'\)/);
-  assert.match(source, /queryParams\.set\('order', 'id\.desc'\)/);
+  assert.match(source, /queryParams\.set\('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
+  assert.match(source, /\? 'posting_date\.desc'[\s\S]*: 'id\.desc'/);
   assert.match(source, /Fill the final image page from the no-image lane/);
   assert.match(source, /pageResult\.records\.filter\(isTradingFloorSourceRow\)/);
   assert.match(source, /usedLegacyViewContract \? isLegacyReviewedInventoryRecord\(record\) : true/);

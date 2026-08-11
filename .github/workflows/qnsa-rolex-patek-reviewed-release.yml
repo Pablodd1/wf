@@ -82,21 +82,37 @@ jobs:
           "@
           $checkBody = @{ query = [string]$checkSql; read_only = $true } | ConvertTo-Json -Depth 3
           $check = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $checkBody
-          if ($check[0].installed -eq $true) {
+          if ($check[0].installed -ne $true) {
+            $paths = @(
+              'supabase/migrations/20260811190000_qnsa_rolex_patek_reviewed_release.sql',
+              'supabase/migrations/20260811220000_qnsa_source_backed_public_fields.sql'
+            )
+            foreach ($path in $paths) {
+              $sql = Get-Content -Raw -LiteralPath $path
+              if ($sql -match '(?i)INSERT\s+INTO\s+public\.watch_records') {
+                throw "Release migration attempts a legacy watch_records write: $path"
+              }
+              $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+              Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+            }
+          } else {
             Write-Output 'Reviewed release contract and source-backed correction are already installed.'
-            exit 0
           }
-          $paths = @(
-            'supabase/migrations/20260811190000_qnsa_rolex_patek_reviewed_release.sql',
-            'supabase/migrations/20260811220000_qnsa_source_backed_public_fields.sql'
-          )
-          foreach ($path in $paths) {
+
+          $indexPath = 'supabase/migrations/20260811230000_qnsa_release_query_indexes.sql'
+          $indexCheckSql = "SELECT to_regclass('staging.idx_staging_qnsa_release_reference_posted') IS NOT NULL AS installed;"
+          $indexCheckBody = @{ query = $indexCheckSql; read_only = $true } | ConvertTo-Json -Depth 3
+          $indexCheck = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $indexCheckBody
+          if ($indexCheck[0].installed -ne $true) {
+            $path = $indexPath
             $sql = Get-Content -Raw -LiteralPath $path
             if ($sql -match '(?i)INSERT\s+INTO\s+public\.watch_records') {
               throw "Release migration attempts a legacy watch_records write: $path"
             }
             $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
             Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          } else {
+            Write-Output 'QNSA release query indexes are already installed.'
           }
 
       - name: Verify completed staging and arm the disabled release lane
