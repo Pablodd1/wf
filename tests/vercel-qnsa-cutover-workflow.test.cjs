@@ -39,8 +39,10 @@ test('production variables and reviewed two-brand gates are updated', () => {
 
 test('cutover snapshots and restores old production values on failure', () => {
   assert.match(workflow, /env pull \.env\.vercel\.rollback/);
-  assert.match(workflow, /restoring previous production environment/);
+  assert.match(workflow, /restoring the validated previous production environment/);
   assert.match(workflow, /foreach \(\$name in \$names\)/);
+  assert.match(workflow, /\$rollbackReady = \$old\['SUPABASE_URL'\] -match/);
+  assert.match(workflow, /retaining the complete QNSA environment instead of restoring blank credentials/);
 });
 
 test('post-deploy smoke tests cover QNSA health, Rolex trading and Patek price research', () => {

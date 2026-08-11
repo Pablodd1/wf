@@ -122,6 +122,8 @@ jobs:
           )
           $old = @{}
           foreach ($name in $names) { $old[$name] = Read-DotEnv $name }
+          $rollbackReady = $old['SUPABASE_URL'] -match '^https://[a-z0-9]+\.supabase\.co$' `
+            -and -not [string]::IsNullOrWhiteSpace($old['SUPABASE_SERVICE_ROLE_KEY'])
 
           try {
             Set-VercelEnv 'SUPABASE_URL' $env:QNSA_URL
@@ -162,11 +164,15 @@ jobs:
               patek_5712_price_verified = $true
             } | ConvertTo-Json | Out-File qnsa-cutover-evidence.json -Encoding utf8
           } catch {
-            Write-Warning "Cutover failed; restoring previous production environment. $($_.Exception.Message)"
-            foreach ($name in $names) {
-              if ($null -ne $old[$name]) { Set-VercelEnv $name $old[$name] }
+            if ($rollbackReady) {
+              Write-Warning "Cutover failed; restoring the validated previous production environment. $($_.Exception.Message)"
+              foreach ($name in $names) {
+                if ($null -ne $old[$name]) { Set-VercelEnv $name $old[$name] }
+              }
+              vercel deploy --prod --yes --token=$env:VERCEL_TOKEN --scope=$env:VERCEL_SCOPE | Out-Null
+            } else {
+              Write-Warning "Cutover failed and the prior environment snapshot is invalid; retaining the complete QNSA environment instead of restoring blank credentials. $($_.Exception.Message)"
             }
-            vercel deploy --prod --yes --token=$env:VERCEL_TOKEN --scope=$env:VERCEL_SCOPE | Out-Null
             throw
           } finally {
             Remove-Item -LiteralPath .env.vercel.rollback -Force -ErrorAction SilentlyContinue
