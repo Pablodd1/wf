@@ -997,7 +997,10 @@ module.exports = async function handler(req, res) {
     if (!qnsaUnpartitionedMedia) {
       queryParams.set('has_exact_source_image', requestedLane === 'images' ? 'eq.true' : 'eq.false');
     }
-    queryParams.set('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+    const qnsaBrandOnly = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      && Boolean(brand)
+      && !reference;
+    queryParams.set('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source' && !qnsaBrandOnly
       ? 'posting_date.desc'
       : 'id.desc');
     queryParams.set('limit', String(pageSize + 1));

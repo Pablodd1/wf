@@ -21,6 +21,7 @@ test('QNSA exact-reference pages use the indexed reference and no-image lane', (
   assert.match(source, /queryParams\.set\('normalized_reference', `in\.\(\$\{exactVariants\.join\(','\)\}\)`\)/);
   assert.match(source, /qnsaUnpartitionedMedia[\s\S]*!imagesOnly/);
   assert.match(source, /if \(!qnsaUnpartitionedMedia\)[\s\S]*has_exact_source_image/);
+  assert.match(source, /qnsaBrandOnly[\s\S]*Boolean\(brand\)[\s\S]*!reference[\s\S]*'id\.desc'/);
   assert.match(source, /\? 'posting_date\.desc'/);
   assert.match(source, /normalized_reference', `like\.\$\{familyPrefix\}\*`/);
 });
