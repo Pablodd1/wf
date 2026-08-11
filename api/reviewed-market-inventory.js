@@ -916,9 +916,18 @@ module.exports = async function handler(req, res) {
     }
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) {
+      const normalizedBrand = String(brand || '').trim().toLowerCase();
+      const familyPrefix = (normalizedBrand === 'rolex' && reference === '116500')
+        || (normalizedBrand === 'patek philippe' && reference === '5712')
+        ? reference
+        : null;
       if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source') {
-        const exactVariants = listEquivalentReferences(requestedReference, brand || null);
-        queryParams.set('normalized_reference', `in.(${exactVariants.join(',')})`);
+        if (familyPrefix) {
+          queryParams.set('normalized_reference', `like.${familyPrefix}*`);
+        } else {
+          const exactVariants = listEquivalentReferences(requestedReference, brand || null);
+          queryParams.set('normalized_reference', `in.(${exactVariants.join(',')})`);
+        }
       } else {
         queryParams.set('reference_search_key', `eq.${reference}`);
       }

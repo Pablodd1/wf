@@ -21,6 +21,7 @@ test('QNSA exact-reference pages use the indexed reference and no-image lane', (
   assert.match(source, /queryParams\.set\('normalized_reference', `in\.\(\$\{exactVariants\.join\(','\)\}\)`\)/);
   assert.match(source, /qnsaNoImageDefault[\s\S]*'no-images'/);
   assert.match(source, /\? 'posting_date\.desc'/);
+  assert.match(source, /normalized_reference', `like\.\$\{familyPrefix\}\*`/);
 });
 
 test('same-reference Trading Floor listings place supplied prices before no-price activity', () => {

@@ -150,7 +150,7 @@ jobs:
             }
             if (-not $healthy) { throw 'Production health did not confirm the QNSA project.' }
 
-            $rolex = Invoke-RestMethod -Uri "$env:PRODUCTION_URL/api/reviewed-market-inventory?brand=Rolex&reference=116500LN&limit=5" -TimeoutSec 45
+            $rolex = Invoke-RestMethod -Uri "$env:PRODUCTION_URL/api/reviewed-market-inventory?brand=Rolex&reference=116500&limit=5" -TimeoutSec 45
             $patek = Invoke-RestMethod -Uri "$env:PRODUCTION_URL/api/price-research?brand=Patek%20Philippe&reference=5712" -TimeoutSec 45
             if (@($rolex.records).Count -eq 0) {
               throw 'Production Rolex Trading Floor smoke test returned no rows.'

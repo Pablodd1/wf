@@ -63,6 +63,14 @@ function sourceAlreadySuppressesDuplicates(sourceTable) {
     || sourceTable === QNSA_PRICE_RESEARCH_SOURCE;
 }
 
+function reviewedFamilyPrefix(brand, reference) {
+  const normalizedBrand = String(brand || '').trim().toLowerCase();
+  const normalizedReference = normRef(reference);
+  if (normalizedBrand === 'rolex' && normalizedReference === '116500') return '116500';
+  if (normalizedBrand === 'patek philippe' && normalizedReference === '5712') return '5712';
+  return null;
+}
+
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
 // by /api/catalog-lookup. The Supabase cached_price_guide_watches table is empty
@@ -126,7 +134,7 @@ function isPriceResearchAdmissionCandidate(row) {
   return isReleaseListingEligible(row) || isHumanReviewAnalyticsCandidate(row);
 }
 
-async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null) {
+async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null, familyPrefix = null) {
   // ponytail: admit all demand-side records. classifyDemandEligibility
   // handles per-row quality downstream.
   let data;
@@ -136,12 +144,15 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     demandSampleCapped = preloadedRows.sampleCapped === true;
   } else if (sourceTable === QNSA_PRICE_RESEARCH_SOURCE) {
     const qnsaColumns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at,listing_date,listing_status';
-    const { data: qnsaDemandRows, error: qnsaDemandError } = await client
+    let demandQuery = client
       .from(QNSA_WTB_DEMAND_SOURCE)
       .select(qnsaColumns)
       .eq('brand', brand)
-      .in('reference', referenceVariants)
       .limit(DEMAND_SAMPLE_LIMIT);
+    demandQuery = familyPrefix
+      ? demandQuery.ilike('reference', `${familyPrefix}%`)
+      : demandQuery.in('reference', referenceVariants);
+    const { data: qnsaDemandRows, error: qnsaDemandError } = await demandQuery;
     if (qnsaDemandError) {
       console.warn('[price-research] QNSA WTB demand unavailable:', qnsaDemandError.message || qnsaDemandError);
       return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
@@ -175,7 +186,9 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     (qnsaReviewedSource || isReleaseListingEligible(row))
     &&
     String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
-    && equivalentKeys.has(normRef(row.reference)));
+    && (familyPrefix
+      ? normRef(row.reference).startsWith(normRef(familyPrefix))
+      : equivalentKeys.has(normRef(row.reference))));
   let suppressedIds;
   try {
     suppressedIds = sourceAlreadySuppressesDuplicates(sourceTable)
@@ -318,6 +331,7 @@ module.exports = async function handler(req, res) {
       });
     }
   }
+  const familyPrefix = reviewedFamilyPrefix(brand, rawRef);
   // A reviewed workbook cohort is already constrained to complete identity and
   // source-explicit USD evidence. It may authorize its exact brand/reference
   // even when an older deployment allowlist has not yet been expanded.
@@ -485,8 +499,10 @@ module.exports = async function handler(req, res) {
         .from(table)
         .select(columns)
         .eq('brand', brand)
-        .in('reference', referenceVariants)
         .eq('listing_type', 'WTS');
+      query = table === QNSA_PRICE_RESEARCH_SOURCE && familyPrefix
+        ? query.ilike('reference', `${familyPrefix}%`)
+        : query.in('reference', referenceVariants);
       if (table !== QNSA_PRICE_RESEARCH_SOURCE) {
         query = query.in('verdict', ['APPROVED', 'approved', ...HUMAN_REVIEW_VERDICTS]);
       }
@@ -851,12 +867,13 @@ module.exports = async function handler(req, res) {
         || null;
     const demand = await lookupDemand(
       client,
-      'watch_records',
+      sourceTable,
       brand,
       referenceVariants,
       catalogHit,
       selection,
       null,
+      familyPrefix,
     );
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 

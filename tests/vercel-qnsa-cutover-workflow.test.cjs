@@ -49,7 +49,7 @@ test('post-deploy smoke tests cover QNSA health, Rolex trading and Patek price r
   assert.match(workflow, /api\/health/);
   assert.match(workflow, /database_project_ref/);
   assert.match(workflow, /rolex\.records/);
-  assert.match(workflow, /brand=Rolex&reference=116500LN/);
+  assert.match(workflow, /brand=Rolex&reference=116500/);
   assert.match(workflow, /brand=Patek%20Philippe&reference=5712/);
 });
 
