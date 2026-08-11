@@ -97,7 +97,7 @@ export function Footer() {
               <button type="submit" className="flex min-h-11 items-center justify-center gap-2 border border-[#c9a96e] px-5 text-sm font-semibold text-[#e6cf9a] transition-colors hover:bg-[#c9a96e] hover:text-[#09090d]">
                 <Send size={15} /> {t('Send email')}
               </button>
-              <p className="text-[11px] leading-5 text-white/35">{t('Email Curated Luxury at')} <a className="text-white/60 hover:text-[#c9a96e]" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
+              <p className="text-[11px] leading-5 text-white/35"><a className="text-white/60 hover:text-[#c9a96e]" href={`mailto:${CONTACT_EMAIL}`}>{t('Email Curated Luxury at')}</a>.</p>
             </form>
           </section>
 
