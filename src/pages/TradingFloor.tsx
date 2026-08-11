@@ -15,6 +15,7 @@ import { rateMarketPrice } from '../lib/marketPriceRating';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
+import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
 
 const GOLD = '#9A7127';
 const GOLD_BRIGHT = '#7B5719';
@@ -593,6 +594,21 @@ export default function TradingFloor() {
               <Filter size={17} /> Filter
               {activeFilterCount > 0 && <span className="flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[11px]" style={{ background: GOLD, color: '#09090D' }}>{activeFilterCount}</span>}
             </button>
+          </div>
+
+          <div className="rounded-md bg-[#09090d] px-4 py-3">
+            <PriorityReferenceShortcuts
+              mode="trading"
+              activeBrand={brandFilter}
+              activeReference={search}
+              onSelect={cohort => {
+                setSelectedCatalogReference(null);
+                setSearchInput(cohort.tradingQuery);
+                setSuggestionsOpen(false);
+                resetResults();
+                updateViewParams({ q: cohort.tradingQuery, brand: cohort.brand, item: 'watches' });
+              }}
+            />
           </div>
 
           <CurrencyConverter compact />

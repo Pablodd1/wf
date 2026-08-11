@@ -96,6 +96,20 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.doesNotMatch(floor, /top_watches_trading_floor\.json/);
 });
 
+test('Trading Floor and Price Research share controlled featured reference shortcuts', () => {
+  const shortcuts = read('src/components/PriorityReferenceShortcuts.tsx');
+  const cohorts = read('src/data/priorityReferenceCohorts.ts');
+  const floor = read('src/pages/TradingFloor.tsx');
+  const research = read('src/pages/PriceResearch.tsx');
+
+  assert.match(cohorts, /116500LN/);
+  assert.match(cohorts, /5712\/1A-001/);
+  assert.match(cohorts, /tradingQuery: '5712'/);
+  assert.match(shortcuts, /Featured research/);
+  assert.match(floor, /mode="trading"/);
+  assert.match(research, /mode="research"/);
+});
+
 test('dealer and CL login keep authentication but omit preview access and marketing panels', () => {
   const login = read('src/pages/DealerLogin.tsx');
 

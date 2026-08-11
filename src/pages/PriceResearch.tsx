@@ -6,6 +6,7 @@ import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer as CommunityFooter } from '../components/Footer';
 import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
+import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
@@ -1036,6 +1037,20 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </button>
             </div>
           </div>
+          <PriorityReferenceShortcuts
+            mode="research"
+            activeBrand={queryBrand}
+            activeReference={query}
+            onSelect={cohort => {
+              setSelectedCatalogReference(null);
+              setQuery(cohort.reference);
+              setQueryBrand(cohort.brand);
+              setPBrand(cohort.brand);
+              setReferenceSuggestionsOpen(false);
+              setReferenceSuggestions([]);
+              void fetchData(cohort.reference, '', cohort.brand);
+            }}
+          />
         </div>
       </header>
 
