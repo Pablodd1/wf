@@ -48,6 +48,7 @@ const {
 const DEMAND_SAMPLE_LIMIT = 2500;
 const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source';
 const QNSA_WTB_DEMAND_SOURCE = 'qnsa_rolex_patek_wtb_demand_source';
+const QNSA_TRADING_SOURCE = 'qnsa_rolex_patek_trading_floor_source';
 
 function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
@@ -69,6 +70,64 @@ function reviewedFamilyPrefix(brand, reference) {
   if (normalizedBrand === 'rolex' && normalizedReference === '116500') return '116500';
   if (normalizedBrand === 'patek philippe' && normalizedReference === '5712') return '5712';
   return null;
+}
+
+async function loadQnsaVerifiedTradingPrices(client, {
+  brand,
+  referenceVariants,
+  familyPrefix,
+  limit,
+}) {
+  // The dedicated research view is the primary source. This bounded fallback
+  // uses the same reconciled release base when PostgREST has not refreshed that
+  // view yet. Only rows already marked as verified USD evidence are admitted;
+  // no-price, ambiguous-currency, WTB, bundle, and suppressed rows remain out.
+  const columns = [
+    'id,canonical_brand,catalog_model,normalized_reference,source_price_amount',
+    'verified_price_usd,source_currency,raw_message,posting_date,condition',
+    'dial_color,listing_type,dealer_id,seller_name,seller_phone,confidence',
+    'verdict,trading_floor_status,user_image_url,has_exact_source_image',
+  ].join(',');
+  let query = client
+    .from(QNSA_TRADING_SOURCE)
+    .select(columns)
+    .eq('brand_scope', brand)
+    .eq('listing_type', 'WTS')
+    .eq('has_verified_usd_price', true);
+  query = familyPrefix
+    ? query.like('normalized_reference', `${familyPrefix}%`)
+    : query.in('normalized_reference', referenceVariants);
+  const { data, error } = await query
+    .order('posting_date', { ascending: false })
+    .limit(limit);
+  if (error) throw error;
+  return (data || []).map(row => ({
+    id: row.id,
+    brand: row.canonical_brand,
+    model: row.catalog_model,
+    reference: row.normalized_reference,
+    price_raw: row.source_price_amount,
+    price_usd: row.verified_price_usd,
+    currency: row.source_currency,
+    raw_message: row.raw_message,
+    flags: [],
+    created_at: row.posting_date,
+    listing_date: row.posting_date,
+    condition: row.condition,
+    source: 'MARIADB_IMMUTABLE_RAW',
+    dial_color: row.dial_color,
+    year: null,
+    listing_type: row.listing_type,
+    dealer_id: row.dealer_id,
+    seller_name: row.seller_name,
+    seller_phone: row.seller_phone,
+    confidence: row.confidence,
+    verdict: row.verdict,
+    listing_status: row.trading_floor_status,
+    thumbnail_url: row.user_image_url,
+    image_urls: row.user_image_url ? [row.user_image_url] : [],
+    has_images: row.has_exact_source_image === true,
+  }));
 }
 
 // Look up a human model name for a reference from the PROVEN file catalog
@@ -540,6 +599,14 @@ module.exports = async function handler(req, res) {
       }
       if (result.error) throw result.error;
       rows = result.data || [];
+      if (sourceTable === QNSA_PRICE_RESEARCH_SOURCE && rows.length === 0) {
+        rows = await loadQnsaVerifiedTradingPrices(client, {
+          brand,
+          referenceVariants,
+          familyPrefix,
+          limit: pageSize,
+        });
+      }
     }
     // Reviewed workbooks are the customer-visible canonical inventory. When an
     // exact reference has source-explicit USD evidence there, use that same
