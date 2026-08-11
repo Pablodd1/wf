@@ -47,7 +47,7 @@ export default function DealerDirectory() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [view, setView] = useState<DirectoryView>('reference');
+  const [view, setView] = useState<DirectoryView>('top-rated');
   const pageSize = view === 'top-rated' ? 25 : 24;
 
   useEffect(() => {

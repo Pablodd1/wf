@@ -1,22 +1,10 @@
-import { ArrowLeft, ArrowRight, Globe2, MessageCircle, PlusCircle, Search, ShieldCheck, Smartphone, Store, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Globe2, MessageCircle, PlusCircle, ShieldCheck, Smartphone, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { COMMUNITY_GROUPS, CONTACT_WHATSAPP_URL } from '@/components/Footer';
 import { LUXFI_URL } from '@/components/MarketHeader';
 import { demoDealerLabels } from '@/data/demoDealerWorkflows';
 
 const portalLinks = [
-  {
-    title: 'Trading Floor',
-    description: 'Browse current dealer inventory, WTS and WTB signals, and source evidence.',
-    to: '/trading',
-    icon: Store,
-  },
-  {
-    title: 'Price Research',
-    description: 'Research a reference using dated, comparable market observations.',
-    to: '/price-research',
-    icon: Search,
-  },
   {
     title: 'POST IT',
     description: 'Coming soon: organize photos and seller details once, then send each item through a faster moderated publication workflow.',
@@ -55,19 +43,7 @@ export default function DealerPortal() {
           <Link to="/dealer/account/profile" className="border border-white/15 px-3 py-2 text-xs font-semibold text-white/65 transition-colors hover:border-white/40 hover:text-white">Dealer Account</Link>
         </header>
 
-        <section className="grid gap-8 border-b border-white/10 py-10 lg:grid-cols-[1fr_auto] lg:items-end">
-          <div>
-            <div className="mb-5 flex h-11 w-11 items-center justify-center border border-[#c9a96e]/45 text-[#c9a96e]">
-              <ShieldCheck size={22} />
-            </div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Workspace</p>
-            <h1 className="mt-3 max-w-2xl font-serif text-4xl leading-tight sm:text-5xl">Market access, with the evidence attached.</h1>
-            <p className="mt-4 max-w-2xl text-sm leading-7 text-white/58">Search prices, review the live trading floor, and verify counterparties before a transaction.</p>
-          </div>
-          <div className="flex items-center gap-2 border border-[#c9a96e]/30 bg-[#c9a96e]/[0.08] px-3 py-2 text-xs text-[#ead6aa]">Public workspace</div>
-        </section>
-
-        <section className="grid gap-4 py-8 md:grid-cols-2">
+        <section className="grid gap-4 py-10 md:grid-cols-2" aria-label="Workspace tools">
           {portalLinks.map(({ title, description, to, external, icon: Icon }) => {
             const content = <>
               <div>

@@ -96,3 +96,21 @@ test('source profile workflow is provenance-labeled and remains distinct from ve
   assert.match(directory, /Full profile/);
   assert.match(profile, /Verified dealer/);
 });
+
+test('Dealer Directory opens on the populated source-ranked view while Reference Check remains available', () => {
+  const directory = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
+  assert.match(directory, /useState<DirectoryView>\('top-rated'\)/);
+  assert.match(directory, /Reference Check/);
+  assert.match(directory, /Top Rated Dealers/);
+});
+
+test('Workspace removes the redundant public market-access block and preserves the remaining tools', () => {
+  const workspace = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerPortal.tsx'), 'utf8');
+  assert.doesNotMatch(workspace, /Market access, with the evidence attached/);
+  assert.doesNotMatch(workspace, /Public workspace/);
+  assert.doesNotMatch(workspace, /title: 'Trading Floor'/);
+  assert.doesNotMatch(workspace, /title: 'Price Research'/);
+  assert.match(workspace, /title: 'POST IT'/);
+  assert.match(workspace, /title: 'Dealer Directory'/);
+  assert.match(workspace, /title: 'Dealer Account'/);
+});
