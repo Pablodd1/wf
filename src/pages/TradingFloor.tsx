@@ -42,6 +42,22 @@ const INTENT_OPTIONS = [
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
+const RATING_OPTIONS = [
+  { label: 'All dealers', value: '' },
+  { label: 'Rated dealers', value: 'rated' },
+  { label: 'Not rated', value: 'unrated' },
+] as const;
+
+const DATE_OPTIONS = [
+  { label: 'All dates', value: '' },
+  { label: '1D', value: '1D' },
+  { label: '7D', value: '7D' },
+  { label: '1M', value: '1M' },
+  { label: '3M', value: '3M' },
+  { label: '6M', value: '6M' },
+  { label: '1Y', value: '1Y' },
+] as const;
+
 interface ListingRecord {
   id: string;
   brand: string;
@@ -79,6 +95,7 @@ interface ListingRecord {
   region: string | null;
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
+  verification_label?: string | null;
   multi_listing?: boolean;
   is_unbundled_child?: boolean;
   raw_message?: string | null;
@@ -92,6 +109,7 @@ interface ListingRecord {
   seller_avatar_url?: string | null;
   seller_rating?: number | null;
   seller_review_count?: number | null;
+  seller_rating_evidence_status?: 'SOURCE_SUPPLIED' | 'UNAVAILABLE';
   seller_group_count?: number | null;
   seller_credential_status?: string | null;
   location?: string | null;
@@ -166,6 +184,8 @@ type ViewMode = 'grid' | 'list';
 type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
+type RatingFilter = typeof RATING_OPTIONS[number]['value'];
+type DateFilter = typeof DATE_OPTIONS[number]['value'];
 
 function isValidListingImageUrl(value: unknown): value is string {
   return typeof value === 'string' && /^https?:\/\/[^\s]+$/i.test(value.trim());
@@ -226,6 +246,14 @@ export default function TradingFloor() {
   const imagesOnly = searchParams.get('images') === 'true';
   const pricedOnly = searchParams.get('priced') === 'true';
   const locationFilter = searchParams.get('location') || '';
+  const requestedRating = searchParams.get('rating') || '';
+  const ratingFilter = RATING_OPTIONS.some(option => option.value === requestedRating)
+    ? requestedRating as RatingFilter
+    : '';
+  const requestedDate = searchParams.get('date')?.toUpperCase() || '';
+  const dateFilter = DATE_OPTIONS.some(option => option.value === requestedDate)
+    ? requestedDate as DateFilter
+    : '';
   const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
@@ -251,7 +279,7 @@ export default function TradingFloor() {
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter].join('\u001f');
+  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter, ratingFilter, dateFilter].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
@@ -260,6 +288,8 @@ export default function TradingFloor() {
     imagesOnly,
     pricedOnly,
     Boolean(locationFilter),
+    Boolean(ratingFilter),
+    Boolean(dateFilter),
   ].filter(Boolean).length;
   const locationOptions = useMemo(() => [...new Set(listings
     .map(listing => cleanValue(listing.location || listing.seller_country || listing.region))
@@ -428,6 +458,8 @@ export default function TradingFloor() {
         if (imagesOnly) params.set('images', 'true');
         if (pricedOnly) params.set('priced', 'true');
         if (locationFilter) params.set('region', locationFilter);
+        if (ratingFilter) params.set('rating', ratingFilter);
+        if (dateFilter) params.set('date', dateFilter);
 
         if (categoryFilter !== 'all') params.set('item', categoryFilter);
         if (!['all', 'watches'].includes(categoryFilter)) params.delete('brand');
@@ -470,7 +502,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, search]);
+  }, [brandFilter, categoryFilter, cursor, dateFilter, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, ratingFilter, search]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -625,6 +657,8 @@ export default function TradingFloor() {
           pricedOnly={pricedOnly}
           location={locationFilter}
           locations={locationOptions}
+          rating={ratingFilter}
+          date={dateFilter}
           onApply={next => {
             setFiltersOpen(false);
             resetResults();
@@ -635,6 +669,8 @@ export default function TradingFloor() {
               images: next.imagesOnly ? 'true' : null,
               priced: next.pricedOnly ? 'true' : null,
               location: next.location || null,
+              rating: next.rating || null,
+              date: next.date || null,
             });
           }}
           onClose={() => setFiltersOpen(false)}
@@ -666,6 +702,8 @@ export default function TradingFloor() {
                 pricedOnly={pricedOnly}
                 location={locationFilter}
                 locations={locationOptions}
+                rating={ratingFilter}
+                date={dateFilter}
                 onChange={updates => { resetResults(); updateViewParams(updates); }}
               />
             </aside>
@@ -788,6 +826,8 @@ function DesktopFilters({
   pricedOnly,
   location,
   locations,
+  rating,
+  date,
   onChange,
 }: {
   brand: BrandFilter;
@@ -798,14 +838,16 @@ function DesktopFilters({
   pricedOnly: boolean;
   location: string;
   locations: string[];
+  rating: RatingFilter;
+  date: DateFilter;
   onChange: (updates: Record<string, string | null>) => void;
 }) {
   return (
     <div className="space-y-7">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
-        {(brand || category !== 'all' || intent || imagesOnly || pricedOnly || location) && (
-          <button type="button" onClick={() => onChange({ brand: null, item: null, type: null, images: null, priced: null, location: null })} className="text-xs font-semibold underline underline-offset-4" style={{ color: GOLD_BRIGHT }}>Clear</button>
+        {(brand || category !== 'all' || intent || imagesOnly || pricedOnly || location || rating || date) && (
+          <button type="button" onClick={() => onChange({ brand: null, item: null, type: null, images: null, priced: null, location: null, rating: null, date: null })} className="text-xs font-semibold underline underline-offset-4" style={{ color: GOLD_BRIGHT }}>Clear</button>
         )}
       </div>
 
@@ -844,6 +886,21 @@ function DesktopFilters({
       </fieldset>
 
       <fieldset>
+        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Dealer rating</legend>
+        {RATING_OPTIONS.map(option => (
+          <FilterCheck key={option.value || 'all'} checked={rating === option.value} label={option.label} onChange={() => onChange({ rating: option.value || null })} />
+        ))}
+        <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>Rated badges appear only when both a source-backed rating and review count are supplied.</p>
+      </fieldset>
+
+      <fieldset>
+        <label htmlFor="date-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Posted</label>
+        <select id="date-filter" value={date} onChange={event => onChange({ date: event.target.value || null })} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none" style={{ borderColor: BORDER, color: INK }}>
+          {DATE_OPTIONS.map(option => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}
+        </select>
+      </fieldset>
+
+      <fieldset>
         <label htmlFor="location-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Location</label>
         <input
           id="location-filter"
@@ -873,6 +930,8 @@ function MobileFilterSheet({
   pricedOnly,
   location,
   locations,
+  rating,
+  date,
   onApply,
   onClose,
 }: {
@@ -884,7 +943,9 @@ function MobileFilterSheet({
   pricedOnly: boolean;
   location: string;
   locations: string[];
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; location: string }) => void;
+  rating: RatingFilter;
+  date: DateFilter;
+  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; location: string; rating: RatingFilter; date: DateFilter }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
@@ -893,6 +954,8 @@ function MobileFilterSheet({
   const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
   const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
   const [draftLocation, setDraftLocation] = useState(location);
+  const [draftRating, setDraftRating] = useState<RatingFilter>(rating);
+  const [draftDate, setDraftDate] = useState<DateFilter>(date);
 
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="presentation">
@@ -934,6 +997,16 @@ function MobileFilterSheet({
               <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} onClick={() => setDraftIntent(option.value)} />
             ))}
           </FilterGroup>
+          <FilterGroup label="Dealer rating">
+            {RATING_OPTIONS.map(option => (
+              <FilterChoice key={option.value || 'all'} active={draftRating === option.value} label={option.label} onClick={() => setDraftRating(option.value)} />
+            ))}
+          </FilterGroup>
+          <FilterGroup label="Posted">
+            <select value={draftDate} onChange={event => setDraftDate(event.target.value as DateFilter)} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none" style={{ borderColor: BORDER, color: INK }}>
+              {DATE_OPTIONS.map(option => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}
+            </select>
+          </FilterGroup>
           <FilterGroup label="Location">
             <input
               type="search"
@@ -961,8 +1034,10 @@ function MobileFilterSheet({
             setDraftImagesOnly(false);
             setDraftPricedOnly(false);
             setDraftLocation('');
+            setDraftRating('');
+            setDraftDate('');
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, location: draftLocation })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, location: draftLocation, rating: draftRating, date: draftDate })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
         </footer>
       </section>
     </div>
@@ -992,6 +1067,9 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const [imageAvailable, setImageAvailable] = useState(() => hasListingImage(listing));
   const cardHasImage = imageAvailable && hasListingImage(listing);
+  const isRatedDealer = listing.seller_rating_evidence_status === 'SOURCE_SUPPLIED'
+    && Number(listing.seller_rating) > 0
+    && Number(listing.seller_review_count) > 0;
 
   return (
     <article
@@ -1007,6 +1085,8 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       <div className={`${cardHasImage ? 'mt-5' : ''} min-h-[56px]`}>
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
           <span>{listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}</span>
+          {listing.data_quality_review_required && <span className="rounded-full border px-2 py-0.5 normal-case tracking-normal" style={{ borderColor: GOLD, color: GOLD_BRIGHT }}>Human review</span>}
+          {isRatedDealer && <span className="rounded-full bg-[#183153] px-2 py-0.5 normal-case tracking-normal text-white">Rated Dealer</span>}
         </div>
         <button
           type="button"
@@ -1016,12 +1096,21 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         >
           {meta.title}
         </button>
+        {(listing.raw_message || listing.raw_line || listing.description) && (
+          <details className="mt-3.5 rounded border bg-stone-50 p-3 text-xs" style={{ borderColor: BORDER, color: MUTED }}>
+            <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wider" style={{ color: GOLD_BRIGHT }}>Original raw message</summary>
+            <div className="mt-2 max-h-36 overflow-y-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed" style={{ color: INK }}>
+              {listing.raw_message || listing.raw_line || listing.description}
+            </div>
+          </details>
+        )}
         {(cleanValue(listing.seller_name) || listing['Posted By'] || listing.location || listing.seller_country) && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm" style={{ color: MUTED }}>
             <div className="flex items-center gap-2">
               {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="" className="h-8 w-8 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
               <span>
                 Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer'}</span>
+                {isRatedDealer && <span className="ml-1 text-xs" style={{ color: GOLD_BRIGHT }}>{Number(listing.seller_rating).toFixed(1)} · {listing.seller_review_count} reviews</span>}
               </span>
             </div>
             {(listing.location || listing.seller_country || listing['Location']) && (
@@ -1040,17 +1129,6 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       </div>
 
       {meta.postedDate && <div className="mt-3 text-[15px]" style={{ color: INK }}>Posted: {meta.postedDate}</div>}
-
-      {(listing.raw_message || listing.raw_line || listing.description) && (
-        <div className="mt-3.5 rounded border bg-stone-50 p-3 text-xs" style={{ borderColor: BORDER, color: MUTED }}>
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: GOLD_BRIGHT }}>Original raw message</span>
-          </div>
-          <div className="line-clamp-3 whitespace-pre-wrap font-mono text-[11px] leading-relaxed" style={{ color: INK }}>
-            {listing.raw_message || listing.raw_line || listing.description}
-          </div>
-        </div>
-      )}
 
       <div className="mt-auto pt-4">
         <ActionButton
@@ -1219,6 +1297,11 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               <X size={18} />
             </button>
           </div>
+          {listing.data_quality_review_required && (
+            <div className="mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: GOLD, color: GOLD_BRIGHT }}>
+              Human review · source evidence preserved
+            </div>
+          )}
 
           <div className="mt-6">
             <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>

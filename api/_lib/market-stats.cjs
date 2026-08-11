@@ -27,7 +27,16 @@ function summarizePrices(values) {
   const sample_quality = raw.length < 2 ? 'observational' : raw.length < 10 ? 'provisional' : 'robust';
 
   if (raw.length < 2) {
-    return { sample_quality, analytics_ready: false, raw_count: raw.length, included: raw, outliers: [], stats: null };
+    return {
+      sample_quality,
+      analytics_ready: false,
+      raw_count: raw.length,
+      included_count: raw.length,
+      outlier_count: 0,
+      included: raw,
+      outliers: [],
+      stats: null,
+    };
   }
 
   const q1 = percentile(sortedRaw, 0.25);
@@ -48,6 +57,8 @@ function summarizePrices(values) {
     sample_quality,
     analytics_ready: raw.length >= 2,
     raw_count: raw.length,
+    included_count: included.length,
+    outlier_count: outliers.length,
     included,
     outliers,
     stats: {
@@ -61,6 +72,7 @@ function summarizePrices(values) {
       iqr: Math.round(iqr),
       lower_fence: lower_fence == null ? null : Math.round(lower_fence),
       upper_fence: upper_fence == null ? null : Math.round(upper_fence),
+      iqr_multiplier: 3.0,
     },
   };
 }

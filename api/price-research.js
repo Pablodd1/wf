@@ -16,7 +16,12 @@ const {
 } = require('./_lib/market-stats.cjs');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
-const { classifyDemandEligibility, classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
+const {
+  HUMAN_REVIEW_VERDICTS,
+  classifyDemandEligibility,
+  classifyResearchEligibility,
+  isHumanReviewAnalyticsCandidate,
+} = require('./_lib/price-research-eligibility.cjs');
 const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
 const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
@@ -41,6 +46,22 @@ const {
 } = require('./_lib/publication-references.cjs');
 
 const DEMAND_SAMPLE_LIMIT = 2500;
+const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source';
+const QNSA_WTB_DEMAND_SOURCE = 'qnsa_rolex_patek_wtb_demand_source';
+
+function configuredReviewedPriceSource(brand) {
+  const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
+  const normalizedBrand = String(brand || '').trim().toLowerCase();
+  return requested === QNSA_PRICE_RESEARCH_SOURCE
+    && ['rolex', 'patek philippe'].includes(normalizedBrand)
+    ? QNSA_PRICE_RESEARCH_SOURCE
+    : null;
+}
+
+function sourceAlreadySuppressesDuplicates(sourceTable) {
+  return sourceTable === 'price_research_verified_source'
+    || sourceTable === QNSA_PRICE_RESEARCH_SOURCE;
+}
 
 // Look up a human model name for a reference from the PROVEN file catalog
 // (catalog.json + enriched_refs.json via _lib/catalog.js) — same path used live
@@ -101,6 +122,10 @@ function isOwnerReviewedWorkbookRow(row) {
   ) || isReviewedZenithIdentityCorrectionRecord(row);
 }
 
+function isPriceResearchAdmissionCandidate(row) {
+  return isReleaseListingEligible(row) || isHumanReviewAnalyticsCandidate(row);
+}
+
 async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null) {
   // ponytail: admit all demand-side records. classifyDemandEligibility
   // handles per-row quality downstream.
@@ -109,6 +134,20 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
   if (Array.isArray(preloadedRows)) {
     data = preloadedRows.filter(row => ['WTB', 'NTQ'].includes(String(row.listing_type || '').toUpperCase()));
     demandSampleCapped = preloadedRows.sampleCapped === true;
+  } else if (sourceTable === QNSA_PRICE_RESEARCH_SOURCE) {
+    const qnsaColumns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at,listing_date,listing_status';
+    const { data: qnsaDemandRows, error: qnsaDemandError } = await client
+      .from(QNSA_WTB_DEMAND_SOURCE)
+      .select(qnsaColumns)
+      .eq('brand', brand)
+      .in('reference', referenceVariants)
+      .limit(DEMAND_SAMPLE_LIMIT);
+    if (qnsaDemandError) {
+      console.warn('[price-research] QNSA WTB demand unavailable:', qnsaDemandError.message || qnsaDemandError);
+      return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
+    }
+    data = qnsaDemandRows || [];
+    demandSampleCapped = data.length >= DEMAND_SAMPLE_LIMIT;
   } else {
     // Select only physical watch_records columns. phone_number, posted_by,
     // image_url, and display_image_url are view aliases and make PostgREST
@@ -129,28 +168,29 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     }
   }
 
-  let demandRows = (data || []).filter(isOwnerReviewedWorkbookRow);
+  const qnsaReviewedSource = sourceTable === QNSA_PRICE_RESEARCH_SOURCE;
+  let demandRows = (data || []).filter(row => qnsaReviewedSource || isOwnerReviewedWorkbookRow(row));
   const equivalentKeys = new Set(referenceVariants.map(normRef));
   demandRows = demandRows.filter(row =>
-    isReleaseListingEligible(row)
+    (qnsaReviewedSource || isReleaseListingEligible(row))
     &&
     String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
     && equivalentKeys.has(normRef(row.reference)));
   let suppressedIds;
   try {
-    suppressedIds = sourceTable === 'price_research_verified_source'
+    suppressedIds = sourceAlreadySuppressesDuplicates(sourceTable)
       ? new Set()
       : await loadAnalyticsSuppressedIds(client, demandRows.map(row => row.id));
   } catch {
     return { demand_count: 0, demand_cohorts: [], demand_rows: [], demand_sample_capped: false };
   }
   demandRows = demandRows.filter(row => !suppressedIds.has(String(row.id)));
-  const shadowBundleIds = sourceTable === 'price_research_verified_source'
+  const shadowBundleIds = sourceAlreadySuppressesDuplicates(sourceTable)
     ? new Set()
     : await loadShadowBundleParentIds(client, demandRows);
   const eligibleBeforeReposts = demandRows
     .map(row => ({ ...row, bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds) }))
-    .map(row => ({ ...row, owner_reviewed_identity: isOwnerReviewedWorkbookRow(row) }))
+    .map(row => ({ ...row, owner_reviewed_identity: qnsaReviewedSource || isOwnerReviewedWorkbookRow(row) }))
     .filter(row => !classifyDemandEligibility(row, catalog));
   const { uniqueRows: eligible, repostRows } = deduplicateReposts(eligibleBeforeReposts);
   const grouped = new Map();
@@ -282,23 +322,26 @@ module.exports = async function handler(req, res) {
   // source-explicit USD evidence. It may authorize its exact brand/reference
   // even when an older deployment allowlist has not yet been expanded.
   const client = getClient();
+  const configuredSourceTable = configuredReviewedPriceSource(brand);
   const preloadReferences = listEquivalentReferences(rawRef, brand);
   let preloadedReviewedWorkbookRows = [];
-  try {
-    preloadedReviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
-      brand,
-      references: preloadReferences,
-      limit: 10000,
-    });
-  } catch {
-    // The legacy release gates below remain fail-closed when the reviewed view
-    // is temporarily unavailable.
+  if (!configuredSourceTable) {
+    try {
+      preloadedReviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
+        brand,
+        references: preloadReferences,
+        limit: 10000,
+      });
+    } catch {
+      // The legacy release gates below remain fail-closed when the reviewed view
+      // is temporarily unavailable.
+    }
   }
   const exactReviewedWorkbookRelease = preloadedReviewedWorkbookRows.length > 0;
-  if (!exactReviewedWorkbookRelease && !isPublicationBrandAllowed(brand)) {
+  if (!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationBrandAllowed(brand)) {
     return res.status(404).json({ error: 'Brand is not included in this release' });
   }
-  if (!exactReviewedWorkbookRelease && !isPublicationReferenceAllowed(brand, rawRef)) {
+  if (!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationReferenceAllowed(brand, rawRef)) {
     return res.status(404).json({ error: 'Reference is not included in this release' });
   }
 
@@ -318,11 +361,11 @@ module.exports = async function handler(req, res) {
     // workbook cohort, query the bounded approved watch-record lane directly;
     // the legacy release view is not needed to rediscover an identity already
     // proven by the catalog. Partial references never enter this path.
-    let sourceTable = !exactReviewedWorkbookRelease
+    let sourceTable = configuredSourceTable || (!exactReviewedWorkbookRelease
       && exactKnownReference
       && directWatchRecordBrand
       ? 'watch_records'
-      : 'price_research_verified_source';
+      : 'price_research_verified_source');
 
     // Resolve exact stored spellings only. Prefix matches are suggestions for
     // an explicit customer choice; they must never silently become a specific
@@ -427,7 +470,7 @@ module.exports = async function handler(req, res) {
     // multi-million-row legacy table for high-volume Rolex references.
     const pageSize = 1000;
     const sampleLimit = 10000;
-    const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,confidence,verdict,listing_status,thumbnail_url,image_urls,has_images';
+    const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,seller_name,seller_phone,confidence,verdict,listing_status,thumbnail_url,image_urls,has_images';
     // ponytail: admit all records for analytics. classifyResearchEligibility
     // applies per-row quality gates downstream (missing price/brand/dial,
     // catalog mismatch, reference-as-price). Pre-filtering on verdict/confidence
@@ -437,16 +480,21 @@ module.exports = async function handler(req, res) {
     // ponytail: keep query simple — .in('reference') + .eq('brand') is
     // indexed; avoid .or() on unindexed listing_status + double-order that
     // forces full scans on the multi-million-row table.
-    const buildRowsQuery = table => client
-      .from(table)
-      .select(columns)
-      .eq('brand', brand)
-      .in('reference', referenceVariants)
-      .in('verdict', ['APPROVED', 'approved'])
-      .eq('listing_type', 'WTS')
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false })
-      .limit(pageSize);
+    const buildRowsQuery = table => {
+      let query = client
+        .from(table)
+        .select(columns)
+        .eq('brand', brand)
+        .in('reference', referenceVariants)
+        .eq('listing_type', 'WTS');
+      if (table !== QNSA_PRICE_RESEARCH_SOURCE) {
+        query = query.in('verdict', ['APPROVED', 'approved', ...HUMAN_REVIEW_VERDICTS]);
+      }
+      return query
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(pageSize);
+    };
 
     // Avoid a filtered COUNT and high-offset scans over the multi-million-row
     // table. Report the bounded sample honestly when it reaches its source cap.
@@ -470,7 +518,7 @@ module.exports = async function handler(req, res) {
       rows = preloadedReviewedWorkbookRows;
     } else {
       let result = await buildRowsQuery(sourceTable);
-      if (result.error || !(result.data || []).length) {
+      if (!configuredSourceTable && (result.error || !(result.data || []).length)) {
         sourceTable = 'watch_records';
         result = await buildRowsQuery(sourceTable);
       }
@@ -482,7 +530,7 @@ module.exports = async function handler(req, res) {
     // evidence for analytics. Legacy watch_records remains a fallback only.
     let reviewedWorkbookRows = preloadedReviewedWorkbookRows;
     try {
-      if (!reviewedWorkbookRows.length) {
+      if (!configuredSourceTable && !reviewedWorkbookRows.length) {
         reviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
           brand,
           references: referenceVariants,
@@ -493,6 +541,7 @@ module.exports = async function handler(req, res) {
       console.warn('[price-research] reviewed workbook analytics unavailable; using legacy cohort:', workbookError.message);
     }
     const usingReviewedWorkbook = reviewedWorkbookRows.length > 0;
+    const usingQnsaReviewedSource = sourceTable === QNSA_PRICE_RESEARCH_SOURCE;
     // ponytail: reviewed workbooks may have identity metadata (brand/model/ref/dial)
     // but no verified USD price yet. When ALL view rows are price-ineligible,
     // fall back to the direct watch_records query which may have parser-extracted
@@ -604,10 +653,10 @@ module.exports = async function handler(req, res) {
       : rows;
     const equivalentKeys = new Set(referenceVariants.map(normRef));
     rows = rows.filter(row =>
-      (usingReviewedWorkbook || isReleaseListingEligible(row))
+      (usingReviewedWorkbook || isPriceResearchAdmissionCandidate(row))
       && String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
       && equivalentKeys.has(normRef(row.reference)));
-    const shadowBundleIds = controlledPaneraiRelease || usingReviewedWorkbook
+    const shadowBundleIds = controlledPaneraiRelease || usingReviewedWorkbook || usingQnsaReviewedSource
       ? new Set()
       : await loadShadowBundleParentIds(client, rows);
 
@@ -620,7 +669,7 @@ module.exports = async function handler(req, res) {
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {
           ...normalized,
-          owner_reviewed_identity: row.owner_reviewed_identity === true || isOwnerReviewedWorkbookRow(row),
+          owner_reviewed_identity: usingQnsaReviewedSource || row.owner_reviewed_identity === true || isOwnerReviewedWorkbookRow(row),
           bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds),
           dial_color: normalizedDial.known ? normalizedDial.value : normalized.dial_color,
           stored_price_usd: row.price_usd,
@@ -630,7 +679,7 @@ module.exports = async function handler(req, res) {
     // The strict view excludes reviewed duplicates in Postgres. Recheck only
     // this bounded cohort so a deployment-order or lookup failure is
     // unavailable rather than silently publishing a suppressed observation.
-    const analyticsSuppressedIds = controlledPaneraiRelease || usingReviewedWorkbook
+    const analyticsSuppressedIds = controlledPaneraiRelease || usingReviewedWorkbook || usingQnsaReviewedSource
       ? new Set()
       : await loadAnalyticsSuppressedIds(
           client,
@@ -889,8 +938,11 @@ module.exports = async function handler(req, res) {
         listing_description_retained: true,
       },
       admission_policy: {
-        verdict: 'APPROVED',
-        minimum_confidence: MIN_RELEASE_CONFIDENCE,
+        verdicts: ['APPROVED', ...HUMAN_REVIEW_VERDICTS],
+        human_review_scope: ['Rolex', 'Patek Philippe'],
+        human_review_is_analytics_eligible_only_after_all_evidence_gates: true,
+        approved_minimum_confidence: MIN_RELEASE_CONFIDENCE,
+        human_review_minimum_confidence: null,
         confidence_is_probability: false,
         exact_release_reference_required: true,
         canonical_identity_review_required: true,
@@ -959,10 +1011,14 @@ module.exports = async function handler(req, res) {
       }),
       methodology: {
         method: 'PLAUSIBILITY_FLOOR_THEN_IQR_3_0',
+        formula: 'Q1 - 3.0 * IQR <= price <= Q3 + 3.0 * IQR',
+        iqr_multiplier: 3.0,
         analytics_dimensions: ['brand', 'reference', 'dial_color'],
         condition_policy: 'DESCRIPTION_ONLY_NOT_A_COHORT_DIMENSION',
         minimum_sample: 2,
         included_count: includedRows.length,
+        priced_wts_before_plausibility_count: validPriceRows.length,
+        priced_wts_after_plausibility_count: summary.raw_count,
         excluded_count: outlierRows.length,
         statistical_outlier_count: statisticalOutlierRows.length,
         required_field_excluded_count: requiredFieldExclusions.length,

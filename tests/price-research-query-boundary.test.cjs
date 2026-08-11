@@ -11,14 +11,33 @@ const source = fs.readFileSync(
 );
 
 test('high-volume Price Research uses one bounded strict-source query', () => {
-  assert.match(source, /let sourceTable = !exactReviewedWorkbookRelease/);
+  assert.match(source, /let sourceTable = configuredSourceTable \|\| \(!exactReviewedWorkbookRelease/);
   assert.match(source, /\? 'watch_records'\s*: 'price_research_verified_source'/);
-  assert.match(source, /const buildRowsQuery = table => client\s*\.from\(table\)/);
+  assert.match(source, /const buildRowsQuery = table => \{/);
+  assert.match(source, /let query = client\s*\.from\(table\)/);
   assert.match(source, /\.limit\(pageSize\)/);
   assert.match(source, /const sourceSampleCapped = usingReviewedWorkbook/);
   assert.match(source, /sampleCapped: sourceSampleCapped/);
   assert.doesNotMatch(source, /Array\.from\(\{ length: sampleLimit \/ pageSize \}/);
   assert.doesNotMatch(source, /buildRowsQuery\(from, from \+ pageSize - 1\)/);
+  assert.match(source, /\.in\('verdict', \['APPROVED', 'approved', \.\.\.HUMAN_REVIEW_VERDICTS\]\)/);
+  assert.match(source, /isPriceResearchAdmissionCandidate\(row\)/);
+  assert.match(source, /formula: 'Q1 - 3\.0 \* IQR <= price <= Q3 \+ 3\.0 \* IQR'/);
+  assert.match(source, /priced_wts_before_plausibility_count: validPriceRows\.length/);
+  assert.match(source, /seller_name,seller_phone/);
+});
+
+test('QNSA Rolex and Patek release sources are explicit and fail closed', () => {
+  assert.match(source, /const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source'/);
+  assert.match(source, /const QNSA_WTB_DEMAND_SOURCE = 'qnsa_rolex_patek_wtb_demand_source'/);
+  assert.match(source, /process\.env\.PRICE_RESEARCH_SOURCE_VIEW/);
+  assert.match(source, /\['rolex', 'patek philippe'\]\.includes\(normalizedBrand\)/);
+  assert.match(source, /table !== QNSA_PRICE_RESEARCH_SOURCE/);
+  assert.match(source, /sourceTable === QNSA_PRICE_RESEARCH_SOURCE/);
+  assert.match(source, /!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationBrandAllowed/);
+  assert.match(source, /!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationReferenceAllowed/);
+  assert.match(source, /if \(!configuredSourceTable && \(result\.error/);
+  assert.match(source, /QNSA_WTB_DEMAND_SOURCE/);
 });
 
 test('verified workbook preload short-circuits redundant legacy lookups', () => {

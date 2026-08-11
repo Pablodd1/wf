@@ -79,9 +79,18 @@ test('Trading Floor preserves source text and orders price intelligence before p
   assert.match(floor, /Bundle, multi-listing, and unbundled-child images remain excluded/);
   assert.match(floor, /label="Price supplied"/);
   assert.ok(floor.indexOf(': sourcePrice') < floor.indexOf(': reviewedWorkbookUsd !== null'));
-  assert.match(floor, /currency not supplied/);
-  assert.match(floor, /Original source price · no verified USD conversion/);
+  assert.match(floor, /currency \$\{currencyUnconfirmed \? 'not confirmed' : 'not supplied'\}/);
+  assert.match(floor, /Original source price · no USD conversion/);
   assert.match(floor, /Location/);
+  assert.match(floor, /Rated dealers/);
+  assert.match(floor, /Not rated/);
+  for (const window of ['1D', '7D', '1M', '3M', '6M', '1Y']) {
+    assert.match(floor, new RegExp(`label: '${window}'`));
+  }
+  assert.match(floor, /data_quality_review_required[\s\S]*Human review/);
+  assert.match(floor, /isRatedDealer[\s\S]*Rated Dealer/);
+  const cardSource = floor.slice(floor.indexOf('function ListingCard'), floor.indexOf('function ListingDetails'));
+  assert.ok(cardSource.indexOf('Original raw message') < cardSource.indexOf('Posted by'));
 });
 
 test('Price Research uses dial colors, closed methodology, images, and complete fallback evidence', () => {
@@ -189,7 +198,8 @@ test('home and Post an Item share a persistent multilingual interface without ch
   assert.match(toggle, /aria-label=\{t\('Language'\)\}/);
   assert.match(main, /<LanguageProvider>/);
   assert.match(header, /<LanguageToggle compact/);
-  assert.match(home, /t\('A considered marketplace for collectors, dealers, and wholesalers'\)/);
+  assert.match(home, /t\("The trading floor for the world's dealer network"\)/);
+  assert.match(home, /t\('Your AI agent, negotiating every match'\)/);
   assert.match(post, /<LanguageToggle/);
   assert.match(post, /Original listing or request message/);
   assert.match(post, /value=\{item\.raw_message\}/);

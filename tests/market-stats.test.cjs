@@ -16,6 +16,10 @@ test('uses standard 3.0 IQR fences and preserves outliers separately', () => {
   assert.equal(result.stats.upper_fence, 114);
   assert.deepEqual(result.outliers, [500]);
   assert.equal(result.included.length, 6);
+  assert.equal(result.raw_count, 7);
+  assert.equal(result.included_count, 6);
+  assert.equal(result.outlier_count, 1);
+  assert.equal(result.stats.iqr_multiplier, 3);
 });
 
 test('claims analytics readiness for two or more observations', () => {

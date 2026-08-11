@@ -17,7 +17,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   const postItem = read('src/pages/DealerSubmitListing.tsx');
   const styles = read('src/index.css');
 
-  assert.match(header, /<Link to="\/" aria-label="Curated Luxury home"/);
+  assert.match(header, /<Link to="\/" aria-label="WatchFacts home"/);
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
   assert.match(header, /label: 'PRICE RESEARCH', to: '\/price-research'/);
   assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
@@ -25,7 +25,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.doesNotMatch(header, /luxuryapp-wf-w5o1/);
   assert.match(header, /label: 'DEALER ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'HIRE FI'/);
-  assert.match(header, /const LANDING_LINKS = \[[\s\S]*label: 'HIRE FI'[\s\S]*label: 'WORKSPACE', to: '\/dealer\/workspace'/);
+  assert.match(header, /const LANDING_LINKS: HeaderLink\[\] = \[[\s\S]*label: 'TRADING FLOOR'[\s\S]*label: 'PRICE RESEARCH'[\s\S]*label: 'HIRE FI'[\s\S]*label: 'MEMBERSHIP'[\s\S]*label: 'WORKSPACE', to: '\/dealer\/workspace'/);
   assert.doesNotMatch(header, /label: 'ADM PANEL'/);
   assert.match(header, /<LanguageToggle compact \/>/);
   assert.doesNotMatch(header, /!landing && <LanguageToggle/);
@@ -46,7 +46,12 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /location\.pathname === '\/trading' && !wantsToBuy/);
   assert.match(header, /link\.to === '\/trading\?type=WTB'[\s\S]*\? wantsToBuy/);
   assert.match(banner, /href="https:\/\/luxfi\.ai\/#add-fi"/);
-  assert.match(home, /className="luxury-wordmark/);
+  assert.match(home, /The trading floor for the world's dealer network/);
+  assert.match(home, /Your AI agent, negotiating every match/);
+  assert.match(home, /From chat noise to a closed trade/);
+  assert.match(home, /Built on trust, not just volume/);
+  assert.match(home, /id="membership"/);
+  assert.match(home, /\$150/);
   assert.match(styles, /@keyframes luxury-gold-flow-down/);
   assert.match(styles, /animation: luxury-gold-flow-down 6s ease-in-out infinite/);
   assert.match(styles, /prefers-reduced-motion: reduce/);

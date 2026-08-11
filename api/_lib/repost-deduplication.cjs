@@ -12,7 +12,9 @@ function dealerIdentity(rawMessage) {
 
 function structuredDealerIdentity(row) {
   const dealerId = String(row?.dealer_id || '').trim();
-  return dealerId ? compact(dealerId) : '';
+  if (dealerId) return compact(dealerId);
+  const phone = String(row?.seller_phone || row?.phone_number || '').replace(/\D/g, '');
+  return phone.length >= 7 ? phone : '';
 }
 
 function normalizedMessage(rawMessage) {
@@ -26,7 +28,6 @@ function normalizedMessage(rawMessage) {
 function repostSignature(row) {
   const verifiedDealer = structuredDealerIdentity(row);
   const observedDealer = dealerIdentity(row.raw_message);
-  const message = normalizedMessage(row.raw_message);
   const identity = [
     compact(row.brand),
     compact(row.reference),
@@ -37,7 +38,8 @@ function repostSignature(row) {
 
   if (verifiedDealer) return `VERIFIED_DEALER:${verifiedDealer}|${identity}`;
   if (observedDealer) return `OBSERVED_PHONE:${observedDealer}|${identity}`;
-  if (message) return `MESSAGE:${message}|${identity}`;
+  // Identical text without a dealer identity is not enough to call two offers
+  // a repost: different dealers commonly forward the same inventory wording.
   return `RECORD:${row.id}`;
 }
 

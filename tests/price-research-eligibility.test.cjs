@@ -2,10 +2,21 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { classifyDemandEligibility, classifyResearchEligibility } = require('../api/_lib/price-research-eligibility.cjs');
+const {
+  classifyDemandEligibility,
+  classifyResearchEligibility,
+  isHumanReviewAnalyticsCandidate,
+} = require('../api/_lib/price-research-eligibility.cjs');
 
 const catalog = { found: true, model: 'Cosmograph Daytona', dialColors: ['Black', 'White'] };
-const valid = { brand: 'Rolex', reference: '116500LN', dial_color: 'Black', price_usd: 25000 };
+const valid = {
+  brand: 'Rolex',
+  reference: '116500LN',
+  dial_color: 'Black',
+  listing_type: 'WTS',
+  price_usd: 25000,
+  analytics_currency_status: 'VERIFIED',
+};
 
 test('accepts a complete catalog-consistent WTS observation', () => {
   assert.equal(classifyResearchEligibility(valid, catalog), null);
@@ -28,7 +39,7 @@ test('rejects white when the exact catalog configuration is silver', () => {
 test('accepts a matching dial from a scalar legacy catalog field', () => {
   assert.equal(
     classifyResearchEligibility(
-      { brand: 'Patek Philippe', reference: '3712/1A', dial_color: 'Blue', price_usd: 120000 },
+      { brand: 'Patek Philippe', reference: '3712/1A', dial_color: 'Blue', listing_type: 'WTS', price_usd: 120000, analytics_currency_status: 'VERIFIED' },
       { found: true, model: 'Nautilus Moon Phase', dialColors: 'Blue' },
     ),
     null,
@@ -47,6 +58,8 @@ test('accepts owner-reviewed workbook identity without inventing catalog coverag
     reference: '0331003600',
     dial_color: 'Black',
     price_usd: 8000,
+    listing_type: 'WTS',
+    analytics_currency_status: 'VERIFIED',
     owner_reviewed_identity: true,
   };
   assert.equal(classifyResearchEligibility(ownerReviewed, { found: false }), null);
@@ -61,6 +74,21 @@ test('excludes a price whose reference-line currency proof is incomplete', () =>
     classifyResearchEligibility({ ...valid, analytics_currency_status: 'CURRENCY_AMBIGUOUS' }, catalog),
     'CURRENCY_AMBIGUOUS',
   );
+});
+
+test('excludes a priced row when explicit currency evidence is absent', () => {
+  assert.equal(
+    classifyResearchEligibility({ ...valid, analytics_currency_status: undefined }, catalog),
+    'CURRENCY_UNVERIFIED',
+  );
+});
+
+test('admits Rolex and Patek human-review WTS candidates to evidence gates only', () => {
+  assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, verdict: 'Human Review' }), true);
+  assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, brand: 'Patek Philippe', verdict: 'NEEDS_REVIEW' }), true);
+  assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, brand: 'Omega', verdict: 'Human Review' }), false);
+  assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, listing_type: 'WTB', verdict: 'Human Review' }), false);
+  assert.equal(isHumanReviewAnalyticsCandidate({ ...valid, verdict: 'Human Review', trading_floor_status: 'suppressed_exact_duplicate' }), false);
 });
 
 test('rejects unsplit bundle source rows from price analytics', () => {
@@ -92,7 +120,7 @@ test('rejects multi-listing identity sentinels even for owner-reviewed rows', ()
 test('rejects a numeric reference copied into the market price', () => {
   assert.equal(
     classifyResearchEligibility(
-      { brand: 'Rolex', reference: '16610', dial_color: 'Black', price_raw: 16610, price_usd: 16610 },
+      { brand: 'Rolex', reference: '16610', dial_color: 'Black', listing_type: 'WTS', price_raw: 16610, price_usd: 16610, analytics_currency_status: 'VERIFIED' },
       catalog,
     ),
     'REFERENCE_TOKEN_AS_PRICE',
@@ -107,6 +135,6 @@ test('rejects a year token copied into the market price', () => {
 });
 
 test('WTB demand requires identity and dial but not an asking price', () => {
-  assert.equal(classifyDemandEligibility({ ...valid, price_usd: null }, catalog), null);
-  assert.equal(classifyDemandEligibility({ ...valid, dial_color: 'Purple', price_usd: null }, catalog), 'CATALOG_DIAL_MISMATCH');
+  assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTB', price_usd: null }, catalog), null);
+  assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTB', dial_color: 'Purple', price_usd: null }, catalog), 'CATALOG_DIAL_MISMATCH');
 });

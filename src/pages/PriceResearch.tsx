@@ -42,6 +42,10 @@ interface RowData {
   image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
   whatsapp_url?: string | null;
+  verdict?: string | null;
+  confidence?: number | null;
+  listing_status?: string | null;
+  contact_publication_approved?: boolean;
 }
 
 interface WtbListingData {
@@ -352,6 +356,7 @@ interface PriceData {
   stats: {
     avg: number; median: number; min: number; max: number; range: number;
     q1: number; q3: number; iqr: number; lower_fence: number | null; upper_fence: number | null;
+    iqr_multiplier?: number;
   } | null;
   liquidity: LiquidityData | null;
   monthly: MonthlyPoint[];
@@ -372,6 +377,8 @@ interface PriceData {
   };
   methodology: {
     method: 'IQR_3_0' | 'PLAUSIBILITY_FLOOR_THEN_IQR_3_0'; minimum_sample: number; included_count: number; excluded_count: number;
+    formula?: string; iqr_multiplier?: number;
+    priced_wts_before_plausibility_count?: number; priced_wts_after_plausibility_count?: number;
     plausibility_floor_usd?: number; plausibility_excluded_count?: number; required_field_excluded_count?: number;
     statistical_outlier_count?: number;
     repost_excluded_count?: number;
@@ -379,8 +386,11 @@ interface PriceData {
     lower_fence?: number | null; upper_fence?: number | null;
   };
   admission_policy?: {
-    verdict: 'APPROVED';
-    minimum_confidence: number;
+    verdicts?: string[];
+    human_review_scope?: string[];
+    human_review_is_analytics_eligible_only_after_all_evidence_gates?: boolean;
+    approved_minimum_confidence?: number;
+    human_review_minimum_confidence?: null;
     confidence_is_probability: false;
     exact_release_reference_required: true;
     canonical_identity_review_required: true;
@@ -1297,21 +1307,20 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing</h3>
                 {stats ? (
                   <>
-                    <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
-                      Average price:{' '}
-                      <span style={{ color: GREEN, fontWeight: 700, fontSize: 20 }}>
-                        ${stats.avg.toLocaleString()}
-                      </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" aria-label="Qualified WTS price range">
+                      {[
+                        ['Minimum', stats.min, NAVY],
+                        ['Average', stats.avg, GREEN],
+                        ['Maximum', stats.max, NAVY],
+                      ].map(([label, value, color]) => (
+                        <div key={String(label)} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '12px 14px' }}>
+                          <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+                          <div style={{ color: String(color), fontSize: 20, fontWeight: 800, marginTop: 3 }}>${Number(value).toLocaleString()}</div>
+                        </div>
+                      ))}
                     </div>
-                    <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
-                      Median price:{' '}
-                      <span style={{ color: NAVY, fontWeight: 600 }}>
-                        ${stats.median.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between mt-3" style={{ fontSize: 12, color: MUTED }}>
-                      <span>Minimum price: ${stats.min.toLocaleString()}</span>
-                      <span>Maximum price: ${stats.max.toLocaleString()}</span>
+                    <div style={{ fontSize: 12, color: MUTED, marginTop: 10 }}>
+                      Median price: <strong style={{ color: NAVY }}>${stats.median.toLocaleString()}</strong>
                     </div>
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                       {data.sample_quality === 'robust' ? 'Robust' : data.sample_quality === 'provisional' ? 'Provisional' : 'Observational'} evidence · {stats.count} listings
@@ -1472,11 +1481,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    The release starts with canonical-identity-reviewed records that are APPROVED at confidence 90 or higher. Confidence is a parser score, not a probability. Explicit source currency, verified FX provenance when conversion is required, catalog model and dial, bundle, and duplicate checks run before a cohort with two or more observations uses the market plausibility floor and standard 3.0 x IQR method.
+                    Approved records and provisional Rolex/Patek human-review WTS records may enter evaluation. Human-review status alone never qualifies a price: every included observation must still have a positive source-backed price, verified currency evidence, exact catalog or owner-reviewed identity, a valid dial, and pass bundle, duplicate, and repost checks. WTB demand is calculated separately. The qualified WTS cohort then uses the market plausibility floor and the 3.0 x IQR formula.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
                       ['Selected cohort with usable price', data.rawCount],
+                      ['Priced WTS before plausibility', data.methodology.priced_wts_before_plausibility_count ?? data.rawCount],
+                      ['Priced WTS after plausibility', data.methodology.priced_wts_after_plausibility_count ?? data.rawCount],
                       ['Passed WTS/catalog gate', data.eligible_observation_count ?? 0],
                       ['Included', data.methodology.included_count],
                       ['Total exclusions', data.methodology.excluded_count],
@@ -1505,6 +1516,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
                     Exclusions remain preserved for authorized audit and human review. They are not deleted from the database.
                   </div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
+                    Formula: {data.methodology.formula || 'Q1 - 3.0 * IQR <= price <= Q3 + 3.0 * IQR'}
+                  </div>
                   {data.evidence?.truncated && (
                     <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
                       Showing the newest {data.evidence.outliers_returned.toLocaleString()} excluded observations for responsive review. This evidence includes required-field failures, reposts, plausibility failures, and IQR outliers. Aggregate statistics use all {data.evidence.outliers_total.toLocaleString()} exclusions in the sampled cohort.
@@ -1521,7 +1535,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   <div>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Insufficient qualified market evidence</h3>
                     <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginTop: 5 }}>
-                      Price statistics and charts require at least two approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort.
+                      Price statistics and charts require at least two qualified WTS observations with a catalog-confirmed or owner-reviewed identity, valid dial color, positive price, and verified currency evidence in the same comparable cohort. WTB requests remain visible as separate demand signals.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
                       {data.sampledListings.toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · {data.count.toLocaleString()} qualified comparable{data.count === 1 ? '' : 's'}
@@ -1542,7 +1556,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               )}
               {listings.length > 0 && (
                 <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
-                  Qualified WTS observations power the chart and statistics. Additional real source listings remain visible here with their exclusion reason and never alter the averages.
+                  Qualified WTS observations power the chart and statistics. Provisional human-review records are labeled and must pass the same price, currency, identity, bundle, duplicate, and outlier gates. WTB requests remain in Demand Signals. Additional real source listings remain visible here with their exclusion reason and never alter the averages.
                 </div>
               )}
               {listings.map(row => (
@@ -1866,7 +1880,8 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
   onOpen: () => void;
 }) {
   const date = row.listing_date || row.created_at;
-  const imageUrl = row.thumbnail_url || row.display_image_url || row.image_url || row.image_urls?.find(Boolean) || '';
+  const imageCandidate = row.thumbnail_url || row.display_image_url || row.image_url || row.image_urls?.find(Boolean) || '';
+  const imageUrl = row.has_images === false ? '' : imageCandidate;
   const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
   const hasUsdPrice = Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0;
   const hasSourcePrice = Boolean(
@@ -1881,6 +1896,10 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
       ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
       : 'Price not available';
   const excludedFromAverages = row.is_outlier === true || !hasUsdPrice;
+  const normalizedVerdict = String(row.verdict || '').trim().toUpperCase().replaceAll('_', ' ');
+  const isHumanReview = ['HUMAN REVIEW', 'NEEDS REVIEW'].includes(normalizedVerdict);
+  const sellerName = row.seller_name || row.posted_by || row['Posted By'] || '';
+  const sellerPhone = row.seller_phone || row.phone_number || row['Phone Number'] || '';
   const evidenceStatus = excludedFromAverages
     ? `Excluded from averages · ${exclusionLabel}`
     : 'Included in qualified comparable average';
@@ -1894,6 +1913,8 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="flex items-center gap-2">
           <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#eef2ff', color: '#3730a3', whiteSpace: 'nowrap', fontWeight: 800 }}>WTS</span>
+          {isHumanReview && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#fff4d6', color: '#7a5900', whiteSpace: 'nowrap', fontWeight: 800 }}>Provisional · Human review</span>}
           {row.source === 'MYSQL_RAW' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#f1f5f9', color: '#475569', whiteSpace: 'nowrap' }}>🗄️ Auction DB</span>}
           {row.source === 'REVIEWED_WORKBOOK' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', whiteSpace: 'nowrap' }}>📋 Workbook</span>}
           {row.source === 'REVIEWED_WORKBOOK_INVENTORY' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#e0e7ff', color: '#3730a3', whiteSpace: 'nowrap' }}>💬 Direct Listing</span>}
@@ -1916,6 +1937,12 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
         {rawMessage && (
           <div className="line-clamp-2" style={{ color: MUTED, fontSize: 11, lineHeight: 1.45, marginTop: 7, whiteSpace: 'pre-wrap' }}>
             {rawMessage}
+          </div>
+        )}
+        {(sellerName || sellerPhone) && (
+          <div className="flex flex-wrap gap-x-3 gap-y-1" style={{ color: MUTED, fontSize: 11, marginTop: 7 }}>
+            {sellerName && <span>Posted by: <strong style={{ color: TEXT }}>{sellerName}</strong></span>}
+            {sellerPhone && <span>Contact: <strong style={{ color: NAVY }}>{sellerPhone}</strong></span>}
           </div>
         )}
       </div>
@@ -2393,7 +2420,9 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
   const phone = row.seller_phone;
   const whatsappUrl = row.whatsapp_url || (phone ? `https://wa.me/${phone.replace(/[^0-9]/g, '')}` : null);
   const sellerName = row.seller_name || 'Buyer / Dealer';
-  const imgUrl = row.image_url || (row.image_urls && row.image_urls[0]) || null;
+  const imgUrl = row.has_images === false
+    ? null
+    : row.image_url || (row.image_urls && row.image_urls[0]) || null;
   const priceDisplay = row.price_usd && row.price_usd > 0
     ? `$${row.price_usd.toLocaleString()} USD`
     : row.price_raw

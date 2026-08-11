@@ -12,7 +12,14 @@ const {
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const EXPLICIT_USD_STATUS = 'SOURCE_EXPLICIT_USD_MATCH';
-const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
+const ALLOWED_MARKET_SOURCE_VIEWS = new Set([
+  'reviewed_workbook_market_source_v2',
+  'qnsa_rolex_patek_trading_floor_source',
+]);
+const requestedMarketSourceView = String(process.env.TRADING_FLOOR_SOURCE_VIEW || '').trim();
+const MARKET_SOURCE_VIEW = ALLOWED_MARKET_SOURCE_VIEWS.has(requestedMarketSourceView)
+  ? requestedMarketSourceView
+  : 'reviewed_workbook_market_source_v2';
 const MULTIPLE_LISTING_IDENTITY_VALUES = ['multiple', 'multi', 'mixed'];
 const MIN_PUBLIC_WORKBOOK_PRICE_USD = 1_000;
 const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
@@ -25,6 +32,7 @@ const EVIDENCE_CONTRACT = Object.freeze({
   contact: 'Seller identity may be published when supplied; phone/contact details require source-backed publication consent.',
   image: 'Only an exact supplied HTTP(S) source URL is image-eligible.',
   price: 'Only an exact explicit-source USD match is analytics-eligible.',
+  rating: 'Rated status requires a source-supplied rating and a positive source review count; unsupported legacy rows remain unrated.',
 });
 
 function positiveNumber(value) {
@@ -146,10 +154,52 @@ function locationMatches(value, query) {
   return Boolean(normalizedQuery) && normalizedValue.includes(normalizedQuery);
 }
 
+const DATE_WINDOWS = Object.freeze({
+  '1D': 1,
+  '7D': 7,
+  '1M': 30,
+  '3M': 90,
+  '6M': 180,
+  '1Y': 365,
+});
+
+function dateWindowStart(value, now = new Date()) {
+  const days = DATE_WINDOWS[cleanExactText(value, 4).toUpperCase()];
+  if (!days || Number.isNaN(now.getTime())) return null;
+  return new Date(now.getTime() - (days * 24 * 60 * 60 * 1000)).toISOString();
+}
+
+function isSourceBackedRatedDealer(record) {
+  const rating = Number(record?.seller_rating);
+  const reviews = Number(record?.seller_review_count);
+  return record?.seller_rating_evidence_status === 'SOURCE_SUPPLIED'
+    && Number.isFinite(rating) && rating > 0
+    && Number.isFinite(reviews) && reviews > 0;
+}
+
+function ratingMatches(record, requestedRating) {
+  const filter = cleanExactText(requestedRating, 12).toLowerCase();
+  if (!filter) return true;
+  const rated = isSourceBackedRatedDealer(record);
+  return filter === 'rated' ? rated : filter === 'unrated' ? !rated : false;
+}
+
+function isPriorityHumanReviewBrand(value) {
+  const brand = cleanExactText(value, 80).toUpperCase();
+  return brand === 'ROLEX' || brand === 'PATEK PHILIPPE' || brand === 'PATEK';
+}
+
 function searchTermsMatch(record, query) {
-  const tokens = safeSearchTerm(query).toLowerCase().split(/\s+/).filter(Boolean);
+  const normalizeSearchText = value => String(value || '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  const tokens = safeSearchTerm(query).toLowerCase().split(/\s+/)
+    .map(normalizeSearchText)
+    .filter(Boolean);
   if (!tokens.length) return true;
-  const haystack = [
+  const haystack = normalizeSearchText([
     record.brand,
     record.model,
     record.reference,
@@ -158,8 +208,9 @@ function searchTermsMatch(record, query) {
     record.seller_phone,
     record.location,
     record.raw_message,
-  ].filter(Boolean).join(' ').toLowerCase();
-  return tokens.every(token => haystack.includes(token));
+  ].filter(Boolean).join(' '));
+  const compactHaystack = haystack.replace(/\s+/g, '');
+  return tokens.every(token => haystack.includes(token) || compactHaystack.includes(token.replace(/\s+/g, '')));
 }
 
 function recordEvidenceCoverage({
@@ -261,7 +312,8 @@ function isTradingFloorSourceRow(row) {
   })) {
     return true;
   }
-  return status === 'PUBLISHED_PENDING_VERIFICATION'
+  return isPriorityHumanReviewBrand(row?.canonical_brand || row?.supplied_brand || row?.brand_scope)
+    && status === 'PUBLISHED_PENDING_VERIFICATION'
     && row?.publication_lane === 'QNSA_NORMALIZED_STAGING_V1'
     && row?.normalization_run_complete === true
     && row?.raw_lineage_verified === true
@@ -301,6 +353,9 @@ function mapDealerSubmission(row) {
     seller_name: sellerName, seller_phone: sellerPhone, seller_avatar_url: row.poster_image_url || null,
     seller_rating: positiveNumber(claimed.dealer_rating),
     seller_review_count: Number(claimed.review_count || 0),
+    seller_rating_evidence_status: positiveNumber(claimed.dealer_rating) !== null && Number(claimed.review_count || 0) > 0
+      ? 'SOURCE_SUPPLIED'
+      : 'UNAVAILABLE',
     seller_group_count: Number(claimed.group_count || 0),
     seller_credential_status: cleanExactText(claimed.credential_status, 30) || null,
     contact_publication_approved: true, price_usd: priceUsd, price_raw: priceRaw,
@@ -336,6 +391,8 @@ function directSubmissionMatches(record, filters) {
   if (filters.region) {
     if (!locationMatches(record.location, filters.region)) return false;
   }
+  if (!ratingMatches(record, filters.rating)) return false;
+  if (filters.postedAfter && new Date(record.listing_date || record.created_at || 0).getTime() < new Date(filters.postedAfter).getTime()) return false;
   if (filters.search) {
     if (!searchTermsMatch(record, filters.search)) return false;
   }
@@ -401,6 +458,8 @@ function mapReviewedRecord(row) {
   const multiListing = isMultiListing(row);
   const isUnbundledChild = evidenceValuePresent(row.parent_id);
   const publicImageUrl = multiListing || isUnbundledChild ? null : exactImageUrl;
+  const pendingVerification = String(row.publication_state || '').toUpperCase() === 'PENDING_VERIFICATION'
+    || String(row.trading_floor_status || '').toUpperCase() === 'PUBLISHED_PENDING_VERIFICATION';
   const evidenceCoverage = recordEvidenceCoverage({
     brand,
     model,
@@ -438,6 +497,9 @@ function mapReviewedRecord(row) {
     raw_message_evidence_type: normalizedSummary ? 'WORKBOOK_NORMALIZED_SUMMARY' : 'SOURCE_RAW_MESSAGE',
     seller_name: sellerName,
     seller_phone: sellerPhone,
+    seller_rating: null,
+    seller_review_count: 0,
+    seller_rating_evidence_status: 'UNAVAILABLE',
     contact_publication_approved: contactApproved,
     price_usd: verifiedUsd,
     price_raw: sourceAmount,
@@ -460,6 +522,8 @@ function mapReviewedRecord(row) {
     location: evidenceValuePresent(row.location || row.region) ? (row.location || row.region) : null,
     item_category: normalizeItemCategory(row.item_category || row.category),
     publication_state: row.publication_state || 'APPROVED',
+    verification_label: pendingVerification ? 'Human review' : 'Verified listing',
+    data_quality_review_required: pendingVerification,
     multi_listing: multiListing,
     is_unbundled_child: isUnbundledChild,
     has_images: publicImageUrl !== null,
@@ -563,6 +627,7 @@ function buildLegacyMarketQueryParams({
   imagesOnly,
   pricedOnly,
   search,
+  postedAfter,
 }) {
   const legacyColumns = [
     'id,source_file,source_row_number,source_record_id,posting_date,posted_by',
@@ -592,8 +657,9 @@ function buildLegacyMarketQueryParams({
   if (listingType) params.set('listing_type', `eq.${listingType}`);
   if (imagesOnly) params.set('has_exact_source_image', 'eq.true');
   if (pricedOnly) params.set('has_supplied_price', 'eq.true');
+  if (postedAfter) params.set('posting_date', `gte.${postedAfter}`);
   const genericSearch = safeSearchTerm(search);
-  if (genericSearch && !requestedReference && !exactDialVariants.length) {
+  if (genericSearch && !genericSearch.includes(' ') && !requestedReference && !exactDialVariants.length) {
     const pattern = `*${genericSearch}*`;
     params.set('or', `(${[
       `supplied_brand.ilike.${pattern}`,
@@ -666,9 +732,18 @@ module.exports = async function handler(req, res) {
     const itemCategories = { all: 'ALL', watches: 'WATCH', handbags: 'HANDBAG', jewelry: 'JEWELRY', accessories: 'ACCESSORY', other: 'OTHER' };
     const itemCategory = requestedItem ? itemCategories[requestedItem] : 'ALL';
     const region = cleanExactText(req.query?.region, 100);
+    const rating = cleanExactText(req.query?.rating, 12).toLowerCase();
+    const dateWindow = cleanExactText(req.query?.date, 4).toUpperCase();
+    const postedAfter = dateWindowStart(dateWindow);
 
     if (listingType && !['WTS', 'WTB', 'OTHER'].includes(listingType)) {
       return res.status(400).json({ status: 'error', error: 'Invalid listing type' });
+    }
+    if (rating && !['rated', 'unrated'].includes(rating)) {
+      return res.status(400).json({ status: 'error', error: 'Invalid dealer rating filter' });
+    }
+    if (dateWindow && !postedAfter) {
+      return res.status(400).json({ status: 'error', error: 'Invalid posting date window' });
     }
     if (requestedReference && !reference) {
       return res.status(400).json({ status: 'error', error: 'Invalid exact reference' });
@@ -738,8 +813,9 @@ module.exports = async function handler(req, res) {
     if (pricedOnly) queryParams.set('source_price_amount', 'gt.0');
     const regionPattern = locationSearchPattern(region);
     if (regionPattern) queryParams.set('location', `ilike.${regionPattern}`);
+    if (postedAfter) queryParams.set('posting_date', `gte.${postedAfter}`);
     const genericSearch = safeSearchTerm(search);
-    if (genericSearch && !requestedReference && !requestedDial) {
+    if (genericSearch && !genericSearch.includes(' ') && !requestedReference && !requestedDial) {
       const pattern = `*${genericSearch}*`;
       queryParams.set('or', `(${[
         `supplied_brand.ilike.${pattern}`,
@@ -773,6 +849,7 @@ module.exports = async function handler(req, res) {
         .order('created_at', { ascending: false })
         .limit(100);
       if (itemCategory !== 'ALL') directQuery = directQuery.eq('category', itemCategory);
+      if (postedAfter) directQuery = directQuery.gte('created_at', postedAfter);
       directRowsPromise = Promise.resolve(directQuery);
     }
     queryParams.set('has_exact_source_image', requestedLane === 'images' ? 'eq.true' : 'eq.false');
@@ -788,11 +865,11 @@ module.exports = async function handler(req, res) {
       ? buildLegacyMarketQueryParams({
           pageSize, offset: requestedOffset, imageLane: requestedLane,
           brand, requestedReference, exactDialVariants,
-          listingType, imagesOnly, pricedOnly, search,
+          listingType, imagesOnly, pricedOnly, search, postedAfter,
         })
       : queryParams;
     let usedLegacyViewContract = legacyMarketViewContractDetected;
-    let restUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${activeQueryParams.toString()}`;
+    let restUrl = `${process.env.SUPABASE_URL}/rest/v1/${MARKET_SOURCE_VIEW}?${activeQueryParams.toString()}`;
     let restRes = await fetch(restUrl, {
       headers,
     });
@@ -807,9 +884,9 @@ module.exports = async function handler(req, res) {
       activeQueryParams = buildLegacyMarketQueryParams({
         pageSize, offset: requestedOffset, imageLane: requestedLane,
         brand, requestedReference, exactDialVariants,
-        listingType, imagesOnly, pricedOnly, search,
+        listingType, imagesOnly, pricedOnly, search, postedAfter,
       });
-      restUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${activeQueryParams.toString()}`;
+      restUrl = `${process.env.SUPABASE_URL}/rest/v1/${MARKET_SOURCE_VIEW}?${activeQueryParams.toString()}`;
       restRes = await fetch(restUrl, { headers });
       errText = restRes.ok ? '' : await restRes.text();
     }
@@ -833,7 +910,7 @@ module.exports = async function handler(req, res) {
           ? buildLegacyMarketQueryParams({
               pageSize: remaining, offset: 0, imageLane: 'no-images',
               brand, requestedReference, exactDialVariants,
-              listingType, imagesOnly: false, pricedOnly, search,
+              listingType, imagesOnly: false, pricedOnly, search, postedAfter,
             })
           : new URLSearchParams(queryParams);
         if (!usedLegacyViewContract) {
@@ -842,7 +919,7 @@ module.exports = async function handler(req, res) {
           noImageParams.set('limit', String(remaining + 1));
           noImageParams.set('offset', '0');
         }
-        const noImageUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${noImageParams.toString()}`;
+        const noImageUrl = `${process.env.SUPABASE_URL}/rest/v1/${MARKET_SOURCE_VIEW}?${noImageParams.toString()}`;
         const noImageRes = await fetch(noImageUrl, { headers });
         const noImageError = noImageRes.ok ? '' : await noImageRes.text();
         if (!noImageRes.ok) {
@@ -867,6 +944,7 @@ module.exports = async function handler(req, res) {
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
       .filter(record => !search || searchTermsMatch(record, search))
       .filter(record => !region || locationMatches(record.location, region))
+      .filter(record => ratingMatches(record, rating))
       .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory);
     if (firstPageOfLane) {
       const { data: directRows, error: directError } = await directRowsPromise;
@@ -876,6 +954,7 @@ module.exports = async function handler(req, res) {
           .filter(record => directSubmissionMatchesImageLane(record, requestedLane))
           .filter(record => !record.multi_listing && directSubmissionMatches(record, {
             imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search, itemCategory, region,
+            rating, postedAfter,
           }));
         records = [...directRecords, ...records]
           .sort((left, right) => Number(right.has_images) - Number(left.has_images))
@@ -936,6 +1015,10 @@ module.exports.isMultiListing = isMultiListing;
 module.exports.safeSearchTerm = safeSearchTerm;
 module.exports.locationSearchPattern = locationSearchPattern;
 module.exports.locationMatches = locationMatches;
+module.exports.dateWindowStart = dateWindowStart;
+module.exports.isSourceBackedRatedDealer = isSourceBackedRatedDealer;
+module.exports.ratingMatches = ratingMatches;
+module.exports.isPriorityHumanReviewBrand = isPriorityHumanReviewBrand;
 module.exports.searchTermsMatch = searchTermsMatch;
 module.exports.parseCursorPage = parseCursorPage;
 module.exports.parseInventoryCursor = parseInventoryCursor;

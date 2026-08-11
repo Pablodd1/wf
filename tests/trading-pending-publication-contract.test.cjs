@@ -34,7 +34,9 @@ test('Trading Floor queries category and does not restore an approved-only query
 
 test('pending Trading Floor publication does not loosen Price Research', () => {
   assert.match(priceResearch, /from\('price_research_verified_source'\)/);
-  assert.match(priceResearch, /\.in\('verdict', \['APPROVED', 'approved'\]\)/);
+  assert.match(priceResearch, /function isPriceResearchAdmissionCandidate\(row\)/);
+  assert.match(priceResearch, /isReleaseListingEligible\(row\) \|\| isHumanReviewAnalyticsCandidate\(row\)/);
+  assert.match(priceResearch, /classifyResearchEligibility\(row, catalogHit\)/);
   assert.match(priceResearch, /listing_type/);
   assert.doesNotMatch(priceResearch, /published_pending_verification/);
 });
