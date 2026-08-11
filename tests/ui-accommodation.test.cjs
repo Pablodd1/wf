@@ -81,7 +81,7 @@ test('Trading Floor preserves source text and orders price intelligence before p
   assert.match(floor, /Bundle, multi-listing, and unbundled-child images remain excluded/);
   assert.match(floor, /label="Price supplied"/);
   assert.ok(floor.indexOf(': sourcePrice') < floor.indexOf(': reviewedWorkbookUsd !== null'));
-  assert.match(floor, /currency \$\{currencyUnconfirmed \? 'not confirmed' : 'not supplied'\}/);
+  assert.match(floor, /currency not supplied/);
   assert.match(floor, /Original source price · no USD conversion/);
   assert.match(floor, /Location/);
   assert.match(floor, /Rated dealers/);
@@ -89,7 +89,8 @@ test('Trading Floor preserves source text and orders price intelligence before p
   for (const window of ['1D', '7D', '1M', '3M', '6M', '1Y']) {
     assert.match(floor, new RegExp(`label: '${window}'`));
   }
-  assert.match(floor, /data_quality_review_required[\s\S]*Human review/);
+  assert.doesNotMatch(floor, />Human review</);
+  assert.doesNotMatch(floor, /Source-confirmed USD/);
   assert.match(floor, /isRatedDealer[\s\S]*Rated Dealer/);
   const cardSource = floor.slice(floor.indexOf('function ListingCard'), floor.indexOf('function ListingDetails'));
   assert.ok(cardSource.indexOf('Original raw message') < cardSource.indexOf('Posted by'));

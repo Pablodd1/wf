@@ -623,7 +623,7 @@ function mapReviewedRecord(row) {
     location: evidenceValuePresent(row.location || row.region) ? (row.location || row.region) : null,
     item_category: effectiveItemCategory(row),
     publication_state: row.publication_state || 'APPROVED',
-    verification_label: pendingVerification ? 'Human review' : 'Verified listing',
+    verification_label: 'Listing',
     data_quality_review_required: pendingVerification,
     multi_listing: multiListing,
     is_unbundled_child: isUnbundledChild,
@@ -914,7 +914,13 @@ module.exports = async function handler(req, res) {
     if (MARKET_SOURCE_VIEW !== 'qnsa_rolex_patek_trading_floor_source') {
       queryParams.set('trading_floor_status', 'not.in.(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate)');
     }
-    if (brand) queryParams.set('brand_scope', `eq.${brand}`);
+    const qnsaBrandOnly = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      && Boolean(brand)
+      && !reference;
+    // Brand-only QNSA queries use the fast global publication order and apply
+    // the brand inside this bounded scan. Filtering the joined view by brand
+    // caused PostgREST to choose a full sort even with a matching index.
+    if (brand && !qnsaBrandOnly) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) {
       const normalizedBrand = String(brand || '').trim().toLowerCase();
       const familyPrefix = (normalizedBrand === 'rolex' && reference === '116500')
@@ -997,13 +1003,11 @@ module.exports = async function handler(req, res) {
     if (!qnsaUnpartitionedMedia) {
       queryParams.set('has_exact_source_image', requestedLane === 'images' ? 'eq.true' : 'eq.false');
     }
-    const qnsaBrandOnly = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
-      && Boolean(brand)
-      && !reference;
-    queryParams.set('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source' && !qnsaBrandOnly
+    queryParams.set('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       ? 'posting_date.desc'
       : 'id.desc');
-    queryParams.set('limit', String(pageSize + 1));
+    const qnsaBrandScanLimit = qnsaBrandOnly ? Math.max(501, pageSize + 1) : pageSize + 1;
+    queryParams.set('limit', String(qnsaBrandScanLimit));
     if (requestedOffset > 0) queryParams.set('offset', String(requestedOffset));
     
     const headers = {
@@ -1043,10 +1047,17 @@ module.exports = async function handler(req, res) {
       throw new Error(`REST query failed: ${restRes.status} ${errText.slice(0, 200)}`);
     }
     const data = await restRes.json();
-    let rawRows = (data || []).slice(0, pageSize);
-    let hasMore = (data || []).length > pageSize;
+    const sourceRows = data || [];
+    const brandRows = qnsaBrandOnly
+      ? sourceRows.filter(row => String(row.brand_scope || row.canonical_brand || '').trim().toLowerCase() === String(brand).trim().toLowerCase())
+      : sourceRows;
+    let rawRows = brandRows.slice(0, pageSize);
+    let hasMore = brandRows.length > pageSize || (qnsaBrandOnly && sourceRows.length >= qnsaBrandScanLimit);
     let nextLane = requestedLane;
-    let nextOffset = requestedOffset + rawRows.length;
+    const lastReturnedSourceIndex = qnsaBrandOnly && rawRows.length
+      ? sourceRows.indexOf(rawRows[rawRows.length - 1]) + 1
+      : rawRows.length;
+    let nextOffset = requestedOffset + lastReturnedSourceIndex;
 
     // Fill the final image page from the no-image lane. The two equality lanes
     // preserve one global boundary without a full-view boolean sort or count.

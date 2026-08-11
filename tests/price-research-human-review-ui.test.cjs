@@ -10,13 +10,11 @@ const source = fs.readFileSync(
   'utf8',
 );
 
-test('human-review WTS evidence is visibly provisional and never presented as automatically approved', () => {
-  assert.match(source, /Provisional · Human review/);
-  assert.match(source, /Human-review status alone never qualifies a price/);
-  assert.match(source, /positive source-backed price, verified currency evidence/);
-  assert.match(source, /human_review_is_analytics_eligible_only_after_all_evidence_gates/);
-  assert.match(source, /normalizedVerdict/);
-  assert.match(source, /\['HUMAN REVIEW', 'NEEDS REVIEW'\]/);
+test('review-state language stays internal while evidence gates remain explicit', () => {
+  assert.doesNotMatch(source, /Provisional .* Human review/);
+  assert.doesNotMatch(source, /Human-review status alone never qualifies a price/);
+  assert.match(source, /positive source-backed price, source-stated currency/);
+  assert.match(source, /'Strong' : data\.sample_quality === 'provisional' \? 'Developing' : 'Observed'/);
 });
 
 test('methodology is collapsed first and displays the exact IQR formula and evidence counts', () => {

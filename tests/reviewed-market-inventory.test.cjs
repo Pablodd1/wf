@@ -21,7 +21,8 @@ test('QNSA exact-reference pages use the indexed reference and no-image lane', (
   assert.match(source, /queryParams\.set\('normalized_reference', `in\.\(\$\{exactVariants\.join\(','\)\}\)`\)/);
   assert.match(source, /qnsaUnpartitionedMedia[\s\S]*!imagesOnly/);
   assert.match(source, /if \(!qnsaUnpartitionedMedia\)[\s\S]*has_exact_source_image/);
-  assert.match(source, /qnsaBrandOnly[\s\S]*Boolean\(brand\)[\s\S]*!reference[\s\S]*'id\.desc'/);
+  assert.match(source, /qnsaBrandOnly[\s\S]*Boolean\(brand\)[\s\S]*!reference/);
+  assert.match(source, /qnsaBrandScanLimit[\s\S]*501[\s\S]*brandRows/);
   assert.match(source, /\? 'posting_date\.desc'/);
   assert.match(source, /normalized_reference', `like\.\$\{familyPrefix\}\*`/);
 });
@@ -190,14 +191,14 @@ test('reviewed QNSA release rows and source-backed ratings reach the card contra
   assert.match(source, /raw_lineage_verified,dealer_rating/);
 });
 
-test('pending publication maps to an explicit human-review label without loosening price eligibility', () => {
+test('pending publication keeps customer copy neutral without loosening price eligibility', () => {
   const mapped = api.mapReviewedRecord(record({
     verdict: 'HUMAN_REVIEW', verification_status: 'HUMAN_REVIEW',
     trading_floor_status: 'published_pending_verification', publication_state: 'PENDING_VERIFICATION',
     has_verified_usd_price: false, verified_price_usd: null,
   }));
   assert.equal(mapped.data_quality_review_required, true);
-  assert.equal(mapped.verification_label, 'Human review');
+  assert.equal(mapped.verification_label, 'Listing');
   assert.equal(mapped.price_research_eligible, false);
 });
 const source = fs.readFileSync(
@@ -516,7 +517,9 @@ test('scoped pages use one lookahead row instead of trusting estimated totals', 
     records: rows.slice(0, 8),
     hasLookahead: false,
   });
-  assert.match(source, /queryParams\.set\('limit', String\(pageSize \+ 1\)\)/);
+  assert.match(source, /const qnsaBrandScanLimit = qnsaBrandOnly \? Math\.max\(501, pageSize \+ 1\) : pageSize \+ 1/);
+  assert.match(source, /queryParams\.set\('limit', String\(qnsaBrandScanLimit\)\)/);
+  assert.match(source, /lastReturnedSourceIndex/);
   assert.match(source, /const nextCursor = hasMore[\s\S]*encodeInventoryCursor/);
 });
 

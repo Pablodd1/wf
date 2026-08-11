@@ -916,7 +916,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     if (reason === 'ABOVE_IQR_FENCE') return 'Above upper IQR fence';
     if (reason === 'MISSING_BRAND') return 'Missing required brand';
     if (reason === 'MISSING_REFERENCE') return 'Missing required reference';
-    if (reason === 'CATALOG_MODEL_UNCONFIRMED') return 'Model/reference not confirmed by catalog';
+    if (reason === 'CATALOG_MODEL_UNCONFIRMED') return 'Catalog model/reference unavailable';
     if (reason === 'MISSING_PRICE') return 'Missing required WTS price';
     if (reason === 'MISSING_DIAL') return 'Missing required dial color';
     if (reason === 'CATALOG_DIAL_UNCONFIRMED') return 'Dial configuration unavailable in catalog';
@@ -925,7 +925,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     if (reason === 'BUNDLE_SOURCE_UNSPLIT') return 'Unsplit multi-listing source';
     if (reason === 'REFERENCE_TOKEN_AS_PRICE') return 'Reference token copied as price';
     if (reason === 'YEAR_TOKEN_AS_PRICE') return 'Year token copied as price';
-    if (reason === 'CURRENCY_UNVERIFIED') return 'Price exists but source currency is not verified';
+    if (reason === 'CURRENCY_UNVERIFIED') return 'Price exists but currency evidence is unavailable for analytics';
     if (reason === 'CURRENCY_AMBIGUOUS') return 'Bare dollar sign requires currency review';
     if (reason === 'CURRENCY_RATE_UNVERIFIED') return 'Currency conversion rate is not verified';
     return 'Invalid price';
@@ -1345,7 +1345,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                       Median price: <strong style={{ color: NAVY }}>${stats.median.toLocaleString()}</strong>
                     </div>
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
-                      {data.sample_quality === 'robust' ? 'Robust' : data.sample_quality === 'provisional' ? 'Provisional' : 'Observational'} evidence · {stats.count} listings
+                      {data.sample_quality === 'robust' ? 'Strong' : data.sample_quality === 'provisional' ? 'Developing' : 'Observed'} evidence · {stats.count} listings
                     </div>
                   </>
                 ) : (
@@ -1503,7 +1503,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    Approved records and provisional Rolex/Patek human-review WTS records may enter evaluation. Human-review status alone never qualifies a price: every included observation must still have a positive source-backed price, verified currency evidence, exact catalog or owner-reviewed identity, a valid dial, and pass bundle, duplicate, and repost checks. WTB demand is calculated separately. The qualified WTS cohort then uses the market plausibility floor and the 3.0 x IQR formula.
+                    Every included observation has a positive source-backed price, source-stated currency, usable model/reference and dial evidence, and passes bundle, duplicate, repost, plausibility, and outlier checks. WTB demand is calculated separately. The qualified WTS cohort then uses the market plausibility floor and the 3.0 x IQR formula.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
@@ -1536,7 +1536,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <AlertTriangle size={17} /> {data.outliersRemoved} statistical price outlier{data.outliersRemoved === 1 ? '' : 's'}
                   </div>
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
-                    Exclusions remain preserved for authorized audit and human review. They are not deleted from the database.
+                    Exclusions remain preserved for authorized audit and analysis. They are not deleted from the database.
                   </div>
                   <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
                     Formula: {data.methodology.formula || 'Q1 - 3.0 * IQR <= price <= Q3 + 3.0 * IQR'}
@@ -1557,7 +1557,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   <div>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Insufficient qualified market evidence</h3>
                     <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginTop: 5 }}>
-                      Price statistics and charts require at least two qualified WTS observations with a catalog-confirmed or owner-reviewed identity, valid dial color, positive price, and verified currency evidence in the same comparable cohort. WTB requests remain visible as separate demand signals.
+                      Price statistics and charts require at least two qualified WTS observations with usable model/reference and dial evidence, a positive source-backed price, and source-stated currency in the same comparable cohort. WTB requests remain visible as separate demand signals.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
                       {data.sampledListings.toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · {data.count.toLocaleString()} qualified comparable{data.count === 1 ? '' : 's'}
@@ -1578,7 +1578,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               )}
               {listings.length > 0 && (
                 <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
-                  Qualified WTS observations power the chart and statistics. Provisional human-review records are labeled and must pass the same price, currency, identity, bundle, duplicate, and outlier gates. WTB requests remain in Demand Signals. Additional real source listings remain visible here with their exclusion reason and never alter the averages.
+                  Qualified WTS observations power the chart and statistics. Every observation passes the same price, currency, identity, bundle, duplicate, and outlier gates. WTB requests remain in Demand Signals. Additional real source listings remain visible here with their exclusion reason and never alter the averages.
                 </div>
               )}
               {listings.map(row => (
@@ -1918,8 +1918,6 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
       ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
       : 'Price not available';
   const excludedFromAverages = row.is_outlier === true || !hasUsdPrice;
-  const normalizedVerdict = String(row.verdict || '').trim().toUpperCase().replaceAll('_', ' ');
-  const isHumanReview = ['HUMAN REVIEW', 'NEEDS REVIEW'].includes(normalizedVerdict);
   const sellerName = row.seller_name || row.posted_by || row['Posted By'] || '';
   const sellerPhone = row.seller_phone || row.phone_number || row['Phone Number'] || '';
   const evidenceStatus = excludedFromAverages
@@ -1936,7 +1934,6 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
         <div className="flex items-center gap-2">
           <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
           <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#eef2ff', color: '#3730a3', whiteSpace: 'nowrap', fontWeight: 800 }}>WTS</span>
-          {isHumanReview && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#fff4d6', color: '#7a5900', whiteSpace: 'nowrap', fontWeight: 800 }}>Provisional · Human review</span>}
           {row.source === 'MYSQL_RAW' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#f1f5f9', color: '#475569', whiteSpace: 'nowrap' }}>🗄️ Auction DB</span>}
           {row.source === 'REVIEWED_WORKBOOK' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', whiteSpace: 'nowrap' }}>📋 Workbook</span>}
           {row.source === 'REVIEWED_WORKBOOK_INVENTORY' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#e0e7ff', color: '#3730a3', whiteSpace: 'nowrap' }}>💬 Direct Listing</span>}

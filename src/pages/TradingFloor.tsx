@@ -1115,7 +1115,6 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       <div className={`${cardHasImage ? 'mt-5' : ''} min-h-[56px]`}>
         <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
           <span>{listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}</span>
-          {listing.data_quality_review_required && <span className="rounded-full border px-2 py-0.5 normal-case tracking-normal" style={{ borderColor: GOLD, color: GOLD_BRIGHT }}>Human review</span>}
           {isRatedDealer && <span className="rounded-full bg-[#183153] px-2 py-0.5 normal-case tracking-normal text-white">Rated Dealer</span>}
         </div>
         <button
@@ -1327,12 +1326,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               <X size={18} />
             </button>
           </div>
-          {listing.data_quality_review_required && (
-            <div className="mt-3 inline-flex rounded-full border px-3 py-1 text-xs font-semibold" style={{ borderColor: GOLD, color: GOLD_BRIGHT }}>
-              Human review · source evidence preserved
-            </div>
-          )}
-
           <div className="mt-6">
             <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
           </div>
@@ -1582,7 +1575,7 @@ function getListingMeta(listing: ListingRecord) {
           : 'Price not supplied';
 
   const priceEvidenceLabel = verifiedUsd !== null
-    ? 'Source-confirmed USD'
+    ? 'USD price'
     : sourcePrice
       ? 'Original source price · no USD conversion'
       : reviewedWorkbookUsd !== null
@@ -1651,15 +1644,14 @@ function sourceTextIncludesCurrency(sourceText: string, currency: string) {
 function formatSourcePrice(listing: ListingRecord) {
   const currency = cleanValue(listing.source_currency) || cleanValue(listing.currency);
   const sourceText = cleanValue(listing.source_price_text);
-  const currencyUnconfirmed = cleanValue(listing.price_evidence_status).toUpperCase() === 'CURRENCY_UNCONFIRMED';
   if (sourceText && currency) {
     return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (sourceText) return `${sourceText} · currency ${currencyUnconfirmed ? 'not confirmed' : 'not supplied'}`;
+  if (sourceText) return `${sourceText} · currency not supplied`;
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
   if (!Number.isFinite(amount) || amount <= 0) return '';
-  if (!currency) return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)} · currency ${currencyUnconfirmed ? 'not confirmed' : 'not supplied'}`;
+  if (!currency) return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)} · currency not supplied`;
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 
