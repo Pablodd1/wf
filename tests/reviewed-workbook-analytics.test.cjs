@@ -8,6 +8,7 @@ const test = require('node:test');
 const {
   LEGACY_WORKBOOK_COLUMNS,
   isMissingColumnError,
+  loadReviewedWorkbookAnalyticsRows,
   mapWorkbookAnalyticsRow,
 } = require('../api/_lib/reviewed-workbook-analytics.cjs');
 
@@ -97,6 +98,45 @@ test('reviewed workbook loader requires complete identity and explicit verified 
   assert.doesNotMatch(source, /workbook_price_usd/);
   assert.match(source, /LEGACY_WORKBOOK_COLUMNS/);
   assert.match(source, /posted_by,phone_number/);
+});
+
+test('reviewed workbook analytics uses the indexed exact reference column', async () => {
+  const calls = [];
+  const query = {
+    select(value) { calls.push(['select', value]); return this; },
+    eq(column, value) { calls.push(['eq', column, value]); return this; },
+    in(column, value) { calls.push(['in', column, value]); return this; },
+    neq(column, value) { calls.push(['neq', column, value]); return this; },
+    not(column, operator, value) { calls.push(['not', column, operator, value]); return this; },
+    order(column, options) { calls.push(['order', column, options]); return this; },
+    async limit(value) { calls.push(['limit', value]); return { data: [], error: null }; },
+  };
+  const client = {
+    from(view) { calls.push(['from', view]); return query; },
+  };
+
+  const rows = await loadReviewedWorkbookAnalyticsRows(client, {
+    brand: 'Patek Philippe',
+    references: ['5712/1A', '5712/1A-001', '5712/1A', ''],
+    limit: 250,
+  });
+
+  assert.deepEqual(rows, []);
+  assert.deepEqual(
+    calls.find(call => call[0] === 'in'),
+    ['in', 'normalized_reference', ['5712/1A', '5712/1A-001']],
+  );
+  assert.equal(calls.some(call => call[1] === 'reference_search_key'), false);
+  assert.deepEqual(calls.find(call => call[0] === 'eq' && call[1] === 'brand_scope'), ['eq', 'brand_scope', 'Patek Philippe']);
+  assert.deepEqual(calls.find(call => call[0] === 'limit'), ['limit', 250]);
+});
+
+test('Price Research passes exact catalog reference variants to the indexed workbook loader', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
+  assert.match(source, /const preloadReferences = listEquivalentReferences\(rawRef, brand\)/);
+  assert.match(source, /loadReviewedWorkbookAnalyticsRows\(client, \{\s*brand,\s*references: preloadReferences/);
+  assert.match(source, /loadReviewedWorkbookAnalyticsRows\(client, \{\s*brand,\s*references: referenceVariants/);
+  assert.doesNotMatch(source, /referenceKeys:/);
 });
 
 test('verified exact-reference WTS lookup has a matching forward-only index', () => {

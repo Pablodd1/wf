@@ -79,12 +79,15 @@ function isMissingColumnError(error) {
   return /42703|does not exist/i.test(`${code} ${message}`);
 }
 
-async function executeAnalyticsQuery(client, columns, { brand, keys, limit }) {
+async function executeAnalyticsQuery(client, columns, { brand, references, limit }) {
   let query = client
     .from(MARKET_SOURCE_VIEW)
     .select(columns)
     .eq('brand_scope', clean(brand))
-    .in('reference_search_key', keys)
+    // Production has a composite B-tree index beginning with
+    // (brand_scope, normalized_reference, posting_date, id). Filtering the
+    // computed reference_search_key forced a full scan of the 8.5M-row view.
+    .in('normalized_reference', references)
     .neq('verification_status', 'QUARANTINED_SOURCE_CONFLICT')
     .eq('has_complete_identity', true)
     .eq('has_verified_usd_price', true)
@@ -101,16 +104,16 @@ async function executeAnalyticsQuery(client, columns, { brand, keys, limit }) {
     .limit(Math.min(10000, Math.max(1, Number(limit) || 10000)));
 }
 
-async function loadReviewedWorkbookAnalyticsRows(client, { brand, referenceKeys, limit = 10000 }) {
-  const keys = [...new Set((referenceKeys || []).map(clean).filter(Boolean))];
-  if (!clean(brand) || !keys.length) return [];
+async function loadReviewedWorkbookAnalyticsRows(client, { brand, references, limit = 10000 }) {
+  const indexedReferences = [...new Set((references || []).map(clean).filter(Boolean))];
+  if (!clean(brand) || !indexedReferences.length) return [];
 
   let { data, error } = await executeAnalyticsQuery(client, WORKBOOK_COLUMNS, {
-    brand, keys, limit,
+    brand, references: indexedReferences, limit,
   });
   if (error && isMissingColumnError(error)) {
     ({ data, error } = await executeAnalyticsQuery(client, LEGACY_WORKBOOK_COLUMNS, {
-      brand, keys, limit,
+      brand, references: indexedReferences, limit,
     }));
   }
 

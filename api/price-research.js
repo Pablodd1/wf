@@ -282,12 +282,12 @@ module.exports = async function handler(req, res) {
   // source-explicit USD evidence. It may authorize its exact brand/reference
   // even when an older deployment allowlist has not yet been expanded.
   const client = getClient();
-  const preloadReferenceKeys = listEquivalentReferences(rawRef, brand).map(normRef);
+  const preloadReferences = listEquivalentReferences(rawRef, brand);
   let preloadedReviewedWorkbookRows = [];
   try {
     preloadedReviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
       brand,
-      referenceKeys: preloadReferenceKeys,
+      references: preloadReferences,
       limit: 10000,
     });
   } catch {
@@ -485,7 +485,7 @@ module.exports = async function handler(req, res) {
       if (!reviewedWorkbookRows.length) {
         reviewedWorkbookRows = await loadReviewedWorkbookAnalyticsRows(client, {
           brand,
-          referenceKeys: referenceVariants.map(normRef),
+          references: referenceVariants,
           limit: sampleLimit,
         });
       }
