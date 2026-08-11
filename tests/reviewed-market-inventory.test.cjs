@@ -7,6 +7,16 @@ const test = require('node:test');
 
 const api = require('../api/reviewed-market-inventory.js');
 
+test('QNSA Trading Floor does not depend on legacy workbook checkpoints', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../api/reviewed-market-inventory.js'),
+    'utf8',
+  );
+  assert.match(source, /function qnsaReviewedReleaseSummary\(\)/);
+  assert.match(source, /MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
+  assert.match(source, /Promise\.resolve\(qnsaReviewedReleaseSummary\(\)\)/);
+});
+
 test('same-reference Trading Floor listings place supplied prices before no-price activity', () => {
   const priced = {
     id: 'priced', brand: 'Patek Philippe', reference: '5712/1A-001',
@@ -495,7 +505,9 @@ test('scoped pages use one lookahead row instead of trusting estimated totals', 
 
 test('cursor inventory honors the 50-card marketplace page and overlaps independent database reads', () => {
   assert.match(source, /const pageSizeLimit = pagination === 'cursor' \? 50 : MAX_PAGE_SIZE/);
-  assert.match(source, /const summaryPromise = loadSummary\(client\)/);
+  assert.match(source, /const summaryPromise = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
+  assert.match(source, /\? Promise\.resolve\(qnsaReviewedReleaseSummary\(\)\)/);
+  assert.match(source, /: loadSummary\(client\)/);
   assert.match(source, /directRowsPromise = Promise\.resolve\(directQuery\)/);
   assert.match(source, /await directRowsPromise/);
   assert.match(source, /const summary = await summaryPromise/);

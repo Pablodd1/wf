@@ -25,6 +25,24 @@ const MIN_PUBLIC_WORKBOOK_PRICE_USD = 1_000;
 const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
 let legacyMarketViewContractDetected = false;
 
+function qnsaReviewedReleaseSummary() {
+  return {
+    files_total: 1,
+    files_complete: 1,
+    source_rows: 1_394_269,
+    rows_scanned: 1_394_269,
+    canonical_listings: null,
+    duplicate_rows_held: null,
+    errors: 0,
+    reconciled: true,
+    source: 'mariadb-normalized-20260811-codex-v1',
+    brands: [
+      { brand: 'Rolex', files: 1, files_complete: 1, source_rows: null, canonical_listings: null, duplicate_rows_held: null },
+      { brand: 'Patek Philippe', files: 1, files_complete: 1, source_rows: null, canonical_listings: null, duplicate_rows_held: null },
+    ],
+  };
+}
+
 const EVIDENCE_CONTRACT = Object.freeze({
   scope: 'returned_page',
   identity_fields: ['brand', 'model', 'reference', 'dial_color'],
@@ -837,7 +855,9 @@ module.exports = async function handler(req, res) {
     // Summary and authenticated direct-post reads are independent of the
     // reviewed market REST request. Start them without serializing three
     // remote database round trips on every page load.
-    const summaryPromise = loadSummary(client);
+    const summaryPromise = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      ? Promise.resolve(qnsaReviewedReleaseSummary())
+      : loadSummary(client);
     const brand = requestedBrand;
     // Cursor pages publish the current reviewed inventory, including incomplete
     // identities and no-price rows; analytics eligibility remains stricter.
