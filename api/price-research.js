@@ -150,7 +150,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
       .eq('brand', brand)
       .limit(DEMAND_SAMPLE_LIMIT);
     demandQuery = familyPrefix
-      ? demandQuery.ilike('reference', `${familyPrefix}%`)
+      ? demandQuery.like('reference', `${familyPrefix}%`)
       : demandQuery.in('reference', referenceVariants);
     const { data: qnsaDemandRows, error: qnsaDemandError } = await demandQuery;
     if (qnsaDemandError) {
@@ -501,7 +501,7 @@ module.exports = async function handler(req, res) {
         .eq('brand', brand)
         .eq('listing_type', 'WTS');
       query = table === QNSA_PRICE_RESEARCH_SOURCE && familyPrefix
-        ? query.ilike('reference', `${familyPrefix}%`)
+        ? query.like('reference', `${familyPrefix}%`)
         : query.in('reference', referenceVariants);
       if (table !== QNSA_PRICE_RESEARCH_SOURCE) {
         query = query.in('verdict', ['APPROVED', 'approved', ...HUMAN_REVIEW_VERDICTS]);
