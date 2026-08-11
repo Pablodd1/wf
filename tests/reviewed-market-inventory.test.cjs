@@ -179,6 +179,13 @@ test('only reconciled Rolex and Patek pending-review singles enter the Trading F
   assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Rolex', raw_lineage_verified: false }), false);
 });
 
+test('reviewed QNSA release rows and source-backed ratings reach the card contract', () => {
+  assert.match(source, /publication_lane === 'QNSA_ROLEX_PATEK_REVIEWED_V1'/);
+  assert.match(source, /reviewedQnsaRelease \|\|/);
+  assert.match(source, /seller_rating: positiveNumber\(row\.dealer_rating\)/);
+  assert.match(source, /raw_lineage_verified,dealer_rating/);
+});
+
 test('pending publication maps to an explicit human-review label without loosening price eligibility', () => {
   const mapped = api.mapReviewedRecord(record({
     verdict: 'HUMAN_REVIEW', verification_status: 'HUMAN_REVIEW',

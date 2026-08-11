@@ -395,15 +395,20 @@ function isTradingFloorSourceRow(row) {
   })) {
     return true;
   }
-  const pendingCategoryEligible = itemCategory === 'WATCH'
-    ? isPriorityHumanReviewBrand(row?.canonical_brand || row?.supplied_brand || row?.brand_scope)
-    : true;
-  return pendingCategoryEligible
-    && status === 'PUBLISHED_PENDING_VERIFICATION'
-    && row?.publication_lane === 'QNSA_NORMALIZED_STAGING_V1'
+  const reviewedQnsaRelease = row?.publication_lane === 'QNSA_ROLEX_PATEK_REVIEWED_V1'
     && row?.normalization_run_complete === true
     && row?.raw_lineage_verified === true
     && row?.publication_state === 'PENDING_VERIFICATION';
+  const pendingCategoryEligible = itemCategory === 'WATCH'
+    ? isPriorityHumanReviewBrand(row?.canonical_brand || row?.supplied_brand || row?.brand_scope)
+    : true;
+  return pendingCategoryEligible && (reviewedQnsaRelease || (
+    status === 'PUBLISHED_PENDING_VERIFICATION'
+    && row?.publication_lane === 'QNSA_NORMALIZED_STAGING_V1'
+    && row?.normalization_run_complete === true
+    && row?.raw_lineage_verified === true
+    && row?.publication_state === 'PENDING_VERIFICATION'
+  ));
 }
 
 function mapDealerSubmission(row) {
@@ -591,9 +596,11 @@ function mapReviewedRecord(row) {
     raw_message_evidence_type: normalizedSummary ? 'WORKBOOK_NORMALIZED_SUMMARY' : 'SOURCE_RAW_MESSAGE',
     seller_name: sellerName,
     seller_phone: sellerPhone,
-    seller_rating: null,
+    seller_rating: positiveNumber(row.dealer_rating),
     seller_review_count: 0,
-    seller_rating_evidence_status: 'UNAVAILABLE',
+    seller_rating_evidence_status: positiveNumber(row.dealer_rating) !== null
+      ? 'SOURCE_SUPPLIED'
+      : 'UNAVAILABLE',
     contact_publication_approved: contactApproved,
     price_usd: verifiedUsd,
     price_raw: sourceAmount,
@@ -895,7 +902,7 @@ module.exports = async function handler(req, res) {
       'workbook_price_usd,source_price_amount,source_currency',
       'price_evidence_status,confidence,verdict,verification_status,user_image_url,imported_at',
       'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity,trading_floor_status,reference_search_key,location,item_category',
-      'publication_state,publication_lane,normalization_run_complete,raw_lineage_verified',
+      'publication_state,publication_lane,normalization_run_complete,raw_lineage_verified,dealer_rating',
     ].join(',');
 
     // ponytail: use raw REST instead of Supabase client to avoid client-side issues
