@@ -57,6 +57,7 @@ test('legacy fallback remains bounded and WTB demand avoids the unindexed workbo
   assert.match(source, /sourceTable = 'watch_records';\s*result = await buildRowsQuery\(sourceTable\)/);
   assert.match(source, /lookupDemand\(\s*client,\s*sourceTable/);
   assert.match(source, /selection,\s*null,\s*familyPrefix/);
+  assert.match(source, /usingQnsaReviewedSource && familyPrefix[\s\S]*startsWith\(normRef\(familyPrefix\)\)/);
   assert.match(source, /if \(Array\.isArray\(preloadedRows\)\)/);
   assert.doesNotMatch(source, /loadReviewedWorkbookDemandRows/);
   assert.doesNotMatch(source, /executeDemandLaneQuery/);

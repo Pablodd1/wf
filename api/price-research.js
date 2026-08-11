@@ -671,7 +671,9 @@ module.exports = async function handler(req, res) {
     rows = rows.filter(row =>
       (usingReviewedWorkbook || isPriceResearchAdmissionCandidate(row))
       && String(row.brand || '').toLowerCase() === String(brand || '').toLowerCase()
-      && equivalentKeys.has(normRef(row.reference)));
+      && (usingQnsaReviewedSource && familyPrefix
+        ? normRef(row.reference).startsWith(normRef(familyPrefix))
+        : equivalentKeys.has(normRef(row.reference))));
     const shadowBundleIds = controlledPaneraiRelease || usingReviewedWorkbook || usingQnsaReviewedSource
       ? new Set()
       : await loadShadowBundleParentIds(client, rows);

@@ -967,14 +967,16 @@ module.exports = async function handler(req, res) {
     }
     if (!itemCategory) return res.status(400).json({ status: 'error', error: 'Invalid item category' });
     // ponytail: simplified query — ORDER BY with offset times out on large views
-    // The reconciled QNSA archive currently has no visually-approved historical
-    // images. Start it in the no-image lane so the first customer page does not
-    // scan every reviewed row looking for a true image flag. Direct submissions
-    // with approved images are still merged above this lane.
-    const qnsaNoImageDefault = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
-      && !imagesOnly
-      && inventoryCursor === null;
-    const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || (qnsaNoImageDefault ? 'no-images' : 'images'));
+    // QNSA already excludes bundle parents/children in the release view. Do not
+    // force its default customer request into either media lane: a historical
+    // replay may legitimately contain source-backed photos, and forcing
+    // `has_exact_source_image=false` made every such Rolex/Patek disappear.
+    // The explicit Images filter remains strict; the general feed is ordered by
+    // the bounded publication index and renders an image only when the row
+    // supplies one.
+    const qnsaUnpartitionedMedia = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      && !imagesOnly;
+    const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || 'images');
     const requestedOffset = pagination === 'cursor'
       ? (inventoryCursor?.offset || 0)
       : pageWindow.start;
@@ -992,7 +994,9 @@ module.exports = async function handler(req, res) {
       if (postedAfter) directQuery = directQuery.gte('created_at', postedAfter);
       directRowsPromise = Promise.resolve(directQuery);
     }
-    queryParams.set('has_exact_source_image', requestedLane === 'images' ? 'eq.true' : 'eq.false');
+    if (!qnsaUnpartitionedMedia) {
+      queryParams.set('has_exact_source_image', requestedLane === 'images' ? 'eq.true' : 'eq.false');
+    }
     queryParams.set('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       ? 'posting_date.desc'
       : 'id.desc');
@@ -1043,7 +1047,7 @@ module.exports = async function handler(req, res) {
 
     // Fill the final image page from the no-image lane. The two equality lanes
     // preserve one global boundary without a full-view boolean sort or count.
-    if (!imagesOnly && requestedLane === 'images' && !hasMore) {
+    if (!qnsaUnpartitionedMedia && !imagesOnly && requestedLane === 'images' && !hasMore) {
       const remaining = pageSize - rawRows.length;
       nextLane = 'no-images';
       nextOffset = 0;
