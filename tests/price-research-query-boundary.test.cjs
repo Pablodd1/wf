@@ -59,7 +59,7 @@ test('legacy fallback remains bounded and WTB demand avoids the unindexed workbo
   assert.match(source, /selection,\s*null,\s*familyPrefix/);
   assert.match(source, /usingQnsaReviewedSource && familyPrefix[\s\S]*startsWith\(normRef\(familyPrefix\)\)/);
   assert.match(source, /loadQnsaVerifiedTradingPrices/);
-  assert.match(source, /eq\('has_verified_usd_price', true\)/);
+  assert.match(source, /row\.has_verified_usd_price === true && Number\(row\.verified_price_usd\) > 0/);
   assert.match(source, /sourceTable === QNSA_PRICE_RESEARCH_SOURCE && rows\.length === 0[\s\S]*loadQnsaVerifiedTradingPrices/);
   assert.match(source, /if \(Array\.isArray\(preloadedRows\)\)/);
   assert.doesNotMatch(source, /loadReviewedWorkbookDemandRows/);

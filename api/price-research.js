@@ -86,14 +86,13 @@ async function loadQnsaVerifiedTradingPrices(client, {
     'id,canonical_brand,catalog_model,normalized_reference,source_price_amount',
     'verified_price_usd,source_currency,raw_message,posting_date,condition',
     'dial_color,listing_type,dealer_id,seller_name,seller_phone,confidence',
-    'verdict,trading_floor_status,user_image_url,has_exact_source_image',
+    'verdict,trading_floor_status,user_image_url,has_exact_source_image,has_verified_usd_price',
   ].join(',');
   let query = client
     .from(QNSA_TRADING_SOURCE)
     .select(columns)
     .eq('brand_scope', brand)
-    .eq('listing_type', 'WTS')
-    .eq('has_verified_usd_price', true);
+    .eq('listing_type', 'WTS');
   query = familyPrefix
     ? query.like('normalized_reference', `${familyPrefix}%`)
     : query.in('normalized_reference', referenceVariants);
@@ -101,7 +100,9 @@ async function loadQnsaVerifiedTradingPrices(client, {
     .order('posting_date', { ascending: false })
     .limit(limit);
   if (error) throw error;
-  return (data || []).map(row => ({
+  return (data || [])
+    .filter(row => row.has_verified_usd_price === true && Number(row.verified_price_usd) > 0)
+    .map(row => ({
     id: row.id,
     brand: row.canonical_brand,
     model: row.catalog_model,
@@ -127,7 +128,7 @@ async function loadQnsaVerifiedTradingPrices(client, {
     thumbnail_url: row.user_image_url,
     image_urls: row.user_image_url ? [row.user_image_url] : [],
     has_images: row.has_exact_source_image === true,
-  }));
+    }));
 }
 
 // Look up a human model name for a reference from the PROVEN file catalog
