@@ -122,6 +122,7 @@ export default function DealerDirectory() {
                   <Link to={`/dealer/profile/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>
                 </h2>
                 <p className="mt-1 text-xs text-white/42">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
+                {dealer.verified_phone && <p className="mt-2 font-mono text-xs text-white/55">{dealer.verified_phone}</p>}
                 <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/60">
                   <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? `${dealer.review_count.toLocaleString()} reviews` : `★ ${Number(dealer.rating).toFixed(1)} (${dealer.review_count.toLocaleString()})`}</span>
                   {dealer.rating != null && <span>Trusted User</span>}

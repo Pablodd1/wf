@@ -18,6 +18,11 @@ function sourceIdFromIdentity(identity) {
   return match ? match[1] : null;
 }
 
+function sourcePhone(profile) {
+  const match = String(profile?.whatsapp_url || profile?.chat_url || '').match(/wa\.me\/(\d{7,15})/i);
+  return match ? `+${match[1]}` : null;
+}
+
 function profileSummary(profile, rank) {
   return {
     id: sourceSlug(profile.id),
@@ -38,7 +43,7 @@ function profileSummary(profile, rank) {
     source_system: SOURCE_SYSTEM,
     source_url: profile.profile_url || null,
     source_crawled_at: crawl.crawled_at || null,
-    verified_phone: null,
+    verified_phone: sourcePhone(profile),
     stats: {
       wts_posts: nonNegativeInteger(profile.wts) || 0,
       wtb_posts: nonNegativeInteger(profile.wtb) || 0,
@@ -132,5 +137,6 @@ module.exports = {
   SOURCE_SYSTEM,
   parsedSourceDate,
   sourceProfilePayload,
+  sourcePhone,
   topRatedProfiles,
 };

@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { publicDealer } = require('../api/dealers.js');
-const { parsedSourceDate, topRatedProfiles, sourceProfilePayload } = require('../api/_lib/dealer-directory-source.cjs');
+const { parsedSourceDate, sourcePhone, topRatedProfiles, sourceProfilePayload } = require('../api/_lib/dealer-directory-source.cjs');
 const dealersHandler = require('../api/dealers.js');
 const dealerProfileHandler = require('../api/dealer-profile.js');
 
@@ -35,8 +35,16 @@ test('Top Rated preserves source rank and feedback without inventing a numeric r
   assert.deepEqual(profiles.map(profile => profile.source_rank), Array.from({ length: 25 }, (_, index) => index + 1));
   assert.ok(profiles.every(profile => profile.rating === null));
   assert.ok(profiles.every(profile => profile.review_count >= 0));
-  assert.ok(profiles.every(profile => profile.verified_phone === null));
+  assert.ok(profiles.every(profile => /^\+\d{7,15}$/.test(profile.verified_phone)));
   assert.ok(profiles.every(profile => profile.source_url?.startsWith('https://watchfacts.com/user/')));
+});
+
+test('public WhatsApp links provide searchable source phone numbers', async () => {
+  assert.equal(sourcePhone({ whatsapp_url: 'https://wa.me/17147340511' }), '+17147340511');
+  const directory = await invoke(dealersHandler, { mode: 'top-rated', pageSize: '25', q: '7147340511' });
+  assert.equal(directory.statusCode, 200);
+  assert.equal(directory.payload.total, 1);
+  assert.equal(directory.payload.dealers[0].display_name, 'Jaztime Watches');
 });
 
 test('Top Rated and source profile API handlers return the complete source-backed workflow', async () => {
