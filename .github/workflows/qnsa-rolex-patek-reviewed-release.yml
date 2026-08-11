@@ -139,6 +139,18 @@ jobs:
             Write-Output 'QNSA global and brand feed indexes are already installed.'
           }
 
+          $feedIndexV2Path = 'supabase/migrations/20260811235500_qnsa_release_feed_indexes_v2.sql'
+          $feedIndexV2CheckSql = "SELECT to_regclass('staging.idx_staging_qnsa_release_global_feed_v2') IS NOT NULL AND to_regclass('staging.idx_staging_qnsa_release_brand_feed_v2') IS NOT NULL AS installed;"
+          $feedIndexV2CheckBody = @{ query = $feedIndexV2CheckSql; read_only = $true } | ConvertTo-Json -Depth 3
+          $feedIndexV2Check = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $feedIndexV2CheckBody
+          if ($feedIndexV2Check[0].installed -ne $true) {
+            $feedIndexV2Sql = Get-Content -Raw -LiteralPath $feedIndexV2Path
+            $feedIndexV2Body = @{ query = [string]$feedIndexV2Sql; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $feedIndexV2Body | Out-Null
+          } else {
+            Write-Output 'QNSA planner-usable global and brand feed indexes are already installed.'
+          }
+
       - name: Verify completed staging and arm the disabled release lane
         shell: pwsh
         run: |

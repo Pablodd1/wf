@@ -61,4 +61,7 @@ test('reviewed release installs bounded QNSA customer-query indexes', () => {
   assert.match(releaseWorkflow, /20260811234500_qnsa_release_feed_indexes\.sql/);
   assert.match(releaseWorkflow, /idx_staging_qnsa_release_global_feed/);
   assert.match(releaseWorkflow, /idx_staging_qnsa_release_brand_feed/);
+  assert.match(releaseWorkflow, /20260811235500_qnsa_release_feed_indexes_v2\.sql/);
+  assert.match(releaseWorkflow, /idx_staging_qnsa_release_global_feed_v2/);
+  assert.match(releaseWorkflow, /idx_staging_qnsa_release_brand_feed_v2/);
 });
