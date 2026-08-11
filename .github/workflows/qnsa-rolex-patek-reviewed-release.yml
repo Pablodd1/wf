@@ -127,6 +127,18 @@ jobs:
             Write-Output 'QNSA reference-family pattern index is already installed.'
           }
 
+          $feedIndexPath = 'supabase/migrations/20260811234500_qnsa_release_feed_indexes.sql'
+          $feedIndexCheckSql = "SELECT to_regclass('staging.idx_staging_qnsa_release_global_feed') IS NOT NULL AND to_regclass('staging.idx_staging_qnsa_release_brand_feed') IS NOT NULL AS installed;"
+          $feedIndexCheckBody = @{ query = $feedIndexCheckSql; read_only = $true } | ConvertTo-Json -Depth 3
+          $feedIndexCheck = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $feedIndexCheckBody
+          if ($feedIndexCheck[0].installed -ne $true) {
+            $feedIndexSql = Get-Content -Raw -LiteralPath $feedIndexPath
+            $feedIndexBody = @{ query = [string]$feedIndexSql; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $feedIndexBody | Out-Null
+          } else {
+            Write-Output 'QNSA global and brand feed indexes are already installed.'
+          }
+
       - name: Verify completed staging and arm the disabled release lane
         shell: pwsh
         run: |
