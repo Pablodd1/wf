@@ -64,7 +64,7 @@ function formatReport(stats) {
   if (!stats) return '\u274c Failed to generate report';
 
   const lines = [
-    `\ud83d\udcca *WatchFacts Daily Report*`,
+    `\ud83d\udcca *Curated Luxury Daily Report*`,
     ``,
     `*Database Overview*`,
     `• Total Records: ${stats.total.toLocaleString()}`,

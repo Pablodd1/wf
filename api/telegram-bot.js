@@ -88,7 +88,7 @@ module.exports = async function handler(req, res) {
           break;
         }
         const msg = `
-*WatchFacts Stats*
+*Curated Luxury Stats*
 
 📊 Total: ${stats.total.toLocaleString()}
 ✅ Approved: ${stats.approved.toLocaleString()} (${Math.round((stats.approved/stats.total)*100)}%)
@@ -125,7 +125,7 @@ module.exports = async function handler(req, res) {
       case '/help':
       default: {
         const help = `
-*WatchFacts Bot Commands*
+*Curated Luxury Bot Commands*
 
 /stats — Current database stats
 /search <ref> — Search by reference

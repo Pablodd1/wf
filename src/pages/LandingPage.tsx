@@ -159,7 +159,7 @@ export default function LandingPage() {
 
       <section className="bg-[#211b15] px-5 py-20 text-center text-white sm:px-8">
         <h2 className="font-serif text-4xl sm:text-5xl">{t('Stop scrolling. Start trading.')}</h2>
-        <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-white/55">{t('Join the verified dealer network already trading through WatchFacts.')}</p>
+        <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-white/55">{t('Join the verified dealer network already trading through Curated Luxury.')}</p>
         <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link to="/dealer/workspace" className="inline-flex min-h-12 items-center gap-2 rounded bg-[#b98432] px-7 text-sm font-semibold text-white">{t('Join the network')} <ArrowRight size={16} /></Link>
           <Link to="/price-research" className="inline-flex min-h-12 items-center gap-2 rounded border border-white/20 px-7 text-sm font-semibold text-white"><Search size={15} /> {t('Price Research')}</Link>

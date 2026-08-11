@@ -8,12 +8,12 @@ export const CONTACT_WHATSAPP_URL = 'https://api.whatsapp.com/send?phone=1786956
 export const CONTACT_EMAIL = 'Aduenas@watchfacts.com';
 
 export const COMMUNITY_GROUPS = [
-  { name: 'WatchFacts | B2B Watch Trading Chat', network: 'WhatsApp', href: 'https://chat.whatsapp.com/JEaK91DatRkLZFKMaJZYIH?mode=gi_t' },
-  { name: 'WatchFacts | Community discussion/announcements', network: 'WhatsApp', href: 'https://chat.whatsapp.com/CHLWqKgzO2Y1sdarNTAcEO?mode=gi_t' },
-  { name: 'WatchFacts | System Calls', network: 'WhatsApp', href: 'https://chat.whatsapp.com/EfL3QcrCVe1F7wKMGjS9WQ' },
-  { name: 'WatchFacts | International Group', network: 'WhatsApp', href: 'https://chat.whatsapp.com/B8qiBT6JZYyGoNg3CAX5Kw?mode=gi_t' },
-  { name: 'WatchFacts | Signed Estate and Branded Jewelry', network: 'WhatsApp', href: 'https://chat.whatsapp.com/DPhtxCrrxES5kyHeO7SmCb?mode=gi_t' },
-  { name: 'WatchFacts (Rolex US Only Sales)', network: 'Telegram', href: 'https://t.me/watchfactsUS' },
+  { name: 'Curated Luxury | B2B Watch Trading Chat', network: 'WhatsApp', href: 'https://chat.whatsapp.com/JEaK91DatRkLZFKMaJZYIH?mode=gi_t' },
+  { name: 'Curated Luxury | Community discussion/announcements', network: 'WhatsApp', href: 'https://chat.whatsapp.com/CHLWqKgzO2Y1sdarNTAcEO?mode=gi_t' },
+  { name: 'Curated Luxury | System Calls', network: 'WhatsApp', href: 'https://chat.whatsapp.com/EfL3QcrCVe1F7wKMGjS9WQ' },
+  { name: 'Curated Luxury | International Group', network: 'WhatsApp', href: 'https://chat.whatsapp.com/B8qiBT6JZYyGoNg3CAX5Kw?mode=gi_t' },
+  { name: 'Curated Luxury | Signed Estate and Branded Jewelry', network: 'WhatsApp', href: 'https://chat.whatsapp.com/DPhtxCrrxES5kyHeO7SmCb?mode=gi_t' },
+  { name: 'Curated Luxury (Rolex US Only Sales)', network: 'Telegram', href: 'https://t.me/watchfactsUS' },
 ] as const;
 
 const MARKET_LINKS = [
@@ -77,7 +77,7 @@ export function Footer() {
         <div className="grid gap-10 border-b border-white/10 pb-10 lg:grid-cols-[0.8fr_1.2fr]">
           <section aria-labelledby="footer-contact-heading">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c9a96e]">{t('Contact')}</p>
-            <h2 id="footer-contact-heading" className="mt-3 font-serif text-3xl">{t('Contact WatchFacts')}</h2>
+            <h2 id="footer-contact-heading" className="mt-3 font-serif text-3xl">{t('Contact Curated Luxury')}</h2>
             <p className="mt-3 max-w-md text-sm leading-6 text-white/52">{t('Questions, partnerships, listing support, or new opportunities.')}</p>
             <a href={CONTACT_WHATSAPP_URL} target="_blank" rel="noreferrer" className="mt-6 inline-flex min-h-11 items-center gap-2 bg-[#25D366] px-5 text-sm font-bold text-[#07130a]">
               <MessageCircle size={17} /> {t('Contact us on WhatsApp')}
@@ -85,7 +85,7 @@ export function Footer() {
             <form className="mt-7 grid gap-3" aria-label="Contact form" onSubmit={event => {
               event.preventDefault();
               const values = Object.fromEntries(new FormData(event.currentTarget));
-              const subject = `WatchFacts contact from ${String(values.name || 'website visitor')}`;
+              const subject = `Curated Luxury contact from ${String(values.name || 'website visitor')}`;
               const body = [`Name: ${String(values.name || '')}`, `Email: ${String(values.email || '')}`, '', String(values.message || '')].join('\n');
               window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
             }}>
@@ -97,7 +97,7 @@ export function Footer() {
               <button type="submit" className="flex min-h-11 items-center justify-center gap-2 border border-[#c9a96e] px-5 text-sm font-semibold text-[#e6cf9a] transition-colors hover:bg-[#c9a96e] hover:text-[#09090d]">
                 <Send size={15} /> {t('Send email')}
               </button>
-              <p className="text-[11px] leading-5 text-white/35">{t('Email WatchFacts at')} <a className="text-white/60 hover:text-[#c9a96e]" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
+              <p className="text-[11px] leading-5 text-white/35">{t('Email Curated Luxury at')} <a className="text-white/60 hover:text-[#c9a96e]" href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.</p>
             </form>
           </section>
 
@@ -119,7 +119,7 @@ export function Footer() {
         <div className="grid gap-8 py-9 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto]">
           <div>
             <img src="/images/curated-luxury-logo-dark.png" alt="Curated Luxury" className="h-14 w-auto max-w-[230px] object-contain object-left" />
-            <p className="mt-3 max-w-sm text-xs leading-5 text-white/38">{t('Curated Luxury marketplace with WatchFacts market intelligence.')}</p>
+            <p className="mt-3 max-w-sm text-xs leading-5 text-white/38">{t('Curated Luxury marketplace intelligence for exceptional objects.')}</p>
           </div>
           <nav aria-label="Marketplace links" className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm text-white/55">
             {MARKET_LINKS.map(([label, to]) => <Link key={to} to={to} className="transition-colors hover:text-white">{t(label)}</Link>)}
@@ -132,13 +132,13 @@ export function Footer() {
             <Link to="/info/community" className="text-white/50 transition-colors hover:text-white">{t('Community')}</Link>
           </div>
         </div>
-        <div className="border-t border-white/10 pt-5 text-center text-[11px] text-white/30">© 2026 WatchFacts Inc. All Rights Reserved.</div>
+        <div className="border-t border-white/10 pt-5 text-center text-[11px] text-white/30">© 2026 Curated Luxury. All Rights Reserved.</div>
       </div>
       {glossaryOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm" role="presentation" onMouseDown={() => setGlossaryOpen(false)}>
           <section role="dialog" aria-modal="true" aria-labelledby="dealer-glossary-title" onMouseDown={event => event.stopPropagation()} className="relative max-h-[88vh] w-full max-w-4xl overflow-y-auto border border-white/15 bg-[#101016] p-6 shadow-2xl sm:p-9">
             <button type="button" aria-label="Close glossary" onClick={() => setGlossaryOpen(false)} className="absolute right-4 top-4 grid h-11 w-11 place-items-center border border-white/15 text-white/60 transition-colors hover:border-[#c9a96e] hover:text-white"><X size={20} /></button>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c9a96e]">WatchFacts terminology</p>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c9a96e]">Curated Luxury terminology</p>
             <h2 id="dealer-glossary-title" className="mt-3 pr-14 font-serif text-3xl sm:text-4xl">Social Media Watch Dealer Glossary</h2>
             <div className="mt-8 grid gap-8 md:grid-cols-2">
               {DEALER_GLOSSARY.map(section => (

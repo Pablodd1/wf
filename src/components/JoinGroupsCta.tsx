@@ -6,7 +6,7 @@ export function JoinGroupsCta({ dark = false }: { dark?: boolean }) {
 
   return (
     <section
-      aria-label="WatchFacts community"
+      aria-label="Curated Luxury community"
       className="flex flex-col gap-5 rounded-lg border px-5 py-6 sm:flex-row sm:items-center sm:justify-between"
       style={{
         borderColor: 'rgba(201, 169, 110, 0.35)',
@@ -15,13 +15,13 @@ export function JoinGroupsCta({ dark = false }: { dark?: boolean }) {
     >
       <div>
         <div className="text-[11px] font-bold uppercase tracking-[0.16em]" style={{ color: '#B18B49' }}>
-          WatchFacts community
+          Curated Luxury community
         </div>
         <div className="mt-2 text-lg font-semibold" style={{ color: foreground }}>
           2.7M+ listings · 30,609+ global dealers · 132 countries
         </div>
         <p className="mt-1 text-sm" style={{ color: muted }}>
-          Enter the official WatchFacts dealer marketplace and request access to its trading communities.
+          Enter the official Curated Luxury dealer marketplace and request access to its trading communities.
         </p>
       </div>
       <a

@@ -99,7 +99,7 @@ async function callOpenRouter(reference, brand, rawMessage, apiKey) {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${apiKey}`,
           'HTTP-Referer': 'https://watchfacts-poc.vercel.app',
-          'X-Title': 'WatchFacts POC',
+          'X-Title': 'Curated Luxury',
         },
         body: JSON.stringify({
           model,

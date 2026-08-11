@@ -5,7 +5,7 @@ import { MarketHeader } from '@/components/MarketHeader';
 const pages = {
   tools: {
     label: 'Tools', icon: BookOpen, title: 'Market language, made precise.',
-    intro: 'A working glossary for the terms used across Curated Luxury and WatchFacts.',
+    intro: 'A working glossary for the terms used across Curated Luxury.',
     items: [
       ['WTS / For sale', 'A seller is offering the listed object. A valid watch offer requires identity, configuration, price, and currency.'],
       ['WTB / Looking for', 'A buyer is seeking the listed object. A price is optional and does not become a market offer.'],
@@ -34,7 +34,7 @@ const pages = {
   },
   company: {
     label: 'Company', icon: Building2, title: 'A considered market needs better evidence.',
-    intro: 'Curated Luxury is building a marketplace for exceptional objects. WatchFacts supplies the watch-market intelligence layer.',
+    intro: 'Curated Luxury is building a marketplace and market-intelligence platform for exceptional objects.',
     items: [
       ['Raw fidelity', 'Original listing text, source time, and provenance remain connected to normalized records.'],
       ['Measured confidence', 'Incomplete or conflicting evidence moves to review instead of becoming false certainty.'],

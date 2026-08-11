@@ -80,7 +80,7 @@ export default function DealerDirectory() {
       <MarketNav />
       <section className="border-b border-white/10 px-5 py-10 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{view === 'top-rated' ? 'WatchFacts public-source leaderboard' : 'WatchFacts verified network'}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{view === 'top-rated' ? 'Curated Luxury public-source leaderboard' : 'Curated Luxury verified network'}</p>
           <div className="mt-3 grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
             <div>
               <h1 className="font-serif text-4xl sm:text-5xl">Dealer directory</h1>

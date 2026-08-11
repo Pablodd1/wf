@@ -178,7 +178,7 @@ module.exports = async function handler(req, res) {
   const catalogFields = confidence?.catalogFields?.join(', ') || 'unknown';
 
   const message = `
-⚠️ *WatchFacts Feedback Needed*
+⚠️ *Curated Luxury Feedback Needed*
 
 *Reference:* ${reference}
 *Confidence:* ${score}%

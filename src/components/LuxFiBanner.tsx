@@ -2,7 +2,7 @@ import { ExternalLink } from 'lucide-react';
 
 export function LuxFiBanner() {
   return (
-    <aside className="border-b border-[#c9a96e]/20 bg-[#f7f6f2] text-[#111118]" aria-label="WatchFacts and LuxFi partnership">
+    <aside className="border-b border-[#c9a96e]/20 bg-[#f7f6f2] text-[#111118]" aria-label="Curated Luxury and LuxFi partnership">
       <div className="mx-auto grid max-w-7xl md:grid-cols-[190px_1fr_210px]">
         <div className="hidden min-h-40 place-items-center bg-[#101116] px-6 text-white md:grid">
           <div className="text-center">
@@ -13,7 +13,7 @@ export function LuxFiBanner() {
         </div>
         <div className="flex min-h-40 flex-col justify-center px-5 py-6 sm:px-10">
           <div className="text-xs font-bold uppercase tracking-[0.2em] text-[#2864d7]">New · Official partnership</div>
-          <div className="mt-2 font-serif text-2xl font-semibold leading-tight sm:text-3xl">WatchFacts just partnered with LuxFi.</div>
+          <div className="mt-2 font-serif text-2xl font-semibold leading-tight sm:text-3xl">Curated Luxury just partnered with LuxFi.</div>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#4b5260] sm:text-base">
             LuxFi monitors global dealer conversations around the clock. Your next opportunity may already be in the network.
           </p>

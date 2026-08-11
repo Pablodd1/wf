@@ -122,7 +122,7 @@ test('Workspace includes official community access and marks phone installation 
   assert.match(footer, /Rolex US Only Sales/);
   assert.match(portal, /href=\{group\.href\}/);
   assert.match(groups, /export const GROUPS_URL = 'https:\/\/watchfacts\.com\//);
-  assert.match(portal, /Add WatchFacts to your phone/);
+  assert.match(portal, /Add Curated Luxury to your phone/);
   assert.match(portal, /Coming soon/);
   assert.doesNotMatch(portal, /beforeinstallprompt/);
   assert.match(index, /rel="manifest" href="\/manifest\.webmanifest"/);

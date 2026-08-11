@@ -513,7 +513,7 @@ export default function TradingFloor() {
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: GOLD_BRIGHT }}>WatchFacts</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: GOLD_BRIGHT }}>Curated Luxury</p>
               <h1 className="mt-1 font-serif text-[36px] font-normal tracking-[-0.025em]" style={{ color: INK }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
                 {total === null ? 'Watch inventory' : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings`}

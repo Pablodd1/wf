@@ -213,7 +213,7 @@ export default function DealerSubmitListing() {
         </header>
 
         <nav aria-label="Posting applications" className="mt-7 grid grid-cols-2 gap-2 border-b border-white/10 pb-4 sm:flex">
-          <Choice active={postingMode === 'watchfacts'} onClick={() => setPostingMode('watchfacts')}>{t('WatchFacts form')}</Choice>
+          <Choice active={postingMode === 'watchfacts'} onClick={() => setPostingMode('watchfacts')}>{t('Curated Luxury form')}</Choice>
           <Choice active={postingMode === 'luxury-app'} onClick={() => setPostingMode('luxury-app')}>Luxury App</Choice>
         </nav>
 
@@ -320,7 +320,7 @@ export default function DealerSubmitListing() {
         ) : (
           <section className="py-9">
             <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Luxury App</p><h1 className="mt-3 font-serif text-4xl sm:text-5xl">{t('Post an item.')}</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{t('Use the connected Luxury App without leaving WatchFacts.')}</p></div>
+              <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Luxury App</p><h1 className="mt-3 font-serif text-4xl sm:text-5xl">{t('Post an item.')}</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{t('Use the connected Luxury App without leaving Curated Luxury.')}</p></div>
               <a href={LUXURY_APP_URL} target="_blank" rel="noreferrer" className="inline-flex h-11 shrink-0 items-center justify-center gap-2 border border-white/20 px-4 text-xs font-semibold text-white/75 hover:border-[#c9a96e] hover:text-white">{t('Open full page')} <ExternalLink size={14} /></a>
             </div>
             <iframe src={LUXURY_APP_URL} title="Luxury App posting experience" className="min-h-[820px] w-full border border-white/12 bg-white" allow="camera; microphone; clipboard-write" />

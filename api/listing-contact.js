@@ -157,7 +157,7 @@ module.exports = async function handler(req, res) {
       const phone = normalizePhone(listing.seller_phone);
       const dealerStats = listing.seller_phone ? await ownerApprovedContactStats(client, listing.seller_phone) : null;
       const profile = {
-        dealer_name: listing.seller_name || 'WatchFacts member',
+        dealer_name: listing.seller_name || 'Curated Luxury member',
         dealer_company: null,
         dealer_country: null,
         dealer_city: null,

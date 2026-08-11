@@ -95,8 +95,8 @@ export default function DealerPortal() {
             <div>
               <div className="flex h-10 w-10 items-center justify-center border border-white/15 text-[#c9a96e]"><MessageCircle size={19} /></div>
               <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Community and contact</p>
-              <h2 id="community-heading" className="mt-2 font-serif text-3xl">WatchFacts trading groups</h2>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">Contact WatchFacts or open the appropriate official WhatsApp and Telegram community directly.</p>
+              <h2 id="community-heading" className="mt-2 font-serif text-3xl">Curated Luxury trading groups</h2>
+              <p className="mt-3 max-w-2xl text-sm leading-6 text-white/55">Contact Curated Luxury or open the appropriate official WhatsApp and Telegram community directly.</p>
             </div>
             <a href={CONTACT_WHATSAPP_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 border border-[#c9a96e] px-5 text-sm font-semibold text-[#c9a96e] transition-colors hover:bg-[#c9a96e] hover:text-[#09090d]">
               <Globe2 size={17} /> Contact us on WhatsApp
@@ -119,8 +119,8 @@ export default function DealerPortal() {
             <div className="border border-white/12 bg-[#111118] p-7">
               <div className="flex h-12 w-12 items-center justify-center border border-[#c9a96e]/40 text-[#c9a96e]"><Smartphone size={22} /></div>
               <div className="mt-6 flex flex-wrap items-center gap-3"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Quick access</p><span className="border border-[#c9a96e]/40 bg-[#c9a96e]/10 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#ead6aa]">Coming soon</span></div>
-              <h2 id="install-heading" className="mt-2 font-serif text-3xl">Add WatchFacts to your phone</h2>
-              <p className="mt-3 text-sm leading-6 text-white/55">A dedicated WatchFacts phone experience is being prepared. Installation is not active during this beta.</p>
+              <h2 id="install-heading" className="mt-2 font-serif text-3xl">Add Curated Luxury to your phone</h2>
+              <p className="mt-3 text-sm leading-6 text-white/55">A dedicated Curated Luxury phone experience is being prepared. Installation is not active during this beta.</p>
               <div className="mt-7 border border-white/10 bg-black/20 px-4 py-3 text-xs leading-5 text-white/45">Coming soon for supported Android and iPhone devices.</div>
             </div>
 
@@ -128,7 +128,7 @@ export default function DealerPortal() {
               <div className="border border-white/12 p-6">
                 <div className="text-sm font-semibold text-white">Android · Coming soon</div>
                 <ol className="mt-4 space-y-3 text-sm leading-6 text-white/55">
-                  <li>1. Open WatchFacts in Chrome.</li>
+                  <li>1. Open Curated Luxury in Chrome.</li>
                   <li>2. Open the browser menu.</li>
                   <li>3. Choose Install app or Add to Home screen.</li>
                 </ol>
@@ -136,7 +136,7 @@ export default function DealerPortal() {
               <div className="border border-white/12 p-6">
                 <div className="text-sm font-semibold text-white">iPhone · Coming soon</div>
                 <ol className="mt-4 space-y-3 text-sm leading-6 text-white/55">
-                  <li>1. Open WatchFacts in Safari.</li>
+                  <li>1. Open Curated Luxury in Safari.</li>
                   <li>2. Tap the Share button.</li>
                   <li>3. Choose Add to Home Screen.</li>
                 </ol>

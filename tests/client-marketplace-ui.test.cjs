@@ -17,7 +17,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   const postItem = read('src/pages/DealerSubmitListing.tsx');
   const styles = read('src/index.css');
 
-  assert.match(header, /<Link to="\/" aria-label="WatchFacts home"/);
+  assert.match(header, /<Link to="\/" aria-label="Curated Luxury home"/);
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
   assert.match(header, /label: 'PRICE RESEARCH', to: '\/price-research'/);
   assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
@@ -33,12 +33,12 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(footer, /\['POST IT', '\/dealer\/post'\]/);
   assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
   assert.match(postItem, /const LUXURY_APP_URL = 'https:\/\/luxuryapp-wf\.vercel\.app\/'/);
-  assert.match(postItem, /WatchFacts form/);
+  assert.match(postItem, /Curated Luxury form/);
   assert.match(postItem, /Luxury App/);
   assert.match(postItem, /<iframe[\s\S]*src=\{LUXURY_APP_URL\}[\s\S]*title="Luxury App posting experience"/);
   assert.match(postItem, /Open full page/);
   assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
-  assert.match(header, />WatchFacts<\/span>/);
+  assert.match(header, />Curated Luxury<\/span>/);
   assert.match(header, /bg-\[#f3ecdf\]\/95/);
   assert.doesNotMatch(header, />CL<\/span>/);
   assert.match(header, /overflow-x-auto/);
@@ -55,7 +55,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(styles, /@keyframes luxury-gold-flow-down/);
   assert.match(styles, /animation: luxury-gold-flow-down 6s ease-in-out infinite/);
   assert.match(styles, /prefers-reduced-motion: reduce/);
-  assert.match(footer, /Curated Luxury marketplace with WatchFacts market intelligence/);
+  assert.match(footer, /Curated Luxury marketplace intelligence for exceptional objects/);
 });
 
 test('Trading Floor watch view does not render internal listing labels or identifiers', () => {
@@ -140,7 +140,7 @@ test('CL control access is kept in the customer footer', () => {
   assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
 });
 
-test('customer workflows expose direct official WatchFacts contact and community links', () => {
+test('customer workflows expose direct official Curated Luxury contact and community links', () => {
   const footer = read('src/components/Footer.tsx');
   const floor = read('src/pages/TradingFloor.tsx');
   const research = read('src/pages/PriceResearch.tsx');

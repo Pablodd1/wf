@@ -46,8 +46,8 @@ export function MarketHeader({ compact = false, className = '', landing = false,
     <header className={`relative z-40 border-b border-[#3f3324]/15 bg-[#f3ecdf]/95 text-[#211b15] backdrop-blur-md ${className}`}>
       <div className={`mx-auto flex max-w-7xl flex-col items-stretch gap-2 px-4 ${compact ? 'py-2.5' : 'py-3.5'} sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6 lg:px-8`}>
         {showLogo ? (
-          <Link to="/" aria-label="WatchFacts home" className="flex min-w-0 shrink-0 items-center">
-            <span className="font-serif text-xl font-semibold tracking-[-0.025em]">WatchFacts</span>
+          <Link to="/" aria-label="Curated Luxury home" className="flex min-w-0 shrink-0 items-center">
+            <span className="font-serif text-xl font-semibold tracking-[-0.025em]">Curated Luxury</span>
           </Link>
         ) : (
           <span className="sr-only">Curated Luxury</span>

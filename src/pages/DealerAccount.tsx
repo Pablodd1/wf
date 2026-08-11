@@ -94,7 +94,7 @@ function AccountSection({ section, data, update, demoUser }: { section: Section;
 
 function Profile({ data, update, demoUser }: { data: WorkspacePayload; update: AccountProps['update']; demoUser: string | null }) {
   const dealer = data.dealer;
-  if (!dealer) return <Empty title="Profile awaiting linkage" copy="Your credential is active, but it is not yet linked to a verified dealer identity. WatchFacts must complete that match before profile edits or contact publication." />;
+  if (!dealer) return <Empty title="Profile awaiting linkage" copy="Your credential is active, but it is not yet linked to a verified dealer identity. Curated Luxury must complete that match before profile edits or contact publication." />;
   const onboarding = [
     ['Identity', Boolean(dealer.display_name || dealer.company_name)],
     ['Verified phone', Boolean(data.profile_stamp?.phone)],

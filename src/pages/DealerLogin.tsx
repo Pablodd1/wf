@@ -114,7 +114,7 @@ export default function DealerLogin() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to submit your application.');
-      setApplicationNotice(`Application ${result.application_id} received. WatchFacts will verify the profile before Workspace credentials are provisioned.`);
+      setApplicationNotice(`Application ${result.application_id} received. Curated Luxury will verify the profile before Workspace credentials are provisioned.`);
       form.reset();
     } catch (applicationError) {
       setError(applicationError instanceof Error ? applicationError.message : 'Unable to submit your application.');
@@ -151,7 +151,7 @@ export default function DealerLogin() {
               <button type="submit" disabled={loading || checkingSession} className="h-11 w-full bg-[#c9a96e] text-sm font-semibold text-[#09090d] transition-colors hover:bg-[#d4b87a] disabled:opacity-60">{checkingSession ? 'Checking existing access...' : loading ? 'Signing in...' : 'Sign in securely'}</button>
             </form>
             </> : <form onSubmit={applyForAccess} className="space-y-4">
-              <div className="border-l-2 border-[#c9a96e] bg-[#c9a96e]/10 px-3 py-2 text-xs leading-5 text-[#ead7ae]">Apply once with the identity that should be stamped on future posts. Submission does not grant access automatically; WatchFacts verifies the profile and phone before provisioning credentials.</div>
+              <div className="border-l-2 border-[#c9a96e] bg-[#c9a96e]/10 px-3 py-2 text-xs leading-5 text-[#ead7ae]">Apply once with the identity that should be stamped on future posts. Submission does not grant access automatically; Curated Luxury verifies the profile and phone before provisioning credentials.</div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <RegistrationInput name="display_name" label="Public display name" required />
                 <RegistrationInput name="company_name" label="Company or dealer name" />

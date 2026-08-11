@@ -61,7 +61,7 @@ function validateApplication(body = {}) {
   if (!application.city) return { error: 'Enter your city.' };
   if (!LANGUAGES.has(application.preferred_language)) return { error: 'Choose a supported language.' };
   if (!Number.isFinite(application.group_count)) return { error: 'Enter a valid group count.' };
-  if (!application.contact_consent) return { error: 'Confirm that WatchFacts may use these details to review and provision your dealer profile.' };
+  if (!application.contact_consent) return { error: 'Confirm that Curated Luxury may use these details to review and provision your dealer profile.' };
   return { application };
 }
 
