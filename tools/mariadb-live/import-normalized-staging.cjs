@@ -33,6 +33,9 @@ function config(env = process.env) {
     rawImportRunKey: env.MARIADB_RAW_IMPORT_RUN_KEY,
     runKey: env.MARIADB_NORMALIZED_RUN_KEY || `mariadb-normalized-${new Date().toISOString().slice(0, 10)}`,
     batchSize: boundedInteger(env.MARIADB_NORMALIZED_BATCH_SIZE, 200, 10, 500, 'MARIADB_NORMALIZED_BATCH_SIZE'),
+    maxRows: env.MARIADB_NORMALIZED_MAX_ROWS
+      ? boundedInteger(env.MARIADB_NORMALIZED_MAX_ROWS, null, 1, 10_000_000, 'MARIADB_NORMALIZED_MAX_ROWS')
+      : null,
     output: path.resolve(env.MARIADB_NORMALIZED_OUTPUT || 'audit-output/mariadb-live/normalized-staging-import'),
   };
 }
@@ -215,6 +218,10 @@ async function run(options = {}) {
   const fingerprint = inputFingerprint([runConfig.rawInput, runConfig.manifestPath, ...files]);
   const prepared = prepareOutput(runConfig, fingerprint);
   const state = { ...prepared.checkpoint };
+  const maxRows = runConfig.maxRows ?? null;
+  if (maxRows !== null && state.input_rows > maxRows) {
+    throw new Error('Normalized-staging checkpoint is already beyond the requested canary boundary');
+  }
   const proposalIterator = proposals(files)[Symbol.asyncIterator]();
   let sourceIndex = 0;
   let records = [];
@@ -243,8 +250,31 @@ async function run(options = {}) {
     const source = JSON.parse(line);
     records.push(assertSafeTransport(stagingRecord(source, proposalResult.value)));
     if (records.length >= runConfig.batchSize) await flush();
+    if (maxRows !== null && sourceIndex >= maxRows) {
+      await flush();
+      break;
+    }
   }
   await flush();
+  const partial = maxRows !== null && state.input_rows < Number(manifest.source_rows);
+  if (partial) {
+    if (state.input_rows !== sourceIndex
+      || state.input_rows !== state.staged_rows + state.existing_rows + state.deferred_rows
+      || state.error_rows !== 0) {
+      throw new Error('Normalized-staging canary did not reconcile');
+    }
+    const report = {
+      ...state,
+      complete: false,
+      partial: true,
+      reconciled: true,
+      requested_max_rows: maxRows,
+      publication_writes: 0,
+    };
+    atomicJson(prepared.reconciliationPath, report);
+    process.stdout.write(`${JSON.stringify({ event: 'mariadb_normalized_staging_canary_complete', ...report })}\n`);
+    return report;
+  }
   const extraProposal = await proposalIterator.next();
   if (!extraProposal.done) throw new Error('Normalization proposals contain rows beyond the raw archive');
   if (sourceIndex !== Number(manifest.source_rows) || state.input_rows !== sourceIndex) {

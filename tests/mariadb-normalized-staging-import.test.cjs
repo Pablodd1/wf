@@ -203,6 +203,81 @@ test('full staging run streams raw and proposals in lockstep and reconciles comp
   }
 });
 
+test('bounded canary checkpoints safely without declaring the full import complete', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-normalized-staging-canary-'));
+  try {
+    const rawInput = path.join(root, 'raw.jsonl');
+    const segment = path.join(root, 'segment');
+    const output = path.join(root, 'output');
+    fs.mkdirSync(segment);
+    const sources = [
+      sourceRecord({ id: '1', type: 'sale', title: 'Rolex 116500LN white USD 28000' }),
+      sourceRecord({ id: '2', type: 'search', title: 'WTB Patek 5712/1A blue' }),
+      sourceRecord({ id: '3', type: 'sale', title: 'Rolex 126500LN black USD 30000' }),
+    ];
+    const proposals = sources.map((source, index) => proposal(source, {
+      brand: index === 1 ? 'Patek Philippe' : 'Rolex',
+      reference: index === 1 ? '5712/1A' : index === 0 ? '116500LN' : '126500LN',
+      listing_type: index === 1 ? 'WTB' : 'WTS',
+      dial_color: index === 1 ? 'Blue' : index === 0 ? 'White' : 'Black',
+      prices: index === 1 ? [] : [{
+        is_primary: true,
+        amount_original: index === 0 ? 28000 : 30000,
+        amount_usd: index === 0 ? 28000 : 30000,
+        currency_original: 'USD',
+        currency_evidence: 'explicit_line_currency',
+      }],
+    }));
+    fs.writeFileSync(rawInput, sources.map(jsonLine).join(''));
+    fs.writeFileSync(path.join(segment, 'normalization-proposals.jsonl'), proposals.map(jsonLine).join(''));
+    const manifestPath = path.join(root, 'manifest.json');
+    fs.writeFileSync(manifestPath, JSON.stringify({
+      source_rows: 3,
+      difference: 0,
+      source_coverage_reconciled: true,
+      totals: { error_rows: 0 },
+      segments: [{ directory: segment }],
+    }));
+
+    const requests = [];
+    const report = await run({
+      config: {
+        baseUrl: 'https://example.supabase.co', key: 'masked', rawInput, manifestPath,
+        rawImportRunKey: 'raw-complete', runKey: 'normalized-canary', batchSize: 10,
+        maxRows: 2, output,
+      },
+      fetchImpl: async (url, options) => {
+        requests.push(url);
+        assert.ok(url.endsWith('/ingest_mariadb_normalization_batch'));
+        const body = JSON.parse(options.body);
+        return {
+          ok: true,
+          status: 200,
+          text: async () => JSON.stringify({
+            input_rows: body.p_records.length,
+            staged_rows: body.p_records.length,
+            existing_rows: 0,
+            deferred_rows: 0,
+            error_rows: 0,
+            next_input_rows: body.p_next_input_rows,
+            publication_writes: 0,
+          }),
+        };
+      },
+    });
+
+    assert.equal(report.partial, true);
+    assert.equal(report.complete, false);
+    assert.equal(report.reconciled, true);
+    assert.equal(report.input_rows, 2);
+    assert.equal(report.publication_writes, 0);
+    assert.equal(requests.length, 1);
+    assert.doesNotMatch(requests[0], /complete_mariadb_normalization_import/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('staging migration is private, lineage-bound, bundle-safe, and non-publishing', () => {
   assert.match(migration, /raw_message_version_id UUID REFERENCES public\.raw_message_versions/);
   assert.match(migration, /source_hash TEXT/);
