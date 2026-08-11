@@ -58,6 +58,7 @@ export default function App() {
         <Route path="/multi-listings" element={<DealerGate allowedRoles={['admin']}><MultiListings /></DealerGate>} />
         <Route path="/dealers" element={<DealerDirectory />} />
         <Route path="/dealers/:dealerId" element={<DealerProfile />} />
+        <Route path="/dealer/profile/:dealerId" element={<DealerProfile />} />
         {/* ponytail: Price Research is public (adaa4e9, 0b92aa3, 0e51450 —
             2026-08-01 "remove DealerGate ... now public/free access, no
             login required"). c1f6490 re-wrapped it in DealerGate the same

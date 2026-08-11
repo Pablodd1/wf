@@ -51,7 +51,7 @@ export default function DealerDirectory() {
   const pageSize = view === 'top-rated' ? 25 : 24;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => { setLoading(true); setSearch(view === 'reference' ? searchInput.trim() : ''); setPage(1); }, 300);
+    const timer = window.setTimeout(() => { setLoading(true); setSearch(searchInput.trim()); setPage(1); }, 300);
     return () => window.clearTimeout(timer);
   }, [searchInput, view]);
 
@@ -86,10 +86,10 @@ export default function DealerDirectory() {
               <h1 className="font-serif text-4xl sm:text-5xl">Dealer directory</h1>
               <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{view === 'top-rated' ? 'Top Rated Dealers preserves the public source rank, feedback count, WTS activity, WTB demand, location, groups, and source profile workflow without inventing a numeric star rating.' : 'Reference Check searches internally verified dealer identities and approved seller lineage used beside listings and Price Research evidence.'}</p>
             </div>
-            {view === 'reference' && <label className="relative block">
+            <label className="relative block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={17} />
-              <input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder="Search dealer, company, city, or phone" className="h-12 w-full border border-white/15 bg-[#111118] pl-10 pr-3 text-sm outline-none focus:border-[#c9a96e]" />
-            </label>}
+              <input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder="Search by dealer name or phone number" aria-label="Search dealers by name or phone number" className="h-12 w-full border border-white/15 bg-[#111118] pl-10 pr-3 text-sm outline-none focus:border-[#c9a96e]" />
+            </label>
           </div>
           <div className="mt-7 flex flex-wrap gap-2" role="tablist" aria-label="Dealer directory views">
             <button type="button" role="tab" aria-selected={view === 'reference'} onClick={() => setView('reference')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'reference' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Search size={15} /> Reference Check</button>
@@ -119,12 +119,12 @@ export default function DealerDirectory() {
                   {view !== 'top-rated' && <BadgeCheck size={19} className="text-[#c9a96e]" aria-label="Verified dealer" />}
                 </div>
                 <h2 className="mt-7 pr-12 text-xl font-semibold">
-                  <Link to={`/dealers/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>
+                  <Link to={`/dealer/profile/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>
                 </h2>
                 <p className="mt-1 text-xs text-white/42">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
                 <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/60">
-                  <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? 'Top rated' : Number(dealer.rating).toFixed(2)}</span>
-                  <span>{dealer.review_count.toLocaleString()} feedback reviews</span>
+                  <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? `${dealer.review_count.toLocaleString()} reviews` : `★ ${Number(dealer.rating).toFixed(1)} (${dealer.review_count.toLocaleString()})`}</span>
+                  {dealer.rating != null && <span>Trusted User</span>}
                   <span className="flex items-center gap-1"><Users size={13} /> {dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} groups` : 'Groups not published'}</span>
                   <span className="flex items-center gap-1"><CalendarDays size={13} /> {dealer.member_since || (dealer.verified_at ? `Verified ${new Date(dealer.verified_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : 'Member date unavailable')}</span>
                 </div>
@@ -134,7 +134,7 @@ export default function DealerDirectory() {
                   <Metric label="Groups" value={dealer.whatsapp_group_count || 0} />
                 </div>
                 <div className="mt-5 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
-                  <Link to={`/dealers/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
+                  <Link to={`/dealer/profile/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
                   {dealer.source_url && <a href={dealer.source_url} target="_blank" rel="noreferrer" className="ml-5 inline-flex items-center gap-1 text-white/45 hover:text-white">Source profile</a>}
                 </div>
               </article>

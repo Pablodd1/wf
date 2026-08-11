@@ -722,7 +722,7 @@ export default function TradingFloor() {
           <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={closeListing} />
         ) : (
           <div className="grid gap-6 md:grid-cols-[230px_minmax(0,1fr)]">
-            <aside className="hidden self-start rounded-md border bg-white p-5 md:sticky md:top-4 md:block" style={{ borderColor: BORDER }} aria-label="Marketplace filters">
+            <aside className="filters-sidebar hidden self-start overflow-y-auto rounded-md border bg-white p-5 md:sticky md:top-5 md:block md:max-h-[calc(100vh-40px)]" style={{ borderColor: BORDER }} aria-label="Marketplace filters">
               <DesktopFilters
                 brand={brandFilter}
                 releaseBrands={releaseBrands}
@@ -1154,7 +1154,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
           {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="" className="h-8 w-8 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
           <span>
             Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer'}</span>
-            {isRatedDealer && <span className="ml-1 text-xs" style={{ color: GOLD_BRIGHT }}>{Number(listing.seller_rating).toFixed(1)} · {listing.seller_review_count} reviews</span>}
+            {isRatedDealer && <span className="ml-1 text-xs font-semibold" style={{ color: GOLD_BRIGHT }} aria-label={`Dealer rating ${Number(listing.seller_rating).toFixed(1)} from ${listing.seller_review_count} reviews`}>★ {Number(listing.seller_rating).toFixed(1)} ({Number(listing.seller_review_count).toLocaleString()})</span>}
           </span>
         </div>
       )}

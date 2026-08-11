@@ -72,7 +72,13 @@ module.exports = async function handler(req, res) {
 
   try {
     if (mode === 'top-rated') {
-      const sourceProfiles = topRatedProfiles().slice(0, pageSize);
+      const normalizedSearch = search.toLocaleLowerCase();
+      const phoneNeedle = digits(search);
+      const sourceProfiles = topRatedProfiles()
+        .filter(profile => !normalizedSearch
+          || [profile.display_name, profile.company_name].some(value => String(value || '').toLocaleLowerCase().includes(normalizedSearch))
+          || (phoneNeedle.length >= 4 && digits(profile.verified_phone).includes(phoneNeedle)))
+        .slice(0, pageSize);
       return res.status(200).json({
         success: true,
         page: 1,
