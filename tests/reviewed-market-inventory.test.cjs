@@ -23,21 +23,22 @@ test('QNSA pages use indexed brand/reference predicates and no-image lane', () =
   assert.match(source, /if \(!qnsaUnpartitionedMedia\)[\s\S]*has_exact_source_image/);
   assert.match(source, /if \(brand\) queryParams\.set\('brand_scope', `eq\.\$\{brand\}`\)/);
   assert.match(source, /const qnsaBrandScanLimit = pageSize \+ 1/);
-  assert.match(source, /rest\/v1\/rpc\/qnsa_trading_floor_page_rows/);
+  assert.match(source, /rest\/v1\/rpc\/qnsa_market_feed_page_rows/);
   assert.match(source, /pageRowsRes\.json\(\)[\s\S]*row\.row_data/);
   assert.match(source, /\? 'created_at\.desc,id\.desc'/);
   assert.match(source, /normalized_reference', `like\.\$\{familyPrefix\}\*`/);
 });
 
-test('broad QNSA page RPC bounds IDs before joining immutable evidence', () => {
-  const migration = fs.readFileSync(path.join(__dirname, '../supabase/migrations/20260812012000_qnsa_trading_floor_page_rows.sql'), 'utf8');
-  assert.match(migration, /WITH candidate_ids AS MATERIALIZED/);
-  assert.match(migration, /eligible_ids AS MATERIALIZED/);
-  assert.match(migration, /JOIN staging\.listings AS l ON l\.id = eligible\.id/);
+test('general QNSA market feed bounds pages and joins immutable evidence', () => {
+  const migration = fs.readFileSync(path.join(__dirname, '../supabase/migrations/20260812110000_qnsa_general_market_feed.sql'), 'utf8');
+  assert.match(migration, /WITH eligible AS MATERIALIZED/);
+  assert.match(migration, /JOIN staging\.listings l ON l\.id = e\.id/);
   assert.match(migration, /p_brand IS NULL OR l\.brand_normalized = p_brand/);
-  assert.match(migration, /p_listing_type TEXT DEFAULT NULL/);
+  assert.match(migration, /p_listing_type text DEFAULT NULL/);
   assert.match(migration, /p_listing_type IS NULL OR upper/);
-  assert.match(source, /body: JSON\.stringify\(\{ p_brand: brand \|\| null/);
+  assert.match(migration, /upper\(COALESCE\(l\.category, ''\)\) = ANY\(v_categories\)/);
+  assert.match(source, /p_brand: brand \|\| null/);
+  assert.match(source, /p_category: itemCategory === 'ALL' \? null : itemCategory/);
 });
 
 test('same-reference Trading Floor listings place supplied prices before no-price activity', () => {
@@ -197,11 +198,11 @@ test('only reconciled Rolex and Patek pending-review singles enter the Trading F
 });
 
 test('reviewed QNSA release rows and source-backed ratings reach the card contract', () => {
-  assert.match(source, /publication_lane === 'QNSA_ROLEX_PATEK_REVIEWED_V1'/);
+  assert.match(source, /'QNSA_ROLEX_PATEK_REVIEWED_V1', 'QNSA_GENERAL_MARKET_FEED_V1'/);
   assert.match(source, /\['APPROVED', 'PENDING_VERIFICATION'\]\.includes\(row\?\.publication_state\)/);
   assert.match(source, /reviewedQnsaRelease \|\|/);
   assert.match(source, /seller_rating: positiveNumber\(row\.dealer_rating\)/);
-  assert.match(source, /raw_lineage_verified,dealer_rating/);
+  assert.match(source, /raw_lineage_verified,dealer_rating,review_count/);
 });
 
 test('pending publication keeps customer copy neutral without loosening price eligibility', () => {

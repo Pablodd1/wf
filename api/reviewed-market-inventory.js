@@ -411,7 +411,8 @@ function isTradingFloorSourceRow(row) {
   })) {
     return true;
   }
-  const reviewedQnsaRelease = row?.publication_lane === 'QNSA_ROLEX_PATEK_REVIEWED_V1'
+  const reviewedQnsaRelease = ['QNSA_ROLEX_PATEK_REVIEWED_V1', 'QNSA_GENERAL_MARKET_FEED_V1']
+    .includes(row?.publication_lane)
     && row?.normalization_run_complete === true
     && row?.raw_lineage_verified === true
     && ['APPROVED', 'PENDING_VERIFICATION'].includes(row?.publication_state);
@@ -613,8 +614,8 @@ function mapReviewedRecord(row) {
     seller_name: sellerName,
     seller_phone: sellerPhone,
     seller_rating: positiveNumber(row.dealer_rating),
-    seller_review_count: 0,
-    seller_rating_evidence_status: positiveNumber(row.dealer_rating) !== null
+    seller_review_count: Number(row.review_count || 0),
+    seller_rating_evidence_status: positiveNumber(row.dealer_rating) !== null && Number(row.review_count || 0) > 0
       ? 'SOURCE_SUPPLIED'
       : 'UNAVAILABLE',
     contact_publication_approved: contactApproved,
@@ -921,7 +922,7 @@ module.exports = async function handler(req, res) {
       'workbook_price_usd,source_price_amount,source_currency',
       'price_evidence_status,confidence,verdict,verification_status,user_image_url,imported_at',
       'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity,trading_floor_status,reference_search_key,location,item_category',
-      'publication_state,publication_lane,normalization_run_complete,raw_lineage_verified,dealer_rating',
+      'publication_state,publication_lane,normalization_run_complete,raw_lineage_verified,dealer_rating,review_count',
     ].join(',');
 
     // ponytail: use raw REST instead of Supabase client to avoid client-side issues
@@ -1049,12 +1050,31 @@ module.exports = async function handler(req, res) {
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
     if (qnsaBroadPage && !legacyMarketViewContractDetected) {
-      const pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_page_rows`, {
+      let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
-          p_offset: requestedOffset, p_listing_type: listingType || null }),
+        body: JSON.stringify({
+          p_brand: brand || null,
+          p_category: itemCategory === 'ALL' ? null : itemCategory,
+          p_limit: qnsaBrandScanLimit,
+          p_offset: requestedOffset,
+          p_listing_type: listingType || null,
+          p_images_only: imagesOnly,
+          p_location: region || null,
+          p_posted_after: postedAfter,
+        }),
       });
+      if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && itemCategory === 'WATCH') {
+        // The application can deploy before the forward database migration.
+        // Preserve the proven two-brand watch feed during that short window;
+        // non-watch categories remain empty rather than being misclassified.
+        pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset, p_listing_type: listingType || null }),
+        });
+      }
       if (!pageRowsRes.ok) {
         const pageRowsError = await pageRowsRes.text();
         throw new Error(`QNSA page rows failed: ${pageRowsRes.status} ${pageRowsError.slice(0, 200)}`);
@@ -1214,7 +1234,7 @@ module.exports = async function handler(req, res) {
       page,
       pageSize,
       totalIsEstimate: false,
-      totalStatus: 'withheld_unreconciled_checkpoint_history',
+      totalStatus: 'available_from_market_feed_counts',
       hasMore,
       nextCursor,
       records,
