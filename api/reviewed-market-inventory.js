@@ -1064,7 +1064,7 @@ module.exports = async function handler(req, res) {
           p_posted_after: postedAfter,
         }),
       });
-      if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && itemCategory === 'WATCH') {
+      if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
         // The application can deploy before the forward database migration.
         // Preserve the proven two-brand watch feed during that short window;
         // non-watch categories remain empty rather than being misclassified.
