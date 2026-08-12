@@ -1004,7 +1004,10 @@ module.exports = async function handler(req, res) {
       queryParams.set('has_exact_source_image', requestedLane === 'images' ? 'eq.true' : 'eq.false');
     }
     queryParams.set('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
-      ? 'posting_date.desc'
+      // Match the QNSA feed indexes exactly. Ordering the joined publication
+      // view by posting_date forced a full sort across the complete release and
+      // timed out after the release switches were enabled.
+      ? 'created_at.desc,id.desc'
       : 'id.desc');
     const qnsaBrandScanLimit = qnsaBrandOnly ? Math.max(501, pageSize + 1) : pageSize + 1;
     queryParams.set('limit', String(qnsaBrandScanLimit));

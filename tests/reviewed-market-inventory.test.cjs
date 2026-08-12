@@ -23,7 +23,7 @@ test('QNSA exact-reference pages use the indexed reference and no-image lane', (
   assert.match(source, /if \(!qnsaUnpartitionedMedia\)[\s\S]*has_exact_source_image/);
   assert.match(source, /qnsaBrandOnly[\s\S]*Boolean\(brand\)[\s\S]*!reference/);
   assert.match(source, /qnsaBrandScanLimit[\s\S]*501[\s\S]*brandRows/);
-  assert.match(source, /\? 'posting_date\.desc'/);
+  assert.match(source, /\? 'created_at\.desc,id\.desc'/);
   assert.match(source, /normalized_reference', `like\.\$\{familyPrefix\}\*`/);
 });
 
@@ -563,7 +563,7 @@ test('endpoint is read-only and globally ranks verified source images before pag
   // price evidence primary, images as tiebreaker, newest last.
   assert.match(source, /queryParams\.set\('has_exact_source_image', requestedLane === 'images' \? 'eq\.true' : 'eq\.false'\)/);
   assert.match(source, /queryParams\.set\('order', MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
-  assert.match(source, /\? 'posting_date\.desc'[\s\S]*: 'id\.desc'/);
+  assert.match(source, /\? 'created_at\.desc,id\.desc'[\s\S]*: 'id\.desc'/);
   assert.match(source, /Fill the final image page from the no-image lane/);
   assert.match(source, /pageResult\.records\.filter\(isTradingFloorSourceRow\)/);
   assert.match(source, /usedLegacyViewContract \? isLegacyReviewedInventoryRecord\(record\) : true/);
