@@ -1,0 +1,97 @@
+name: QNSA two-brand price correction canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_100_PRICE_CORRECTIONS
+        required: true
+        type: string
+      run_key:
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+
+concurrency:
+  group: qnsa-two-brand-price-correction-canary
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    if: ${{ inputs.confirmation == 'APPLY_100_PRICE_CORRECTIONS' }}
+    runs-on: [self-hosted, Windows, X64, watchfacts-raw-import]
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      MARIADB_CORRECTION_RUN_KEY: ${{ inputs.run_key }}
+      MARIADB_CORRECTION_LIMIT: '100'
+      MARIADB_CORRECTION_RAW_INPUT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-archive-20260810-codex-v1\raw-records.jsonl
+      MARIADB_CORRECTION_FX_SNAPSHOT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\fx-snapshot-20260812.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+
+      - name: Validate target and apply transport migration
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SUPABASE_PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Unexpected Supabase project.' }
+          if ($env:MARIADB_CORRECTION_RUN_KEY -notmatch '^[A-Za-z0-9._:-]{1,100}$') { throw 'Invalid run key.' }
+          if (-not (Test-Path -LiteralPath $env:MARIADB_CORRECTION_RAW_INPUT)) { throw 'Immutable raw input missing.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = Get-Content -Raw supabase/migrations/20260812010000_dated_fx_normalized_staging_transport.sql
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Capture before state and retrieve existing server key
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = "SELECT count(*) AS staging_rows FROM staging.listings WHERE normalization_run_key = '$($env:MARIADB_CORRECTION_RUN_KEY)';"
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json
+          $state = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          "STAGING_ROWS_BEFORE=$($state[0].staging_rows)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          $keys = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/api-keys?reveal=true" -Headers $headers
+          $serverKey = $keys | Where-Object { $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret') } | Select-Object -First 1
+          if (-not $serverKey) { throw 'Server API key unavailable.' }
+          Write-Output "::add-mask::$($serverKey.api_key)"
+          "SUPABASE_SERVICE_ROLE_KEY=$($serverKey.api_key)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "SUPABASE_URL=https://$env:SUPABASE_PROJECT_REF.supabase.co" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Fetch dated FX snapshot and apply exactly 100 corrections
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:MARIADB_FX_SNAPSHOT_OUTPUT = $env:MARIADB_CORRECTION_FX_SNAPSHOT
+          node tools/mariadb-live/fetch-fx-snapshot.cjs
+          node tools/mariadb-live/apply-two-brand-price-correction.cjs | Tee-Object -FilePath correction-result.json
+          if ($LASTEXITCODE -ne 0) { throw 'Price correction canary failed.' }
+
+      - name: Reconcile zero new staging rows and exact audit count
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $result = Get-Content correction-result.json -Raw | ConvertFrom-Json
+          if ([long]$result.input_rows -ne 100 -or [long]$result.result.corrected_rows -ne 100 -or [long]$result.result.duplicate_staging_rows_created -ne 0) { throw 'Correction result did not reconcile.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $token = $result.batchToken
+          $sql = "SELECT jsonb_build_object('staging_rows',(SELECT count(*) FROM staging.listings WHERE normalization_run_key='$($env:MARIADB_CORRECTION_RUN_KEY)'),'audit_rows',(SELECT count(*) FROM staging.mariadb_price_policy_correction_audit WHERE batch_token='$token')) AS evidence;"
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json
+          $rows = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $evidence = $rows[0].evidence
+          if ([long]$evidence.staging_rows -ne [long]$env:STAGING_ROWS_BEFORE -or [long]$evidence.audit_rows -ne 100) { throw 'Post-correction reconciliation failed.' }
+          $evidence | ConvertTo-Json | Set-Content correction-evidence.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qnsa-price-correction-canary-${{ github.run_id }}
+          path: correction-*.json
+          if-no-files-found: warn
+          retention-days: 30
