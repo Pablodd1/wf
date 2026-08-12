@@ -31,6 +31,11 @@ on:
         required: true
         default: '20'
         type: string
+      batch_delay_ms:
+        description: Cooldown between 100-row batches to protect customer reads
+        required: true
+        default: '2000'
+        type: string
 
 concurrency:
   group: qnsa-two-brand-price-correction
@@ -57,6 +62,7 @@ jobs:
       MAX_FAILED_JOBS: '0'
       CORRECTION_PAGE_SIZE: '100'
       CORRECTION_MAX_BATCHES: ${{ inputs.max_batches }}
+      CORRECTION_BATCH_DELAY_MS: ${{ inputs.batch_delay_ms }}
     steps:
       - uses: actions/checkout@v4
 
@@ -78,6 +84,9 @@ jobs:
           }
           if ([int]$env:CORRECTION_MAX_BATCHES -lt 1 -or [int]$env:CORRECTION_MAX_BATCHES -gt 500) {
             throw 'max_batches must be between 1 and 500.'
+          }
+          if ([int]$env:CORRECTION_BATCH_DELAY_MS -lt 0 -or [int]$env:CORRECTION_BATCH_DELAY_MS -gt 60000) {
+            throw 'batch_delay_ms must be between 0 and 60000.'
           }
 
       - name: Install private cursor contract

@@ -67,6 +67,7 @@ async function run(options = {}) {
     maxFailedJobs: boundedInteger(env.MAX_FAILED_JOBS, 0, 0, 10_000_000, 'MAX_FAILED_JOBS'),
     pageSize: boundedInteger(env.CORRECTION_PAGE_SIZE, 500, 1, 500, 'CORRECTION_PAGE_SIZE'),
     maxBatches: boundedInteger(env.CORRECTION_MAX_BATCHES, 20, 1, 500, 'CORRECTION_MAX_BATCHES'),
+    batchDelayMs: boundedInteger(env.CORRECTION_BATCH_DELAY_MS, 2000, 0, 60_000, 'CORRECTION_BATCH_DELAY_MS'),
   };
   if (!config.accessToken || config.projectRef !== config.expectedProjectRef) throw new Error('Pinned project credentials are unavailable');
   for (const key of [config.normalizationRunKey, config.correctionRunKey, config.policyVersion]) {
@@ -144,6 +145,9 @@ async function run(options = {}) {
       raw_text_logged: false,
       pii_logged: false,
     })}\n`);
+    if (state.status !== 'COMPLETE' && batches < config.maxBatches && config.batchDelayMs > 0) {
+      await new Promise(resolve => setTimeout(resolve, config.batchDelayMs));
+    }
   }
 
   const finalSafety = await safetySnapshot(config, fetchImpl);
