@@ -17,12 +17,12 @@ test('QNSA Trading Floor does not depend on legacy workbook checkpoints', () => 
   assert.match(source, /Promise\.resolve\(qnsaReviewedReleaseSummary\(\)\)/);
 });
 
-test('QNSA exact-reference pages use the indexed reference and no-image lane', () => {
+test('QNSA pages use indexed brand/reference predicates and no-image lane', () => {
   assert.match(source, /queryParams\.set\('normalized_reference', `in\.\(\$\{exactVariants\.join\(','\)\}\)`\)/);
   assert.match(source, /qnsaUnpartitionedMedia[\s\S]*!imagesOnly/);
   assert.match(source, /if \(!qnsaUnpartitionedMedia\)[\s\S]*has_exact_source_image/);
-  assert.match(source, /qnsaBrandOnly[\s\S]*Boolean\(brand\)[\s\S]*!reference/);
-  assert.match(source, /qnsaBrandScanLimit[\s\S]*501[\s\S]*brandRows/);
+  assert.match(source, /if \(brand\) queryParams\.set\('brand_scope', `eq\.\$\{brand\}`\)/);
+  assert.match(source, /const qnsaBrandScanLimit = pageSize \+ 1/);
   assert.match(source, /\? 'created_at\.desc,id\.desc'/);
   assert.match(source, /normalized_reference', `like\.\$\{familyPrefix\}\*`/);
 });
@@ -517,7 +517,7 @@ test('scoped pages use one lookahead row instead of trusting estimated totals', 
     records: rows.slice(0, 8),
     hasLookahead: false,
   });
-  assert.match(source, /const qnsaBrandScanLimit = qnsaBrandOnly \? Math\.max\(501, pageSize \+ 1\) : pageSize \+ 1/);
+  assert.match(source, /const qnsaBrandScanLimit = pageSize \+ 1/);
   assert.match(source, /queryParams\.set\('limit', String\(qnsaBrandScanLimit\)\)/);
   assert.match(source, /lastReturnedSourceIndex/);
   assert.match(source, /const nextCursor = hasMore[\s\S]*encodeInventoryCursor/);

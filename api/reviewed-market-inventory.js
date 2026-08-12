@@ -914,13 +914,13 @@ module.exports = async function handler(req, res) {
     if (MARKET_SOURCE_VIEW !== 'qnsa_rolex_patek_trading_floor_source') {
       queryParams.set('trading_floor_status', 'not.in.(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate)');
     }
-    const qnsaBrandOnly = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
-      && Boolean(brand)
-      && !reference;
-    // Brand-only QNSA queries use the fast global publication order and apply
-    // the brand inside this bounded scan. Filtering the joined view by brand
-    // caused PostgREST to choose a full sort even with a matching index.
-    if (brand && !qnsaBrandOnly) queryParams.set('brand_scope', `eq.${brand}`);
+    // Keep the brand predicate in PostgreSQL. The forward QNSA feed indexes now
+    // cover (brand_normalized, created_at DESC, id DESC), so scanning an
+    // unpartitioned 501-row window and filtering it in Node is both slower and
+    // capable of starving one brand when the newest global rows skew toward the
+    // other brand.
+    const qnsaBrandOnly = false;
+    if (brand) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) {
       const normalizedBrand = String(brand || '').trim().toLowerCase();
       const familyPrefix = (normalizedBrand === 'rolex' && reference === '116500')
@@ -1009,7 +1009,7 @@ module.exports = async function handler(req, res) {
       // timed out after the release switches were enabled.
       ? 'created_at.desc,id.desc'
       : 'id.desc');
-    const qnsaBrandScanLimit = qnsaBrandOnly ? Math.max(501, pageSize + 1) : pageSize + 1;
+    const qnsaBrandScanLimit = pageSize + 1;
     queryParams.set('limit', String(qnsaBrandScanLimit));
     if (requestedOffset > 0) queryParams.set('offset', String(requestedOffset));
     
