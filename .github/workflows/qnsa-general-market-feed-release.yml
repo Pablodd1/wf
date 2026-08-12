@@ -32,7 +32,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812113000_qnsa_general_market_feed_schema_hotfix.sql')
+          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812114500_qnsa_general_market_feed_timeout_hotfix.sql')
           $compile = "BEGIN;`n$migration`nROLLBACK;"
           $body = @{ query = $compile; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
@@ -64,7 +64,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812113000_qnsa_general_market_feed_schema_hotfix.sql')
+          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812114500_qnsa_general_market_feed_timeout_hotfix.sql')
           $body = @{ query = [string]$migration; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
           Start-Sleep -Seconds 3
@@ -75,6 +75,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
+          SET ROLE postgres;
           SELECT jsonb_build_object(
             'counts', (SELECT jsonb_agg(to_jsonb(c)) FROM public.qnsa_market_feed_counts() c),
             'all_page', (SELECT count(*) FROM public.qnsa_market_feed_page_rows(NULL,NULL,51,0,NULL,false,NULL,NULL)),
