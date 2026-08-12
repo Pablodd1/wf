@@ -81,7 +81,7 @@ AS $function$
             THEN btrim(n.image_url)
           ELSE NULL
         END,
-        'seller_name', n.seller_name,
+        'seller_name', COALESCE(NULLIF(btrim(n.user_name), ''), NULLIF(btrim(n.from_name), '')),
         'seller_phone', CASE WHEN n.contact_consent THEN COALESCE(n.contact_number, n.from_number) ELSE NULL END,
         'location', n.location,
         'dealer_rating', COALESCE(n.dealer_rating, n.rating)
