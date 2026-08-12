@@ -856,6 +856,17 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   const activeDial = data?.selected_cohort.dial_color || '';
   const selectedDialLine = activeDial ? dialChartColor(activeDial) : BLUE;
+  const displayDialAnalysis: DialPoint[] = data?.dial_analysis?.length
+    ? data.dial_analysis
+    : data?.stats
+      ? [{
+          dial_color: activeDial || 'Unspecified',
+          count: data.count,
+          avg_price: data.stats.avg,
+          min_price: data.stats.min,
+          max_price: data.stats.max,
+        }]
+      : [];
   const datedHistory = (data?.monthly || []).length > 0;
   const priceHistoryTitle = `${activeDial || 'Selected'} Dial ${datedHistory ? 'Price History' : 'Current Comparable Range'} - All Conditions`;
   const chartData: Array<Record<string, number | string | null>> = (data?.monthly || []).map(m => ({
@@ -1297,14 +1308,14 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               <span className="flex items-center px-2 text-xs leading-5" style={{ color: MUTED }}>Solid dial-colored lines are observed WTS averages. Dotted points are estimates and are labeled indicative unless the trend passes validation.</span>
             </nav>
 
-            {(data.dial_analysis || []).length > 0 && (
+            {displayDialAnalysis.length > 0 && (
               <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
                   Each dial appears once. New, Used, and Unspecified listings are combined for analytics; condition remains visible in each listing description.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {(data.dial_analysis || []).map(group => {
+                  {displayDialAnalysis.map(group => {
                     const selected = data.selected_cohort.dial_color === group.dial_color;
                     return (
                       <button
@@ -1393,7 +1404,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             <DemandSignalsSection data={data} onOpenListing={openListing} />
 
             {/* Dial cohorts that satisfy catalog and minimum-sample policy. */}
-            {data.dial_analysis && data.dial_analysis.length > 0 && (
+            {displayDialAnalysis.length > 0 && (
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Dial Color Analysis</h3>
                 <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
@@ -1401,16 +1412,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 </div>
                 <div role="img" aria-label={`Average comparable price by dial color for ${displayRef}`} style={{ height: 210, marginBottom: 18 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={data.dial_analysis} margin={{ top: 8, right: 12, bottom: 12, left: 4 }}>
+                    <ComposedChart data={displayDialAnalysis} margin={{ top: 8, right: 12, bottom: 12, left: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                      <XAxis dataKey="dial_color" stroke={MUTED} fontSize={11} interval={0} angle={data.dial_analysis.length > 5 ? -25 : 0} textAnchor={data.dial_analysis.length > 5 ? 'end' : 'middle'} height={data.dial_analysis.length > 5 ? 58 : 32} />
+                      <XAxis dataKey="dial_color" stroke={MUTED} fontSize={11} interval={0} angle={displayDialAnalysis.length > 5 ? -25 : 0} textAnchor={displayDialAnalysis.length > 5 ? 'end' : 'middle'} height={displayDialAnalysis.length > 5 ? 58 : 32} />
                       <YAxis stroke={MUTED} fontSize={11} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} />
                       <Tooltip
                         contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8 }}
                         formatter={(value: number, name: string) => [name === 'avg_price' ? `$${value.toLocaleString()}` : value.toLocaleString(), name === 'avg_price' ? 'Average price' : 'Listings']}
                       />
                       <Bar dataKey="avg_price" name="Average price" radius={[4, 4, 0, 0]}>
-                        {data.dial_analysis.map(dial => (
+                        {displayDialAnalysis.map(dial => (
                           <Cell
                             key={dial.dial_color}
                             fill={dialChartColor(dial.dial_color)}
@@ -1434,7 +1445,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                       </tr>
                     </thead>
                     <tbody>
-                      {data.dial_analysis.map((d, i) => (
+                      {displayDialAnalysis.map((d, i) => (
                         <tr key={i} style={{ borderBottom: `1px solid ${BORDER}` }}>
                           <td style={{ padding: '10px 12px', color: TEXT, fontWeight: 500 }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>

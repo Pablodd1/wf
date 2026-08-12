@@ -27,6 +27,7 @@ const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildIndicativeForecast, buildMarketForecast } = require('./_lib/market-forecast.cjs');
+const { selectDialGroup } = require('./_lib/dial-cohort-selection.cjs');
 const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
 const { loadVerifiedDemandIdentityRows } = require('./_lib/verified-demand-identity.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
@@ -897,9 +898,7 @@ module.exports = async function handler(req, res) {
 
     const cohorts = buildComparableCohorts(marketRows);
     const dialGroups = buildDialGroups(marketRows);
-    const selectedDialGroup = dialGroups.find(group =>
-      !requestedDial || group.dial_color.toLowerCase() === requestedDial
-    ) || dialGroups[0] || { dial_color: 'Unspecified', rows: [], count: 0, condition_counts: {} };
+    const selectedDialGroup = selectDialGroup(dialGroups, requestedDial, summarizeComparableRows);
     const selection = { dial: selectedDialGroup.dial_color };
     const selectedRows = selectedDialGroup.rows;
     const selectedCohort = {
