@@ -856,6 +856,20 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   const activeDial = data?.selected_cohort.dial_color || '';
   const selectedDialLine = activeDial ? dialChartColor(activeDial) : BLUE;
+  const qualifiedWtsCount = data?.reconciliation?.wts_eligible_analytics_count
+    ?? data?.wts_eligible_analytics_count
+    ?? data?.count
+    ?? 0;
+  const wtbDemandCount = data?.reconciliation?.wtb_demand_count
+    ?? data?.wtb_demand_count
+    ?? data?.liquidity?.demand_count
+    ?? 0;
+  const liveWtbWtsRatio = qualifiedWtsCount > 0 ? wtbDemandCount / qualifiedWtsCount : null;
+  const displayedWtbWtsRatio = data?.liquidity?.wtb_fs_ratio ?? liveWtbWtsRatio;
+  const statisticalOutlierCount = data?.methodology?.statistical_outlier_count
+    ?? data?.reconciliation?.excluded_breakdown?.outliers
+    ?? data?.outliersRemoved
+    ?? 0;
   const displayDialAnalysis: DialPoint[] = data?.dial_analysis?.length
     ? data.dial_analysis
     : data?.stats
@@ -1401,6 +1415,28 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             </div>
 
             {/* ── Dedicated Demand Signals Section (WTB Buyer Demand) ── */}
+            <section aria-label="Liquidity, demand and outlier summary" className="grid grid-cols-1 gap-4 lg:grid-cols-3 mb-8">
+              <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 18 }}>
+                <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>Featured listings for sale</div>
+                <div style={{ color: NAVY, fontSize: 26, fontWeight: 800, marginTop: 5 }}>{qualifiedWtsCount.toLocaleString()}</div>
+                <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>Qualified priced WTS offers used in the market analysis.</div>
+              </div>
+              <div style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 18 }}>
+                <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>WTB / WTS ratio</div>
+                <div style={{ color: BLUE, fontSize: 26, fontWeight: 800, marginTop: 5 }}>
+                  {displayedWtbWtsRatio == null ? 'Not available' : displayedWtbWtsRatio.toFixed(2)}
+                </div>
+                <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>
+                  {wtbDemandCount.toLocaleString()} buyer signals versus {qualifiedWtsCount.toLocaleString()} qualified sale offers.
+                </div>
+              </div>
+              <div style={{ backgroundColor: '#fff9e8', border: '1px solid #ead59b', borderRadius: 8, padding: 18 }}>
+                <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>Statistical price outliers</div>
+                <div style={{ color: '#8a6500', fontSize: 26, fontWeight: 800, marginTop: 5 }}>{statisticalOutlierCount.toLocaleString()}</div>
+                <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>Preserved as evidence and excluded from averages using the disclosed 3.0× IQR fences.</div>
+              </div>
+            </section>
+
             <DemandSignalsSection data={data} onOpenListing={openListing} />
 
             {/* Dial cohorts that satisfy catalog and minimum-sample policy. */}
@@ -2427,6 +2463,8 @@ function forecastReason(reason?: string) {
 function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpenListing: (row: RowData) => void }) {
   const displayRef = data.resolvedRef || data.reference || '';
   const demandCount = data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? data.liquidity?.demand_count ?? 0;
+  const qualifiedWtsCount = data.reconciliation?.wts_eligible_analytics_count ?? data.wts_eligible_analytics_count ?? data.count ?? 0;
+  const demandSupplyRatio = data.liquidity?.wtb_fs_ratio ?? (qualifiedWtsCount > 0 ? demandCount / qualifiedWtsCount : null);
   const demandCohorts = data.liquidity?.demand_cohorts || [];
   const demandRows = data.demand_rows || data.liquidity?.demand_rows || [];
 
@@ -2454,10 +2492,10 @@ function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpen
               {demandCount.toLocaleString()} <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>buyers</span>
             </div>
           </div>
-          {data.liquidity?.wtb_fs_ratio != null && (
+          {demandSupplyRatio != null && (
             <div style={{ borderLeft: `1px solid ${BORDER}`, paddingLeft: 16 }}>
               <div style={{ fontSize: 11, color: MUTED, fontWeight: 500 }}>WTB / WTS Ratio</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{Number(data.liquidity.wtb_fs_ratio).toFixed(2)}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{demandSupplyRatio.toFixed(2)}</div>
             </div>
           )}
         </div>
