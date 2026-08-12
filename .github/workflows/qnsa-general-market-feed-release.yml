@@ -32,7 +32,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $migration = Get-Content -Raw 'supabase/migrations/20260812110000_qnsa_general_market_feed.sql'
+          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812110000_qnsa_general_market_feed.sql')
           $compile = "BEGIN;`n$migration`nROLLBACK;"
           $body = @{ query = $compile; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
@@ -64,8 +64,8 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $migration = Get-Content -Raw 'supabase/migrations/20260812110000_qnsa_general_market_feed.sql'
-          $body = @{ query = $migration; read_only = $false } | ConvertTo-Json -Depth 3
+          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812110000_qnsa_general_market_feed.sql')
+          $body = @{ query = [string]$migration; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
           Start-Sleep -Seconds 3
 
