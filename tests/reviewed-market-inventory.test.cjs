@@ -23,8 +23,8 @@ test('QNSA pages use indexed brand/reference predicates and no-image lane', () =
   assert.match(source, /if \(!qnsaUnpartitionedMedia\)[\s\S]*has_exact_source_image/);
   assert.match(source, /if \(brand\) queryParams\.set\('brand_scope', `eq\.\$\{brand\}`\)/);
   assert.match(source, /const qnsaBrandScanLimit = pageSize \+ 1/);
-  assert.match(source, /rest\/v1\/rpc\/qnsa_trading_floor_page_ids/);
-  assert.match(source, /activeQueryParams\.set\('id', `in\.\(\$\{pageIds\.join\(','\)\}\)`\)/);
+  assert.match(source, /rest\/v1\/rpc\/qnsa_trading_floor_page_rows/);
+  assert.match(source, /pageRowsRes\.json\(\)[\s\S]*row\.row_data/);
   assert.match(source, /\? 'created_at\.desc,id\.desc'/);
   assert.match(source, /normalized_reference', `like\.\$\{familyPrefix\}\*`/);
 });

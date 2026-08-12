@@ -163,6 +163,18 @@ jobs:
             Write-Output 'QNSA bounded Trading Floor page-ID function is already installed.'
           }
 
+          $pageRowsPath = 'supabase/migrations/20260812012000_qnsa_trading_floor_page_rows.sql'
+          $pageRowsCheckSql = "SELECT to_regprocedure('public.qnsa_trading_floor_page_rows(text,integer,integer)') IS NOT NULL AS installed;"
+          $pageRowsCheckBody = @{ query = $pageRowsCheckSql; read_only = $true } | ConvertTo-Json -Depth 3
+          $pageRowsCheck = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $pageRowsCheckBody
+          if ($pageRowsCheck[0].installed -ne $true) {
+            $pageRowsSql = Get-Content -Raw -LiteralPath $pageRowsPath
+            $pageRowsBody = @{ query = [string]$pageRowsSql; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $pageRowsBody | Out-Null
+          } else {
+            Write-Output 'QNSA bounded Trading Floor page-row function is already installed.'
+          }
+
       - name: Verify completed staging and arm the disabled release lane
         shell: pwsh
         run: |

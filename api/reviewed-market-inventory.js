@@ -1031,25 +1031,26 @@ module.exports = async function handler(req, res) {
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
     if (qnsaBrandOnly && !legacyMarketViewContractDetected) {
-      const pageIdsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_page_ids`, {
+      const pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_page_rows`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ p_brand: brand, p_limit: qnsaBrandScanLimit, p_offset: requestedOffset }),
       });
-      if (!pageIdsRes.ok) {
-        const pageIdsError = await pageIdsRes.text();
-        throw new Error(`QNSA page IDs failed: ${pageIdsRes.status} ${pageIdsError.slice(0, 200)}`);
+      if (!pageRowsRes.ok) {
+        const pageRowsError = await pageRowsRes.text();
+        throw new Error(`QNSA page rows failed: ${pageRowsRes.status} ${pageRowsError.slice(0, 200)}`);
       }
-      const pageIds = (await pageIdsRes.json()).map(row => row.id).filter(Boolean);
-      activeQueryParams = new URLSearchParams(
-        [...activeQueryParams.entries()].filter(([key]) => !['brand_scope', 'order'].includes(key)),
-      );
-      if (pageIds.length) activeQueryParams.set('id', `in.(${pageIds.join(',')})`);
-      activeQueryParams.set('limit', String(pageIds.length || 1));
-      if (!pageIds.length) activeQueryParams.set('id', 'eq.__no_qnsa_listing__');
+      const pageRows = (await pageRowsRes.json()).map(row => row.row_data).filter(Boolean);
+      const directResponse = new Response(JSON.stringify(pageRows), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      // Reuse the common mapping/filtering path below without a second joined
+      // view query. `restRes` is assigned before its normal declaration.
+      var preloadedQnsaResponse = directResponse;
     }
     let restUrl = `${process.env.SUPABASE_URL}/rest/v1/${MARKET_SOURCE_VIEW}?${activeQueryParams.toString()}`;
-    let restRes = await fetch(restUrl, {
+    let restRes = preloadedQnsaResponse || await fetch(restUrl, {
       headers,
     });
     let errText = restRes.ok ? '' : await restRes.text();
