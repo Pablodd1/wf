@@ -93,6 +93,22 @@ test('authenticated form submissions map into the Trading Floor contract', () =>
   assert.equal(record.location, 'Miami');
 });
 
+test('reviewed inventory cards inherit exact public Rated Dealer feedback evidence', () => {
+  const record = api.mapReviewedRecord({
+    id: 'rated-source-listing', supplied_brand: 'Rolex', model: 'Daytona',
+    normalized_reference: '116500LN', raw_reference: '116500LN', dial_color: 'Black',
+    listing_type: 'WTS', raw_message: 'WTS Rolex 116500LN USD 28000',
+    posted_by: 'Federico Maman', phone_number: '+1 (305) 988-8263',
+    contact_publication_approved: true, source_price_amount: 28000, source_currency: 'USD',
+    has_exact_source_image: false,
+  });
+  assert.equal(record.seller_rating, null);
+  assert.equal(record.seller_review_count, 22);
+  assert.equal(record.seller_rating_evidence_status, 'SOURCE_FEEDBACK_COUNT');
+  assert.equal(record.seller_trust_status, 'Trusted User');
+  assert.equal(api.isSourceBackedRatedDealer(record), true);
+});
+
 test('reviewed direct submissions support category, intent, image, price, and location filters together', () => {
   const record = api.mapDealerSubmission({
     id: 'bag-1', intent: 'WTS', category: 'HANDBAG', raw_message: 'WTS Birkin 30 USD 25000',
@@ -159,10 +175,13 @@ test('direct submissions cannot cross the global image boundary', () => {
 
 test('rated filtering requires source-backed rating and review evidence', () => {
   const rated = { seller_rating: 4.8, seller_review_count: 12, seller_rating_evidence_status: 'SOURCE_SUPPLIED' };
+  const feedbackRated = { seller_rating: null, seller_review_count: 22, seller_rating_evidence_status: 'SOURCE_FEEDBACK_COUNT' };
   assert.equal(api.isSourceBackedRatedDealer(rated), true);
+  assert.equal(api.isSourceBackedRatedDealer(feedbackRated), true);
   assert.equal(api.isSourceBackedRatedDealer({ seller_rating: 5, seller_review_count: 0, seller_rating_evidence_status: 'SOURCE_SUPPLIED' }), false);
   assert.equal(api.isSourceBackedRatedDealer({ seller_rating: 5, seller_review_count: 50, seller_rating_evidence_status: 'UNAVAILABLE' }), false);
   assert.equal(api.ratingMatches(rated, 'rated'), true);
+  assert.equal(api.ratingMatches(feedbackRated, 'rated'), true);
   assert.equal(api.ratingMatches(rated, 'unrated'), false);
   assert.equal(api.ratingMatches({ seller_rating: null, seller_review_count: 0, seller_rating_evidence_status: 'UNAVAILABLE' }, 'unrated'), true);
 });
@@ -201,7 +220,8 @@ test('reviewed QNSA release rows and source-backed ratings reach the card contra
   assert.match(source, /'QNSA_ROLEX_PATEK_REVIEWED_V1', 'QNSA_GENERAL_MARKET_FEED_V1'/);
   assert.match(source, /\['APPROVED', 'PENDING_VERIFICATION'\]\.includes\(row\?\.publication_state\)/);
   assert.match(source, /reviewedQnsaRelease \|\|/);
-  assert.match(source, /seller_rating: positiveNumber\(row\.dealer_rating\)/);
+  assert.match(source, /seller_rating: ratingEvidenceStatus === 'SOURCE_SUPPLIED' \? directRating : null/);
+  assert.match(source, /ratedDealerEvidence/);
   assert.match(source, /raw_lineage_verified,dealer_rating,review_count/);
 });
 

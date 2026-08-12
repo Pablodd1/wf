@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { publicDealer } = require('../api/dealers.js');
-const { parsedSourceDate, sourcePhone, topRatedProfiles, sourceProfilePayload } = require('../api/_lib/dealer-directory-source.cjs');
+const { parsedSourceDate, ratedDealerEvidence, ratedProfilePayload, ratedProfiles, sourcePhone, topRatedProfiles, sourceProfilePayload } = require('../api/_lib/dealer-directory-source.cjs');
 const dealersHandler = require('../api/dealers.js');
 const dealerProfileHandler = require('../api/dealer-profile.js');
 
@@ -37,6 +37,28 @@ test('Top Rated preserves source rank and feedback without inventing a numeric r
   assert.ok(profiles.every(profile => profile.review_count >= 0));
   assert.ok(profiles.every(profile => /^\+\d{7,15}$/.test(profile.verified_phone)));
   assert.ok(profiles.every(profile => profile.source_url?.startsWith('https://watchfacts.com/user/')));
+});
+
+test('Rated Dealers preserves feedback counts without inventing a five-point score', () => {
+  const profiles = ratedProfiles();
+  assert.equal(profiles.length, 53);
+  assert.equal(profiles[0].display_name, 'Federico Maman');
+  assert.equal(profiles[0].rating, null);
+  assert.equal(profiles[0].review_count, 22);
+  assert.equal(profiles[0].rating_evidence_status, 'SOURCE_FEEDBACK_COUNT');
+  assert.equal(ratedDealerEvidence({ phone: '+1 (305) 988-8263' }).source_profile_id, '916');
+  assert.equal(ratedDealerEvidence({ dealerId: '916' }).trust_status, 'Trusted User');
+});
+
+test('every rated dealer card resolves to an internal profile payload', () => {
+  for (const dealer of ratedProfiles()) {
+    const payload = ratedProfilePayload(dealer.id);
+    assert.equal(payload?.success, true, dealer.id);
+    assert.equal(payload?.dealer?.id, dealer.id);
+    assert.equal(payload?.dealer?.rating, null);
+    assert.equal(payload?.dealer?.review_count, dealer.review_count);
+    assert.match(payload?.source_links?.profile || '', /^https:\/\/watchfacts\.com\/(?:profile\/|user\/\d+\/profile)/);
+  }
 });
 
 test('public WhatsApp links provide searchable source phone numbers', async () => {
@@ -105,10 +127,11 @@ test('source profile workflow is provenance-labeled and remains distinct from ve
   assert.match(profile, /Verified dealer/);
 });
 
-test('Dealer Directory opens on the populated source-ranked view while Reference Check remains available', () => {
+test('Dealer Directory opens on Rated Dealers while Reference Check and Top Rated remain available', () => {
   const directory = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
-  assert.match(directory, /useState<DirectoryView>\('top-rated'\)/);
+  assert.match(directory, /useState<DirectoryView>\('rated'\)/);
   assert.match(directory, /Reference Check/);
+  assert.match(directory, /> Rated Dealers</);
   assert.match(directory, /Top Rated Dealers/);
 });
 

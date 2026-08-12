@@ -93,6 +93,7 @@ test('Trading Floor preserves source text and orders price intelligence before p
   assert.doesNotMatch(floor, />Human review</);
   assert.doesNotMatch(floor, /Source-confirmed USD/);
   assert.match(floor, /isRatedDealer[\s\S]*Rated Dealer/);
+  assert.match(floor, /SOURCE_FEEDBACK_COUNT/);
   const cardSource = floor.slice(floor.indexOf('function ListingCard'), floor.indexOf('function ListingDetails'));
   assert.ok(cardSource.indexOf('Original raw message') < cardSource.indexOf('Posted by'));
 });
@@ -184,8 +185,8 @@ test('dealer directory separates verified Reference Check from provenance-backed
   assert.match(directory, /Top Rated Dealers/);
   assert.match(directory, /review_count\.toLocaleString\(\).*reviews/);
   assert.match(directory, /member_since/);
-  assert.match(directory, /label="For sale"/);
-  assert.match(directory, /label="Looking for"/);
+  assert.match(directory, /view === 'legacy' \? 'Captured WTS' : 'For sale'/);
+  assert.match(directory, /view === 'legacy' \? 'Captured WTB' : 'Looking for'/);
   assert.match(directory, /Full profile/);
   assert.match(directory, /Source profile/);
   assert.match(directory, /public-source leaderboard/);

@@ -110,7 +110,9 @@ interface ListingRecord {
   seller_avatar_url?: string | null;
   seller_rating?: number | null;
   seller_review_count?: number | null;
-  seller_rating_evidence_status?: 'SOURCE_SUPPLIED' | 'UNAVAILABLE';
+  seller_rating_evidence_status?: 'SOURCE_SUPPLIED' | 'SOURCE_FEEDBACK_COUNT' | 'UNAVAILABLE';
+  seller_trust_status?: string | null;
+  seller_rating_source_url?: string | null;
   seller_group_count?: number | null;
   seller_credential_status?: string | null;
   location?: string | null;
@@ -1136,8 +1138,9 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const [imageAvailable, setImageAvailable] = useState(() => hasListingImage(listing));
   const cardHasImage = imageAvailable && hasListingImage(listing);
-  const isRatedDealer = listing.seller_rating_evidence_status === 'SOURCE_SUPPLIED'
-    && Number(listing.seller_rating) > 0
+  const hasNumericRating = listing.seller_rating_evidence_status === 'SOURCE_SUPPLIED'
+    && Number(listing.seller_rating) > 0;
+  const isRatedDealer = (hasNumericRating || listing.seller_rating_evidence_status === 'SOURCE_FEEDBACK_COUNT')
     && Number(listing.seller_review_count) > 0;
 
   return (
@@ -1193,7 +1196,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
           {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="" className="h-8 w-8 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
           <span>
             Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer'}</span>
-            {isRatedDealer && <span className="ml-1 text-xs font-semibold" style={{ color: GOLD_BRIGHT }} aria-label={`Dealer rating ${Number(listing.seller_rating).toFixed(1)} from ${listing.seller_review_count} reviews`}>★ {Number(listing.seller_rating).toFixed(1)} ({Number(listing.seller_review_count).toLocaleString()})</span>}
+            {isRatedDealer && <span className="ml-1 text-xs font-semibold" style={{ color: GOLD_BRIGHT }} aria-label={hasNumericRating ? `Dealer rating ${Number(listing.seller_rating).toFixed(1)} from ${listing.seller_review_count} reviews` : `Rated dealer with ${listing.seller_review_count} positive feedback records`}>★ {hasNumericRating ? Number(listing.seller_rating).toFixed(1) : 'Rated'} ({Number(listing.seller_review_count).toLocaleString()})</span>}
           </span>
         </div>
       )}

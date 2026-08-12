@@ -2,9 +2,11 @@
 
 const crawl = require('../../data/dealer-directory/full-crawl-2026-08-09.json');
 const legacyAudit = require('../../data/dealer-directory/legacy-profile-audit-2026-08-11.json');
+const ratedDealers = require('../../data/dealer-directory/rated-dealers-2026-08-12.json');
 
 const SOURCE_SYSTEM = 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT';
 const LEGACY_SOURCE_SYSTEM = 'WATCHFACTS_LEGACY_PROFILE_AUDIT_20260811';
+const RATED_SOURCE_SYSTEM = 'WATCHFACTS_PUBLIC_RATED_DEALERS_20260812';
 
 function nonNegativeInteger(value) {
   const parsed = Number.parseInt(String(value ?? '').replace(/,/g, ''), 10);
@@ -23,6 +25,77 @@ function sourceIdFromIdentity(identity) {
 function sourcePhone(profile) {
   const match = String(profile?.whatsapp_url || profile?.chat_url || '').match(/wa\.me\/(\d{7,15})/i);
   return match ? `+${match[1]}` : null;
+}
+
+function phoneDigits(value) {
+  return String(value || '').replace(/[^0-9]/g, '');
+}
+
+function ratedProfileSummary(profile, rank) {
+  const existing = (crawl.profiles || []).find(row => String(row.id) === String(profile.profile_id));
+  const summary = profileSummary(existing || {
+    id: profile.profile_id,
+    name: profile.name,
+    country: profile.location,
+    profile_rating_count: profile.review_count,
+    feedback_received: profile.positive_feedback_count,
+    common_groups: null,
+    trust_status: profile.trust_status,
+    whatsapp_url: `https://wa.me/${profile.phone}`,
+    profile_url: profile.profile_url,
+  }, rank);
+  return {
+    ...summary,
+    display_name: profile.name || summary.display_name,
+    rating: null,
+    review_count: nonNegativeInteger(profile.review_count) || 0,
+    trust_status: profile.trust_status || summary.trust_status,
+    verified_phone: profile.phone ? `+${profile.phone}` : summary.verified_phone,
+    source_rank: rank,
+    source_system: RATED_SOURCE_SYSTEM,
+    source_url: profile.profile_url || summary.source_url,
+    source_crawled_at: ratedDealers.crawled_at,
+    rating_evidence_status: 'SOURCE_FEEDBACK_COUNT',
+    positive_feedback_count: nonNegativeInteger(profile.positive_feedback_count) || 0,
+    negative_feedback_count: nonNegativeInteger(profile.negative_feedback_count) || 0,
+    stats: existing ? summary.stats : {
+      wts_posts: null,
+      wtb_posts: null,
+      first_post_at: null,
+      last_post_at: null,
+    },
+    whatsapp_group_count: existing ? summary.whatsapp_group_count : null,
+  };
+}
+
+function ratedProfiles() {
+  return (ratedDealers.profiles || []).map((profile, index) => ratedProfileSummary(profile, index + 1));
+}
+
+const ratedEvidenceByProfileId = new Map();
+const ratedEvidenceByPhone = new Map();
+for (const profile of ratedDealers.profiles || []) {
+  const evidence = {
+    source_profile_id: String(profile.profile_id),
+    display_name: profile.name || null,
+    rating: null,
+    review_count: nonNegativeInteger(profile.review_count) || 0,
+    positive_feedback_count: nonNegativeInteger(profile.positive_feedback_count) || 0,
+    negative_feedback_count: nonNegativeInteger(profile.negative_feedback_count) || 0,
+    trust_status: profile.trust_status || null,
+    source_url: profile.profile_url || null,
+    evidence_status: 'SOURCE_FEEDBACK_COUNT',
+  };
+  ratedEvidenceByProfileId.set(String(profile.profile_id), evidence);
+  const phone = phoneDigits(profile.phone);
+  if (phone) ratedEvidenceByPhone.set(phone, evidence);
+}
+
+function ratedDealerEvidence({ dealerId, phone } = {}) {
+  const byId = ratedEvidenceByProfileId.get(String(dealerId || '')) || null;
+  const byPhone = ratedEvidenceByPhone.get(phoneDigits(phone)) || null;
+  if (byId && byPhone && byId.source_profile_id !== byPhone.source_profile_id) return null;
+  return byId || byPhone;
 }
 
 function profileSummary(profile, rank) {
@@ -200,6 +273,45 @@ function sourceProfilePayload(identity) {
   };
 }
 
+function ratedProfilePayload(identity) {
+  const sourceId = sourceIdFromIdentity(identity);
+  if (!sourceId) return null;
+  const ratedIndex = (ratedDealers.profiles || []).findIndex(profile => String(profile.profile_id) === String(sourceId));
+  if (ratedIndex < 0) return null;
+  const summary = ratedProfileSummary(ratedDealers.profiles[ratedIndex], ratedIndex + 1);
+  return {
+    success: true,
+    dealer: summary,
+    stats: {
+      wts_count: summary.stats?.wts_posts ?? null,
+      wtb_count: summary.stats?.wtb_posts ?? null,
+      group_count: summary.whatsapp_group_count ?? null,
+      first_post: summary.stats?.first_post_at ?? null,
+      latest_post: summary.stats?.last_post_at ?? null,
+      verified_contact_info: summary.verified_phone
+        ? { phone: summary.verified_phone, verification_status: 'SOURCE_PUBLISHED' }
+        : null,
+      review_count: summary.review_count,
+      positive_feedback_count: summary.positive_feedback_count,
+      negative_feedback_count: summary.negative_feedback_count,
+    },
+    listings: [],
+    reviews: [],
+    source_links: {
+      profile: summary.source_url,
+      for_sale: null,
+      want_to_buy: null,
+      all_listings: null,
+    },
+    source_provenance: {
+      source_system: RATED_SOURCE_SYSTEM,
+      source_url: ratedDealers.source,
+      crawled_at: ratedDealers.crawled_at,
+    },
+    raw_message_access: false,
+  };
+}
+
 function legacyProfilePayload(identity) {
   const match = String(identity || '').match(/^watchfacts-legacy-(\d+)$/i);
   if (!match) return null;
@@ -247,11 +359,15 @@ function legacyProfilePayload(identity) {
 module.exports = {
   SOURCE_SYSTEM,
   LEGACY_SOURCE_SYSTEM,
+  RATED_SOURCE_SYSTEM,
   legacyProfileForDealerId,
   legacyProfilePayload,
   legacyProfiles,
   parsedSourceDate,
+  ratedProfilePayload,
   sourceProfilePayload,
   sourcePhone,
   topRatedProfiles,
+  ratedDealerEvidence,
+  ratedProfiles,
 };

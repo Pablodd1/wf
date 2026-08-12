@@ -1,7 +1,7 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
-const { legacyProfiles, topRatedProfiles } = require('./_lib/dealer-directory-source.cjs');
+const { legacyProfiles, ratedProfiles, topRatedProfiles } = require('./_lib/dealer-directory-source.cjs');
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value || ''), 10);
@@ -66,26 +66,28 @@ module.exports = async function handler(req, res) {
   const requestedPageSize = boundedInteger(req.query?.pageSize, 24, 1, 100);
   const search = String(req.query?.q || '').trim().slice(0, 100);
   const mode = String(req.query?.mode || '').trim().toLowerCase();
-  const pageSize = mode === 'top-rated' ? Math.min(25, requestedPageSize) : requestedPageSize;
+  const pageSize = mode === 'top-rated' ? Math.min(25, requestedPageSize)
+    : mode === 'rated' ? Math.min(100, requestedPageSize)
+    : requestedPageSize;
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
   try {
-    if (mode === 'top-rated') {
+    if (mode === 'top-rated' || mode === 'rated') {
       const normalizedSearch = search.toLocaleLowerCase();
       const phoneNeedle = digits(search);
-      const sourceProfiles = topRatedProfiles()
+      const matchingProfiles = (mode === 'rated' ? ratedProfiles() : topRatedProfiles())
         .filter(profile => !normalizedSearch
           || [profile.display_name, profile.company_name].some(value => String(value || '').toLocaleLowerCase().includes(normalizedSearch))
-          || (phoneNeedle.length >= 4 && digits(profile.verified_phone).includes(phoneNeedle)))
-        .slice(0, pageSize);
+          || (phoneNeedle.length >= 4 && digits(profile.verified_phone).includes(phoneNeedle)));
+      const sourceProfiles = matchingProfiles.slice(from, from + pageSize);
       return res.status(200).json({
         success: true,
-        page: 1,
+        page,
         pageSize,
-        total: sourceProfiles.length,
+        total: matchingProfiles.length,
         dealers: sourceProfiles,
-        source: 'public-source-snapshot',
+        source: mode === 'rated' ? 'public-rated-dealers-snapshot' : 'public-source-snapshot',
       });
     }
     if (mode === 'legacy') {

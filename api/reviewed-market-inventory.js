@@ -3,6 +3,7 @@
 const { getClient } = require('./_lib/supabase');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
 const { listEquivalentReferences } = require('./_lib/catalog');
+const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -50,7 +51,7 @@ const EVIDENCE_CONTRACT = Object.freeze({
   contact: 'Seller identity may be published when supplied; phone/contact details require source-backed publication consent.',
   image: 'Only an exact supplied HTTP(S) source URL is image-eligible.',
   price: 'Only an exact explicit-source USD match is analytics-eligible.',
-  rating: 'Rated status requires a source-supplied rating and a positive source review count; unsupported legacy rows remain unrated.',
+  rating: 'Rated status requires either a source-supplied score plus review count or an exact phone/profile match to public dealer feedback. Feedback counts are never converted into a five-point score.',
 });
 
 function positiveNumber(value) {
@@ -190,9 +191,10 @@ function dateWindowStart(value, now = new Date()) {
 function isSourceBackedRatedDealer(record) {
   const rating = Number(record?.seller_rating);
   const reviews = Number(record?.seller_review_count);
-  return record?.seller_rating_evidence_status === 'SOURCE_SUPPLIED'
-    && Number.isFinite(rating) && rating > 0
-    && Number.isFinite(reviews) && reviews > 0;
+  const scored = record?.seller_rating_evidence_status === 'SOURCE_SUPPLIED'
+    && Number.isFinite(rating) && rating > 0;
+  const feedbackBacked = record?.seller_rating_evidence_status === 'SOURCE_FEEDBACK_COUNT';
+  return (scored || feedbackBacked) && Number.isFinite(reviews) && reviews > 0;
 }
 
 function ratingMatches(record, requestedRating) {
@@ -554,6 +556,17 @@ function mapReviewedRecord(row) {
   const sellerPhone = contactApproved && evidenceValuePresent(row.phone_number || row.seller_phone || row.from_number)
     ? (row.phone_number || row.seller_phone || row.from_number)
     : null;
+  const directRating = positiveNumber(row.dealer_rating);
+  const directReviewCount = Number(row.review_count || 0);
+  const publicRatedEvidence = ratedDealerEvidence({
+    dealerId: row.dealer_id || row.company_id,
+    phone: sellerPhone,
+  });
+  const ratingEvidenceStatus = directRating !== null && directReviewCount > 0
+    ? 'SOURCE_SUPPLIED'
+    : publicRatedEvidence?.review_count > 0
+      ? 'SOURCE_FEEDBACK_COUNT'
+      : 'UNAVAILABLE';
   const referenceSearchKey = row.reference_search_key
     || referenceComparisonKey(reference)
     || null;
@@ -613,11 +626,13 @@ function mapReviewedRecord(row) {
     raw_message_evidence_type: normalizedSummary ? 'WORKBOOK_NORMALIZED_SUMMARY' : 'SOURCE_RAW_MESSAGE',
     seller_name: sellerName,
     seller_phone: sellerPhone,
-    seller_rating: positiveNumber(row.dealer_rating),
-    seller_review_count: Number(row.review_count || 0),
-    seller_rating_evidence_status: positiveNumber(row.dealer_rating) !== null && Number(row.review_count || 0) > 0
-      ? 'SOURCE_SUPPLIED'
-      : 'UNAVAILABLE',
+    seller_rating: ratingEvidenceStatus === 'SOURCE_SUPPLIED' ? directRating : null,
+    seller_review_count: ratingEvidenceStatus === 'SOURCE_SUPPLIED'
+      ? directReviewCount
+      : publicRatedEvidence?.review_count || 0,
+    seller_rating_evidence_status: ratingEvidenceStatus,
+    seller_trust_status: publicRatedEvidence?.trust_status || null,
+    seller_rating_source_url: publicRatedEvidence?.source_url || null,
     contact_publication_approved: contactApproved,
     price_usd: verifiedUsd,
     price_raw: sourceAmount,
