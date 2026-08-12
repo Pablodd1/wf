@@ -1666,11 +1666,11 @@ function formatSourcePrice(listing: ListingRecord) {
   if (sourceText && currency) {
     return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (sourceText) return `${sourceText} · currency not supplied`;
+  if (sourceText) return sourceTextIncludesCurrency(sourceText, 'USD') ? sourceText : `USD ${sourceText}`;
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
   if (!Number.isFinite(amount) || amount <= 0) return '';
-  if (!currency) return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)} · currency not supplied`;
+  if (!currency) return `USD ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 

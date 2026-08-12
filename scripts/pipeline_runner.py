@@ -13,6 +13,8 @@ import uuid
 import hashlib
 import json
 import sqlite3
+import urllib.request
+from datetime import datetime, timezone
 import psycopg2
 from psycopg2.extras import RealDictCursor
 
@@ -30,6 +32,30 @@ IS_SQLITE = False
 PIPELINE_MODE = os.environ.get("PIPELINE_MODE", "postgres").strip().lower()
 REQUIRE_POSTGRES = PIPELINE_MODE != "sqlite"
 SQLITE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scratch", "pipeline_fallback.db")
+
+FX_URL = os.environ.get("FX_RATES_URL", "https://api.exchangerate-api.com/v4/latest/USD")
+
+def load_verified_fx_rates():
+    """Fetch one dated USD-base rate snapshot per worker step.
+
+    Returns USD-per-source-unit values. Failure is fail-closed: non-USD rows
+    keep their source price but do not receive a fabricated USD conversion.
+    """
+    try:
+        req = urllib.request.Request(FX_URL, headers={"User-Agent": "CuratedLuxury-Ingestion/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+        quoted = payload.get("rates") or {}
+        rates = {"USD": 1.0, "USDT": 1.0}
+        for code in ("HKD", "CNY", "JPY", "SGD", "EUR", "GBP", "CHF", "AED", "CAD", "AUD"):
+            units_per_usd = float(quoted.get(code) or 0)
+            if units_per_usd > 0:
+                rates[code] = 1.0 / units_per_usd
+        observed_at = payload.get("date") or payload.get("time_last_updated") or datetime.now(timezone.utc).isoformat()
+        return rates, str(observed_at), FX_URL
+    except Exception as exc:
+        print(f"FX rate refresh unavailable; non-USD analytics remain ineligible: {exc}")
+        return {}, None, None
 
 def get_db_connection():
     global IS_SQLITE
@@ -115,6 +141,7 @@ def setup_sqlite_schema(conn):
         currency_normalized TEXT,
         price_usd REAL,
         conversion_rate REAL,
+        conversion_timestamp TEXT,
         reserve_price REAL,
         price_min REAL,
         price_max REAL,
@@ -170,6 +197,12 @@ def setup_sqlite_schema(conn):
         completed_at TEXT
     );
     """)
+
+    # Keep existing local development databases forward-compatible. SQLite's
+    # CREATE TABLE IF NOT EXISTS does not add newly introduced columns.
+    listing_columns = {row[1] for row in cur.execute("PRAGMA table_info(listings)").fetchall()}
+    if "conversion_timestamp" not in listing_columns:
+        cur.execute("ALTER TABLE listings ADD COLUMN conversion_timestamp TEXT")
     try:
         cur.execute("ALTER TABLE listings ADD COLUMN provenance_metadata TEXT;")
     except Exception:
@@ -288,7 +321,12 @@ def run_pipeline_step(limit=50):
         conn.close()
         return 0
 
-    processor = WatchFactsPipelineProcessor()
+    fx_rates, fx_observed_at, fx_source = load_verified_fx_rates()
+    processor = WatchFactsPipelineProcessor(
+        fx_rates=fx_rates,
+        fx_observed_at=fx_observed_at,
+        fx_source=fx_source,
+    )
 
     for job in jobs:
         job_id = job["job_id"]
@@ -321,7 +359,7 @@ def run_pipeline_step(limit=50):
                 id, job_id, parent_id, bundle_position, raw_message_text, category, intent, listing_type, is_bundle,
                 brand_original, brand_normalized, model_original, model_normalized,
                 reference_original, reference_normalized, dial_color_original, dial_color_normalized, dial_color_source,
-                price_original, currency_original, price_normalized, currency_normalized, price_usd, conversion_rate,
+                price_original, currency_original, price_normalized, currency_normalized, price_usd, conversion_rate, conversion_timestamp,
                 reserve_price, price_min, price_max, price_avg,
                 condition_original, condition_normalized, box_original, box_normalized,
                 papers_original, papers_normalized, image_url, report_url, user_name, from_name, contact_number, from_number,
@@ -331,7 +369,7 @@ def run_pipeline_step(limit=50):
             ) VALUES (
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                 %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
             )
             """
             if IS_SQLITE:
@@ -350,7 +388,7 @@ def run_pipeline_step(limit=50):
                 res["model_original"], res["model_normalized"], res["reference_original"], res["reference_normalized"],
                 res["dial_color_original"], res["dial_color_normalized"], res["dial_color_source"],
                 res["price_original"], res["currency_original"], res["price_normalized"], res["currency_normalized"],
-                res["price_usd"], res["conversion_rate"], res["reserve_price"], res["price_min"], res["price_max"], res["price_avg"],
+                res["price_usd"], res["conversion_rate"], res["conversion_timestamp"], res["reserve_price"], res["price_min"], res["price_max"], res["price_avg"],
                 res["condition_original"], res["condition_normalized"], res["box_original"], res["box_normalized"],
                 res["papers_original"], res["papers_normalized"], res["image_url"], res["report_url"],
                 res["user_name"], res["from_name"], res["contact_number"], res["from_number"],
@@ -370,7 +408,7 @@ def run_pipeline_step(limit=50):
                     id, job_id, parent_id, bundle_position, raw_message_text, category, intent, listing_type, is_bundle,
                     brand_original, brand_normalized, model_original, model_normalized,
                     reference_original, reference_normalized, dial_color_original, dial_color_normalized, dial_color_source,
-                    price_original, currency_original, price_normalized, currency_normalized, price_usd, conversion_rate,
+                    price_original, currency_original, price_normalized, currency_normalized, price_usd, conversion_rate, conversion_timestamp,
                     reserve_price, price_min, price_max, price_avg,
                     condition_original, condition_normalized, box_original, box_normalized,
                     papers_original, papers_normalized, image_url, report_url, user_name, from_name, contact_number, from_number,
@@ -380,7 +418,7 @@ def run_pipeline_step(limit=50):
                 ) VALUES (
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
                     %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
                 )
                 """
                 if IS_SQLITE:
@@ -394,7 +432,7 @@ def run_pipeline_step(limit=50):
                     None, None, child["reference_normalized"], child["reference_normalized"],
                     child["dial_color_normalized"], child["dial_color_normalized"], child["dial_color_source"],
                     child["price_normalized"], child["currency_normalized"], child["price_normalized"], child["currency_normalized"],
-                    child["price_usd"], child["conversion_rate"], 0.0, 0.0, 0.0, 0.0,
+                    child["price_usd"], child["conversion_rate"], child.get("conversion_timestamp"), 0.0, 0.0, 0.0, 0.0,
                     child["condition_normalized"], child["condition_normalized"], child["box_normalized"], child["box_normalized"],
                     child["papers_normalized"], child["papers_normalized"], "", "",
                     res["user_name"], res["from_name"], res["contact_number"], res["from_number"],

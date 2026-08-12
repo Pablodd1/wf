@@ -57,6 +57,14 @@ SUPPORTED_CURRENCIES = {
     "CAD", "AUD", "JPY", "CNY",
 }
 
+CURRENCY_ALIASES = {
+    "USD": "USD", "USDT": "USDT", "$": "USD",
+    "HKD": "HKD", "HKN": "HKD", "HNK": "HKD", "HK$": "HKD",
+    "RMB": "CNY", "CNY": "CNY", "JPY": "JPY",
+    "SGD": "SGD", "EUR": "EUR", "GBP": "GBP", "CHF": "CHF",
+    "AED": "AED", "CAD": "CAD", "AUD": "AUD",
+}
+
 EMOJI_DIGITS = {
     '0️⃣': '0', '1️⃣': '1', '2️⃣': '2', '3️⃣': '3', '4️⃣': '4',
     '5️⃣': '5', '6️⃣': '6', '7️⃣': '7', '8️⃣': '8', '9️⃣': '9',
@@ -80,8 +88,13 @@ BRAND_PRICE_PLAUSIBILITY = {
 
 class WatchFactsPipelineProcessor:
 
-    def __init__(self, catalog_refs=None):
+    def __init__(self, catalog_refs=None, fx_rates=None, fx_observed_at=None, fx_source=None):
         self.catalog_refs = catalog_refs or {}
+        # Values are USD per one unit of source currency. They must come from a
+        # dated external-rate response; the worker never silently invents FX.
+        self.fx_rates = {str(k).upper(): float(v) for k, v in (fx_rates or {}).items()}
+        self.fx_observed_at = fx_observed_at
+        self.fx_source = fx_source
         self.version = "2.2.3"
 
     def parse_emoji_numbers(self, text):
@@ -153,7 +166,10 @@ class WatchFactsPipelineProcessor:
 
         lower = text_clean.lower()
         default_curr = None
-        if "hkd" in lower: default_curr = "HKD"
+        currency_evidence = "missing"
+        if re.search(r"\b(hkd|hkn|hnk)\b|hk\$", lower): default_curr = "HKD"
+        elif re.search(r"\b(rmb|cny)\b", lower): default_curr = "CNY"
+        elif re.search(r"\bjpy\b|¥", lower): default_curr = "JPY"
         elif "eur" in lower: default_curr = "EUR"
         elif "gbp" in lower: default_curr = "GBP"
         elif "usdt" in lower: default_curr = "USDT"
@@ -162,29 +178,43 @@ class WatchFactsPipelineProcessor:
         elif "aed" in lower: default_curr = "AED"
         elif "chf" in lower: default_curr = "CHF"
 
-        m = re.search(r'(\d+(?:\.\d+)?)\s*(k|m|million)\s*(usd|usdt|hkd|eur|gbp|chf|aed|sgd|\$)?\b', text_clean, re.I)
+        if default_curr:
+            currency_evidence = "explicit_source_currency"
+
+        currency_token = r'usd|usdt|hkd|hkn|hnk|hk\$|rmb|cny|jpy|eur|gbp|chf|aed|sgd|cad|aud|\$'
+
+        def normalize_currency(token):
+            nonlocal currency_evidence
+            if token:
+                canonical = CURRENCY_ALIASES.get(token.upper(), token.upper())
+                currency_evidence = "usd_defaulted_by_policy" if token == "$" else "explicit_source_currency"
+                return canonical
+            if default_curr:
+                return default_curr
+            currency_evidence = "usd_defaulted_by_policy"
+            return "USD"
+
+        m = re.search(rf'(\d+(?:\.\d+)?)\s*(k|m|million)\s*({currency_token})?(?:\b|$)', text_clean, re.I)
         if m:
             val = float(m.group(1))
             unit = m.group(2).lower()
             val *= 1000 if unit == 'k' else 1_000_000
-            curr_match = m.group(3)
-            curr = curr_match.upper() if curr_match and curr_match != "$" else default_curr
-            return (val, curr)
+            curr = normalize_currency(m.group(3))
+            return (val, curr, currency_evidence)
 
-        m = re.search(r'(?:yours for|price|\$|usd|usdt|hkd|eur|gbp|chf|aed|sgd)\s*:?\s*(\d+(?:\.\d+)?)\s*(usd|usdt|hkd|eur|gbp|chf|aed|sgd|\$)?\b', text_clean, re.I)
+        m = re.search(rf'(?:yours for|price|\$|usd|usdt|hkd|hkn|hnk|hk\$|rmb|cny|jpy|eur|gbp|chf|aed|sgd)\s*:?\s*(\d+(?:\.\d+)?)\s*({currency_token})?(?:\b|$)', text_clean, re.I)
         if m:
             val = float(m.group(1))
             if not (1950 <= val <= 2030 and len(str(int(val))) == 4):
-                curr_match = m.group(2)
-                curr = curr_match.upper() if curr_match and curr_match != "$" else default_curr
-                return (val, curr)
+                curr = normalize_currency(m.group(2))
+                return (val, curr, currency_evidence)
 
-        m = re.search(r'\b(\d+(?:\.\d+)?)\s*(usd|usdt|hkd|eur|gbp|chf|aed|sgd|\$)\b', text_clean, re.I)
+        m = re.search(rf'\b(\d+(?:\.\d+)?)\s*({currency_token})(?:\b|$)', text_clean, re.I)
         if m:
             val = float(m.group(1))
             if not (1950 <= val <= 2030 and len(str(int(val))) == 4):
-                curr = None if m.group(2) == "$" else m.group(2).upper()
-                return (val, curr)
+                curr = normalize_currency(m.group(2))
+                return (val, curr, currency_evidence)
 
         ref_val = self.extract_reference(text)
 
@@ -194,16 +224,18 @@ class WatchFactsPipelineProcessor:
             if ref_val and str(int(val)) == str(ref_val):
                 pass
             elif not (1950 <= val <= 2030 and len(str(int(val))) == 4):
-                return (val, default_curr)
+                return (val, normalize_currency(None), currency_evidence)
 
-        return (0.0, None)
+        return (0.0, None, "missing")
 
     def convert_to_usd(self, price, currency, verified_rate=None):
         if not price or price <= 0 or not currency:
             return (None, None)
         normalized_currency = str(currency).upper()
-        if normalized_currency == "USD":
+        if normalized_currency in ("USD", "USDT"):
             return (round(price, 2), 1.0)
+        if verified_rate is None:
+            verified_rate = self.fx_rates.get(normalized_currency)
         if verified_rate is None:
             return (None, None)
         try:
@@ -250,7 +282,7 @@ class WatchFactsPipelineProcessor:
         reference = self.extract_reference(message_text)
         dial_color = self.extract_dial_color(message_text)
         condition = self.extract_condition(message_text)
-        price, currency = self.extract_price(message_text)
+        price, currency, currency_evidence = self.extract_price(message_text)
         has_box = bool(re.search(r'\bbox\b', message_text, re.I))
         has_papers = bool(re.search(r'\b(papers|card|cert)\b', message_text, re.I))
         segments = split_bundle_listing(message_text)
@@ -353,11 +385,13 @@ class WatchFactsPipelineProcessor:
         reference = self.extract_reference(message_text) or job_data.get("reference_src") or None
         dial      = self.extract_dial_color(message_text) or job_data.get("dial_src") or None
         condition = self.extract_condition(message_text, job_data.get("condition_id"))
-        price, currency = self.extract_price(message_text)
+        price, currency, currency_evidence = self.extract_price(message_text)
 
         if price == 0.0 and job_data.get("price_src", 0):
             price    = float(job_data.get("price_src", 0))
-            currency = job_data.get("currency_src") or None
+            source_currency = str(job_data.get("currency_src") or "").upper()
+            currency = CURRENCY_ALIASES.get(source_currency, source_currency) or "USD"
+            currency_evidence = "explicit_source_currency" if source_currency else "usd_defaulted_by_policy"
 
         price_usd, conversion_rate = self.convert_to_usd(
             price, currency, job_data.get("verified_conversion_rate")
@@ -421,7 +455,7 @@ class WatchFactsPipelineProcessor:
                 c_brand  = self.extract_brand(item["raw_text"]) or item.get("brand") or brand
                 c_ref    = self.extract_reference(item["raw_text"]) or item.get("reference")
                 c_dial   = self.extract_dial_color(item["raw_text"])
-                c_price, c_currency = self.extract_price(item["raw_text"])
+                c_price, c_currency, c_currency_evidence = self.extract_price(item["raw_text"])
                 c_cond   = self.extract_condition(item["raw_text"])
                 c_usd, c_rate = self.convert_to_usd(c_price, c_currency)
                 c_box    = "yes" if re.search(r'\bbox\b', item["raw_text"], re.I) else "no"
@@ -463,6 +497,7 @@ class WatchFactsPipelineProcessor:
                     "currency_normalized":   c_currency,
                     "price_usd":             c_usd,
                     "conversion_rate":       c_rate,
+                    "conversion_timestamp": self.fx_observed_at if c_rate and c_currency not in ("USD", "USDT") else None,
                     "price_split_required":  price_split_req,
                     "image_url":             "",
                     "verdict":               c_verdict,
@@ -474,6 +509,8 @@ class WatchFactsPipelineProcessor:
                         "brand": "parsed" if c_brand else "missing",
                         "reference": "parsed" if c_ref else "missing",
                         "price": "parsed" if c_price > 0 else "missing",
+                        "currency_evidence": c_currency_evidence,
+                        "fx_source": self.fx_source if c_rate and c_currency not in ("USD", "USDT") else None,
                         "dial": "parsed" if c_dial else "image_pending",
                         "plausibility_reason": c_statuses["plausibility_reason"],
                     },
@@ -512,6 +549,7 @@ class WatchFactsPipelineProcessor:
             "currency_normalized":          currency,
             "price_usd":                    price_usd,
             "conversion_rate":              conversion_rate,
+            "conversion_timestamp":         self.fx_observed_at if conversion_rate and currency not in ("USD", "USDT") else None,
             "reserve_price":                float(job_data.get("reserve_price") or 0),
             "price_min":                    float(job_data.get("price_min") or 0),
             "price_max":                    float(job_data.get("price_max") or 0),
@@ -549,6 +587,9 @@ class WatchFactsPipelineProcessor:
                 "brand":     "db+parsed" if job_data.get("brand_src") else "parsed",
                 "reference": "db+parsed" if job_data.get("reference_src") else "parsed",
                 "price":     "db+parsed" if price > 0 else "missing",
+                "currency_evidence": currency_evidence,
+                "fx_source": self.fx_source if conversion_rate and currency not in ("USD", "USDT") else None,
+                "fx_observed_at": self.fx_observed_at if conversion_rate and currency not in ("USD", "USDT") else None,
                 "dial":      dial_source,
                 "plausibility_reason": statuses["plausibility_reason"],
             },

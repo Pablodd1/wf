@@ -2,6 +2,7 @@
 
 const CURRENCY_ALIASES = [
   { code: 'USDT', pattern: 'USDT' },
+  { code: 'HKD', pattern: 'HKN|HNK' },
   { code: 'HKD', pattern: 'HKD|HDK|HK\\$|H\\.?K\\.?D\\.?|港币|港幣' },
   { code: 'USD', pattern: 'USD|US\\$|U\\$' },
   { code: 'EUR', pattern: 'EUR|€' },
@@ -214,18 +215,30 @@ function extractPriceObservations(text, context = {}) {
     rejectedOverlaps.add(trailingPair && suffixHasExplicitScale ? prefix : suffix);
   }
 
-  // A bare dollar sign inherits an explicit section/message currency. Without
-  // context it remains unresolved instead of silently becoming USD.
+  // A bare dollar sign is USD unless an explicit section/message currency is
+  // present. The evidence label keeps this product default auditable.
   const dollarPattern = new RegExp(`\\$\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
   for (const match of line.matchAll(dollarPattern)) {
-    const contextCurrency = context.currency_context || null;
-    if (contextCurrency) {
-      add(match[0], match[1], match[2], contextCurrency, match.index, 'section_currency');
-    }
+    if (observations.length) continue;
+    const contextCurrency = context.currency_context || 'USD';
+    add(match[0], match[1], match[2], contextCurrency, match.index,
+      context.currency_context ? 'section_currency' : 'usd_defaulted_by_policy');
   }
 
-  if (!observations.length && context.currency_context) {
-    const bare = line.match(new RegExp(`\\b(\\d{1,3}(?:[.,]\\d{3})+|\\d+(?:[.,]\\d+)?)\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z])`, 'i'));
+  const suffixDollarPattern = new RegExp(`(?<![A-Za-z0-9])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?\\$`, 'gi');
+  for (const match of line.matchAll(suffixDollarPattern)) {
+    if (observations.length) continue;
+    add(match[0], match[1], match[2], 'USD', match.index, 'usd_defaulted_by_policy');
+  }
+
+  if (!observations.length && !/[?]/.test(line)) {
+    const bareMatches = [...line.matchAll(new RegExp(`\\b(\\d{1,3}(?:[.,]\\d{3})+|\\d+(?:[.,]\\d+)?)\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z])`, 'gi'))];
+    const reference = String(extractReference(line) || '').replace(/[^0-9A-Z]/gi, '').toUpperCase();
+    const bare = bareMatches.reverse().find(match => {
+      const amount = parseNumber(match[1], match[2]);
+      const token = String(match[1] || '').replace(/[^0-9A-Z]/gi, '').toUpperCase();
+      return amount > 0 && !(amount >= 1950 && amount <= 2030) && token !== reference;
+    });
     if (bare) {
       const multiplier = String(bare[2] || '').toLowerCase();
       const integerToken = /^\d{4,}$/.test(bare[1]);
@@ -233,9 +246,27 @@ function extractPriceObservations(text, context = {}) {
       // Tokens such as Rolex 14060M are references, not 14.06B prices. When
       // currency is inherited, leave this ambiguous instead of manufacturing
       // a price. An explicit adjacent currency still follows the rules above.
-      if (!(integerToken && millionScale)) {
-        add(bare[0], bare[1], bare[2], context.currency_context, bare.index, 'section_currency');
+      const hasDefaultablePriceCue = Boolean(context.currency_context)
+        || /(?:^|\b)(?:price|asking|ask|net|obo|yours\s+for)\b/i.test(line)
+        || line.trim() === bare[0].trim();
+      if (!(integerToken && millionScale) && hasDefaultablePriceCue) {
+        add(bare[0], bare[1], bare[2], context.currency_context || 'USD', bare.index,
+          context.currency_context ? 'section_currency' : 'usd_defaulted_by_policy');
       }
+    }
+  }
+
+  if (!observations.length && !/[?]/.test(line)) {
+    const reference = String(extractReference(line) || '').replace(/[^0-9A-Z]/gi, '').toUpperCase();
+    const numericMatches = [...line.matchAll(/\b(\d{1,3}(?:,\d{3})+|\d{4,9})\b/g)].filter(match => {
+      const amount = parseNumber(match[1]);
+      return amount >= 10_000 && !(amount >= 1950 && amount <= 2030)
+        && match[1].replace(/[^0-9A-Z]/gi, '').toUpperCase() !== reference;
+    });
+    const priceCandidate = numericMatches.at(-1);
+    if (priceCandidate) {
+      add(priceCandidate[0], priceCandidate[1], null, context.currency_context || 'USD', priceCandidate.index,
+        context.currency_context ? 'section_currency' : 'usd_defaulted_by_policy');
     }
   }
 
@@ -442,7 +473,7 @@ function segmentDealerMessage(rawMessage, initialContext = {}) {
       intent_context: inferIntent(line, context.intent_context),
       condition_context: inferCondition(line, context.condition_context),
     };
-    const prices = extractPriceObservations(line, context);
+    const prices = extractPriceObservations(line, candidateContext);
     candidates.push({
       rawLine: line,
       reference,

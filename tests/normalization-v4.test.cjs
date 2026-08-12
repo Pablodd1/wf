@@ -57,8 +57,20 @@ HKD ~ Without Box
   assert.equal(candidates[0].prices[0].amount_original, 283000);
 });
 
-test('does not assume USD for a bare dollar sign without context', () => {
-  assert.deepEqual(extractPriceObservations('126500 White $283000', {}), []);
+test('defaults a bare dollar sign to USD and preserves policy provenance', () => {
+  const prices = extractPriceObservations('126500 White $283000', {});
+  assert.equal(prices.length, 1);
+  assert.equal(prices[0].amount_original, 283000);
+  assert.equal(prices[0].currency_original, 'USD');
+  assert.equal(prices[0].currency_evidence, 'usd_defaulted_by_policy');
+});
+
+test('defaults suffix dollar and unsupplied numeric asking amounts to USD', () => {
+  for (const [message, expected] of [['116688 $37k', 37000], ['336935 60000$', 60000], ['126500 18,000', 18000]]) {
+    const prices = extractPriceObservations(message, {});
+    assert.equal(prices.at(-1).amount_original, expected, message);
+    assert.equal(prices.at(-1).currency_original, 'USD', message);
+  }
 });
 
 test('parses Chinese HKD labels and ten-thousand multipliers without a USD fallback', () => {
@@ -97,9 +109,13 @@ test('parses explicit mil, mill, and million multipliers on either side of HKD',
   }
 });
 
-test('does not assign a currency to a multiplier without explicit or inherited evidence', () => {
-  assert.deepEqual(extractPriceObservations('380 mil'), []);
-  assert.deepEqual(extractPriceObservations('1.2 million'), []);
+test('defaults unlabelled numeric multiplier asking prices to USD', () => {
+  for (const [raw, expected] of [['380 mil', 380000], ['1.2 million', 1200000]]) {
+    const prices = extractPriceObservations(raw);
+    assert.equal(prices[0].amount_original, expected);
+    assert.equal(prices[0].currency_original, 'USD');
+    assert.equal(prices[0].currency_evidence, 'usd_defaulted_by_policy');
+  }
 });
 
 test('inherits Chinese HKD section context for bare dollar prices', () => {
@@ -224,7 +240,8 @@ test('keeps a bare six-digit reference when the following price uses a separate 
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].reference, '126333');
   assert.equal(candidates[0].context.brand_context, 'Rolex');
-  assert.deepEqual(candidates[0].prices, []);
+  assert.equal(candidates[0].prices[0].amount_original, 14500);
+  assert.equal(candidates[0].prices[0].currency_original, 'USD');
 });
 
 test('recognizes Cartier and dotted Hublot reference formats', () => {
@@ -271,7 +288,8 @@ test('accepts HK only beside a price without treating location text as currency 
   assert.equal(prefix[0].currency_original, 'HKD');
 
   const locationOnly = segmentDealerMessage('126334 Used 2023 $125000 arrive HK');
-  assert.deepEqual(locationOnly[0].prices, []);
+  assert.equal(locationOnly[0].prices[0].amount_original, 125000);
+  assert.equal(locationOnly[0].prices[0].currency_original, 'USD');
   assert.equal(locationOnly[0].context.currency_context, undefined);
 });
 

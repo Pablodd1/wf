@@ -64,8 +64,12 @@ function analyzeRecord(record) {
     sourceIntent ? { intent_context: sourceIntent } : {},
   );
   const proposed = candidates.map(candidate => {
-    const parsedPrices = candidate.prices || [];
-    const sourceCurrencyPrice = parsedPrices.length ? null : sourceCurrencyTextObservation(candidate, record);
+    let parsedPrices = candidate.prices || [];
+    const defaultedUsd = parsedPrices.find(price => price.currency_evidence === 'usd_defaulted_by_policy');
+    const sourceCurrencyPrice = defaultedUsd && record.currency
+      ? sourceCurrencyTextObservation(candidate, record)
+      : parsedPrices.length ? null : sourceCurrencyTextObservation(candidate, record);
+    if (sourceCurrencyPrice) parsedPrices = [];
     // A collapsed parent price cannot be assigned to an arbitrary child. Only
     // retain a structured source price when the message resolves to one watch.
     const retainedSourcePrice = candidates.length === 1 && !parsedPrices.length && !sourceCurrencyPrice
@@ -121,13 +125,8 @@ function analyzeRecord(record) {
     if (next.dial_ambiguous) flags.add('DIAL_AMBIGUOUS');
     if (next.dial_color && comparisonKey(next.dial_color) !== comparisonKey(sourceDial.value)) flags.add('DIAL_CHANGED');
 
-    // A bare dollar amount without message or section currency context is not
-    // safe to preserve as USD. Keep it out of automatic approval even when an
-    // older parser already supplied a numeric price or currency.
-    const priceCameFromText = next.prices.some(price => price.currency_evidence !== 'source_record');
-    if (!priceCameFromText && /\$\s*\d/.test(next.raw_line) && !/(?:US\$|U\$|HK\$)/i.test(next.raw_line)) {
-      flags.add('CURRENCY_AMBIGUOUS');
-    }
+    // Product policy defaults bare dollar and unlabelled numeric asking prices
+    // to USD. The currency_evidence field preserves that distinction for audit.
     if (!next.price_raw && record.price_raw != null) flags.add('PRICE_PARSE_FAILED');
     if (next.listing_type !== 'WTB' && next.emoji_price_ambiguous) flags.add('EMOJI_PRICE_AMBIGUOUS');
   }

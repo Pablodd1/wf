@@ -81,7 +81,8 @@ test('Trading Floor preserves source text and orders price intelligence before p
   assert.match(floor, /Bundle, multi-listing, and unbundled-child images remain excluded/);
   assert.match(floor, /label="Price supplied"/);
   assert.ok(floor.indexOf(': sourcePrice') < floor.indexOf(': reviewedWorkbookUsd !== null'));
-  assert.match(floor, /currency not supplied/);
+  assert.doesNotMatch(floor, /currency not supplied/);
+  assert.match(floor, /USD \$\{sourceText\}/);
   assert.match(floor, /Original source price · no USD conversion/);
   assert.match(floor, /Location/);
   assert.match(floor, /Rated dealers/);

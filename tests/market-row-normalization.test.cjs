@@ -111,9 +111,11 @@ test('does not borrow a later emoji-bullet price from the same physical line', (
   assert.equal(result.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
 });
 
-test('withholds bare-dollar and non-pegged currency records without a verified USD conversion', () => {
+test('defaults bare-dollar to USD while withholding non-pegged currency without dated FX', () => {
   const ambiguous = normalizeMarketRow({ price_usd: 25000, raw_message: '5712/1A blue $25k' }, '5712/1A');
   const eur = normalizeMarketRow({ price_usd: 27000, raw_message: '5712/1A blue EUR 25k' }, '5712/1A');
-  assert.equal(ambiguous.analytics_currency_status, 'CURRENCY_AMBIGUOUS');
+  assert.equal(ambiguous.analytics_currency_status, 'VERIFIED');
+  assert.equal(ambiguous.analytics_price_usd, 25000);
+  assert.equal(ambiguous.price_normalization, 'USD_DEFAULTED_BY_POLICY');
   assert.equal(eur.analytics_currency_status, 'CURRENCY_RATE_UNVERIFIED');
 });
