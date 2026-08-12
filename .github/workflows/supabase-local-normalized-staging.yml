@@ -77,7 +77,8 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $migrationPaths = @(
             'supabase/migrations/20260811120000_mariadb_normalized_staging_import.sql',
-            'supabase/migrations/20260811193000_widen_normalized_source_fields.sql'
+            'supabase/migrations/20260811193000_widen_normalized_source_fields.sql',
+            'supabase/migrations/20260812010000_dated_fx_normalized_staging_transport.sql'
           )
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           foreach ($migrationPath in $migrationPaths) {

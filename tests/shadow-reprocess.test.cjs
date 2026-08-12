@@ -75,12 +75,20 @@ test('uses source HKD only as currency evidence for a bare-dollar text amount', 
     price_raw: 283000,
     price_usd: 36282,
     listing_type: 'WTS',
+  }, {
+    fxSnapshot: {
+      observed_at: '2026-08-11T00:00:00Z',
+      source: 'TEST_DATED_RATE',
+      usd_per_unit: { HKD: 36282 / 283000 },
+    },
   });
   const candidate = result.proposed_candidates[0];
   assert.equal(candidate.price_raw, 283000);
   assert.equal(candidate.price_usd, 36282);
   assert.equal(candidate.currency, 'HKD');
   assert.equal(candidate.currency_evidence, 'source_record_currency');
+  assert.equal(candidate.prices[0].conversion_timestamp, '2026-08-11T00:00:00Z');
+  assert.equal(candidate.prices[0].conversion_source, 'TEST_DATED_RATE');
   assert.ok(!result.change_flags.includes('CURRENCY_AMBIGUOUS'));
 });
 

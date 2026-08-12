@@ -10,6 +10,7 @@ const CURRENCY_ALIASES = [
   { code: 'CHF', pattern: 'CHF' },
   { code: 'SGD', pattern: 'SGD|S\\$' },
   { code: 'CNY', pattern: 'CNY|RMB|CN¥' },
+  { code: 'JPY', pattern: 'JPY' },
 ];
 
 const CURRENCY_TOKEN = CURRENCY_ALIASES.map(item => item.pattern).join('|');
@@ -86,7 +87,7 @@ function decodeNumericUnicode(value) {
 
 function normalizeCurrencyToken(token) {
   const clean = String(token || '').toUpperCase().replace(/\s/g, '');
-  if (/^(HKD|HDK|HK|HK\$|H\.?K\.?D\.?)$/.test(clean) || /港币|港幣/.test(token)) return 'HKD';
+  if (/^(HKD|HDK|HKN|HNK|HK|HK\$|H\.?K\.?D\.?)$/.test(clean) || /港币|港幣/.test(token)) return 'HKD';
   if (/^(USD|US\$|U\$)$/.test(clean)) return 'USD';
   if (clean === 'USDT') return 'USDT';
   if (clean === 'EUR' || clean === '€') return 'EUR';
@@ -94,6 +95,7 @@ function normalizeCurrencyToken(token) {
   if (clean === 'CHF') return 'CHF';
   if (clean === 'SGD' || clean === 'S$') return 'SGD';
   if (/^(CNY|RMB|CN¥)$/.test(clean)) return 'CNY';
+  if (clean === 'JPY') return 'JPY';
   return null;
 }
 

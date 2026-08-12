@@ -55,7 +55,42 @@ function sourceCurrencyTextObservation(candidate, record) {
   };
 }
 
-function analyzeRecord(record) {
+function applyCurrencyPolicy(price, fxSnapshot = null) {
+  if (!price) return price;
+  const currency = String(price.currency_original || '').toUpperCase();
+  const amount = Number(price.amount_original);
+  if (!Number.isFinite(amount) || amount <= 0 || !currency) return price;
+  if (currency === 'USD' || currency === 'USDT') {
+    return {
+      ...price,
+      amount_usd: amount,
+      conversion_rate: 1,
+      conversion_timestamp: null,
+      conversion_source: price.currency_evidence === 'usd_defaulted_by_policy'
+        ? 'USD_DEFAULTED_BY_POLICY'
+        : 'SOURCE_USD_OR_USDT',
+    };
+  }
+  const rate = Number(fxSnapshot?.usd_per_unit?.[currency]);
+  if (!Number.isFinite(rate) || rate <= 0 || !fxSnapshot?.observed_at || !fxSnapshot?.source) {
+    return {
+      ...price,
+      amount_usd: null,
+      conversion_rate: null,
+      conversion_timestamp: null,
+      conversion_source: null,
+    };
+  }
+  return {
+    ...price,
+    amount_usd: Math.round(amount * rate),
+    conversion_rate: rate,
+    conversion_timestamp: fxSnapshot.observed_at,
+    conversion_source: fxSnapshot.source,
+  };
+}
+
+function analyzeRecord(record, options = {}) {
   const sourceIntent = ['WTB', 'WTS'].includes(String(record.listing_type || '').toUpperCase())
     ? String(record.listing_type).toUpperCase()
     : null;
@@ -75,7 +110,8 @@ function analyzeRecord(record) {
     const retainedSourcePrice = candidates.length === 1 && !parsedPrices.length && !sourceCurrencyPrice
       ? sourcePriceObservation(record)
       : null;
-    const prices = sourceCurrencyPrice ? [sourceCurrencyPrice] : retainedSourcePrice ? [retainedSourcePrice] : parsedPrices;
+    const prices = (sourceCurrencyPrice ? [sourceCurrencyPrice] : retainedSourcePrice ? [retainedSourcePrice] : parsedPrices)
+      .map(price => applyCurrencyPolicy(price, options.fxSnapshot));
     const primary = prices.find(price => price.is_primary) || prices[0] || null;
     const candidateBrand = candidate.context.brand_context || record.brand || null;
     const candidateReference = candidate.reference || record.reference || null;
@@ -228,5 +264,5 @@ if (require.main === module) {
   });
 }
 
-module.exports = { analyzeRecord };
+module.exports = { analyzeRecord, applyCurrencyPolicy };
 

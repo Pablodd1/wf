@@ -7,13 +7,30 @@ const { confirmCatalogCandidate } = require('../../api/_lib/catalog-confirmation
 const { buildPromotionDecision } = require('../shadow-reprocess/promotion-policy.cjs');
 const { atomicJson, boundedInteger, csv, jsonLine, normalizationInput, readJsonLines } = require('./lib.cjs');
 
+function loadFxSnapshot(filePath) {
+  if (!filePath) return null;
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) throw new Error(`FX snapshot does not exist: ${resolved}`);
+  const snapshot = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+  if (!snapshot.observed_at || !snapshot.source || !snapshot.usd_per_unit || typeof snapshot.usd_per_unit !== 'object') {
+    throw new Error('FX snapshot must contain observed_at, source, and usd_per_unit');
+  }
+  if (!Number.isFinite(Date.parse(snapshot.observed_at))) throw new Error('FX snapshot observed_at is invalid');
+  for (const [currency, value] of Object.entries(snapshot.usd_per_unit)) {
+    if (!/^[A-Z]{3,4}$/.test(currency) || !Number.isFinite(Number(value)) || Number(value) <= 0) {
+      throw new Error(`FX snapshot contains an invalid USD-per-unit rate for ${currency}`);
+    }
+  }
+  return snapshot;
+}
+
 function increment(map, key) {
   map[key] = (map[key] || 0) + 1;
 }
 
-function normalizeSourceRecord(source) {
+function normalizeSourceRecord(source, options = {}) {
   const normalizedInput = normalizationInput(source);
-  const shadow = analyzeRecord(normalizedInput);
+  const shadow = analyzeRecord(normalizedInput, { fxSnapshot: options.fxSnapshot || null });
   const confirmation = shadow.candidate_count === 1
     ? confirmCatalogCandidate(shadow.proposed_candidates[0])
     : null;
@@ -66,6 +83,7 @@ async function run(options = {}) {
   const startRow = boundedInteger(env.MARIADB_NORMALIZE_START_ROW, 0, 0, 10_000_000, 'MARIADB_NORMALIZE_START_ROW');
   const flushRows = boundedInteger(env.MARIADB_NORMALIZE_FLUSH_ROWS, 500, 1, 5000, 'MARIADB_NORMALIZE_FLUSH_ROWS');
   const resume = env.MARIADB_NORMALIZE_RESUME === '1';
+  const fxSnapshot = loadFxSnapshot(env.MARIADB_NORMALIZE_FX_SNAPSHOT || null);
   if (!fs.existsSync(input)) throw new Error(`Input does not exist: ${input}`);
   fs.mkdirSync(output, { recursive: true });
   const paths = {
@@ -120,7 +138,7 @@ async function run(options = {}) {
     try {
       const source = JSON.parse(line);
       sourceId = source.source_record_id;
-      const proposal = normalizeSourceRecord(source);
+      const proposal = normalizeSourceRecord(source, { fxSnapshot });
       increment(bundles, proposal.bundle_status);
       increment(dispositions, proposal.review_disposition);
       for (const reason of proposal.review_reasons) increment(reasons, reason);
@@ -177,4 +195,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { normalizeSourceRecord, readExistingProgress, run };
+module.exports = { loadFxSnapshot, normalizeSourceRecord, readExistingProgress, run };

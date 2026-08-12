@@ -3,7 +3,12 @@
 const { extractPriceObservations, explicitIntent, parseNumber } = require('../../api/_lib/normalization-v4.cjs');
 const { classify } = require('./audit-non-watch.cjs');
 
-const ACCEPTABLE_PRICE_EVIDENCE = new Set(['explicit_line_currency', 'section_context', 'message_context']);
+const ACCEPTABLE_PRICE_EVIDENCE = new Set([
+  'explicit_line_currency',
+  'section_context',
+  'message_context',
+  'usd_defaulted_by_policy',
+]);
 const PUBLIC_CATEGORIES = new Set(['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY']);
 const DO_ORIGIN = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/';
 const DO_LISTINGS_FULL_BASE = `${DO_ORIGIN}listings/full/`;
@@ -106,6 +111,9 @@ function normalizedPrice(candidate) {
     raw_price_text: primary.raw_price_text || null,
     currency_evidence: primary.currency_evidence || null,
     analytics_currency_evidence_eligible: ACCEPTABLE_PRICE_EVIDENCE.has(primary.currency_evidence),
+    conversion_rate: primary.conversion_rate ?? null,
+    conversion_timestamp: primary.conversion_timestamp || null,
+    conversion_source: primary.conversion_source || null,
   };
 }
 
@@ -138,7 +146,10 @@ function priceResearchStatus({ category, bundleStatus, candidate, catalogConfirm
   const price = normalizedPrice(candidate);
   if (!price) return 'INELIGIBLE_NO_PRICE';
   if (!price.analytics_currency_evidence_eligible || !price.amount_usd) return 'INELIGIBLE_CURRENCY_OR_FX';
-  if (!['USD', 'USDT'].includes(String(price.currency_original).toUpperCase())) return 'INELIGIBLE_FX_UNVERIFIED';
+  if (!['USD', 'USDT'].includes(String(price.currency_original).toUpperCase())
+    && (!price.conversion_rate || !price.conversion_timestamp || !price.conversion_source)) {
+    return 'INELIGIBLE_FX_UNVERIFIED';
+  }
   if (!candidate.dial_color) return 'INELIGIBLE_DIAL';
   return reviewDisposition === 'READY_FOR_HUMAN_APPROVAL'
     ? 'SALE_PENDING_HUMAN_APPROVAL'

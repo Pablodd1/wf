@@ -83,6 +83,9 @@ function compactCandidate(candidate) {
       raw_price_text: candidate.price.raw_price_text || null,
       currency_evidence: candidate.price.currency_evidence || null,
       analytics_currency_evidence_eligible: candidate.price.analytics_currency_evidence_eligible === true,
+      conversion_rate: candidate.price.conversion_rate ?? null,
+      conversion_timestamp: candidate.price.conversion_timestamp || null,
+      conversion_source: candidate.price.conversion_source || null,
     } : null,
   };
 }
@@ -192,7 +195,7 @@ async function submitBatch(runConfig, state, records, fetchImpl = fetch) {
     expected_input_rows: state.input_rows,
     records: records.map(record => [record.source_record_id, record.source_hash, record.source_candidate_hash]),
   }));
-  const result = await rpc(runConfig, 'ingest_mariadb_normalization_batch', {
+  const result = await rpc(runConfig, 'ingest_mariadb_normalization_batch_v2', {
     p_run_key: runConfig.runKey,
     p_raw_import_run_key: runConfig.rawImportRunKey,
     p_contract: STAGING_CONTRACT,

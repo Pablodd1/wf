@@ -60,6 +60,7 @@ test('normalized importer supports a resumable bounded canary', () => {
 
 test('normalized staging preserves long source-supplied identity fields', () => {
   assert.match(staging, /20260811193000_widen_normalized_source_fields\.sql/);
+  assert.match(staging, /20260812010000_dated_fx_normalized_staging_transport\.sql/);
   for (const column of [
     'brand_original',
     'brand_normalized',

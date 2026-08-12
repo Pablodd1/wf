@@ -74,18 +74,51 @@ test('WTB with no supplied price remains a single Trading Floor demand candidate
   assert.equal(row.price_research_status, 'DEMAND_PENDING_HUMAN_APPROVAL');
 });
 
-test('bare-dollar evidence is transported as a source amount with no currency or USD conversion', () => {
+test('policy-defaulted bare-dollar evidence is transported as auditable USD', () => {
   const source = sourceRecord({ id: 'bare-dollar-1', type: 'sale', title: 'Rolex 116500LN white $23,995' });
   const row = stagingRecord(source, proposal(source, {
-    brand: 'Rolex', reference: '116500LN', listing_type: 'WTS', dial_color: 'White', prices: [],
+    brand: 'Rolex', reference: '116500LN', listing_type: 'WTS', dial_color: 'White', prices: [{
+      is_primary: true,
+      amount_original: 23995,
+      amount_usd: 23995,
+      currency_original: 'USD',
+      raw_price_text: '$23,995',
+      currency_evidence: 'usd_defaulted_by_policy',
+      conversion_rate: 1,
+      conversion_timestamp: null,
+      conversion_source: 'USD_DEFAULTED_BY_POLICY',
+    }],
     raw_line: source.raw_message,
-  }, { review_disposition: 'HUMAN_REVIEW', review_reasons: ['CURRENCY_AMBIGUOUS'] }));
+  }, { review_disposition: 'HUMAN_REVIEW', review_reasons: ['USD_DEFAULTED_BY_POLICY'] }));
   assert.equal(row.materialization, 'SINGLE');
   assert.equal(row.candidate.price.amount_original, 23995);
-  assert.equal(row.candidate.price.currency_original, null);
-  assert.equal(row.candidate.price.amount_usd, null);
-  assert.equal(row.candidate.price.currency_evidence, 'bare_dollar_unconfirmed');
-  assert.equal(row.price_research_status, 'INELIGIBLE_CURRENCY_OR_FX');
+  assert.equal(row.candidate.price.currency_original, 'USD');
+  assert.equal(row.candidate.price.amount_usd, 23995);
+  assert.equal(row.candidate.price.currency_evidence, 'usd_defaulted_by_policy');
+  assert.equal(row.candidate.price.conversion_rate, 1);
+  assert.equal(row.candidate.price.conversion_source, 'USD_DEFAULTED_BY_POLICY');
+});
+
+test('dated non-USD FX provenance survives the staging transport', () => {
+  const source = sourceRecord({ id: 'hkd-1', type: 'sale', title: 'Patek 5712/1A blue 298000 HKD' });
+  const row = stagingRecord(source, proposal(source, {
+    brand: 'Patek Philippe', reference: '5712/1A', listing_type: 'WTS', dial_color: 'Blue',
+    prices: [{
+      is_primary: true,
+      amount_original: 298000,
+      amount_usd: 38205,
+      currency_original: 'HKD',
+      currency_evidence: 'explicit_line_currency',
+      conversion_rate: 0.128205,
+      conversion_timestamp: '2026-08-11T00:00:00Z',
+      conversion_source: 'ECB_REFERENCE_RATE',
+    }],
+  }));
+  assert.equal(row.candidate.price.amount_usd, 38205);
+  assert.equal(row.candidate.price.conversion_rate, 0.128205);
+  assert.equal(row.candidate.price.conversion_timestamp, '2026-08-11T00:00:00Z');
+  assert.equal(row.candidate.price.conversion_source, 'ECB_REFERENCE_RATE');
+  assert.equal(row.price_research_status, 'SALE_PENDING_HUMAN_APPROVAL');
 });
 
 test('bundle parents and their children are deferred from materialization', () => {
@@ -152,7 +185,7 @@ test('batch transport is idempotently tokened and exactly reconciled', async () 
     };
   });
   assert.equal(result.staged_rows, 1);
-  assert.match(request.url, /rpc\/ingest_mariadb_normalization_batch$/);
+  assert.match(request.url, /rpc\/ingest_mariadb_normalization_batch_v2$/);
   const body = JSON.parse(request.options.body);
   assert.equal(body.p_records.length, 1);
   assert.equal(body.p_records[0].source_record_id, source.source_record_id);
@@ -203,7 +236,7 @@ test('full staging run streams raw and proposals in lockstep and reconciles comp
       fetchImpl: async (url, options) => {
         const body = JSON.parse(options.body);
         requests.push({ url, body });
-        if (url.endsWith('/ingest_mariadb_normalization_batch')) {
+        if (url.endsWith('/ingest_mariadb_normalization_batch_v2')) {
           const deferred = body.p_records.filter(row => row.materialization === 'DEFERRED').length;
           return {
             ok: true, status: 200,
@@ -281,7 +314,7 @@ test('bounded canary checkpoints safely without declaring the full import comple
       },
       fetchImpl: async (url, options) => {
         requests.push(url);
-        assert.ok(url.endsWith('/ingest_mariadb_normalization_batch'));
+    assert.ok(url.endsWith('/ingest_mariadb_normalization_batch_v2'));
         const body = JSON.parse(options.body);
         return {
           ok: true,
