@@ -32,7 +32,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812110000_qnsa_general_market_feed.sql')
+          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812113000_qnsa_general_market_feed_schema_hotfix.sql')
           $compile = "BEGIN;`n$migration`nROLLBACK;"
           $body = @{ query = $compile; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
@@ -64,7 +64,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812110000_qnsa_general_market_feed.sql')
+          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812113000_qnsa_general_market_feed_schema_hotfix.sql')
           $body = @{ query = [string]$migration; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
           Start-Sleep -Seconds 3
@@ -94,4 +94,25 @@ jobs:
               [long]$evidence.handbag_page -lt 1 -or [long]$evidence.jewelry_page -lt 1 -or [long]$evidence.accessory_page -lt 1 -or
               [long]$evidence.media_leakage -ne 0) {
             throw 'General market feed release reconciliation failed.'
+          }
+
+      - name: Smoke production API categories
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $base = 'https://watchfacts-poc.vercel.app/api/reviewed-market-inventory?pageSize=12'
+          $cases = @(
+            @{ name='all'; url=$base },
+            @{ name='Rolex'; url="$base&brand=Rolex" },
+            @{ name='Patek'; url="$base&brand=Patek%20Philippe" },
+            @{ name='handbags'; url="$base&item=handbags" },
+            @{ name='jewelry'; url="$base&item=jewelry" },
+            @{ name='accessories'; url="$base&item=accessories" }
+          )
+          foreach ($case in $cases) {
+            $response = Invoke-RestMethod -Uri "$($case.url)&release=$env:GITHUB_SHA" -TimeoutSec 45
+            if ($response.status -ne 'ok' -or [int]$response.count -lt 1) {
+              throw "Production Trading Floor smoke failed for $($case.name)."
+            }
+            Write-Output "$($case.name)=$($response.count)"
           }
