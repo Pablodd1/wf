@@ -204,7 +204,7 @@ test('date windows produce deterministic inclusive lower bounds', () => {
   assert.equal(api.dateWindowStart('invalid', now), null);
 });
 
-test('only reconciled Rolex and Patek pending-review singles enter the Trading Floor', () => {
+test('only reconciled Rolex, Patek, and Audemars Piguet pending-review singles enter the Trading Floor', () => {
   const pending = {
     item_category: 'WATCH', listing_type: 'WTS', trading_floor_status: 'published_pending_verification',
     publication_lane: 'QNSA_NORMALIZED_STAGING_V1', normalization_run_complete: true,
@@ -212,6 +212,7 @@ test('only reconciled Rolex and Patek pending-review singles enter the Trading F
   };
   assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Rolex' }), true);
   assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Patek Philippe' }), true);
+  assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Audemars Piguet' }), true);
   assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Omega' }), false);
   assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Rolex', raw_lineage_verified: false }), false);
 });

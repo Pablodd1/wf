@@ -206,7 +206,10 @@ function ratingMatches(record, requestedRating) {
 
 function isPriorityHumanReviewBrand(value) {
   const brand = cleanExactText(value, 80).toUpperCase();
-  return brand === 'ROLEX' || brand === 'PATEK PHILIPPE' || brand === 'PATEK';
+  return brand === 'ROLEX'
+    || brand === 'PATEK PHILIPPE'
+    || brand === 'PATEK'
+    || brand === 'AUDEMARS PIGUET';
 }
 
 function searchTermsMatch(record, query) {

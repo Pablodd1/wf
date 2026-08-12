@@ -921,7 +921,7 @@ function IdentityReviewLane() {
       <div className="rounded-xl border border-border-default bg-bg-card p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-text-primary">Rolex and Patek identity review</h2>
+            <h2 className="text-sm font-bold text-text-primary">Rolex, Patek Philippe, and Audemars Piguet identity review</h2>
             <p className="mt-1 max-w-3xl text-xs text-text-muted">
               Actionable identities are loaded in bounded pages of 50, with no synchronous global count across the 1.4M-row unresolved universe. Normalization, market-data, bundle, duplicate, and missing-evidence cases stay in their own lanes. Approval requires the exact reference in the preserved raw listing and a catalog-compatible dial.
             </p>

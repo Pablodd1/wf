@@ -6,6 +6,11 @@ BRANDS = [
     'Hublot', 'Breitling', 'Tag Heuer', 'Panerai', 'Jaeger-LeCoultre'
 ]
 
+AP_ALIAS_PATTERN = re.compile(r'(?<![A-Za-z0-9])(?:AP|A\.P\.)(?![A-Za-z0-9])', re.I)
+PATEK_ALIAS_PATTERN = re.compile(r'(?<![A-Za-z0-9])PP(?![A-Za-z0-9])', re.I)
+RM_ALIAS_PATTERN = re.compile(r'(?<![A-Za-z0-9])RM(?![A-Za-z0-9])', re.I)
+VC_ALIAS_PATTERN = re.compile(r'(?<![A-Za-z0-9])VC(?![A-Za-z0-9])', re.I)
+
 # Common inline separators used in chat lists
 EMOJI_SEPARATORS = [
     "\U0001f195", "\u2705", "\u2b50\ufe0f", "\u2b50", "\U0001f525", "\U0001f31f", "\U0001f48e", "\u2022", "-", "/"
@@ -112,13 +117,13 @@ def detect_brand_header(text):
     for b in BRANDS:
         if b.lower() in text_lower:
             return b
-    if 'pp' in text_lower or 'patek' in text_lower:
+    if PATEK_ALIAS_PATTERN.search(text) or 'patek' in text_lower:
         return 'Patek Philippe'
-    if 'ap' in text_lower or 'audemars' in text_lower:
+    if AP_ALIAS_PATTERN.search(text) or 'audemars' in text_lower:
         return 'Audemars Piguet'
-    if 'rm' in text_lower or 'richard' in text_lower:
+    if RM_ALIAS_PATTERN.search(text) or 'richard' in text_lower:
         return 'Richard Mille'
-    if 'vc' in text_lower or 'vacheron' in text_lower:
+    if VC_ALIAS_PATTERN.search(text) or 'vacheron' in text_lower:
         return 'Vacheron Constantin'
     return None
 
@@ -127,13 +132,13 @@ def infer_brand(text):
     for b in BRANDS:
         if b.lower() in text_lower:
             return b
-    if 'pp' in text_lower or 'patek' in text_lower:
+    if PATEK_ALIAS_PATTERN.search(text) or 'patek' in text_lower:
         return 'Patek Philippe'
-    if 'ap' in text_lower or 'audemars' in text_lower:
+    if AP_ALIAS_PATTERN.search(text) or 'audemars' in text_lower:
         return 'Audemars Piguet'
-    if 'rm' in text_lower or 'richard' in text_lower:
+    if RM_ALIAS_PATTERN.search(text) or 'richard' in text_lower:
         return 'Richard Mille'
-    if 'vc' in text_lower or 'vacheron' in text_lower:
+    if VC_ALIAS_PATTERN.search(text) or 'vacheron' in text_lower:
         return 'Vacheron Constantin'
     return None
 

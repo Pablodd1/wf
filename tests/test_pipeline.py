@@ -99,7 +99,11 @@ class TestWatchFactsPipeline(unittest.TestCase):
         self.assertEqual(result["category"], "WATCH")
 
     def test_bundle_splitting(self):
-        from pipeline_bundle_splitter import split_bundle_listing
+        from pipeline_bundle_splitter import detect_brand_header, infer_brand, split_bundle_listing
+
+        self.assertEqual(infer_brand("AP 15500ST blue dial USD 38000"), "Audemars Piguet")
+        self.assertIsNone(infer_brand("Full set with papers and spare strap USD 38000"))
+        self.assertIsNone(detect_brand_header("Papers, strap, and box included"))
         
         msg1 = "🐂🐂🐂PP NEW HK🐂🐂🐂3 ⭐️5980/1400r 4/25 hkd4.5m ⭐️7140r 2/25 hkd475k"
         res1 = split_bundle_listing(msg1)

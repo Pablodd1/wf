@@ -100,7 +100,7 @@ module.exports = async function handler(req, res) {
     if (releaseOnly) {
       const configuredBrands = publicationBrands();
       const brands = isFullReviewedBrandRelease()
-        ? ['Rolex', 'Patek Philippe'].filter(brand => !configuredBrands.length
+        ? ['Rolex', 'Patek Philippe', 'Audemars Piguet'].filter(brand => !configuredBrands.length
           || configuredBrands.some(configured => configured.toLowerCase() === brand.toLowerCase()))
         : configuredBrands;
       const references = [...new Set(publicationReferences().map(entry => entry.reference))];

@@ -7,11 +7,11 @@ const test = require('node:test');
 
 const read = relative => fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
 
-test('Trading Floor provides a complete Rolex brand entry without a reference restriction', () => {
+test('Trading Floor provides complete three-brand entries without a reference restriction', () => {
   const floor = read('src/pages/TradingFloor.tsx');
   assert.match(floor, /Browse all \{brand\}/);
-  assert.match(floor, /\['Rolex', 'Patek Philippe'\]/);
-  assert.match(floor, /updateViewParams\(\{ q: '', brand, item: 'watches' \}\)/);
+  assert.match(floor, /\['Rolex', 'Patek Philippe', 'Audemars Piguet'\]/);
+  assert.match(floor, /reference: null, brand, item: 'watches'/);
 });
 
 test('Price Research explains the all-reference Rolex autocomplete workflow', () => {

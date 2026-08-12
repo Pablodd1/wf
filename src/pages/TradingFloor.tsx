@@ -718,7 +718,7 @@ export default function TradingFloor() {
 
           <div className="rounded-md border bg-white/35 px-4 py-3" style={{ borderColor: BORDER }}>
             <div className="mb-3 flex flex-wrap gap-2" aria-label="Complete brand inventory shortcuts">
-              {['Rolex', 'Patek Philippe'].map(brand => (
+              {['Rolex', 'Patek Philippe', 'Audemars Piguet'].map(brand => (
                 <button
                   key={brand}
                   type="button"
@@ -788,7 +788,7 @@ export default function TradingFloor() {
         <div className="mb-5 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
             {loading && listings.length === 0 ? (
-              <><strong style={{ color: INK }}>Loading Rolex and Patek inventory…</strong></>
+              <><strong style={{ color: INK }}>Loading Rolex, Patek Philippe, and Audemars Piguet inventory…</strong></>
             ) : (
               <>Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong>
                 {total === null

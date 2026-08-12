@@ -24,7 +24,7 @@ async function loadQnsaSummary(client) {
   const { data, error } = await client.rpc('qnsa_market_feed_counts');
   if (error) throw error;
   const watchRows = (data || []).filter(row => String(row.category || '').toUpperCase() === 'WATCH');
-  const brands = ['Rolex', 'Patek Philippe'].map(brand => ({
+  const brands = ['Rolex', 'Patek Philippe', 'Audemars Piguet'].map(brand => ({
     brand,
     listing_count: watchRows
       .filter(row => String(row.brand || '').toLowerCase() === brand.toLowerCase())

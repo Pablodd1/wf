@@ -55,7 +55,7 @@ function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['rolex', 'patek philippe'].includes(normalizedBrand)
+    && ['rolex', 'patek philippe', 'audemars piguet'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
     : null;
 }
@@ -1145,7 +1145,7 @@ module.exports = async function handler(req, res) {
       },
       admission_policy: {
         verdicts: ['APPROVED', ...HUMAN_REVIEW_VERDICTS],
-        human_review_scope: ['Rolex', 'Patek Philippe'],
+        human_review_scope: ['Rolex', 'Patek Philippe', 'Audemars Piguet'],
         human_review_is_analytics_eligible_only_after_all_evidence_gates: true,
         approved_minimum_confidence: MIN_RELEASE_CONFIDENCE,
         human_review_minimum_confidence: null,

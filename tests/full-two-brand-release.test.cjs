@@ -88,7 +88,7 @@ test('identity review is signed, evidence-first, and leaves raw records immutabl
   assert.match(decision, /confirmCatalogCandidate\(canonical\)/);
   assert.match(decision, /\.rpc\('apply_listing_identity_review'/);
   assert.doesNotMatch(decision, /\.from\('watch_records'\)\.(?:update|upsert|insert|delete)/);
-  assert.match(ui, /Rolex and Patek identity review/);
+  assert.match(ui, /Rolex, Patek Philippe, and Audemars Piguet identity review/);
   assert.match(ui, /Actionable identities are loaded in bounded pages of 50/);
   assert.match(ui, /Human approve identity/);
 });
@@ -118,7 +118,7 @@ test('bounded identity pages apply every non-identity static publication gate', 
   }), true);
 });
 
-test('identity approval requires complete two-brand canonical evidence', () => {
+test('identity approval requires complete controlled-brand canonical evidence', () => {
   assert.equal(rawSupportsExactReference('Rolex 126500LN black dial', '126500LN'), true);
   assert.equal(rawSupportsExactReference('Patek 5712/1A only', '5712/1A-001'), false);
 
@@ -138,7 +138,7 @@ test('identity approval requires complete two-brand canonical evidence', () => {
     reference: '126500LN',
     dial_color: 'Black',
   });
-  assert.match(validateDecisionBody({
+  assert.deepEqual(validateDecisionBody({
     recordId: 'record-2',
     decision: 'APPROVE',
     reason: 'Complete reviewer reason.',
@@ -148,7 +148,12 @@ test('identity approval requires complete two-brand canonical evidence', () => {
       reference: '15500ST',
       dial_color: 'Blue',
     },
-  }).error, /Rolex and Patek/);
+  }).value?.canonical, {
+    brand: 'Audemars Piguet',
+    model: 'Royal Oak',
+    reference: '15500ST',
+    dial_color: 'Blue',
+  });
 });
 
 test('CTO control center makes the full two-brand release authoritative', () => {
