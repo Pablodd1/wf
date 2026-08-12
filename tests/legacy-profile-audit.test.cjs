@@ -81,6 +81,22 @@ test('legacy directory and profile endpoints are public, searchable, and paginat
   assert.equal(profile.payload.source_provenance.counts_are_historical_snapshots, true);
 });
 
+test('live legacy listing mapper preserves listing and poster evidence', () => {
+  const mapped = dealerProfileHandler.mapLegacyLiveListing({
+    id: 'listing-1', canonical_brand: 'Patek Philippe', normalized_reference: '5712/1A',
+    verified_price_usd: 110000, source_price_amount: 850000, source_currency: 'HKD',
+    source_price_text: '850000 HKD', listing_type: 'WTS', posting_date: '2026-08-11T00:00:00Z',
+    raw_message: 'WTS Patek 5712/1A 850k HKD', user_image_url: 'https://images.example/item.jpg',
+    seller_name: 'Forest', seller_phone: '15551234567', location: 'Hong Kong',
+  });
+  assert.equal(mapped.reference, '5712/1A');
+  assert.equal(mapped.price_usd, 110000);
+  assert.equal(mapped.currency, 'HKD');
+  assert.equal(mapped.raw_message, 'WTS Patek 5712/1A 850k HKD');
+  assert.equal(mapped.seller_name, 'Forest');
+  assert.equal(mapped.evidence_only, false);
+});
+
 test('production lineage audit is read-only and exact-ID only', () => {
   const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'qnsa-legacy-profile-lineage-audit.yml'), 'utf8');
   assert.match(workflow, /qnsafosakvonzgfcsphh/);

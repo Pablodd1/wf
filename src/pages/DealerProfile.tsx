@@ -11,7 +11,7 @@ interface ProfilePayload {
     rating: number | null; review_count: number | null; whatsapp_group_count: number | null; avatar_url: string | null; profile_summary: string | null;
     source_system?: string; source_url?: string | null; source_rank?: number; member_since?: string | null; trust_status?: string | null;
   };
-  stats: { wts_count: number | null; wtb_count: number | null; group_count: number | null; first_post: string | null; latest_post: string | null; verified_contact_info: { phone: string; verification_status: 'VERIFIED' } | null; source_contact_url?: string | null; snapshot_range?: { snapshot_count?: number; current_counts_are_dynamic?: boolean } } | null;
+  stats: { wts_count: number | null; wtb_count: number | null; group_count: number | null; first_post: string | null; latest_post: string | null; verified_contact_info: { phone: string; verification_status: 'VERIFIED' } | null; source_contact_url?: string | null; current_counts_are_dynamic?: boolean; current_counts_scope?: string; snapshot_range?: { snapshot_count?: number; current_counts_are_dynamic?: boolean } } | null;
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; display_price?: string | null; listing_type: string; listing_date: string | null; created_at: string | null; raw_message?: string; image_url?: string | null; source_url?: string | null; availability_url?: string | null }>;
   reviews?: Array<{ date: string | null; reviewer: string | null; sentiment: string | null }>;
   source_links?: { profile?: string | null; for_sale?: string | null; want_to_buy?: string | null; all_listings?: string | null };
@@ -91,7 +91,7 @@ export default function DealerProfile() {
           <ProfileMetric label="Common groups" value={count(stats?.group_count)} />
         </div>
         <p className="mt-5 text-xs text-white/40">First post shown: {date(stats?.first_post)} · Latest post shown: {date(stats?.latest_post)}. Import timestamps are never substituted for missing source dates.</p>
-        {isLegacyProfile && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">Captured WTS/WTB values are historical source snapshots across {stats?.snapshot_range?.snapshot_count || 0} observations. They do not replace live totals calculated from verified listing lineage.</p>}
+        {isLegacyProfile && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">{stats?.current_counts_are_dynamic ? 'WTS/WTB totals and the listing cards below are calculated dynamically from the current released Rolex and Patek listing lineage.' : `Captured WTS/WTB values are historical source snapshots across ${stats?.snapshot_range?.snapshot_count || 0} observations. They do not replace live totals calculated from verified listing lineage.`}</p>}
         {stats?.verified_contact_info?.phone && (
           <a className="mt-4 inline-flex items-center gap-2 text-sm text-[#d4b87a] hover:text-white" href={`https://wa.me/${stats.verified_contact_info.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer">
             <MessageCircle size={15} /> Contact verified poster on WhatsApp

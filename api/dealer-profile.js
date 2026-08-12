@@ -27,6 +27,65 @@ function buildDealerStats(listings, dealer, verifiedPhone, aggregate = null) {
   };
 }
 
+function mapLegacyLiveListing(row) {
+  return {
+    id: row.id,
+    brand: row.canonical_brand || row.supplied_brand || null,
+    model: row.catalog_model || row.model || null,
+    reference: row.normalized_reference || row.raw_reference || null,
+    dial_color: row.dial_color || null,
+    condition: row.condition || null,
+    price_usd: Number(row.verified_price_usd) > 0 ? Number(row.verified_price_usd) : null,
+    price_raw: Number(row.source_price_amount) > 0 ? Number(row.source_price_amount) : null,
+    display_price: row.source_price_text || null,
+    currency: row.source_currency || null,
+    listing_type: row.listing_type || null,
+    listing_date: row.posting_date || null,
+    created_at: row.posting_date || null,
+    raw_message: row.raw_message || null,
+    image_url: row.user_image_url || null,
+    seller_name: row.seller_name || row.posted_by || null,
+    seller_phone: row.seller_phone || null,
+    location: row.location || null,
+    evidence_only: false,
+  };
+}
+
+async function loadLegacyDynamicProfile(client, payload) {
+  const legacyId = payload?.dealer?.legacy_profile_id;
+  if (!legacyId) return payload;
+  const source = 'qnsa_rolex_patek_trading_floor_source';
+  const listingColumns = [
+    'id,supplied_brand,canonical_brand,model,catalog_model,raw_reference,normalized_reference',
+    'dial_color,condition,verified_price_usd,source_price_amount,source_price_text,source_currency',
+    'listing_type,posting_date,raw_message,user_image_url,posted_by,seller_name,seller_phone,location',
+  ].join(',');
+  const [recent, wts, wtb] = await Promise.all([
+    client.from(source).select(listingColumns).eq('dealer_id', legacyId)
+      .order('posting_date', { ascending: false, nullsFirst: false }).order('id', { ascending: true }).limit(50),
+    client.from(source).select('id', { count: 'exact', head: true }).eq('dealer_id', legacyId).eq('listing_type', 'WTS'),
+    client.from(source).select('id', { count: 'exact', head: true }).eq('dealer_id', legacyId).eq('listing_type', 'WTB'),
+  ]);
+  const error = recent.error || wts.error || wtb.error;
+  if (error) throw error;
+  const liveListings = (recent.data || []).map(mapLegacyLiveListing);
+  const dates = liveListings.map(row => row.listing_date).filter(Boolean).sort();
+  return {
+    ...payload,
+    stats: {
+      ...payload.stats,
+      wts_count: Number(wts.count || 0),
+      wtb_count: Number(wtb.count || 0),
+      first_post: dates[0] || null,
+      latest_post: dates.at(-1) || null,
+      current_counts_are_dynamic: true,
+      current_counts_scope: 'QNSA_RELEASED_ROLEX_PATEK',
+    },
+    listings: liveListings,
+    historical_posts: payload.listings,
+  };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -36,7 +95,18 @@ module.exports = async function handler(req, res) {
   const sourceProfile = sourceProfilePayload(identity);
   if (sourceProfile) return res.status(200).json(sourceProfile);
   const legacyProfile = legacyProfilePayload(identity);
-  if (legacyProfile) return res.status(200).json(legacyProfile);
+  if (legacyProfile) {
+    try {
+      const dynamic = await loadLegacyDynamicProfile(getClient(), legacyProfile);
+      return res.status(200).json(dynamic);
+    } catch (error) {
+      console.error('[dealer-profile:legacy-dynamic]', error.message);
+      return res.status(200).json({
+        ...legacyProfile,
+        dynamic_activity_status: 'TEMPORARILY_UNAVAILABLE',
+      });
+    }
+  }
 
   try {
     const client = getClient();
@@ -135,3 +205,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.buildDealerStats = buildDealerStats;
+module.exports.mapLegacyLiveListing = mapLegacyLiveListing;
