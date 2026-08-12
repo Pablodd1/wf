@@ -111,6 +111,18 @@ BEGIN
         AND listing.parent_id IS NULL AND COALESCE(listing.is_bundle, false) = false
         AND upper(COALESCE(listing.listing_type, listing.intent, '')) = 'WTS'
         AND NULLIF(btrim(listing.reference_normalized), '') IS NOT NULL
+        AND COALESCE(listing.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
+        AND listing.source_hash ~ '^[0-9a-f]{64}$'
+        AND lower(COALESCE(listing.trading_floor_status, '')) NOT IN (
+          'bundle_child_pending_review', 'bundle_pending_separation', 'suppressed_exact_duplicate',
+          'withdrawn', 'rejected', 'hidden', 'deleted', 'archived')
+        AND upper(COALESCE(listing.verdict, '')) NOT IN ('WITHDRAWN', 'REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED')
+        AND EXISTS (
+          SELECT 1 FROM public.raw_message_versions AS version
+          WHERE version.id = listing.raw_message_version_id
+            AND version.source_record_id = listing.source_record_id
+            AND version.source_hash = listing.source_hash
+        )
         AND (
           COALESCE(listing.price_usd, 0) <= 0
           OR (

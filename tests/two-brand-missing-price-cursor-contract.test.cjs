@@ -14,6 +14,9 @@ test('full correction cursor revisits only missing or incomplete USD evidence', 
     'page, reconciliation and continuation paths must share the missing-USD gate');
   assert.ok((sql.match(incompleteFx) || []).length >= 3,
     'all cursor paths must revisit incomplete non-USD FX evidence');
+  const lineageGate = /EXISTS \(\s*SELECT 1 FROM public\.raw_message_versions AS version/g;
+  assert.ok((sql.match(lineageGate) || []).length >= 2,
+    'both the page membership and continuation paths require immutable lineage');
   assert.doesNotMatch(sql, /INSERT\s+INTO\s+(?:public\.)?watch_records/i);
 });
 
