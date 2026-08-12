@@ -5,6 +5,8 @@ const path = require('node:path');
 const { sha256, stableJson } = require('./lib.cjs');
 const { normalizeSourceRecord, loadFxSnapshot } = require('./normalize-local.cjs');
 const { normalizedPrice } = require('./publication-review.cjs');
+const { extractPriceObservations } = require('../../api/_lib/normalization-v4.cjs');
+const { applyCurrencyPolicy } = require('../shadow-reprocess/shadow-reprocess.cjs');
 
 const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe']);
 
@@ -12,19 +14,54 @@ function exactIdentity(value) {
   return String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
+function recoveredLineagedPrice(source, fxSnapshot) {
+  const observations = extractPriceObservations(source?.raw_message || '', {});
+  if (!observations.length) return null;
+  const converted = observations
+    .map(observation => applyCurrencyPolicy(observation, fxSnapshot))
+    .filter(price => price?.amount_original > 0 && price?.amount_usd > 0
+      && price?.currency_original && price?.conversion_rate > 0 && price?.conversion_source);
+  if (!converted.length) return null;
+
+  // If the seller supplied USD/USDT alongside an Asian-currency amount, the
+  // supplied dollar amount is the authoritative display value. Otherwise a
+  // single explicit asking-price observation can be converted safely. Multiple
+  // materially different non-USD observations remain unresolved rather than
+  // assigning one watch another item's price.
+  const suppliedUsd = converted.find(price => ['USD', 'USDT'].includes(price.currency_original));
+  if (suppliedUsd) return normalizedPrice({ prices: [suppliedUsd] });
+  if (converted.length === 1) return normalizedPrice({ prices: converted });
+
+  const usdValues = converted.map(price => Number(price.amount_usd)).filter(Number.isFinite);
+  const low = Math.min(...usdValues);
+  const high = Math.max(...usdValues);
+  if (low > 0 && high / low <= 1.05) return normalizedPrice({ prices: [converted[0]] });
+  return null;
+}
+
+function hasConflictingTargetBrand(rawMessage, canonicalBrand) {
+  const raw = String(rawMessage || '');
+  const mentionsRolex = /\brolex\b/i.test(raw);
+  const mentionsPatek = /\b(?:patek(?:\s+philippe)?|pp)\b/i.test(raw);
+  return canonicalBrand === 'Rolex' ? mentionsPatek : mentionsRolex;
+}
+
 function correctionRecord(row, fxSnapshot) {
   const source = row?.raw_payload;
   if (!source || typeof source !== 'object') return null;
   if (source.source_record_id !== row.source_record_id || source.raw_sha256 !== row.source_hash) return null;
   if (!ALLOWED_BRANDS.has(row.canonical_brand)) return null;
+  if (hasConflictingTargetBrand(source.raw_message, row.canonical_brand)) return null;
   const proposal = normalizeSourceRecord(source, { fxSnapshot });
-  if (proposal.bundle_status !== 'SINGLE_CANDIDATE') return null;
   const candidates = proposal.normalization?.proposed_candidates || [];
-  if (candidates.length !== 1) return null;
-  const candidate = candidates[0];
-  if (candidate.brand !== row.canonical_brand
-    || exactIdentity(candidate.reference) !== exactIdentity(row.normalized_reference)) return null;
-  const price = normalizedPrice(candidate);
+  const candidate = proposal.bundle_status === 'SINGLE_CANDIDATE' && candidates.length === 1
+    && candidates[0].brand === row.canonical_brand
+    && exactIdentity(candidates[0].reference) === exactIdentity(row.normalized_reference)
+    ? candidates[0]
+    : null;
+  const price = normalizedPrice(candidate) || (proposal.bundle_status !== 'BUNDLE_SPLIT_REQUIRED'
+    ? recoveredLineagedPrice(source, fxSnapshot)
+    : null);
   if (!price?.amount_original || !price?.amount_usd || !price?.currency_original
     || !price?.conversion_rate || !price?.conversion_source) return null;
   if (!['USD', 'USDT'].includes(price.currency_original)
@@ -155,4 +192,7 @@ if (require.main === module) {
   }
 }
 
-module.exports = { buildCanary, buildCorrectionPage, correctionRecord, exactIdentity };
+module.exports = {
+  buildCanary, buildCorrectionPage, correctionRecord, exactIdentity,
+  recoveredLineagedPrice, hasConflictingTargetBrand,
+};
