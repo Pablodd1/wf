@@ -13,7 +13,7 @@ test('full correction is manual, GitHub-hosted, bounded, and resumable', () => {
   assert.match(workflow, /RUN_TWO_BRAND_PRICE_CORRECTION/);
   assert.match(workflow, /runs-on: ubuntu-latest/);
   assert.match(workflow, /CORRECTION_PAGE_SIZE: '500'/);
-  assert.match(workflow, /max_batches must be between 1 and 50/);
+  assert.match(workflow, /max_batches must be between 1 and 500/);
   assert.match(workflow, /concurrency:[\s\S]*qnsa-two-brand-price-correction/);
 });
 

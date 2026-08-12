@@ -27,7 +27,7 @@ on:
         default: '2'
         type: string
       max_batches:
-        description: Bounded batches for this dispatch (1-50, max 500 rows each)
+        description: Bounded batches for this dispatch (1-500, 100 rows each)
         required: true
         default: '20'
         type: string
@@ -76,8 +76,8 @@ jobs:
           foreach ($value in @($env:NORMALIZED_RUN_KEY, $env:CORRECTION_RUN_KEY, $env:CORRECTION_POLICY_VERSION)) {
             if ($value -notmatch '^[A-Za-z0-9._:-]{1,100}$') { throw 'Invalid run or policy key.' }
           }
-          if ([int]$env:CORRECTION_MAX_BATCHES -lt 1 -or [int]$env:CORRECTION_MAX_BATCHES -gt 50) {
-            throw 'max_batches must be between 1 and 50.'
+          if ([int]$env:CORRECTION_MAX_BATCHES -lt 1 -or [int]$env:CORRECTION_MAX_BATCHES -gt 500) {
+            throw 'max_batches must be between 1 and 500.'
           }
 
       - name: Install private cursor contract

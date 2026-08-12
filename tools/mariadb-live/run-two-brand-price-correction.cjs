@@ -66,7 +66,7 @@ async function run(options = {}) {
     maxPendingJobs: boundedInteger(env.MAX_PENDING_JOBS, 1000, 0, 10_000_000, 'MAX_PENDING_JOBS'),
     maxFailedJobs: boundedInteger(env.MAX_FAILED_JOBS, 0, 0, 10_000_000, 'MAX_FAILED_JOBS'),
     pageSize: boundedInteger(env.CORRECTION_PAGE_SIZE, 500, 1, 500, 'CORRECTION_PAGE_SIZE'),
-    maxBatches: boundedInteger(env.CORRECTION_MAX_BATCHES, 20, 1, 50, 'CORRECTION_MAX_BATCHES'),
+    maxBatches: boundedInteger(env.CORRECTION_MAX_BATCHES, 20, 1, 500, 'CORRECTION_MAX_BATCHES'),
   };
   if (!config.accessToken || config.projectRef !== config.expectedProjectRef) throw new Error('Pinned project credentials are unavailable');
   for (const key of [config.normalizationRunKey, config.correctionRunKey, config.policyVersion]) {
