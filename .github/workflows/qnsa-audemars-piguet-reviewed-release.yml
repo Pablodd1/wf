@@ -173,7 +173,7 @@ jobs:
             if ($evidence.trading_enabled -ne $true -or $evidence.research_enabled -ne $true) { throw 'Enabled Audemars Piguet customer controls are disabled.' }
             # Existence probes stop on the first eligible row and avoid a
             # full count over layered customer views under the DB timeout.
-            $probeSql = "SELECT jsonb_build_object('trading_exists', EXISTS (SELECT 1 FROM public.qnsa_rolex_patek_trading_floor_source WHERE canonical_brand = 'Audemars Piguet' LIMIT 1), 'priced_wts_exists', EXISTS (SELECT 1 FROM public.qnsa_rolex_patek_price_research_source WHERE canonical_brand = 'Audemars Piguet' LIMIT 1), 'wtb_exists', EXISTS (SELECT 1 FROM public.qnsa_rolex_patek_wtb_demand_source WHERE canonical_brand = 'Audemars Piguet' LIMIT 1)) AS evidence;"
+            $probeSql = "SELECT jsonb_build_object('trading_exists', EXISTS (SELECT 1 FROM public.qnsa_rolex_patek_trading_floor_source WHERE canonical_brand = 'Audemars Piguet' LIMIT 1), 'priced_wts_exists', EXISTS (SELECT 1 FROM public.qnsa_rolex_patek_price_research_source WHERE brand = 'Audemars Piguet' LIMIT 1), 'wtb_exists', EXISTS (SELECT 1 FROM public.qnsa_rolex_patek_wtb_demand_source WHERE brand = 'Audemars Piguet' LIMIT 1)) AS evidence;"
             $probeBody = @{ query = [string]$probeSql; read_only = $true } | ConvertTo-Json -Depth 3
             $probeResult = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $probeBody
             $probe = $probeResult[0].evidence
