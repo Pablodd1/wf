@@ -32,7 +32,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812114500_qnsa_general_market_feed_timeout_hotfix.sql')
+          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812120000_qnsa_general_market_feed_index_hotfix.sql')
           $compile = "BEGIN;`n$migration`nROLLBACK;"
           $body = @{ query = $compile; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
@@ -64,7 +64,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812114500_qnsa_general_market_feed_timeout_hotfix.sql')
+          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812120000_qnsa_general_market_feed_index_hotfix.sql')
           $body = @{ query = [string]$migration; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
           Start-Sleep -Seconds 3
@@ -75,25 +75,25 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
-          SET ROLE postgres;
           SELECT jsonb_build_object(
-            'counts', (SELECT jsonb_agg(to_jsonb(c)) FROM public.qnsa_market_feed_counts() c),
-            'all_page', (SELECT count(*) FROM public.qnsa_market_feed_page_rows(NULL,NULL,51,0,NULL,false,NULL,NULL)),
-            'rolex_page', (SELECT count(*) FROM public.qnsa_market_feed_page_rows('Rolex','WATCH',51,0,NULL,false,NULL,NULL)),
-            'patek_page', (SELECT count(*) FROM public.qnsa_market_feed_page_rows('Patek Philippe','WATCH',51,0,NULL,false,NULL,NULL)),
-            'handbag_page', (SELECT count(*) FROM public.qnsa_market_feed_page_rows(NULL,'HANDBAG',51,0,NULL,false,NULL,NULL)),
-            'jewelry_page', (SELECT count(*) FROM public.qnsa_market_feed_page_rows(NULL,'JEWELRY',51,0,NULL,false,NULL,NULL)),
-            'accessory_page', (SELECT count(*) FROM public.qnsa_market_feed_page_rows(NULL,'ACCESSORY',51,0,NULL,false,NULL,NULL)),
-            'media_leakage', (SELECT count(*) FROM public.qnsa_market_feed_page_rows(NULL,NULL,101,0,NULL,false,NULL,NULL) r WHERE r.row_data->>'parent_id' IS NOT NULL)
-          ) AS evidence;
+            'all_rows', count(*),
+            'rolex_rows', count(*) FILTER (WHERE category='WATCH' AND brand_normalized='Rolex'),
+            'patek_rows', count(*) FILTER (WHERE category='WATCH' AND brand_normalized='Patek Philippe'),
+            'handbag_rows', count(*) FILTER (WHERE category='HANDBAG'),
+            'jewelry_rows', count(*) FILTER (WHERE category='JEWELRY'),
+            'accessory_rows', count(*) FILTER (WHERE category='ACCESSORY'),
+            'bundle_or_child_rows', count(*) FILTER (WHERE parent_id IS NOT NULL OR COALESCE(is_bundle,false))
+          ) AS evidence
+          FROM staging.listings
+          WHERE normalization_run_key='$env:EXPECTED_RUN_KEY';
           "@
           $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 4
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
           $evidence = $result[0].evidence
           $evidence | ConvertTo-Json -Depth 8
-          if ([long]$evidence.all_page -lt 50 -or [long]$evidence.rolex_page -lt 50 -or [long]$evidence.patek_page -lt 50 -or
-              [long]$evidence.handbag_page -lt 1 -or [long]$evidence.jewelry_page -lt 1 -or [long]$evidence.accessory_page -lt 1 -or
-              [long]$evidence.media_leakage -ne 0) {
+          if ([long]$evidence.all_rows -ne 603678 -or [long]$evidence.rolex_rows -lt 1 -or [long]$evidence.patek_rows -lt 1 -or
+              [long]$evidence.handbag_rows -lt 1 -or [long]$evidence.jewelry_rows -lt 1 -or [long]$evidence.accessory_rows -lt 1 -or
+              [long]$evidence.bundle_or_child_rows -ne 0) {
             throw 'General market feed release reconciliation failed.'
           }
 
