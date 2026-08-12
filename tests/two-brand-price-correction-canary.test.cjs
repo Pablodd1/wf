@@ -7,7 +7,7 @@ const test = require('node:test');
 const { applyCorrection, correctionRecord } = require('../tools/mariadb-live/apply-two-brand-price-correction.cjs');
 
 test('correction record admits only exact single Rolex/Patek priced evidence', () => {
-  const source = { source_record_id: 'mysql_1', raw_sha256: 'a'.repeat(64), raw_message: 'Rolex 116500LN $23,995', source_created_on: '2026-01-01' };
+  const source = { source_record_id: 'mysql_1', raw_sha256: 'a'.repeat(64), raw_message: 'WTS Rolex Daytona 116500LN watch $23,995', raw_data: { title: 'WTS Rolex Daytona 116500LN watch $23,995', brand: 'Rolex', reference: '116500LN' }, brand: 'Rolex', reference: '116500LN', listing_type: 'WTS', source_created_on: '2026-01-01' };
   const proposal = {
     source_record_id: source.source_record_id, source_hash: source.raw_sha256, bundle_status: 'SINGLE_CANDIDATE', review_disposition: 'HUMAN_REVIEW', review_reasons: [],
     normalization: { normalization_version: 'test', proposed_candidates: [{ brand: 'Rolex', reference: '116500LN', listing_type: 'WTS', dial_color: 'Black', prices: [{ amount_original: 23995, amount_usd: 23995, currency_original: 'USD', currency_evidence: 'usd_defaulted_by_policy', conversion_rate: 1, conversion_source: 'USD_DEFAULTED_BY_POLICY', is_primary: true }] }] },
