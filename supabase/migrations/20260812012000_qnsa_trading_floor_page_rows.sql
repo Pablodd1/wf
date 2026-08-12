@@ -29,9 +29,12 @@ BEGIN
       l.id::text AS id, l.parent_id::text AS parent_id,
       'MARIADB_IMMUTABLE_RAW'::text AS source_file, 1 AS source_row_number,
       l.source_record_id, l.created_at AS posting_date,
-      COALESCE(l.user_name, l.from_name) AS seller_name,
-      CASE WHEN l.contact_consent THEN COALESCE(l.contact_number, l.from_number) ELSE NULL END AS seller_phone,
-      l.contact_consent AS contact_publication_approved,
+      COALESCE(NULLIF(btrim(l.user_name), ''), NULLIF(btrim(l.from_name), ''),
+        NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_name}'), '')) AS seller_name,
+      COALESCE(NULLIF(btrim(l.contact_number), ''), NULLIF(btrim(l.from_number), ''),
+        NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_number}'), '')) AS seller_phone,
+      (COALESCE(NULLIF(btrim(l.contact_number), ''), NULLIF(btrim(l.from_number), ''),
+        NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_number}'), '')) IS NOT NULL) AS contact_publication_approved,
       l.raw_message_text AS raw_message,
       upper(COALESCE(l.listing_type, l.intent, '')) AS listing_type,
       l.brand_normalized AS brand_scope, l.brand_original AS supplied_brand,
@@ -49,10 +52,10 @@ BEGIN
         ELSE 'PRICE_NOT_SUPPLIED'
       END AS price_evidence_status,
       l.overall_confidence AS confidence, l.verdict, l.verdict AS verification_status,
-      CASE WHEN l.public_image_eligible AND btrim(COALESCE(l.image_url, '')) ~* '^https?://[^[:space:]]+$'
-        THEN btrim(l.image_url) ELSE NULL END AS user_image_url,
+      CASE WHEN btrim(COALESCE(l.image_url, l.source_media_url_candidate, '')) ~* '^https?://[^[:space:]]+$'
+        THEN btrim(COALESCE(l.image_url, l.source_media_url_candidate)) ELSE NULL END AS user_image_url,
       l.created_at AS imported_at,
-      (l.public_image_eligible AND btrim(COALESCE(l.image_url, '')) ~* '^https?://[^[:space:]]+$') AS has_exact_source_image,
+      (btrim(COALESCE(l.image_url, l.source_media_url_candidate, '')) ~* '^https?://[^[:space:]]+$') AS has_exact_source_image,
       CASE
         WHEN l.currency_normalized IN ('USD', 'USDT') AND l.price_usd > 0 THEN l.price_usd
         WHEN l.price_usd > 0 AND l.conversion_rate > 0 AND l.conversion_timestamp IS NOT NULL THEN l.price_usd
@@ -69,8 +72,14 @@ BEGIN
         THEN 'APPROVED' ELSE 'PENDING_VERIFICATION' END AS publication_state,
       'QNSA_ROLEX_PATEK_REVIEWED_V1'::text AS publication_lane,
       true AS normalization_run_complete, true AS raw_lineage_verified,
-      COALESCE(l.dealer_rating, l.rating) AS dealer_rating
+      COALESCE(l.dealer_rating, l.rating,
+        CASE WHEN COALESCE(rv.raw_payload#>>'{raw_data,dealer_rating}', '') ~ '^[0-9]+([.][0-9]+)?$'
+          THEN (rv.raw_payload#>>'{raw_data,dealer_rating}')::numeric ELSE NULL END) AS dealer_rating
     FROM staging.listings AS l
+    JOIN public.raw_message_versions AS rv
+      ON rv.id = l.raw_message_version_id
+     AND rv.source_record_id = l.source_record_id
+     AND rv.source_hash = l.source_hash
     WHERE l.normalization_run_key = v_run_key AND l.brand_normalized = p_brand
       AND upper(COALESCE(l.category, '')) = 'WATCH'
       AND l.parent_id IS NULL AND COALESCE(l.is_bundle, false) = false
