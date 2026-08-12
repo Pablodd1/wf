@@ -37,6 +37,26 @@ CREATE INDEX IF NOT EXISTS idx_staging_two_brand_price_correction_cursor
     AND upper(COALESCE(listing_type, intent, '')) = 'WTS'
     AND NULLIF(btrim(reference_normalized), '') IS NOT NULL;
 
+CREATE INDEX IF NOT EXISTS idx_staging_two_brand_missing_price_cursor_20260812124500
+  ON staging.listings (normalization_run_key, id)
+  WHERE brand_normalized IN ('Rolex', 'Patek Philippe')
+    AND upper(COALESCE(category, '')) = 'WATCH'
+    AND parent_id IS NULL
+    AND COALESCE(is_bundle, false) = false
+    AND upper(COALESCE(listing_type, intent, '')) = 'WTS'
+    AND NULLIF(btrim(reference_normalized), '') IS NOT NULL
+    AND (
+      COALESCE(price_usd, 0) <= 0
+      OR (
+        upper(COALESCE(currency_normalized, '')) NOT IN ('USD', 'USDT')
+        AND (
+          COALESCE(conversion_rate, 0) <= 0
+          OR conversion_timestamp IS NULL
+          OR NULLIF(btrim(conversion_source), '') IS NULL
+        )
+      )
+    );
+
 CREATE OR REPLACE FUNCTION public.start_mariadb_two_brand_price_correction(
   p_correction_run_key TEXT,
   p_normalization_run_key TEXT,

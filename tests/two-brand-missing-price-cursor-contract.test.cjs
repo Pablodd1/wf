@@ -20,6 +20,8 @@ test('full correction cursor revisits only missing or incomplete USD evidence', 
   assert.match(sql,
     /listing\.provenance_metadata->>'price_policy_correction_batch' = p_correction_batch_token/,
     'exact-page reconciliation must retain rows corrected by the current audited batch');
+  assert.match(sql, /idx_staging_two_brand_missing_price_cursor_20260812124500/,
+    'the production cursor must have a matching missing-price partial index');
   assert.doesNotMatch(sql, /INSERT\s+INTO\s+(?:public\.)?watch_records/i);
 });
 
