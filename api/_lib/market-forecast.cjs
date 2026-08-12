@@ -54,7 +54,7 @@ function buildMarketForecast(rows, options = {}) {
   const minimumBacktestPoints = options.minimumBacktestPoints || 4;
   const now = options.now ? new Date(options.now) : new Date();
   const monthly = buildMonthlyMedians(rows);
-  const dealerCount = new Set(rows.map(row => row.dealer_id).filter(Boolean)).size;
+  const dealerCount = new Set(rows.map(row => row.dealer_id || row.seller_phone).filter(Boolean)).size;
   const reasons = [];
   if (rows.length < minimumOffers) reasons.push('MINIMUM_OFFERS_NOT_MET');
   if (monthly.length < minimumMonths) reasons.push('MINIMUM_MONTHS_NOT_MET');
@@ -102,4 +102,43 @@ function buildMarketForecast(rows, options = {}) {
   };
 }
 
-module.exports = { buildMarketForecast, buildMonthlyMedians, linearFit, monthIndex };
+function buildIndicativeForecast(rows, options = {}) {
+  const minimumOffers = options.minimumOffers || 10;
+  const monthly = buildMonthlyMedians(rows);
+  const prices = rows.map(row => Number(row.price_usd)).filter(value => Number.isFinite(value) && value > 0).sort((a, b) => a - b);
+  const dealerCount = new Set(rows.map(row => row.dealer_id || row.seller_phone).filter(Boolean)).size;
+  if (prices.length < minimumOffers || !monthly.length) {
+    return {
+      ready: false,
+      provisional: true,
+      reasons: [prices.length < minimumOffers ? 'MINIMUM_OFFERS_NOT_MET' : 'MINIMUM_MONTHS_NOT_MET'],
+      monthly,
+      offer_count: prices.length,
+      verified_dealer_count: dealerCount,
+    };
+  }
+  const latestIndex = monthly.at(-1).month_index;
+  const baseline = Math.round(median(prices));
+  const q1 = percentile(prices, 0.25);
+  const q3 = percentile(prices, 0.75);
+  const uncertainty = Math.max(1, Math.round((q3 - q1) / 2));
+  return {
+    ready: true,
+    provisional: true,
+    reasons: ['INSUFFICIENT_HISTORY_FOR_TREND_MODEL'],
+    monthly,
+    points: [1, 2, 3].map(offset => ({
+      month: monthLabel(latestIndex + offset),
+      expected_price: baseline,
+      lower: Math.max(0, baseline - uncertainty),
+      upper: baseline + uncertainty,
+    })),
+    offer_count: prices.length,
+    verified_dealer_count: dealerCount,
+    method: 'CURRENT_COHORT_MEDIAN_BASELINE',
+    horizon_months: 3,
+    uncertainty_method: 'HALF_INTERQUARTILE_RANGE',
+  };
+}
+
+module.exports = { buildIndicativeForecast, buildMarketForecast, buildMonthlyMedians, linearFit, monthIndex };

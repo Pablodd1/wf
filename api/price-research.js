@@ -26,7 +26,7 @@ const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs
 const { partitionExcludedEvidence } = require('./_lib/exclusion-summary.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
-const { buildMarketForecast } = require('./_lib/market-forecast.cjs');
+const { buildIndicativeForecast, buildMarketForecast } = require('./_lib/market-forecast.cjs');
 const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
 const { loadVerifiedDemandIdentityRows } = require('./_lib/verified-demand-identity.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
@@ -933,9 +933,9 @@ module.exports = async function handler(req, res) {
       classifiedRows
     );
 
-    // Monthly aggregation
-    const monthlyMap = {};
-    includedRows.forEach(r => {
+    function monthlyAverages(cohortRows) {
+      const monthlyMap = {};
+      cohortRows.forEach(r => {
       const observedAt = r.listing_date;
       if (!observedAt) return;
       const d = new Date(observedAt);
@@ -946,26 +946,22 @@ module.exports = async function handler(req, res) {
       monthlyMap[key].sum += r.price_usd;
       monthlyMap[key].min = Math.min(monthlyMap[key].min, r.price_usd);
       monthlyMap[key].max = Math.max(monthlyMap[key].max, r.price_usd);
-    });
+      });
+      return Object.values(monthlyMap)
+        .map(m => ({ month: m.month, count: m.count, avg_price: Math.round(m.sum / m.count), min_price: m.min, max_price: m.max }))
+        .sort((a, b) => a.month.localeCompare(b.month));
+    }
 
-    const monthly = Object.values(monthlyMap)
-      .map(m => ({ month: m.month, count: m.count, avg_price: Math.round(m.sum / m.count), min_price: m.min, max_price: m.max }))
-      .sort((a, b) => a.month.localeCompare(b.month));
+    const monthly = monthlyAverages(includedRows);
 
     // The release cohort is exact brand + reference + dial. Condition remains
     // descriptive listing evidence and does not split market analytics. The
     // helper still enforces sample, identity, recency, and rolling-backtest
     // gates before returning any future values.
-    const forecastsDisabled = process.env.ENABLE_PRICE_FORECASTS !== 'true';
-    const forecastCandidate = forecastsDisabled
-      ? {
-          ready: false,
-          reasons: ['FEATURE_NOT_RELEASED'],
-          offer_count: includedRows.length,
-          verified_dealer_count: new Set(includedRows.map(row => row.dealer_id).filter(Boolean)).size,
-        }
-      : buildMarketForecast(includedRows);
-    const forecast = forecastCandidate;
+    const validatedForecast = buildMarketForecast(includedRows);
+    const forecast = validatedForecast.ready
+      ? validatedForecast
+      : buildIndicativeForecast(includedRows);
 
     // ── Dial analysis with family rollup + min-5 gate + catalog cross-reference ──
     // Family map: normalize variant names to canonical families
@@ -1027,6 +1023,28 @@ module.exports = async function handler(req, res) {
       })
       .filter(Boolean)
       .filter(d => d.count >= 2)  // min-2 gate: only show dial families with 2+ listings
+      .sort((a, b) => b.count - a.count);
+    const dial_trends = Object.values(dialMap)
+      .map(d => {
+        const dialSummary = summarizeComparableRows(d.rows);
+        if (!dialSummary.summary.analytics_ready || !dialSummary.summary.stats) return null;
+        const dialIncludedRows = d.rows.filter(row => classifyPrice(
+          row.price_usd,
+          dialSummary.summary.stats,
+          { minimumPrice: dialSummary.marketPriceFloorUsd },
+        ).included);
+        if (dialIncludedRows.length < 2) return null;
+        const validatedDialForecast = buildMarketForecast(dialIncludedRows);
+        return {
+          dial_color: d.dial_color,
+          count: dialIncludedRows.length,
+          monthly: monthlyAverages(dialIncludedRows),
+          forecast: validatedDialForecast.ready
+            ? validatedDialForecast
+            : buildIndicativeForecast(dialIncludedRows),
+        };
+      })
+      .filter(Boolean)
       .sort((a, b) => b.count - a.count);
     const dialColors = dial_analysis.map(d => d.dial_color);
 
@@ -1100,6 +1118,7 @@ module.exports = async function handler(req, res) {
       excluded_breakdown: reconciliation.excluded_breakdown,
       reconciliation,
       dial_analysis,
+      dial_trends,
       dial_data_quality: {
         known_count: analyticsRows.length - unknownDialCount,
         unknown_count: unknownDialCount,

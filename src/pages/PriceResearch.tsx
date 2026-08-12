@@ -89,6 +89,7 @@ interface CatalogSuggestionsResponse {
 
 interface ForecastData {
   ready: boolean;
+  provisional?: boolean;
   reasons: string[];
   offer_count?: number;
   verified_dealer_count?: number;
@@ -98,6 +99,13 @@ interface ForecastData {
   backtest?: { points: number; model_mae: number; naive_mae: number };
   uncertainty_method?: string;
   release_candidate?: boolean;
+}
+
+interface DialTrendData {
+  dial_color: string;
+  count: number;
+  monthly: MonthlyPoint[];
+  forecast: ForecastData;
 }
 
 interface DialPoint {
@@ -302,6 +310,7 @@ interface PriceData {
   collection: string | null;
   dialColors: string[] | null;
   dial_analysis: DialPoint[];
+  dial_trends?: DialTrendData[];
   dial_data_quality?: {
     known_count: number;
     unknown_count: number;
@@ -880,6 +889,23 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       });
     }
   }
+  const dialTrendMonths = [...new Set((data?.dial_trends || []).flatMap(trend => [
+    ...trend.monthly.map(point => point.month),
+    ...(trend.forecast.ready ? (trend.forecast.points || []).map(point => point.month) : []),
+  ]))].sort();
+  const dialTrendChartData = dialTrendMonths.map(month => {
+    const point: Record<string, string | number | null> = { month };
+    for (const trend of data?.dial_trends || []) {
+      const observed = trend.monthly.find(value => value.month === month);
+      const projected = trend.forecast.points?.find(value => value.month === month);
+      point[`history:${trend.dial_color}`] = observed?.avg_price ?? null;
+      point[`forecast:${trend.dial_color}`] = projected?.expected_price ?? null;
+      if (observed && trend.forecast.ready && trend.monthly.at(-1)?.month === month) {
+        point[`forecast:${trend.dial_color}`] = observed.avg_price;
+      }
+    }
+    return point;
+  });
 
   const displayRef = data?.resolvedRef || data?.reference || query;
   const listingEvidence = data
@@ -1422,6 +1448,30 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             )}
 
+            {data.dial_trends && data.dial_trends.length > 0 && dialTrendChartData.length > 0 && (
+              <section data-testid="dial-price-outlook" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Dial Price History &amp; 3-Month Outlook</h3>
+                <p style={{ fontSize: 12, color: MUTED, marginTop: 4, marginBottom: 14 }}>
+                  Monthly average qualified WTS price by dial for {displayRef}. Solid points are observed; dotted points are estimates. When dated history is insufficient for a validated trend, the outlook holds the current cohort median flat and is labeled indicative.
+                </p>
+                <div role="img" aria-label={`Monthly average price and three-month dial outlook for ${displayRef}`} style={{ height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={dialTrendChartData} margin={{ top: 10, right: 18, bottom: 8, left: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                      <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
+                      <YAxis stroke={MUTED} fontSize={11} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} />
+                      <Tooltip contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8 }} formatter={(value: number, name: string) => [`$${Math.round(Number(value)).toLocaleString()}`, name.startsWith('forecast:') ? `${name.slice(9)} dial outlook` : `${name.slice(8)} dial observed average`]} />
+                      {data.dial_trends.map(trend => <Line key={`history-${trend.dial_color}`} type="monotone" dataKey={`history:${trend.dial_color}`} name={`history:${trend.dial_color}`} stroke={dialChartColor(trend.dial_color)} strokeWidth={3} dot={{ r: 4, fill: dialChartColor(trend.dial_color), stroke: WHITE, strokeWidth: 2 }} connectNulls />)}
+                      {data.dial_trends.filter(trend => trend.forecast.ready).map(trend => <Line key={`forecast-${trend.dial_color}`} type="monotone" dataKey={`forecast:${trend.dial_color}`} name={`forecast:${trend.dial_color}`} stroke={dialChartColor(trend.dial_color)} strokeWidth={2} strokeDasharray="3 6" dot={{ r: 5, fill: WHITE, stroke: dialChartColor(trend.dial_color), strokeWidth: 2 }} connectNulls />)}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs" style={{ color: MUTED }}>
+                  {data.dial_trends.map(trend => <span key={`legend-${trend.dial_color}`} className="inline-flex items-center gap-2"><span aria-hidden="true" style={{ width: 18, borderTop: `3px solid ${dialChartColor(trend.dial_color)}` }} />{trend.dial_color} · {trend.count.toLocaleString()} offers{trend.forecast.provisional && ' · indicative baseline'}</span>)}
+                </div>
+              </section>
+            )}
+
             {/* ── Price Chart ───────────────────────────────── */}
             {chartData.length >= 1 ? (
               <>
@@ -1473,9 +1523,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     Based on {data.count} comparable WTS listings | standard 3.0 x IQR fences applied.
                     {!datedHistory && ' Original posting dates are unavailable for a reliable time series, so this is a current range only.'}
                   </div>
-                  {data.forecast?.ready ? (
+                  {data.forecast?.ready && !data.forecast.provisional ? (
                     <div className="mt-4 border-l-2 border-[#c9a03a] bg-[#c9a03a]/10 px-4 py-3 text-xs leading-6" style={{ color: NAVY }}>
                       Three-month projection passed {data.forecast.backtest?.points || 0} rolling backtests. Model MAE ${data.forecast.backtest?.model_mae.toLocaleString()} versus naive MAE ${data.forecast.backtest?.naive_mae.toLocaleString()}. Dashed values are estimates, not offers or guarantees.
+                    </div>
+                  ) : data.forecast?.ready && data.forecast.provisional ? (
+                    <div className="mt-4 border-l-2 border-[#c9a03a] bg-[#c9a03a]/10 px-4 py-3 text-xs leading-6" style={{ color: NAVY }}>
+                      Indicative three-month baseline: dated history is not yet sufficient to validate a directional trend, so the dotted points hold the current outlier-clean cohort median flat. This is an evidence-based benchmark, not a prediction of appreciation or decline.
                     </div>
                   ) : (
                     <div className="mt-4 border-l-2 border-[#adb5bd] bg-white px-4 py-3 text-xs leading-6" style={{ color: MUTED }}>

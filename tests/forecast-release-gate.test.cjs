@@ -5,8 +5,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-test('public forecast values require an explicit production release flag', () => {
+test('public forecasts use validated trends or an explicitly provisional median baseline', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
-  assert.match(source, /process\.env\.ENABLE_PRICE_FORECASTS !== 'true'/);
-  assert.match(source, /FEATURE_NOT_RELEASED/);
+  assert.match(source, /buildMarketForecast\(includedRows\)/);
+  assert.match(source, /buildIndicativeForecast\(includedRows\)/);
+  assert.match(source, /dial_trends/);
+  assert.doesNotMatch(source, /FEATURE_NOT_RELEASED/);
 });
