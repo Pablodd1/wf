@@ -114,7 +114,14 @@ test('Trading Floor and Price Research share controlled featured reference short
   assert.match(cohorts, /116500LN/);
   assert.match(cohorts, /reference: '5712'/);
   assert.match(cohorts, /tradingQuery: '5712'/);
+  for (const reference of [
+    '126500LN', '5712/1A-001', '5990/1R', '126710BLNR', '126610LN',
+    '5164A', '5740/1G', '116688', '126334', '5980/1R',
+  ]) {
+    assert.match(cohorts, new RegExp(reference.replace('/', '\\/')));
+  }
   assert.match(shortcuts, /Featured research/);
+  assert.match(shortcuts, /max-h-\[22rem\]/);
   assert.match(floor, /mode="trading"/);
   assert.match(floor, /reference: cohort\.reference/);
   assert.match(research, /mode="research"/);
