@@ -54,30 +54,19 @@ function mapLegacyLiveListing(row) {
 async function loadLegacyDynamicProfile(client, payload) {
   const legacyId = payload?.dealer?.legacy_profile_id;
   if (!legacyId) return payload;
-  const source = 'qnsa_rolex_patek_trading_floor_source';
-  const listingColumns = [
-    'id,supplied_brand,canonical_brand,model,catalog_model,raw_reference,normalized_reference',
-    'dial_color,condition,verified_price_usd,source_price_amount,source_price_text,source_currency',
-    'listing_type,posting_date,raw_message,user_image_url,posted_by,seller_name,seller_phone,location',
-  ].join(',');
-  const [recent, wts, wtb] = await Promise.all([
-    client.from(source).select(listingColumns).eq('dealer_id', legacyId)
-      .order('posting_date', { ascending: false, nullsFirst: false }).order('id', { ascending: true }).limit(50),
-    client.from(source).select('id', { count: 'exact', head: true }).eq('dealer_id', legacyId).eq('listing_type', 'WTS'),
-    client.from(source).select('id', { count: 'exact', head: true }).eq('dealer_id', legacyId).eq('listing_type', 'WTB'),
-  ]);
-  const error = recent.error || wts.error || wtb.error;
+  const { data, error } = await client.rpc('qnsa_legacy_dealer_activity', {
+    p_legacy_profile_id: Number(legacyId), p_limit: 50,
+  });
   if (error) throw error;
-  const liveListings = (recent.data || []).map(mapLegacyLiveListing);
-  const dates = liveListings.map(row => row.listing_date).filter(Boolean).sort();
+  const liveListings = (data?.listings || []).map(row => ({ ...row, evidence_only: false }));
   return {
     ...payload,
     stats: {
       ...payload.stats,
-      wts_count: Number(wts.count || 0),
-      wtb_count: Number(wtb.count || 0),
-      first_post: dates[0] || null,
-      latest_post: dates.at(-1) || null,
+      wts_count: Number(data?.wts_count || 0),
+      wtb_count: Number(data?.wtb_count || 0),
+      first_post: data?.first_post || null,
+      latest_post: data?.latest_post || null,
       current_counts_are_dynamic: true,
       current_counts_scope: 'QNSA_RELEASED_ROLEX_PATEK',
     },

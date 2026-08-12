@@ -12,6 +12,7 @@ jobs:
   audit:
     if: ${{ inputs.confirmation == 'AUDIT_LEGACY_PROFILE_LINEAGE' }}
     runs-on: ubuntu-latest
+    environment: production
     timeout-minutes: 15
     permissions:
       contents: read

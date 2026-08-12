@@ -1,0 +1,49 @@
+name: QNSA legacy dealer activity RPC
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_QNSA_LEGACY_DEALER_ACTIVITY_RPC
+        required: true
+        type: string
+
+jobs:
+  apply:
+    if: ${{ inputs.confirmation == 'APPLY_QNSA_LEGACY_DEALER_ACTIVITY_RPC' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply bounded dealer activity function
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          if ($env:SUPABASE_PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Unexpected Supabase project.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260812113000_qnsa_legacy_dealer_activity_rpc.sql'
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+      - name: Smoke test workbook profile IDs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $audit = Get-Content -Raw 'data/dealer-directory/legacy-profile-audit-2026-08-11.json' | ConvertFrom-Json
+          $ids = @($audit.users | Where-Object { $_.legacy_profile_id } | ForEach-Object { [int]$_.legacy_profile_id })
+          $values = ($ids | ForEach-Object { "($_)" }) -join ','
+          $sql = "SELECT jsonb_agg(public.qnsa_legacy_dealer_activity(id, 1)) AS results FROM (VALUES $values) AS input(id);"
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          if (@($result[0].results).Count -ne 21) { throw 'Expected 21 stable profile audit results.' }
+          @{
+            profile_ids = @($result[0].results).Count
+            profiles_with_live_activity = @($result[0].results | Where-Object { [int]$_.wts_count + [int]$_.wtb_count -gt 0 }).Count
+          } | ConvertTo-Json -Compress
