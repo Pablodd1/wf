@@ -4,7 +4,7 @@ const { getClient } = require('./_lib/supabase');
 const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
-const { sourceProfilePayload } = require('./_lib/dealer-directory-source.cjs');
+const { legacyProfilePayload, sourceProfilePayload } = require('./_lib/dealer-directory-source.cjs');
 
 function buildDealerStats(listings, dealer, verifiedPhone, aggregate = null) {
   const dates = listings
@@ -35,6 +35,8 @@ module.exports = async function handler(req, res) {
 
   const sourceProfile = sourceProfilePayload(identity);
   if (sourceProfile) return res.status(200).json(sourceProfile);
+  const legacyProfile = legacyProfilePayload(identity);
+  if (legacyProfile) return res.status(200).json(legacyProfile);
 
   try {
     const client = getClient();

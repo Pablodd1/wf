@@ -1,8 +1,10 @@
 'use strict';
 
 const crawl = require('../../data/dealer-directory/full-crawl-2026-08-09.json');
+const legacyAudit = require('../../data/dealer-directory/legacy-profile-audit-2026-08-11.json');
 
 const SOURCE_SYSTEM = 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT';
+const LEGACY_SOURCE_SYSTEM = 'WATCHFACTS_LEGACY_PROFILE_AUDIT_20260811';
 
 function nonNegativeInteger(value) {
   const parsed = Number.parseInt(String(value ?? '').replace(/,/g, ''), 10);
@@ -55,6 +57,71 @@ function profileSummary(profile, rank) {
 
 function topRatedProfiles() {
   return (crawl.profiles || []).map((profile, index) => profileSummary(profile, index + 1));
+}
+
+function legacySnapshotRange(profileId) {
+  const rows = (legacyAudit.stat_snapshots || []).filter(row => String(row.legacy_profile_id) === String(profileId));
+  const values = key => rows.map(row => nonNegativeInteger(row[key])).filter(value => value !== null);
+  const wts = values('wts_count');
+  const wtb = values('wtb_count');
+  const latest = rows.at(-1) || null;
+  return {
+    snapshot_count: rows.length,
+    wts_min: wts.length ? Math.min(...wts) : null,
+    wts_max: wts.length ? Math.max(...wts) : null,
+    wtb_min: wtb.length ? Math.min(...wtb) : null,
+    wtb_max: wtb.length ? Math.max(...wtb) : null,
+    latest_captured_wts: nonNegativeInteger(latest?.wts_count),
+    latest_captured_wtb: nonNegativeInteger(latest?.wtb_count),
+    latest_context: latest?.snapshot_context || null,
+    current_counts_are_dynamic: false,
+  };
+}
+
+function legacyProfileSummary(user, rank) {
+  const snapshot = legacySnapshotRange(user.legacy_profile_id);
+  return {
+    id: `watchfacts-legacy-${user.legacy_profile_id}`,
+    slug: `watchfacts-legacy-${user.legacy_profile_id}`,
+    legacy_profile_id: user.legacy_profile_id,
+    display_name: user.display_name || null,
+    company_name: null,
+    country_code: user.dealer_country || user.location_raw || null,
+    city: null,
+    rating: null,
+    review_count: null,
+    whatsapp_group_count: null,
+    avatar_url: null,
+    profile_summary: user.profile_user_type || null,
+    verified_at: null,
+    member_since: user.member_since_raw || null,
+    trust_status: null,
+    source_rank: rank,
+    source_system: LEGACY_SOURCE_SYSTEM,
+    source_url: user.profile_sale_url || null,
+    source_crawled_at: '2026-08-11',
+    verified_phone: null,
+    evidence_status: user.profile_click_status || null,
+    stats: {
+      wts_posts: snapshot.latest_captured_wts,
+      wtb_posts: snapshot.latest_captured_wtb,
+      first_post_at: null,
+      last_post_at: null,
+      ...snapshot,
+    },
+  };
+}
+
+function legacyProfiles() {
+  return (legacyAudit.users || [])
+    .filter(user => user.legacy_profile_id)
+    .map((user, index) => legacyProfileSummary(user, index + 1));
+}
+
+const legacyById = new Map(legacyProfiles().map(profile => [String(profile.legacy_profile_id), profile]));
+
+function legacyProfileForDealerId(dealerId) {
+  return legacyById.get(String(dealerId || '')) || null;
 }
 
 function sourceListings(sourceId) {
@@ -133,8 +200,56 @@ function sourceProfilePayload(identity) {
   };
 }
 
+function legacyProfilePayload(identity) {
+  const match = String(identity || '').match(/^watchfacts-legacy-(\d+)$/i);
+  if (!match) return null;
+  const profile = legacyProfileForDealerId(match[1]);
+  if (!profile) return null;
+  const posts = (legacyAudit.posts || []).filter(row => String(row.legacy_profile_id) === match[1]);
+  const snapshots = (legacyAudit.stat_snapshots || []).filter(row => String(row.legacy_profile_id) === match[1]);
+  return {
+    success: true,
+    dealer: profile,
+    stats: {
+      wts_count: profile.stats.latest_captured_wts,
+      wtb_count: profile.stats.latest_captured_wtb,
+      group_count: null,
+      first_post: null,
+      latest_post: null,
+      verified_contact_info: null,
+      snapshot_range: profile.stats,
+    },
+    listings: posts.map(row => ({
+      id: `watchfacts-legacy-post-${row.post_id}`,
+      brand: null, reference: null, dial_color: null, condition: null,
+      price_usd: null, currency: null, listing_type: row.post_intent || null,
+      listing_date: row.posted_on || null, created_at: null,
+      raw_message: row.raw_post_summary || null, image_url: null,
+      source_url: row.source_url || null, repost_count: row.repost_count,
+      box: row.page_box || null, papers: row.page_papers || null,
+      evidence_only: true,
+    })),
+    stat_snapshots: snapshots,
+    source_links: { profile: profile.source_url, for_sale: profile.source_url, want_to_buy: profile.source_url?.replace('for=sale', 'for=search') || null },
+    source_provenance: {
+      source_system: LEGACY_SOURCE_SYSTEM,
+      source_url: profile.source_url || null,
+      crawled_at: '2026-08-11',
+      source_file: legacyAudit.source_file,
+      source_sha256: legacyAudit.source_sha256,
+      captured_at: '2026-08-11',
+      counts_are_historical_snapshots: true,
+    },
+    raw_message_access: true,
+  };
+}
+
 module.exports = {
   SOURCE_SYSTEM,
+  LEGACY_SOURCE_SYSTEM,
+  legacyProfileForDealerId,
+  legacyProfilePayload,
+  legacyProfiles,
   parsedSourceDate,
   sourceProfilePayload,
   sourcePhone,

@@ -1,0 +1,65 @@
+name: QNSA legacy profile lineage audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_LEGACY_PROFILE_LINEAGE
+        required: true
+        type: string
+
+jobs:
+  audit:
+    if: ${{ inputs.confirmation == 'AUDIT_LEGACY_PROFILE_LINEAGE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconcile exact legacy profile IDs read-only
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $audit = Get-Content -Raw 'data/dealer-directory/legacy-profile-audit-2026-08-11.json' | ConvertFrom-Json
+          $ids = @($audit.users | Where-Object { $_.legacy_profile_id } | ForEach-Object { "'$($_.legacy_profile_id.Replace("'", "''"))'" }) -join ','
+          $sql = @"
+          WITH audit_ids(legacy_profile_id) AS (VALUES $($ids -replace "'([^']+)'", "('$1')")),
+          exact_company AS (
+            SELECT company_id::text AS legacy_profile_id,
+              count(*) AS staging_rows,
+              count(*) FILTER (WHERE upper(coalesce(listing_type, intent, '')) = 'WTS') AS wts_rows,
+              count(*) FILTER (WHERE upper(coalesce(listing_type, intent, '')) = 'WTB') AS wtb_rows,
+              min(created_at) AS first_post_at,
+              max(created_at) AS latest_post_at,
+              count(DISTINCT nullif(btrim(coalesce(seller_name, from_name, '')), '')) AS seller_names
+            FROM staging.listings
+            WHERE normalization_run_key = 'mariadb-normalized-20260811-codex-v1'
+              AND company_id::text IN (SELECT legacy_profile_id FROM audit_ids)
+            GROUP BY company_id::text
+          )
+          SELECT jsonb_build_object(
+            'audit_profile_ids', (SELECT count(*) FROM audit_ids),
+            'matched_profile_ids', (SELECT count(*) FROM exact_company),
+            'unmatched_profile_ids', (SELECT count(*) FROM audit_ids a LEFT JOIN exact_company c USING (legacy_profile_id) WHERE c.legacy_profile_id IS NULL),
+            'matched_staging_rows', coalesce((SELECT sum(staging_rows) FROM exact_company), 0),
+            'profiles_with_multiple_seller_names', (SELECT count(*) FROM exact_company WHERE seller_names > 1),
+            'matches', coalesce((SELECT jsonb_agg(to_jsonb(exact_company) ORDER BY legacy_profile_id) FROM exact_company), '[]'::jsonb)
+          ) AS audit;
+          "@
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $result[0].audit | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 legacy-profile-lineage-audit.json
+
+      - name: Upload aggregate reconciliation only
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-legacy-profile-lineage-audit-${{ github.run_id }}
+          path: legacy-profile-lineage-audit.json
+          retention-days: 30

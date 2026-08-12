@@ -8,10 +8,10 @@ import { Breadcrumb } from '@/components/Breadcrumb';
 interface ProfilePayload {
   dealer: {
     id: string; display_name: string | null; company_name: string | null; country_code: string | null; city: string | null;
-    rating: number | null; review_count: number; whatsapp_group_count: number; avatar_url: string | null; profile_summary: string | null;
+    rating: number | null; review_count: number | null; whatsapp_group_count: number | null; avatar_url: string | null; profile_summary: string | null;
     source_system?: string; source_url?: string | null; source_rank?: number; member_since?: string | null; trust_status?: string | null;
   };
-  stats: { wts_count: number; wtb_count: number; group_count: number; first_post: string | null; latest_post: string | null; verified_contact_info: { phone: string; verification_status: 'VERIFIED' } | null; source_contact_url?: string | null } | null;
+  stats: { wts_count: number | null; wtb_count: number | null; group_count: number | null; first_post: string | null; latest_post: string | null; verified_contact_info: { phone: string; verification_status: 'VERIFIED' } | null; source_contact_url?: string | null; snapshot_range?: { snapshot_count?: number; current_counts_are_dynamic?: boolean } } | null;
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; display_price?: string | null; listing_type: string; listing_date: string | null; created_at: string | null; raw_message?: string; image_url?: string | null; source_url?: string | null; availability_url?: string | null }>;
   reviews?: Array<{ date: string | null; reviewer: string | null; sentiment: string | null }>;
   source_links?: { profile?: string | null; for_sale?: string | null; want_to_buy?: string | null; all_listings?: string | null };
@@ -37,6 +37,7 @@ export default function DealerProfile() {
   if (!payload) return <main className="min-h-screen bg-[#08080c] text-white"><MarketNav /><div className="mx-auto max-w-5xl px-5 py-16 text-white/45">Loading dealer profile...</div></main>;
   const { dealer, stats, listings } = payload;
   const isPublicSourceProfile = dealer.source_system === 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT';
+  const isLegacyProfile = dealer.source_system === 'WATCHFACTS_LEGACY_PROFILE_AUDIT_20260811';
   const name = dealer.display_name || dealer.company_name || 'Verified dealer';
   const count = (value: number | null | undefined) => value == null ? 'Not available' : Number(value).toLocaleString();
   const date = (value: string | null | undefined) => {
@@ -69,14 +70,14 @@ export default function DealerProfile() {
                 {dealer.avatar_url ? <img src={dealer.avatar_url} alt="" className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}
               </div>
               <div>
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-[#c9a96e]"><BadgeCheck size={15} /> {isPublicSourceProfile ? `Public-source Top Rated profile${dealer.source_rank ? ` #${dealer.source_rank}` : ''}` : 'Verified dealer'}</div>
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-[#c9a96e]"><BadgeCheck size={15} /> {isPublicSourceProfile ? `Public-source Top Rated profile${dealer.source_rank ? ` #${dealer.source_rank}` : ''}` : isLegacyProfile ? 'Legacy profile evidence' : 'Verified dealer'}</div>
                 <h1 className="mt-3 font-serif text-4xl sm:text-5xl">{name}</h1>
                 <p className="mt-2 text-sm text-white/45">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
               </div>
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-white/60">
               <span className="flex items-center gap-2"><Star size={15} className="text-[#c9a96e]" /> {dealer.rating == null ? 'Rating not published' : `${Number(dealer.rating).toFixed(2)} · ${dealer.review_count} reviews`}</span>
-              <span className="flex items-center gap-2"><Users size={15} /> {dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} WhatsApp groups` : 'WhatsApp groups not published'}</span>
+              <span className="flex items-center gap-2"><Users size={15} /> {dealer.whatsapp_group_count == null ? 'Groups not captured' : dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} WhatsApp groups` : 'No published groups'}</span>
               {dealer.member_since && <span className="flex items-center gap-2"><CalendarDays size={15} /> {dealer.member_since}</span>}
             </div>
           </div>
@@ -90,6 +91,7 @@ export default function DealerProfile() {
           <ProfileMetric label="Common groups" value={count(stats?.group_count)} />
         </div>
         <p className="mt-5 text-xs text-white/40">First post shown: {date(stats?.first_post)} · Latest post shown: {date(stats?.latest_post)}. Import timestamps are never substituted for missing source dates.</p>
+        {isLegacyProfile && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">Captured WTS/WTB values are historical source snapshots across {stats?.snapshot_range?.snapshot_count || 0} observations. They do not replace live totals calculated from verified listing lineage.</p>}
         {stats?.verified_contact_info?.phone && (
           <a className="mt-4 inline-flex items-center gap-2 text-sm text-[#d4b87a] hover:text-white" href={`https://wa.me/${stats.verified_contact_info.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer">
             <MessageCircle size={15} /> Contact verified poster on WhatsApp
@@ -145,7 +147,7 @@ export default function DealerProfile() {
             </article>)}
           </div>
         </section>}
-        {payload.source_provenance && <p className="mt-8 border-t border-white/10 pt-5 text-xs leading-6 text-white/35">Public source snapshot: {payload.source_provenance.crawled_at || 'date unavailable'}. Source facts remain distinct from internally verified seller lineage and Price Research eligibility.</p>}
+        {payload.source_provenance && <p className="mt-8 border-t border-white/10 pt-5 text-xs leading-6 text-white/35">Source snapshot: {payload.source_provenance.crawled_at || 'date unavailable'}. Source facts remain distinct from internally verified seller lineage and Price Research eligibility.</p>}
       </section>
       <Footer />
     </main>

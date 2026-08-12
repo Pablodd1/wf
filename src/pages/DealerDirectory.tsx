@@ -12,6 +12,8 @@ interface DealerStats {
   first_post_at: string | null;
   last_post_at: string | null;
   posting_years: number;
+  snapshot_count?: number;
+  current_counts_are_dynamic?: boolean;
 }
 
 interface DealerSummary {
@@ -22,8 +24,8 @@ interface DealerSummary {
   country_code: string | null;
   city: string | null;
   rating: number | null;
-  review_count: number;
-  whatsapp_group_count: number;
+  review_count: number | null;
+  whatsapp_group_count: number | null;
   avatar_url: string | null;
   profile_summary: string | null;
   verified_at: string | null;
@@ -35,9 +37,10 @@ interface DealerSummary {
   trust_status?: string | null;
   source_url?: string | null;
   source_crawled_at?: string | null;
+  legacy_profile_id?: string | null;
 }
 
-type DirectoryView = 'reference' | 'top-rated';
+type DirectoryView = 'reference' | 'top-rated' | 'legacy';
 
 export default function DealerDirectory() {
   const [dealers, setDealers] = useState<DealerSummary[]>([]);
@@ -80,11 +83,11 @@ export default function DealerDirectory() {
       <MarketNav />
       <section className="border-b border-white/10 px-5 py-10 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{view === 'top-rated' ? 'Curated Luxury public-source leaderboard' : 'Curated Luxury verified network'}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{view === 'top-rated' ? 'Curated Luxury public-source leaderboard' : view === 'legacy' ? 'Curated Luxury legacy profile evidence' : 'Curated Luxury verified network'}</p>
           <div className="mt-3 grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
             <div>
               <h1 className="font-serif text-4xl sm:text-5xl">Dealer directory</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{view === 'top-rated' ? 'Top Rated Dealers preserves the public source rank, feedback count, WTS activity, WTB demand, location, groups, and source profile workflow without inventing a numeric star rating.' : 'Reference Check searches internally verified dealer identities and approved seller lineage used beside listings and Price Research evidence.'}</p>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{view === 'top-rated' ? 'Top Rated Dealers preserves the public source rank, feedback count, WTS activity, WTB demand, location, groups, and source profile workflow without inventing a numeric star rating.' : view === 'legacy' ? 'Legacy profiles use stable source profile IDs. WTS and WTB values are dated source snapshots—not permanent live totals—and missing ratings, groups, or contacts remain unknown.' : 'Reference Check searches internally verified dealer identities and approved seller lineage used beside listings and Price Research evidence.'}</p>
             </div>
             <label className="relative block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={17} />
@@ -94,13 +97,14 @@ export default function DealerDirectory() {
           <div className="mt-7 flex flex-wrap gap-2" role="tablist" aria-label="Dealer directory views">
             <button type="button" role="tab" aria-selected={view === 'reference'} onClick={() => setView('reference')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'reference' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Search size={15} /> Reference Check</button>
             <button type="button" role="tab" aria-selected={view === 'top-rated'} onClick={() => setView('top-rated')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'top-rated' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Trophy size={15} /> Top Rated Dealers</button>
+            <button type="button" role="tab" aria-selected={view === 'legacy'} onClick={() => setView('legacy')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'legacy' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><CalendarDays size={15} /> Legacy Profiles</button>
           </div>
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:px-12">
         <div className="mb-5 flex items-center justify-between text-sm text-white/45">
-          <span>{loading ? (view === 'top-rated' ? 'Loading public-source profiles...' : 'Loading verified profiles...') : view === 'top-rated' ? `Top ${Math.min(25, dealers.length)} source-ranked dealers` : `${total.toLocaleString()} verified dealers`}</span>
+          <span>{loading ? (view === 'top-rated' ? 'Loading public-source profiles...' : view === 'legacy' ? 'Loading legacy profile evidence...' : 'Loading verified profiles...') : view === 'top-rated' ? `Top ${Math.min(25, dealers.length)} source-ranked dealers` : view === 'legacy' ? `${total.toLocaleString()} stable legacy profiles` : `${total.toLocaleString()} verified dealers`}</span>
           <span>Page {page} of {pages}</span>
         </div>
         {error && <div role="alert" className="border border-amber-300/25 bg-amber-300/[0.07] px-4 py-3 text-sm text-amber-100/75">{error}</div>}
@@ -124,16 +128,17 @@ export default function DealerDirectory() {
                 <p className="mt-1 text-xs text-white/42">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
                 {dealer.verified_phone && <p className="mt-2 font-mono text-xs text-white/55">{dealer.verified_phone}</p>}
                 <div className="mt-5 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-white/60">
-                  <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? `${dealer.review_count.toLocaleString()} reviews` : `★ ${Number(dealer.rating).toFixed(1)} (${dealer.review_count.toLocaleString()})`}</span>
+                  <span className="flex items-center gap-1"><Star size={13} className="text-[#c9a96e]" /> {dealer.rating == null ? (dealer.review_count == null ? 'Rating not captured' : `${dealer.review_count.toLocaleString()} reviews`) : `★ ${Number(dealer.rating).toFixed(1)} (${Number(dealer.review_count || 0).toLocaleString()})`}</span>
                   {dealer.rating != null && <span>Trusted User</span>}
-                  <span className="flex items-center gap-1"><Users size={13} /> {dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} groups` : 'Groups not published'}</span>
+                  <span className="flex items-center gap-1"><Users size={13} /> {dealer.whatsapp_group_count == null ? 'Groups not captured' : dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} groups` : 'No published groups'}</span>
                   <span className="flex items-center gap-1"><CalendarDays size={13} /> {dealer.member_since || (dealer.verified_at ? `Verified ${new Date(dealer.verified_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : 'Member date unavailable')}</span>
                 </div>
                 <div className="mt-7 grid grid-cols-3 border-t border-white/10 pt-5 text-center">
-                  <Metric label="For sale" value={stats?.wts_posts || 0} />
-                  <Metric label="Looking for" value={stats?.wtb_posts || 0} />
-                  <Metric label="Groups" value={dealer.whatsapp_group_count || 0} />
+                  <Metric label={view === 'legacy' ? 'Captured WTS' : 'For sale'} value={stats?.wts_posts ?? null} />
+                  <Metric label={view === 'legacy' ? 'Captured WTB' : 'Looking for'} value={stats?.wtb_posts ?? null} />
+                  <Metric label="Groups" value={dealer.whatsapp_group_count ?? null} />
                 </div>
+                {view === 'legacy' && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Historical snapshot · {stats?.snapshot_count || 0} captured observations · live totals require verified listing lineage.</p>}
                 <div className="mt-5 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
                   <Link to={`/dealer/profile/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
                   {dealer.source_url && <a href={dealer.source_url} target="_blank" rel="noreferrer" className="ml-5 inline-flex items-center gap-1 text-white/45 hover:text-white">Source profile</a>}
@@ -142,7 +147,7 @@ export default function DealerDirectory() {
             );
           })}
         </div>
-        {view === 'reference' && <div className="mt-6 flex justify-end gap-2">
+        {view !== 'top-rated' && <div className="mt-6 flex justify-end gap-2">
           <button type="button" disabled={page <= 1 || loading} onClick={() => { setLoading(true); setPage(value => Math.max(1, value - 1)); }} className="h-10 border border-white/15 px-4 text-xs disabled:opacity-35">Previous</button>
           <button type="button" disabled={page >= pages || loading} onClick={() => { setLoading(true); setPage(value => Math.min(pages, value + 1)); }} className="h-10 bg-[#c9a96e] px-4 text-xs font-semibold text-[#08080c] disabled:opacity-35">Next</button>
         </div>}

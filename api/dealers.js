@@ -1,7 +1,7 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
-const { topRatedProfiles } = require('./_lib/dealer-directory-source.cjs');
+const { legacyProfiles, topRatedProfiles } = require('./_lib/dealer-directory-source.cjs');
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value || ''), 10);
@@ -86,6 +86,18 @@ module.exports = async function handler(req, res) {
         total: sourceProfiles.length,
         dealers: sourceProfiles,
         source: 'public-source-snapshot',
+      });
+    }
+    if (mode === 'legacy') {
+      const normalizedSearch = search.toLocaleLowerCase();
+      const profiles = legacyProfiles().filter(profile => !normalizedSearch
+        || [profile.display_name, profile.legacy_profile_id, profile.country_code]
+          .some(value => String(value || '').toLocaleLowerCase().includes(normalizedSearch)));
+      const legacyFrom = (page - 1) * pageSize;
+      return res.status(200).json({
+        success: true, page, pageSize, total: profiles.length,
+        dealers: profiles.slice(legacyFrom, legacyFrom + pageSize),
+        source: 'legacy-profile-audit',
       });
     }
     const client = getClient();
