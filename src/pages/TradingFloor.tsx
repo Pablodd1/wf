@@ -659,6 +659,25 @@ export default function TradingFloor() {
           </div>
 
           <div className="rounded-md border bg-white/35 px-4 py-3" style={{ borderColor: BORDER }}>
+            <div className="mb-3 flex flex-wrap gap-2" aria-label="Complete brand inventory shortcuts">
+              {['Rolex', 'Patek Philippe'].map(brand => (
+                <button
+                  key={brand}
+                  type="button"
+                  onClick={() => {
+                    setSelectedCatalogReference(null);
+                    setSearchInput('');
+                    setSuggestionsOpen(false);
+                    resetResults();
+                    updateViewParams({ q: '', brand, item: 'watches' });
+                  }}
+                  className="min-h-10 rounded-md border px-3 text-xs font-semibold transition-colors"
+                  style={{ borderColor: brandFilter === brand && !search ? GOLD : BORDER, background: brandFilter === brand && !search ? GOLD : '#FFFFFF', color: brandFilter === brand && !search ? '#FFFFFF' : INK }}
+                >
+                  Browse all {brand}
+                </button>
+              ))}
+            </div>
             <PriorityReferenceShortcuts
               mode="trading"
               activeBrand={brandFilter}

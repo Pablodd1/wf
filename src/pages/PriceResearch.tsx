@@ -942,6 +942,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             <div>
               <h1 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
               <p className="mt-1 max-w-xl text-sm text-white/60">Search catalog-backed market evidence by watch reference.</p>
+              {queryBrand === 'Rolex' && <p className="mt-2 text-xs text-[#d8be7a]">All available Rolex references are searchable. Select an autocomplete result to load that reference’s WTS prices, WTB demand, users, raw listings, and charts.</p>}
             </div>
             <div className="grid gap-2 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
               <label className="block">
