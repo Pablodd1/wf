@@ -249,6 +249,10 @@ BEGIN
             OR NULLIF(btrim(listing.conversion_source), '') IS NULL
           )
         )
+        OR (
+          p_correction_batch_token IS NOT NULL
+          AND listing.provenance_metadata->>'price_policy_correction_batch' = p_correction_batch_token
+        )
       )
       AND listing.source_hash ~ '^[0-9a-f]{64}$'
       AND (v_run.cursor_listing_id IS NULL OR listing.id > v_run.cursor_listing_id)

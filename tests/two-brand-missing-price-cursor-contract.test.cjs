@@ -17,6 +17,9 @@ test('full correction cursor revisits only missing or incomplete USD evidence', 
   const lineageGate = /EXISTS \(\s*SELECT 1 FROM public\.raw_message_versions AS version/g;
   assert.ok((sql.match(lineageGate) || []).length >= 2,
     'both the page membership and continuation paths require immutable lineage');
+  assert.match(sql,
+    /listing\.provenance_metadata->>'price_policy_correction_batch' = p_correction_batch_token/,
+    'exact-page reconciliation must retain rows corrected by the current audited batch');
   assert.doesNotMatch(sql, /INSERT\s+INTO\s+(?:public\.)?watch_records/i);
 });
 
