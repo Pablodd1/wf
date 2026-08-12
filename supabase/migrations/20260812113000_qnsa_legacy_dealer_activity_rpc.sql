@@ -19,9 +19,10 @@ SECURITY DEFINER
 SET search_path = pg_catalog, public, staging
 AS $function$
   WITH enabled_run AS (
-    SELECT normalization_run_key
+    SELECT enabled_run_key AS normalization_run_key
     FROM public.qnsa_two_brand_release_control
-    WHERE enabled = true
+    WHERE trading_floor_enabled = true
+      AND enabled_run_key IS NOT NULL
     ORDER BY updated_at DESC, normalization_run_key DESC
     LIMIT 1
   ),
