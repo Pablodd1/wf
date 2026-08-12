@@ -55,7 +55,7 @@ jobs:
       MINIMUM_HEADROOM_GIB: ${{ inputs.minimum_headroom_gib }}
       MAX_PENDING_JOBS: '1000'
       MAX_FAILED_JOBS: '0'
-      CORRECTION_PAGE_SIZE: '500'
+      CORRECTION_PAGE_SIZE: '100'
       CORRECTION_MAX_BATCHES: ${{ inputs.max_batches }}
     steps:
       - uses: actions/checkout@v4
