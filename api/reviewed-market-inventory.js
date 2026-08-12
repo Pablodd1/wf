@@ -919,7 +919,9 @@ module.exports = async function handler(req, res) {
     // unpartitioned 501-row window and filtering it in Node is both slower and
     // capable of starving one brand when the newest global rows skew toward the
     // other brand.
-    const qnsaBrandOnly = false;
+    const qnsaBrandOnly = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      && Boolean(brand)
+      && !reference;
     if (brand) queryParams.set('brand_scope', `eq.${brand}`);
     if (reference) {
       const normalizedBrand = String(brand || '').trim().toLowerCase();
@@ -1025,6 +1027,27 @@ module.exports = async function handler(req, res) {
         })
       : queryParams;
     let usedLegacyViewContract = legacyMarketViewContractDetected;
+    // Broad QNSA brand pages first resolve a tiny ordered ID page from the
+    // enabled normalization run. Fetching the strict evidence view by those IDs
+    // avoids a slow ordered scan through its release-control/checkpoint joins.
+    if (qnsaBrandOnly && !legacyMarketViewContractDetected) {
+      const pageIdsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_page_ids`, {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ p_brand: brand, p_limit: qnsaBrandScanLimit, p_offset: requestedOffset }),
+      });
+      if (!pageIdsRes.ok) {
+        const pageIdsError = await pageIdsRes.text();
+        throw new Error(`QNSA page IDs failed: ${pageIdsRes.status} ${pageIdsError.slice(0, 200)}`);
+      }
+      const pageIds = (await pageIdsRes.json()).map(row => row.id).filter(Boolean);
+      activeQueryParams = new URLSearchParams(
+        [...activeQueryParams.entries()].filter(([key]) => !['brand_scope', 'order'].includes(key)),
+      );
+      if (pageIds.length) activeQueryParams.set('id', `in.(${pageIds.join(',')})`);
+      activeQueryParams.set('limit', String(pageIds.length || 1));
+      if (!pageIds.length) activeQueryParams.set('id', 'eq.__no_qnsa_listing__');
+    }
     let restUrl = `${process.env.SUPABASE_URL}/rest/v1/${MARKET_SOURCE_VIEW}?${activeQueryParams.toString()}`;
     let restRes = await fetch(restUrl, {
       headers,
@@ -1051,9 +1074,7 @@ module.exports = async function handler(req, res) {
     }
     const data = await restRes.json();
     const sourceRows = data || [];
-    const brandRows = qnsaBrandOnly
-      ? sourceRows.filter(row => String(row.brand_scope || row.canonical_brand || '').trim().toLowerCase() === String(brand).trim().toLowerCase())
-      : sourceRows;
+    const brandRows = sourceRows;
     let rawRows = brandRows.slice(0, pageSize);
     let hasMore = brandRows.length > pageSize || (qnsaBrandOnly && sourceRows.length >= qnsaBrandScanLimit);
     let nextLane = requestedLane;
