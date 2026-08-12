@@ -85,7 +85,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260812020000_two_brand_price_correction_cursor.sql'
+          $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260812123000_two_brand_missing_price_cursor.sql'
           if ($sql -match '(?i)INSERT\s+INTO\s+(?:public\.)?watch_records') { throw 'Migration attempts a legacy publication write.' }
           $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
