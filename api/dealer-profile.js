@@ -59,6 +59,18 @@ async function loadLegacyDynamicProfile(client, payload) {
   });
   if (error) throw error;
   const liveListings = (data?.listings || []).map(row => ({ ...row, evidence_only: false }));
+  const liveCount = Number(data?.wts_count || 0) + Number(data?.wtb_count || 0);
+  if (liveCount === 0 && liveListings.length === 0) {
+    return {
+      ...payload,
+      dynamic_activity_status: 'UNLINKED_IDENTITY_NAMESPACE',
+      stats: {
+        ...payload.stats,
+        current_counts_are_dynamic: false,
+        current_counts_scope: 'LEGACY_SNAPSHOT_PENDING_EXACT_LINEAGE_LINK',
+      },
+    };
+  }
   return {
     ...payload,
     stats: {
