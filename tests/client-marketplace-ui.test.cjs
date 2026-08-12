@@ -123,7 +123,8 @@ test('Trading Floor and Price Research share controlled featured reference short
     assert.match(cohorts, new RegExp(reference.replace('/', '\\/')));
   }
   assert.match(shortcuts, /Featured research/);
-  assert.match(shortcuts, /max-h-\[22rem\]/);
+  assert.match(shortcuts, /PRIORITY_REFERENCE_COHORTS\.slice\(0, 2\)/);
+  assert.match(shortcuts, /sm:grid-cols-2/);
   assert.match(floor, /mode="trading"/);
   assert.match(floor, /reference: cohort\.reference/);
   assert.match(research, /mode="research"/);

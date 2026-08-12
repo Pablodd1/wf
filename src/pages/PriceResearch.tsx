@@ -45,6 +45,8 @@ interface RowData {
   verdict?: string | null;
   confidence?: number | null;
   listing_status?: string | null;
+  listing_type?: string | null;
+  intent?: string | null;
   contact_publication_approved?: boolean;
 }
 
@@ -528,7 +530,6 @@ export default function PriceResearch() {
   const [activeReferenceSuggestion, setActiveReferenceSuggestion] = useState(-1);
   const [selectedCatalogReference, setSelectedCatalogReference] = useState<CatalogSuggestion | null>(null);
   const referenceSearchBoxRef = useRef<HTMLDivElement | null>(null);
-  const analyticsChartsRef = useRef<HTMLElement | null>(null);
 
   // ── Drill-down picker state (brand → model → reference) ──
   const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
@@ -948,6 +949,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     : null;
 
   const listings = [...new Map(listingEvidence.map(row => [row.id, row])).values()]
+    .filter(row => !['WTB', 'BUY'].includes(String(row.listing_type || row.intent || '').toUpperCase()))
     .sort((left, right) => {
       const eligibilityDifference = Number(right.price_usd != null && !right.is_outlier) - Number(left.price_usd != null && !left.is_outlier);
       if (eligibilityDifference !== 0) return eligibilityDifference;
@@ -1317,10 +1319,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             </div>
 
-            <nav aria-label="Price Research result sections" className="mb-6 flex flex-wrap gap-2 rounded-lg border bg-[#fffaf0] p-3" style={{ borderColor: '#ead9a2' }}>
-              <button type="button" onClick={() => analyticsChartsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })} className="min-h-11 rounded-md bg-[#9a7127] px-4 text-sm font-semibold text-white">View graphic analytics &amp; 3-month outlook</button>
-              <span className="flex items-center px-2 text-xs leading-5" style={{ color: MUTED }}>Solid dial-colored lines are observed WTS averages. Dotted points are estimates and are labeled indicative unless the trend passes validation.</span>
-            </nav>
+            <aside aria-label="Graphic analytics explanation" className="mb-6 rounded-lg border bg-[#fffaf0] px-4 py-3 text-xs leading-5" style={{ borderColor: '#ead9a2', color: MUTED }}>
+              The dial comparison table and graphic analytics are shown below for this reference. Solid dial-colored lines are observed WTS averages. Dotted points are estimates and are labeled indicative unless the trend passes validation.
+            </aside>
 
             {displayDialAnalysis.length > 0 && (
               <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
@@ -1437,8 +1438,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             </section>
 
-            <DemandSignalsSection data={data} onOpenListing={openListing} />
-
             {/* Dial cohorts that satisfy catalog and minimum-sample policy. */}
             {displayDialAnalysis.length > 0 && (
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
@@ -1502,7 +1501,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             )}
 
             {data.dial_trends && data.dial_trends.length > 0 && dialTrendChartData.length > 0 && (
-              <section ref={analyticsChartsRef} data-testid="dial-price-outlook" style={{ scrollMarginTop: 24, backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+              <section data-testid="dial-price-outlook" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Dial Price History &amp; 3-Month Outlook</h3>
                 <p style={{ fontSize: 12, color: MUTED, marginTop: 4, marginBottom: 14 }}>
                   Monthly average qualified WTS price by dial for {displayRef}. Solid points are observed; dotted points are estimates. When dated history is insufficient for a validated trend, the outlook holds the current cohort median flat and is labeled indicative.
@@ -1686,7 +1685,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               )}
               {listings.length > 0 && (
                 <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
-                  Qualified WTS observations power the chart and statistics. Every observation passes the same price, currency, identity, bundle, duplicate, and outlier gates. WTB requests remain in Demand Signals. Additional real source listings remain visible here with their exclusion reason and never alter the averages.
+                  Compact, full-width WTS source evidence only. Qualified observations power the chart and statistics; excluded sale evidence remains visible with its reason and never alters the averages. WTB requests remain counted separately in the WTB / WTS ratio above.
                 </div>
               )}
               {listings.map(row => (
@@ -2033,8 +2032,8 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
     : 'Included in qualified comparable average';
   return (
     <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}, ${evidenceStatus}`}
-      className="min-h-24"
-      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
+      className="min-h-20"
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
       <ComparableThumbnail src={imageUrl} alt={`${title} listing image`} />
@@ -2087,7 +2086,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
 function ComparableThumbnail({ src, alt }: { src: string; alt: string }) {
   const [failed, setFailed] = useState(false);
   return (
-    <div aria-hidden={!src || failed} style={{ width: 76, height: 76, flex: '0 0 76px', borderRadius: 8, overflow: 'hidden', display: 'grid', placeItems: 'center', background: '#f1f3f5', color: MUTED, fontSize: 10 }}>
+    <div aria-hidden={!src || failed} style={{ width: 60, height: 60, flex: '0 0 60px', borderRadius: 8, overflow: 'hidden', display: 'grid', placeItems: 'center', background: '#f1f3f5', color: MUTED, fontSize: 10 }}>
       {src && !failed
         ? <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         : <span>No image</span>}

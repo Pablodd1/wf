@@ -20,10 +20,12 @@ test('footer exposes the detailed Curated Luxury horology blog', () => {
   assert.match(blog, /britishmuseum\.org/);
 });
 
-test('Price Research leads users directly to visible dial analytics and outlook', () => {
+test('Price Research always shows the dial analytics table and outlook without an action gate', () => {
   const page = read('src/pages/PriceResearch.tsx');
-  assert.match(page, /View graphic analytics &amp; 3-month outlook/);
-  assert.match(page, /analyticsChartsRef\.current\?\.scrollIntoView/);
-  assert.match(page, /ref=\{analyticsChartsRef\}[\s\S]*data-testid="dial-price-outlook"/);
+  assert.doesNotMatch(page, /View graphic analytics &amp; 3-month outlook/);
+  assert.doesNotMatch(page, /analyticsChartsRef/);
+  assert.match(page, /Dial colors and comparable prices/);
+  assert.match(page, /<table[\s\S]*Average price[\s\S]*Minimum price[\s\S]*Maximum price/);
+  assert.match(page, /data-testid="dial-price-outlook"/);
   assert.match(page, /Solid dial-colored lines are observed WTS averages/);
 });

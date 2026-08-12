@@ -13,7 +13,7 @@ test('Price Research renders analytics before the compact featured-sale sample',
   assert.match(pageRender, /Analysis outcome and methodology/);
   assert.match(pageRender, /Featured listings for sale/);
   assert.ok(
-    pageRender.indexOf('Analysis outcome and methodology') < pageRender.indexOf('Featured listings for sale'),
+    pageRender.indexOf('key={`methodology-') < pageRender.indexOf('Featured listings for sale ({listings.length} shown)'),
     'analysis must render before listing evidence',
   );
   assert.match(pageRender, /\.slice\(0, COMPARABLE_LISTING_PREVIEW_LIMIT\)/);
@@ -34,7 +34,8 @@ test('featured-sale rows preserve source evidence while excluded rows never alte
   assert.match(pageRender, /\.\.\.data\.rows, \.\.\.\(data\.retained_rows \|\| \[\]\), \.\.\.\(data\.outlier_rows \|\| \[\]\)/);
   assert.match(pageRender, /eligibilityDifference/);
   assert.match(pageRender, /listings\.map\(row =>/);
-  assert.match(pageRender, /Additional real source listings remain visible here with their exclusion reason and never alter the averages/);
+  assert.match(pageRender, /Compact, full-width WTS source evidence only/);
+  assert.match(pageRender, /WTB requests remain counted separately in the WTB \/ WTS ratio above/);
   assert.match(pageRender, /exclusionLabel=\{outlierReason\(row\.outlier_reason\)\}/);
   assert.match(source, /function ComparableThumbnail/);
   assert.match(source, /row\.raw_message \?\? row\.raw_line/);

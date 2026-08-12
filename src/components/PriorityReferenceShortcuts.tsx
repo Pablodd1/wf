@@ -32,8 +32,8 @@ export function PriorityReferenceShortcuts({
           </p>
         </div>
       </div>
-      <div className="grid max-h-[22rem] gap-2 overflow-y-auto pr-1 sm:grid-cols-2 lg:grid-cols-3">
-        {PRIORITY_REFERENCE_COHORTS.map(cohort => {
+      <div className="grid gap-2 sm:grid-cols-2">
+        {PRIORITY_REFERENCE_COHORTS.slice(0, 2).map(cohort => {
           const cohortReference = cohort.reference.toUpperCase().replace(/[^A-Z0-9]/g, '');
           const isActive = activeBrand.toLowerCase() === cohort.brand.toLowerCase()
             && (mode === 'trading'
