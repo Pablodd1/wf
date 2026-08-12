@@ -83,8 +83,10 @@ test('legacy directory and profile endpoints are public, searchable, and paginat
 
 test('production lineage audit is read-only and exact-ID only', () => {
   const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'qnsa-legacy-profile-lineage-audit.yml'), 'utf8');
-  assert.match(workflow, /SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh/);
-  assert.match(workflow, /read_only = \$true/);
-  assert.match(workflow, /company_id::text IN \(SELECT legacy_profile_id FROM audit_ids\)/);
+  assert.match(workflow, /qnsafosakvonzgfcsphh/);
+  assert.match(workflow, /qnsa_rolex_patek_trading_floor_source/);
+  assert.match(workflow, /dealer_id=\$encoded/);
+  assert.match(workflow, /SUPABASE_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(workflow, /SUPABASE_ACCESS_TOKEN/);
   assert.doesNotMatch(workflow, /UPDATE |INSERT INTO|DELETE FROM/i);
 });

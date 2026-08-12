@@ -16,8 +16,8 @@ jobs:
     permissions:
       contents: read
     env:
-      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,37 +25,44 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          if (-not $env:SUPABASE_URL -or -not $env:SUPABASE_SERVICE_ROLE_KEY) {
+            throw 'Supabase read credentials are unavailable.'
+          }
+          if ($env:SUPABASE_URL -notmatch '^https://qnsafosakvonzgfcsphh[.]supabase[.]co/?$') {
+            throw 'Refusing to audit an unexpected Supabase project.'
+          }
           $audit = Get-Content -Raw 'data/dealer-directory/legacy-profile-audit-2026-08-11.json' | ConvertFrom-Json
-          $ids = @($audit.users | Where-Object { $_.legacy_profile_id } | ForEach-Object { "'$($_.legacy_profile_id.Replace("'", "''"))'" }) -join ','
-          $sql = @"
-          WITH audit_ids(legacy_profile_id) AS (VALUES $($ids -replace "'([^']+)'", "('$1')")),
-          exact_company AS (
-            SELECT company_id::text AS legacy_profile_id,
-              count(*) AS staging_rows,
-              count(*) FILTER (WHERE upper(coalesce(listing_type, intent, '')) = 'WTS') AS wts_rows,
-              count(*) FILTER (WHERE upper(coalesce(listing_type, intent, '')) = 'WTB') AS wtb_rows,
-              min(created_at) AS first_post_at,
-              max(created_at) AS latest_post_at,
-              count(DISTINCT nullif(btrim(coalesce(seller_name, from_name, '')), '')) AS seller_names
-            FROM staging.listings
-            WHERE normalization_run_key = 'mariadb-normalized-20260811-codex-v1'
-              AND company_id::text IN (SELECT legacy_profile_id FROM audit_ids)
-            GROUP BY company_id::text
-          )
-          SELECT jsonb_build_object(
-            'audit_profile_ids', (SELECT count(*) FROM audit_ids),
-            'matched_profile_ids', (SELECT count(*) FROM exact_company),
-            'unmatched_profile_ids', (SELECT count(*) FROM audit_ids a LEFT JOIN exact_company c USING (legacy_profile_id) WHERE c.legacy_profile_id IS NULL),
-            'matched_staging_rows', coalesce((SELECT sum(staging_rows) FROM exact_company), 0),
-            'profiles_with_multiple_seller_names', (SELECT count(*) FROM exact_company WHERE seller_names > 1),
-            'matches', coalesce((SELECT jsonb_agg(to_jsonb(exact_company) ORDER BY legacy_profile_id) FROM exact_company), '[]'::jsonb)
-          ) AS audit;
-          "@
-          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
-          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
-          $result[0].audit | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 legacy-profile-lineage-audit.json
+          $ids = @($audit.users | Where-Object { $_.legacy_profile_id } | ForEach-Object { [string]$_.legacy_profile_id })
+          $headers = @{
+            Authorization = "Bearer $env:SUPABASE_SERVICE_ROLE_KEY"
+            apikey = $env:SUPABASE_SERVICE_ROLE_KEY
+          }
+          $matches = @()
+          foreach ($legacyId in $ids) {
+            $encoded = [uri]::EscapeDataString("eq.$legacyId")
+            $uri = "$($env:SUPABASE_URL.TrimEnd('/'))/rest/v1/qnsa_rolex_patek_trading_floor_source?select=dealer_id,listing_type,posting_date,seller_name&dealer_id=$encoded&limit=10000"
+            $rows = @(Invoke-RestMethod -Method Get -Uri $uri -Headers $headers)
+            if ($rows.Count -eq 0) { continue }
+            $names = @($rows | ForEach-Object { [string]$_.seller_name } | Where-Object { $_.Trim() } | Sort-Object -Unique)
+            $dates = @($rows | ForEach-Object { [string]$_.posting_date } | Where-Object { $_ } | Sort-Object)
+            $matches += [ordered]@{
+              legacy_profile_id = $legacyId
+              released_rows = $rows.Count
+              wts_rows = @($rows | Where-Object { ([string]$_.listing_type).ToUpperInvariant() -eq 'WTS' }).Count
+              wtb_rows = @($rows | Where-Object { ([string]$_.listing_type).ToUpperInvariant() -eq 'WTB' }).Count
+              first_post_at = if ($dates.Count) { $dates[0] } else { $null }
+              latest_post_at = if ($dates.Count) { $dates[-1] } else { $null }
+              seller_names = $names
+            }
+          }
+          [ordered]@{
+            audit_profile_ids = $ids.Count
+            matched_profile_ids = $matches.Count
+            unmatched_profile_ids = $ids.Count - $matches.Count
+            matched_released_rows = ($matches | Measure-Object -Property released_rows -Sum).Sum
+            profiles_with_multiple_seller_names = @($matches | Where-Object { $_.seller_names.Count -gt 1 }).Count
+            matches = $matches
+          } | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 legacy-profile-lineage-audit.json
 
       - name: Upload aggregate reconciliation only
         uses: actions/upload-artifact@v4
