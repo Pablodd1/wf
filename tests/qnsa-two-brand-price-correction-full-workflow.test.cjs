@@ -12,7 +12,7 @@ const runner = fs.readFileSync(path.join(__dirname, '..', 'tools', 'mariadb-live
 test('full correction is manual, GitHub-hosted, bounded, and resumable', () => {
   assert.match(workflow, /RUN_TWO_BRAND_PRICE_CORRECTION/);
   assert.match(workflow, /runs-on: ubuntu-latest/);
-  assert.match(workflow, /CORRECTION_PAGE_SIZE: '500'/);
+  assert.match(workflow, /CORRECTION_PAGE_SIZE: '100'/);
   assert.match(workflow, /max_batches must be between 1 and 500/);
   assert.match(workflow, /concurrency:[\s\S]*qnsa-two-brand-price-correction/);
 });
@@ -51,3 +51,4 @@ test('workflow artifacts contain only aggregate reconciliation counts', () => {
   assert.match(workflow, /Upload sanitized counts and cursor status only/);
   assert.doesNotMatch(workflow.match(/Upload sanitized counts and cursor status only[\s\S]*$/)[0], /raw_payload|source_record_id|records/);
 });
+
