@@ -69,12 +69,10 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $sql = @"
-          WITH checkpoint AS (
-            SELECT status, error_rows
-            FROM staging.mariadb_normalization_import_checkpoints
-            WHERE run_key = '$($env:NORMALIZED_RUN_KEY)'
-          ), armed AS (
+          # Arm the compatibility view in a separate statement. PostgreSQL
+          # statement snapshots do not expose a data-modifying CTE's control
+          # update to a view scanned by the same statement.
+          $armSql = @"
             UPDATE public.qnsa_two_brand_release_control
             SET trading_floor_enabled = false,
                 price_research_enabled = false,
@@ -84,7 +82,17 @@ jobs:
                 change_reason = 'Audemars Piguet normalized-candidate audit; public release remains disabled',
                 updated_at = now()
             WHERE canonical_brand = 'Audemars Piguet'
-            RETURNING canonical_brand
+            RETURNING canonical_brand;
+          "@
+          $armBody = @{ query = [string]$armSql; read_only = $false } | ConvertTo-Json -Depth 3
+          $armed = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $armBody
+          if ($armed.Count -ne 1) { throw 'Audemars Piguet release control was not armed.' }
+
+          $sql = @"
+          WITH checkpoint AS (
+            SELECT status, error_rows
+            FROM staging.mariadb_normalization_import_checkpoints
+            WHERE run_key = '$($env:NORMALIZED_RUN_KEY)'
           ), candidates AS (
             SELECT *
             FROM public.qnsa_rolex_patek_reviewed_release_base
@@ -93,7 +101,7 @@ jobs:
           SELECT jsonb_build_object(
             'checkpoint_status', (SELECT status FROM checkpoint),
             'checkpoint_error_rows', (SELECT error_rows FROM checkpoint),
-            'armed_rows', (SELECT count(*) FROM armed),
+            'armed_rows', 1,
             'candidate_total', count(*),
             'wts_total', count(*) FILTER (WHERE listing_type = 'WTS'),
             'wtb_total', count(*) FILTER (WHERE listing_type = 'WTB'),

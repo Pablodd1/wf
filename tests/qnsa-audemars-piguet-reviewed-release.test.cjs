@@ -79,4 +79,7 @@ test('workflow gates release on completed normalization, usable WTS and clean li
   assert.match(workflow, /qnsa_rolex_patek_trading_floor_source/);
   assert.match(workflow, /qnsa_rolex_patek_price_research_source/);
   assert.match(workflow, /qnsa_rolex_patek_wtb_demand_source/);
+  assert.match(workflow, /\$armSql = @"/);
+  assert.match(workflow, /\$armed = Invoke-RestMethod/);
+  assert.doesNotMatch(workflow, /WITH checkpoint AS \([\s\S]*?\), armed AS \(/);
 });
