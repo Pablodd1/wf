@@ -28,6 +28,14 @@ test('QNSA comparable detail reuses the exact evidence already loaded by analyti
   assert.match(source, /image_evidence_type: imageCandidate \? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE'/);
 });
 
+test('direct detail API checks QNSA before legacy release views', () => {
+  const source = read('api/price-research-listing.js');
+  assert.ok(
+    source.indexOf('await loadQnsaReleaseListing(client, id)')
+      < source.indexOf(".from('price_research_verified_source')"),
+  );
+});
+
 test('URL-selected brand remains visible while release-brand metadata loads', () => {
   const source = read('src/pages/PriceResearch.tsx');
   assert.match(source, /queryBrand && !pBrands\.some\(item => item\.brand === queryBrand\)/);

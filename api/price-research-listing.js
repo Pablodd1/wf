@@ -149,6 +149,14 @@ module.exports = async function handler(req, res) {
     } catch {
       // Public evidence remains available when optional reviewer resolution fails.
     }
+    let qnsaListing = null;
+    try {
+      qnsaListing = await loadQnsaReleaseListing(client, id);
+    } catch (qnsaDetailError) {
+      console.warn('[price-research-listing] QNSA detail source unavailable; checking legacy release sources:', qnsaDetailError.message);
+    }
+    if (qnsaListing) return res.status(200).json(qnsaListingResponse(qnsaListing));
+
     const strictResult = await client
       .from('price_research_verified_source')
       .select('id,brand,model,reference,dial_color')
@@ -157,13 +165,6 @@ module.exports = async function handler(req, res) {
     if (strictResult.error) throw strictResult.error;
     const strictGate = strictResult.data;
     if (!strictGate) {
-      let qnsaListing = null;
-      try {
-        qnsaListing = await loadQnsaReleaseListing(client, id);
-      } catch (qnsaDetailError) {
-        console.warn('[price-research-listing] QNSA detail source unavailable; checking reviewed workbook:', qnsaDetailError.message);
-      }
-      if (qnsaListing) return res.status(200).json(qnsaListingResponse(qnsaListing));
       const workbookListing = await loadReviewedWorkbookListing(client, id);
       if (workbookListing) {
         const publicSource = String(workbookListing.raw_message || '').trim();
