@@ -731,6 +731,7 @@ test('QNSA exact reference RPC uses indexed family lookup for AP base references
   assert.match(source, /const apEvidenceReferences = \[audemarsBaseFamily, \.\.\.apExactReferences\]/);
   assert.match(source, /p_references: apEvidenceReferences/);
   assert.match(source, /Promise\.all\(\['WTS', 'WTB'\]\.map/);
+  assert.match(source, /publication_lane: 'QNSA_ROLEX_PATEK_REVIEWED_V1'/);
 });
 
 test('obvious immutable-raw cross-brand conflicts never reach customer cards', () => {

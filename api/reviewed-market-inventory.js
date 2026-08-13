@@ -1184,6 +1184,7 @@ module.exports = async function handler(req, res) {
           location: row.location,
           item_category: 'WATCH',
           publication_state: 'PENDING_VERIFICATION',
+          publication_lane: 'QNSA_ROLEX_PATEK_REVIEWED_V1',
           normalization_run_complete: true,
           raw_lineage_verified: true,
           dealer_rating: row.seller_rating,
