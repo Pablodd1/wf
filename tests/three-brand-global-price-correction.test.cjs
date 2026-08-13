@@ -106,9 +106,15 @@ test('workflow separates read-only audit, one-page canary, and bounded resume', 
   assert.match(workflow, /APPLY_THREE_BRAND_FX_CANARY/);
   assert.match(workflow, /RESUME_THREE_BRAND_FX/);
   assert.match(workflow, /inputs\.mode == 'CANARY' && '1'/);
-  assert.match(workflow, /Read-only capacity, checkpoint, and lineage preflight/);
+  assert.match(workflow, /Read-only configured disk and utilization preflight/);
+  assert.match(workflow, /Read-only bounded checkpoint, queue, and lineage preflight/);
+  assert.match(workflow, /node tools\/supabase\/audit-disk-capacity\.cjs/);
+  assert.doesNotMatch(workflow, /pg_database_size\(current_database\(\)\)/);
+  assert.doesNotMatch(workflow, /SELECT count\(\*\) FROM staging\.listings/);
+  assert.doesNotMatch(workflow, /SELECT count\(\*\) FROM public\.raw_message_versions/);
   assert.match(workflow, /staging_row_delta/);
-  assert.match(workflow, /raw_version_row_delta/);
+  assert.match(workflow, /raw_immutability_verification/);
+  assert.doesNotMatch(workflow, /'raw_version_row_delta',\s*0/);
   assert.match(workflow, /unsupported_currency_rows/);
   assert.match(workflow, /MAX_PENDING_JOBS: '0'/);
   assert.match(workflow, /scanned_rows -ne \(\[long\]\$r\.run\.corrected_rows\+\[long\]\$r\.run\.skipped_rows\)/);

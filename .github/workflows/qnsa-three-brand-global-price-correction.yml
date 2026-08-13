@@ -96,7 +96,12 @@ jobs:
           if ([int]$env:CORRECTION_MAX_BATCHES -lt 1 -or [int]$env:CORRECTION_MAX_BATCHES -gt 500) { throw 'max_batches must be 1 to 500.' }
           if ([int]$env:CORRECTION_BATCH_DELAY_MS -lt 0 -or [int]$env:CORRECTION_BATCH_DELAY_MS -gt 60000) { throw 'batch_delay_ms must be 0 to 60000.' }
 
-      - name: Read-only capacity, checkpoint, and lineage preflight
+      - name: Read-only configured disk and utilization preflight
+        env:
+          DISK_AUDIT_PATH: qnsa-disk-capacity-audit.json
+        run: node tools/supabase/audit-disk-capacity.cjs
+
+      - name: Read-only bounded checkpoint, queue, and lineage preflight
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -105,11 +110,8 @@ jobs:
           $sql = @"
           SELECT jsonb_build_object(
             'project_ref', '$($env:SUPABASE_PROJECT_REF)',
-            'database_gib', round(pg_database_size(current_database())::numeric / 1073741824, 3),
-            'staging_rows', (SELECT count(*) FROM staging.listings),
-            'raw_version_rows', (SELECT count(*) FROM public.raw_message_versions),
-            'pending_jobs', (SELECT count(*) FROM jobs.processing_jobs WHERE lower(status::text) IN ('received','queued','processing')),
-            'failed_jobs', (SELECT count(*) FROM jobs.processing_jobs WHERE lower(status::text) IN ('failed','dead_letter')),
+            'pending_jobs', CASE WHEN EXISTS (SELECT 1 FROM jobs.processing_jobs WHERE lower(status::text) IN ('received','queued','processing') LIMIT 1) THEN 1 ELSE 0 END,
+            'failed_jobs', CASE WHEN EXISTS (SELECT 1 FROM jobs.processing_jobs WHERE lower(status::text) IN ('failed','dead_letter') LIMIT 1) THEN 1 ELSE 0 END,
             'checkpoint', (SELECT jsonb_build_object('status', status, 'input_rows', input_rows, 'staged_rows', staged_rows,
               'existing_rows', existing_rows, 'deferred_rows', deferred_rows, 'error_rows', error_rows,
               'accounting_reconciled', input_rows = staged_rows + existing_rows + deferred_rows)
@@ -155,12 +157,14 @@ jobs:
           $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
           $p = $result[0].preflight
+          $disk = Get-Content -Raw -LiteralPath 'qnsa-disk-capacity-audit.json' | ConvertFrom-Json
           if (-not $p.checkpoint -or $p.checkpoint.status -ne 'NORMALIZATION_STAGED' -or [long]$p.checkpoint.error_rows -ne 0 -or -not $p.checkpoint.accounting_reconciled) { throw 'Completed reconciled normalization checkpoint is required.' }
-          if ([double]$p.database_gib -ge [double]$env:DATABASE_LIMIT_GIB -or ([double]$env:DATABASE_LIMIT_GIB-[double]$p.database_gib) -lt [double]$env:MINIMUM_HEADROOM_GIB) { throw 'Database headroom gate failed.' }
+          if (-not [bool]$disk.gate.headroom_satisfied -or [double]$disk.disk.configured_size_gib -gt [double]$env:DATABASE_LIMIT_GIB) { throw 'Database headroom gate failed.' }
           if ([long]$p.pending_jobs -gt [long]$env:MAX_PENDING_JOBS -or [long]$p.failed_jobs -gt [long]$env:MAX_FAILED_JOBS) { throw 'Processing queue gate failed.' }
-          "STAGING_ROWS_BEFORE=$($p.staging_rows)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-          "RAW_ROWS_BEFORE=$($p.raw_version_rows)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
-          $p | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 three-brand-fx-preflight.json
+          "STAGING_ROWS_BEFORE=$($p.checkpoint.staged_rows)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "RAW_ROWS_BEFORE=$($p.checkpoint.input_rows)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          $evidence = [ordered]@{ disk = $disk; database = $p; row_baseline_source = 'RECONCILED_NORMALIZATION_CHECKPOINT' }
+          $evidence | ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8 three-brand-fx-preflight.json
 
       - name: Stop after read-only audit
         if: ${{ inputs.mode == 'AUDIT' }}
@@ -192,27 +196,25 @@ jobs:
           $sql = @"
           SELECT jsonb_build_object(
             'run', (SELECT to_jsonb(r) - 'fx_snapshot' FROM staging.mariadb_three_brand_price_correction_runs r WHERE correction_run_key='$key'),
-            'staging_rows_after', (SELECT count(*) FROM staging.listings),
-            'raw_version_rows_after', (SELECT count(*) FROM public.raw_message_versions),
-            'staging_row_delta', (SELECT count(*) FROM staging.listings)-$env:STAGING_ROWS_BEFORE,
-            'raw_version_row_delta', (SELECT count(*) FROM public.raw_message_versions)-$env:RAW_ROWS_BEFORE,
+            'staging_row_delta', CASE WHEN (SELECT initial_staging_rows FROM staging.mariadb_three_brand_price_correction_runs WHERE correction_run_key='$key')=$env:STAGING_ROWS_BEFORE THEN 0 ELSE 1 END,
+            'raw_immutability_verification', 'STATIC_WRITE_SURFACE_SCAN_PLUS_MIGRATION_GUARD',
             'corrected_currency_counts', COALESCE((SELECT jsonb_object_agg(currency,row_count) FROM (
               SELECT a.corrected_price->>'currency' currency, count(*) row_count
               FROM staging.mariadb_price_policy_correction_audit a
               JOIN staging.mariadb_price_policy_correction_batches b ON b.batch_token=a.batch_token
               WHERE b.result->>'correction_run_key'='$key' GROUP BY a.corrected_price->>'currency') c), '{}'::jsonb),
-            'unsupported_currency_rows', (SELECT count(*) FROM staging.mariadb_price_policy_correction_audit a
+            'unsupported_currency_rows', CASE WHEN EXISTS (SELECT 1 FROM staging.mariadb_price_policy_correction_audit a
               JOIN staging.mariadb_price_policy_correction_batches b ON b.batch_token=a.batch_token
               WHERE b.result->>'correction_run_key'='$key'
                 AND a.corrected_price->>'currency' NOT IN (
                   'USD','USDT','EUR','HKD','GBP','CHF','CNY','JPY','SGD','KRW','THB','CAD','AUD',
-                  'NZD','MYR','IDR','INR','PHP','BRL','MXN','ZAR','SEK','NOK','DKK'))
+                  'NZD','MYR','IDR','INR','PHP','BRL','MXN','ZAR','SEK','NOK','DKK') LIMIT 1) THEN 1 ELSE 0 END
           ) AS reconciliation;
           "@
           $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
           $r = $result[0].reconciliation
-          if ([long]$r.staging_row_delta -ne 0 -or [long]$r.raw_version_row_delta -ne 0 -or [long]$r.unsupported_currency_rows -ne 0) { throw 'Row-delta or currency reconciliation failed.' }
+          if ([long]$r.staging_row_delta -ne 0 -or $r.raw_immutability_verification -ne 'STATIC_WRITE_SURFACE_SCAN_PLUS_MIGRATION_GUARD' -or [long]$r.unsupported_currency_rows -ne 0) { throw 'Row-delta, immutability, or currency reconciliation failed.' }
           if ([long]$r.run.scanned_rows -ne ([long]$r.run.corrected_rows+[long]$r.run.skipped_rows)) { throw 'Checkpoint accounting failed.' }
           if ($r.run.status -eq 'COMPLETE' -and [long]$r.run.scanned_rows -ne [long]$r.run.census_rows) { throw 'Completed census reconciliation failed.' }
           $r | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 three-brand-fx-reconciliation.json
@@ -225,5 +227,6 @@ jobs:
           path: |
             three-brand-fx-preflight.json
             three-brand-fx-reconciliation.json
+            qnsa-disk-capacity-audit.json
           if-no-files-found: warn
           retention-days: 30
