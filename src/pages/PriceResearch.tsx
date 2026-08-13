@@ -794,6 +794,43 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           }
         })
         .catch(() => undefined);
+      if (String(row.source || '').toUpperCase() === 'MARIADB_IMMUTABLE_RAW') {
+        const imageCandidate = row.thumbnail_url || row.display_image_url || row.image_url
+          || row.image_urls?.find(Boolean) || '';
+        const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
+        setListingDetail({
+          id: row.id,
+          brand: queryBrand || data?.brand || 'Watch',
+          model: data?.model || null,
+          reference: data?.reference || query,
+          price_raw: row.source_price_amount ?? row.price_usd,
+          price_usd: row.price_usd,
+          price_evidence_status: Number(row.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED',
+          currency: row.source_currency || (Number(row.price_usd) > 0 ? 'USD' : null),
+          raw_message: rawMessage || null,
+          raw_message_scope: rawMessage ? 'original_post' : 'unavailable',
+          raw_message_truncated: false,
+          created_at: row.created_at,
+          listing_date: row.listing_date || row.created_at,
+          condition: row.condition,
+          source: row.source,
+          dial_color: row.dial_color,
+          year: row.year,
+          listing_type: row.listing_type || 'WTS',
+          accessories: [],
+          image_urls: imageCandidate ? [imageCandidate] : [],
+          has_images: Boolean(imageCandidate),
+          image_evidence_type: imageCandidate ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
+          image_evidence_label: imageCandidate ? 'Source-supplied listing image' : null,
+          image_evidence_notice: imageCandidate ? 'Exact image retained with this immutable source listing.' : null,
+          region: null,
+          source_type: 'qnsa_reviewed_release',
+          listing_status: row.listing_status || null,
+          confidence: row.confidence == null ? null : Number(row.confidence),
+        });
+        setDetailLoading(false);
+        return;
+      }
       const response = await fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`, { signal: controller.signal });
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Listing detail is unavailable');

@@ -20,12 +20,12 @@ test('Price Research returns to the exact Trading Floor cohort', () => {
   assert.doesNotMatch(source, /to=\{`\/trading\?brand=\$\{encodeURIComponent\(data\.brand\)\}&q=/);
 });
 
-test('QNSA comparable detail is loaded from the same reviewed release as analytics', () => {
-  const source = read('api/price-research-listing.js');
-  assert.match(source, /QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source'/);
-  assert.match(source, /loadQnsaReleaseListing\(client, id\)/);
+test('QNSA comparable detail reuses the exact evidence already loaded by analytics', () => {
+  const source = read('src/pages/PriceResearch.tsx');
+  assert.match(source, /row\.source \|\| ''\)\.toUpperCase\(\) === 'MARIADB_IMMUTABLE_RAW'/);
+  assert.match(source, /setListingDetail\(\{/);
   assert.match(source, /raw_message_scope: rawMessage \? 'original_post' : 'unavailable'/);
-  assert.match(source, /image_evidence_type: listing\.has_images === true/);
+  assert.match(source, /image_evidence_type: imageCandidate \? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE'/);
 });
 
 test('URL-selected brand remains visible while release-brand metadata loads', () => {
