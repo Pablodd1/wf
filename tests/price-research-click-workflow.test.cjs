@@ -34,6 +34,8 @@ test('direct detail API checks QNSA before legacy release views', () => {
     source.indexOf('await loadQnsaReleaseListing(client, id)')
       < source.indexOf(".from('price_research_verified_source')"),
   );
+  assert.doesNotMatch(source, /'image_url,thumbnail_url,display_image_url,image_urls,has_images,location'/);
+  assert.match(source, /'thumbnail_url,image_urls,has_images'/);
 });
 
 test('URL-selected brand remains visible while release-brand metadata loads', () => {

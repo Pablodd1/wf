@@ -37,7 +37,7 @@ async function loadQnsaReleaseListing(client, id) {
   const columns = [
     'id,brand,model,reference,dial_color,condition,price_raw,price_usd,currency',
     'raw_message,created_at,listing_date,source,listing_type,listing_status,confidence',
-    'image_url,thumbnail_url,display_image_url,image_urls,has_images,location',
+    'thumbnail_url,image_urls,has_images',
   ].join(',');
   const { data, error } = await client
     .from(QNSA_PRICE_RESEARCH_SOURCE)
@@ -52,7 +52,7 @@ async function loadQnsaReleaseListing(client, id) {
 function qnsaListingResponse(listing) {
   const imageUrls = Array.isArray(listing.image_urls)
     ? listing.image_urls.filter(Boolean)
-    : [listing.display_image_url, listing.thumbnail_url, listing.image_url].filter(Boolean);
+    : [listing.thumbnail_url].filter(Boolean);
   const rawMessage = String(listing.raw_message || '').trim();
   return {
     success: true,
