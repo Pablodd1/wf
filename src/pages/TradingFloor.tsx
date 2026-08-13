@@ -1613,6 +1613,21 @@ function isPricePlausible(price: number | null) {
   return true;
 }
 
+function isReferencePricePlausible(listing: ListingRecord, price: number | null) {
+  if (!isPricePlausible(price)) return false;
+  const brand = cleanValue(listing.brand).toUpperCase();
+  const reference = cleanValue(listing.reference).toUpperCase().replace(/[^A-Z0-9]/g, '');
+  // The 5164A source lane contains a small number of legacy dollar-labelled
+  // values at HKD-like magnitudes. Preserve the original message, but do not
+  // present those values as a customer-ready USD asking price. This guard is
+  // deliberately reference-scoped; other Patek cohorts can legitimately
+  // trade above this ceiling.
+  if (brand === 'PATEK PHILIPPE' && reference.startsWith('5164A')) {
+    return price! >= 20_000 && price! <= 200_000;
+  }
+  return true;
+}
+
 function getListingMeta(listing: ListingRecord) {
   const region = normalizeRegion(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
@@ -1621,8 +1636,8 @@ function getListingMeta(listing: ListingRecord) {
   const workbookPriceNeedsReview = Boolean(cleanValue(listing.workbook_price_review_reason));
   const sourcePrice = formatSourcePrice(listing);
   // Price sanity check — flag implausible values
-  const verifiedPlausible = isPricePlausible(verifiedUsd);
-  const workbookPlausible = isPricePlausible(reviewedWorkbookUsd);
+  const verifiedPlausible = isReferencePricePlausible(listing, verifiedUsd);
+  const workbookPlausible = isReferencePricePlausible(listing, reviewedWorkbookUsd);
   
   const priceLabel = verifiedUsd !== null
     ? (verifiedPlausible ? formatUsdPrice(verifiedUsd) : 'Price under review')
