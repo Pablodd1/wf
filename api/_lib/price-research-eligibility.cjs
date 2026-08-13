@@ -72,6 +72,8 @@ function classifyResearchEligibility(row, catalog) {
 }
 
 function classifyDemandEligibility(row, catalog) {
+  const itemReason = classifyDemandItemEligibility(row);
+  if (itemReason) return itemReason;
   return classifyResearchEligibility({
     ...row,
     listing_type: 'WTS',
@@ -81,9 +83,30 @@ function classifyDemandEligibility(row, catalog) {
   }, catalog);
 }
 
+// Demand analytics describe buyers seeking a complete watch. A canonical
+// reference in the message is not enough when the preserved raw evidence says
+// the requested object is a spare part. Keep this deliberately conservative:
+// configuration phrases such as "new clasp", "full links", and "blue dial
+// only" may still describe a complete watch and must not be auto-reclassified.
+const EXPLICIT_WATCH_PART_REQUESTS = [
+  /\b(?:looking\s+(?:for|to\s+buy)|need|wtb|ltb|ntq)\b[^\n.!?]{0,80}\b(?:saphir|sapphire)\s+(?:glass|crystal)\s+for\b/i,
+  /\b(?:looking\s+(?:for|to\s+buy)|need|wtb|ltb|ntq)\b[^\n.!?]{0,80}\bjust\s+the\s+(?:clasp|buckle|bracelet|strap|band|bezel|crystal|glass|movement|case)\s+for\b/i,
+  /\b(?:looking\s+(?:for|to\s+buy)|need|wtb|ltb|ntq)\b[^\n.!?]{0,80}\b(?:one|two|1(?:\.\d+)?|2)\s+(?:stainless\s+steel\s+)?links?\s+for\b/i,
+];
+
+function classifyDemandItemEligibility(row) {
+  const category = normalizedStatus(row?.category || row?.item_category);
+  if (category && category !== 'WATCH') return 'NOT_WATCH_DEMAND';
+  const rawMessage = String(row?.raw_message || '');
+  return EXPLICIT_WATCH_PART_REQUESTS.some(pattern => pattern.test(rawMessage))
+    ? 'WATCH_PART_DEMAND'
+    : null;
+}
+
 module.exports = {
   ANALYTICS_BLOCKED_STATUSES,
   HUMAN_REVIEW_VERDICTS,
+  classifyDemandItemEligibility,
   classifyDemandEligibility,
   classifyResearchEligibility,
   isHumanReviewAnalyticsCandidate,

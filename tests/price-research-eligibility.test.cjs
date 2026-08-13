@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  classifyDemandItemEligibility,
   classifyDemandEligibility,
   classifyResearchEligibility,
   isHumanReviewAnalyticsCandidate,
@@ -138,4 +139,39 @@ test('rejects a year token copied into the market price', () => {
 test('WTB demand requires identity and dial but not an asking price', () => {
   assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTB', price_usd: null }, catalog), null);
   assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTB', dial_color: 'Purple', price_usd: null }, catalog), 'CATALOG_DIAL_MISMATCH');
+});
+
+test('excludes explicit watch-part requests from complete-watch WTB demand', () => {
+  const explicitParts = [
+    'Looking for saphir glass for Daytona 116500Ln new eu dealer',
+    'Looking to buy just the clasp for a Rolex Daytona 116500LN pm if you have',
+    '*NEED ONE Stainless Steel Link for 5712/1A Patek*',
+    'NTQ 1.5 Link for 5712/1A',
+    'Need 1 or 2 links for 26240st anyone has?',
+  ];
+  for (const raw_message of explicitParts) {
+    assert.equal(classifyDemandItemEligibility({ raw_message }), 'WATCH_PART_DEMAND');
+    assert.equal(
+      classifyDemandEligibility({ ...valid, listing_type: 'WTB', price_usd: null, raw_message }, catalog),
+      'WATCH_PART_DEMAND',
+    );
+  }
+});
+
+test('does not guess that whole-watch configuration language is a spare part', () => {
+  const wholeWatchRequests = [
+    'WTB new movement new buckle 2022+ 5712/1A complete set unpolished',
+    'Looking for 5712/1A BNIB with new clasp. Pls DM me',
+    'WTB retail ready 116500ln black complete full links 2021+',
+    'NTQ: Audemars Piguet 26240ST blue dial only complete set',
+  ];
+  for (const raw_message of wholeWatchRequests) {
+    assert.equal(classifyDemandItemEligibility({ raw_message }), null);
+  }
+});
+
+test('uses an explicit non-watch category as a fail-closed demand gate', () => {
+  assert.equal(classifyDemandItemEligibility({ category: 'ACCESSORY' }), 'NOT_WATCH_DEMAND');
+  assert.equal(classifyDemandItemEligibility({ item_category: 'JEWELRY' }), 'NOT_WATCH_DEMAND');
+  assert.equal(classifyDemandItemEligibility({ category: 'WATCH' }), null);
 });

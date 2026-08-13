@@ -88,7 +88,8 @@ test('legacy fallback remains bounded and WTB demand avoids the unindexed workbo
   assert.doesNotMatch(source, /retainVerifiedIdentityRows/);
   assert.doesNotMatch(source, /\.limit\(5000\)/);
   assert.doesNotMatch(source, /maxWtbCapacity/);
-  assert.match(source, /const totalTrackedListings = wtsTrackedListings \+ wtbDemandCount/);
+  assert.match(source, /const totalTrackedListings = wtsAccounting\.loaded \+ wtbDemandCount/);
+  assert.match(source, /demand_non_watch_excluded_count/);
 });
 
 test('WTB demand has an exact-reference partial production index', () => {

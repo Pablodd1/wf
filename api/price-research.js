@@ -18,6 +18,7 @@ const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
 const {
   HUMAN_REVIEW_VERDICTS,
+  classifyDemandItemEligibility,
   classifyDemandEligibility,
   classifyResearchEligibility,
   isHumanReviewAnalyticsCandidate,
@@ -28,6 +29,7 @@ const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { bundleCandidateCount, loadShadowBundleParentIds } = require('./_lib/unsplit-bundle-filter.cjs');
 const { buildIndicativeForecast, buildMarketForecast } = require('./_lib/market-forecast.cjs');
 const { selectDialGroup } = require('./_lib/dial-cohort-selection.cjs');
+const { buildWtsReconciliation } = require('./_lib/price-research-reconciliation.cjs');
 const { loadReviewedWorkbookAnalyticsRows } = require('./_lib/reviewed-workbook-analytics.cjs');
 const { loadVerifiedDemandIdentityRows } = require('./_lib/verified-demand-identity.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
@@ -370,6 +372,9 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
   const shadowBundleIds = sourceAlreadySuppressesDuplicates(sourceTable)
     ? new Set()
     : await loadShadowBundleParentIds(client, demandRows);
+  const demandItemExclusions = demandRows
+    .map(row => ({ row, reason: classifyDemandItemEligibility(row) }))
+    .filter(item => item.reason);
   const eligibleBeforeReposts = demandRows
     .map(row => ({ ...row, bundle_candidate_count: bundleCandidateCount(row, shadowBundleIds) }))
     .map(row => ({ ...row, owner_reviewed_identity: qnsaReviewedSource || isOwnerReviewedWorkbookRow(row) }))
@@ -428,6 +433,11 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     demand_sample_capped: demandSampleCapped,
     demand_repost_count: repostRows.length,
     demand_suppressed_duplicate_count: suppressedIds.size,
+    demand_non_watch_excluded_count: demandItemExclusions.length,
+    demand_non_watch_excluded_breakdown: demandItemExclusions.reduce((counts, item) => {
+      counts[item.reason] = (counts[item.reason] || 0) + 1;
+      return counts;
+    }, {}),
   };
 }
 
@@ -1126,10 +1136,25 @@ module.exports = async function handler(req, res) {
     // WTS evidence and verified WTB demand are loaded through independent
     // lanes. Count both populations explicitly; capping demand to the number
     // of WTS rows made valid buyer signals disappear from reconciliation.
-    const wtsTrackedListings = rows.length;
-    const unpricedCount = Math.max(0, wtsTrackedListings - wtsEligibleAnalyticsCount - outliersCount - unsplitBundlesCount);
-    const excludedTotalCount = unpricedCount + outliersCount + unsplitBundlesCount;
-    const totalTrackedListings = wtsTrackedListings + wtbDemandCount;
+    const requiredFieldReasonCounts = requiredFieldExclusions.reduce((counts, row) => {
+      const reason = String(row.outlier_reason || 'OTHER_REQUIRED_FIELD').toUpperCase();
+      counts[reason] = (counts[reason] || 0) + 1;
+      return counts;
+    }, {});
+    const wtsAccounting = buildWtsReconciliation({
+      analyticsRowsCount: analyticsRows.length,
+      includedCount: wtsEligibleAnalyticsCount,
+      requiredFieldReasonCounts,
+      requiredFieldExclusionsCount: requiredFieldExclusions.length,
+      repostCount: repostRows.length,
+      marketRowsCount: marketRows.length,
+      listedRowsCount: listedRows.length,
+      outliersCount,
+      unsplitBundlesCount,
+      duplicateSuppressedCount: duplicateSuppressedRows.length,
+    });
+    const excludedTotalCount = wtsAccounting.excluded;
+    const totalTrackedListings = wtsAccounting.loaded + wtbDemandCount;
 
     const reconciliation = {
       total_tracked_listings: totalTrackedListings,
@@ -1137,10 +1162,12 @@ module.exports = async function handler(req, res) {
       wtb_demand_count: wtbDemandCount,
       excluded_count: excludedTotalCount,
       excluded_breakdown: {
-        unpriced: unpricedCount,
-        outliers: outliersCount,
-        unsplit_bundles: unsplitBundlesCount,
+        ...wtsAccounting.breakdown,
       },
+      wts_accounting_reconciles: wtsAccounting.reconciles,
+      wts_loaded_count: wtsAccounting.loaded,
+      demand_non_watch_excluded_count: demand?.demand_non_watch_excluded_count || 0,
+      demand_non_watch_excluded_breakdown: demand?.demand_non_watch_excluded_breakdown || {},
     };
 
     res.status(200).json({
