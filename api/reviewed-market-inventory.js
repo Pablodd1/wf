@@ -27,22 +27,48 @@ const MIN_PUBLIC_WORKBOOK_PRICE_USD = 1_000;
 const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
 let legacyMarketViewContractDetected = false;
 
-function qnsaReviewedReleaseSummary() {
+async function loadQnsaReviewedReleaseSummary(client) {
+  const { data, error } = await client.rpc('qnsa_market_feed_counts');
+  if (error) throw error;
+  const marketCounts = Array.isArray(data) ? data : [];
+  const watchRows = marketCounts.filter(row => String(row.category || '').toUpperCase() === 'WATCH');
   return {
     files_total: 1,
     files_complete: 1,
     source_rows: 1_394_269,
     rows_scanned: 1_394_269,
-    canonical_listings: null,
+    canonical_listings: watchRows.reduce((sum, row) => sum + Number(row.row_count || 0), 0),
     duplicate_rows_held: null,
     errors: 0,
     reconciled: true,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: [
-      { brand: 'Rolex', files: 1, files_complete: 1, source_rows: null, canonical_listings: null, duplicate_rows_held: null },
-      { brand: 'Patek Philippe', files: 1, files_complete: 1, source_rows: null, canonical_listings: null, duplicate_rows_held: null },
-    ],
+    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet'].map(brand => ({
+      brand,
+      files: 1,
+      files_complete: 1,
+      source_rows: null,
+      canonical_listings: watchRows
+        .filter(row => String(row.brand || '').toLowerCase() === brand.toLowerCase())
+        .reduce((sum, row) => sum + Number(row.row_count || 0), 0),
+      duplicate_rows_held: null,
+    })),
+    market_counts: marketCounts,
   };
+}
+
+function snapshotInventoryTotal(summary, filters) {
+  const unsupported = filters.search || filters.reference || filters.dial || filters.imagesOnly
+    || filters.condition || filters.region || filters.rating || filters.postedAfter;
+  if (unsupported || !Array.isArray(summary?.market_counts)) return null;
+  return summary.market_counts
+    .filter(row => filters.itemCategory === 'ALL'
+      || String(row.category || '').toUpperCase() === filters.itemCategory)
+    .filter(row => !filters.brand
+      || String(row.brand || '').toLowerCase() === filters.brand.toLowerCase())
+    .filter(row => !filters.listingType
+      || String(row.listing_type || '').toUpperCase() === filters.listingType)
+    .filter(row => !filters.pricedOnly || row.supplied_price === true)
+    .reduce((sum, row) => sum + Number(row.row_count || 0), 0);
 }
 
 const EVIDENCE_CONTRACT = Object.freeze({
@@ -910,18 +936,22 @@ module.exports = async function handler(req, res) {
     // reviewed market REST request. Start them without serializing three
     // remote database round trips on every page load.
     const summaryPromise = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
-      ? Promise.resolve(qnsaReviewedReleaseSummary())
+      ? loadQnsaReviewedReleaseSummary(client)
       : loadSummary(client);
     const brand = requestedBrand;
     // Cursor pages publish the current reviewed inventory, including incomplete
     // identities and no-price rows; analytics eligibility remains stricter.
     const scopedFilter = true;
     const canReverse = !scopedFilter;
-    // Historical workbook checkpoints contain repeated import attempts and are
-    // not a trustworthy customer inventory count. Pagination is cursor-based,
-    // so withhold the total until the reconciled publication ledger supplies an
-    // exact count rather than presenting checkpoint rows as unique listings.
-    const publicInventoryTotal = null;
+    const summary = await summaryPromise;
+    // The snapshot is an exact census of the enabled reconciled market-feed
+    // run. Totals stay withheld for predicates the snapshot does not encode.
+    const publicInventoryTotal = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      ? snapshotInventoryTotal(summary, {
+          search, reference, dial: requestedDial, imagesOnly, condition, region,
+          rating, postedAfter, itemCategory, brand, listingType, pricedOnly,
+        })
+      : null;
     const pageWindow = resolvePageWindow({
       page,
       pageSize,
@@ -930,11 +960,12 @@ module.exports = async function handler(req, res) {
     });
 
     if (pageWindow.empty) {
-      const summary = await summaryPromise;
       const publicationBrands = publicationBrandsFromSummary(summary);
       return res.status(200).json({
         status: 'ok', count: 0, total: publicInventoryTotal, page, pageSize,
-        totalIsEstimate: false, totalStatus: 'withheld_unreconciled_checkpoint_history', hasMore: false, nextCursor: null,
+        totalIsEstimate: false,
+        totalStatus: publicInventoryTotal === null ? 'withheld_for_unsupported_filter' : 'available_from_market_feed_counts',
+        hasMore: false, nextCursor: null,
         records: [], summary, publicationBrands,
         evidenceContract: EVIDENCE_CONTRACT,
         coverage: summarizeCoverage([]),
@@ -1375,7 +1406,6 @@ module.exports = async function handler(req, res) {
     const nextCursor = hasMore
       ? encodeInventoryCursor({ lane: nextLane, offset: nextOffset, page: page + 1 })
       : null;
-    const summary = await summaryPromise;
     const publicationBrands = publicationBrandsFromSummary(summary);
 
     return res.status(200).json({
@@ -1385,7 +1415,7 @@ module.exports = async function handler(req, res) {
       page,
       pageSize,
       totalIsEstimate: false,
-      totalStatus: 'available_from_market_feed_counts',
+      totalStatus: publicInventoryTotal === null ? 'withheld_for_unsupported_filter' : 'available_from_market_feed_counts',
       hasMore,
       nextCursor,
       records,

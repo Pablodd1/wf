@@ -12,9 +12,9 @@ test('QNSA Trading Floor does not depend on legacy workbook checkpoints', () => 
     path.join(__dirname, '../api/reviewed-market-inventory.js'),
     'utf8',
   );
-  assert.match(source, /function qnsaReviewedReleaseSummary\(\)/);
+  assert.match(source, /async function loadQnsaReviewedReleaseSummary\(client\)/);
   assert.match(source, /MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
-  assert.match(source, /Promise\.resolve\(qnsaReviewedReleaseSummary\(\)\)/);
+  assert.match(source, /loadQnsaReviewedReleaseSummary\(client\)/);
 });
 
 test('QNSA pages use indexed brand/reference predicates and no-image lane', () => {
@@ -580,7 +580,7 @@ test('scoped pages use one lookahead row instead of trusting estimated totals', 
 test('cursor inventory honors the 50-card marketplace page and overlaps independent database reads', () => {
   assert.match(source, /const pageSizeLimit = pagination === 'cursor' \? 50 : MAX_PAGE_SIZE/);
   assert.match(source, /const summaryPromise = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
-  assert.match(source, /\? Promise\.resolve\(qnsaReviewedReleaseSummary\(\)\)/);
+  assert.match(source, /\? loadQnsaReviewedReleaseSummary\(client\)/);
   assert.match(source, /: loadSummary\(client\)/);
   assert.match(source, /directRowsPromise = Promise\.resolve\(directQuery\)/);
   assert.match(source, /await directRowsPromise/);
@@ -595,11 +595,12 @@ test('publication brands are derived from populated reviewed checkpoints', () =>
   ] }), ['Rolex', 'Patek Philippe']);
 });
 
-test('public brand filters preserve punctuation and untrusted checkpoint totals stay withheld', () => {
+test('public brand filters preserve punctuation and use only supported exact snapshot totals', () => {
   assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand, 80\)/);
   assert.match(source, /const brand = requestedBrand/);
-  assert.match(source, /const publicInventoryTotal = null/);
-  assert.match(source, /totalStatus: 'withheld_unreconciled_checkpoint_history'/);
+  assert.match(source, /snapshotInventoryTotal\(summary/);
+  assert.match(source, /'withheld_for_unsupported_filter'/);
+  assert.match(source, /'available_from_market_feed_counts'/);
   assert.doesNotMatch(source, /const preciseCount = Boolean\(reference\)/);
   assert.doesNotMatch(source, /const total = summaryTotal/);
 });
