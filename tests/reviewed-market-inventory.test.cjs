@@ -715,9 +715,17 @@ test('QNSA broad intent lanes have an expression-matched cold-read index', () =>
 
 test('QNSA exact reference RPC preserves Patek catalog punctuation', () => {
   assert.match(source, /const patekBaseEquivalent[\s\S]*replace\(\/-001\$\/i, ''\)/);
-  assert.match(source, /p_reference: familyReference \? reference : \(patekBaseEquivalent/);
-  assert.match(source, /p_family: Boolean\(familyReference \|\| patekBaseEquivalent\)/);
+  assert.match(source, /const rpcReference = familyReference[\s\S]*patekBaseEquivalent/);
+  assert.match(source, /p_reference: rpcReference/);
+  assert.match(source, /p_family: Boolean\(familyReference \|\| patekBaseEquivalent \|\| audemarsBaseFamily\)/);
   assert.doesNotMatch(source, /p_reference: reference, p_family/);
+});
+
+test('QNSA exact reference RPC uses indexed family lookup for AP base references', () => {
+  assert.match(source, /const audemarsBaseFamily = normalizedBrand === 'audemars piguet'/);
+  assert.match(source, /\^\\d\{5\}\[A-Z\]\{2,4\}\$/);
+  assert.match(source, /patekBaseEquivalent \|\| audemarsBaseFamily/);
+  assert.match(source, /p_family: Boolean\(familyReference \|\| patekBaseEquivalent \|\| audemarsBaseFamily\)/);
 });
 
 test('obvious immutable-raw cross-brand conflicts never reach customer cards', () => {

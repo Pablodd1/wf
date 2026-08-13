@@ -1115,6 +1115,18 @@ module.exports = async function handler(req, res) {
         && /-001$/i.test(String(requestedReference || ''))
         ? String(requestedReference).trim().toUpperCase().replace(/-001$/i, '')
         : null;
+      // Audemars Piguet listings commonly preserve the complete catalog
+      // reference (for example 15500ST.OO.1220ST.01), while users search by
+      // its model-family prefix (15500ST). Route only well-formed AP base
+      // references through the indexed prefix lane; complete dotted
+      // references remain exact matches.
+      const audemarsBaseFamily = normalizedBrand === 'audemars piguet'
+        && /^\d{5}[A-Z]{2,4}$/i.test(String(requestedReference || '').trim())
+        ? String(requestedReference).trim().toUpperCase()
+        : null;
+      const rpcReference = familyReference
+        ? reference
+        : (patekBaseEquivalent || audemarsBaseFamily || String(requestedReference).trim().toUpperCase());
       const referenceRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_reference_rows`, {
         method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
         // Preserve catalog punctuation for the indexed exact-reference RPC.
@@ -1123,8 +1135,8 @@ module.exports = async function handler(req, res) {
         // 57121A001 and miss the stored canonical reference.
         body: JSON.stringify({
           p_brand: brand,
-          p_reference: familyReference ? reference : (patekBaseEquivalent || String(requestedReference).trim().toUpperCase()),
-          p_family: Boolean(familyReference || patekBaseEquivalent),
+          p_reference: rpcReference,
+          p_family: Boolean(familyReference || patekBaseEquivalent || audemarsBaseFamily),
           p_limit: qnsaBrandScanLimit, p_offset: requestedOffset }),
       });
       if (!referenceRowsRes.ok) {
