@@ -2,7 +2,7 @@
 
 const { getClient } = require('./_lib/supabase');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
-const { listEquivalentReferences } = require('./_lib/catalog');
+const { listCatalogReferences, listEquivalentReferences } = require('./_lib/catalog');
 const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
 const {
   cleanExactText,
@@ -1127,23 +1127,50 @@ module.exports = async function handler(req, res) {
       const rpcReference = familyReference
         ? reference
         : (patekBaseEquivalent || audemarsBaseFamily || String(requestedReference).trim().toUpperCase());
-      const referenceRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_reference_rows`, {
-        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-        // Preserve catalog punctuation for the indexed exact-reference RPC.
-        // `reference` is the alphanumeric search key used by the UI/filter
-        // layer; passing it to PostgreSQL made Patek 5712/1A-001 become
-        // 57121A001 and miss the stored canonical reference.
-        body: JSON.stringify({
-          p_brand: brand,
-          p_reference: rpcReference,
-          p_family: Boolean(familyReference || patekBaseEquivalent || audemarsBaseFamily),
-          p_limit: qnsaBrandScanLimit, p_offset: requestedOffset }),
-      });
-      if (!referenceRowsRes.ok) {
-        const referenceRowsError = await referenceRowsRes.text();
-        throw new Error(`QNSA reference rows failed: ${referenceRowsRes.status} ${referenceRowsError.slice(0, 200)}`);
+      // AP shorthand families can cover several full dotted catalog variants.
+      // Query those variants through exact indexed predicates and merge the
+      // small result sets in memory. This avoids the expensive prefix-sort
+      // plan that can cross the hosted statement timeout on large families.
+      const apExactReferences = audemarsBaseFamily
+        ? [...new Set(listCatalogReferences('Audemars Piguet')
+          .map(entry => String(entry.reference || '').trim().toUpperCase())
+          .filter(candidate => candidate === audemarsBaseFamily || candidate.startsWith(`${audemarsBaseFamily}.`)))]
+        : [];
+      const rpcRequests = apExactReferences.length
+        ? apExactReferences.map(candidate => ({ reference: candidate, family: false }))
+        : [{ reference: rpcReference, family: Boolean(familyReference || patekBaseEquivalent) }];
+      const rpcResponses = await Promise.all(rpcRequests.map(request => fetch(
+        `${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_reference_rows`,
+        {
+          method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            p_brand: brand,
+            p_reference: request.reference,
+            p_family: request.family,
+            p_limit: apExactReferences.length ? 101 : qnsaBrandScanLimit,
+            p_offset: apExactReferences.length ? 0 : requestedOffset,
+          }),
+        },
+      )));
+      for (const rpcResponse of rpcResponses) {
+        if (!rpcResponse.ok) {
+          const referenceRowsError = await rpcResponse.text();
+          throw new Error(`QNSA reference rows failed: ${rpcResponse.status} ${referenceRowsError.slice(0, 200)}`);
+        }
       }
-      const referenceRows = (await referenceRowsRes.json()).map(row => row.row_data || row).filter(Boolean);
+      const referenceRows = (await Promise.all(rpcResponses.map(response => response.json())))
+        .flat()
+        .map(row => row.row_data || row)
+        .filter(Boolean)
+        .sort((left, right) => {
+          const leftPriced = Number(left.verified_price_usd || left.workbook_price_usd || 0) > 0 ? 1 : 0;
+          const rightPriced = Number(right.verified_price_usd || right.workbook_price_usd || 0) > 0 ? 1 : 0;
+          if (leftPriced !== rightPriced) return rightPriced - leftPriced;
+          const dateDelta = new Date(right.posting_date || right.imported_at || 0).getTime()
+            - new Date(left.posting_date || left.imported_at || 0).getTime();
+          return dateDelta || String(right.id || '').localeCompare(String(left.id || ''));
+        })
+        .slice(apExactReferences.length ? requestedOffset : 0, apExactReferences.length ? requestedOffset + qnsaBrandScanLimit : undefined);
       var preloadedQnsaResponse = new Response(JSON.stringify(referenceRows), {
         status: 200, headers: { 'Content-Type': 'application/json' },
       });
