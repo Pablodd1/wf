@@ -41,7 +41,7 @@ BEGIN
       count(*)::bigint AS row_count
     FROM eligible GROUP BY 1,2,3,4
   )
-  SELECT (SELECT max(id) FROM page), (SELECT count(*)::integer FROM page),
+  SELECT (SELECT id FROM page ORDER BY id DESC LIMIT 1), (SELECT count(*)::integer FROM page),
     COALESCE((SELECT jsonb_agg(to_jsonb(grouped)) FROM grouped), '[]'::jsonb), v_run_key;
 END;
 $$;

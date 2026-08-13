@@ -44,6 +44,8 @@ test('production census is resumable and bounded below the statement timeout', (
   assert.match(bounded, /qnsa_market_feed_count_page/);
   assert.match(bounded, /p_limit integer DEFAULT 5000/);
   assert.match(bounded, /l\.id > p_after[\s\S]*ORDER BY l\.id ASC LIMIT p_limit/);
+  assert.match(bounded, /SELECT id FROM page ORDER BY id DESC LIMIT 1/);
+  assert.doesNotMatch(bounded, /max\(id\)/i);
   assert.match(bounded, /replace_qnsa_market_feed_count_snapshot/);
   assert.match(workflow, /do \{[\s\S]*qnsa_market_feed_count_page[\s\S]*\} while \(\$pageRows -gt 0\)/);
   assert.match(workflow, /replace_qnsa_market_feed_count_snapshot/);
