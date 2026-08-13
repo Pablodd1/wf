@@ -727,8 +727,9 @@ test('QNSA exact reference RPC uses indexed family lookup for AP base references
   assert.match(source, /listCatalogReferences\('Audemars Piguet'\)/);
   assert.match(source, /candidate\.startsWith\(`\$\{audemarsBaseFamily\}\.``?\)/);
   assert.doesNotMatch(source, /candidate === audemarsBaseFamily/);
-  assert.match(source, /apExactReferences\.map\(candidate => \(\{ reference: candidate, family: false \}\)\)/);
-  assert.match(source, /Promise\.all\(rpcRequests\.map/);
+  assert.match(source, /qnsa_bounded_price_research_rows/);
+  assert.match(source, /p_references: apExactReferences/);
+  assert.match(source, /Promise\.all\(\['WTS', 'WTB'\]\.map/);
 });
 
 test('obvious immutable-raw cross-brand conflicts never reach customer cards', () => {
