@@ -34,14 +34,13 @@ function isMissingQnsaDetailSource(error) {
 }
 
 async function loadQnsaReleaseListing(client, id) {
-  const columns = [
-    'id,brand,model,reference,dial_color,condition,price_raw,price_usd,currency',
-    'raw_message,created_at,listing_date,source,listing_type,listing_status,confidence',
-    'thumbnail_url,image_urls,has_images',
-  ].join(',');
   const { data, error } = await client
     .from(QNSA_PRICE_RESEARCH_SOURCE)
-    .select(columns)
+    // The reviewed source is a versioned public contract. Selecting the row
+    // avoids coupling this endpoint to optional projection columns added by
+    // individual release migrations while the response mapper remains
+    // deliberately allow-listed below.
+    .select('*')
     .eq('id', id)
     .maybeSingle();
   if (error && isMissingQnsaDetailSource(error)) return null;
