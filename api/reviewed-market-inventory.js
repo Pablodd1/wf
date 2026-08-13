@@ -1136,8 +1136,60 @@ module.exports = async function handler(req, res) {
           .map(entry => String(entry.reference || '').trim().toUpperCase())
           .filter(candidate => candidate.startsWith(`${audemarsBaseFamily}.`)))]
         : [];
+      let referenceRows;
+      if (apExactReferences.length) {
+        const client = getClient();
+        const [wtsResult, wtbResult] = await Promise.all(['WTS', 'WTB'].map(listingIntent => client.rpc(
+          'qnsa_bounded_price_research_rows',
+          {
+            p_brand: brand,
+            p_references: apExactReferences,
+            p_listing_type: listingIntent,
+            p_limit: 2500,
+          },
+        )));
+        const rpcError = wtsResult.error || wtbResult.error;
+        if (rpcError) throw new Error(`QNSA AP reference evidence failed: ${rpcError.message || rpcError}`);
+        referenceRows = [...(wtsResult.data || []), ...(wtbResult.data || [])].map(row => ({
+          id: row.id,
+          source_file: row.source,
+          posting_date: row.listing_date || row.created_at,
+          seller_name: row.seller_name,
+          seller_phone: row.seller_phone,
+          contact_publication_approved: Boolean(row.seller_phone),
+          raw_message: row.raw_message,
+          listing_type: row.listing_type,
+          brand_scope: row.brand,
+          canonical_brand: row.brand,
+          catalog_model: row.model,
+          normalized_reference: row.reference,
+          catalog_reference: row.reference,
+          dial_color: row.dial_color,
+          condition: row.condition,
+          workbook_price_usd: row.price_usd,
+          verified_price_usd: row.price_usd,
+          source_price_amount: row.price_raw,
+          source_currency: row.currency,
+          price_evidence_status: Number(row.price_usd) > 0 ? 'EXPLICIT_SOURCE_FX_CONVERTED' : 'PRICE_NOT_SUPPLIED',
+          confidence: row.confidence,
+          verdict: row.verdict,
+          verification_status: row.verdict,
+          user_image_url: row.thumbnail_url,
+          has_exact_source_image: row.has_images === true,
+          has_verified_usd_price: Number(row.price_usd) > 0,
+          has_complete_identity: true,
+          trading_floor_status: row.listing_status,
+          reference_search_key: referenceComparisonKey(row.reference),
+          location: row.location,
+          item_category: 'WATCH',
+          publication_state: 'PENDING_VERIFICATION',
+          normalization_run_complete: true,
+          raw_lineage_verified: true,
+          dealer_rating: row.seller_rating,
+        }));
+      }
       const rpcRequests = apExactReferences.length
-        ? apExactReferences.map(candidate => ({ reference: candidate, family: false }))
+        ? []
         : [{ reference: rpcReference, family: Boolean(familyReference || patekBaseEquivalent) }];
       const rpcResponses = await Promise.all(rpcRequests.map(request => fetch(
         `${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_trading_floor_reference_rows`,
@@ -1158,10 +1210,10 @@ module.exports = async function handler(req, res) {
           throw new Error(`QNSA reference rows failed: ${rpcResponse.status} ${referenceRowsError.slice(0, 200)}`);
         }
       }
-      const referenceRows = (await Promise.all(rpcResponses.map(response => response.json())))
+      referenceRows = (referenceRows || (await Promise.all(rpcResponses.map(response => response.json())))
         .flat()
         .map(row => row.row_data || row)
-        .filter(Boolean)
+        .filter(Boolean))
         .sort((left, right) => {
           const leftPriced = Number(left.verified_price_usd || left.workbook_price_usd || 0) > 0 ? 1 : 0;
           const rightPriced = Number(right.verified_price_usd || right.workbook_price_usd || 0) > 0 ? 1 : 0;
