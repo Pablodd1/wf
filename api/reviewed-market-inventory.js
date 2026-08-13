@@ -1134,7 +1134,7 @@ module.exports = async function handler(req, res) {
       const apExactReferences = audemarsBaseFamily
         ? [...new Set(listCatalogReferences('Audemars Piguet')
           .map(entry => String(entry.reference || '').trim().toUpperCase())
-          .filter(candidate => candidate === audemarsBaseFamily || candidate.startsWith(`${audemarsBaseFamily}.`)))]
+          .filter(candidate => candidate.startsWith(`${audemarsBaseFamily}.`)))]
         : [];
       const rpcRequests = apExactReferences.length
         ? apExactReferences.map(candidate => ({ reference: candidate, family: false }))

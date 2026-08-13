@@ -725,7 +725,8 @@ test('QNSA exact reference RPC uses indexed family lookup for AP base references
   assert.match(source, /const audemarsBaseFamily = normalizedBrand === 'audemars piguet'/);
   assert.match(source, /\^\\d\{5\}\[A-Z\]\{2,4\}\$/);
   assert.match(source, /listCatalogReferences\('Audemars Piguet'\)/);
-  assert.match(source, /candidate === audemarsBaseFamily \|\| candidate\.startsWith/);
+  assert.match(source, /candidate\.startsWith\(`\$\{audemarsBaseFamily\}\.``?\)/);
+  assert.doesNotMatch(source, /candidate === audemarsBaseFamily/);
   assert.match(source, /apExactReferences\.map\(candidate => \(\{ reference: candidate, family: false \}\)\)/);
   assert.match(source, /Promise\.all\(rpcRequests\.map/);
 });
