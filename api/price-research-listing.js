@@ -26,6 +26,74 @@ const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs')
 const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
 const { loadReviewedWorkbookListing } = require('./_lib/reviewed-workbook-analytics.cjs');
 
+const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source';
+
+function isMissingQnsaDetailSource(error) {
+  return /42P01|PGRST205|relation .* does not exist|could not find the table/i
+    .test(`${error?.code || ''} ${error?.message || error || ''}`);
+}
+
+async function loadQnsaReleaseListing(client, id) {
+  const columns = [
+    'id,brand,model,reference,dial_color,condition,price_raw,price_usd,currency',
+    'raw_message,created_at,listing_date,source,listing_type,listing_status,confidence',
+    'image_url,thumbnail_url,display_image_url,image_urls,has_images,location',
+  ].join(',');
+  const { data, error } = await client
+    .from(QNSA_PRICE_RESEARCH_SOURCE)
+    .select(columns)
+    .eq('id', id)
+    .maybeSingle();
+  if (error && isMissingQnsaDetailSource(error)) return null;
+  if (error) throw error;
+  return data || null;
+}
+
+function qnsaListingResponse(listing) {
+  const imageUrls = Array.isArray(listing.image_urls)
+    ? listing.image_urls.filter(Boolean)
+    : [listing.display_image_url, listing.thumbnail_url, listing.image_url].filter(Boolean);
+  const rawMessage = String(listing.raw_message || '').trim();
+  return {
+    success: true,
+    listing: {
+      id: String(listing.id),
+      brand: listing.brand,
+      model: listing.model || null,
+      reference: listing.reference,
+      dial_color: listing.dial_color || null,
+      condition: listing.condition || null,
+      price_raw: listing.price_raw == null ? null : Number(listing.price_raw),
+      price_usd: listing.price_usd == null ? null : Number(listing.price_usd),
+      price_evidence_status: Number(listing.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED',
+      currency: listing.currency || null,
+      raw_message: rawMessage || null,
+      raw_message_scope: rawMessage ? 'original_post' : 'unavailable',
+      raw_message_truncated: false,
+      source_message_available_to_reviewers: Boolean(rawMessage),
+      created_at: listing.created_at,
+      listing_date: listing.listing_date || listing.created_at,
+      source: listing.source || 'MARIADB_IMMUTABLE_RAW',
+      source_type: 'qnsa_reviewed_release',
+      listing_type: listing.listing_type || 'WTS',
+      listing_status: listing.listing_status || null,
+      confidence: listing.confidence == null ? null : Number(listing.confidence),
+      accessories: [],
+      image_urls: imageUrls,
+      has_images: listing.has_images === true && imageUrls.length > 0,
+      image_evidence_type: listing.has_images === true && imageUrls.length > 0 ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
+      image_evidence_label: listing.has_images === true && imageUrls.length > 0 ? 'Source-supplied listing image' : null,
+      image_evidence_notice: listing.has_images === true && imageUrls.length > 0
+        ? 'Exact image retained with this immutable source listing.'
+        : null,
+      image_provenance: listing.has_images === true && imageUrls.length > 0 ? 'source_supplied' : 'none',
+      region: listing.location || null,
+      data_quality_issues: [],
+      data_quality_review_required: false,
+    },
+  };
+}
+
 function normalizeAccessories(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean).slice(0, 20);
@@ -89,6 +157,13 @@ module.exports = async function handler(req, res) {
     if (strictResult.error) throw strictResult.error;
     const strictGate = strictResult.data;
     if (!strictGate) {
+      let qnsaListing = null;
+      try {
+        qnsaListing = await loadQnsaReleaseListing(client, id);
+      } catch (qnsaDetailError) {
+        console.warn('[price-research-listing] QNSA detail source unavailable; checking reviewed workbook:', qnsaDetailError.message);
+      }
+      if (qnsaListing) return res.status(200).json(qnsaListingResponse(qnsaListing));
       const workbookListing = await loadReviewedWorkbookListing(client, id);
       if (workbookListing) {
         const publicSource = String(workbookListing.raw_message || '').trim();

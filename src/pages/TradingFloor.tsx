@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -696,13 +696,13 @@ export default function TradingFloor() {
               {selectedCatalogReference && (
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
                   <span>Selected catalog reference: <strong style={{ color: INK }}>{selectedCatalogReference.brand} {selectedCatalogReference.reference}</strong></span>
-                  <a
-                    href={`/price-research?brand=${encodeURIComponent(selectedCatalogReference.brand)}&reference=${encodeURIComponent(selectedCatalogReference.reference)}`}
+                  <Link
+                    to={`/price-research?brand=${encodeURIComponent(selectedCatalogReference.brand)}&reference=${encodeURIComponent(selectedCatalogReference.reference)}`}
                     className="font-semibold underline underline-offset-4"
                     style={{ color: GOLD_BRIGHT }}
                   >
                     Open Price Research
-                  </a>
+                  </Link>
                 </div>
               )}
             </div>
@@ -1518,13 +1518,13 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         )}
 
         {listing.item_category === 'WATCH' && listing.brand && listing.reference && (
-          <a
-            href={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference)}`}
+          <Link
+            to={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference)}`}
             className="flex h-12 items-center justify-center rounded-md border text-sm font-semibold"
             style={{ borderColor: GOLD, background: SURFACE, color: GOLD_BRIGHT }}
           >
             Open full price research
-          </a>
+          </Link>
         )}
 
       </div>

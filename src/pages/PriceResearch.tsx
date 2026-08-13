@@ -1008,6 +1008,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   className="h-11 w-full rounded-md border border-white/20 bg-[#1a1a20] px-3 text-sm text-white outline-none focus:border-[#c9a03a]"
                 >
                   <option value="">Select brand</option>
+                  {queryBrand && !pBrands.some(item => item.brand === queryBrand) && (
+                    <option value={queryBrand}>{queryBrand}</option>
+                  )}
                   {pBrands.map(item => <option key={item.brand} value={item.brand}>{item.brand}</option>)}
                 </select>
               </label>
@@ -1308,7 +1311,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   {data.collection && <span style={{ fontSize: 13, color: MUTED }}>{data.collection}</span>}
                 </div>
                 <Link
-                  to={`/trading?brand=${encodeURIComponent(data.brand)}&q=${encodeURIComponent(data.reference)}`}
+                  to={`/trading?brand=${encodeURIComponent(data.brand)}&reference=${encodeURIComponent(data.reference)}`}
                   className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:opacity-90 shadow-sm"
                   style={{ color: '#C9A96E', border: '1px solid #C9A96E', background: 'transparent' }}
                 >
