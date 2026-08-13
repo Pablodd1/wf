@@ -44,7 +44,10 @@ jobs:
           $totals = @{}
           do {
             $sql = "SELECT * FROM public.qnsa_market_feed_count_page('$cursor'::uuid, 5000);"
-            $pageBody = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+            # Management read_only uses a restricted role that cannot execute
+            # the protected SECURITY DEFINER page function. The function body
+            # itself is SELECT-only; use the authorized management role here.
+            $pageBody = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
             $pageResult = @(Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $pageBody)[0]
             $pageRows = [int]$pageResult.page_rows
             if (-not $runKey) { $runKey = [string]$pageResult.normalization_run_key }

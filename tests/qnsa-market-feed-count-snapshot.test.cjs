@@ -47,4 +47,7 @@ test('production census is resumable and bounded below the statement timeout', (
   assert.match(bounded, /replace_qnsa_market_feed_count_snapshot/);
   assert.match(workflow, /do \{[\s\S]*qnsa_market_feed_count_page[\s\S]*\} while \(\$pageRows -gt 0\)/);
   assert.match(workflow, /replace_qnsa_market_feed_count_snapshot/);
+  const pageFunction = bounded.match(/CREATE OR REPLACE FUNCTION public\.qnsa_market_feed_count_page[\s\S]*?\$\$;/)?.[0] || '';
+  assert.doesNotMatch(pageFunction, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE|DROP)\b/i);
+  assert.match(workflow, /\$pageBody = @\{ query = \$sql; read_only = \$false \}/);
 });
