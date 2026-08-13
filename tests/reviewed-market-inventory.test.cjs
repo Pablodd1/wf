@@ -728,7 +728,8 @@ test('QNSA exact reference RPC uses indexed family lookup for AP base references
   assert.match(source, /candidate\.startsWith\(`\$\{audemarsBaseFamily\}\.``?\)/);
   assert.doesNotMatch(source, /candidate === audemarsBaseFamily/);
   assert.match(source, /qnsa_bounded_price_research_rows/);
-  assert.match(source, /p_references: apExactReferences/);
+  assert.match(source, /const apEvidenceReferences = \[audemarsBaseFamily, \.\.\.apExactReferences\]/);
+  assert.match(source, /p_references: apEvidenceReferences/);
   assert.match(source, /Promise\.all\(\['WTS', 'WTB'\]\.map/);
 });
 

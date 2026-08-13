@@ -1139,11 +1139,12 @@ module.exports = async function handler(req, res) {
       let referenceRows;
       if (apExactReferences.length) {
         const client = getClient();
+        const apEvidenceReferences = [audemarsBaseFamily, ...apExactReferences];
         const [wtsResult, wtbResult] = await Promise.all(['WTS', 'WTB'].map(listingIntent => client.rpc(
           'qnsa_bounded_price_research_rows',
           {
             p_brand: brand,
-            p_references: apExactReferences,
+            p_references: apEvidenceReferences,
             p_listing_type: listingIntent,
             p_limit: 2500,
           },
