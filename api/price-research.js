@@ -235,12 +235,36 @@ async function loadQnsaVerifiedTradingPrices(client, {
       p_listing_type: 'WTS',
       p_limit: limit,
     });
-    if (!rpcError) return (rpcRows || []).map(row => {
+    if (!rpcError && (rpcRows || []).length) return (rpcRows || []).map(row => {
       const effective = applyEffectivePrice(row);
       return effective.price_correction_applied
         ? { ...effective, price_usd: effective.verified_price_usd }
         : row;
     });
+    // Zenith's reviewed Trading release intentionally retains genuine no-price
+    // WTS activity. The priced-only analytics RPC can therefore return an empty
+    // set for a released exact reference. Recover that bounded public cohort so
+    // downstream eligibility accounts for unpriced evidence without allowing it
+    // into averages. Never use this fallback for an RPC error.
+    if (!rpcError && String(brand || '').trim().toLowerCase() === 'zenith') {
+      const recovered = [];
+      for (const reference of [...new Set(referenceVariants || [])].slice(0, 8)) {
+        const { data, error } = await client.rpc('qnsa_trading_floor_reference_rows', {
+          p_brand: brand,
+          p_reference: reference,
+          p_family: false,
+          p_limit: Math.min(1000, Math.max(1, Number(limit) || 1000)),
+          p_offset: 0,
+        });
+        if (error) {
+          console.warn('[price-research] Zenith Trading evidence fallback unavailable:', error.message || error);
+          return [];
+        }
+        recovered.push(...(data || []).map(qnsaReferenceRowToMarketRow)
+          .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS'));
+      }
+      if (recovered.length) return [...new Map(recovered.map(row => [String(row.id), row])).values()];
+    }
     console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
   }
   // The dedicated research view is the primary source. This bounded fallback

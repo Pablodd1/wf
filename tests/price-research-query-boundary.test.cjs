@@ -10,6 +10,13 @@ const source = fs.readFileSync(
   'utf8',
 );
 
+test('Zenith recovers released no-price WTS evidence without promoting it into averages', () => {
+  assert.match(source, /String\(brand \|\| ''\)\.trim\(\)\.toLowerCase\(\) === 'zenith'/);
+  assert.match(source, /qnsa_trading_floor_reference_rows/);
+  assert.match(source, /filter\(row => String\(row\.listing_type \|\| ''\)\.toUpperCase\(\) === 'WTS'\)/);
+  assert.match(source, /unpriced evidence without allowing it[\s\S]*into averages/);
+});
+
 test('high-volume Price Research uses one bounded strict-source query', () => {
   assert.match(source, /let sourceTable = configuredSourceTable \|\| \(!exactReviewedWorkbookRelease/);
   assert.match(source, /\? 'watch_records'\s*: 'price_research_verified_source'/);
