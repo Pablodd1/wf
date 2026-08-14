@@ -34,11 +34,13 @@ jobs:
           $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
       - name: Reconcile snapshots and released listing lineage
-        run: node tools/dealer-directory/sync-canonical-directory.cjs | tee canonical-directory-reconciliation.json
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/dealer-directory/sync-canonical-directory.cjs | tee canonical-directory-reconciliation.json
       - name: Upload sanitized reconciliation
         uses: actions/upload-artifact@v4
         with:
           name: canonical-directory-reconciliation
           path: canonical-directory-reconciliation.json
           retention-days: 14
-
