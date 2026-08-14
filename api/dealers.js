@@ -103,6 +103,24 @@ module.exports = async function handler(req, res) {
       });
     }
     const client = getClient();
+    const { data: canonicalPage, error: canonicalError } = await client.rpc('qnsa_dealer_directory_page', {
+      p_search: search || null,
+      p_limit: pageSize,
+      p_offset: from,
+    });
+    if (!canonicalError && canonicalPage) {
+      return res.status(200).json({
+        success: true,
+        page,
+        pageSize,
+        total: Number(canonicalPage.total || 0),
+        dealers: canonicalPage.dealers || [],
+        source: 'canonical-database',
+      });
+    }
+    if (canonicalError && !/function .*qnsa_dealer_directory_page.*does not exist|schema cache/i.test(canonicalError.message)) {
+      throw canonicalError;
+    }
     const phoneIds = mode === 'top-rated' ? null : await phoneMatchedDealerIds(client, search);
     if (phoneIds !== null && !phoneIds.length) {
       return res.status(200).json({

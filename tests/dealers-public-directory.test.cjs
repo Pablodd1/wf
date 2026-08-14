@@ -151,10 +151,10 @@ test('public dealer API payloads never expose private provenance URLs', async ()
   }
 });
 
-test('Dealer Directory opens on Rated Dealers while Reference Check and Top Rated remain available', () => {
+test('Dealer Directory opens on the live canonical directory while evidence views remain available', () => {
   const directory = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
-  assert.match(directory, /useState<DirectoryView>\('rated'\)/);
-  assert.match(directory, /Reference Check/);
+  assert.match(directory, /useState<DirectoryView>\('reference'\)/);
+  assert.match(directory, /Live Directory/);
   assert.match(directory, /> Rated Dealers</);
   assert.match(directory, /Top Rated Dealers/);
 });

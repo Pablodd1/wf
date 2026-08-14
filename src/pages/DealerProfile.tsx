@@ -14,6 +14,8 @@ interface ProfilePayload {
   stats: { wts_count: number | null; wtb_count: number | null; group_count: number | null; first_post: string | null; latest_post: string | null; verified_contact_info: { phone: string; verification_status: 'VERIFIED' } | null; current_counts_are_dynamic?: boolean; current_counts_scope?: string; captured_inventory_count?: number; snapshot_range?: { snapshot_count?: number; current_counts_are_dynamic?: boolean } } | null;
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; condition: string | null; price_usd: number | null; currency: string | null; display_price?: string | null; listing_type: string; listing_date: string | null; created_at: string | null; raw_message?: string; image_url?: string | null; evidence_only?: boolean }>;
   reviews?: Array<{ date: string | null; reviewer: string | null; sentiment: string | null }>;
+  groups?: Array<{ name: string | null; platform: string | null; membership_status: string | null }>;
+  listing_total?: number;
   source_provenance?: { source_system: string; crawled_at: string | null; captured_listing_count?: number; captured_review_count?: number };
   dynamic_activity_status?: string;
   raw_message_access: boolean;
@@ -76,7 +78,7 @@ export default function DealerProfile() {
               </div>
             </div>
             <div className="flex flex-wrap gap-4 text-sm text-white/60">
-              <span className="flex items-center gap-2"><Star size={15} className="text-[#c9a96e]" /> {dealer.rating == null ? 'Rating not published' : `${Number(dealer.rating).toFixed(2)} · ${dealer.review_count} reviews`}</span>
+              <span className="flex items-center gap-2"><Star size={15} className="text-[#c9a96e]" /> {dealer.rating == null ? (dealer.review_count == null ? 'Rating not published' : `${Number(dealer.review_count).toLocaleString()} reviews`) : `${Number(dealer.rating).toFixed(2)} · ${dealer.review_count} reviews`}</span>
               <span className="flex items-center gap-2"><Users size={15} /> {dealer.whatsapp_group_count == null ? 'Groups not captured' : dealer.whatsapp_group_count > 0 ? `${dealer.whatsapp_group_count.toLocaleString()} WhatsApp groups` : 'No published groups'}</span>
               {dealer.member_since && <span className="flex items-center gap-2"><CalendarDays size={15} /> {dealer.member_since}</span>}
             </div>
@@ -100,7 +102,7 @@ export default function DealerProfile() {
         {dealer.profile_summary && <p className="mt-8 max-w-3xl text-sm leading-7 text-white/55">{dealer.profile_summary}</p>}
         <div className="mt-10 flex items-center justify-between border-b border-white/10 pb-4">
           <h2 className="text-xl font-semibold">Recent market activity</h2>
-          <span className="text-xs text-white/35">{listings.length} {isPublicSourceProfile || isLegacyProfile ? 'captured activity records' : 'verified posts'}</span>
+          <span className="text-xs text-white/35">{Number(payload.listing_total ?? listings.length).toLocaleString()} {isPublicSourceProfile || isLegacyProfile ? 'captured activity records' : 'verified linked posts'}</span>
         </div>
         <div className="divide-y divide-white/10">
           {listings.map(listing => (
@@ -132,6 +134,15 @@ export default function DealerProfile() {
             {payload.reviews.map((review, index) => <article key={`${review.reviewer || 'review'}-${review.date || index}`} className="bg-[#111118] p-5">
               <div className="text-sm font-semibold">{review.reviewer || 'Reviewer'}</div>
               <div className="mt-2 flex gap-3 text-xs text-white/45"><span>{review.sentiment || 'Feedback'}</span><span>{review.date || 'Date unavailable'}</span></div>
+            </article>)}
+          </div>
+        </section>}
+        {payload.groups && payload.groups.length > 0 && <section className="mt-12">
+          <div className="flex items-center justify-between border-b border-white/10 pb-4"><h2 className="text-xl font-semibold">Published communities</h2><span className="text-xs text-white/35">{payload.groups.length} verified memberships</span></div>
+          <div className="grid gap-px bg-white/10 md:grid-cols-2">
+            {payload.groups.map((group, index) => <article key={`${group.platform || 'group'}-${group.name || index}`} className="bg-[#111118] p-5">
+              <div className="text-sm font-semibold">{group.name || 'Community name unavailable'}</div>
+              <div className="mt-2 text-xs text-white/45">{[group.platform, group.membership_status].filter(Boolean).join(' · ')}</div>
             </article>)}
           </div>
         </section>}

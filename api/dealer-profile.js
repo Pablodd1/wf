@@ -113,6 +113,28 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    const { data: canonicalProfile, error: canonicalError } = await client.rpc('qnsa_dealer_profile', {
+      p_identity: identity,
+      p_limit: 50,
+      p_offset: 0,
+    });
+    if (!canonicalError && canonicalProfile?.dealer) {
+      return res.status(200).json({
+        success: true,
+        ...canonicalProfile,
+        raw_message_access: true,
+        source_provenance: {
+          source_system: 'QNSA_CANONICAL_DEALER_DIRECTORY',
+          current_counts_are_dynamic: true,
+        },
+      });
+    }
+    if (!canonicalError && !canonicalProfile?.dealer) {
+      return res.status(404).json({ error: 'Verified dealer profile not found' });
+    }
+    if (canonicalError && !/function .*qnsa_dealer_profile.*does not exist|schema cache/i.test(canonicalError.message)) {
+      throw canonicalError;
+    }
     let query = client
       .from('dealers')
       .select('id,slug,display_name,company_name,country_code,city,rating,review_count,whatsapp_group_count,avatar_url,profile_summary,verified_at,status,contact_consent');
