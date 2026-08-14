@@ -5,10 +5,10 @@ const EXPECTED_RELEASE_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', '
 
 async function fetchJson(url, fetchImpl) {
   let response;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  for (let attempt = 0; attempt < 6; attempt += 1) {
     response = await fetchImpl(url);
-    if (response.ok || ![500, 502, 503, 504].includes(response.status) || attempt === 2) break;
-    await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+    if (response.ok || ![500, 502, 503, 504].includes(response.status) || attempt === 5) break;
+    await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
   }
   if (!response.ok) throw new Error(`public release request failed: ${response.status}`);
   return response.json();
