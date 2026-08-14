@@ -1,7 +1,6 @@
 'use strict';
 
 const { buildCanonicalDirectory } = require('./build-canonical-directory.cjs');
-const { buildLiveListingLinks } = require('./build-live-listing-links.cjs');
 const { jsonSql, managementQuery } = require('../mariadb-live/run-two-brand-price-correction.cjs');
 
 function chunks(values, size) {
@@ -23,10 +22,8 @@ async function run({ env = process.env, fetchImpl = fetch } = {}) {
     await managementQuery(config, `SELECT public.apply_qnsa_dealer_directory_snapshot(${jsonSql(batch)}) AS result`, false, fetchImpl);
   }
 
-  const links = await buildLiveListingLinks({ fetchImpl });
-  for (const batch of chunks(links.records, 200)) {
-    await managementQuery(config, `SELECT public.apply_qnsa_dealer_listing_links(${jsonSql(batch)}) AS result`, false, fetchImpl);
-  }
+  const linkSync = await managementQuery(config,
+    'SELECT public.sync_qnsa_dealer_public_listing_links() AS result', false, fetchImpl);
 
   const reconciliation = await managementQuery(config, `
     SELECT jsonb_build_object(
@@ -49,7 +46,7 @@ async function run({ env = process.env, fetchImpl = fetch } = {}) {
   if (!result || Number(result.duplicate_verified_phones) !== 0 || Number(result.orphan_listing_links) !== 0) {
     throw new Error('Canonical dealer reconciliation failed');
   }
-  return { directory: directory.report, links: links.report, reconciliation: result };
+  return { directory: directory.report, links: linkSync?.[0]?.result || null, reconciliation: result };
 }
 
 if (require.main === module) {
@@ -60,4 +57,3 @@ if (require.main === module) {
 }
 
 module.exports = { chunks, run };
-
