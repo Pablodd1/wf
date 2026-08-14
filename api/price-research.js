@@ -265,7 +265,9 @@ async function loadQnsaVerifiedTradingPrices(client, {
       }
       if (recovered.length) return [...new Map(recovered.map(row => [String(row.id), row])).values()];
     }
-    console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
+    if (rpcError) {
+      console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
+    }
   }
   // The dedicated research view is the primary source. This bounded fallback
   // uses the same reconciled release base when PostgREST has not refreshed that
