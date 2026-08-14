@@ -49,6 +49,7 @@ test('hotfix workflow is pinned, bounded, and adds no storage-heavy index', () =
   assert.match(workflow, /20260814114500_qnsa_later_brand_candidate_cursor\.sql/);
   assert.match(workflow, /20260814115000_qnsa_later_brand_bounded_candidate_stride\.sql/);
   assert.match(workflow, /20260814123000_qnsa_rm_low_latency_stride\.sql/);
+  assert.match(workflow, /20260814124000_qnsa_rm_reliable_stride\.sql/);
   assert.match(workflow,
     /qnsa_later_brand_candidate_stride_page\('\$safeBrand',\$offset,50,NULL\)/);
   assert.match(workflow, /Invoke-CandidatePage \$brand 0/);
@@ -56,7 +57,7 @@ test('hotfix workflow is pinned, bounded, and adds no storage-heavy index', () =
     /Invoke-CandidatePage \$brand \(\[long\]\$firstPage\.next_offset\)/);
   assert.doesNotMatch(workflow, /candidate_page\(brand,0,50,500,NULL\)/);
   assert.match(workflow, /cross_page_duplicate_ids/);
-  assert.match(workflow, /Richard Mille exceeded the 12-candidate latency stride/);
+  assert.match(workflow, /Richard Mille exceeded the 4-candidate reliability stride/);
   assert.match(workflow, /Customer endpoint latency smoke/);
   assert.match(workflow, /watchfacts-poc\.vercel\.app\/api\/reviewed-market-inventory/);
   assert.match(workflow, /first_latency_ms -gt 18000/);

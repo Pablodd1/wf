@@ -15,6 +15,8 @@ const strideMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations'
   '20260814115000_qnsa_later_brand_bounded_candidate_stride.sql'), 'utf8');
 const lowLatencyMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
   '20260814123000_qnsa_rm_low_latency_stride.sql'), 'utf8');
+const reliabilityMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
+  '20260814124000_qnsa_rm_reliable_stride.sql'), 'utf8');
 const inventorySource = fs.readFileSync(path.join(root, 'api', 'reviewed-market-inventory.js'), 'utf8');
 
 function traverseBoundedSource(rows, presentationFilter = () => true, pageSize = 50) {
@@ -106,6 +108,13 @@ test('Richard Mille uses a low-latency stride without weakening cursor accountin
   assert.match(lowLatencyMigration, /Expected candidate scan-limit clamp was not found/);
   assert.doesNotMatch(lowLatencyMigration,
     /INSERT\s+INTO\s+staging\.listings|UPDATE\s+staging\.listings|DELETE\s+FROM\s+staging\.listings/i);
+});
+
+test('Richard Mille cold reads use a four-candidate reliability stride', () => {
+  assert.match(reliabilityMigration, /p_brand = 'Richard Mille' THEN 4 ELSE 50/);
+  assert.match(reliabilityMigration, /qnsa_later_brand_candidate_page/);
+  assert.doesNotMatch(reliabilityMigration,
+    /CREATE\s+(?:UNIQUE\s+)?INDEX|INSERT\s+INTO\s+staging\.listings|UPDATE\s+staging\.listings|DELETE\s+FROM\s+staging\.listings/i);
 });
 
 test('an empty bounded stride advances by its envelope instead of entering the legacy magic-offset fallback', () => {
