@@ -1,7 +1,7 @@
 'use strict';
 
 const { buildCanonicalDirectory } = require('./build-canonical-directory.cjs');
-const { jsonSql, managementQuery } = require('../mariadb-live/run-two-brand-price-correction.cjs');
+const { jsonSql, managementQuery, sqlLiteral } = require('../mariadb-live/run-two-brand-price-correction.cjs');
 
 function chunks(values, size) {
   const result = [];
@@ -22,8 +22,28 @@ async function run({ env = process.env, fetchImpl = fetch } = {}) {
     await managementQuery(config, `SELECT public.apply_qnsa_dealer_directory_snapshot(${jsonSql(batch)}) AS result`, false, fetchImpl);
   }
 
-  const linkSync = await managementQuery(config,
-    'SELECT public.sync_qnsa_dealer_public_listing_links() AS result', false, fetchImpl);
+  const identities = await managementQuery(config, `
+    SELECT DISTINCT public.normalize_seller_phone_identity(source_identity) AS phone
+    FROM public.dealer_source_identities
+    WHERE verification_status = 'VERIFIED'
+      AND upper(identity_type) IN ('PHONE','WHATSAPP')
+      AND public.normalize_seller_phone_identity(source_identity) IS NOT NULL
+  `, true, fetchImpl);
+  let linked = 0;
+  for (const identity of identities || []) {
+    let cursor = null;
+    for (let page = 0; page < 1000; page += 1) {
+      const result = await managementQuery(config,
+        `SELECT public.sync_qnsa_dealer_public_listing_links_batch(${sqlLiteral(identity.phone)}, ${cursor ? sqlLiteral(cursor) : 'NULL'}, 200) AS result`,
+        false, fetchImpl);
+      const batch = result?.[0]?.result;
+      if (!batch) throw new Error('Dealer listing batch returned no reconciliation');
+      linked += Number(batch.applied || 0);
+      if (!batch.has_more) break;
+      if (!batch.next_id || batch.next_id === cursor) throw new Error('Dealer listing cursor did not advance');
+      cursor = batch.next_id;
+    }
+  }
 
   const reconciliation = await managementQuery(config, `
     SELECT jsonb_build_object(
@@ -46,7 +66,7 @@ async function run({ env = process.env, fetchImpl = fetch } = {}) {
   if (!result || Number(result.duplicate_verified_phones) !== 0 || Number(result.orphan_listing_links) !== 0) {
     throw new Error('Canonical dealer reconciliation failed');
   }
-  return { directory: directory.report, links: linkSync?.[0]?.result || null, reconciliation: result };
+  return { directory: directory.report, links: { applied: linked }, reconciliation: result };
 }
 
 if (require.main === module) {

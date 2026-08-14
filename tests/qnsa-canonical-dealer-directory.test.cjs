@@ -9,6 +9,7 @@ const root = path.join(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260814203000_qnsa_canonical_dealer_directory.sql'), 'utf8');
 const dealersApi = fs.readFileSync(path.join(root, 'api', 'dealers.js'), 'utf8');
 const profileApi = fs.readFileSync(path.join(root, 'api', 'dealer-profile.js'), 'utf8');
+const batchMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260814204000_qnsa_canonical_dealer_batched_link_sync.sql'), 'utf8');
 
 test('canonical directory is private-by-default and exact-phone keyed', () => {
   for (const table of ['dealers', 'dealer_source_identities', 'dealer_directory_snapshots', 'dealer_reviews', 'dealer_group_memberships', 'dealer_listing_links']) {
@@ -20,6 +21,14 @@ test('canonical directory is private-by-default and exact-phone keyed', () => {
   assert.match(migration, /REVOKE ALL ON public\.dealers/);
   assert.match(migration, /extensions\.digest/);
   assert.doesNotMatch(migration, /UPDATE\s+(?:raw|staging)\.|DELETE\s+FROM\s+(?:raw|staging)\.|INSERT\s+INTO\s+(?:raw|staging)\./i);
+});
+
+test('listing reconciliation is bounded, cursor-driven, and release-view gated', () => {
+  assert.match(batchMigration, /qnsa_rolex_patek_trading_floor_source/);
+  assert.match(batchMigration, /p_after_id/);
+  assert.match(batchMigration, /LIMIT LEAST\(GREATEST\(COALESCE\(p_limit, 200\), 1\), 500\)/);
+  assert.match(batchMigration, /'has_more'/);
+  assert.doesNotMatch(batchMigration, /UPDATE\s+(?:raw|staging)\.|DELETE\s+FROM\s+(?:raw|staging)\.|INSERT\s+INTO\s+(?:raw|staging)\./i);
 });
 
 test('directory and profile APIs prefer the canonical QNSA contracts', () => {
