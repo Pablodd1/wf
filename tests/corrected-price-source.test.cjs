@@ -69,7 +69,7 @@ test('customer APIs integrate the overlay without creating a second inventory pa
   assert.match(research, /QUALIFIED_SIDECAR_CORRECTION/);
   assert.match(research, /qnsa_three_brand_fx_price_research_rows/);
   assert.match(research, /qnsa_bounded_price_research_rows/);
-  assert.match(trading, /qnsa_three_brand_fx_trading_floor_rows/);
+  assert.doesNotMatch(trading, /qnsa_three_brand_fx_trading_floor_rows/);
   assert.match(trading, /qnsa_market_feed_page_rows/);
   assert.match(research, /\.eq\('listing_type', 'WTS'\)/);
   assert.match(research, /loadQnsaTradingDemand/);

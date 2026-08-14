@@ -62,6 +62,30 @@ async function loadQnsaReviewedReleaseSummary(client) {
   };
 }
 
+function unavailableQnsaReleaseSummary() {
+  return {
+    files_total: 1,
+    files_complete: 1,
+    source_rows: 1_394_269,
+    rows_scanned: 1_394_269,
+    canonical_listings: null,
+    duplicate_rows_held: null,
+    errors: 0,
+    reconciled: false,
+    count_snapshot_available: false,
+    source: 'mariadb-normalized-20260811-codex-v1',
+    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet'].map(brand => ({
+      brand,
+      files: 1,
+      files_complete: 1,
+      source_rows: null,
+      canonical_listings: null,
+      duplicate_rows_held: null,
+    })),
+    market_counts: [],
+  };
+}
+
 function snapshotInventoryTotal(summary, filters) {
   const unsupported = filters.search || filters.reference || filters.dial || filters.imagesOnly
     || filters.condition || filters.region || filters.rating || filters.postedAfter;
@@ -937,7 +961,12 @@ module.exports = async function handler(req, res) {
     // reviewed market REST request. Start them without serializing three
     // remote database round trips on every page load.
     const summaryPromise = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
-      ? loadQnsaReviewedReleaseSummary(client)
+      // Counts are metadata, not an admission gate. Never serialize the
+      // customer page behind a global snapshot RPC: if that RPC is stale or
+      // locked it can consume the hosted statement timeout before the bounded
+      // 50-row feed is attempted. Counts remain explicitly unavailable until
+      // refreshed out of band.
+      ? Promise.resolve(unavailableQnsaReleaseSummary())
       : loadSummary(client);
     const brand = requestedBrand;
     // Cursor pages publish the current reviewed inventory, including incomplete

@@ -71,12 +71,22 @@ test('a count-snapshot failure does not take the bounded customer feed offline',
 });
 
 test('broad pages bypass the reference-scoped FX sidecar', () => {
+  const broadStart = source.indexOf('if (qnsaBroadPage && !legacyMarketViewContractDetected)');
   const broadBlock = source.slice(
-    source.indexOf('if (qnsaBroadPage && !legacyMarketViewContractDetected)'),
-    source.indexOf("if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'"),
+    broadStart,
+    source.indexOf('const pageRows =', broadStart),
   );
   assert.match(broadBlock, /qnsa_market_feed_page_rows/);
   assert.doesNotMatch(broadBlock, /qnsa_three_brand_fx_trading_floor_rows/);
+});
+
+test('customer inventory does not wait for the optional global count snapshot', () => {
+  const requestBlock = source.slice(
+    source.indexOf('const summaryPromise ='),
+    source.indexOf('const brand = requestedBrand'),
+  );
+  assert.match(requestBlock, /Promise\.resolve\(unavailableQnsaReleaseSummary\(\)\)/);
+  assert.doesNotMatch(requestBlock, /loadQnsaReviewedReleaseSummary\(client\)/);
 });
 
 test('Trading Floor source view is allowlisted and defaults to the legacy source', () => {
@@ -596,7 +606,7 @@ test('scoped pages use one lookahead row instead of trusting estimated totals', 
 test('cursor inventory honors the 50-card marketplace page and overlaps independent database reads', () => {
   assert.match(source, /const pageSizeLimit = pagination === 'cursor' \? 50 : MAX_PAGE_SIZE/);
   assert.match(source, /const summaryPromise = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
-  assert.match(source, /\? loadQnsaReviewedReleaseSummary\(client\)/);
+  assert.match(source, /\? Promise\.resolve\(unavailableQnsaReleaseSummary\(\)\)/);
   assert.match(source, /: loadSummary\(client\)/);
   assert.match(source, /directRowsPromise = Promise\.resolve\(directQuery\)/);
   assert.match(source, /await directRowsPromise/);
