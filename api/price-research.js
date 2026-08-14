@@ -116,6 +116,81 @@ function qnsaReferenceRowToMarketRow(row) {
   };
 }
 
+function directSubmissionToMarketRow(row) {
+  const claimed = row?.claimed_fields || {};
+  const intent = String(row?.intent || '').trim().toUpperCase();
+  const category = String(row?.category || '').trim().toUpperCase();
+  const currency = String(claimed.currency || '').trim().toUpperCase() || null;
+  const amount = Number(claimed.price_usd ?? claimed.price_amount);
+  const verifiedUsd = Number.isFinite(amount) && amount > 0 && ['USD', 'USDT'].includes(currency);
+  const imageUrls = Array.isArray(row?.image_urls) ? row.image_urls.filter(Boolean) : [];
+  const isBundle = claimed.is_bundle === true;
+  if (category !== 'WATCH'
+    || !['WTS', 'WTB'].includes(intent)
+    || row?.review_status !== 'APPROVED'
+    || row?.publication_status !== 'PUBLISHED'
+    || claimed.catalog_confirmed !== true
+    || !claimed.brand
+    || !claimed.reference) return null;
+  return {
+    id: `direct:${row.id}`,
+    source_submission_id: row.id,
+    brand: claimed.brand,
+    model: claimed.model || null,
+    reference: claimed.reference,
+    dial_color: claimed.dial_color || null,
+    condition: claimed.condition || null,
+    listing_type: intent,
+    verdict: 'APPROVED',
+    confidence: 100,
+    raw_message: row.raw_message,
+    dealer_id: row.dealer_id,
+    source: 'AUTHENTICATED_DIRECT_SUBMISSION',
+    seller_name: claimed.poster_name || null,
+    seller_phone: claimed.poster_phone || null,
+    price_raw: claimed.price_amount ?? null,
+    price_usd: intent === 'WTS' && verifiedUsd ? amount : null,
+    currency,
+    source_price_amount: claimed.price_amount ?? null,
+    source_currency: currency,
+    created_at: row.created_at,
+    listing_date: row.created_at,
+    listing_status: 'published',
+    thumbnail_url: !isBundle ? imageUrls[0] || null : null,
+    image_urls: !isBundle ? imageUrls : [],
+    has_images: !isBundle && imageUrls.length > 0,
+    owner_reviewed_identity: true,
+    contact_publication_approved: true,
+    flags: isBundle ? ['BUNDLE_SPLIT_REQUIRED'] : [],
+    bundle_candidate_count: isBundle ? 2 : 1,
+    analytics_currency_status: verifiedUsd ? 'VERIFIED' : 'UNVERIFIED',
+  };
+}
+
+async function loadApprovedDirectSubmissionRows(client, { brand, referenceVariants, intent, limit = 1000 }) {
+  try {
+    const { data, error } = await client.from('dealer_listing_submissions')
+      .select('id,dealer_id,intent,category,raw_message,claimed_fields,image_urls,review_status,publication_status,created_at')
+      .eq('review_status', 'APPROVED')
+      .eq('publication_status', 'PUBLISHED')
+      .eq('category', 'WATCH')
+      .eq('intent', intent)
+      .order('created_at', { ascending: false })
+      .limit(Math.min(1000, Math.max(1, Number(limit) || 1000)));
+    if (error) throw error;
+    const brandKey = String(brand || '').trim().toLowerCase();
+    const referenceKeys = new Set((referenceVariants || []).map(normRef));
+    return (data || [])
+      .map(directSubmissionToMarketRow)
+      .filter(Boolean)
+      .filter(row => String(row.brand || '').trim().toLowerCase() === brandKey
+        && referenceKeys.has(normRef(row.reference)));
+  } catch (error) {
+    console.warn('[price-research] approved direct submissions unavailable:', error?.message || error);
+    return [];
+  }
+}
+
 async function loadRuntimePriceRecoveryRows(client, { brand, referenceVariants }) {
   if (!['richard mille', 'cartier'].includes(String(brand || '').trim().toLowerCase())) return [];
   const pages = await Promise.all([...new Set(referenceVariants || [])].slice(0, 8).map(reference => client.rpc(
@@ -410,6 +485,14 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
   }
 
   const qnsaReviewedSource = sourceTable === QNSA_PRICE_RESEARCH_SOURCE;
+  const directDemandRows = await loadApprovedDirectSubmissionRows(client, {
+    brand, referenceVariants, intent: 'WTB', limit: DEMAND_SAMPLE_LIMIT,
+  });
+  if (directDemandRows.length) {
+    const merged = new Map((data || []).map(row => [String(row.id), row]));
+    for (const row of directDemandRows) merged.set(String(row.id), row);
+    data = [...merged.values()];
+  }
   let demandRows = (data || []).filter(row => qnsaReviewedSource || isOwnerReviewedWorkbookRow(row));
   const equivalentKeys = new Set(referenceVariants.map(normRef));
   demandRows = demandRows.filter(row =>
@@ -840,6 +923,14 @@ module.exports = async function handler(req, res) {
       // Keep usingReviewedWorkbook false so downstream doesn't expect workbook-only fields
     } else if (usingReviewedWorkbook) {
       rows = reviewedWorkbookRows;
+    }
+    const directWtsRows = await loadApprovedDirectSubmissionRows(client, {
+      brand, referenceVariants, intent: 'WTS', limit: pageSize,
+    });
+    if (directWtsRows.length) {
+      const rowsById = new Map((rows || []).map(row => [String(row.id), row]));
+      for (const row of directWtsRows) rowsById.set(String(row.id), row);
+      rows = [...rowsById.values()];
     }
     const baseSampleCount = rows.length;
     const sourceSampleCapped = usingReviewedWorkbook
@@ -1439,3 +1530,6 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: 'Failed to fetch from database', detail: err.message });
   }
 };
+
+module.exports.directSubmissionToMarketRow = directSubmissionToMarketRow;
+module.exports.loadApprovedDirectSubmissionRows = loadApprovedDirectSubmissionRows;

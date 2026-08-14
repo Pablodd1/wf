@@ -234,6 +234,15 @@ async function handler(req, res) {
     publication: 'QUEUED_FOR_REVIEW',
     queue: queued || [],
     count: data.length,
+    accounting: {
+      submission_saved: true,
+      immutable_raw_version_saved: true,
+      dealer_history_recorded: true,
+      review_queue: 'QUEUED',
+      trading_floor: 'AFTER_APPROVAL',
+      price_research: 'WTS_ONLY_AFTER_IDENTITY_PRICE_CURRENCY_AND_DUPLICATE_GATES',
+      wtb_demand: 'AFTER_APPROVAL',
+    },
   });
 }
 

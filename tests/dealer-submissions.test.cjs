@@ -173,6 +173,10 @@ test('every authenticated posting event receives a stable batch receipt', () => 
   assert.match(route, /const bulkSubmissionId = crypto\.randomUUID\(\)/);
   assert.match(route, /bulk_submission_id: bulkSubmissionId/);
   assert.match(route, /publication: 'QUEUED_FOR_REVIEW'/);
+  assert.match(route, /immutable_raw_version_saved: true/);
+  assert.match(route, /trading_floor: 'AFTER_APPROVAL'/);
+  assert.match(route, /price_research: 'WTS_ONLY_AFTER_IDENTITY_PRICE_CURRENCY_AND_DUPLICATE_GATES'/);
+  assert.match(route, /wtb_demand: 'AFTER_APPROVAL'/);
   assert.match(route, /enqueue_dealer_submission_batch/);
   assert.match(route, /source_evidence_confirmed !== true/);
   assert.match(route, /source_evidence_confirmed_at/);

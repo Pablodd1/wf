@@ -34,11 +34,10 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(footer, /APP_POST_SMART_URL = 'https:\/\/91933fc4\.curatedlux\.pages\.dev'/);
   assert.match(footer, /href=\{APP_POST_SMART_URL\}[\s\S]*APP POST SMART/);
   assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
-  assert.match(postItem, /const LUXURY_APP_URL = 'https:\/\/luxuryapp-wf\.vercel\.app\/'/);
-  assert.match(postItem, /Curated Luxury form/);
-  assert.match(postItem, /Luxury App/);
-  assert.match(postItem, /<iframe[\s\S]*src=\{LUXURY_APP_URL\}[\s\S]*title="Luxury App posting experience"/);
-  assert.match(postItem, /Open full page/);
+  assert.doesNotMatch(postItem, /LUXURY_APP_URL|Luxury App|<iframe/);
+  assert.match(postItem, /Open for testing/);
+  assert.match(postItem, /Registration is required only when you save and submit/);
+  assert.match(postItem, /Register or sign in to save/);
   assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
   assert.match(header, />Curated Luxury<\/span>/);
   assert.match(header, /bg-\[#f3ecdf\]\/95/);

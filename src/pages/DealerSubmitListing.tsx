@@ -1,4 +1,4 @@
-import { ArrowLeft, Camera, CheckCircle2, CopyPlus, ExternalLink, ImagePlus, Layers3, Plus, Send, ShieldCheck, Trash2, UserRound } from 'lucide-react';
+import { ArrowLeft, Camera, CheckCircle2, CopyPlus, ImagePlus, Layers3, Plus, Send, ShieldCheck, Trash2, UserRound } from 'lucide-react';
 import type { ChangeEvent, ReactNode } from 'react';
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
@@ -12,7 +12,6 @@ const CATEGORIES = [
   ['ACCESSORY', 'Other accessory'], ['OTHER', 'Other luxury item'],
 ] as const;
 const CURRENCIES = ['USD', 'HKD', 'EUR', 'GBP', 'CHF', 'CNY', 'JPY', 'SGD', 'USDT'];
-const LUXURY_APP_URL = 'https://luxuryapp-wf.vercel.app/';
 const MAX_ITEMS = 20;
 const MAX_ITEM_PHOTOS = 5;
 
@@ -90,7 +89,6 @@ export default function DealerSubmitListing() {
   const [searchParams] = useSearchParams();
   const demoUser = searchParams.get('demoUser');
   const demoPoster = getDemoPoster(demoUser);
-  const [postingMode, setPostingMode] = useState<'watchfacts' | 'luxury-app'>('watchfacts');
   const [mode, setMode] = useState<Mode>('single');
   const [items, setItems] = useState<DraftItem[]>([createDraft()]);
   const [poster, setPoster] = useState<CredentialedPoster | null>(null);
@@ -119,13 +117,18 @@ export default function DealerSubmitListing() {
       return;
     }
     fetch('/api/dealer-submissions', { credentials: 'include' })
-      .then(response => response.ok ? response.json() : Promise.reject(new Error('Unable to load submissions')))
+      .then(response => response.ok ? response.json() : Promise.reject(new Error(
+        response.status === 401 ? 'Register or sign in to save and submit this form.' : 'Unable to load submissions',
+      )))
       .then(payload => {
         setSubmissions(payload.submissions || []);
         setPoster(payload.poster || null);
         setCredentialError(payload.credential_error || '');
       })
-      .catch(() => undefined);
+      .catch(caught => {
+        setPoster(null);
+        setCredentialError(caught instanceof Error ? caught.message : 'Register or sign in to save and submit this form.');
+      });
   }, [demoUser]);
 
   function updateItem(key: string, patch: Partial<DraftItem>) {
@@ -232,27 +235,22 @@ export default function DealerSubmitListing() {
       <div className="mx-auto max-w-7xl px-5 py-7 sm:px-8 lg:px-12">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-5">
           <Link to="/dealer/workspace" className="flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft size={16} /> {t('Workspace')}</Link>
-          <div className="flex items-center gap-2"><span className="hidden items-center gap-2 text-xs text-[#c9a96e] sm:flex"><ShieldCheck size={15} /> {t('Credential required to publish')}</span><LanguageToggle /></div>
+          <div className="flex items-center gap-2"><span className="hidden items-center gap-2 text-xs text-[#c9a96e] sm:flex"><ShieldCheck size={15} /> {t('Registration required to save')}</span><LanguageToggle /></div>
         </header>
-
-        <nav aria-label="Posting applications" className="mt-7 grid grid-cols-2 gap-2 border-b border-white/10 pb-4 sm:flex">
-          <Choice active={postingMode === 'watchfacts'} onClick={() => setPostingMode('watchfacts')}>{t('Curated Luxury form')}</Choice>
-          <Choice active={postingMode === 'luxury-app'} onClick={() => setPostingMode('luxury-app')}>Luxury App</Choice>
-        </nav>
 
         {demoPoster && <aside className="mt-5 border border-amber-300/30 bg-amber-300/[0.08] p-4" aria-label="Synthetic posting workflow">
           <div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">Synthetic posting workflow</p><p className="mt-1 text-xs text-white/55">Uploads and submissions remain in this browser and never enter production or Price Research.</p></div><Link to={`/dealer/account/profile?demoUser=${encodeURIComponent(demoUser || '')}`} className="text-xs text-[#f4d99c] underline underline-offset-4">View full demo account</Link></div>
           <div className="mt-3 flex flex-wrap gap-2">{Object.entries(demoDealerLabels).map(([id, label]) => <Link key={id} to={`/dealer/post?demoUser=${id}`} className={`border px-3 py-2 text-xs ${demoUser === id ? 'border-[#c9a96e] bg-[#c9a96e] text-black' : 'border-white/15 text-white/65'}`}>{label}</Link>)}</div>
         </aside>}
 
-        {postingMode === 'watchfacts' ? (
-          <section className="grid gap-10 py-9 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="grid gap-10 py-9 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{t('Reviewed normalized posting')}</p>
-              <div className="mt-3 flex flex-wrap items-center gap-3"><h1 className="font-serif text-4xl sm:text-5xl">POST IT</h1><span className="border border-[#c9a96e]/45 bg-[#c9a96e]/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#ead6aa]">{t('Coming soon')}</span></div>
+              <div className="mt-3 flex flex-wrap items-center gap-3"><h1 className="font-serif text-4xl sm:text-5xl">POST IT</h1><span className="border border-emerald-400/35 bg-emerald-400/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-emerald-200">{t('Open for testing')}</span></div>
               <h2 className="mt-4 text-xl font-semibold text-white/88">{t('Photograph it. Describe it. Post it.')}</h2>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-white/55">POST IT keeps the seller identity, raw message, item details, price, and photos together from the beginning. That organization reduces corrections, protects the original evidence, and helps approved listings reach the Trading Floor faster.</p>
               <p className="mt-3 max-w-3xl text-sm leading-7 text-white/45">{t('Required identity and source fields keep each item organized. Price remains optional; when omitted, the Trading Floor displays “Price not supplied.”')}</p>
+              <p className="mt-3 max-w-3xl text-sm leading-7 text-white/45">{t('You may complete and preview the form without an account. Registration is required only when you save and submit. Approved WTS items reach the Trading Floor and, when price, currency, catalog identity, and duplicate checks pass, Price Research. WTB stays separate as demand.')}</p>
 
               <div className="mt-7 grid gap-2 sm:grid-cols-3">
                 <Choice active={mode === 'single'} onClick={() => changeMode('single')}>{t('One item')}</Choice>
@@ -282,16 +280,16 @@ export default function DealerSubmitListing() {
                         <p className="mt-2 text-[11px] text-white/35">{t('Stamped from the signed-in credential · identity fields cannot be edited here.')}</p>
                       </div>
                     </div>
-                  ) : <div className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-3 text-xs text-amber-100"><p>{credentialError || 'Loading credentialed dealer profile...'}</p>{credentialError && <Link to="/dealer/account/profile" className="mt-2 inline-block font-semibold text-[#f4d99c] underline underline-offset-4">Complete dealer onboarding</Link>}</div>}
+                  ) : <div className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-3 text-xs text-amber-100"><p>{credentialError || 'Checking registration...'}</p><p className="mt-2 text-amber-100/75">The editor and preview remain open. Sign in or register only when you are ready to save.</p><Link to="/dealer" className="mt-3 inline-flex min-h-10 items-center border border-amber-200/35 px-3 py-2 font-semibold text-[#f4d99c]">Register or sign in to save</Link></div>}
                   {poster && credentialError && <div className="mt-4 border-l-2 border-amber-400 bg-amber-400/10 px-3 py-3 text-xs text-amber-100"><p>{credentialError}</p><Link to="/dealer/account/profile" className="mt-2 inline-block font-semibold text-[#f4d99c] underline underline-offset-4">Complete dealer onboarding</Link></div>}
-                  <PhotoPicker
+                  {poster && <PhotoPicker
                     label={t(poster?.avatar_url ? 'Update credentialed profile photo' : 'Add credentialed profile photo')}
                     hint={t('Optional. This becomes the posting-user photo attached to the credential.')}
                     capture="user"
                     files={posterPhoto ? [posterPhoto] : []}
                     onChange={files => setPosterPhoto(files[0] || null)}
                     onRemove={() => setPosterPhoto(null)}
-                  />
+                  />}
                 </section>
 
                 {items.map((item, index) => (
@@ -325,7 +323,7 @@ export default function DealerSubmitListing() {
                 </label>
                 <div className="sticky bottom-3 border border-white/15 bg-[#0d0d13]/95 p-3 shadow-2xl backdrop-blur">
                   <div className="mb-2 flex items-center justify-between text-[11px] text-white/45"><span>{readyItems}/{items.length} {t('ready')} · {totalPhotos} {t('item photos')}</span><span>{t(mode === 'bundle' ? 'Deferred bundle lane' : 'Pipeline review')}</span></div>
-                  <button disabled={saving || !poster || Boolean(credentialError) || readyItems !== items.length || !sourceEvidenceConfirmed} className="flex h-12 w-full items-center justify-center gap-2 bg-[#c9a96e] text-sm font-semibold text-[#09090d] disabled:opacity-60"><Send size={16} /> {saving ? `Uploading ${totalPhotos + Number(Boolean(posterPhoto))} photos and securing evidence...` : mode === 'bundle' ? 'Submit intact bundle for later separation' : `Submit ${items.length === 1 ? 'item' : `${items.length} separate items`} for review`}</button>
+                  {poster && !credentialError ? <button disabled={saving || readyItems !== items.length || !sourceEvidenceConfirmed} className="flex h-12 w-full items-center justify-center gap-2 bg-[#c9a96e] text-sm font-semibold text-[#09090d] disabled:opacity-60"><Send size={16} /> {saving ? `Uploading ${totalPhotos + Number(Boolean(posterPhoto))} photos and securing evidence...` : mode === 'bundle' ? 'Submit intact bundle for later separation' : `Submit ${items.length === 1 ? 'item' : `${items.length} separate items`} for review`}</button> : <Link to="/dealer" className="flex h-12 w-full items-center justify-center gap-2 border border-[#c9a96e] text-sm font-semibold text-[#ead6aa]"><ShieldCheck size={16} /> {t('Register or sign in to save')}</Link>}
                 </div>
               </form>
             </div>
@@ -349,15 +347,6 @@ export default function DealerSubmitListing() {
               </section>
             </aside>
           </section>
-        ) : (
-          <section className="py-9">
-            <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-              <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Luxury App</p><h1 className="mt-3 font-serif text-4xl sm:text-5xl">{t('Post an item.')}</h1><p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{t('Use the connected Luxury App without leaving Curated Luxury.')}</p></div>
-              <a href={LUXURY_APP_URL} target="_blank" rel="noreferrer" className="inline-flex h-11 shrink-0 items-center justify-center gap-2 border border-white/20 px-4 text-xs font-semibold text-white/75 hover:border-[#c9a96e] hover:text-white">{t('Open full page')} <ExternalLink size={14} /></a>
-            </div>
-            <iframe src={LUXURY_APP_URL} title="Luxury App posting experience" className="min-h-[820px] w-full border border-white/12 bg-white" allow="camera; microphone; clipboard-write" />
-          </section>
-        )}
       </div>
       <Footer />
     </main>

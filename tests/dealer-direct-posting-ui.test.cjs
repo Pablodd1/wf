@@ -40,3 +40,11 @@ test('direct form keeps price optional and sends normalized items to the publica
   assert.match(source, /Material or color/);
   assert.match(source, /Included accessories/);
 });
+
+test('guest users can prepare and preview but registration is required to save', () => {
+  assert.match(source, /The editor and preview remain open/);
+  assert.match(source, /Registration is required only when you save and submit/);
+  assert.match(source, /Register or sign in to save/);
+  assert.match(source, /Submission preview/);
+  assert.doesNotMatch(source, /LUXURY_APP_URL|Luxury App|<iframe/);
+});
