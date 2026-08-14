@@ -623,6 +623,13 @@ test('publication brands are derived from populated reviewed checkpoints', () =>
   ] }), ['Rolex', 'Patek Philippe']);
 });
 
+test('enabled reviewed brands stay discoverable while count metadata is offline', () => {
+  assert.deepEqual(api.publicationBrandsFromSummary({
+    count_snapshot_available: false,
+    brands: [{ brand: 'Rolex', canonical_listings: null }, { brand: 'Richard Mille', canonical_listings: null }],
+  }), ['Rolex', 'Richard Mille']);
+});
+
 test('public brand filters preserve punctuation and use only supported exact snapshot totals', () => {
   assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand, 80\)/);
   assert.match(source, /const brand = requestedBrand/);

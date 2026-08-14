@@ -790,7 +790,8 @@ function encodeInventoryCursor({ lane, offset, page }) {
 
 function publicationBrandsFromSummary(summary) {
   return (summary.brands || [])
-    .filter(brand => Number(brand.canonical_listings || 0) > 0)
+    .filter(brand => summary.count_snapshot_available === false
+      || Number(brand.canonical_listings || 0) > 0)
     .map(brand => brand.brand)
     .filter(Boolean);
 }
@@ -976,6 +977,14 @@ module.exports = async function handler(req, res) {
     const scopedFilter = true;
     const canReverse = !scopedFilter;
     const summary = await summaryPromise;
+    // RM is explicitly controlled by the production release ledger. It is
+    // included in discovery only after the reviewed RM deployment exists;
+    // counts remain unavailable while the optional snapshot is offline.
+    if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+      && !summary.brands.some(entry => entry.brand === 'Richard Mille')) {
+      summary.brands.push({ brand: 'Richard Mille', files: 1, files_complete: 1,
+        source_rows: null, canonical_listings: null, duplicate_rows_held: null });
+    }
     // The snapshot is an exact census of the enabled reconciled market-feed
     // run. Totals stay withheld for predicates the snapshot does not encode.
     const publicInventoryTotal = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'

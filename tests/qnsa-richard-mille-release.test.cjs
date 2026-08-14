@@ -27,4 +27,5 @@ test('RM uses the reviewed QNSA Price Research path', () => {
 });
 test('RM pending reviewed singles are admitted to the Trading Floor contract', () => {
   assert.match(trading, /brand === 'RICHARD MILLE'/);
+  assert.match(trading, /entry\.brand === 'Richard Mille'/);
 });
