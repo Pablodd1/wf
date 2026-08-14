@@ -1,97 +1,157 @@
-# Curated Luxury Continuation Handoff — 2026-08-14
+# Curated Luxury continuation handoff — 2026-08-14
 
-## Production baseline
+## Authority and workspace
 
 - Repository: `Pablodd1/wf`
-- Production branch: `main`
-- Verified production merge: `cc3feaac2261615e77f33edd63f242d6ccb112ba`
-- Completion PR: `#482` (`Complete four-brand market availability`)
-- Production database project: QNSA `qnsafosakvonzgfcsphh`
-- Customer site: `https://watchfacts-poc.vercel.app/`
-- Branding: Curated Luxury
+- Workspace: `C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate`
+- Canonical remote baseline at handoff: `origin/main` commit `c8b61e0d` (`fix: bucket dealer link sync without global sort (#509)`).
+- Production site: `https://watchfacts-poc.vercel.app`
+- Production Supabase project: QNSA `qnsafosakvonzgfcsphh`.
+- Never point production back to retired project `bptrvfncppbjnchsaxtb` and do not mix rows from both projects.
+- Preserve and do not stage/delete local `audit-output/` and `scratch-price-run-1786535506099/`.
+- Preserve the older untracked `docs/CODEX_CONTINUATION_HANDOFF_2026-08-12.md` unless explicitly instructed otherwise.
 
-The Vercel `watchfacts-poc` and `wf` deployments passed. Railway deployments
-for `wf`, `wf-mariadb-live-v2`, and `wf-mariadb-shadow` passed. An unrelated
-Railway service named `AIMedicalscriberjas` failed and is not part of this
-pipeline.
+## Customer-facing product rules
 
-## Released four-brand census
+- Global customer brand name is **Curated Luxury**.
+- Trading Floor keeps WTS and WTB, including genuinely unpriced activity, but Price Research averages use qualified priced WTS only.
+- WTB must never enter WTS sale averages.
+- Statistical policy remains 3.0 × IQR with outliers retained as excluded evidence.
+- Exact source images render first. Missing/broken images render no empty image frame. Bundle parents/children never inherit or display group images.
+- Ratings must be source-backed. Feedback count may render as `Rated (N)` but must never be converted into a fabricated five-point score.
+- Preserve immutable raw messages and source lineage. Human-review records can be visible under the approved release contract, but analytical inclusion still requires identity, currency, dial, bundle, duplicate, and repost gates.
+- POST IT remains open for testing, but saving requires a registered/authenticated dealer. Approved submissions must bind `dealer_id`, preserve raw/version lineage, enter review, and only then reach Trading Floor/Price Research.
+- Do not publish ambiguous/unclassified items or unresolved multi-listings.
 
-These are exact QNSA Trading Floor snapshot counts for every gate-passing
-single-watch WTS or WTB observation. They are not page-one estimates.
+## Released brand state
 
-| Brand | Trading Floor | WTS with price | WTS without price | WTB |
-| --- | ---: | ---: | ---: | ---: |
-| Rolex | 281,480 | 146,110 | 86,081 | 49,289 |
-| Patek Philippe | 126,571 | 69,599 | 28,576 | 28,396 |
-| Richard Mille | 39,958 | 23,469 | 10,410 | 6,079 |
-| Cartier | 11,753 | 5,705 | 4,361 | 1,687 |
-| **Total** | **459,762** | **244,883** | **129,428** | **85,451** |
+The intended current released watch brands are:
 
-All four rows reconcile: Trading Floor = priced WTS + no-price WTS + WTB.
-Brand-level supplied-price counts are not the same as qualified analytics;
-Price Research applies exact-reference identity, currency, dial, repost, and
-3.0x IQR gates after a reference is selected.
+1. Rolex
+2. Patek Philippe
+3. Audemars Piguet
+4. Richard Mille
+5. Cartier
+6. Zenith
 
-## Live acceptance evidence
+The live inventory discovery endpoint returned HTTP 503 during this handoff check, so refresh the exact production brand census before quoting totals.
 
-- Health: HTTP 200, QNSA reachable.
-- Cursor sweep: 1,048 records across the four brands, zero repeated IDs and
-  zero bundle/parent/child leakage.
-- Richard Mille: 30 consecutive cursor pages, zero duplicates and zero 5xx
-  after the final reliability migration.
-- Production workflow `31822590600`: passed database and customer-endpoint
-  smoke tests.
-- UI displays exact global and current-page counts for brand views.
-- Verified Price Research references:
-  - Rolex `116500LN`: 1,054 tracked, 199 qualified WTS, 216 WTB.
-  - Patek Philippe `5712`: 1,628 tracked, 397 qualified WTS, 628 WTB.
-  - Richard Mille `RM11-03`: 14 tracked, 6 qualified WTS, 7 WTB.
-  - Cartier `WSSA0018`: 86 tracked, 12 qualified WTS, 64 WTB.
-- All four exact-reference responses were HTTP 200, analytics-ready, and WTS
-  accounting reconciled. Dial charts/tables, liquidity, WTB/WTS ratio,
-  outliers, raw evidence, seller data, and images rendered.
+### Required per-brand acceptance
 
-## Richard Mille pagination decision
+- Broad Trading Floor brand route works and paginates without repeated IDs.
+- Exact reference search works, including punctuation/equivalent references.
+- Images are exact, reachable, globally image-first, and bundles are absent.
+- Supplied USD/USDT and supported dated-FX prices display in USD; genuine no-price rows remain at the tail.
+- Price Research keeps WTS/WTB/no-price/outlier/repost accounting non-overlapping and reconciled.
+- Liquidity, WTB/WTS ratio, outlier counts, dial table, dial-colored chart, and provisional three-month outlook render without an action button.
+- Forecast is explicitly provisional until sufficient monthly history exists.
+- Listing poster, raw message, contact (when consented), location, and source-backed rating evidence remain connected.
 
-The broad RM query previously exceeded the statement timeout. Migration
-`20260814124000_qnsa_rm_reliable_stride.sql` uses a four-candidate source
-stride. Pages can be smaller, but the cursor advances by the exact consumed
-source window, so eligible watches are neither repeated nor skipped. Do not
-raise the database statement timeout or replace this with offset pagination.
+## Next watch brand
 
-## POST IT and live intake
+**Panerai is the next recommended controlled brand rollout**, followed by Omega.
 
-- Luxury App was removed from POST IT.
-- Guests can complete and preview the form.
-- Registration is required to save and submit.
-- Unauthenticated API submission returns HTTP 401 with no write.
-- Approved WTS records reach Trading Floor; only qualified watch price evidence
-  reaches Price Research. WTB remains separate demand.
-- A real authenticated write canary still requires a credentialed test dealer.
-- The WatchFacts live and shadow Railway services deployed successfully, but a
-  new source-chat event should be traced end-to-end before claiming a fresh
-  incoming group message was normalized and published.
+Reason: the prior catalog census showed Panerai as a smaller controlled surface than Omega, while Omega has a much larger reference space. Before Panerai release:
 
-## Next release
+1. Re-audit current QNSA candidates and exact catalog identities; do not use stale July counts as production truth.
+2. Quarantine mixed-brand, multiple-reference, quantity (`x2`, `pair`, `lot`, `pcs`) and comma/slash/or-separated request messages.
+3. Run a bounded 100-row canary with WTS, WTB, priced, no-price, FX, image, duplicate, repost, bundle, and cross-brand controls.
+4. Reconcile every canary input to published, withheld, or review-required disposition.
+5. Enable Trading Floor first, then qualified Price Research, then run live browser acceptance.
 
-Recommended next brand: **Zenith**.
+## Multi-listing correction still required
 
-Current accounted evidence: 464 Trading Floor observations, including 237 WTS
-with supplied price, 214 WTS without supplied price, and 13 WTB. Before public
-enablement, run the same identity, multi-listing, currency/FX, image-lineage,
-duplicate/repost, cursor, and Price Research reconciliation gates used for the
-four released brands.
+A live audit found Richard Mille messages containing several references/prices published as one listing, including a raw message containing RM002, RM014, and RM022. The correct policy is:
 
-## Safety boundaries
+- Preserve parent raw evidence.
+- Quarantine the parent as `bundle_pending_separation`.
+- Do not expose parent/child images.
+- Split only when each reference/price span is deterministic.
+- Generated children remain pending human/catalog review; never auto-publish them.
+- Apply the unified multi-item detector to historical normalization, POST IT, Trading Floor defensive admission, and Price Research.
 
-- Use QNSA only; do not combine legacy BPTR rows into customer APIs.
-- Preserve immutable raw messages and raw-message versions.
-- Never publish bundle parents, unresolved multi-listings, or generated bundle
-  children without item-level review.
-- Never include WTB, no-price WTS, unverified currency, repost duplicates, or
-  statistical outliers in WTS averages.
-- Do not fabricate dealer ratings. Display rating evidence only when it is
-  source-backed.
-- Local `audit-output/`, `scratch-price-run-1786535506099/`, and the untracked
-  2026-08-12 handoff are intentionally not committed.
+Do not launch Panerai until this five/six-brand defensive gate is applied and regression-tested.
+
+## Dealer Directory — current live state
+
+Merged work:
+
+- PR #502 canonical QNSA Dealer Directory.
+- PR #504 fail-closed synchronization.
+- PR #505 release-view linkage.
+- PR #506 listing ID cast.
+- PR #507 bounded reconciliation.
+- PR #508 indexed-candidate correction.
+- PR #509 UUID bucket correction.
+
+Live `/api/dealers?pageSize=5` returned:
+
+- `success: true`
+- `source: canonical-database`
+- `total: 54` canonical dealers
+- Real source-backed display names, countries, membership dates, review counts, and group counts.
+
+Examples observed live:
+
+- Federico Maman: 22 reviews, 25 groups.
+- Jaztime Watches: 18 reviews, 22 groups.
+- Zack: 16 reviews, 24 groups.
+- Ian Mottale: 14 reviews, 30 groups.
+
+No external WatchFacts profile links are exposed. Numeric ratings remain null when no numeric rating evidence exists.
+
+### Dealer Directory blocker
+
+Dynamic listing linkage is **not complete**. WTS/WTB totals on canonical profiles remain zero because each release-view linkage strategy reached PostgreSQL statement timeout. The fail-closed runs were:
+
+- `31842577856`: public HTTP scan failed on repeated 503.
+- `31842806310`: text listing ID required UUID cast.
+- `31842889912`: full public-view join timed out.
+- `31846337214`: per-identity ordered public-view query timed out.
+- `31846594197`: indexed candidate/public-view join timed out.
+- `31846869292`: UUID bucket/public-view join timed out.
+
+The schema/profile/review snapshot work is live; the listing ledger is not reconciled. Do not claim listing-to-listing directory completion.
+
+### Safe next Dealer Directory action
+
+QNSA was previously measured near 7.894 GiB of an 8 GiB disk. Before adding an index:
+
+1. Refresh disk capacity via the read-only QNSA disk audit.
+2. Expand QNSA to at least 10–12 GiB, or reclaim only authorized derived data.
+3. Add a forward-only composite/expression index matching verified seller phone plus listing cursor on the release source.
+4. EXPLAIN the exact dealer-link query and require an index scan.
+5. Resume bounded linkage and require zero duplicate verified phones, zero orphan links, and exact listing/WTS/WTB reconciliation.
+6. Verify internal dealer profiles and Trading Floor rating badges in the live browser.
+
+Do not increase statement timeout as the primary fix and do not weaken the public release gate.
+
+## Verification commands
+
+```powershell
+git fetch origin main
+git log origin/main -1 --oneline
+npm run test:normalization
+node --test tests/dealers-public-directory.test.cjs tests/qnsa-canonical-dealer-directory.test.cjs tests/dealer-directory-builders.test.cjs tests/dealer-profile-payload.test.cjs
+npm run build
+gh run list --repo Pablodd1/wf --workflow qnsa-canonical-dealer-directory.yml --limit 10
+```
+
+Live checks:
+
+- `/api/health` must report QNSA `qnsafosakvonzgfcsphh`.
+- `/api/dealers?pageSize=5` must remain `source=canonical-database`.
+- Refresh exact Trading Floor and Price Research counts; never quote a stale total or a returned-page count as a global total.
+- Check desktop and mobile visually after every customer-facing modification.
+
+## Definition of completion
+
+This program is complete only when:
+
+- All six currently released brands pass broad and exact Trading/Price acceptance.
+- All multi-item parents are withheld and deterministic children are reviewed.
+- Supported currency evidence is converted with dated provenance; no guessed FX.
+- Dealer listing linkage reconciles and profiles show real dynamic WTS/WTB/listings.
+- POST IT and incoming group-chat entries preserve immutable lineage and reach the same review/publication pipeline.
+- Panerai passes canary and controlled release; only then proceed to Omega.
+- Production browser verification passes with no 5xx, no duplicate pagination, no bundle-image leakage, and no fabricated ratings.
