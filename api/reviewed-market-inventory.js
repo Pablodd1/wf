@@ -29,7 +29,12 @@ let legacyMarketViewContractDetected = false;
 
 async function loadQnsaReviewedReleaseSummary(client) {
   const { data, error } = await client.rpc('qnsa_market_feed_counts');
-  if (error) throw error;
+  // Summary counts are useful metadata, but they must never take the customer
+  // inventory feed offline. The bounded page RPC remains the authoritative
+  // row path while a stale/missing count snapshot is repaired separately.
+  if (error) {
+    console.warn('[reviewed-market-inventory] QNSA count snapshot unavailable:', error.message);
+  }
   const marketCounts = Array.isArray(data) ? data : [];
   const watchRows = marketCounts.filter(row => String(row.category || '').toUpperCase() === 'WATCH');
   return {
@@ -40,7 +45,8 @@ async function loadQnsaReviewedReleaseSummary(client) {
     canonical_listings: watchRows.reduce((sum, row) => sum + Number(row.row_count || 0), 0),
     duplicate_rows_held: null,
     errors: 0,
-    reconciled: true,
+    reconciled: !error,
+    count_snapshot_available: !error,
     source: 'mariadb-normalized-20260811-codex-v1',
     brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet'].map(brand => ({
       brand,

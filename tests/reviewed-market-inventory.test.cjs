@@ -63,6 +63,13 @@ test('same-reference Trading Floor listings preserve the global image boundary b
   });
 });
 
+test('a count-snapshot failure does not take the bounded customer feed offline', () => {
+  assert.match(source, /QNSA count snapshot unavailable/);
+  assert.match(source, /const marketCounts = Array\.isArray\(data\) \? data : \[\]/);
+  assert.match(source, /count_snapshot_available: !error/);
+  assert.doesNotMatch(source, /if \(error\) throw error;\s*const marketCounts/);
+});
+
 test('Trading Floor source view is allowlisted and defaults to the legacy source', () => {
   assert.equal(api.MARKET_SOURCE_VIEW, 'reviewed_workbook_market_source_v2');
   const sourceText = fs.readFileSync(
