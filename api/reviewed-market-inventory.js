@@ -1138,7 +1138,10 @@ module.exports = async function handler(req, res) {
           p_posted_after: postedAfter,
         }),
       });
-      if (sidecarRpcEligible && !pageRowsRes.ok && [404, 400].includes(pageRowsRes.status)) {
+      if (sidecarRpcEligible && !pageRowsRes.ok) {
+        // The correction sidecar is optional enrichment. A transient database
+        // timeout (5xx) must fall back to the bounded canonical feed just as a
+        // not-yet-applied sidecar function (400/404) does.
         pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
