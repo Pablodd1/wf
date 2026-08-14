@@ -1110,21 +1110,10 @@ module.exports = async function handler(req, res) {
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
     if (qnsaBroadPage && !legacyMarketViewContractDetected) {
-      const sidecarRpcEligible = ['ALL', 'WATCH'].includes(itemCategory)
-        && ['rolex', 'patek philippe', 'audemars piguet'].includes(String(brand || '').trim().toLowerCase())
-        && !imagesOnly && !region && !postedAfter;
-      let pageRowsRes = sidecarRpcEligible
-        ? await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_three_brand_fx_trading_floor_rows`, {
-            method: 'POST',
-            headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              p_brand: brand,
-              p_limit: qnsaBrandScanLimit,
-              p_offset: requestedOffset,
-              p_listing_type: listingType || null,
-            }),
-          })
-        : await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
+      // Broad browsing always uses the indexed canonical feed. The FX sidecar
+      // is reference-scoped enrichment and can consume the hosted statement
+      // timeout on an unconstrained brand scan before any fallback can run.
+      let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1138,25 +1127,6 @@ module.exports = async function handler(req, res) {
           p_posted_after: postedAfter,
         }),
       });
-      if (sidecarRpcEligible && !pageRowsRes.ok) {
-        // The correction sidecar is optional enrichment. A transient database
-        // timeout (5xx) must fall back to the bounded canonical feed just as a
-        // not-yet-applied sidecar function (400/404) does.
-        pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            p_brand: brand,
-            p_category: itemCategory === 'ALL' ? null : itemCategory,
-            p_limit: qnsaBrandScanLimit,
-            p_offset: requestedOffset,
-            p_listing_type: listingType || null,
-            p_images_only: imagesOnly,
-            p_location: region || null,
-            p_posted_after: postedAfter,
-          }),
-        });
-      }
       if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
         // The application can deploy before the forward database migration.
         // Preserve the proven two-brand watch feed during that short window;

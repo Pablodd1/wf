@@ -70,10 +70,13 @@ test('a count-snapshot failure does not take the bounded customer feed offline',
   assert.doesNotMatch(source, /if \(error\) throw error;\s*const marketCounts/);
 });
 
-test('a sidecar timeout falls back to the bounded canonical market feed', () => {
-  assert.match(source, /if \(sidecarRpcEligible && !pageRowsRes\.ok\)/);
-  assert.match(source, /qnsa_three_brand_fx_trading_floor_rows[\s\S]*qnsa_market_feed_page_rows/);
-  assert.doesNotMatch(source, /sidecarRpcEligible && !pageRowsRes\.ok && \[404, 400\]\.includes/);
+test('broad pages bypass the reference-scoped FX sidecar', () => {
+  const broadBlock = source.slice(
+    source.indexOf('if (qnsaBroadPage && !legacyMarketViewContractDetected)'),
+    source.indexOf("if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'"),
+  );
+  assert.match(broadBlock, /qnsa_market_feed_page_rows/);
+  assert.doesNotMatch(broadBlock, /qnsa_three_brand_fx_trading_floor_rows/);
 });
 
 test('Trading Floor source view is allowlisted and defaults to the legacy source', () => {
