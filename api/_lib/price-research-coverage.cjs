@@ -16,9 +16,13 @@ function buildPriceResearchCoverage(rows, catalogBrands) {
     if (String(row.category || '').trim().toUpperCase() !== 'WATCH') continue;
     const brand = String(row.brand || '').trim();
     const listingType = String(row.listing_type || '').trim().toUpperCase();
-    if (!brand || !['WTS', 'WTB'].includes(listingType)) continue;
-    if (!grouped.has(brand.toLowerCase())) {
-      grouped.set(brand.toLowerCase(), {
+    const brandKey = brand.toLowerCase();
+    // The normalized staging snapshot can retain malformed historical brand
+    // labels (for example model names). Price Research discovery is catalog-
+    // backed, so never expose a brand that has no searchable catalog identity.
+    if (!brand || !catalogByBrand.has(brandKey) || !['WTS', 'WTB'].includes(listingType)) continue;
+    if (!grouped.has(brandKey)) {
+      grouped.set(brandKey, {
         brand,
         wts_with_supplied_price: 0,
         wts_without_supplied_price: 0,
@@ -26,7 +30,7 @@ function buildPriceResearchCoverage(rows, catalogBrands) {
         wtb_without_target_price: 0,
       });
     }
-    const target = grouped.get(brand.toLowerCase());
+    const target = grouped.get(brandKey);
     const supplied = row.supplied_price === true || String(row.supplied_price).toLowerCase() === 'true';
     const key = listingType === 'WTS'
       ? supplied ? 'wts_with_supplied_price' : 'wts_without_supplied_price'

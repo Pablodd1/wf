@@ -35,6 +35,17 @@ test('brand coverage is non-overlapping and reconciles to the Trading Floor tota
   assert.equal(result.totals.trading_floor_listings, 17);
 });
 
+test('coverage excludes malformed historical brand labels without a catalog identity', () => {
+  const result = buildPriceResearchCoverage([
+    { category: 'WATCH', brand: 'Rolex', listing_type: 'WTS', supplied_price: true, row_count: 8 },
+    { category: 'WATCH', brand: 'Datejust', listing_type: 'WTS', supplied_price: true, row_count: 312 },
+    { category: 'WATCH', brand: 'Unspecified', listing_type: 'WTB', supplied_price: false, row_count: 12492 },
+  ], [{ brand: 'Rolex', model_count: 19, reference_count: 301 }]);
+
+  assert.deepEqual(result.brands.map(item => item.brand), ['Rolex']);
+  assert.equal(result.totals.trading_floor_listings, 8);
+});
+
 test('coverage API reads only the bounded market-count snapshot and labels exact analytics reference-scoped', () => {
   const api = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research-coverage.js'), 'utf8');
   assert.match(api, /client\.rpc\('qnsa_market_feed_counts'\)/);
