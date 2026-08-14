@@ -48,7 +48,7 @@ async function loadQnsaReviewedReleaseSummary(client) {
     reconciled: !error,
     count_snapshot_available: !error,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet'].map(brand => ({
+    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille'].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,
@@ -87,6 +87,7 @@ function unavailableQnsaReleaseSummary() {
 }
 
 function snapshotInventoryTotal(summary, filters) {
+  if (summary?.count_snapshot_available === false) return null;
   const unsupported = filters.search || filters.reference || filters.dial || filters.imagesOnly
     || filters.condition || filters.region || filters.rating || filters.postedAfter;
   if (unsupported || !Array.isArray(summary?.market_counts)) return null;

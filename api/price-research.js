@@ -59,7 +59,13 @@ function isMissingRpcError(error) {
 }
 
 async function loadQnsaPriceRpcRows(client, args) {
-  let result = await client.rpc('qnsa_three_brand_fx_price_research_rows', args);
+  const isRichardMille = String(args?.p_brand || '').trim().toLowerCase() === 'richard mille';
+  // The correction sidecar is intentionally three-brand scoped. RM must use
+  // the reviewed bounded source until a separately audited RM correction lane
+  // exists; an empty sidecar result is not evidence that the cohort is empty.
+  let result = isRichardMille
+    ? await client.rpc('qnsa_bounded_price_research_rows', args)
+    : await client.rpc('qnsa_three_brand_fx_price_research_rows', args);
   if (result.error && isMissingRpcError(result.error)) {
     result = await client.rpc('qnsa_bounded_price_research_rows', args);
   }
@@ -70,7 +76,7 @@ function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['rolex', 'patek philippe', 'audemars piguet'].includes(normalizedBrand)
+    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
     : null;
 }
@@ -548,7 +554,7 @@ module.exports = async function handler(req, res) {
     );
     const exactReviewedReleaseReference = isReviewedReleaseReference(brand, rawRef);
     const exactKnownReference = exactCatalogReference || exactReviewedReleaseReference;
-    const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet']
+    const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet', 'richard mille']
       .includes(brand.toLowerCase());
     // Reviewed workbooks remain first. When an exact catalog reference has no
     // workbook cohort, query the bounded approved watch-record lane directly;
@@ -1213,7 +1219,7 @@ module.exports = async function handler(req, res) {
       },
       admission_policy: {
         verdicts: ['APPROVED', ...HUMAN_REVIEW_VERDICTS],
-        human_review_scope: ['Rolex', 'Patek Philippe', 'Audemars Piguet'],
+        human_review_scope: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille'],
         human_review_is_analytics_eligible_only_after_all_evidence_gates: true,
         approved_minimum_confidence: MIN_RELEASE_CONFIDENCE,
         human_review_minimum_confidence: null,

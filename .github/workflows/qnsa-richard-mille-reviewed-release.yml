@@ -1,0 +1,92 @@
+name: QNSA Richard Mille reviewed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_RM or ENABLE_QNSA_RM
+        required: true
+        type: string
+      mode:
+        required: true
+        default: audit
+        type: choice
+        options: [audit, enable]
+      run_key:
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+
+concurrency:
+  group: qnsa-richard-mille-reviewed-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      RUN_KEY: ${{ inputs.run_key }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate authorization
+        shell: pwsh
+        run: |
+          $expected = if ('${{ inputs.mode }}' -eq 'enable') { 'ENABLE_QNSA_RM' } else { 'AUDIT_QNSA_RM' }
+          if ('${{ inputs.confirmation }}' -cne $expected) { throw "Confirmation must be $expected" }
+          if ($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Wrong Supabase target' }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'Missing Supabase access token' }
+      - name: Apply forward contract
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = Get-Content -Raw supabase/migrations/20260814010000_qnsa_richard_mille_reviewed_release.sql
+          if ($sql -match '(?i)(DELETE|TRUNCATE|UPDATE)\s+(FROM\s+)?(staging\.listings|public\.raw_message_versions)') { throw 'Destructive source mutation' }
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body | Out-Null
+      - name: Audit and arm fail-closed
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $enabled = if ('${{ inputs.mode }}' -eq 'enable') { 'true' } else { 'false' }
+          $sql = @"
+          WITH checkpoint AS (
+            SELECT status,error_rows FROM staging.mariadb_normalization_import_checkpoints WHERE run_key='$env:RUN_KEY'
+          ), candidates AS (
+            SELECT l.* FROM staging.listings l
+            WHERE l.normalization_run_key='$env:RUN_KEY' AND l.brand_normalized='Richard Mille'
+              AND upper(COALESCE(l.category,''))='WATCH' AND l.parent_id IS NULL
+              AND COALESCE(l.is_bundle,false)=false
+              AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
+              AND COALESCE(l.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
+              AND l.raw_message_version_id IS NOT NULL AND COALESCE(l.source_record_id,'')<>''
+              AND l.source_hash ~ '^[0-9a-f]{64}$' AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
+              AND lower(COALESCE(l.trading_floor_status,'')) NOT IN ('bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate','withdrawn','rejected','hidden','deleted','archived')
+          ), updated AS (
+            UPDATE public.qnsa_two_brand_release_control
+            SET enabled_run_key='$env:RUN_KEY', trading_floor_enabled=$enabled,
+                price_research_enabled=$enabled, updated_at=now(),
+                change_reason='Richard Mille ${{ inputs.mode }} after bounded candidate audit'
+            WHERE canonical_brand='Richard Mille' RETURNING 1
+          )
+          SELECT jsonb_build_object(
+            'checkpoint_status',(SELECT status FROM checkpoint),
+            'checkpoint_errors',(SELECT error_rows FROM checkpoint),
+            'control_rows',(SELECT count(*) FROM updated),
+            'candidates',(SELECT count(*) FROM candidates),
+            'wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS'),
+            'wtb',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTB'),
+            'priced_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND price_usd>0),
+            'references',(SELECT count(DISTINCT reference_normalized) FROM candidates)
+          ) evidence;
+          "@
+          $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
+          $result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $e=$result[0].evidence; $e|ConvertTo-Json -Depth 5
+          if($e.checkpoint_status -ne 'NORMALIZATION_STAGED' -or [long]$e.checkpoint_errors -ne 0){throw 'Run is not reconciled'}
+          if([long]$e.control_rows -ne 1 -or [long]$e.candidates -lt 1 -or [long]$e.wts -lt 1 -or [long]$e.priced_wts -lt 1){throw 'RM candidate gate failed'}

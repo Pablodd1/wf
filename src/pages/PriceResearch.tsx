@@ -425,7 +425,7 @@ const RED = '#dc3545';
 const BLUE = '#0d6efd';
 const COMPARABLE_LISTING_PREVIEW_LIMIT = 12;
 const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
-const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
+const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',

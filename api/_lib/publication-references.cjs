@@ -22,7 +22,7 @@ const THREE_WATCH_RELEASE_REFERENCES = [
   'Audemars Piguet::15400'
 ].join('|');
 const FULL_REVIEWED_BRAND_RELEASE = 'ALL_REVIEWED';
-const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe', 'audemars piguet']);
+const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe', 'audemars piguet', 'richard mille']);
 const MIN_RELEASE_CONFIDENCE = 90;
 const REVIEWED_PANERAI_RECORD_PREFIX = 'reviewed_panerai_';
 const REVIEWED_PANERAI_SOURCE = 'PANERAI_REVIEWED_XLSX_20260729';
