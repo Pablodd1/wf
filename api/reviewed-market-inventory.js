@@ -1139,22 +1139,29 @@ module.exports = async function handler(req, res) {
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
     if (qnsaBroadPage && !legacyMarketViewContractDetected) {
-      // Broad browsing always uses the indexed canonical feed. The FX sidecar
-      // is reference-scoped enrichment and can consume the hosted statement
-      // timeout on an unconstrained brand scan before any fallback can run.
-      let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_market_feed_page_rows`, {
+      // WATCH browsing uses the proven indexed watch-only feed. The general
+      // category feed performs additional expression sorting and immutable
+      // evidence joins that can exceed the hosted statement timeout on broad
+      // brand pages. Keep it for non-watch categories only.
+      const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
+      let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
+        ? 'qnsa_trading_floor_page_rows'
+        : 'qnsa_market_feed_page_rows'}`, {
         method: 'POST',
         headers: { ...headers, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          p_brand: brand || null,
-          p_category: itemCategory === 'ALL' ? null : itemCategory,
-          p_limit: qnsaBrandScanLimit,
-          p_offset: requestedOffset,
-          p_listing_type: listingType || null,
-          p_images_only: imagesOnly,
-          p_location: region || null,
-          p_posted_after: postedAfter,
-        }),
+        body: JSON.stringify(watchFeed
+          ? { p_brand: brand || null, p_limit: qnsaBrandScanLimit,
+              p_offset: requestedOffset, p_listing_type: listingType || null }
+          : {
+              p_brand: brand || null,
+              p_category: itemCategory,
+              p_limit: qnsaBrandScanLimit,
+              p_offset: requestedOffset,
+              p_listing_type: listingType || null,
+              p_images_only: imagesOnly,
+              p_location: region || null,
+              p_posted_after: postedAfter,
+            }),
       });
       if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
         // The application can deploy before the forward database migration.

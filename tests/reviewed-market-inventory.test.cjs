@@ -76,6 +76,7 @@ test('broad pages bypass the reference-scoped FX sidecar', () => {
     broadStart,
     source.indexOf('const pageRows =', broadStart),
   );
+  assert.match(broadBlock, /qnsa_trading_floor_page_rows/);
   assert.match(broadBlock, /qnsa_market_feed_page_rows/);
   assert.doesNotMatch(broadBlock, /qnsa_three_brand_fx_trading_floor_rows/);
 });
