@@ -57,9 +57,11 @@ test('hotfix workflow is pinned, bounded, and adds no storage-heavy index', () =
   assert.doesNotMatch(workflow, /candidate_page\(brand,0,50,500,NULL\)/);
   assert.match(workflow, /cross_page_duplicate_ids/);
   assert.match(workflow, /Richard Mille exceeded the 12-candidate latency stride/);
+  assert.match(workflow, /Customer endpoint latency smoke/);
+  assert.match(workflow, /watchfacts-poc\.vercel\.app\/api\/reviewed-market-inventory/);
   assert.match(workflow, /first_latency_ms -gt 18000/);
   assert.match(workflow, /second_latency_ms -gt 8000/);
-  assert.match(workflow, /Candidate page exceeds the hosted cold\/warm latency budget/);
+  assert.match(workflow, /Customer endpoint exceeds the hosted cold\/warm latency budget/);
   assert.doesNotMatch(workflow, /'Cartier',21,2650/,
     'Cartier starts at logical candidate offset zero inside its indexed W namespace');
   assert.match(workflow, /CREATE\\s\+INDEX/);
