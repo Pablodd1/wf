@@ -282,6 +282,7 @@ export default function TradingFloor() {
     ? requestedDate as DateFilter
     : '';
   const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
+  const [releaseBrandTotals, setReleaseBrandTotals] = useState<Record<string, number>>({});
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
@@ -330,6 +331,12 @@ export default function TradingFloor() {
     }
     return true;
   }).sort(compareListingsForDisplay), [imagesOnly, listings, locationFilter, pricedOnly]);
+  const unfilteredBrandTotal = brandFilter
+    && categoryFilter === 'watches'
+    && !intentFilter && !search && !exactReference && !imagesOnly && !pricedOnly
+    && !locationFilter && !ratingFilter && !dateFilter
+    ? releaseBrandTotals[brandFilter] ?? null
+    : null;
 
   const resetResults = useCallback(() => {
     setCursor(null);
@@ -370,6 +377,20 @@ export default function TradingFloor() {
         listScrollPositionRef.current = null;
       });
     });
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch('/api/live-release-summary', { signal: controller.signal })
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Release summary unavailable')))
+      .then(payload => {
+        const totals = Object.fromEntries((payload.brands || [])
+          .filter((entry: { brand?: string; listing_count?: number }) => entry.brand && Number.isFinite(Number(entry.listing_count)))
+          .map((entry: { brand: string; listing_count: number }) => [entry.brand, Number(entry.listing_count)]));
+        setReleaseBrandTotals(totals);
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
   }, []);
 
   useEffect(() => {
@@ -602,7 +623,9 @@ export default function TradingFloor() {
               <p className="font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: GOLD_BRIGHT }}>Curated Luxury</p>
               <h1 className="mt-1 font-serif text-[36px] font-normal tracking-[-0.025em]" style={{ color: INK }}>Trading Floor</h1>
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {total === null
+                {unfilteredBrandTotal !== null
+                  ? `${unfilteredBrandTotal.toLocaleString()} ${brandFilter} listings globally`
+                  : total === null
                   ? `${((cursorHistory.length * pageSize) + visibleListings.length).toLocaleString()} viewed so far${hasMore ? ' · more listings available' : ''}`
                   : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings globally`}
               </p>
@@ -794,7 +817,9 @@ export default function TradingFloor() {
               <><strong style={{ color: INK }}>Loading released watch inventory…</strong></>
             ) : (
               <>Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong>
-                {total === null
+                {unfilteredBrandTotal !== null
+                  ? <> on this page of <strong style={{ color: INK }}>{unfilteredBrandTotal.toLocaleString()}</strong> {brandFilter} listings</>
+                  : total === null
                   ? <> on page <strong style={{ color: INK }}>{cursorHistory.length + 1}</strong>
                     {' · '}<strong style={{ color: INK }}>{((cursorHistory.length * pageSize) + visibleListings.length).toLocaleString()}</strong> viewed so far
                     {hasMore ? ' · more available globally' : ''}</>

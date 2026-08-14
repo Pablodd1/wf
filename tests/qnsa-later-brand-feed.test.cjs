@@ -48,6 +48,7 @@ test('hotfix workflow is pinned, bounded, and adds no storage-heavy index', () =
   assert.match(workflow, /read_only = \$false/);
   assert.match(workflow, /20260814114500_qnsa_later_brand_candidate_cursor\.sql/);
   assert.match(workflow, /20260814115000_qnsa_later_brand_bounded_candidate_stride\.sql/);
+  assert.match(workflow, /20260814123000_qnsa_rm_low_latency_stride\.sql/);
   assert.match(workflow,
     /qnsa_later_brand_candidate_stride_page\('\$safeBrand',\$offset,50,NULL\)/);
   assert.match(workflow, /Invoke-CandidatePage \$brand 0/);
@@ -55,6 +56,8 @@ test('hotfix workflow is pinned, bounded, and adds no storage-heavy index', () =
     /Invoke-CandidatePage \$brand \(\[long\]\$firstPage\.next_offset\)/);
   assert.doesNotMatch(workflow, /candidate_page\(brand,0,50,500,NULL\)/);
   assert.match(workflow, /cross_page_duplicate_ids/);
+  assert.match(workflow, /Richard Mille exceeded the 12-candidate latency stride/);
+  assert.match(workflow, /Candidate page exceeds the hosted latency budget/);
   assert.doesNotMatch(workflow, /'Cartier',21,2650/,
     'Cartier starts at logical candidate offset zero inside its indexed W namespace');
   assert.match(workflow, /CREATE\\s\+INDEX/);
@@ -67,7 +70,7 @@ test('strict later-brand wrapper rejects parser-artifact references', () => {
   assert.doesNotMatch(strictMigration, /CREATE INDEX|INSERT INTO staging\.listings|UPDATE staging\.listings/);
   assert.match(workflow, /invalid_rows/);
   assert.match(workflow, /\$evidence = @\(\)/);
-  assert.match(workflow, /return \$result\[-1\]\.page/);
+  assert.match(workflow, /return @\{ page = \$result\[-1\]\.page; latency_ms = \$started\.ElapsedMilliseconds \}/);
 });
 
 test('strict later-brand wrapper stays inside the proven 51-row latency bound', () => {

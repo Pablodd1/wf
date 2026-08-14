@@ -38,7 +38,8 @@ jobs:
             Get-Content -Raw supabase/migrations/20260814112500_qnsa_later_brand_reference_window.sql
             Get-Content -Raw supabase/migrations/20260814114000_qnsa_later_brand_stable_pagination.sql
             Get-Content -Raw supabase/migrations/20260814114500_qnsa_later_brand_candidate_cursor.sql
-            Get-Content -Raw supabase/migrations/20260814115000_qnsa_later_brand_bounded_candidate_stride.sql
+          Get-Content -Raw supabase/migrations/20260814115000_qnsa_later_brand_bounded_candidate_stride.sql
+          Get-Content -Raw supabase/migrations/20260814123000_qnsa_rm_low_latency_stride.sql
           ) -join "`n"
           if ($sql -match '(?i)(CREATE\s+INDEX|INSERT\s+INTO\s+staging\.listings|UPDATE\s+staging\.listings|DELETE\s+FROM\s+staging\.listings)') {
             throw 'Unexpected storage-heavy or destructive statement'
@@ -57,17 +58,21 @@ jobs:
             $safeBrand = $brand.Replace("'", "''")
             $sql = "SET LOCAL statement_timeout='20s'; SELECT public.qnsa_later_brand_candidate_stride_page('$safeBrand',$offset,50,NULL) AS page;"
             $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
+            $started = [System.Diagnostics.Stopwatch]::StartNew()
             $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
               -Headers $headers -ContentType application/json -Body $body
-            return $result[-1].page
+            $started.Stop()
+            return @{ page = $result[-1].page; latency_ms = $started.ElapsedMilliseconds }
           }
           $evidence = @()
           foreach ($brand in @('Richard Mille', 'Cartier')) {
             # Each page gets its own 20-second statement budget; one slow brand
             # cannot consume the other brand/page smoke budget.
-            $firstPage = Invoke-CandidatePage $brand 0
+            $firstResult = Invoke-CandidatePage $brand 0
+            $firstPage = $firstResult.page
             if (-not $firstPage -or -not $firstPage.rows) { throw "Missing first-page envelope for $brand" }
-            $secondPage = Invoke-CandidatePage $brand ([long]$firstPage.next_offset)
+            $secondResult = Invoke-CandidatePage $brand ([long]$firstPage.next_offset)
+            $secondPage = $secondResult.page
             if (-not $secondPage -or -not $secondPage.rows) { throw "Missing second-page envelope for $brand" }
             $firstIds = @($firstPage.rows | ForEach-Object { [string]$_.id })
             $secondIds = @($secondPage.rows | ForEach-Object { [string]$_.id })
@@ -81,6 +86,8 @@ jobs:
               scanned_count = [long]$firstPage.scanned_count
               next_offset = [long]$firstPage.next_offset
               has_more = [bool]$firstPage.has_more
+              first_latency_ms = [long]$firstResult.latency_ms
+              second_latency_ms = [long]$secondResult.latency_ms
               invalid_rows = $invalidRows
               cross_page_duplicate_ids = $duplicates
             }
@@ -89,6 +96,8 @@ jobs:
           if ($evidence.Count -ne 2) { throw 'Missing per-brand smoke evidence' }
           if (@($evidence | Where-Object { [long]$_.rows -lt 1 }).Count -gt 0) { throw 'Bounded feed returned no valid rows' }
           if (@($evidence | Where-Object { [long]$_.scanned_count -lt 1 -or [long]$_.scanned_count -gt 50 }).Count -gt 0) { throw 'Candidate stride is outside the bounded contract' }
+          if (@($evidence | Where-Object { $_.brand -eq 'Richard Mille' -and [long]$_.scanned_count -gt 12 }).Count -gt 0) { throw 'Richard Mille exceeded the 12-candidate latency stride' }
+          if (@($evidence | Where-Object { [long]$_.first_latency_ms -gt 7000 -or [long]$_.second_latency_ms -gt 7000 }).Count -gt 0) { throw 'Candidate page exceeds the hosted latency budget' }
           if (@($evidence | Where-Object { [long]$_.next_offset -lt 1 }).Count -gt 0) { throw 'Candidate cursor did not advance' }
           if (@($evidence | Where-Object { [long]$_.invalid_rows -ne 0 }).Count -gt 0) { throw 'Parser-artifact reference escaped strict feed' }
           if (@($evidence | Where-Object { [long]$_.cross_page_duplicate_ids -ne 0 }).Count -gt 0) { throw 'Candidate cursor repeated IDs across pages' }
