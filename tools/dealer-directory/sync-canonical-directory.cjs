@@ -31,17 +31,13 @@ async function run({ env = process.env, fetchImpl = fetch } = {}) {
   `, true, fetchImpl);
   let linked = 0;
   for (const identity of identities || []) {
-    let cursor = null;
-    for (let page = 0; page < 1000; page += 1) {
+    for (const bucket of '0123456789abcdef') {
       const result = await managementQuery(config,
-        `SELECT public.sync_qnsa_dealer_public_listing_links_batch(${sqlLiteral(identity.phone)}, ${cursor ? sqlLiteral(cursor) : 'NULL'}, 200) AS result`,
+        `SELECT public.sync_qnsa_dealer_public_listing_links_bucket(${sqlLiteral(identity.phone)}, ${sqlLiteral(bucket)}) AS result`,
         false, fetchImpl);
       const batch = result?.[0]?.result;
       if (!batch) throw new Error('Dealer listing batch returned no reconciliation');
       linked += Number(batch.applied || 0);
-      if (!batch.has_more) break;
-      if (!batch.next_id || batch.next_id === cursor) throw new Error('Dealer listing cursor did not advance');
-      cursor = batch.next_id;
     }
   }
 

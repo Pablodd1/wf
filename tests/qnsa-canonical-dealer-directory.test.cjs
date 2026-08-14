@@ -10,6 +10,7 @@ const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '202
 const dealersApi = fs.readFileSync(path.join(root, 'api', 'dealers.js'), 'utf8');
 const profileApi = fs.readFileSync(path.join(root, 'api', 'dealer-profile.js'), 'utf8');
 const batchMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260814204000_qnsa_canonical_dealer_batched_link_sync.sql'), 'utf8');
+const bucketMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations', '20260814204500_qnsa_canonical_dealer_bucket_link_sync.sql'), 'utf8');
 
 test('canonical directory is private-by-default and exact-phone keyed', () => {
   for (const table of ['dealers', 'dealer_source_identities', 'dealer_directory_snapshots', 'dealer_reviews', 'dealer_group_memberships', 'dealer_listing_links']) {
@@ -21,6 +22,13 @@ test('canonical directory is private-by-default and exact-phone keyed', () => {
   assert.match(migration, /REVOKE ALL ON public\.dealers/);
   assert.match(migration, /extensions\.digest/);
   assert.doesNotMatch(migration, /UPDATE\s+(?:raw|staging)\.|DELETE\s+FROM\s+(?:raw|staging)\.|INSERT\s+INTO\s+(?:raw|staging)\./i);
+});
+
+test('production sync uses contact-indexed UUID buckets without a global sort or new index', () => {
+  assert.match(bucketMigration, /substring\(lower\(l\.id::text\), 1, 1\) = p_bucket/);
+  assert.match(bucketMigration, /l\.contact_number IN \(v_phone, '\+' \|\| v_phone\)/);
+  assert.match(bucketMigration, /qnsa_rolex_patek_trading_floor_source/);
+  assert.doesNotMatch(bucketMigration, /ORDER BY|CREATE INDEX/i);
 });
 
 test('listing reconciliation is bounded, cursor-driven, and release-view gated', () => {

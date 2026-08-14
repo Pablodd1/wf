@@ -33,6 +33,7 @@ jobs:
           $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260814203000_qnsa_canonical_dealer_directory.sql'
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260814203500_qnsa_canonical_dealer_public_link_sync.sql')
           $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260814204000_qnsa_canonical_dealer_batched_link_sync.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260814204500_qnsa_canonical_dealer_bucket_link_sync.sql')
           $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
       - name: Reconcile snapshots and released listing lineage
