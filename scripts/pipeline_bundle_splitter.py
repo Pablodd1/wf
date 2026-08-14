@@ -16,6 +16,43 @@ EMOJI_SEPARATORS = [
     "\U0001f195", "\u2705", "\u2b50\ufe0f", "\u2b50", "\U0001f525", "\U0001f31f", "\U0001f48e", "\u2022", "-", "/"
 ]
 
+MULTI_ITEM_LANGUAGE = re.compile(
+    r'\b(bundle|multi[\s-]?listing|multiple watches|several watches|two watches|'
+    r'both watches|pair of watches|set of watches|lot of watches|watch lot|stock list|package deal|combo deal)\b',
+    re.I,
+)
+MULTI_ITEM_QUANTITY = re.compile(r'\b(x\s*[2-9]|[2-9]\s*x|[2-9]\s*(pcs|pieces|watches))\b', re.I)
+MULTI_REQUEST = re.compile(r'\b(WTB|NTQ|looking for|seeking|wanted|need)\b', re.I)
+
+def detect_multi_item_risk(raw_text):
+    """Conservative parent quarantine; never fabricates child identities."""
+    text = str(raw_text or '')
+    if not text.strip():
+        return False
+    segments = split_bundle_listing(text)
+    if len(segments) >= 2 or MULTI_ITEM_LANGUAGE.search(text) or MULTI_ITEM_QUANTITY.search(text):
+        return True
+    rm_refs = {
+        re.sub(r'[\s.-]', '', value.upper())
+        for value in re.findall(r'\bRM\s*\d{2,3}(?:-\d{2})?(?:-[A-Z0-9]{1,4})?\b', text, re.I)
+    }
+    rm_price_tokens = re.findall(
+        r'(?:USDTT?|USDT|HKD|EUR|GBP|CHF|SGD|AED|CNY|JPY)\s*\d|'
+        r'\d(?:[\d.,]*\d)?\s*(?:USDTT?|USDT|HKD|EUR|GBP|CHF|SGD|AED|CNY|JPY)',
+        text,
+        re.I,
+    )
+    if len(rm_refs) >= 2 and len(rm_price_tokens) >= 2:
+        return True
+    if len(rm_refs) >= 2 and MULTI_REQUEST.search(text) and re.search(r'[,;]|\s*/\s*|\s+or\s+|\s+and\s+', text, re.I):
+        return True
+    reviewed_brands = sum(bool(pattern.search(text)) for pattern in [
+        re.compile(r'\bRolex\b', re.I), re.compile(r'\b(?:Patek(?: Philippe)?|PP)\b', re.I),
+        re.compile(r'\b(?:Audemars(?: Piguet)?|AP)\b', re.I),
+        re.compile(r'\b(?:Richard Mille|RM(?=\s*\d))\b', re.I), re.compile(r'\bCartier\b', re.I),
+    ])
+    return reviewed_brands >= 2
+
 def split_bundle_listing(raw_text):
     """
     Splits a raw bundle listing into individual watch listings with brand context inheritance.

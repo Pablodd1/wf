@@ -95,6 +95,26 @@ test('requires a bundle to be submitted alone', () => {
   assert.match(validateBatch({ items: [bundle, single] }).error, /bundle by itself/);
 });
 
+test('server overrides a false single-item claim when raw evidence contains several watches', () => {
+  const result = validateSubmission({
+    image_urls, intent: 'WTS', category: 'WATCH', is_bundle: false,
+    raw_message: 'WTS Rolex 126500LN White USD30k, Patek 5712/1A Blue USD100k',
+    brand: 'Rolex', model: 'Daytona', reference: '126500LN', dial_color: 'White',
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.isBundle, true);
+  assert.ok(result.multiItemReasons.length > 0);
+});
+
+test('multi-reference WTB is saved for deferred separation instead of published as one request', () => {
+  const result = validateSubmission({
+    image_urls, intent: 'WTB', category: 'WATCH', is_bundle: false,
+    raw_message: 'Looking for RM001, RM002, RM003',
+  });
+  assert.equal(result.error, undefined);
+  assert.equal(result.isBundle, true);
+});
+
 test('credential stamp requires linked name, verified phone, and location', () => {
   const complete = { name: 'Alex Dealer', phone: '+13055550101', location: 'Miami, US', credential_status: 'VERIFIED' };
   assert.equal(credentialError(complete), null);

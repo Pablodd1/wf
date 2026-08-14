@@ -2,7 +2,7 @@ import re
 import json
 import uuid
 from datetime import datetime
-from pipeline_bundle_splitter import split_bundle_listing
+from pipeline_bundle_splitter import detect_multi_item_risk, split_bundle_listing
 
 CONDITIONS_MAP = {
     1: 'New', 2: 'Used - Like New', 3: 'Used - Good',
@@ -287,8 +287,8 @@ class WatchFactsPipelineProcessor:
         has_papers = bool(re.search(r'\b(papers|card|cert)\b', message_text, re.I))
         segments = split_bundle_listing(message_text)
         lines = [l.strip() for l in message_text.split('\n') if l.strip()]
-        is_bundle = len(lines) > 2 or len(segments) >= 2 or bool(
-            re.search(r'(x\d+|\bset\b|\bbundle\b|\bpackage\b|\bmultilisting\b|\b\d+\s+pcs\b)', message_text, re.I)
+        is_bundle = detect_multi_item_risk(message_text) or len(lines) > 2 or len(segments) >= 2 or bool(
+            re.search(r'(x\d+|\bbundle\b|\bpackage\b|\bmultilisting\b|\b\d+\s+pcs\b)', message_text, re.I)
         )
 
         return {
@@ -405,8 +405,8 @@ class WatchFactsPipelineProcessor:
         validation_errors = self.validate_listing(parsed_dict)
 
         segments  = split_bundle_listing(message_text)
-        is_bundle = len(segments) >= 2 or bool(
-            re.search(r'(x\d+|\bset\b|\bbundle\b|\bpackage\b|\bmultilisting\b|\b\d+\s+pcs\b)',
+        is_bundle = detect_multi_item_risk(message_text) or len(segments) >= 2 or bool(
+            re.search(r'(x\d+|\bbundle\b|\bpackage\b|\bmultilisting\b|\b\d+\s+pcs\b)',
                       message_text, re.I)
         )
 
@@ -471,12 +471,10 @@ class WatchFactsPipelineProcessor:
                     False, intent, "WATCH", False
                 )
 
-                if c_statuses["normalization_status"] == "needs_review":
-                    c_tf_status = "bundle_child_pending_review"
-                    c_pr_status = "ineligible_bundle_child_pending_review"
-                else:
-                    c_tf_status = "published"
-                    c_pr_status = c_statuses["price_research_status"]
+                # Parsing can propose a child, but only a reviewer may confirm
+                # its parent lineage, identity, allocated price, and media.
+                c_tf_status = "bundle_child_pending_review"
+                c_pr_status = "ineligible_bundle_child_pending_review"
 
                 child_listings.append({
                     "raw_text_segment":      item["raw_text"],
@@ -500,9 +498,9 @@ class WatchFactsPipelineProcessor:
                     "conversion_timestamp": self.fx_observed_at if c_rate and c_currency not in ("USD", "USDT") else None,
                     "price_split_required":  price_split_req,
                     "image_url":             "",
-                    "verdict":               c_verdict,
+                    "verdict":               "needs_review",
                     "validation_errors":     c_errors,
-                    "normalization_status":  c_statuses["normalization_status"],
+                    "normalization_status":  "needs_review",
                     "trading_floor_status":  c_tf_status,
                     "price_research_status": c_pr_status,
                     "provenance_metadata":   {

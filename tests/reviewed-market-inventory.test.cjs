@@ -261,6 +261,24 @@ test('reviewed QNSA release rows and source-backed ratings reach the card contra
   }), true);
 });
 
+test('raw messages with several watch candidates stay out of the single-watch publication lane', () => {
+  const multi = api.mapReviewedRecord(record({
+    raw_message: 'WTS AP 15500ST Blue USD 40k\nRolex 126500LN White USD 30k',
+    is_bundle: false,
+    listing_type: 'WTS',
+  }));
+  assert.equal(multi.multi_listing, true);
+  assert.equal(multi.has_images, false);
+  assert.deepEqual(multi.image_urls, []);
+
+  const single = api.mapReviewedRecord(record({
+    raw_message: 'WTS Rolex 126500LN White 2025 full set USD 30k',
+    is_bundle: false,
+    listing_type: 'WTS',
+  }));
+  assert.equal(single.multi_listing, false);
+});
+
 test('pending publication keeps customer copy neutral without loosening price eligibility', () => {
   const mapped = api.mapReviewedRecord(record({
     verdict: 'HUMAN_REVIEW', verification_status: 'HUMAN_REVIEW',

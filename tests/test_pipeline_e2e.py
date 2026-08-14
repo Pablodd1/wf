@@ -80,11 +80,12 @@ class TestPipelineEndToEnd(unittest.TestCase):
         self.assertEqual(result["trading_floor_status"], "bundle_pending_separation")
         self.assertEqual(result["price_research_status"], "ineligible_bundle")
 
-        # Normalized children should be published on Trading Floor with parent lineage
+        # Parsed children remain deferred until their lineage and evidence are reviewed.
         children = result.get("child_listings", [])
         self.assertGreater(len(children), 0)
         for child in children:
-            self.assertEqual(child["trading_floor_status"], "published")
+            self.assertEqual(child["trading_floor_status"], "bundle_child_pending_review")
+            self.assertEqual(child["price_research_status"], "ineligible_bundle_child_pending_review")
 
     def test_e2e_rm_price_validation(self):
         """Test Richard Mille price validation check."""

@@ -21,6 +21,8 @@ class TestWatchFactsPipeline(unittest.TestCase):
         self.assertEqual(res['box'], 'Yes')
         self.assertEqual(res['papers'], 'Yes')
         self.assertFalse(res['is_bundle'])
+        full_set = self.processor.parse_raw_message('WTS Rolex 126500LN White 2025 full set USD 30000')
+        self.assertFalse(full_set['is_bundle'])
 
     def test_bundle_detection(self):
         msg = "Rolex 116500LN White Dial - 31k\nRolex 126610LV Green - 15k\nAP 15500ST Blue - 38k"
@@ -99,7 +101,7 @@ class TestWatchFactsPipeline(unittest.TestCase):
         self.assertEqual(result["category"], "WATCH")
 
     def test_bundle_splitting(self):
-        from pipeline_bundle_splitter import detect_brand_header, infer_brand, split_bundle_listing
+        from pipeline_bundle_splitter import detect_brand_header, detect_multi_item_risk, infer_brand, split_bundle_listing
 
         self.assertEqual(infer_brand("AP 15500ST blue dial USD 38000"), "Audemars Piguet")
         self.assertIsNone(infer_brand("Full set with papers and spare strap USD 38000"))
@@ -121,6 +123,14 @@ class TestWatchFactsPipeline(unittest.TestCase):
         self.assertEqual(res2[1]["brand"], "Rolex")
         self.assertIn("116508", res2[1]["raw_text"])
         self.assertIn("562K", res2[1]["raw_text"])
+
+        self.assertTrue(detect_multi_item_risk(
+            "-RM002-V2 usdt 440.000  RM014 usdtt 458.000  RM022 usd 665.000"
+        ))
+        self.assertTrue(detect_multi_item_risk("Looking for RM001, RM002, RM003"))
+        self.assertTrue(detect_multi_item_risk("WTB RM002 /RM003"))
+        self.assertTrue(detect_multi_item_risk("Rolex 126610LN USD14k, Patek 5712/1A USD100k"))
+        self.assertFalse(detect_multi_item_risk("Rolex 126500LN 2025 full set USD30k"))
 
 if __name__ == '__main__':
     unittest.main()

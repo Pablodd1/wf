@@ -6,6 +6,7 @@ const { listCatalogReferences, listEquivalentReferences } = require('./_lib/cata
 const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
+const { deterministicCandidateCount } = require('./_lib/unsplit-bundle-filter.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -199,8 +200,20 @@ function isNormalizedWorkbookSummary(row) {
 function isMultiListing(row) {
   const listingType = cleanExactText(row.listing_type, 30).toUpperCase();
   if (row.is_bundle === true || ['MULTI', 'MULTI_LISTING', 'BUNDLE'].includes(listingType)) return true;
-  return [row.model, row.catalog_model, row.dial_color, row.catalog_dial]
-    .some(value => MULTIPLE_LISTING_IDENTITY_VALUES.includes(cleanExactText(value, 40).toLowerCase()));
+  if ([row.model, row.catalog_model, row.dial_color, row.catalog_dial]
+    .some(value => MULTIPLE_LISTING_IDENTITY_VALUES.includes(cleanExactText(value, 40).toLowerCase()))) {
+    return true;
+  }
+
+  // Some legacy rows were normalized as a single watch before the source raw
+  // message was deterministically segmented. Re-run the same bounded,
+  // evidence-only segmentation used by Price Research so those unresolved
+  // multi-watch messages cannot appear as one public listing. The raw message
+  // remains immutable; separation stays in the deferred review lane.
+  return deterministicCandidateCount({
+    raw_message: row.raw_message || row.raw_message_text || '',
+    flags: row.flags,
+  }) > 1;
 }
 
 function safeSearchTerm(value) {

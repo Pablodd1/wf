@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
+const { multiItemRisk } = require('./_lib/unsplit-bundle-filter.cjs');
 
 const INTENTS = new Set(['WTS', 'WTB']);
 const CATEGORIES = new Set(['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY', 'OTHER']);
@@ -75,16 +76,18 @@ function ownedMediaUrl(value, userId) {
 }
 
 function validateSubmission(body = {}) {
-  const isBundle = body.is_bundle === true;
+  const submittedAsBundle = body.is_bundle === true;
   const intent = clean(body.intent, 3)?.toUpperCase();
   const category = clean(body.category, 20)?.toUpperCase();
   const rawInput = typeof body.raw_message === 'string' ? body.raw_message : '';
   // Validate with trimmed text but retain the submitted bytes exactly. Leading
   // whitespace, trailing whitespace, and line breaks are source evidence.
   const rawMessage = rawInput.trim() ? rawInput : null;
+  const detectedMultiItem = category === 'WATCH' ? multiItemRisk(rawMessage) : { is_multi: false, reasons: [] };
+  const isBundle = submittedAsBundle || detectedMultiItem.is_multi;
   if (!INTENTS.has(intent)) return { error: 'Choose For sale or Want to buy.' };
   if (!CATEGORIES.has(category)) return { error: 'Choose a valid category.' };
-  if (isBundle && (intent !== 'WTS' || category !== 'WATCH')) return { error: 'A deferred bundle must be a For sale watch listing.' };
+  if (isBundle && category !== 'WATCH') return { error: 'A deferred multi-item post must contain watches.' };
   if (!rawMessage || rawMessage.length < 3) return { error: 'Enter the original listing or request message.' };
   if (rawMessage.length > 10000) return { error: 'Original message is limited to 10,000 characters.' };
 
@@ -115,7 +118,7 @@ function validateSubmission(body = {}) {
   const imageUrls = Array.isArray(body.image_urls) ? body.image_urls.map(value => clean(value, 2000)).filter(Boolean).slice(0, 5) : [];
   if (!imageUrls.length) return { error: 'Add at least one item photo.' };
   if (imageUrls.some(value => !/^https:\/\//i.test(value))) return { error: 'Invalid item photo URL.' };
-  return { intent, category, rawMessage, claimed, imageUrls, isBundle };
+  return { intent, category, rawMessage, claimed, imageUrls, isBundle, multiItemReasons: detectedMultiItem.reasons };
 }
 
 function validateBatch(body = {}) {
@@ -190,7 +193,12 @@ async function handler(req, res) {
     id: crypto.randomUUID(),
     auth_user_id: authorization.user.id, dealer_id: poster.dealer_id,
     intent: validated.intent, category: validated.category, raw_message: validated.rawMessage,
-    claimed_fields: { ...validated.claimed, ...posterSnapshot, is_bundle: validated.isBundle }, image_urls: validated.imageUrls,
+    claimed_fields: {
+      ...validated.claimed,
+      ...posterSnapshot,
+      is_bundle: validated.isBundle,
+      multi_item_detection_reasons: validated.multiItemReasons,
+    }, image_urls: validated.imageUrls,
     poster_image_url: posterImageUrl,
     submission_checksum: crypto.createHash('sha256').update(JSON.stringify({
       intent: validated.intent, category: validated.category, raw_message: validated.rawMessage, is_bundle: validated.isBundle,
