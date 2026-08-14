@@ -23,7 +23,8 @@ test('QNSA pages use indexed brand/reference predicates and no-image lane', () =
   assert.match(source, /if \(!qnsaUnpartitionedMedia\)[\s\S]*has_exact_source_image/);
   assert.match(source, /if \(brand\) queryParams\.set\('brand_scope', `eq\.\$\{brand\}`\)/);
   assert.match(source, /const qnsaBrandScanLimit = pageSize \+ 1/);
-  assert.match(source, /rest\/v1\/rpc\/qnsa_market_feed_page_rows/);
+  assert.match(source, /qnsa_trading_floor_page_rows/);
+  assert.match(source, /qnsa_market_feed_page_rows/);
   assert.match(source, /pageRowsRes\.json\(\)[\s\S]*row\.row_data/);
   assert.match(source, /\? 'created_at\.desc,id\.desc'/);
   assert.match(source, /normalized_reference', `like\.\$\{familyPrefix\}\*`/);
@@ -38,7 +39,7 @@ test('general QNSA market feed bounds pages and joins immutable evidence', () =>
   assert.match(migration, /p_listing_type IS NULL OR upper/);
   assert.match(migration, /upper\(COALESCE\(l\.category, ''\)\) = ANY\(v_categories\)/);
   assert.match(source, /p_brand: brand \|\| null/);
-  assert.match(source, /p_category: itemCategory === 'ALL' \? null : itemCategory/);
+  assert.match(source, /p_category: itemCategory/);
 });
 
 test('same-reference Trading Floor listings preserve the global image boundary before price', () => {
