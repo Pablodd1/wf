@@ -11,7 +11,7 @@ BEGIN
     listing_id, source_record_id, dealer_id, source_system, source_identity,
     link_method, link_status, evidence, updated_at
   )
-  SELECT feed.id, feed.source_record_id, identity.dealer_id,
+  SELECT feed.id::uuid, feed.source_record_id, identity.dealer_id,
     'QNSA_PUBLIC_TRADING_FLOOR', public.normalize_seller_phone_identity(feed.seller_phone),
     'EXACT_VERIFIED_PHONE', 'APPLIED',
     jsonb_build_object('seller_name', feed.seller_name, 'public_release_gate', true), now()
@@ -34,4 +34,3 @@ $$;
 REVOKE ALL ON FUNCTION public.sync_qnsa_dealer_public_listing_links() FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.sync_qnsa_dealer_public_listing_links() TO service_role;
 COMMIT;
-
