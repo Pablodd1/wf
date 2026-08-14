@@ -13,6 +13,7 @@ DECLARE
   v_dealer_id uuid;
   v_applied integer := 0;
   v_next_id text;
+  v_scanned integer := 0;
 BEGIN
   IF v_phone IS NULL THEN RAISE EXCEPTION 'verified phone identity is required'; END IF;
   SELECT min(dealer_id::text)::uuid INTO v_dealer_id
@@ -22,13 +23,18 @@ BEGIN
     AND public.normalize_seller_phone_identity(source_identity) = v_phone;
   IF v_dealer_id IS NULL THEN RAISE EXCEPTION 'verified dealer identity was not found'; END IF;
 
-  WITH page AS MATERIALIZED (
-    SELECT feed.id::uuid AS listing_id, feed.source_record_id, feed.seller_name
-    FROM public.qnsa_rolex_patek_trading_floor_source feed
-    WHERE public.normalize_seller_phone_identity(feed.seller_phone) = v_phone
-      AND (p_after_id IS NULL OR feed.id::text > p_after_id)
-    ORDER BY feed.id::text
+  WITH candidates AS MATERIALIZED (
+    SELECT l.id
+    FROM staging.listings l
+    WHERE l.contact_number IN (v_phone, '+' || v_phone)
+      AND (p_after_id IS NULL OR l.id::text > p_after_id)
+    ORDER BY l.id::text
     LIMIT LEAST(GREATEST(COALESCE(p_limit, 200), 1), 500)
+  ), page AS MATERIALIZED (
+    SELECT feed.id::uuid AS listing_id, feed.source_record_id, feed.seller_name
+    FROM candidates candidate
+    JOIN public.qnsa_rolex_patek_trading_floor_source feed
+      ON feed.id::uuid = candidate.id
   ), inserted AS (
     INSERT INTO public.dealer_listing_links (
       listing_id, source_record_id, dealer_id, source_system, source_identity,
@@ -44,11 +50,16 @@ BEGIN
       link_status = 'APPLIED', evidence = EXCLUDED.evidence, updated_at = now()
     RETURNING listing_id
   )
-  SELECT count(*), max(listing_id::text) INTO v_applied, v_next_id FROM inserted;
+  SELECT
+    (SELECT count(*) FROM inserted),
+    (SELECT count(*) FROM candidates),
+    (SELECT max(id::text) FROM candidates)
+  INTO v_applied, v_scanned, v_next_id;
   RETURN jsonb_build_object(
     'applied', v_applied,
+    'scanned', v_scanned,
     'next_id', v_next_id,
-    'has_more', v_applied = LEAST(GREATEST(COALESCE(p_limit, 200), 1), 500)
+    'has_more', v_scanned = LEAST(GREATEST(COALESCE(p_limit, 200), 1), 500)
   );
 END;
 $$;
