@@ -267,7 +267,8 @@ function isPriorityHumanReviewBrand(value) {
   return brand === 'ROLEX'
     || brand === 'PATEK PHILIPPE'
     || brand === 'PATEK'
-    || brand === 'AUDEMARS PIGUET';
+    || brand === 'AUDEMARS PIGUET'
+    || brand === 'RICHARD MILLE';
 }
 
 function searchTermsMatch(record, query) {
