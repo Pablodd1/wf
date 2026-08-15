@@ -4,7 +4,7 @@ const { parseNumber, segmentDealerMessage } = require('../../api/_lib/normalizat
 const { lookupCatalog } = require('../../api/_lib/catalog.js');
 const { comparisonKey, normalizeDialValue, resolveDial } = require('../../api/_lib/dial-normalization.cjs');
 
-const VERSION = 'v4.2-line-condition';
+const VERSION = 'v4.3-mint-condition';
 const USD_PER_UNIT = { USD: 1, USDT: 1, HKD: 1 / 7.8, EUR: 1.08, GBP: 1.27, CHF: 1.12, SGD: 0.74, CNY: 0.138 };
 
 function normalizeText(value) {

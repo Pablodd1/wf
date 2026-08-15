@@ -156,7 +156,7 @@ async function run(options = {}) {
   const coverage = {
     contract: 'wf-mariadb-local-normalization-v1',
     generated_at: new Date().toISOString(),
-    normalization_version: 'v4.2-line-condition',
+    normalization_version: 'v4.3-mint-condition',
     source_start_row: startRow + 1,
     source_end_row: startRow + inputRows,
     resumed_rows: resumedRows,

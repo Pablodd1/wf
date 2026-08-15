@@ -247,7 +247,7 @@ const DIAL_KEYWORDS: [RegExp, string][] = [
 
 const CONDITION_PATTERNS: [RegExp, string][] = [
   [/\b(?:brand\s*new|bnib|unworn|unused|nib)\b/i, 'New'],
-  [/\b(?:like\s*new|mint|excellent)\b/i, 'New'],
+  [/\b(?:like\s*new|mint|excellent|slider|lnib)\b/i, 'Like New'],
   [/\b(?:pre.owned|used|second.hand)\b/i, 'Used'],
   [/\b(?:fair|good|vintage)\b/i, 'Used'],
 ];

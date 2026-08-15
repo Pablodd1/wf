@@ -3,7 +3,7 @@
 const { createHash } = require('node:crypto');
 const { comparisonKey, normalizeDialValue } = require('../../api/_lib/dial-normalization.cjs');
 
-const VERSION = 'v4.2-line-condition';
+const VERSION = 'v4.3-mint-condition';
 const ADJACENT_DIAL_TERMS = [
   'white mother of pearl', 'black mother of pearl', 'mother of pearl', 'reverse panda',
   'tiffany blue', 'tiffany', 'ombre green', 'ice blue', 'olive green', 'sunburst blue',

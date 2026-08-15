@@ -44,7 +44,6 @@ DIAL_PATTERNS = [
     (r'\btiffany(?:\s+blue)?\b', 'Blue'),
     (r'\bnavy(?:\s+blue)?\b', 'Blue'),
     (r'\bolive(?:\s+green)?\b', 'Green'),
-    (r'\bmint\s+green\b', 'Green'),
     (r'\bwimbledon\b', 'Wimbledon'),
     (r'\brhodium\b', 'Rhodium'),
     (r'\bmeteorite\b', 'Meteorite'),
@@ -76,7 +75,7 @@ FAMILY_MAP = {
     'mother of pearl': 'Mother of Pearl', 'mop': 'Mother of Pearl',
     'ice blue': 'Blue', 'tiffany': 'Blue', 'tiffany blue': 'Blue',
     'navy': 'Blue', 'navy blue': 'Blue', 'blue': 'Blue', 'blu': 'Blue',
-    'olive': 'Green', 'olive green': 'Green', 'mint green': 'Green',
+    'olive': 'Green', 'olive green': 'Green',
     'green': 'Green', 'grn': 'Green',
     'wimbledon': 'Wimbledon', 'rhodium': 'Rhodium', 'meteorite': 'Meteorite',
     'skeleton': 'Skeleton', 'panda': 'Panda',
@@ -95,7 +94,7 @@ def family(color):
     if not color or pd.isna(color):
         return ''
     c = str(color).strip().lower()
-    if c in ('unknown', 'none', 'null', 'n/a', ''):
+    if c in ('unknown', 'none', 'null', 'n/a', '', 'mint', 'mint condition', 'mint green'):
         return ''
     # Direct hit
     if c in FAMILY_MAP:
@@ -107,7 +106,7 @@ def family(color):
     return c.title()  # unknown custom color → treat as its own family
 
 def text_dial_family(raw):
-    tl = (raw or '').lower()
+    tl = re.sub(r'\bmint\s+green\b(?!\s+dial\b)', 'mint', (raw or '').lower())
     for pattern, fam in DIAL_PATTERNS:
         if re.search(pattern, tl):
             return fam

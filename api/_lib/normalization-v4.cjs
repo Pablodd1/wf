@@ -470,7 +470,8 @@ function applyHeaderContext(context, line) {
   if (brand) next.brand_context = brand;
   const currency = inferContextCurrency(line, null);
   if (currency) next.currency_context = currency;
-  if (/\b(?:brand\s+new|new)\b/i.test(line)) next.condition_context = 'New';
+  if (/\b(?:like\s+new|slider|mint|excellent|lnib)\b/i.test(line)) next.condition_context = 'Used - Like New';
+  else if (/\b(?:brand\s+new|new|unworn|bnib|nos)\b/i.test(line)) next.condition_context = 'New';
   if (/\bused\b/i.test(line)) next.condition_context = 'Used';
   if (/without\s+box/i.test(line)) next.set_status_context = 'Without Box';
   if (/only\s+watch\s+and\s+card|watch\s+only/i.test(line)) next.set_status_context = 'Watch Only';
@@ -490,6 +491,7 @@ function inferIntent(line, inherited = null) {
 
 function inferCondition(line, inherited = null) {
   const text = String(line || '');
+  if (/\b(?:like\s+new|slider|mint|excellent|lnib)\b/i.test(text)) return 'Used - Like New';
   if (/\b(?:used|pre[\s-]?owned|worn|second[\s-]?hand)\b/i.test(text)) return 'Used';
   if (/\b(?:brand\s+new|new|unworn|bnib|nos)\b/i.test(text)) return 'New';
   return inherited || null;

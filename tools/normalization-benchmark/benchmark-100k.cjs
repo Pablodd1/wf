@@ -404,7 +404,7 @@ async function runBenchmark(options) {
         : 'benchmark-object-adapter-v1',
     },
     normalization: {
-      version: results[0]?.normalization_version || 'v4.2-line-condition',
+      version: results[0]?.normalization_version || 'v4.3-mint-condition',
       implementation_files: normalizerEvidence,
     },
     benchmark_implementation_files: benchmarkEvidence,

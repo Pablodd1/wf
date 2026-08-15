@@ -2,7 +2,7 @@
 
 const { segmentDealerMessage } = require('../../api/_lib/normalization-v4.cjs');
 
-const PARSER_VERSION = 'v4.2-line-condition';
+const PARSER_VERSION = 'v4.3-mint-condition';
 const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
 function required(name, fallback) {

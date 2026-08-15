@@ -19,7 +19,7 @@ const { normalizeSourceRecord } = require('./normalize-local.cjs');
 
 const WORKER_CONTRACT = 'wf-mariadb-continuous-shadow-v2';
 const ACCOUNTABILITY_SOURCE_KEY = 'mariadb-thecollective-inventory-auctions';
-const PARSER_VERSION = 'v4.2-line-condition';
+const PARSER_VERSION = 'v4.3-mint-condition';
 
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));

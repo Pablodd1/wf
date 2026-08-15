@@ -16,6 +16,7 @@ const {
 } = require('./_lib/market-stats.cjs');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { normalizeDialValue } = require('./_lib/dial-normalization.cjs');
+const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const {
   HUMAN_REVIEW_VERDICTS,
   classifyDemandItemEligibility,
@@ -85,13 +86,18 @@ function configuredReviewedPriceSource(brand) {
 
 function qnsaReferenceRowToMarketRow(row) {
   const source = row?.row_data || row || {};
+  const correctedWatchFields = normalizeWatchConditionFields({
+    dial_color: source.dial_color || source.catalog_dial,
+    condition: source.condition,
+    raw_message: source.raw_message,
+  });
   return {
     id: source.id,
     brand: source.canonical_brand || source.brand_scope,
     model: source.catalog_model || source.model,
     reference: source.normalized_reference || source.catalog_reference,
-    dial_color: source.dial_color || source.catalog_dial,
-    condition: source.condition,
+    dial_color: correctedWatchFields.dial_color,
+    condition: correctedWatchFields.condition,
     listing_type: source.listing_type,
     verdict: source.verdict || source.verification_status,
     confidence: source.confidence,
@@ -173,6 +179,11 @@ function directSubmissionToMarketRow(row) {
   const verifiedUsd = Number.isFinite(amount) && amount > 0 && ['USD', 'USDT'].includes(currency);
   const imageUrls = Array.isArray(row?.image_urls) ? row.image_urls.filter(Boolean) : [];
   const isBundle = claimed.is_bundle === true;
+  const correctedWatchFields = normalizeWatchConditionFields({
+    dial_color: claimed.dial_color,
+    condition: claimed.condition,
+    raw_message: row.raw_message,
+  });
   if (category !== 'WATCH'
     || !['WTS', 'WTB'].includes(intent)
     || row?.review_status !== 'APPROVED'
@@ -186,8 +197,8 @@ function directSubmissionToMarketRow(row) {
     brand: claimed.brand,
     model: claimed.model || null,
     reference: claimed.reference,
-    dial_color: claimed.dial_color || null,
-    condition: claimed.condition || null,
+    dial_color: correctedWatchFields.dial_color,
+    condition: correctedWatchFields.condition,
     listing_type: intent,
     verdict: 'APPROVED',
     confidence: 100,
@@ -569,7 +580,9 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     for (const row of directDemandRows) merged.set(String(row.id), row);
     data = [...merged.values()];
   }
-  let demandRows = (data || []).filter(row => qnsaReviewedSource || isOwnerReviewedWorkbookRow(row));
+  let demandRows = (data || [])
+    .map(row => ({ ...row, ...normalizeWatchConditionFields(row) }))
+    .filter(row => qnsaReviewedSource || isOwnerReviewedWorkbookRow(row));
   const equivalentKeys = new Set(referenceVariants.map(normRef));
   demandRows = demandRows.filter(row =>
     (qnsaReviewedSource || isReleaseListingEligible(row))
@@ -1136,9 +1149,10 @@ module.exports = async function handler(req, res) {
     const normalizedRows = rows
       .filter(r => !excludedSources.has(r.source))
       .map(row => {
+        const conditionCorrectedRow = { ...row, ...normalizeWatchConditionFields(row) };
         const normalized = usingReviewedWorkbook || row.price_correction_applied === true || row.runtime_price_recovery_applied === true
           ? {
-              ...row,
+              ...conditionCorrectedRow,
               analytics_price_usd: row.price_usd,
               price_normalization: row.price_correction_applied
                 ? 'QUALIFIED_SIDECAR_CORRECTION'
@@ -1147,7 +1161,7 @@ module.exports = async function handler(req, res) {
                   : null,
               analytics_currency_status: 'VERIFIED',
             }
-          : normalizeMarketRow(row, referenceVariants);
+          : normalizeMarketRow(conditionCorrectedRow, referenceVariants);
         const normalizedDial = normalizeDialValue(normalized.dial_color);
         return {
           ...normalized,
@@ -1614,6 +1628,7 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.directSubmissionToMarketRow = directSubmissionToMarketRow;
+module.exports.qnsaReferenceRowToMarketRow = qnsaReferenceRowToMarketRow;
 module.exports.loadApprovedDirectSubmissionRows = loadApprovedDirectSubmissionRows;
 module.exports.loadZenithReviewedTradingRows = loadZenithReviewedTradingRows;
 module.exports.isPendingQnsaBrandRelease = isPendingQnsaBrandRelease;

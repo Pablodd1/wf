@@ -9,6 +9,7 @@ const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { deterministicCandidateCount } = require('./_lib/unsplit-bundle-filter.cjs');
 const { classifyZenithIdentityEvidence } = require('./_lib/zenith-identity-evidence.cjs');
 const { luxuryIdentityEligibility, normalizeLuxuryIdentity } = require('./_lib/luxury-item-normalization.cjs');
+const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const {
   cleanExactText,
   loadSummary,
@@ -543,7 +544,14 @@ function mapDealerSubmission(row) {
   const brand = cleanExactText(claimed.brand, 80) || null;
   const model = cleanExactText(claimed.model, 120) || cleanExactText(claimed.title, 240) || null;
   const reference = cleanExactText(claimed.reference, 80) || null;
-  const dialColor = cleanExactText(claimed.dial_color, 80) || null;
+  const correctedWatchFields = row.category === 'WATCH'
+    ? normalizeWatchConditionFields({
+        dial_color: cleanExactText(claimed.dial_color, 80),
+        condition: claimed.condition,
+        raw_message: row.raw_message,
+      })
+    : { dial_color: cleanExactText(claimed.dial_color, 80) || null, condition: claimed.condition || null };
+  const dialColor = correctedWatchFields.dial_color;
   const sellerName = cleanExactText(claimed.poster_name, 160) || null;
   const sellerPhone = cleanExactText(claimed.poster_phone, 50) || null;
   const hasCompleteIdentity = row.category !== 'WATCH' || Boolean(brand && model && reference && dialColor);
@@ -571,7 +579,7 @@ function mapDealerSubmission(row) {
     reference_search_key: reference ? referenceComparisonKey(reference) : null,
     raw_reference: reference, normalized_reference: reference, catalog_reference: null,
     reference_invalid_reason: null, has_complete_identity: hasCompleteIdentity,
-    dial_color: dialColor, condition: claimed.condition || null,
+    dial_color: dialColor, condition: correctedWatchFields.condition,
     listing_type: row.intent, listing_date: row.created_at, created_at: row.created_at,
     raw_message: row.raw_message, raw_message_scope: 'stored_source_message',
     raw_message_evidence_type: 'USER_ENTERED_SOURCE_MESSAGE',
@@ -721,7 +729,14 @@ function mapReviewedRecord(row) {
     && referenceComparisonKey(row.raw_reference) === referenceComparisonKey(approvedReference)
     ? row.raw_reference
     : approvedReference;
-  const dialColor = row.dial_color || row.catalog_dial || null;
+  const correctedWatchFields = effectiveItemCategory(row) === 'WATCH'
+    ? normalizeWatchConditionFields({
+        dial_color: row.dial_color || row.catalog_dial,
+        condition: row.condition,
+        raw_message: row.raw_message,
+      })
+    : { dial_color: row.dial_color || row.catalog_dial || null, condition: row.condition || null };
+  const dialColor = correctedWatchFields.dial_color;
   const sellerName = evidenceValuePresent(row.posted_by || row.seller_name || row.from_name)
     ? (row.posted_by || row.seller_name || row.from_name)
     : null;
@@ -804,7 +819,7 @@ function mapReviewedRecord(row) {
     reference_invalid_reason: invalidReference ? 'PRICE_CURRENCY_TOKEN' : null,
     has_complete_identity: hasCompleteIdentity,
     dial_color: dialColor,
-    condition: row.condition || null,
+    condition: correctedWatchFields.condition,
     listing_type: row.listing_type || 'OTHER',
     listing_date: row.posting_date || null,
     created_at: row.posting_date || row.imported_at || null,

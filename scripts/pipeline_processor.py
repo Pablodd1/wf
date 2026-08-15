@@ -106,7 +106,10 @@ class WatchFactsPipelineProcessor:
         return re.sub(pattern, repl, text)
 
     def detect_category(self, text):
-        lower = text.lower()
+        # "mint" describes condition. Mask the ambiguous condition phrase so
+        # it cannot manufacture a Green dial; an independently stated green
+        # dial (for example "mint, green dial") remains detectable.
+        lower = re.sub(r'\bmint\s+green\b(?!\s+dial\b)', 'mint', text.lower())
         for cat, patterns in NON_WATCH_KEYWORDS.items():
             for pat in patterns:
                 if re.search(pat, lower):
