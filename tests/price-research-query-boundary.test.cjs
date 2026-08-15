@@ -5,6 +5,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
 
+const { loadZenithReviewedTradingRows } = require('../api/price-research.js');
+
 const source = fs.readFileSync(
   path.join(__dirname, '..', 'api', 'price-research.js'),
   'utf8',
@@ -15,6 +17,45 @@ test('Zenith recovers released no-price WTS evidence without promoting it into a
   assert.match(source, /qnsa_trading_floor_reference_rows/);
   assert.match(source, /filter\(row => String\(row\.listing_type \|\| ''\)\.toUpperCase\(\) === 'WTS'\)/);
   assert.match(source, /unpriced evidence without allowing it[\s\S]*into averages/);
+  assert.match(source, /qnsa_later_brand_candidate_stride_page/);
+  assert.match(source, /maximumPages = 10/);
+  assert.match(source, /referenceKeys\.has\(normRef\(row\.reference\)\)/);
+  assert.match(source, /p_listing_type: 'WTS'/);
+});
+
+test('Zenith bounded release scan finds an exact dotted reference across pages', async () => {
+  const calls = [];
+  const pages = [
+    {
+      rows: [
+        { id: 'z1', normalized_reference: '03.2522.400', listing_type: 'WTS' },
+        { id: 'z-demand', normalized_reference: '03.2522.400', listing_type: 'WTB' },
+        { id: 'other', normalized_reference: '03.2085.4021', listing_type: 'WTS' },
+      ],
+      next_offset: 50,
+      has_more: true,
+    },
+    {
+      rows: [{ id: 'z2', normalized_reference: '03.2522.400', listing_type: 'WTS' }],
+      next_offset: 51,
+      has_more: false,
+    },
+  ];
+  const client = {
+    rpc: async (name, args) => {
+      calls.push({ name, args });
+      return { data: pages[calls.length - 1], error: null };
+    },
+  };
+  const rows = await loadZenithReviewedTradingRows(client, {
+    referenceVariants: ['03.2522.400'],
+    limit: 100,
+  });
+  assert.deepEqual(rows.map(row => row.id), ['z1', 'z2']);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].name, 'qnsa_later_brand_candidate_stride_page');
+  assert.equal(calls[0].args.p_listing_type, 'WTS');
+  assert.equal(calls[1].args.p_offset, 50);
 });
 
 test('high-volume Price Research uses one bounded strict-source query', () => {

@@ -116,6 +116,47 @@ function qnsaReferenceRowToMarketRow(row) {
   };
 }
 
+function unwrapQnsaJsonEnvelope(data, functionName) {
+  if (Array.isArray(data) && data.length === 1 && data[0]?.[functionName]) {
+    return data[0][functionName];
+  }
+  return data;
+}
+
+async function loadZenithReviewedTradingRows(client, { referenceVariants, limit }) {
+  const referenceKeys = new Set((referenceVariants || []).map(normRef).filter(Boolean));
+  if (!referenceKeys.size) return [];
+
+  const recovered = [];
+  let offset = 0;
+  const maximumPages = 10; // Zenith's released customer lane is currently under 500 rows.
+  for (let page = 0; page < maximumPages && recovered.length < limit; page += 1) {
+    const { data, error } = await client.rpc('qnsa_later_brand_candidate_stride_page', {
+      p_brand: 'Zenith',
+      p_offset: offset,
+      p_limit: 50,
+      p_listing_type: 'WTS',
+    });
+    if (error) {
+      console.warn('[price-research] Zenith bounded release scan unavailable:', error.message || error);
+      return [];
+    }
+    const envelope = unwrapQnsaJsonEnvelope(data, 'qnsa_later_brand_candidate_stride_page') || {};
+    const pageRows = Array.isArray(envelope.rows) ? envelope.rows : [];
+    for (const rawRow of pageRows) {
+      const row = qnsaReferenceRowToMarketRow(rawRow);
+      if (String(row.listing_type || '').toUpperCase() !== 'WTS') continue;
+      if (!referenceKeys.has(normRef(row.reference))) continue;
+      recovered.push(row);
+      if (recovered.length >= limit) break;
+    }
+    const nextOffset = Number(envelope.next_offset);
+    if (envelope.has_more !== true || !Number.isFinite(nextOffset) || nextOffset <= offset) break;
+    offset = nextOffset;
+  }
+  return [...new Map(recovered.map(row => [String(row.id), row])).values()];
+}
+
 function directSubmissionToMarketRow(row) {
   const claimed = row?.claimed_fields || {};
   const intent = String(row?.intent || '').trim().toUpperCase();
@@ -264,6 +305,8 @@ async function loadQnsaVerifiedTradingPrices(client, {
           .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS'));
       }
       if (recovered.length) return [...new Map(recovered.map(row => [String(row.id), row])).values()];
+      const scannedRows = await loadZenithReviewedTradingRows(client, { referenceVariants, limit });
+      if (scannedRows.length) return scannedRows;
     }
     if (rpcError) {
       console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
@@ -1559,3 +1602,4 @@ module.exports = async function handler(req, res) {
 
 module.exports.directSubmissionToMarketRow = directSubmissionToMarketRow;
 module.exports.loadApprovedDirectSubmissionRows = loadApprovedDirectSubmissionRows;
+module.exports.loadZenithReviewedTradingRows = loadZenithReviewedTradingRows;
