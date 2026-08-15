@@ -1,5 +1,6 @@
 'use strict';
 
+const { createHash, randomUUID } = require('node:crypto');
 const { managementQuery, sqlLiteral } = require('../mariadb-live/run-two-brand-price-correction.cjs');
 
 const EXPECTED_PROJECT = 'qnsafosakvonzgfcsphh';
@@ -39,6 +40,32 @@ function appliedDeltaReconciles(before, after, applied) {
     === Number(applied);
 }
 
+function populationEvidenceMatches(before = {}, observed = {}, after = {}) {
+  return CATEGORIES.every(category => {
+    const first = before[category];
+    const middle = observed[category];
+    const last = after[category];
+    return first?.exhausted === true && middle?.exhausted === true && last?.exhausted === true
+      && Number(first.scanned) === Number(middle.scanned)
+      && Number(first.scanned) === Number(last.scanned)
+      && first.digest === middle.digest && first.digest === last.digest;
+  });
+}
+
+async function linkageLease(config, ownerId, action, mode, fetchImpl) {
+  const rows = await managementQuery(config, `
+    SELECT public.qnsa_non_watch_linkage_lease_action(
+      ${sqlLiteral(ownerId)}::uuid,${sqlLiteral(action)},${sqlLiteral(mode)},900
+    ) AS result`, false, fetchImpl);
+  const result = rows?.[0]?.result;
+  if (!result || (action !== 'release' && result.acquired !== true)) {
+    throw new Error(action === 'acquire'
+      ? 'Another non-watch linkage run owns the database lease'
+      : `Non-watch linkage lease ${action} failed`);
+  }
+  return result;
+}
+
 async function reconciliation(config, fetchImpl) {
   const rows = await managementQuery(config,
     'SELECT public.qnsa_non_watch_dealer_linkage_reconciliation() AS result', false, fetchImpl);
@@ -76,6 +103,13 @@ async function run(options = {}) {
         WHERE n.nspname='staging' AND c.relname='idx_staging_qnsa_market_feed_page'
           AND i.indisvalid AND i.indisready
       ),
+      'bounded_reconciliation_contract', COALESCE((SELECT
+        position('QNSA_NON_WATCH_RELEASE_GATED_RAW_LINEAGE' in definition)>0
+          AND position('eligible_released_non_watch' in definition)=0
+          AND position('qnsa_market_feed_control' in definition)=0
+        FROM (SELECT pg_get_functiondef(to_regprocedure(
+          'public.qnsa_non_watch_dealer_linkage_reconciliation()'
+        )) AS definition) contract),false),
       'enabled_non_watch_run', (SELECT enabled_run_key FROM public.qnsa_market_feed_control
         WHERE singleton=true AND enabled=true),
       'enabled_non_watch_categories', (SELECT enabled_categories FROM public.qnsa_market_feed_control
@@ -83,6 +117,7 @@ async function run(options = {}) {
     ) AS capacity`, true, fetchImpl);
   const capacity = capacityRows?.[0]?.capacity;
   if (!capacity?.raw_version_primary_key_valid || !capacity?.non_watch_category_index_valid
+      || !capacity?.bounded_reconciliation_contract
       || !capacity?.enabled_non_watch_run) {
     throw new Error('Required category/raw indexes or non-watch release control are unavailable');
   }
@@ -165,83 +200,113 @@ async function run(options = {}) {
     throw new Error('EXPLAIN did not preserve bounded category-first immutable-raw plan');
   }
 
-  const before = await reconciliation(config, fetchImpl);
-  if (Number(before.duplicate_verified_phones) !== 0
-      || Number(before.orphan_non_watch_links) !== 0
-      || Number(before.non_applied_non_watch_links) !== 0) {
-    throw new Error('Preflight reconciliation failed');
-  }
-
-  const totals = { pages: 0, scanned: 0, eligible: 0, applied: 0,
-    already_linked: 0, conflicting_links: 0, dealers_matched: 0, categories: {} };
-  let canaryComplete = false;
-  for (const category of CATEGORIES) {
-    let cursor = null;
-    let exhausted = false;
-    const categoryTotals = { pages: 0, scanned: 0, eligible: 0, applied: 0, exhausted: false };
-    while (!exhausted) {
-      if (totals.pages >= maxPages) throw new Error('NON_WATCH_LINKAGE_MAX_PAGES reached before categories completed');
-      const remainingCanary = mode === 'canary' ? canaryLimit - totals.applied : null;
-      if (mode === 'canary' && remainingCanary <= 0) { canaryComplete = true; break; }
-      const rows = await managementQuery(config, `
-        SELECT public.qnsa_non_watch_dealer_candidate_link_page(
-          ${sqlLiteral(capacity.enabled_non_watch_run)},${sqlLiteral(category)},
-          ${sqlLiteral(boundaries[category].createdAt)}::timestamptz,
-          ${sqlLiteral(boundaries[category].id)}::uuid,
-          ${cursor ? `${sqlLiteral(cursor.createdAt)}::timestamptz` : 'NULL::timestamptz'},
-          ${cursor ? `${sqlLiteral(cursor.id)}::uuid` : 'NULL::uuid'},
-          ${pageSize},true,${mode === 'canary' ? remainingCanary : 'NULL::integer'}
-        ) AS result`, false, fetchImpl);
-      const result = rows?.[0]?.result;
-      if (!result || result.run_key !== capacity.enabled_non_watch_run || result.category !== category) {
-        throw new Error('Candidate linkage page returned a mismatched release stream');
-      }
-      totals.pages += 1; categoryTotals.pages += 1;
-      for (const field of ['scanned','eligible','applied','already_linked','conflicting_links','dealers_matched']) {
-        totals[field] += Number(result[field] || 0);
-        if (field in categoryTotals) categoryTotals[field] += Number(result[field] || 0);
-      }
-      if (Number(result.conflicting_links || 0) !== 0) throw new Error('Conflicting dealer/listing link detected');
-      if (!result.has_more) { exhausted = true; categoryTotals.exhausted = true; break; }
-      const next = { createdAt: safeTimestamp(result.next_created_at), id: safeUuid(result.next_id) };
-      if (cursor && next.createdAt === cursor.createdAt && next.id === cursor.id) {
-        throw new Error(`${category} category cursor did not advance`);
-      }
-      cursor = next;
-      if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+  const leaseOwner = randomUUID();
+  let leaseAcquired = false;
+  try {
+    await linkageLease(config, leaseOwner, 'acquire', mode, fetchImpl);
+    leaseAcquired = true;
+    const before = await reconciliation(config, fetchImpl);
+    if (Number(before.duplicate_verified_phones) !== 0
+        || Number(before.orphan_non_watch_links) !== 0
+        || Number(before.non_applied_non_watch_links) !== 0) {
+      throw new Error('Preflight reconciliation failed');
     }
-    totals.categories[category] = categoryTotals;
-    if (canaryComplete) break;
-  }
 
-  if (mode === 'canary' && totals.applied > canaryLimit) throw new Error('Canary write cap was exceeded');
-  const allCategoriesExhausted = allCategoryCursorsExhausted(totals.categories);
-  if (mode === 'full') {
-    if (!allCategoriesExhausted) throw new Error('Full linkage cannot complete before all category cursors exhaust');
-    const controlRows = await managementQuery(config, `SELECT enabled_run_key,enabled_categories
-      FROM public.qnsa_market_feed_control WHERE singleton=true AND enabled=true`, true, fetchImpl);
-    if (controlRows?.[0]?.enabled_run_key !== capacity.enabled_non_watch_run
-        || !CATEGORIES.every(category => controlRows[0].enabled_categories?.includes(category))) {
-      throw new Error('Frozen non-watch release control changed during full linkage');
+    const scanStreams = async ({ apply, canaryCap = null }) => {
+      const totals = { pages: 0, scanned: 0, eligible: 0, applied: 0,
+        already_linked: 0, conflicting_links: 0, dealers_matched: 0, categories: {} };
+      let canaryComplete = false;
+      for (const category of CATEGORIES) {
+        let cursor = null;
+        let exhausted = false;
+        const digest = createHash('sha256');
+        digest.update(`${capacity.enabled_non_watch_run}:${category}:`);
+        const categoryTotals = { pages: 0, scanned: 0, eligible: 0,
+          applied: 0, exhausted: false, digest: null };
+        while (!exhausted) {
+          if (totals.pages >= maxPages) throw new Error('NON_WATCH_LINKAGE_MAX_PAGES reached before categories completed');
+          const remainingCanary = canaryCap === null ? null : canaryCap - totals.applied;
+          if (remainingCanary !== null && remainingCanary <= 0) { canaryComplete = true; break; }
+          await linkageLease(config, leaseOwner, 'renew', mode, fetchImpl);
+          const rows = await managementQuery(config, `
+            SELECT public.qnsa_non_watch_dealer_candidate_link_page(
+              ${sqlLiteral(capacity.enabled_non_watch_run)},${sqlLiteral(category)},
+              ${sqlLiteral(boundaries[category].createdAt)}::timestamptz,
+              ${sqlLiteral(boundaries[category].id)}::uuid,
+              ${cursor ? `${sqlLiteral(cursor.createdAt)}::timestamptz` : 'NULL::timestamptz'},
+              ${cursor ? `${sqlLiteral(cursor.id)}::uuid` : 'NULL::uuid'},
+              ${pageSize},${apply ? 'true' : 'false'},
+              ${remainingCanary === null ? 'NULL::integer' : `${remainingCanary}::integer`}
+            ) AS result`, false, fetchImpl);
+          const result = rows?.[0]?.result;
+          if (!result || result.run_key !== capacity.enabled_non_watch_run || result.category !== category
+              || !/^[0-9a-f]{32}$/i.test(String(result.candidate_page_digest || ''))) {
+            throw new Error('Candidate linkage page returned a mismatched release stream');
+          }
+          digest.update(String(result.candidate_page_digest));
+          totals.pages += 1; categoryTotals.pages += 1;
+          for (const field of ['scanned','eligible','applied','already_linked','conflicting_links','dealers_matched']) {
+            totals[field] += Number(result[field] || 0);
+            if (field in categoryTotals) categoryTotals[field] += Number(result[field] || 0);
+          }
+          if (!apply && Number(result.applied || 0) !== 0) throw new Error('Read-only population census changed linkage state');
+          if (Number(result.conflicting_links || 0) !== 0) throw new Error('Conflicting dealer/listing link detected');
+          if (!result.has_more) { exhausted = true; categoryTotals.exhausted = true; break; }
+          const next = { createdAt: safeTimestamp(result.next_created_at), id: safeUuid(result.next_id) };
+          if (cursor && next.createdAt === cursor.createdAt && next.id === cursor.id) {
+            throw new Error(`${category} category cursor did not advance`);
+          }
+          cursor = next;
+          if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+        }
+        categoryTotals.digest = categoryTotals.exhausted ? digest.digest('hex') : null;
+        totals.categories[category] = categoryTotals;
+        if (canaryComplete) break;
+      }
+      return totals;
+    };
+
+    const frozenPopulation = mode === 'full' ? await scanStreams({ apply: false }) : null;
+    const totals = await scanStreams({ apply: true,
+      canaryCap: mode === 'canary' ? canaryLimit : null });
+    if (mode === 'canary' && totals.applied > canaryLimit) throw new Error('Canary write cap was exceeded');
+    const allCategoriesExhausted = allCategoryCursorsExhausted(totals.categories);
+    let finalPopulation = null;
+    if (mode === 'full') {
+      if (!allCategoriesExhausted) throw new Error('Full linkage cannot complete before all category cursors exhaust');
+      finalPopulation = await scanStreams({ apply: false });
+      if (!populationEvidenceMatches(frozenPopulation.categories, totals.categories,
+        finalPopulation.categories)) {
+        throw new Error('Frozen non-watch category population changed or did not reconcile');
+      }
+      const controlRows = await managementQuery(config, `SELECT enabled_run_key,enabled_categories
+        FROM public.qnsa_market_feed_control WHERE singleton=true AND enabled=true`, true, fetchImpl);
+      if (controlRows?.[0]?.enabled_run_key !== capacity.enabled_non_watch_run
+          || !CATEGORIES.every(category => controlRows[0].enabled_categories?.includes(category))) {
+        throw new Error('Frozen non-watch release control changed during full linkage');
+      }
     }
-  }
-  if (totals.scanned === 0) throw new Error('Released category scan returned no evidence rows');
+    if (totals.scanned === 0) throw new Error('Released category scan returned no evidence rows');
 
-  const after = await reconciliation(config, fetchImpl);
-  if (Number(after.duplicate_verified_phones) !== 0
-      || Number(after.orphan_non_watch_links) !== 0
-      || Number(after.non_applied_non_watch_links) !== 0) {
-    throw new Error('Postflight reconciliation failed');
-  }
-  if (!appliedDeltaReconciles(before, after, totals.applied)) {
-    throw new Error('Applied non-watch link delta did not reconcile');
-  }
+    const after = await reconciliation(config, fetchImpl);
+    if (Number(after.duplicate_verified_phones) !== 0
+        || Number(after.orphan_non_watch_links) !== 0
+        || Number(after.non_applied_non_watch_links) !== 0) {
+      throw new Error('Postflight reconciliation failed');
+    }
+    if (!appliedDeltaReconciles(before, after, totals.applied)) {
+      throw new Error('Applied non-watch link delta did not reconcile');
+    }
 
-  return { mode, run_key: RUN_KEY, project_ref: EXPECTED_PROJECT, capacity,
-    explain: { required_indexes: ['raw_message_versions_pkey',
-      'idx_staging_qnsa_market_feed_page'], bounded_nested_loop_verified: true },
-    boundaries, all_categories_exhausted: allCategoriesExhausted, before, totals, after,
-    raw_text_logged: false, pii_logged: false };
+    return { mode, run_key: RUN_KEY, project_ref: EXPECTED_PROJECT, capacity,
+      explain: { required_indexes: ['raw_message_versions_pkey',
+        'idx_staging_qnsa_market_feed_page'], bounded_nested_loop_verified: true },
+      boundaries, frozen_population: frozenPopulation,
+      final_population: finalPopulation, all_categories_exhausted: allCategoriesExhausted,
+      before, totals, after, raw_text_logged: false, pii_logged: false };
+  } finally {
+    if (leaseAcquired) await linkageLease(config, leaseOwner, 'release', mode, fetchImpl);
+  }
 }
 
 if (require.main === module) {
@@ -254,4 +319,4 @@ if (require.main === module) {
 
 module.exports = { CATEGORIES, EXPECTED_PROJECT, MODES, RUN_KEY,
   allCategoryCursorsExhausted, appliedDeltaReconciles,
-  boundedInteger, safeTimestamp, safeUuid, run };
+  boundedInteger, populationEvidenceMatches, safeTimestamp, safeUuid, run };

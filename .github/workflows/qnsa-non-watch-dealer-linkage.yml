@@ -19,6 +19,10 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: qnsa-non-watch-dealer-linkage-production
+  cancel-in-progress: false
+
 jobs:
   reconcile:
     runs-on: ubuntu-latest
@@ -67,12 +71,25 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          function Get-ForwardMigrationBody([string]$path) {
+            $lines = @(Get-Content -LiteralPath $path)
+            $beginIndex = -1
+            $commitIndex = -1
+            for ($i=0; $i -lt $lines.Count; $i++) {
+              if ($beginIndex -lt 0 -and $lines[$i].Trim() -eq 'BEGIN;') { $beginIndex = $i }
+              if ($lines[$i].Trim() -eq 'COMMIT;') { $commitIndex = $i }
+            }
+            if ($beginIndex -lt 0 -or $commitIndex -le $beginIndex) {
+              throw "Migration $path does not have one outer transaction contract."
+            }
+            $bodyLines = for ($i=0; $i -lt $lines.Count; $i++) {
+              if ($i -ne $beginIndex -and $i -ne $commitIndex) { $lines[$i] }
+            }
+            return ($bodyLines -join "`n")
+          }
           if ($env:NON_WATCH_LINKAGE_MODE -ne 'audit') {
-            [string]$migration = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815223000_qnsa_non_watch_exact_phone_linkage.sql'
-            $migration += "`n" + [string](Get-Content -Raw -LiteralPath 'supabase/migrations/20260815234500_qnsa_non_watch_linkage_plan_fence.sql')
-            $migration += "`n" + [string](Get-Content -Raw -LiteralPath 'supabase/migrations/20260815235500_qnsa_non_watch_candidate_driven_linkage.sql')
-            $compileSql = $migration -replace '(?im)^\s*(BEGIN|COMMIT);\s*$', ''
-            $compileBody = @{ query = "BEGIN;`n$compileSql`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
+            $migrationBody = Get-ForwardMigrationBody 'supabase/migrations/20260815235500_qnsa_non_watch_candidate_driven_linkage.sql'
+            $compileBody = @{ query = "BEGIN;`n$migrationBody`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
             Invoke-RestMethod -Method Post `
               -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
               -Headers $headers -ContentType 'application/json' -Body $compileBody | Out-Null
@@ -87,6 +104,16 @@ jobs:
           SELECT jsonb_build_object(
             'raw_version_primary_key', to_regclass('public.raw_message_versions_pkey') IS NOT NULL,
             'raw_version_lineage_index', to_regclass('staging.idx_staging_mariadb_raw_version') IS NOT NULL,
+            'non_watch_category_index', to_regclass('staging.idx_staging_qnsa_market_feed_page') IS NOT NULL,
+            'base_linkage_contract_installed', to_regprocedure(
+              'public.qnsa_non_watch_dealer_linkage_reconciliation()') IS NOT NULL,
+            'bounded_reconciliation_contract', COALESCE((SELECT
+              position('QNSA_NON_WATCH_RELEASE_GATED_RAW_LINEAGE' in definition)>0
+                AND position('eligible_released_non_watch' in definition)=0
+                AND position('qnsa_market_feed_control' in definition)=0
+              FROM (SELECT pg_get_functiondef(to_regprocedure(
+                'public.qnsa_non_watch_dealer_linkage_reconciliation()'
+              )) AS definition) contract),false),
             'enabled_run_key', (SELECT enabled_run_key FROM public.qnsa_market_feed_control
               WHERE singleton=true AND enabled=true),
             'enabled_categories', (SELECT enabled_categories FROM public.qnsa_market_feed_control
@@ -156,6 +183,8 @@ jobs:
           $evidence = [ordered]@{ control = $control; identity = $identity; ledger = $ledger }
           $evidence | ConvertTo-Json -Depth 8 | Set-Content qnsa-non-watch-linkage-audit.json
           if ($control.raw_version_primary_key -ne $true -or $control.raw_version_lineage_index -ne $true -or
+              $control.non_watch_category_index -ne $true -or $control.base_linkage_contract_installed -ne $true -or
+              $control.bounded_reconciliation_contract -ne $true -or
               -not $control.enabled_run_key -or $control.snapshot_run_aligned -ne $true -or
               $control.snapshot_has_all_non_watch_categories -ne $true -or
               $identity.duplicate_verified_phone_exists -eq $true -or
@@ -171,10 +200,25 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if ($env:SUPABASE_PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Unexpected Supabase project.' }
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          [string]$sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815223000_qnsa_non_watch_exact_phone_linkage.sql'
-          $sql += "`n" + [string](Get-Content -Raw -LiteralPath 'supabase/migrations/20260815234500_qnsa_non_watch_linkage_plan_fence.sql')
-          $sql += "`n" + [string](Get-Content -Raw -LiteralPath 'supabase/migrations/20260815235500_qnsa_non_watch_candidate_driven_linkage.sql')
-          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
+          function Get-ForwardMigrationBody([string]$path) {
+            $lines = @(Get-Content -LiteralPath $path)
+            $beginIndex = -1
+            $commitIndex = -1
+            for ($i=0; $i -lt $lines.Count; $i++) {
+              if ($beginIndex -lt 0 -and $lines[$i].Trim() -eq 'BEGIN;') { $beginIndex = $i }
+              if ($lines[$i].Trim() -eq 'COMMIT;') { $commitIndex = $i }
+            }
+            if ($beginIndex -lt 0 -or $commitIndex -le $beginIndex) {
+              throw "Migration $path does not have one outer transaction contract."
+            }
+            $bodyLines = for ($i=0; $i -lt $lines.Count; $i++) {
+              if ($i -ne $beginIndex -and $i -ne $commitIndex) { $lines[$i] }
+            }
+            return ($bodyLines -join "`n")
+          }
+          $migrationBody = Get-ForwardMigrationBody 'supabase/migrations/20260815235500_qnsa_non_watch_candidate_driven_linkage.sql'
+          $atomicSql = "BEGIN;`n$migrationBody`nCOMMIT;"
+          $body = @{ query = $atomicSql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post `
             -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
             -Headers $headers -ContentType 'application/json' -Body $body | Out-Null

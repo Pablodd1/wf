@@ -101,3 +101,28 @@ therefore supersedes traversal, not eligibility:
   the release control remains unchanged;
 - EXPLAIN must show the category index, raw primary key, and bounded nested-loop
   plan before a canary/full write is attempted.
+
+PR review added three independent production-safety fences before this forward
+migration may be run:
+
+- FULL performs a read-only census of each frozen category stream, the apply
+  traversal, and a second read-only census. Per-page digests cover listing ID,
+  timestamp, raw-version ID, source record ID, source hash, and candidate hash.
+  Counts and chained digests must agree across all three traversals, so an
+  eligibility backfill or update below an already-consumed cursor blocks FULL
+  completion instead of being silently skipped.
+- GitHub serializes the workflow with a non-cancelling concurrency group. A
+  private database lease additionally blocks overlap from another workflow or
+  direct runner; it is renewed on every bounded page and released in `finally`.
+- The workflow no longer concatenates historical migrations. It verifies that
+  the installed reconciliation definition is the bounded private-ledger form
+  (not merely that a function with that name exists), removes only the new migration's outer transaction
+  lines, and submits that one forward migration inside one BEGIN/COMMIT. Compile
+  uses the same body inside BEGIN/ROLLBACK. Inner PL/pgSQL BEGIN statements are
+  preserved, and a failure cannot commit an earlier portion of the DDL.
+
+Production evidence later confirmed successful workflow `31914163791` had
+already installed the bounded reconciliation/plan fence and completed 703
+bounded pages. The candidate migration therefore does not duplicate or replace
+that historical DDL; both the workflow audit and runner inspect its installed
+definition and fail closed if the population-wide predecessor reappears.

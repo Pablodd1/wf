@@ -9,6 +9,73 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '30s';
 
+CREATE TABLE IF NOT EXISTS public.qnsa_non_watch_linkage_lease (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  owner_id uuid,
+  lease_mode text,
+  acquired_at timestamptz,
+  expires_at timestamptz,
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+ALTER TABLE public.qnsa_non_watch_linkage_lease ENABLE ROW LEVEL SECURITY;
+REVOKE ALL ON public.qnsa_non_watch_linkage_lease FROM PUBLIC,anon,authenticated;
+GRANT SELECT,INSERT,UPDATE ON public.qnsa_non_watch_linkage_lease
+  TO service_role,postgres,supabase_admin;
+
+CREATE OR REPLACE FUNCTION public.qnsa_non_watch_linkage_lease_action(
+  p_owner_id uuid,p_action text,p_mode text DEFAULT NULL,p_ttl_seconds integer DEFAULT 900
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path=pg_catalog,public
+AS $$
+DECLARE
+  v_action text:=lower(NULLIF(btrim(p_action),''));
+  v_row public.qnsa_non_watch_linkage_lease%ROWTYPE;
+BEGIN
+  IF p_owner_id IS NULL OR v_action NOT IN ('acquire','renew','release') THEN
+    RAISE EXCEPTION 'valid linkage lease owner and action are required';
+  END IF;
+  IF p_ttl_seconds NOT BETWEEN 60 AND 1800 THEN
+    RAISE EXCEPTION 'linkage lease ttl must be 60..1800 seconds';
+  END IF;
+
+  INSERT INTO public.qnsa_non_watch_linkage_lease(singleton)
+  VALUES(true) ON CONFLICT(singleton) DO NOTHING;
+  SELECT * INTO v_row FROM public.qnsa_non_watch_linkage_lease
+  WHERE singleton=true FOR UPDATE;
+
+  IF v_action='acquire' THEN
+    IF v_row.owner_id IS NOT NULL AND v_row.owner_id<>p_owner_id
+        AND v_row.expires_at>clock_timestamp() THEN
+      RETURN jsonb_build_object('acquired',false,'status','HELD_BY_ANOTHER_RUN',
+        'expires_at',v_row.expires_at);
+    END IF;
+    UPDATE public.qnsa_non_watch_linkage_lease SET owner_id=p_owner_id,
+      lease_mode=left(COALESCE(NULLIF(btrim(p_mode),''),'unknown'),32),
+      acquired_at=clock_timestamp(),expires_at=clock_timestamp()+make_interval(secs=>p_ttl_seconds),
+      updated_at=clock_timestamp() WHERE singleton=true;
+    RETURN jsonb_build_object('acquired',true,'status','ACQUIRED');
+  ELSIF v_action='renew' THEN
+    IF v_row.owner_id IS DISTINCT FROM p_owner_id OR v_row.expires_at<=clock_timestamp() THEN
+      RAISE EXCEPTION 'non-watch linkage lease is not owned by this run';
+    END IF;
+    UPDATE public.qnsa_non_watch_linkage_lease
+      SET expires_at=clock_timestamp()+make_interval(secs=>p_ttl_seconds),updated_at=clock_timestamp()
+      WHERE singleton=true;
+    RETURN jsonb_build_object('acquired',true,'status','RENEWED');
+  ELSE
+    IF v_row.owner_id IS DISTINCT FROM p_owner_id THEN
+      RAISE EXCEPTION 'non-watch linkage lease cannot be released by another run';
+    END IF;
+    UPDATE public.qnsa_non_watch_linkage_lease SET owner_id=NULL,lease_mode=NULL,
+      acquired_at=NULL,expires_at=NULL,updated_at=clock_timestamp() WHERE singleton=true;
+    RETURN jsonb_build_object('acquired',false,'status','RELEASED');
+  END IF;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.qnsa_non_watch_dealer_candidate_link_page(
   p_expected_run_key text,
   p_category text,
@@ -81,7 +148,7 @@ BEGIN
 
   WITH candidates AS MATERIALIZED (
     SELECT listing.id, listing.created_at, listing.raw_message_version_id,
-      listing.source_record_id, listing.source_hash
+      listing.source_record_id, listing.source_hash,listing.source_candidate_hash
     FROM staging.listings AS listing
     WHERE listing.normalization_run_key=v_run_key
       AND listing.category=v_category
@@ -184,6 +251,10 @@ BEGIN
     'conflicting_links',v_conflicting,'dealers_matched',v_dealers_matched,
     'next_created_at',COALESCE(v_next_created_at,p_before_created_at),
     'next_id',COALESCE(v_next_id,p_before_id),'has_more',v_has_more,
+    'candidate_page_digest',COALESCE((SELECT md5(string_agg(
+      concat_ws(':',id::text,created_at::text,raw_message_version_id::text,
+        source_record_id,source_hash,source_candidate_hash),','
+      ORDER BY created_at DESC,id DESC)) FROM candidate_page),md5('')),
     'apply_requested',p_apply,'status','OK');
 END;
 $$;
@@ -194,5 +265,8 @@ REVOKE ALL ON FUNCTION public.qnsa_non_watch_dealer_candidate_link_page(
 GRANT EXECUTE ON FUNCTION public.qnsa_non_watch_dealer_candidate_link_page(
   text,text,timestamptz,uuid,timestamptz,uuid,integer,boolean,integer)
   TO service_role,postgres,supabase_admin;
-
+REVOKE ALL ON FUNCTION public.qnsa_non_watch_linkage_lease_action(uuid,text,text,integer)
+  FROM PUBLIC,anon,authenticated;
+GRANT EXECUTE ON FUNCTION public.qnsa_non_watch_linkage_lease_action(uuid,text,text,integer)
+  TO service_role,postgres,supabase_admin;
 COMMIT;
