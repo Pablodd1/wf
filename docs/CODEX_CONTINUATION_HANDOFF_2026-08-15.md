@@ -106,7 +106,12 @@ The observed collaboration spans August 11–15, 2026, approximately four calend
 This continuation was executed on a review branch after a fresh live health and
 release-summary check. Production remained on QNSA `qnsafosakvonzgfcsphh`.
 
-### Implemented in the pending review branch
+### Implemented and deployed
+
+The market, Reference Check, and POST IT application changes were merged through
+PR #559 at `11d187a1f99bda3840efe225c8421cf5db84f54d`. The follow-up Price
+Research contact-consent repair was merged through PR #560 at
+`21ef28492013e51748ff66cf25fb4d5ae5a5f052` and independently accepted live.
 
 - Price Research replaces the large Reference activity panel with one compact
   WTB Demand summary and removes the visible Statistical Price Outliers card.
@@ -144,6 +149,9 @@ release-summary check. Production remained on QNSA `qnsafosakvonzgfcsphh`.
   Zenith 49.9010.9004/01.R947.
 - The designated Zenith gate `03.2522.400` remains NOT READY: 20 tracked rows,
   one qualified WTS, 19 required-field exclusions, and no statistics/forecast.
+- Final Rolex 116500LN live privacy/visual acceptance passed: 1,057 tracked,
+  200 qualified WTS, 219 WTB, reconciliation true, two dial cohorts/trends, and
+  zero phone/WhatsApp fields or actions without explicit publication consent.
 
 ### Still pending before Panerai
 
