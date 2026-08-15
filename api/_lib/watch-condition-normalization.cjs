@@ -19,8 +19,14 @@ function withoutConditionOnlyMintGreen(rawText) {
   return String(rawText || '').replace(/\bmint\s+green\b(?!\s+dial\b)/gi, 'mint');
 }
 
+function withoutNonDialGreenEvidence(rawText) {
+  return String(rawText || '')
+    .replace(/\bgreen\s+(?:card(?:s)?|tag(?:s)?|box(?:es)?|seal(?:s)?|sticker(?:s)?|bezel(?:s)?|strap(?:s)?|band(?:s)?|bracelet(?:s)?)\b/gi, ' ')
+    .replace(/\b(?:card(?:s)?|tag(?:s)?|box(?:es)?|seal(?:s)?|sticker(?:s)?|bezel(?:s)?|strap(?:s)?|band(?:s)?|bracelet(?:s)?)\s+(?:is\s+)?green\b/gi, ' ');
+}
+
 function hasIndependentGreenEvidence(rawText) {
-  const text = withoutConditionOnlyMintGreen(rawText);
+  const text = withoutNonDialGreenEvidence(withoutConditionOnlyMintGreen(rawText));
   return /(?:\bgreen\s+dial\b|\bdial\s*[:=-]?\s*green\b|\bgreen\b)/i.test(text);
 }
 
@@ -63,4 +69,5 @@ module.exports = {
   normalizeWatchConditionFields,
   normalizeWatchDial,
   withoutConditionOnlyMintGreen,
+  withoutNonDialGreenEvidence,
 };

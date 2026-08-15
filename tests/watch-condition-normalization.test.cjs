@@ -32,6 +32,23 @@ test('explicit Green dial remains Green while mint remains condition', () => {
   assert.equal(corrected.dial_color, 'Green');
 });
 
+test('green cards and components are not accepted as Green dial evidence', () => {
+  for (const raw_message of [
+    'Rolex Daytona 116500LN mint with green cards',
+    'Rolex Daytona 116508 mint, green tag and full set',
+    'Rolex Daytona 116508 mint on green strap',
+    'Rolex Daytona 116508 mint with green bezel',
+  ]) {
+    const corrected = normalizeWatchConditionFields({
+      dial_color: 'Green',
+      condition: null,
+      raw_message,
+    });
+    assert.equal(corrected.condition, 'Used - Like New');
+    assert.equal(corrected.dial_color, null);
+  }
+});
+
 test('Mint and Mint Green are rejected as dial values for every brand', () => {
   assert.equal(normalizeDialValue('Mint').known, false);
   assert.equal(normalizeDialValue('Mint Green').known, false);
