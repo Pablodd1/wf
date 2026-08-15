@@ -19,6 +19,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
 
   assert.match(header, /<Link to="\/" aria-label="Curated Luxury home"/);
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
+  assert.match(header, /label: 'LANDING PAGE', to: '\/'/);
   assert.match(header, /label: 'PRICE RESEARCH', to: '\/price-research'/);
   assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
   assert.match(header, /label: 'POST IT', to: '\/dealer\/post'/);

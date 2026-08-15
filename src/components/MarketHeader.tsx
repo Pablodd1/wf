@@ -13,6 +13,7 @@ type HeaderLink = {
 };
 
 const HEADER_LINKS: HeaderLink[] = [
+  { label: 'LANDING PAGE', to: '/' },
   { label: 'TRADING FLOOR', to: '/trading' },
   { label: 'PRICE RESEARCH', to: '/price-research' },
   { label: 'POST IT', to: '/dealer/post' },
