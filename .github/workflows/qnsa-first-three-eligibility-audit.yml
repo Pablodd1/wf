@@ -38,23 +38,22 @@ jobs:
             FROM public.qnsa_two_brand_release_control
             WHERE trading_floor_enabled = true
               AND canonical_brand IN ('Rolex','Patek Philippe','Audemars Piguet')
-          ), candidates AS MATERIALIZED (
-            SELECT l.*,
-              row_number() OVER (
-                PARTITION BY l.brand_normalized
-                ORDER BY (COALESCE(l.price_usd,l.price_normalized,0)>0) DESC,
-                  l.created_at DESC, l.id DESC
-              ) AS candidate_position
-            FROM enabled e
-            JOIN staging.listings l
-              ON l.normalization_run_key=e.enabled_run_key
-             AND l.brand_normalized=e.canonical_brand
-            WHERE l.parent_id IS NULL
-              AND COALESCE(l.is_bundle,false)=false
-              AND btrim(COALESCE(l.image_url,l.source_media_url_candidate,''))
-                ~* '^https?://[^[:space:]]+$'
           ), sample AS MATERIALIZED (
-            SELECT * FROM candidates WHERE candidate_position <= 2500
+            SELECT candidate.*
+            FROM enabled e
+            CROSS JOIN LATERAL (
+              SELECT l.*
+              FROM staging.listings l
+              WHERE l.normalization_run_key=e.enabled_run_key
+                AND l.brand_normalized=e.canonical_brand
+                AND l.parent_id IS NULL
+                AND COALESCE(l.is_bundle,false)=false
+                AND btrim(COALESCE(l.image_url,l.source_media_url_candidate,''))
+                  ~* '^https?://[^[:space:]]+$'
+              ORDER BY (COALESCE(l.price_usd,l.price_normalized,0)>0) DESC,
+                l.created_at DESC, l.id DESC
+              LIMIT 2500
+            ) candidate
           ), assessed AS MATERIALIZED (
             SELECT s.*,
               upper(COALESCE(s.category,''))='WATCH' AS category_ok,

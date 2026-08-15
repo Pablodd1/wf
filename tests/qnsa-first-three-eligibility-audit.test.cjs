@@ -10,7 +10,9 @@ const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflow
 
 test('first-three diagnostic is bounded, read-only, sanitized, and QNSA-pinned', () => {
   assert.match(workflow, /PROJECT_REF: qnsafosakvonzgfcsphh/);
-  assert.match(workflow, /candidate_position <= 2500/);
+  assert.match(workflow, /CROSS JOIN LATERAL/);
+  assert.match(workflow, /LIMIT 2500/);
+  assert.doesNotMatch(workflow, /row_number\(\)/i);
   assert.match(workflow, /read_only = \$false/);
   assert.match(workflow, /SQL[\s\S]*SELECT-only/);
   assert.match(workflow, /GROUP BY brand_normalized/);
