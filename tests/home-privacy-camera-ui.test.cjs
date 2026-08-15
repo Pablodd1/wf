@@ -5,17 +5,19 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
-test('home restores dark video hero and only requested public tabs', () => {
+test('home restores cream dealer-network landing and only requested public tabs', () => {
   const home = read('src/pages/LandingPage.tsx');
   const header = read('src/components/MarketHeader.tsx');
-  assert.match(home, /curated-luxury-hero\.webm/);
-  assert.match(home, /curated-luxury-hero\.mp4/);
+  assert.match(home, /The trading floor for the world's dealer network/);
+  assert.match(home, /Meet Fi/);
+  assert.match(home, /From chat noise to a closed trade/);
+  assert.doesNotMatch(home, /curated-luxury-hero\.(?:webm|mp4)/);
   const landingLinks = header.match(/const LANDING_LINKS[\s\S]*?\];/)?.[0] || '';
   assert.match(landingLinks, /TRADING FLOOR/);
   assert.match(landingLinks, /HIRE FI/);
   assert.match(landingLinks, /WORKSPACE/);
   assert.doesNotMatch(landingLinks, /PRICE RESEARCH|MEMBERSHIP/);
-  assert.match(header, /curated-luxury-logo-dark\.png/);
+  assert.match(header, /curated-luxury-logo\.png/);
 });
 
 test('workspace omits synthetic demos and phone installation instructions', () => {

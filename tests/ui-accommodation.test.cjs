@@ -213,8 +213,8 @@ test('home and Post an Item share a persistent multilingual interface without ch
   assert.match(toggle, /aria-label=\{t\('Language'\)\}/);
   assert.match(main, /<LanguageProvider>/);
   assert.match(header, /<LanguageToggle compact/);
-  assert.match(home, /curated-luxury-hero\.webm/);
-  assert.match(home, /Exceptional objects/);
+  assert.match(home, /The trading floor for the world's dealer network/);
+  assert.match(home, /Meet Fi/);
   assert.match(post, /<LanguageToggle/);
   assert.match(post, /Original listing or request message/);
   assert.match(post, /value=\{item\.raw_message\}/);

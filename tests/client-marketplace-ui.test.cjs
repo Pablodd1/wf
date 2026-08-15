@@ -34,7 +34,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.doesNotMatch(header, /label: 'ADM PANEL'/);
   assert.match(header, /<LanguageToggle compact \/>/);
   assert.doesNotMatch(header, /!landing && <LanguageToggle/);
-  assert.match(home, /<MarketHeader className="absolute left-0 right-0 top-\[31px\]" landing \/>/);
+  assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
   assert.match(footer, /\['POST IT', '\/dealer\/post'\]/);
   assert.match(footer, /APP_POST_SMART_URL = 'https:\/\/91933fc4\.curatedlux\.pages\.dev'/);
   assert.match(footer, /href=\{APP_POST_SMART_URL\}[\s\S]*APP POST SMART/);
@@ -52,11 +52,10 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /location\.pathname === '\/trading' && !wantsToBuy/);
   assert.match(header, /link\.to === '\/trading\?type=WTB'[\s\S]*\? wantsToBuy/);
   assert.match(banner, /href="https:\/\/luxfi\.ai\/#add-fi"/);
-  assert.match(home, /Exceptional objects\./);
-  assert.match(home, /Intelligent access\./);
-  assert.match(home, /Enter Trading Floor/);
-  assert.match(home, /Explore the collection/);
-  assert.doesNotMatch(home, /id="membership"|\$150/);
+  assert.match(home, /The trading floor for the world's dealer network/);
+  assert.match(home, /See live Trading Floor/);
+  assert.match(home, /From chat noise to a closed trade/);
+  assert.match(home, /id="membership"[\s\S]*\$150/);
   assert.match(styles, /@keyframes luxury-gold-flow-down/);
   assert.match(styles, /animation: luxury-gold-flow-down 6s ease-in-out infinite/);
   assert.match(styles, /prefers-reduced-motion: reduce/);

@@ -1,50 +1,171 @@
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, Bot, Check, Search, ShieldCheck } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Footer } from '@/components/Footer';
 import { MarketHeader, LUXFI_URL } from '@/components/MarketHeader';
 import { MarketActivityTicker } from '@/components/MarketActivityTicker';
+import { useLanguage } from '@/i18n/LanguageContext';
 
-const collections = [
-  ['Important watches', '/images/editorial/important-watches.webp', '/trading?item=watches'],
-  ['Rare handbags', '/images/editorial/rare-handbags.webp', '/trading?item=handbags'],
-  ['High jewelry', '/images/editorial/high-jewelry.webp', '/trading?item=jewelry'],
+const networkStats = [
+  ['Source-backed', 'Dealer directory'],
+  ['1.39M', 'Historical source records'],
+  ['WTS + WTB', 'Market activity'],
+  ['Dated', 'Price evidence'],
+] as const;
+
+const workflow = [
+  {
+    number: '01',
+    title: 'Post or browse',
+    detail: 'List what you are selling or looking for once. Fi matches it against the full dealer network, not only your own channels.',
+  },
+  {
+    number: '02',
+    title: 'Fi matches and negotiates',
+    detail: 'Fi surfaces verified counterparties, confirms price and condition, and opens the conversation so the back-and-forth is done before you are needed.',
+  },
+  {
+    number: '03',
+    title: 'Close with confidence',
+    detail: 'Dealer ratings, independent inspection, and escrow-backed payment support a faster and safer close.',
+  },
+] as const;
+
+const trustPartners = [
+  ['LuxFi', 'Continuous network monitoring and negotiation support.', 'Three introductions included with membership'],
+  ['Bennisson', 'Independent virtual or in-person inspection before funds move.', 'First inspection included with membership'],
+  ['Dealer Ref Check', 'Counterparty verification from source-backed dealer history.', 'Included with every verified match'],
 ] as const;
 
 export default function LandingPage() {
+  const { t } = useLanguage();
+
   return (
-    <main className="min-h-screen bg-[#08080c] text-white">
+    <main className="min-h-screen bg-[#f3ecdf] text-[#211b15]">
       <MarketActivityTicker />
-      <MarketHeader className="absolute left-0 right-0 top-[31px]" landing />
-      <section className="relative min-h-[86vh] overflow-hidden" aria-labelledby="home-hero-title">
-        <video className="absolute inset-0 h-full w-full object-cover" autoPlay muted loop playsInline preload="metadata" poster="/video/curated-luxury-hero-poster.jpg" aria-hidden="true">
-          <source src="/video/curated-luxury-hero.webm" type="video/webm" />
-          <source src="/video/curated-luxury-hero.mp4" type="video/mp4" />
-        </video>
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,4,7,.88)_0%,rgba(4,4,7,.54)_48%,rgba(4,4,7,.2)_100%)]" />
-        <div className="relative mx-auto flex min-h-[86vh] max-w-7xl items-center px-5 pb-12 pt-36 sm:px-8 sm:pt-40 lg:px-12">
-          <div className="max-w-4xl">
-            <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-[#d5b56f]">Curated access · source-backed intelligence</p>
-            <h1 id="home-hero-title" className="mt-5 font-serif text-[clamp(2.8rem,6.2vw,6rem)] leading-[0.92] tracking-[-0.04em]">Exceptional objects.<br />Intelligent access.</h1>
-            <p className="mt-7 max-w-xl text-sm leading-7 text-white/65 sm:text-base">Trade watches and luxury objects through a global dealer network, with structured evidence, price research, and Fi working beside you.</p>
-            <div className="mt-9 flex flex-col gap-3 sm:flex-row">
-              <Link to="/trading" className="inline-flex min-h-12 items-center justify-center gap-2 bg-[#c39a4c] px-7 text-sm font-semibold text-[#100d09]">Enter Trading Floor <ArrowRight size={16} /></Link>
-              <Link to="/dealer/workspace" className="inline-flex min-h-12 items-center justify-center border border-white/35 bg-black/20 px-7 text-sm font-semibold text-white backdrop-blur">Open Workspace</Link>
-              <a href={LUXFI_URL} target="_blank" rel="noreferrer" className="inline-flex min-h-12 items-center justify-center border border-white/35 bg-black/20 px-7 text-sm font-semibold text-white backdrop-blur">Hire FI</a>
+      <MarketHeader className="sticky top-0" landing />
+
+      <section className="border-b border-[#3f3324]/15 px-5 py-20 text-center sm:px-8 sm:py-28 lg:px-12 lg:py-32">
+        <div className="mx-auto max-w-4xl">
+          <p className="mx-auto inline-flex rounded-full bg-[#e8dcc4] px-4 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-[#735c32]">
+            {t('For verified dealers and wholesalers')}
+          </p>
+          <h1 className="mt-7 font-serif text-[clamp(3rem,7vw,6rem)] leading-[0.98] tracking-[-0.035em]">
+            {t("The trading floor for the world's dealer network")}
+          </h1>
+          <p className="mx-auto mt-7 max-w-2xl text-base leading-7 text-[#574b3e] sm:text-lg">
+            {t('Organized, source-backed market intelligence and dealer activity in one workspace, with Fi helping you spend less time scrolling and more time closing.')}
+          </p>
+          <div className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">
+            <Link to="/dealer/workspace" className="inline-flex min-h-12 min-w-48 items-center justify-center gap-2 rounded bg-[#211b15] px-6 text-sm font-semibold text-white hover:bg-[#3a3027]">
+              {t('Join the network')} <ArrowRight size={16} />
+            </Link>
+            <Link to="/trading" className="inline-flex min-h-12 min-w-48 items-center justify-center gap-2 rounded border border-[#3f3324]/25 bg-white/25 px-6 text-sm font-semibold hover:bg-white/60">
+              {t('See live Trading Floor')} <ArrowRight size={16} />
+            </Link>
+          </div>
+        </div>
+        <div className="mx-auto mt-16 grid max-w-5xl grid-cols-2 border-y border-[#3f3324]/15 py-7 md:grid-cols-4">
+          {networkStats.map(([value, label], index) => (
+            <div key={label} className={`px-3 py-4 ${index % 2 === 0 ? 'border-r' : ''} border-[#3f3324]/15 md:border-r md:last:border-r-0`}>
+              <strong className="block font-serif text-3xl font-normal">{value}</strong>
+              <span className="mt-1 block text-[10px] font-semibold uppercase tracking-[0.12em] text-[#766857]">{t(label)}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="meet-fi" className="border-b border-[#3f3324]/15 px-5 py-20 sm:px-8 sm:py-28 lg:px-12">
+        <div className="mx-auto grid max-w-6xl gap-12 lg:grid-cols-2 lg:items-center">
+          <div>
+            <p className="inline-flex rounded-full bg-[#e8dcc4] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[#735c32]">{t('Meet Fi')}</p>
+            <h2 className="mt-5 max-w-xl font-serif text-4xl leading-tight sm:text-5xl">{t('Your AI agent, negotiating every match')}</h2>
+            <p className="mt-6 max-w-xl text-sm leading-7 text-[#625547]">
+              {t('Fi reads WTS and WTB activity, cleans up the data, and opens the negotiation on your behalf. You step in once there is a real deal on the table.')}
+            </p>
+            <ul className="mt-7 space-y-4 text-sm text-[#4f4438]">
+              <li><strong>{t('Finds the match')}</strong> — {t('cross-references price, condition, location, and dealer evidence.')}</li>
+              <li><strong>{t('Opens the negotiation')}</strong> — {t('confirms interest, price, and terms before you are pulled in.')}</li>
+              <li><strong>{t('Closes with support')}</strong> — {t('hands off to inspection and escrow partners when required.')}</li>
+            </ul>
+            <a href={LUXFI_URL} target="_blank" rel="noreferrer" className="mt-8 inline-flex items-center gap-2 border-b border-[#211b15] pb-1 text-sm font-semibold">
+              {t('Hire Fi')} <ArrowRight size={15} />
+            </a>
+          </div>
+          <div className="rounded-lg border border-[#3f3324]/15 bg-[#fbf7ef] p-5 shadow-[0_22px_60px_rgba(74,54,29,0.10)] sm:p-7">
+            <div className="flex items-center gap-3 border-b border-[#3f3324]/15 pb-4">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-[#211b15] text-[#d8b36b]"><Bot size={17} /></span>
+              <div><strong className="block text-sm">Fi — {t('negotiation agent')}</strong><span className="text-xs text-[#756a5d]">{t('matching now')}</span></div>
+            </div>
+            <div className="mt-5 space-y-3 text-sm leading-6">
+              <p className="mr-12 rounded bg-[#efe3cb] p-4">{t('Found a source-backed match for your requested reference with a verified dealer.')}</p>
+              <p className="ml-12 rounded bg-[#211b15] p-4 text-white">{t('Ask whether the seller can close this week.')}</p>
+              <p className="mr-12 rounded bg-[#efe3cb] p-4">{t('The seller confirmed condition and supplied price. Contact details are ready.')}</p>
+              <p className="flex items-center gap-2 rounded bg-[#e3eee5] p-4 font-mono text-xs"><Check size={14} /> {t('Matched · terms confirmed')}</p>
             </div>
           </div>
         </div>
       </section>
-      <section className="border-y border-white/10 px-5 py-16 sm:px-8 lg:px-12">
-        <div className="mx-auto max-w-7xl">
-          <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
-            <div><p className="font-mono text-[10px] uppercase tracking-[0.2em] text-[#c9a96e]">Curated marketplace</p><h2 className="mt-3 font-serif text-4xl sm:text-5xl">Explore the collection</h2></div>
-            <Link to="/trading" className="text-sm text-white/60 hover:text-white">View all market activity →</Link>
+
+      <section className="border-b border-[#3f3324]/15 px-5 py-20 sm:px-8 sm:py-28 lg:px-12">
+        <div className="mx-auto max-w-6xl">
+          <div className="text-center">
+            <h2 className="font-serif text-4xl sm:text-5xl">{t('From chat noise to a closed trade')}</h2>
+            <p className="mt-3 text-sm text-[#756a5d]">{t('Three steps, with most of the work done for you')}</p>
           </div>
-          <div className="mt-9 grid gap-4 md:grid-cols-3">
-            {collections.map(([name, image, to]) => <Link key={name} to={to} className="group relative min-h-80 overflow-hidden border border-white/10"><img src={image} alt="" className="absolute inset-0 h-full w-full object-cover transition duration-500 group-hover:scale-[1.03]" /><div className="absolute inset-0 bg-gradient-to-t from-black via-black/15 to-transparent" /><span className="absolute bottom-6 left-6 font-serif text-2xl">{name}</span></Link>)}
+          <div className="mt-12 grid gap-4 md:grid-cols-3">
+            {workflow.map(item => (
+              <article key={item.number} className="min-h-56 rounded border border-[#3f3324]/15 bg-[#f8f2e7] p-7">
+                <span className="font-mono text-[10px] text-[#a17d38]">{item.number}</span>
+                <h3 className="mt-7 font-serif text-2xl">{t(item.title)}</h3>
+                <p className="mt-4 text-sm leading-6 text-[#6a5d4e]">{t(item.detail)}</p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
+
+      <section className="px-5 py-20 sm:px-8 sm:py-28 lg:px-12">
+        <div className="mx-auto max-w-6xl">
+          <div className="text-center">
+            <ShieldCheck className="mx-auto text-[#9a7634]" size={28} />
+            <h2 className="mt-4 font-serif text-4xl sm:text-5xl">{t('Built on trust, not just volume')}</h2>
+            <p className="mt-3 text-sm text-[#756a5d]">{t('Every match runs through independent security and verification partners')}</p>
+          </div>
+          <div className="mt-12 grid gap-4 md:grid-cols-3">
+            {trustPartners.map(([name, detail, offer]) => (
+              <article key={name} className="rounded bg-[#211b15] p-7 text-white">
+                <h3 className="font-serif text-2xl">{name}</h3>
+                <p className="mt-4 min-h-14 text-sm leading-6 text-white/60">{t(detail)}</p>
+                <p className="mt-5 rounded bg-[#4a3a24]/70 px-4 py-3 font-mono text-[10px] text-[#e3c98f]">{t(offer)}</p>
+              </article>
+            ))}
+          </div>
+
+          <section id="membership" className="mx-auto mt-20 max-w-xl rounded-lg border border-[#9a7634]/30 bg-[#faf5ec] p-8 text-center shadow-sm sm:p-10">
+            <p className="inline-flex rounded-full bg-[#e8dcc4] px-3 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-[#735c32]">{t('Membership')}</p>
+            <p className="mt-5 font-serif text-5xl">$150 <span className="text-sm text-[#756a5d]">/{t('month')}</span></p>
+            <ul className="mx-auto mt-7 max-w-md space-y-3 text-left text-sm leading-6 text-[#514539]">
+              {[
+                'Full access to the Trading Floor and dealer network',
+                'Fi negotiation support for WTS and WTB activity',
+                'Source-backed dealer ratings and Dealer Ref Check',
+                'Priority access to inspection and escrow partners',
+              ].map(item => <li key={item} className="flex gap-3"><Check size={16} className="mt-1 shrink-0 text-[#6b8d72]" />{t(item)}</li>)}
+            </ul>
+            <Link to="/dealer/workspace" className="mt-8 inline-flex min-h-12 items-center justify-center rounded bg-[#211b15] px-7 text-sm font-semibold text-white">{t('Start your membership')}</Link>
+          </section>
+        </div>
+      </section>
+
+      <section className="bg-[#211b15] px-5 py-20 text-center text-white sm:px-8">
+        <h2 className="font-serif text-4xl sm:text-5xl">{t('Stop scrolling. Start trading.')}</h2>
+        <p className="mx-auto mt-4 max-w-xl text-sm leading-6 text-white/55">{t('Join the verified dealer network already trading through Curated Luxury.')}</p>
+        <div className="mt-7 flex flex-col items-center justify-center gap-3 sm:flex-row">
+          <Link to="/dealer/workspace" className="inline-flex min-h-12 items-center gap-2 rounded bg-[#b98432] px-7 text-sm font-semibold text-white">{t('Join the network')} <ArrowRight size={16} /></Link>
+          <Link to="/price-research" className="inline-flex min-h-12 items-center gap-2 rounded border border-white/20 px-7 text-sm font-semibold text-white"><Search size={15} /> {t('Price Research')}</Link>
+        </div>
+      </section>
+
       <Footer />
     </main>
   );
