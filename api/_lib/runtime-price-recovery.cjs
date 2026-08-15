@@ -113,6 +113,7 @@ async function recoverRecordPrices(records, options = {}) {
     // particular, references such as "RM 001" must never be reparsed as a
     // Malaysian-ringgit amount by this later recovery pass.
     observation: String(record?.price_evidence_status || '').toUpperCase() === 'REFERENCE_TOKEN_AS_PRICE'
+      || String(record?.workbook_price_review_reason || '').trim()
       ? null
       : explicitObservation(record?.raw_message),
   };

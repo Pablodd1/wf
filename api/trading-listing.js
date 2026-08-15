@@ -4,6 +4,7 @@ const { getClient } = require('./_lib/supabase');
 const { listEquivalentReferences } = require('./_lib/catalog');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
+const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
@@ -33,6 +34,14 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
     if (publicError) throw publicError;
     let publicListing = strictTradingListing;
+    if (publicListing) {
+      try {
+        const enriched = await loadVerifiedListingRows(client, [id]);
+        publicListing = enriched.get(id) || publicListing;
+      } catch (mediaError) {
+        console.warn('[trading-listing] multi-image enrichment unavailable; retaining verified thumbnail:', mediaError.message);
+      }
+    }
     if (!publicListing && id.startsWith(REVIEWED_ZENITH_RECORD_PREFIX)) {
       const fallback = await client
         .from('watch_records')

@@ -28,6 +28,7 @@ const SURFACE = '#FBF7EF';
 const PANEL = '#F3ECDF';
 const PAGE = '#F3ECDF';
 const RED = '#B42318';
+const MAX_EMPTY_CURSOR_HOPS = 3;
 
 const CATEGORY_OPTIONS = [
   { label: 'All inventory', value: 'all' },
@@ -505,22 +506,37 @@ export default function TradingFloor() {
         if (categoryFilter !== 'all') params.set('item', categoryFilter);
         if (!['all', 'watches'].includes(categoryFilter)) params.delete('brand');
         const endpoint = '/api/reviewed-market-inventory';
-        const requestUrl = `${endpoint}?${params.toString()}`;
-        let response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
-        // A cold hosted query can occasionally cross the database statement
-        // timeout. Retry once after a short pause so a transient 503 does not
-        // leave the customer staring at an empty Trading Floor.
-        if (response.status === 502 || response.status === 503 || response.status === 504) {
-          await new Promise(resolve => window.setTimeout(resolve, 450));
-          if (controller.signal.aborted) return;
-          response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
-        }
+        let response: Response;
         let data: TradingFloorResponse;
-        try {
-          data = await response.json() as TradingFloorResponse;
-        } catch {
-          data = { status: 'error' };
-        }
+        let emptyCursorHops = 0;
+
+        // Intent/image lanes are deliberately bounded in the API. A safe scan
+        // window can therefore contain zero public rows while returning a
+        // progressing cursor (WTB is notably sparse in the image-first lane).
+        // Follow only empty cursor windows, never skip a returned listing, and
+        // cap the extra reads so one customer request remains bounded.
+        do {
+          const requestUrl = `${endpoint}?${params.toString()}`;
+          response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
+          // A cold hosted query can occasionally cross the database statement
+          // timeout. Retry once after a short pause so a transient 503 does not
+          // leave the customer staring at an empty Trading Floor.
+          if (response.status === 502 || response.status === 503 || response.status === 504) {
+            await new Promise(resolve => window.setTimeout(resolve, 450));
+            if (controller.signal.aborted) return;
+            response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
+          }
+          try {
+            data = await response.json() as TradingFloorResponse;
+          } catch {
+            data = { status: 'error' };
+          }
+          if (!response.ok || data.status === 'error' || !Array.isArray(data.records)
+            || data.records.length > 0 || !data.hasMore || !data.nextCursor
+            || emptyCursorHops >= MAX_EMPTY_CURSOR_HOPS - 1) break;
+          params.set('cursor', data.nextCursor);
+          emptyCursorHops += 1;
+        } while (!controller.signal.aborted);
 
         if (data.status === 'supabase_not_configured') {
           throw new Error('Inventory is temporarily unavailable.');
@@ -1677,24 +1693,28 @@ function getListingMeta(listing: ListingRecord) {
   const verifiedPlausible = isReferencePricePlausible(listing, verifiedUsd);
   const workbookPlausible = isReferencePricePlausible(listing, reviewedWorkbookUsd);
   
-  const priceLabel = verifiedUsd !== null
-    ? (verifiedPlausible ? formatUsdPrice(verifiedUsd) : 'Price under review')
-    : sourcePrice
-      ? sourcePrice
-      : reviewedWorkbookUsd !== null
-        ? (workbookPlausible ? formatUsdPrice(reviewedWorkbookUsd) : 'Price under review')
-        : workbookPriceNeedsReview
-          ? 'Price requires review'
+  // A workbook review hold is a customer-display hold as well as an
+  // analytics hold. Keep the listing and immutable raw message visible, but
+  // never let the same malformed amount fall back through verified/source
+  // formatting (for example `$25,1` displayed as USD 251).
+  const priceLabel = workbookPriceNeedsReview
+    ? 'Price requires review'
+    : verifiedUsd !== null
+      ? (verifiedPlausible ? formatUsdPrice(verifiedUsd) : 'Price under review')
+      : sourcePrice
+        ? sourcePrice
+        : reviewedWorkbookUsd !== null
+          ? (workbookPlausible ? formatUsdPrice(reviewedWorkbookUsd) : 'Price under review')
           : 'Price not supplied';
 
-  const priceEvidenceLabel = verifiedUsd !== null
-    ? 'USD price'
-    : sourcePrice
-      ? 'Original source price · no USD conversion'
-      : reviewedWorkbookUsd !== null
-        ? 'Workbook-reviewed USD - not in averages'
-        : workbookPriceNeedsReview
-          ? 'Workbook price anomaly - held for review'
+  const priceEvidenceLabel = workbookPriceNeedsReview
+    ? 'Workbook price anomaly - held for review'
+    : verifiedUsd !== null
+      ? 'USD price'
+      : sourcePrice
+        ? 'Original source price · no USD conversion'
+        : reviewedWorkbookUsd !== null
+          ? 'Workbook-reviewed USD - not in averages'
           : 'Price not supplied';
   const title = buildListingTitle(listing);
 

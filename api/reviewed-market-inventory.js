@@ -567,7 +567,7 @@ function mapDealerSubmission(row) {
   }, row.category);
   const evidenceCoverage = recordEvidenceCoverage({
     brand, model, reference, dialColor, sellerName, sellerPhone,
-    contactApproved: true, exactImageUrl: imageUrls[0] || null,
+    contactApproved, exactImageUrl: imageUrls[0] || null,
     sourceAmount: priceRaw, sourceCurrency: currency, hasCompleteIdentity,
     invalidReferenceReason: null, priceEligible,
   });
@@ -585,6 +585,10 @@ function mapDealerSubmission(row) {
     raw_message: row.raw_message, raw_message_scope: 'stored_source_message',
     raw_message_evidence_type: 'USER_ENTERED_SOURCE_MESSAGE',
     seller_name: sellerName, seller_phone: sellerPhone, seller_avatar_url: row.poster_image_url || null,
+    // Internal join hint only. `enrichRecordsWithDealerDirectory` removes it
+    // before the customer response and publishes a dealer_id/profile only
+    // when the authenticated submission owner resolves to a verified dealer.
+    source_dealer_id: evidenceValuePresent(row.dealer_id) ? row.dealer_id : null,
     seller_rating: positiveNumber(claimed.dealer_rating),
     seller_review_count: Number(claimed.review_count || 0),
     seller_rating_evidence_status: positiveNumber(claimed.dealer_rating) !== null && Number(claimed.review_count || 0) > 0
@@ -638,36 +642,50 @@ function directSubmissionMatchesImageLane(record, lane) {
 }
 
 async function enrichRecordsWithDealerDirectory(client, records = []) {
+  const recordsWithoutJoinHints = records.map(record => {
+    const { source_dealer_id: _sourceDealerId, ...publicRecord } = record;
+    return publicRecord;
+  });
   const ids = [...new Set(records.map(record => String(record?.id || '').trim()).filter(Boolean))];
-  if (ids.length === 0) return records;
+  if (ids.length === 0) return recordsWithoutJoinHints;
   const { data: links, error: linkError } = await client
     .from('dealer_listing_links')
     .select('listing_id,dealer_id')
     .eq('link_status', 'APPLIED')
     .in('listing_id', ids);
-  if (linkError || !Array.isArray(links) || links.length === 0) return records;
-  const dealerIds = [...new Set(links.map(link => String(link.dealer_id || '')).filter(Boolean))];
+  const verifiedLinks = !linkError && Array.isArray(links) ? links : [];
+  const sourceDealerIds = records
+    .map(record => String(record?.source_dealer_id || '').trim())
+    .filter(Boolean);
+  const dealerIds = [...new Set([
+    ...verifiedLinks.map(link => String(link.dealer_id || '')).filter(Boolean),
+    ...sourceDealerIds,
+  ])];
+  if (dealerIds.length === 0) return recordsWithoutJoinHints;
   const { data: dealers, error: dealerError } = await client
     .from('dealers')
     .select('id,display_name,company_name,country_code,city,rating,review_count,whatsapp_group_count,status')
     .eq('status', 'VERIFIED')
     .in('id', dealerIds);
-  if (dealerError || !Array.isArray(dealers)) return records;
+  if (dealerError || !Array.isArray(dealers)) return recordsWithoutJoinHints;
   const dealerById = new Map(dealers.map(dealer => [String(dealer.id), dealer]));
-  const dealerIdByListing = new Map(links.map(link => [String(link.listing_id), String(link.dealer_id)]));
+  const dealerIdByListing = new Map(verifiedLinks
+    .map(link => [String(link.listing_id), String(link.dealer_id)]));
   return records.map(record => {
-    const dealerId = dealerIdByListing.get(String(record.id));
+    const { source_dealer_id: sourceDealerId, ...publicRecord } = record;
+    const dealerId = String(sourceDealerId || '').trim()
+      || dealerIdByListing.get(String(record.id));
     const dealer = dealerById.get(dealerId);
-    if (!dealer) return record;
+    if (!dealer) return publicRecord;
     const reviewCount = Math.max(0, Number(dealer.review_count || 0));
     const numericRating = positiveNumber(dealer.rating);
     const ratingStatus = numericRating !== null && reviewCount > 0
       ? 'SOURCE_SUPPLIED'
       : reviewCount > 0 ? 'SOURCE_FEEDBACK_COUNT' : 'UNAVAILABLE';
     return {
-      ...record,
-      source_seller_name: record.seller_name || null,
-      seller_name: dealer.display_name || record.seller_name || null,
+      ...publicRecord,
+      source_seller_name: publicRecord.seller_name || null,
+      seller_name: dealer.display_name || publicRecord.seller_name || null,
       dealer_id: dealer.id,
       dealer_display_name: dealer.display_name || null,
       dealer_company_name: dealer.company_name || null,
@@ -717,6 +735,10 @@ function mapReviewedRecord(row) {
   const verifiedUsd = hasVerifiedUsdPrice
     ? positiveNumber(verifiedPriceUsd)
     : null;
+  // A reviewed workbook anomaly must not remain available as a normalized USD
+  // value through the customer API. Preserve the raw/source amount and the
+  // review reason so the listing stays visible and auditable.
+  const publicVerifiedUsd = workbookPriceReview ? null : verifiedUsd;
   const brand = row.supplied_brand || row.canonical_brand || row.brand_scope;
   const storedModel = row.model || row.catalog_model || null;
   const sourceReference = row.normalized_reference || row.raw_reference || row.catalog_reference || null;
@@ -762,7 +784,7 @@ function mapReviewedRecord(row) {
   const locallyCompleteIdentity = [brand, storedModel, reference, dialColor]
     .every(evidenceValuePresent);
   const hasCompleteIdentity = locallyCompleteIdentity && !invalidReference;
-  const priceEligible = hasCompleteIdentity && verifiedUsd !== null;
+  const priceEligible = hasCompleteIdentity && publicVerifiedUsd !== null;
   const normalizedSummary = isNormalizedWorkbookSummary(row);
   const multiListing = isMultiListing(row);
   const isUnbundledChild = evidenceValuePresent(row.parent_id);
@@ -823,6 +845,9 @@ function mapReviewedRecord(row) {
     condition: correctedWatchFields.condition,
     listing_type: row.listing_type || 'OTHER',
     listing_date: row.posting_date || null,
+    source_posted_at_text: evidenceValuePresent(row.source_posted_at_text)
+      ? row.source_posted_at_text
+      : null,
     created_at: row.posting_date || row.imported_at || null,
     raw_message: row.raw_message || null,
     raw_message_scope: normalizedSummary ? 'normalized_summary' : 'stored_source_message',
@@ -837,7 +862,7 @@ function mapReviewedRecord(row) {
     seller_trust_status: publicRatedEvidence?.trust_status || null,
     seller_rating_source_url: publicRatedEvidence?.source_url || null,
     contact_publication_approved: contactApproved,
-    price_usd: verifiedUsd,
+    price_usd: publicVerifiedUsd,
     effective_price_source: row.effective_price_source || null,
     price_correction_applied: row.price_correction_applied === true,
     price_correction_id: row.price_correction_id || null,
@@ -1604,7 +1629,7 @@ module.exports = async function handler(req, res) {
     // would introduce an unpaged seventh stream and break deterministic order.
     if (firstPageOfLane && !sixBrandBroadScope) {
       let directQuery = client.from('dealer_listing_submissions')
-        .select('id,intent,category,raw_message,claimed_fields,image_urls,poster_image_url,review_status,publication_status,created_at')
+        .select('id,dealer_id,intent,category,raw_message,claimed_fields,image_urls,poster_image_url,review_status,publication_status,created_at')
         .eq('publication_status', 'PUBLISHED')
         .eq('review_status', 'APPROVED')
         .order('created_at', { ascending: false })
@@ -2082,8 +2107,10 @@ module.exports = async function handler(req, res) {
     if (firstPageOfLane && !sixBrandBroadScope) {
       const { data: directRows, error: directError } = await directRowsPromise;
       if (!directError) {
-        const directRecords = (directRows || [])
-          .map(mapDealerSubmission)
+        const directRecords = (await enrichRecordsWithDealerDirectory(
+          client,
+          (directRows || []).map(mapDealerSubmission),
+        ))
           .filter(record => directSubmissionMatchesImageLane(record, requestedLane))
           .filter(record => !record.multi_listing && directSubmissionMatches(record, {
             imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search, itemCategory, region,

@@ -168,6 +168,39 @@ test('exact listing links enrich cards with the canonical dealer profile without
   assert.equal(record.seller_phone, null);
 });
 
+test('authenticated submissions inherit their verified dealer profile without exposing the internal join hint', async () => {
+  const tableRows = {
+    dealer_listing_links: [],
+    dealers: [{ id: 'dealer-auth', display_name: 'Authenticated Dealer', company_name: 'Dealer LLC',
+      country_code: 'US', city: 'Miami', rating: 4.9, review_count: 12,
+      whatsapp_group_count: 2, status: 'VERIFIED' }],
+  };
+  const client = { from(table) {
+    const chain = {
+      select() { return chain; },
+      eq() { return chain; },
+      in() { return Promise.resolve({ data: tableRows[table], error: null }); },
+    };
+    return chain;
+  } };
+  const submission = api.mapDealerSubmission({
+    id: 'submission-auth', dealer_id: 'dealer-auth', intent: 'WTS', category: 'WATCH',
+    raw_message: 'WTS Rolex 116500LN Black',
+    claimed_fields: { brand: 'Rolex', model: 'Daytona', reference: '116500LN', dial_color: 'Black' },
+    image_urls: [], review_status: 'APPROVED', publication_status: 'PUBLISHED',
+    created_at: '2026-08-15T12:00:00Z',
+  });
+  assert.equal(submission.source_dealer_id, 'dealer-auth');
+  const [record] = await api.enrichRecordsWithDealerDirectory(client, [submission]);
+  assert.equal(record.dealer_id, 'dealer-auth');
+  assert.equal(record.dealer_profile_path, '/reference-check/dealer-auth');
+  assert.equal(record.seller_name, 'Authenticated Dealer');
+  assert.equal(record.seller_rating, 4.9);
+  assert.equal(record.seller_review_count, 12);
+  assert.equal(record.seller_group_count, 2);
+  assert.equal(Object.hasOwn(record, 'source_dealer_id'), false);
+});
+
 test('reviewed direct submissions support category, intent, image, price, and location filters together', () => {
   const record = api.mapDealerSubmission({
     id: 'bag-1', intent: 'WTS', category: 'HANDBAG', raw_message: 'WTS Birkin 30 USD 25000',
@@ -557,6 +590,26 @@ test('holds implausible workbook-only amounts for review instead of displaying t
   assert.equal(mapped.workbook_price_usd, 25000000000);
   assert.equal(mapped.workbook_price_review_reason, 'WORKBOOK_PRICE_ABOVE_PUBLIC_PLAUSIBILITY');
   assert.equal(mapped.price_usd, null);
+  assert.equal(mapped.price_research_eligible, false);
+});
+
+test('keeps reviewed malformed source prices as evidence without exposing normalized USD', () => {
+  const mapped = api.mapReviewedRecord(record({
+    model: 'Cosmograph Daytona',
+    raw_reference: '116500LN',
+    normalized_reference: '116500LN',
+    dial_color: 'Black',
+    workbook_price_usd: 251,
+    source_price_amount: 251,
+    source_currency: 'USD',
+    price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
+    has_verified_usd_price: true,
+    verified_price_usd: 251,
+    raw_message: '116500LN black, watch + card, $25,1 + label',
+  }));
+  assert.equal(mapped.workbook_price_review_reason, 'WORKBOOK_PRICE_BELOW_PUBLIC_PLAUSIBILITY');
+  assert.equal(mapped.price_usd, null);
+  assert.equal(mapped.price_raw, 251, 'raw source evidence must remain intact');
   assert.equal(mapped.price_research_eligible, false);
 });
 

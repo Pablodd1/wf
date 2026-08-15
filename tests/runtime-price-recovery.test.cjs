@@ -35,6 +35,20 @@ test('leaves existing verified prices unchanged', async () => {
   assert.equal(row.runtime_price_recovery_applied, undefined);
 });
 
+test('does not reintroduce a USD amount held by workbook price review', async () => {
+  const [row] = await recoverRecordPrices([{
+    raw_message: '116500LN black, watch + card, $25,1 + label',
+    price_usd: null,
+    price_raw: 251,
+    source_price_amount: 251,
+    source_currency: 'USD',
+    workbook_price_review_reason: 'WORKBOOK_PRICE_BELOW_PUBLIC_PLAUSIBILITY',
+  }]);
+  assert.equal(row.price_usd, null);
+  assert.equal(row.price_raw, 251, 'raw source evidence remains available for review');
+  assert.equal(row.runtime_price_recovery_applied, undefined);
+});
+
 test('never reintroduces a reference token that an earlier safety gate rejected as price', async () => {
   const [row] = await recoverRecordPrices([{
     id: 'rm-reference-token',
