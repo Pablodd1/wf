@@ -426,6 +426,8 @@ const BLUE = '#0d6efd';
 const COMPARABLE_LISTING_PREVIEW_LIMIT = 12;
 const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
 const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
+const REFERENCE_ONLY_MODEL = 'Reference-only listings';
+const displayCatalogModel = (model: string) => model === REFERENCE_ONLY_MODEL ? 'Other exact references' : model;
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
@@ -1012,7 +1014,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         || left.id.localeCompare(right.id);
     })
     .slice(0, COMPARABLE_LISTING_PREVIEW_LIMIT);
-  const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
+  const visibleModels = pModels.filter(item => displayCatalogModel(item.model).toLowerCase().includes(modelQuery.trim().toLowerCase()));
   const visibleBrands = showAllBrands
     ? pBrands
     : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
@@ -1184,7 +1186,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               {pBrand && <span aria-hidden="true">/</span>}
               {pBrand && <button type="button" onClick={() => { setPModel(''); setPRefs([]); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{pBrand}</button>}
               {pModel && <span aria-hidden="true">/</span>}
-              {pModel && <span>{pModel}</span>}
+              {pModel && <span>{displayCatalogModel(pModel)}</span>}
             </nav>
           )}
           <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${pBrand} model` : 'Choose a brand'}</h3>
@@ -1237,8 +1239,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   }}>
                   {modelImages[m.model] && <img src={modelImages[m.model]} alt="" loading="lazy" style={{ width: 48, height: 48, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.model}</span>
-                    <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>{m.reference_count} catalog refs</span>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayCatalogModel(m.model)}</span>
+                    <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>{m.reference_count} {m.model === REFERENCE_ONLY_MODEL ? 'exact references · click to browse individually' : 'catalog refs'}</span>
                   </span>
                 </button>
               ))}
@@ -1259,7 +1261,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 <div className="flex items-center gap-3">
                   {modelImages[pModel] && <img src={modelImages[pModel]} alt={`${pBrand} ${pModel}`} style={{ width: 72, height: 72, borderRadius: 8, objectFit: 'cover', border: `1px solid ${BORDER}` }} />}
                   <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>
-                    {pBrand} {pModel} — Market Overview
+                    {pBrand} {displayCatalogModel(pModel)} — Market Overview
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: MUTED }}>

@@ -53,3 +53,11 @@ test('Price Research opens a supplied brand and Trading Floor hides internal evi
   assert.match(research, /onChange=\{event => void loadModels\(event\.target\.value\)\}/);
   assert.doesNotMatch(floor, /aria-label="Listing evidence"|EvidenceIndicators|Source contact supplied|Source-supplied listing image/);
 });
+
+test('Price Research presents uncategorized catalog identities as individually browsable exact references', () => {
+  const research = fs.readFileSync(path.join(__dirname, '..', 'src/pages/PriceResearch.tsx'), 'utf8');
+  assert.match(research, /REFERENCE_ONLY_MODEL = 'Reference-only listings'/);
+  assert.match(research, /Other exact references/);
+  assert.match(research, /exact references · click to browse individually/);
+  assert.match(research, /loadRefs\(pBrand, m\.model\)/);
+});
