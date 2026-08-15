@@ -91,7 +91,10 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.match(floor, /Workbook price anomaly - held for review/);
   assert.match(floor, /const priceLabel = workbookPriceNeedsReview[\s\S]*?verifiedUsd !== null/);
   assert.match(floor, /const priceEvidenceLabel = workbookPriceNeedsReview[\s\S]*?verifiedUsd !== null/);
-  assert.match(floor, /const MAX_EMPTY_CURSOR_HOPS = 3/);
+  assert.match(floor, /const MAX_EMPTY_CURSOR_HOPS = 5/);
+  assert.match(floor, /const INVENTORY_REQUEST_TIMEOUT_MS = 12_000/);
+  assert.match(floor, /const requestController = new AbortController\(\)/);
+  assert.match(floor, /Inventory request timed out\. Please retry\./);
   assert.match(floor, /data\.records\.length > 0 \|\| !data\.hasMore \|\| !data\.nextCursor/);
   assert.match(floor, /params\.set\('cursor', data\.nextCursor\)/);
   assert.match(floor, /filter\(listing => !isBundleListing\(listing\)\)/);

@@ -9,6 +9,7 @@ const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { deterministicCandidateCount } = require('./_lib/unsplit-bundle-filter.cjs');
 const { classifyZenithIdentityEvidence } = require('./_lib/zenith-identity-evidence.cjs');
 const { luxuryIdentityEligibility, normalizeLuxuryIdentity } = require('./_lib/luxury-item-normalization.cjs');
+const { classifyWatchPartListing } = require('./_lib/watch-item-classification.cjs');
 const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const {
   cleanExactText,
@@ -464,6 +465,8 @@ const WATCH_EXCLUSIVE_BRANDS = new Set([
 ]);
 
 function effectiveItemCategory(row) {
+  const watchPart = classifyWatchPartListing(row);
+  if (watchPart) return watchPart.category;
   const explicit = normalizeItemCategory(row?.item_category || row?.category);
   if (explicit !== 'OTHER') return explicit;
   const brand = cleanExactText(
@@ -544,7 +547,12 @@ function mapDealerSubmission(row) {
   const brand = cleanExactText(claimed.brand, 80) || null;
   const model = cleanExactText(claimed.model, 120) || cleanExactText(claimed.title, 240) || null;
   const reference = cleanExactText(claimed.reference, 80) || null;
-  const correctedWatchFields = row.category === 'WATCH'
+  const watchPart = classifyWatchPartListing({
+    item_category: row.category,
+    raw_message: row.raw_message,
+  });
+  const itemCategory = watchPart?.category || normalizeItemCategory(row.category);
+  const correctedWatchFields = itemCategory === 'WATCH'
     ? normalizeWatchConditionFields({
         dial_color: cleanExactText(claimed.dial_color, 80),
         condition: claimed.condition,
@@ -555,16 +563,26 @@ function mapDealerSubmission(row) {
   const sellerName = cleanExactText(claimed.poster_name, 160) || null;
   const contactApproved = claimed.contact_publication_approved === true;
   const sellerPhone = contactApproved ? (cleanExactText(claimed.poster_phone, 50) || null) : null;
-  const hasCompleteIdentity = row.category !== 'WATCH' || Boolean(brand && model && reference && dialColor);
-  const priceEligible = row.category === 'WATCH' && hasCompleteIdentity && priceUsd !== null;
-  const luxuryIdentity = row.category === 'WATCH' ? null : normalizeLuxuryIdentity({
+  const hasCompleteIdentity = itemCategory !== 'WATCH' || Boolean(brand && model && reference && dialColor);
+  const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && priceUsd !== null;
+  const watchPartIdentity = watchPart ? {
+    brand,
+    model: watchPart.item_type,
+    luxury_item_name: [brand, watchPart.item_type].filter(Boolean).join(' ') || watchPart.item_type,
+    luxury_item_type: watchPart.item_type,
+    source_item_description: row.raw_message || null,
+    maker_evidence_status: brand ? 'SOURCE_OR_SIGNATURE_EVIDENCE' : 'MISSING_REVIEW_REQUIRED',
+  } : null;
+  const luxuryIdentity = itemCategory === 'WATCH' ? null : (watchPartIdentity || normalizeLuxuryIdentity({
     raw_message: row.raw_message,
     raw_data: { brand, model, title: claimed.title, reference },
-  }, row.category);
-  const luxuryEligibility = row.category === 'WATCH' ? null : luxuryIdentityEligibility({
+  }, itemCategory));
+  const luxuryEligibility = itemCategory === 'WATCH' ? null : watchPart
+    ? { eligible: true, reasons: [] }
+    : luxuryIdentityEligibility({
     raw_message: row.raw_message,
     raw_data: { brand, model, title: claimed.title, reference },
-  }, row.category);
+  }, itemCategory);
   const evidenceCoverage = recordEvidenceCoverage({
     brand, model, reference, dialColor, sellerName, sellerPhone,
     contactApproved, exactImageUrl: imageUrls[0] || null,
@@ -572,7 +590,7 @@ function mapDealerSubmission(row) {
     invalidReferenceReason: null, priceEligible,
   });
   return {
-    id: row.id, brand: luxuryIdentity?.brand || brand, model, reference,
+    id: row.id, brand: luxuryIdentity?.brand || brand, model: luxuryIdentity?.model || model, reference,
     luxury_item_name: luxuryIdentity?.luxury_item_name || null,
     luxury_item_type: luxuryIdentity?.luxury_item_type || null,
     luxury_identity_eligible: luxuryEligibility?.eligible ?? true,
@@ -603,7 +621,9 @@ function mapDealerSubmission(row) {
     price_research_eligible: priceEligible, confidence: 1, verdict: row.review_status,
     listing_status: row.publication_status, source: 'AUTHENTICATED_USER_FORM',
     source_type: 'authenticated_user_form', source_file: null, source_row_number: null,
-    source_record_id: row.id, item_category: row.category, multi_listing: multiListing,
+    source_record_id: row.id, item_category: itemCategory,
+    watch_part_classification_reason: watchPart?.reason || null,
+    multi_listing: multiListing,
     is_unbundled_child: false,
     has_images: !multiListing && imageUrls.length > 0,
     thumbnail_url: multiListing ? null : (imageUrls[0] || null),
@@ -740,6 +760,8 @@ function mapReviewedRecord(row) {
   // review reason so the listing stays visible and auditable.
   const publicVerifiedUsd = workbookPriceReview ? null : verifiedUsd;
   const brand = row.supplied_brand || row.canonical_brand || row.brand_scope;
+  const watchPart = classifyWatchPartListing(row);
+  const itemCategory = watchPart?.category || effectiveItemCategory(row);
   const storedModel = row.model || row.catalog_model || null;
   const sourceReference = row.normalized_reference || row.raw_reference || row.catalog_reference || null;
   const catalogIdentity = sourceReference && brand ? lookupCatalog(sourceReference, brand) : null;
@@ -752,7 +774,7 @@ function mapReviewedRecord(row) {
     && referenceComparisonKey(row.raw_reference) === referenceComparisonKey(approvedReference)
     ? row.raw_reference
     : approvedReference;
-  const correctedWatchFields = effectiveItemCategory(row) === 'WATCH'
+  const correctedWatchFields = itemCategory === 'WATCH'
     ? normalizeWatchConditionFields({
         dial_color: row.dial_color || row.catalog_dial,
         condition: row.condition,
@@ -783,8 +805,10 @@ function mapReviewedRecord(row) {
 
   const locallyCompleteIdentity = [brand, storedModel, reference, dialColor]
     .every(evidenceValuePresent);
-  const hasCompleteIdentity = locallyCompleteIdentity && !invalidReference;
-  const priceEligible = hasCompleteIdentity && publicVerifiedUsd !== null;
+  const hasCompleteIdentity = itemCategory === 'WATCH'
+    ? locallyCompleteIdentity && !invalidReference
+    : true;
+  const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
   const normalizedSummary = isNormalizedWorkbookSummary(row);
   const multiListing = isMultiListing(row);
   const isUnbundledChild = evidenceValuePresent(row.parent_id);
@@ -814,12 +838,21 @@ function mapReviewedRecord(row) {
     invalidReferenceReason: invalidReference ? 'PRICE_CURRENCY_TOKEN' : null,
     priceEligible,
   });
-  const itemCategory = effectiveItemCategory(row);
-  const luxuryIdentity = itemCategory === 'WATCH' ? null : normalizeLuxuryIdentity({
+  const watchPartIdentity = watchPart ? {
+    brand,
+    model: watchPart.item_type,
+    luxury_item_name: [brand, watchPart.item_type].filter(Boolean).join(' ') || watchPart.item_type,
+    luxury_item_type: watchPart.item_type,
+    source_item_description: row.raw_message || null,
+    maker_evidence_status: brand ? 'SOURCE_OR_SIGNATURE_EVIDENCE' : 'MISSING_REVIEW_REQUIRED',
+  } : null;
+  const luxuryIdentity = itemCategory === 'WATCH' ? null : (watchPartIdentity || normalizeLuxuryIdentity({
     raw_message: row.raw_message,
     raw_data: { brand, model: storedModel, title: storedModel, reference },
-  }, itemCategory);
-  const luxuryEligibility = itemCategory === 'WATCH' ? null : luxuryIdentityEligibility({
+  }, itemCategory));
+  const luxuryEligibility = itemCategory === 'WATCH' ? null : watchPart
+    ? { eligible: true, reasons: [] }
+    : luxuryIdentityEligibility({
     raw_message: row.raw_message,
     raw_data: { brand, model: storedModel, title: storedModel, reference },
   }, itemCategory);
@@ -889,6 +922,7 @@ function mapReviewedRecord(row) {
     source_record_id: row.source_record_id || null,
     location: evidenceValuePresent(row.location || row.region) ? (row.location || row.region) : null,
     item_category: itemCategory,
+    watch_part_classification_reason: watchPart?.reason || null,
     publication_state: row.publication_state || 'APPROVED',
     verification_label: 'Listing',
     data_quality_review_required: pendingVerification,
@@ -2094,7 +2128,7 @@ module.exports = async function handler(req, res) {
         .filter(record => !search || searchTermsMatch(record, search))
         .filter(record => !region || locationMatches(record.location, region))
         .filter(record => ratingMatches(record, rating))
-        .filter(record => itemCategory === 'ALL' || itemCategory === 'WATCH')
+        .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory)
         .sort(compareInventoryForDisplay)
         .slice(0, pageSize);
     }

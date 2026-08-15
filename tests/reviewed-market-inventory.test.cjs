@@ -461,6 +461,42 @@ function record(overrides = {}) {
   };
 }
 
+test('routes an explicit watch-part sale out of watch inventory without losing evidence', () => {
+  const mapped = api.mapReviewedRecord(record({
+    id: 'dab509ee-feec-4b6c-b955-dac54638493e',
+    raw_message: 'Black Ceramic Bezel for 116500LN Rolex Daytona Steel *$2,400*',
+    raw_reference: '116500LN', normalized_reference: '116500LN',
+    public_reference: '116500LN', reference_search_key: '116500LN',
+    source_price_amount: '2400', source_price_text: '$2,400', source_currency: 'USD',
+    workbook_price_usd: '2400', verified_price_usd: '2400',
+    posted_by: 'Parts Dealer', user_image_url: 'https://images.example.test/bezel.jpg',
+  }));
+
+  assert.equal(mapped.id, 'dab509ee-feec-4b6c-b955-dac54638493e');
+  assert.equal(mapped.item_category, 'ACCESSORY');
+  assert.equal(mapped.watch_part_classification_reason, 'WATCH_PART_ACCESSORY');
+  assert.equal(mapped.model, 'Bezel');
+  assert.equal(mapped.luxury_item_type, 'Bezel');
+  assert.equal(mapped.luxury_identity_eligible, true);
+  assert.equal(mapped.price_research_eligible, false);
+  assert.equal(mapped.raw_message, 'Black Ceramic Bezel for 116500LN Rolex Daytona Steel *$2,400*');
+  assert.equal(mapped.reference, '116500LN');
+  assert.equal(mapped.price_raw, 2400);
+  assert.equal(mapped.seller_name, 'Parts Dealer');
+  assert.deepEqual(mapped.image_urls, ['https://images.example.test/bezel.jpg']);
+  assert.equal(api.effectiveItemCategory(record({ raw_message: mapped.raw_message })), 'ACCESSORY');
+  assert.match(source, /filter\(record => itemCategory === 'ALL' \|\| record\.item_category === itemCategory\)/);
+});
+
+test('keeps a complete watch on a strap in the watch lane', () => {
+  const mapped = api.mapReviewedRecord(record({
+    raw_message: 'Rolex Daytona 126500LN watch on black strap USD 30,000',
+  }));
+  assert.equal(mapped.item_category, 'WATCH');
+  assert.equal(mapped.watch_part_classification_reason, null);
+  assert.equal(mapped.price_research_eligible, true);
+});
+
 test('maps exact reviewed evidence to the Trading Floor-compatible contract', () => {
   const mapped = api.mapReviewedRecord(record({
     model: 'Owner-reviewed Daytona',

@@ -28,7 +28,8 @@ const SURFACE = '#FBF7EF';
 const PANEL = '#F3ECDF';
 const PAGE = '#F3ECDF';
 const RED = '#B42318';
-const MAX_EMPTY_CURSOR_HOPS = 3;
+const MAX_EMPTY_CURSOR_HOPS = 5;
+const INVENTORY_REQUEST_TIMEOUT_MS = 12_000;
 
 const CATEGORY_OPTIONS = [
   { label: 'All inventory', value: 'all' },
@@ -510,6 +511,25 @@ export default function TradingFloor() {
         let data: TradingFloorResponse;
         let emptyCursorHops = 0;
 
+        const fetchInventoryPage = async (requestUrl: string) => {
+          const requestController = new AbortController();
+          const cancelForPageChange = () => requestController.abort();
+          controller.signal.addEventListener('abort', cancelForPageChange, { once: true });
+          const timeoutId = window.setTimeout(
+            () => requestController.abort(),
+            INVENTORY_REQUEST_TIMEOUT_MS,
+          );
+          try {
+            return await fetch(requestUrl, {
+              signal: requestController.signal,
+              cache: 'no-store',
+            });
+          } finally {
+            window.clearTimeout(timeoutId);
+            controller.signal.removeEventListener('abort', cancelForPageChange);
+          }
+        };
+
         // Intent/image lanes are deliberately bounded in the API. A safe scan
         // window can therefore contain zero public rows while returning a
         // progressing cursor (WTB is notably sparse in the image-first lane).
@@ -517,14 +537,14 @@ export default function TradingFloor() {
         // cap the extra reads so one customer request remains bounded.
         do {
           const requestUrl = `${endpoint}?${params.toString()}`;
-          response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
+          response = await fetchInventoryPage(requestUrl);
           // A cold hosted query can occasionally cross the database statement
           // timeout. Retry once after a short pause so a transient 503 does not
           // leave the customer staring at an empty Trading Floor.
           if (response.status === 502 || response.status === 503 || response.status === 504) {
             await new Promise(resolve => window.setTimeout(resolve, 450));
             if (controller.signal.aborted) return;
-            response = await fetch(requestUrl, { signal: controller.signal, cache: 'no-store' });
+            response = await fetchInventoryPage(requestUrl);
           }
           try {
             data = await response.json() as TradingFloorResponse;
@@ -558,8 +578,11 @@ export default function TradingFloor() {
         setHasMore(Boolean(data.hasMore && data.nextCursor));
         if (!cursor) setSelectedListing(null);
       } catch (caught) {
-        if ((caught as Error).name !== 'AbortError') {
-          setError((caught as Error).message || 'Failed to load listings');
+        if (!controller.signal.aborted) {
+          const error = caught as Error;
+          setError(error.name === 'AbortError'
+            ? 'Inventory request timed out. Please retry.'
+            : error.message || 'Failed to load listings');
         }
       } finally {
         if (!controller.signal.aborted) setLoading(false);

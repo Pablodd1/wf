@@ -23,6 +23,17 @@ test('accepts a complete catalog-consistent WTS observation', () => {
   assert.equal(classifyResearchEligibility(valid, catalog), null);
 });
 
+test('excludes an explicit watch-part sale without excluding a complete watch on a strap', () => {
+  assert.equal(classifyResearchEligibility({
+    ...valid,
+    raw_message: 'Black Ceramic Bezel for 116500LN Rolex Daytona Steel *$2,400*',
+  }, catalog), 'WATCH_PART_ACCESSORY');
+  assert.equal(classifyResearchEligibility({
+    ...valid,
+    raw_message: 'Rolex Daytona 116500LN watch on black strap $25,000',
+  }, catalog), null);
+});
+
 test('rejects a dial that is impossible for the cataloged reference', () => {
   assert.equal(
     classifyResearchEligibility({ ...valid, dial_color: 'Purple' }, catalog),

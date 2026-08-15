@@ -2,6 +2,7 @@
 
 const { comparisonKey, normalizeDialValue, uniqueCatalogDials } = require('./dial-normalization.cjs');
 const { isLikelyYearAsPrice, isReferencePriceCollision } = require('./trading-record-safety.cjs');
+const { classifyWatchPartListing } = require('./watch-item-classification.cjs');
 
 function isMultiListingSentinel(value) {
   return /^(?:multiple|multi|mixed)$/i.test(String(value || '').trim());
@@ -47,6 +48,7 @@ function isHumanReviewAnalyticsCandidate(row) {
 function classifyResearchEligibility(row, catalog) {
   const price = Number(row?.price_usd);
   const ownerReviewedIdentity = row?.owner_reviewed_identity === true;
+  if (classifyWatchPartListing(row)) return 'WATCH_PART_ACCESSORY';
   if (Number(row?.bundle_candidate_count || 0) > 1) return 'BUNDLE_SOURCE_UNSPLIT';
   if ([row?.model, row?.dial_color].some(isMultiListingSentinel)) return 'BUNDLE_SOURCE_UNSPLIT';
   if (!row?.brand || String(row.brand).trim().toUpperCase() === 'UNKNOWN') return 'MISSING_BRAND';
