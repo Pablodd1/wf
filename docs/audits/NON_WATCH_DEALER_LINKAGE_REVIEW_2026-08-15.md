@@ -86,3 +86,18 @@ and the management statement failed atomically.
   staging raw-version index, and the bounded nested-loop shape;
 - the read-only audit exposes `non_watch_lane_link_exists`; a false result after
   the failed run is the durable post-failure proof that no canary link survived.
+
+The raw-version traversal remained unnecessarily broad for only 2,692 released
+non-watch candidates. `20260815235500_qnsa_non_watch_candidate_driven_linkage.sql`
+therefore supersedes traversal, not eligibility:
+
+- it freezes the enabled run and newest `(created_at,id)` boundary separately
+  for HANDBAG, JEWELRY, and ACCESSORY;
+- it keyset-pages those three streams through the existing
+  `idx_staging_qnsa_market_feed_page` partial index;
+- every candidate still joins `raw_message_versions` by primary key and must
+  match source record ID and hash before exact unique verified-phone matching;
+- full mode cannot complete until all three frozen category cursors exhaust and
+  the release control remains unchanged;
+- EXPLAIN must show the category index, raw primary key, and bounded nested-loop
+  plan before a canary/full write is attempted.

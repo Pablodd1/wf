@@ -9,6 +9,8 @@ const migration = fs.readFileSync(path.join(__dirname,
   '../supabase/migrations/20260815223000_qnsa_non_watch_exact_phone_linkage.sql'), 'utf8');
 const planFence = fs.readFileSync(path.join(__dirname,
   '../supabase/migrations/20260815234500_qnsa_non_watch_linkage_plan_fence.sql'), 'utf8');
+const candidateDriven = fs.readFileSync(path.join(__dirname,
+  '../supabase/migrations/20260815235500_qnsa_non_watch_candidate_driven_linkage.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(__dirname,
   '../.github/workflows/qnsa-non-watch-dealer-linkage.yml'), 'utf8');
 const runner = fs.readFileSync(path.join(__dirname,
@@ -72,20 +74,20 @@ test('audit uses split bounded evidence instead of population-wide aggregate joi
 
 test('runner reconciles applied deltas and requires full cursor exhaustion', () => {
   assert.match(runner, /Canary write cap was exceeded/);
-  assert.match(runner, /Full linkage cannot complete before cursor exhaustion/);
-  assert.match(runner, /totals\.scanned !== finalCount/);
-  assert.match(runner, /applied_non_watch_links[\s\S]*totals\.applied/);
+  assert.match(runner, /Full linkage cannot complete before all category cursors exhaust/);
+  assert.match(runner, /allCategoryCursorsExhausted/);
+  assert.match(runner, /appliedDeltaReconciles\(before, after, totals\.applied\)/);
   assert.match(runner, /raw_text_logged: false, pii_logged: false/);
   assert.match(runner, /EXPLAIN \(FORMAT TEXT, COSTS TRUE\)/);
   assert.match(runner, /raw_message_versions_pkey/);
-  assert.match(runner, /idx_staging_mariadb_raw_version/);
+  assert.match(runner, /idx_staging_qnsa_market_feed_page/);
   assert.match(runner, /Nested Loop/);
   assert.ok(runner.indexOf('const before = await reconciliation')
-    < runner.indexOf('while (!cursorExhausted)'));
+    < runner.indexOf('for (const category of CATEGORIES)'));
 });
 
 test('runner input validation is bounded and QNSA pinned', () => {
-  const { EXPECTED_PROJECT, boundedInteger, safeUuid } = require(
+  const { EXPECTED_PROJECT, boundedInteger, safeTimestamp, safeUuid } = require(
     '../tools/dealer-directory/run-non-watch-exact-linkage.cjs');
   assert.equal(EXPECTED_PROJECT, 'qnsafosakvonzgfcsphh');
   assert.equal(boundedInteger('10', 1, 1, 10, 'limit'), 10);
@@ -93,6 +95,48 @@ test('runner input validation is bounded and QNSA pinned', () => {
   assert.equal(safeUuid('123e4567-e89b-12d3-a456-426614174000'),
     '123e4567-e89b-12d3-a456-426614174000');
   assert.throws(() => safeUuid('not-a-uuid'));
+  assert.equal(safeTimestamp('2026-08-15T12:30:00Z'), '2026-08-15T12:30:00.000Z');
+  assert.throws(() => safeTimestamp('not-a-date'));
+});
+
+test('candidate-driven traversal preserves release and immutable identity gates', () => {
+  assert.match(candidateDriven, /idx_staging_qnsa_market_feed_page/);
+  assert.match(candidateDriven, /listing\.normalization_run_key=v_run_key/);
+  assert.match(candidateDriven, /listing\.category=v_category/);
+  assert.match(candidateDriven, /listing\.parent_id IS NULL/);
+  assert.match(candidateDriven, /COALESCE\(listing\.is_bundle,false\)=false/);
+  assert.match(candidateDriven, /bundle_status'='SINGLE_CANDIDATE'/);
+  assert.match(candidateDriven, /listing\.source_hash ~ '\^\[0-9a-f\]\{64\}\$'/);
+  assert.match(candidateDriven, /listing\.source_candidate_hash ~ '\^\[0-9a-f\]\{64\}\$'/);
+  assert.match(candidateDriven, /candidate_raw\.id=page\.raw_message_version_id/);
+  assert.match(candidateDriven, /candidate_raw\.source_record_id=page\.source_record_id/);
+  assert.match(candidateDriven, /candidate_raw\.source_hash=page\.source_hash/);
+  assert.match(candidateDriven, /identity\.verification_status='VERIFIED'/);
+  assert.match(candidateDriven, /dealer\.status='VERIFIED'/);
+  assert.match(candidateDriven, /JOIN LATERAL/);
+  assert.match(candidateDriven, /OFFSET 0/);
+  assert.doesNotMatch(candidateDriven, /seller_name\s*=|display_name\s*=/i);
+  assert.doesNotMatch(candidateDriven, /UPDATE\s+(?:public\.raw|staging\.listings)|DELETE FROM/i);
+});
+
+test('candidate-driven runner freezes all category boundaries and reconciles completion', () => {
+  const { CATEGORIES, allCategoryCursorsExhausted, appliedDeltaReconciles } = require(
+    '../tools/dealer-directory/run-non-watch-exact-linkage.cjs');
+  assert.deepEqual(CATEGORIES, ['HANDBAG','JEWELRY','ACCESSORY']);
+  assert.equal(allCategoryCursorsExhausted({
+    HANDBAG: { exhausted: true }, JEWELRY: { exhausted: true }, ACCESSORY: { exhausted: true },
+  }), true);
+  assert.equal(allCategoryCursorsExhausted({
+    HANDBAG: { exhausted: true }, JEWELRY: { exhausted: false }, ACCESSORY: { exhausted: true },
+  }), false);
+  assert.equal(appliedDeltaReconciles({ applied_non_watch_links: 2 },
+    { applied_non_watch_links: 9 }, 7), true);
+  assert.equal(appliedDeltaReconciles({ applied_non_watch_links: 2 },
+    { applied_non_watch_links: 8 }, 7), false);
+  assert.match(runner, /WITH categories\(category\) AS \(VALUES \('HANDBAG'\),\('JEWELRY'\),\('ACCESSORY'\)\)/);
+  assert.match(runner, /boundaries\[category\]\.createdAt/);
+  assert.match(runner, /Frozen non-watch release control changed during full linkage/);
+  assert.match(workflow, /20260815235500_qnsa_non_watch_candidate_driven_linkage\.sql/);
 });
 
 test('forward repair fences raw pages and removes unbounded reconciliation', () => {

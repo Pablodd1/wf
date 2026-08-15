@@ -70,6 +70,7 @@ jobs:
           if ($env:NON_WATCH_LINKAGE_MODE -ne 'audit') {
             [string]$migration = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815223000_qnsa_non_watch_exact_phone_linkage.sql'
             $migration += "`n" + [string](Get-Content -Raw -LiteralPath 'supabase/migrations/20260815234500_qnsa_non_watch_linkage_plan_fence.sql')
+            $migration += "`n" + [string](Get-Content -Raw -LiteralPath 'supabase/migrations/20260815235500_qnsa_non_watch_candidate_driven_linkage.sql')
             $compileSql = $migration -replace '(?im)^\s*(BEGIN|COMMIT);\s*$', ''
             $compileBody = @{ query = "BEGIN;`n$compileSql`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
             Invoke-RestMethod -Method Post `
@@ -172,6 +173,7 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           [string]$sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815223000_qnsa_non_watch_exact_phone_linkage.sql'
           $sql += "`n" + [string](Get-Content -Raw -LiteralPath 'supabase/migrations/20260815234500_qnsa_non_watch_linkage_plan_fence.sql')
+          $sql += "`n" + [string](Get-Content -Raw -LiteralPath 'supabase/migrations/20260815235500_qnsa_non_watch_candidate_driven_linkage.sql')
           $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post `
             -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
