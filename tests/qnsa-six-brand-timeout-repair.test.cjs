@@ -61,5 +61,11 @@ test('QNSA workflow audits and applies only the new forward timeout repair', () 
   assert.match(workflow, /Compile the forward migration and roll it back/);
   assert.match(workflow, /EXPLAIN \(FORMAT JSON, COSTS true\)/);
   assert.match(workflow, /source_rows_scanned',0/);
+  assert.doesNotMatch(workflow, /qnsa_six_brand_image_lane_page\(NULL/);
+  assert.match(workflow,
+    /@\('Rolex','Patek Philippe','Audemars Piguet','Richard Mille','Cartier','Zenith'\)/);
+  assert.match(workflow, /foreach \(\$brand in \$brands\)/);
+  assert.match(workflow, /qnsa_six_brand_image_lane_page\('\$brandSql',true/);
+  assert.match(workflow, /qnsa_six_brand_image_lane_page\('\$brandSql',false/);
   assert.doesNotMatch(workflow, /bptrvfncppbjnchsaxtb/);
 });

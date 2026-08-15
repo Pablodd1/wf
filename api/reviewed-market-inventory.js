@@ -28,6 +28,17 @@ const MARKET_SOURCE_VIEW = ALLOWED_MARKET_SOURCE_VIEWS.has(requestedMarketSource
 const MULTIPLE_LISTING_IDENTITY_VALUES = ['multiple', 'multi', 'mixed'];
 const MIN_PUBLIC_WORKBOOK_PRICE_USD = 1_000;
 const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
+const SIX_REVIEWED_WATCH_BRANDS = [
+  'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith',
+];
+const SIX_REVIEWED_BRAND_CURSOR_CODES = Object.freeze({
+  Rolex: 'r',
+  'Patek Philippe': 'p',
+  'Audemars Piguet': 'a',
+  'Richard Mille': 'm',
+  Cartier: 'c',
+  Zenith: 'z',
+});
 let legacyMarketViewContractDetected = false;
 
 async function loadQnsaReviewedReleaseSummary(client) {
@@ -795,7 +806,10 @@ function parseCursorPage(value) {
 }
 
 function parseInventoryCursor(value, pageSize) {
-  const cursor = cleanExactText(value, 240);
+  // Six independently bounded brand streams need six independent keysets.
+  // Keep the token self-contained and strictly validated, while allowing
+  // enough room for six ISO timestamps and UUIDs.
+  const cursor = cleanExactText(value, 2048);
   if (!cursor) return { lane: 'images', offset: 0, page: 1 };
   const legacyPage = parseCursorPage(cursor);
   if (legacyPage !== null) {
@@ -807,24 +821,172 @@ function parseInventoryCursor(value, pageSize) {
   }
   try {
     const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (decoded?.v !== 1 && decoded?.v !== 2) return null;
     const lane = decoded?.l === 'i' ? 'images' : decoded?.l === 'n' ? 'no-images' : null;
     const offset = Number(decoded?.o);
     const page = Number(decoded?.p);
     if (!lane || !Number.isSafeInteger(offset) || offset < 0
       || !Number.isSafeInteger(page) || page < 1) return null;
-    return { lane, offset, page };
+    let keyset;
+    if (decoded?.k !== undefined) {
+      const createdAt = new Date(decoded?.k?.c || '');
+      const id = String(decoded?.k?.i || '');
+      if (typeof decoded?.k?.h !== 'boolean' || Number.isNaN(createdAt.getTime())
+        || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) return null;
+      keyset = { hasPrice: decoded.k.h, createdAt: createdAt.toISOString(), id };
+    }
+    let brandKeysets;
+    if (decoded?.v === 2) {
+      if (offset !== 0 || Object.keys(decoded).some(key =>
+        !['v', 'l', 'o', 'p', 'b'].includes(key))) return null;
+      if (!decoded?.b || typeof decoded.b !== 'object' || Array.isArray(decoded.b)) return null;
+      brandKeysets = {};
+      for (const brand of SIX_REVIEWED_WATCH_BRANDS) {
+        const compact = decoded.b[SIX_REVIEWED_BRAND_CURSOR_CODES[brand]];
+        if (compact === undefined || compact === null) continue;
+        const createdAt = new Date(compact?.c || '');
+        const id = String(compact?.i || '');
+        if (typeof compact?.h !== 'boolean' || Number.isNaN(createdAt.getTime())
+          || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) return null;
+        brandKeysets[brand] = {
+          hasPrice: compact.h, createdAt: createdAt.toISOString(), id,
+        };
+      }
+      if (Object.keys(decoded.b).some(code =>
+        !Object.values(SIX_REVIEWED_BRAND_CURSOR_CODES).includes(code))) return null;
+    }
+    return { lane, offset, page, ...(keyset ? { keyset } : {}),
+      ...(brandKeysets ? { brandKeysets } : {}) };
   } catch {
     return null;
   }
 }
 
-function encodeInventoryCursor({ lane, offset, page }) {
-  return Buffer.from(JSON.stringify({
+function encodeInventoryCursor({ lane, offset, page, keyset = null, brandKeysets = null }) {
+  const payload = {
     v: 1,
     l: lane === 'images' ? 'i' : 'n',
     o: offset,
     p: page,
-  })).toString('base64url');
+  };
+  if (brandKeysets) {
+    payload.v = 2;
+    payload.b = {};
+    for (const brand of SIX_REVIEWED_WATCH_BRANDS) {
+      const value = brandKeysets[brand];
+      if (!value) continue;
+      payload.b[SIX_REVIEWED_BRAND_CURSOR_CODES[brand]] = {
+        h: value.hasPrice, c: value.createdAt, i: value.id,
+      };
+    }
+  }
+  if (keyset) payload.k = { h: keyset.hasPrice, c: keyset.createdAt, i: keyset.id };
+  return Buffer.from(JSON.stringify(payload)).toString('base64url');
+}
+
+function sixBrandRowKeyset(row) {
+  const createdAt = new Date(row?.posting_date || row?.imported_at || row?.created_at || '');
+  const id = String(row?.id || '');
+  if (Number.isNaN(createdAt.getTime())
+    || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) return null;
+  return {
+    hasPrice: typeof row?.has_price === 'boolean' ? row.has_price
+      : positiveNumber(row?.source_price_amount) !== null
+        || positiveNumber(row?.workbook_price_usd) !== null,
+    createdAt: createdAt.toISOString(), id,
+  };
+}
+
+function compareSixBrandKeysets(a, b) {
+  if (a.hasPrice !== b.hasPrice) return Number(b.hasPrice) - Number(a.hasPrice);
+  if (a.createdAt !== b.createdAt) return b.createdAt.localeCompare(a.createdAt);
+  return b.id.localeCompare(a.id);
+}
+
+function compareSixBrandRows(left, right) {
+  const a = sixBrandRowKeyset(left);
+  const b = sixBrandRowKeyset(right);
+  if (!a || !b) return a ? -1 : b ? 1 : 0;
+  return compareSixBrandKeysets(a, b);
+}
+
+function parseSixBrandEnvelope(payload) {
+  const value = Array.isArray(payload) && payload.length === 1
+    && payload[0]?.qnsa_six_brand_image_lane_page
+    ? payload[0].qnsa_six_brand_image_lane_page : payload;
+  if (!value || Array.isArray(value) || !Array.isArray(value.rows)
+    || typeof value.has_more !== 'boolean') return null;
+  if (value.has_more && !parseSixBrandKeyset(value.next_cursor)) return null;
+  return value;
+}
+
+function parseSixBrandKeyset(value) {
+  const createdAt = new Date(value?.created_at || value?.createdAt || '');
+  const id = String(value?.id || '');
+  const hasPrice = value?.has_price ?? value?.hasPrice;
+  if (typeof hasPrice !== 'boolean' || Number.isNaN(createdAt.getTime())
+    || !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)) return null;
+  return { hasPrice, createdAt: createdAt.toISOString(), id };
+}
+
+function validateSixBrandStreamEnvelope(envelope, previousKeyset = null) {
+  const rowKeysets = envelope.rows.map(sixBrandRowKeyset);
+  if (rowKeysets.some(value => !value)) return false;
+  const ids = new Set();
+  for (let index = 0; index < rowKeysets.length; index += 1) {
+    const current = rowKeysets[index];
+    if (ids.has(current.id)) return false;
+    ids.add(current.id);
+    if (previousKeyset && compareSixBrandKeysets(current, previousKeyset) <= 0) return false;
+    if (index > 0 && compareSixBrandKeysets(rowKeysets[index - 1], current) >= 0) return false;
+  }
+  if (envelope.has_more) {
+    const next = parseSixBrandKeyset(envelope.next_cursor);
+    if (!next) return false;
+    if (previousKeyset && compareSixBrandKeysets(next, previousKeyset) <= 0) return false;
+    const last = rowKeysets.at(-1);
+    if (last && compareSixBrandKeysets(next, last) < 0) return false;
+  }
+  return true;
+}
+
+function mergeSixBrandEnvelopes(entries, limit, previousKeysets = {}) {
+  const taggedRows = entries.flatMap(entry => (entry.envelope?.rows || [])
+    .map(row => ({ brand: entry.brand, row })))
+    .sort((left, right) => compareSixBrandRows(left.row, right.row));
+  const selected = taggedRows.slice(0, limit);
+  const nextBrandKeysets = { ...previousKeysets };
+
+  // Advance each stream only through the prefix actually emitted. Advancing
+  // every brand to one global cutoff loses fetched-but-unselected rows.
+  for (const brand of SIX_REVIEWED_WATCH_BRANDS) {
+    const selectedForBrand = selected.filter(item => item.brand === brand);
+    const entry = entries.find(item => item.brand === brand);
+    const returnedCount = (entry?.envelope?.rows || []).length;
+    const scannedCursor = parseSixBrandKeyset(entry?.envelope?.next_cursor);
+    if (selectedForBrand.length) {
+      // When every returned row from this stream was emitted, the RPC's
+      // scanned boundary can also consume filtered candidates after that row.
+      // Otherwise stop at the last emitted row so buffered rows remain.
+      nextBrandKeysets[brand] = selectedForBrand.length === returnedCount && scannedCursor
+        ? scannedCursor
+        : sixBrandRowKeyset(selectedForBrand[selectedForBrand.length - 1].row);
+      continue;
+    }
+    if (returnedCount === 0 && entry?.envelope?.has_more === true) {
+      // A sparse bounded window may contain no eligible row. Its own cursor is
+      // safe to consume because there is no buffered public row to preserve.
+      if (scannedCursor) nextBrandKeysets[brand] = scannedCursor;
+    }
+  }
+  const hasMore = taggedRows.length > limit
+    || entries.some(entry => entry.envelope?.has_more === true);
+  return {
+    rows: selected.map(item => item.row),
+    hasMore,
+    nextBrandKeysets,
+    selectedBrands: selected.map(item => item.brand),
+  };
 }
 
 function publicationBrandsFromSummary(summary) {
@@ -1210,16 +1372,31 @@ module.exports = async function handler(req, res) {
     // The explicit Images filter remains strict; the general feed is ordered by
     // the bounded publication index and renders an image only when the row
     // supplies one.
+    const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
+    const sixBrandBroadScope = qnsaBroadPage && watchFeed
+      && (!brand || SIX_REVIEWED_WATCH_BRANDS.includes(brand));
+    if (sixBrandBroadScope && pagination === 'cursor' && cursorProvided
+      && page > 1 && !inventoryCursor?.brandKeysets) {
+      return res.status(400).json({
+        status: 'error',
+        error: 'This Trading Floor cursor is stale; refresh to start the safe six-brand feed.',
+      });
+    }
     const qnsaUnpartitionedMedia = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
-      && !imagesOnly;
+      && !imagesOnly && !sixBrandBroadScope;
     const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || 'images');
     const requestedOffset = pagination === 'cursor'
       ? (inventoryCursor?.offset || 0)
       : pageWindow.start;
-    const firstPageOfLane = requestedOffset === 0
-      && (requestedLane === 'images' ? page === 1 : true);
+    const firstPageOfLane = sixBrandBroadScope
+      ? Object.keys(inventoryCursor?.brandKeysets || {}).length === 0
+        && (requestedLane === 'images' ? page === 1 : true)
+      : requestedOffset === 0 && (requestedLane === 'images' ? page === 1 : true);
     let directRowsPromise = Promise.resolve({ data: [], error: null });
-    if (firstPageOfLane) {
+    // Six-brand pages use only the canonical immutable/staging release. POST IT
+    // rows enter that pipeline before publication; overlaying submissions here
+    // would introduce an unpaged seventh stream and break deterministic order.
+    if (firstPageOfLane && !sixBrandBroadScope) {
       let directQuery = client.from('dealer_listing_submissions')
         .select('id,intent,category,raw_message,claimed_fields,image_urls,poster_image_url,review_status,publication_status,created_at')
         .eq('publication_status', 'PUBLISHED')
@@ -1265,7 +1442,57 @@ module.exports = async function handler(req, res) {
       // category feed performs additional expression sorting and immutable
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
-      const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
+      if (sixBrandBroadScope) {
+        const requestedBrands = brand ? [brand] : SIX_REVIEWED_WATCH_BRANDS;
+        const previousBrandKeysets = inventoryCursor?.brandKeysets || {};
+        const entries = await Promise.all(requestedBrands.map(async brandName => {
+          const brandCursor = previousBrandKeysets[brandName] || null;
+          const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_six_brand_image_lane_page`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              p_brand: brandName,
+              p_has_image: requestedLane === 'images',
+              p_after_has_price: brandCursor?.hasPrice ?? null,
+              p_after_created_at: brandCursor?.createdAt ?? null,
+              p_after_id: brandCursor?.id ?? null,
+              p_limit: pageSize,
+              p_listing_type: listingType || null,
+              p_scan_limit: 100,
+            }),
+          });
+          if (!response.ok) {
+            const body = await response.text();
+            throw new Error(`QNSA six-brand ${brandName} page failed: ${response.status} ${body.slice(0, 200)}`);
+          }
+          const envelope = parseSixBrandEnvelope(await response.json());
+          if (!envelope) throw new Error(`QNSA six-brand ${brandName} returned a malformed envelope`);
+          if (envelope.rows.some(row =>
+            cleanExactText(row?.brand_scope || row?.canonical_brand, 80) !== brandName
+            || !sixBrandRowKeyset(row))
+            || !validateSixBrandStreamEnvelope(envelope, brandCursor)) {
+            throw new Error(`QNSA six-brand ${brandName} returned an out-of-contract row`);
+          }
+          return { brand: brandName, envelope };
+        }));
+        const returnedIds = entries.flatMap(entry =>
+          entry.envelope.rows.map(row => String(row.id)));
+        if (new Set(returnedIds).size !== returnedIds.length) {
+          throw new Error('QNSA six-brand streams returned duplicate listing IDs');
+        }
+        const merged = mergeSixBrandEnvelopes(entries, pageSize, previousBrandKeysets);
+        qnsaCandidateCursorMeta = {
+          hasMore: merged.hasMore,
+          nextBrandKeysets: merged.nextBrandKeysets,
+          previousBrandKeysets,
+          scannedCount: entries.reduce((sum, entry) =>
+            sum + Number(entry.envelope.scanned_count || 0), 0),
+        };
+        var preloadedQnsaResponse = new Response(JSON.stringify(merged.rows), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } else {
       let pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${watchFeed
         ? (laterReviewedBrand ? 'qnsa_later_brand_candidate_stride_page' : 'qnsa_trading_floor_page_rows')
         : 'qnsa_market_feed_page_rows'}`, {
@@ -1357,7 +1584,8 @@ module.exports = async function handler(req, res) {
       });
       // Reuse the common mapping/filtering path below without a second joined
       // view query. `restRes` is assigned before its normal declaration.
-      var preloadedQnsaResponse = directResponse;
+      preloadedQnsaResponse = directResponse;
+      }
     }
     if (MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       && brand && reference && !legacyMarketViewContractDetected) {
@@ -1524,7 +1752,8 @@ module.exports = async function handler(req, res) {
 
     // Fill the final image page from the no-image lane. The two equality lanes
     // preserve one global boundary without a full-view boolean sort or count.
-    if (!qnsaUnpartitionedMedia && !imagesOnly && requestedLane === 'images' && !hasMore) {
+    if (!sixBrandBroadScope && !qnsaUnpartitionedMedia
+      && !imagesOnly && requestedLane === 'images' && !hasMore) {
       const remaining = pageSize - rawRows.length;
       nextLane = 'no-images';
       nextOffset = 0;
@@ -1611,7 +1840,7 @@ module.exports = async function handler(req, res) {
     // repeated exact IDs across RM11-03 and WSSA0018 cursor pages. The bounded
     // RPC returns one lookahead row, so rawRows is the exact consumed window.
     let consumedSourceRecordCount = sourceCursorAdvance(rawRows);
-    if (firstPageOfLane) {
+    if (firstPageOfLane && !sixBrandBroadScope) {
       const { data: directRows, error: directError } = await directRowsPromise;
       if (!directError) {
         const directRecords = (directRows || [])
@@ -1637,13 +1866,28 @@ module.exports = async function handler(req, res) {
         }
       }
     }
+    if (sixBrandBroadScope && !imagesOnly && requestedLane === 'images' && !hasMore) {
+      // Start the no-image lane only after every independently paged image
+      // stream is exhausted and no fetched row remains buffered.
+      nextLane = 'no-images';
+      nextOffset = 0;
+      qnsaCandidateCursorMeta.nextBrandKeysets = {};
+      hasMore = true;
+    }
     if (pagination === 'cursor') {
-      nextOffset = qnsaCandidateCursorMeta
+      nextOffset = qnsaCandidateCursorMeta?.nextOffset !== undefined
         ? qnsaCandidateCursorMeta.nextOffset
         : requestedOffset + consumedSourceRecordCount;
     }
     const nextCursor = hasMore
-      ? encodeInventoryCursor({ lane: nextLane, offset: nextOffset, page: page + 1 })
+      ? encodeInventoryCursor({
+          lane: nextLane,
+          offset: nextOffset,
+          page: page + 1,
+          brandKeysets: sixBrandBroadScope
+            ? qnsaCandidateCursorMeta?.nextBrandKeysets || {}
+            : null,
+        })
       : null;
     const publicationBrands = publicationBrandsFromSummary(summary);
 
@@ -1717,6 +1961,13 @@ module.exports.searchTermsMatch = searchTermsMatch;
 module.exports.parseCursorPage = parseCursorPage;
 module.exports.parseInventoryCursor = parseInventoryCursor;
 module.exports.encodeInventoryCursor = encodeInventoryCursor;
+module.exports.sixBrandRowKeyset = sixBrandRowKeyset;
+module.exports.compareSixBrandKeysets = compareSixBrandKeysets;
+module.exports.compareSixBrandRows = compareSixBrandRows;
+module.exports.parseSixBrandEnvelope = parseSixBrandEnvelope;
+module.exports.parseSixBrandKeyset = parseSixBrandKeyset;
+module.exports.validateSixBrandStreamEnvelope = validateSixBrandStreamEnvelope;
+module.exports.mergeSixBrandEnvelopes = mergeSixBrandEnvelopes;
 module.exports.publicationBrandsFromSummary = publicationBrandsFromSummary;
 module.exports.boundedPage = boundedPage;
 module.exports.sortPageWithoutMovingLookahead = sortPageWithoutMovingLookahead;

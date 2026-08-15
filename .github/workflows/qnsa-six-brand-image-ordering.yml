@@ -164,15 +164,19 @@ jobs:
         shell: pwsh
         run: |
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $evidence = @()
+          $brands = @('Rolex','Patek Philippe','Audemars Piguet','Richard Mille','Cartier','Zenith')
+          foreach ($brand in $brands) {
+          $brandSql = $brand.Replace("'", "''")
           $sql = @"
           WITH first_page AS MATERIALIZED (
-            SELECT public.qnsa_six_brand_image_lane_page(NULL,true,NULL,NULL,NULL,10,NULL,100) value
+            SELECT public.qnsa_six_brand_image_lane_page('$brandSql',true,NULL,NULL,NULL,10,NULL,100) value
           ), first_rows AS MATERIALIZED (
             SELECT row_data, ordinality::integer position
             FROM first_page, LATERAL jsonb_array_elements(value->'rows') WITH ORDINALITY rows(row_data, ordinality)
           ), second_page AS MATERIALIZED (
             SELECT public.qnsa_six_brand_image_lane_page(
-              NULL, true,
+              '$brandSql', true,
               ((value->'next_cursor'->>'has_price')::boolean),
               ((value->'next_cursor'->>'created_at')::timestamptz),
               ((value->'next_cursor'->>'id')::uuid),
@@ -182,7 +186,7 @@ jobs:
             SELECT row_data, ordinality::integer position
             FROM second_page, LATERAL jsonb_array_elements(value->'rows') WITH ORDINALITY rows(row_data, ordinality)
           ), no_image_page AS MATERIALIZED (
-            SELECT public.qnsa_six_brand_image_lane_page(NULL,false,NULL,NULL,NULL,10,NULL,100) value
+            SELECT public.qnsa_six_brand_image_lane_page('$brandSql',false,NULL,NULL,NULL,10,NULL,100) value
           ), no_image_rows AS MATERIALIZED (
             SELECT row_data FROM no_image_page,
               LATERAL jsonb_array_elements(value->'rows') rows(row_data)
@@ -190,6 +194,7 @@ jobs:
             SELECT row_data FROM first_rows UNION ALL SELECT row_data FROM second_rows
           )
           SELECT jsonb_build_object(
+            'brand','$brandSql',
             'first_rows', (SELECT count(*) FROM first_rows),
             'second_rows', (SELECT count(*) FROM second_rows),
             'no_image_rows', (SELECT count(*) FROM no_image_rows),
@@ -218,10 +223,12 @@ jobs:
           $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $e = $result[0].evidence
-          $e | ConvertTo-Json -Depth 6 | Tee-Object -FilePath qnsa-six-brand-image-smoke.json
           if ($e.function_installed -ne $true -or [long]$e.image_contract_violations -ne 0 -or [long]$e.no_image_frame_violations -ne 0 -or [long]$e.bundle_or_child_leaks -ne 0 -or [long]$e.cross_page_duplicate_ids -ne 0 -or [long]$e.max_candidate_scan -gt 100) {
-            throw 'Six-brand image-lane acceptance failed'
+            throw "Six-brand image-lane acceptance failed for $brand"
           }
+          $evidence += $e
+          }
+          $evidence | ConvertTo-Json -Depth 6 | Tee-Object -FilePath qnsa-six-brand-image-smoke.json
 
       - uses: actions/upload-artifact@v4
         with:
