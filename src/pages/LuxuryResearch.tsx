@@ -20,14 +20,24 @@ type LuxuryObservation = {
   model?: string | null;
   luxury_item_name?: string | null;
   luxury_item_type?: string | null;
+  source_item_description?: string | null;
+  maker_evidence_status?: string | null;
+  condition?: string | null;
   listing_type?: string | null;
   listing_date?: string | null;
   price_usd?: number | null;
   source_price_amount?: number | null;
   source_currency?: string | null;
   seller_name?: string | null;
+  seller_rating?: number | null;
+  seller_review_count?: number | null;
+  seller_rating_evidence_status?: 'SOURCE_SUPPLIED' | 'SOURCE_FEEDBACK_COUNT' | 'UNAVAILABLE';
+  seller_group_count?: number | null;
+  dealer_profile_path?: string | null;
   location?: string | null;
   raw_message?: string | null;
+  thumbnail_url?: string | null;
+  has_images?: boolean;
 };
 
 const CATEGORY_META = {
@@ -163,16 +173,18 @@ export default function LuxuryResearch() {
                 <div className="mt-5 overflow-x-auto border border-[#3f3324]/15 bg-white/45">
                   <table className="min-w-[1050px] w-full border-collapse text-left text-xs">
                     <thead className="bg-[#e8ddca] text-[#675b4d]"><tr>
-                      {['Type', 'Brand / maker', 'Item name / style', 'Intent', 'Price evidence', 'Date', 'Seller', 'Location', 'Raw source evidence'].map(label => <th key={label} className="border-b border-[#3f3324]/15 px-4 py-3 font-semibold">{label}</th>)}
+                      {['Image', 'Type', 'Brand / maker', 'Item name / style', 'Condition', 'Intent', 'Price evidence', 'Date', 'Seller', 'Location', 'Raw source evidence'].map(label => <th key={label} className="border-b border-[#3f3324]/15 px-4 py-3 font-semibold">{label}</th>)}
                     </tr></thead>
                     <tbody>{observations.map(row => <tr key={row.id} className="align-top odd:bg-white/30">
+                      <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.has_images && row.thumbnail_url ? <img src={row.thumbnail_url} alt="" className="h-14 w-14 rounded object-cover" /> : null}</td>
                       <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.luxury_item_type || CATEGORY_META[row.item_category]?.label || row.item_category}</td>
-                      <td className="border-b border-[#3f3324]/10 px-4 py-3 font-semibold">{row.brand || 'Not supplied'}</td>
-                      <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.luxury_item_name || row.model || 'Not supplied'}</td>
+                      <td className="border-b border-[#3f3324]/10 px-4 py-3 font-semibold">{row.brand || 'Maker pending review'}{row.maker_evidence_status === 'MISSING_REVIEW_REQUIRED' && <div className="mt-1 text-[10px] font-normal text-[#8c6b32]">Not inferred</div>}</td>
+                      <td className="border-b border-[#3f3324]/10 px-4 py-3"><div className="font-semibold">{row.luxury_item_name || row.model || 'Identity pending review'}</div>{row.source_item_description && row.source_item_description !== row.luxury_item_name && <div className="mt-1 max-w-[260px] text-[10px] leading-4 text-[#675b4d]">{row.source_item_description}</div>}</td>
+                      <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.condition || 'Not supplied'}</td>
                       <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.listing_type || 'Unspecified'}</td>
                       <td className="border-b border-[#3f3324]/10 px-4 py-3">{formatLuxuryPrice(row)}</td>
                       <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.listing_date ? new Date(row.listing_date).toLocaleDateString() : 'Not supplied'}</td>
-                      <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.seller_name || 'Not supplied'}</td>
+                      <td className="border-b border-[#3f3324]/10 px-4 py-3"><div>{row.seller_name || 'Not supplied'}</div>{row.seller_rating_evidence_status === 'SOURCE_SUPPLIED' && row.seller_rating ? <div className="mt-1 text-[10px] text-[#9a7127]">★ {Number(row.seller_rating).toFixed(1)} ({row.seller_review_count || 0})</div> : row.seller_rating_evidence_status === 'SOURCE_FEEDBACK_COUNT' ? <div className="mt-1 text-[10px] text-[#9a7127]">★ Rated ({row.seller_review_count || 0})</div> : null}{row.dealer_profile_path && <Link to={row.dealer_profile_path} className="mt-1 inline-flex text-[10px] font-semibold underline">Dealer profile</Link>}</td>
                       <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.location || 'Not supplied'}</td>
                       <td className="max-w-[310px] border-b border-[#3f3324]/10 px-4 py-3 leading-5">{row.raw_message || 'Not supplied'}</td>
                     </tr>)}</tbody>

@@ -46,6 +46,20 @@ const TYPE_PATTERNS = {
   ],
 };
 
+const CANONICAL_BRAND_ALIASES = new Map([
+  ['HERMES', 'Hermès'],
+  ['HERMÈS', 'Hermès'],
+  ['HERMÉ̀S', 'Hermès'],
+  ['BVLGARI', 'Bvlgari'],
+  ['BULGARI', 'Bvlgari'],
+  ['TIFFANY', 'Tiffany & Co.'],
+  ['TIFFANY & CO', 'Tiffany & Co.'],
+  ['TIFFANY & CO.', 'Tiffany & Co.'],
+  ['VAN CLEEF', 'Van Cleef & Arpels'],
+  ['VCA', 'Van Cleef & Arpels'],
+  ['DIOR', 'Christian Dior'],
+]);
+
 function clean(value) {
   const result = value == null ? '' : String(value).replace(/\s+/g, ' ').trim();
   return result || null;
@@ -57,12 +71,29 @@ function sourceText(source = {}) {
     .map(clean).filter(Boolean).join('\n');
 }
 
+function canonicalizeLuxuryBrand(value) {
+  const supplied = clean(value);
+  if (!supplied) return null;
+  return CANONICAL_BRAND_ALIASES.get(supplied.toUpperCase()) || supplied;
+}
+
+function inferSignatureMaison(source = {}, category) {
+  if (String(category || '').toUpperCase() !== 'HANDBAG') return null;
+  const text = sourceText(source);
+  if (/\bbirkin\b|\bconstance\b/i.test(text)) return 'Hermès';
+  if (/\bkelly\b/i.test(text)
+    && /\b(?:bag|mini|togo|epsom|chevre|mysore|hardware|stamp|hwd)\b/i.test(text)) return 'Hermès';
+  return null;
+}
+
 function inferLuxuryBrand(source = {}) {
   const raw = source.raw_data || {};
-  const supplied = clean(raw.brand || raw.maker);
+  const supplied = canonicalizeLuxuryBrand(raw.brand || raw.maker);
   if (supplied) return supplied;
   const text = sourceText(source);
-  return LUXURY_BRANDS.find(([, pattern]) => pattern.test(text))?.[0] || null;
+  return canonicalizeLuxuryBrand(LUXURY_BRANDS.find(([, pattern]) => pattern.test(text))?.[0])
+    || inferSignatureMaison(source, raw.category || source.category)
+    || null;
 }
 
 function inferLuxuryItemType(source = {}, category) {
@@ -114,19 +145,28 @@ function normalizeLuxuryIdentity(source = {}, category) {
   const raw = source.raw_data || {};
   const itemType = inferLuxuryItemType(source, category);
   const suppliedTitle = clean(raw.model || raw.title);
+  const brand = inferLuxuryBrand({ ...source, category, raw_data: { ...raw, category } });
+  const sourceDescription = suppliedTitle || clean(source.raw_message);
+  const titleLooksLikeRawMessage = Boolean(sourceDescription)
+    && (sourceDescription.length > 120
+      || /[\r\n]|(?:^|\s)(?:price|delivery|shipping)\s*[:\-]|[$€£¥₩₹]/i.test(sourceDescription));
+  const normalizedName = [brand, itemType].filter(Boolean).join(' ') || itemType || null;
   return {
-    brand: inferLuxuryBrand(source),
-    model: suppliedTitle || itemType,
+    brand,
+    model: titleLooksLikeRawMessage ? normalizedName : (suppliedTitle || normalizedName),
     reference: clean(raw.reference || raw.normalized_reference || raw.sku || raw.style_number),
     condition: inferLuxuryCondition(source),
-    luxury_item_name: suppliedTitle || itemType,
+    luxury_item_name: titleLooksLikeRawMessage ? normalizedName : (suppliedTitle || normalizedName),
     luxury_item_type: itemType,
+    source_item_description: sourceDescription,
+    maker_evidence_status: brand ? 'SOURCE_OR_SIGNATURE_EVIDENCE' : 'MISSING_REVIEW_REQUIRED',
   };
 }
 
 module.exports = {
   LUXURY_BRANDS,
   TYPE_PATTERNS,
+  canonicalizeLuxuryBrand,
   inferLuxuryBrand,
   inferLuxuryCondition,
   inferLuxuryItemType,

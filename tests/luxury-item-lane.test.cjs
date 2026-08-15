@@ -23,8 +23,21 @@ function source(overrides = {}) {
 
 test('normalizes explicit non-watch maker, item name, type, condition, and source identity', () => {
   assert.deepEqual(normalizeLuxuryIdentity(source(), 'HANDBAG'), {
-    brand: 'Hermes', model: 'Hermes Birkin 30 Togo handbag', reference: null,
+    brand: 'Hermès', model: 'Hermes Birkin 30 Togo handbag', reference: null,
     condition: 'Used - Like New', luxury_item_name: 'Hermes Birkin 30 Togo handbag', luxury_item_type: 'Birkin',
+    source_item_description: 'Hermes Birkin 30 Togo handbag', maker_evidence_status: 'SOURCE_OR_SIGNATURE_EVIDENCE',
+  });
+});
+
+test('uses signature product evidence without copying a full raw message into the normalized item name', () => {
+  assert.deepEqual(normalizeLuxuryIdentity({
+    raw_message: 'Excellent Condition\nBirkin 35 togo Blue Izmir Palladium Hardware N Stamp No Box $12000',
+    raw_data: { model: 'Excellent Condition\nBirkin 35 togo Blue Izmir Palladium Hardware N Stamp No Box $12000' },
+  }, 'HANDBAG'), {
+    brand: 'Hermès', model: 'Hermès Birkin', reference: null, condition: 'Used - Good',
+    luxury_item_name: 'Hermès Birkin', luxury_item_type: 'Birkin',
+    source_item_description: 'Excellent Condition Birkin 35 togo Blue Izmir Palladium Hardware N Stamp No Box $12000',
+    maker_evidence_status: 'SOURCE_OR_SIGNATURE_EVIDENCE',
   });
 });
 
@@ -65,7 +78,7 @@ test('publication review keeps luxury identity and excludes it from watch Price 
   });
   assert.equal(reviewed.category, 'HANDBAG');
   assert.equal(reviewed.bundle_status, 'SINGLE_CANDIDATE');
-  assert.equal(reviewed.candidate.brand, 'Hermes');
+  assert.equal(reviewed.candidate.brand, 'Hermès');
   assert.equal(reviewed.candidate.luxury_item_type, 'Birkin');
   assert.equal(reviewed.price_research_status, 'INELIGIBLE_NON_WATCH');
 });
@@ -73,7 +86,7 @@ test('publication review keeps luxury identity and excludes it from watch Price 
 test('separate luxury research totals reconcile by category, intent, price, and brand', () => {
   const coverage = buildLuxuryResearchCoverage([
     { category: 'HANDBAG', brand: 'Hermes', listing_type: 'WTS', supplied_price: true, row_count: 4 },
-    { category: 'HANDBAG', brand: 'Hermes', listing_type: 'WTS', supplied_price: false, row_count: 2 },
+    { category: 'HANDBAG', brand: 'Hermès', listing_type: 'WTS', supplied_price: false, row_count: 2 },
     { category: 'HANDBAG', brand: 'Chanel', listing_type: 'WTB', supplied_price: false, row_count: 3 },
     { category: 'JEWELRY', brand: 'Cartier', listing_type: 'WTS', supplied_price: true, row_count: 5 },
     { category: 'WATCH', brand: 'Rolex', listing_type: 'WTS', supplied_price: true, row_count: 999 },
@@ -81,7 +94,7 @@ test('separate luxury research totals reconcile by category, intent, price, and 
   assert.equal(coverage.total_listing_count, 14);
   assert.deepEqual(coverage.categories[0], {
     category: 'HANDBAG', listing_count: 9, wts_with_price: 4, wts_without_price: 2, wtb_activity: 3,
-    brands: [{ brand: 'Hermes', listing_count: 6 }, { brand: 'Chanel', listing_count: 3 }],
+    brands: [{ brand: 'Hermès', listing_count: 6 }, { brand: 'Chanel', listing_count: 3 }],
   });
 });
 
@@ -111,6 +124,8 @@ test('Luxury Item Research is a separate route and watch research stays isolated
   assert.match(page, /separate from watch reference Price Research/i);
   assert.match(page, /Item name, maker, type, and market activity/);
   assert.match(page, /Raw source evidence/);
+  assert.match(page, /Maker pending review/);
+  assert.match(page, /Dealer profile/);
   assert.match(page, /at least two verified WTS observations/);
   assert.match(summary, /luxury_categories/);
   assert.match(summary, /total_luxury_item_count/);

@@ -137,6 +137,37 @@ test('reviewed inventory cards inherit exact public Rated Dealer feedback eviden
   assert.equal(api.isSourceBackedRatedDealer(record), true);
 });
 
+test('exact listing links enrich cards with the canonical dealer profile without exposing private phone evidence', async () => {
+  const tableRows = {
+    dealer_listing_links: [{ listing_id: 'listing-1', dealer_id: 'dealer-1' }],
+    dealers: [{ id: 'dealer-1', display_name: 'Verified Dealer', company_name: null,
+      country_code: 'US', city: 'Miami', rating: null, review_count: 22,
+      whatsapp_group_count: 5, status: 'VERIFIED' }],
+  };
+  const client = { from(table) {
+    const chain = {
+      select() { return chain; },
+      eq() { return chain; },
+      in() { return Promise.resolve({ data: tableRows[table], error: null }); },
+    };
+    return chain;
+  } };
+  const [record] = await api.enrichRecordsWithDealerDirectory(client, [{
+    id: 'listing-1', seller_name: 'Source Alias', seller_phone: null,
+    seller_rating: null, seller_review_count: 0, seller_rating_source_url: 'https://watchfacts.com/private-evidence',
+  }]);
+  assert.equal(record.source_seller_name, 'Source Alias');
+  assert.equal(record.seller_name, 'Verified Dealer');
+  assert.equal(record.dealer_id, 'dealer-1');
+  assert.equal(record.dealer_profile_path, '/dealer/profile/dealer-1');
+  assert.equal(record.seller_rating, null);
+  assert.equal(record.seller_review_count, 22);
+  assert.equal(record.seller_rating_evidence_status, 'SOURCE_FEEDBACK_COUNT');
+  assert.equal(record.seller_group_count, 5);
+  assert.equal(record.seller_rating_source_url, null);
+  assert.equal(record.seller_phone, null);
+});
+
 test('reviewed direct submissions support category, intent, image, price, and location filters together', () => {
   const record = api.mapDealerSubmission({
     id: 'bag-1', intent: 'WTS', category: 'HANDBAG', raw_message: 'WTS Birkin 30 USD 25000',

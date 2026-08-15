@@ -85,6 +85,8 @@ interface ListingRecord {
   item_category: 'WATCH' | 'HANDBAG' | 'JEWELRY' | 'ACCESSORY' | 'OTHER';
   luxury_item_name?: string | null;
   luxury_item_type?: string | null;
+  source_item_description?: string | null;
+  maker_evidence_status?: string | null;
   listing_date: string | null;
   listing_status: string | null;
   created_at: string | null;
@@ -117,6 +119,9 @@ interface ListingRecord {
   seller_rating_source_url?: string | null;
   seller_group_count?: number | null;
   seller_credential_status?: string | null;
+  dealer_id?: string | null;
+  dealer_profile_path?: string | null;
+  dealer_directory_link_status?: string | null;
   location?: string | null;
   seller_country?: string | null;
   posted_by?: string | null;
@@ -1244,6 +1249,9 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
             {isRatedDealer
               ? <span className="ml-1 text-xs font-semibold" style={{ color: GOLD_BRIGHT }} aria-label={hasNumericRating ? `Dealer rating ${Number(listing.seller_rating).toFixed(1)} from ${listing.seller_review_count} reviews` : `Rated dealer with ${listing.seller_review_count} positive feedback records`}>★ {hasNumericRating ? Number(listing.seller_rating).toFixed(1) : 'Rated'} ({Number(listing.seller_review_count).toLocaleString()})</span>
               : <span className="ml-1 text-xs font-medium" style={{ color: MUTED }}>Not rated</span>}
+            {listing.dealer_profile_path && (
+              <Link to={listing.dealer_profile_path} onClick={event => event.stopPropagation()} className="ml-2 text-xs font-semibold underline underline-offset-2" style={{ color: GOLD_BRIGHT }}>Dealer profile</Link>
+            )}
           </span>
         </div>
       )}
@@ -1454,6 +1462,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
                   {(contact?.dealer_name || listing['Posted By'] || listing.seller_name) && <div className="text-base font-semibold" style={{ color: INK }}>{contact?.dealer_name || listing['Posted By'] || listing.seller_name}</div>}
                   {listing.seller_rating != null && <div className="mt-1 text-xs" style={{ color: GOLD_BRIGHT }}>Rating {Number(listing.seller_rating).toFixed(1)}</div>}
                   {(listing.seller_review_count != null || listing.seller_group_count != null) && <div className="mt-1 text-xs" style={{ color: MUTED }}>{listing.seller_review_count || 0} reviews · {listing.seller_group_count || 0} groups{listing.seller_credential_status ? ` · ${listing.seller_credential_status.toLowerCase()}` : ''}</div>}
+                  {listing.dealer_profile_path && <Link to={listing.dealer_profile_path} className="mt-2 inline-flex text-xs font-semibold underline underline-offset-2" style={{ color: GOLD_BRIGHT }}>Open verified dealer profile</Link>}
                 </div>
               </div>
               {(contact?.phone_display || listing['Phone Number'] || listing.seller_phone) && (

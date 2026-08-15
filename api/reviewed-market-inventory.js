@@ -628,6 +628,53 @@ function directSubmissionMatchesImageLane(record, lane) {
   return lane === 'images' ? record.has_images === true : record.has_images === false;
 }
 
+async function enrichRecordsWithDealerDirectory(client, records = []) {
+  const ids = [...new Set(records.map(record => String(record?.id || '').trim()).filter(Boolean))];
+  if (ids.length === 0) return records;
+  const { data: links, error: linkError } = await client
+    .from('dealer_listing_links')
+    .select('listing_id,dealer_id')
+    .eq('link_status', 'APPLIED')
+    .in('listing_id', ids);
+  if (linkError || !Array.isArray(links) || links.length === 0) return records;
+  const dealerIds = [...new Set(links.map(link => String(link.dealer_id || '')).filter(Boolean))];
+  const { data: dealers, error: dealerError } = await client
+    .from('dealers')
+    .select('id,display_name,company_name,country_code,city,rating,review_count,whatsapp_group_count,status')
+    .eq('status', 'VERIFIED')
+    .in('id', dealerIds);
+  if (dealerError || !Array.isArray(dealers)) return records;
+  const dealerById = new Map(dealers.map(dealer => [String(dealer.id), dealer]));
+  const dealerIdByListing = new Map(links.map(link => [String(link.listing_id), String(link.dealer_id)]));
+  return records.map(record => {
+    const dealerId = dealerIdByListing.get(String(record.id));
+    const dealer = dealerById.get(dealerId);
+    if (!dealer) return record;
+    const reviewCount = Math.max(0, Number(dealer.review_count || 0));
+    const numericRating = positiveNumber(dealer.rating);
+    const ratingStatus = numericRating !== null && reviewCount > 0
+      ? 'SOURCE_SUPPLIED'
+      : reviewCount > 0 ? 'SOURCE_FEEDBACK_COUNT' : 'UNAVAILABLE';
+    return {
+      ...record,
+      source_seller_name: record.seller_name || null,
+      seller_name: dealer.display_name || record.seller_name || null,
+      dealer_id: dealer.id,
+      dealer_display_name: dealer.display_name || null,
+      dealer_company_name: dealer.company_name || null,
+      dealer_country_code: dealer.country_code || null,
+      dealer_city: dealer.city || null,
+      dealer_profile_path: `/dealer/profile/${dealer.id}`,
+      seller_rating: ratingStatus === 'SOURCE_SUPPLIED' ? numericRating : null,
+      seller_review_count: reviewCount,
+      seller_rating_evidence_status: ratingStatus,
+      seller_group_count: Math.max(0, Number(dealer.whatsapp_group_count || 0)),
+      seller_rating_source_url: null,
+      dealer_directory_link_status: 'EXACT_VERIFIED_PHONE',
+    };
+  });
+}
+
 function mapReviewedRecord(row) {
   row = applyEffectivePrice(row);
   const rmMyrPriceArtifact = rmReferenceIsMyrPriceArtifact(
@@ -742,9 +789,11 @@ function mapReviewedRecord(row) {
   return {
     id: row.id,
     brand: luxuryIdentity?.brand || brand,
-    model,
+    model: luxuryIdentity?.model || model,
     luxury_item_name: luxuryIdentity?.luxury_item_name || null,
     luxury_item_type: luxuryIdentity?.luxury_item_type || null,
+    source_item_description: luxuryIdentity?.source_item_description || null,
+    maker_evidence_status: luxuryIdentity?.maker_evidence_status || null,
     luxury_identity_eligible: luxuryEligibility?.eligible ?? true,
     luxury_identity_review_reasons: luxuryEligibility?.reasons || [],
     reference,
@@ -1916,8 +1965,11 @@ module.exports = async function handler(req, res) {
           if (laterReviewedBrand && qnsaBroadPage) return !hasObviousCrossBrandConflict(row);
           return isTradingFloorSourceRow(row);
         });
-    const recoveredMarketRecords = (await recoverRecordPrices(eligibleRows.map(mapReviewedRecord)))
-      .map(suppressPublicReferenceTokenPrice);
+    const recoveredMarketRecords = await enrichRecordsWithDealerDirectory(
+      client,
+      (await recoverRecordPrices(eligibleRows.map(mapReviewedRecord)))
+        .map(suppressPublicReferenceTokenPrice),
+    );
     let records = recoveredMarketRecords
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true) && !record.multi_listing)
       .filter(record => record.item_category === 'WATCH' || record.luxury_identity_eligible === true)
@@ -2056,6 +2108,7 @@ module.exports.recordEvidenceCoverage = recordEvidenceCoverage;
 module.exports.mapDealerSubmission = mapDealerSubmission;
 module.exports.directSubmissionMatches = directSubmissionMatches;
 module.exports.directSubmissionMatchesImageLane = directSubmissionMatchesImageLane;
+module.exports.enrichRecordsWithDealerDirectory = enrichRecordsWithDealerDirectory;
 module.exports.summarizeCoverage = summarizeCoverage;
 module.exports.hasUsableSourcePrice = hasUsableSourcePrice;
 module.exports.inventoryIdentityKey = inventoryIdentityKey;
