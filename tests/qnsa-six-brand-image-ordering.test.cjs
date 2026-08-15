@@ -14,6 +14,7 @@ const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
 test('six-brand lane function is forward-only and reuses the existing image-order index', () => {
   assert.match(migration, /CREATE OR REPLACE FUNCTION public\.qnsa_six_brand_image_lane_page/);
   assert.match(migration, /idx_qnsa_listing_global_image_price_order_20260813/);
+  assert.match(migration, /SET enable_sort = off/i);
   assert.doesNotMatch(migration, /CREATE\s+(?:UNIQUE\s+)?INDEX|REINDEX|ANALYZE|VACUUM/i);
   assert.doesNotMatch(migration,
     /(?:INSERT\s+INTO|UPDATE|DELETE\s+FROM|TRUNCATE)\s+(?:public\.raw_messages|public\.raw_message_versions|staging\.listings)/i);
@@ -98,7 +99,8 @@ test('targeted workflow is pinned to QNSA and has audit-only plus explicit apply
   assert.match(workflow, /rolled_back = \$true/);
   assert.match(workflow, /existing_order_index/);
   assert.match(workflow, /EXPLAIN \(FORMAT JSON, COSTS true\)/);
-  assert.match(workflow, /Representative candidate query did not choose the existing image-order index/);
+  assert.match(workflow, /Representative candidate query did not choose a proven bounded image-order index/);
+  assert.match(workflow, /idx_qnsa_listing_\(global\|reference\)_image_price_order_20260813/);
   assert.match(workflow, /Audit a bounded source census for every enabled brand and media lane/);
   assert.match(workflow, /LIMIT 501/);
   assert.match(workflow, /maximum_rows_per_brand_lane',501/);

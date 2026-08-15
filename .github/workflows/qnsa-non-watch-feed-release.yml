@@ -47,34 +47,44 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
           SET statement_timeout = '20s';
-          WITH eligible AS (
-            SELECT l.id, upper(l.category) AS category
-            FROM staging.listings l
-            JOIN public.raw_message_versions rv
-              ON rv.id = l.raw_message_version_id
-             AND rv.source_record_id = l.source_record_id
-             AND rv.source_hash = l.source_hash
-            WHERE l.normalization_run_key = '$env:EXPECTED_RUN_KEY'
-              AND upper(l.category) IN ('HANDBAG','JEWELRY','ACCESSORY')
-              AND l.parent_id IS NULL
-              AND COALESCE(l.is_bundle,false) = false
-              AND l.provenance_metadata->>'bundle_status' = 'SINGLE_CANDIDATE'
-              AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
-              AND lower(COALESCE(l.trading_floor_status,'')) NOT IN
-                ('bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate','withdrawn','rejected','hidden','deleted','archived')
-              AND upper(COALESCE(l.verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+          WITH categories(category) AS (
+            VALUES ('HANDBAG'::text),('JEWELRY'::text),('ACCESSORY'::text)
+          ), evidence AS (
+            SELECT category, EXISTS (
+              SELECT 1
+              FROM staging.listings l
+              WHERE l.normalization_run_key = '$env:EXPECTED_RUN_KEY'
+                AND l.category = categories.category
+                AND l.parent_id IS NULL
+                AND COALESCE(l.is_bundle,false) = false
+                AND l.provenance_metadata->>'bundle_status' = 'SINGLE_CANDIDATE'
+                AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
+                AND lower(COALESCE(l.trading_floor_status,'')) NOT IN
+                  ('bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate','withdrawn','rejected','hidden','deleted','archived')
+                AND upper(COALESCE(l.verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+                AND EXISTS (
+                  SELECT 1 FROM public.raw_message_versions rv
+                  WHERE rv.id = l.raw_message_version_id
+                    AND rv.source_record_id = l.source_record_id
+                    AND rv.source_hash = l.source_hash)
+              LIMIT 1
+            ) AS has_eligible_source
+            FROM categories
           )
           SELECT jsonb_build_object(
-            'handbags', count(*) FILTER (WHERE category='HANDBAG'),
-            'jewelry', count(*) FILTER (WHERE category='JEWELRY'),
-            'accessories', count(*) FILTER (WHERE category='ACCESSORY')
-          ) AS evidence FROM eligible;
+            'category_index', to_regclass('staging.idx_staging_qnsa_market_feed_page') IS NOT NULL,
+            'handbags', bool_or(has_eligible_source) FILTER (WHERE category='HANDBAG'),
+            'jewelry', bool_or(has_eligible_source) FILTER (WHERE category='JEWELRY'),
+            'accessories', bool_or(has_eligible_source) FILTER (WHERE category='ACCESSORY'),
+            'bounded_exists_per_category', true
+          ) AS evidence FROM evidence;
           "@
           $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 4
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
           $evidence = $result[0].evidence
           $evidence | ConvertTo-Json -Depth 4
-          if ([long]$evidence.handbags -lt 1 -or [long]$evidence.jewelry -lt 1 -or [long]$evidence.accessories -lt 1) {
+          if ($evidence.category_index -ne $true -or $evidence.handbags -ne $true -or
+              $evidence.jewelry -ne $true -or $evidence.accessories -ne $true) {
             throw 'One or more reviewed luxury categories have no eligible source rows.'
           }
       - name: Apply only the allowlisted forward contract

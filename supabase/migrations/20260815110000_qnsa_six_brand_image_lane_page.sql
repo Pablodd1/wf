@@ -20,6 +20,7 @@ LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public, staging, pg_catalog
+SET enable_sort = off
 AS $$
 DECLARE
   v_limit INTEGER := LEAST(GREATEST(COALESCE(p_limit, 50), 1), 50);
