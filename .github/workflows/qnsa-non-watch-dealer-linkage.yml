@@ -75,7 +75,13 @@ jobs:
               -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
               -Headers $headers -ContentType 'application/json' -Body $compileBody | Out-Null
           }
-          $auditSql = @"
+          function Invoke-ReadOnlyAuditQuery([string]$query) {
+            $body = @{ query = $query; read_only = $true } | ConvertTo-Json -Depth 3
+            return Invoke-RestMethod -Method Post `
+              -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $body
+          }
+          $controlSql = @"
           SELECT jsonb_build_object(
             'raw_version_primary_key', to_regclass('public.raw_message_versions_pkey') IS NOT NULL,
             'raw_version_lineage_index', to_regclass('staging.idx_staging_mariadb_raw_version') IS NOT NULL,
@@ -83,23 +89,27 @@ jobs:
               WHERE singleton=true AND enabled=true),
             'enabled_categories', (SELECT enabled_categories FROM public.qnsa_market_feed_control
               WHERE singleton=true AND enabled=true),
-            'released_singletons_by_category', (SELECT COALESCE(jsonb_object_agg(category, row_count), '{}'::jsonb)
-              FROM (SELECT upper(l.category) category, count(*) row_count
-                FROM staging.listings l JOIN public.qnsa_market_feed_control c
-                  ON c.singleton=true AND c.enabled=true
-                 AND l.normalization_run_key=c.enabled_run_key
-                 AND upper(l.category)=ANY(c.enabled_categories)
-                WHERE upper(l.category) IN ('HANDBAG','JEWELRY','ACCESSORY')
-                  AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
-                  AND l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
-                GROUP BY upper(l.category)) counts),
-            'existing_links_by_category', (SELECT COALESCE(jsonb_object_agg(category, row_count), '{}'::jsonb)
-              FROM (SELECT upper(l.category) category, count(*) row_count
-                FROM public.dealer_listing_links link JOIN staging.listings l ON l.id=link.listing_id
-                WHERE link.link_status='APPLIED'
-                  AND upper(l.category) IN ('HANDBAG','JEWELRY','ACCESSORY')
-                GROUP BY upper(l.category)) counts),
-            'duplicate_verified_phones', (SELECT count(*) FROM (
+            'snapshot_run_aligned', NOT EXISTS (
+              SELECT 1 FROM public.qnsa_market_feed_count_snapshot snapshot
+              CROSS JOIN public.qnsa_market_feed_control control
+              WHERE control.singleton=true AND control.enabled=true
+                AND snapshot.normalization_run_key<>control.enabled_run_key
+            ),
+            'snapshot_has_all_non_watch_categories', (SELECT count(DISTINCT category)=3
+              FROM public.qnsa_market_feed_count_snapshot
+              WHERE category IN ('HANDBAG','JEWELRY','ACCESSORY') AND row_count>0),
+            'snapshot_refreshed_at', (SELECT max(refreshed_at)
+              FROM public.qnsa_market_feed_count_snapshot),
+            'released_non_watch_snapshot', (SELECT COALESCE(jsonb_object_agg(category, row_count), '{}'::jsonb)
+              FROM (SELECT category, sum(row_count)::bigint row_count
+                FROM public.qnsa_market_feed_count_snapshot
+                WHERE category IN ('HANDBAG','JEWELRY','ACCESSORY')
+                GROUP BY category) snapshot_counts)
+          ) AS evidence;
+          "@
+          $identitySql = @"
+          SELECT jsonb_build_object(
+            'duplicate_verified_phone_exists', EXISTS (SELECT 1 FROM (
               SELECT public.normalize_seller_phone_identity(source_identity)
               FROM public.dealer_source_identities
               WHERE verification_status='VERIFIED'
@@ -107,18 +117,43 @@ jobs:
                 AND public.normalize_seller_phone_identity(source_identity) IS NOT NULL
               GROUP BY 1 HAVING count(DISTINCT dealer_id)>1
             ) duplicates),
-            'orphan_links', (SELECT count(*) FROM public.dealer_listing_links link
-              LEFT JOIN staging.listings l ON l.id=link.listing_id WHERE l.id IS NULL)
+            'verified_identity_table_estimated_rows', COALESCE((SELECT reltuples::bigint
+              FROM pg_class WHERE oid='public.dealer_source_identities'::regclass), 0)
           ) AS evidence;
           "@
-          $auditBody = @{ query = $auditSql; read_only = $true } | ConvertTo-Json -Depth 3
-          $result = Invoke-RestMethod -Method Post `
-            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
-            -Headers $headers -ContentType 'application/json' -Body $auditBody
-          $evidence = $result[0].evidence
+          $ledgerSql = @"
+          SELECT jsonb_build_object(
+            'orphan_link_exists', EXISTS (
+              SELECT 1 FROM public.dealer_listing_links link
+              WHERE NOT EXISTS (SELECT 1 FROM staging.listings listing
+                WHERE listing.id=link.listing_id)
+              LIMIT 1
+            ),
+            'non_applied_link_exists', EXISTS (
+              SELECT 1 FROM public.dealer_listing_links
+              WHERE link_status<>'APPLIED' LIMIT 1
+            ),
+            'invalid_non_watch_link_contract_exists', EXISTS (
+              SELECT 1 FROM public.dealer_listing_links
+              WHERE source_system='QNSA_NON_WATCH_RELEASE_GATED_RAW_LINEAGE'
+                AND (link_method<>'EXACT_VERIFIED_PHONE' OR link_status<>'APPLIED')
+              LIMIT 1
+            ),
+            'link_ledger_estimated_rows', COALESCE((SELECT reltuples::bigint FROM pg_class
+              WHERE oid='public.dealer_listing_links'::regclass), 0)
+          ) AS evidence;
+          "@
+          $control = (Invoke-ReadOnlyAuditQuery $controlSql)[0].evidence
+          $identity = (Invoke-ReadOnlyAuditQuery $identitySql)[0].evidence
+          $ledger = (Invoke-ReadOnlyAuditQuery $ledgerSql)[0].evidence
+          $evidence = [ordered]@{ control = $control; identity = $identity; ledger = $ledger }
           $evidence | ConvertTo-Json -Depth 8 | Set-Content qnsa-non-watch-linkage-audit.json
-          if ($evidence.raw_version_primary_key -ne $true -or $evidence.raw_version_lineage_index -ne $true -or
-              [long]$evidence.duplicate_verified_phones -ne 0 -or [long]$evidence.orphan_links -ne 0) {
+          if ($control.raw_version_primary_key -ne $true -or $control.raw_version_lineage_index -ne $true -or
+              -not $control.enabled_run_key -or $control.snapshot_run_aligned -ne $true -or
+              $control.snapshot_has_all_non_watch_categories -ne $true -or
+              $identity.duplicate_verified_phone_exists -eq $true -or
+              $ledger.orphan_link_exists -eq $true -or $ledger.non_applied_link_exists -eq $true -or
+              $ledger.invalid_non_watch_link_contract_exists -eq $true) {
             throw 'Non-watch dealer linkage prerequisites failed.'
           }
 

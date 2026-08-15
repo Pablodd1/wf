@@ -41,8 +41,10 @@ separate `contact_consent` decision.
 
 `.github/workflows/qnsa-non-watch-dealer-linkage.yml` provides:
 
-1. `audit`: performs only read-only queries and records counts, release controls,
-   index presence, duplicate identities, and orphan links;
+1. `audit`: performs only read-only queries. Population evidence comes from the
+   existing bounded market-feed count snapshot; release control/index evidence,
+   duplicate identities, and orphan/non-applied link existence are queried
+   separately. It deliberately avoids full staging/link-ledger count joins;
 2. `canary`: explicit confirmation, contract installation, and at most 10 new
    links, followed by exact applied-delta reconciliation;
 3. `full`: bounded raw-version keyset scan, stable raw snapshot requirement,

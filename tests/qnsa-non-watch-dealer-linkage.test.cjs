@@ -44,10 +44,28 @@ test('workflow offers read-only audit and requires explicit capped write confirm
   assert.match(workflow, /NON_WATCH_LINKAGE_CANARY_LIMIT: '10'/);
   assert.match(workflow, /if \(\$env:NON_WATCH_LINKAGE_MODE -ne 'audit'\)/);
   assert.match(workflow, /read_only = \$true/);
+  assert.match(workflow, /qnsa_market_feed_count_snapshot/);
+  assert.match(workflow, /orphan_link_exists[\s\S]*NOT EXISTS/);
+  assert.match(workflow, /duplicate_verified_phone_exists[\s\S]*HAVING count\(DISTINCT dealer_id\)>1/);
+  assert.doesNotMatch(workflow,
+    /count\s*\(\*\)[\s\S]{0,240}FROM\s+(?:staging\.listings|public\.dealer_listing_links)/i);
+  assert.doesNotMatch(workflow,
+    /FROM\s+public\.dealer_listing_links[\s\S]{0,240}GROUP BY/i);
+  assert.doesNotMatch(workflow,
+    /JOIN\s+staging\.listings[\s\S]{0,240}count\s*\(/i);
   assert.match(workflow, /inputs\.install_contract && inputs\.mode != 'audit'/);
   assert.match(workflow, /SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.doesNotMatch(workflow, /raw_payload\s+AS\s+evidence|raw_message\s+AS\s+evidence/i);
   assert.doesNotMatch(workflow, /matched_phone[\s\S]*Set-Content/i);
+});
+
+test('audit uses split bounded evidence instead of population-wide aggregate joins', () => {
+  assert.match(workflow, /Invoke-ReadOnlyAuditQuery \$controlSql/);
+  assert.match(workflow, /Invoke-ReadOnlyAuditQuery \$identitySql/);
+  assert.match(workflow, /Invoke-ReadOnlyAuditQuery \$ledgerSql/);
+  assert.match(workflow, /link_ledger_estimated_rows[\s\S]*reltuples/);
+  assert.doesNotMatch(workflow, /released_singletons_by_category/);
+  assert.doesNotMatch(workflow, /existing_links_by_category/);
 });
 
 test('runner reconciles applied deltas and requires full cursor exhaustion', () => {
