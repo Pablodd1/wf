@@ -21,6 +21,7 @@ test('contact-consent repair is an explicit, QNSA-pinned, single-migration workf
 
 test('workflow compiles before apply and proves privacy without mutating listings', () => {
   assert.match(workflow, /BEGIN;`n\$migration`nROLLBACK/);
+  assert.equal((workflow.match(/\$migration = \[string\]\(Get-Content -Raw/g) || []).length, 2);
   assert.match(workflow, /Apply only the contact-consent function repair/);
   assert.match(workflow, /unconsented_phone/);
   assert.match(workflow, /has_function_privilege\('anon'/);
