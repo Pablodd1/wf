@@ -12,5 +12,6 @@ test('Zenith exact release is QNSA-pinned, allowlisted, compiled, and consent-sm
   assert.match(workflow, /BEGIN;`n\$migration`nROLLBACK;/);
   assert.match(workflow, /03\.2522\.400/);
   assert.match(workflow, /unconsented_phone/);
+  assert.match(workflow, /\$migration = \[string\]\(Get-Content -Raw -LiteralPath \$env:MIGRATION_FILE\)/);
   assert.doesNotMatch(workflow, /supabase db push|--include-all|migration repair/i);
 });

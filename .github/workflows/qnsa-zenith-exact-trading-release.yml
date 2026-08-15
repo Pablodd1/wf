@@ -71,7 +71,8 @@ jobs:
         shell: powershell
         run: |
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $body = @{ query = (Get-Content -Raw -LiteralPath $env:MIGRATION_FILE); read_only = $false } | ConvertTo-Json -Depth 3
+          $migration = [string](Get-Content -Raw -LiteralPath $env:MIGRATION_FILE)
+          $body = @{ query = $migration; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body | Out-Null
 
       - name: Smoke exact Zenith RPC

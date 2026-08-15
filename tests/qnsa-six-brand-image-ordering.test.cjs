@@ -94,6 +94,7 @@ test('targeted workflow is pinned to QNSA and has audit-only plus explicit apply
   assert.match(workflow, /options: \[audit, apply\]/);
   assert.match(workflow, /APPLY_QNSA_IMAGE_ORDER/);
   assert.match(workflow, /if: inputs\.mode == 'apply'/);
+  assert.match(workflow, /\$migration = \[string\]\(Get-Content -Raw -LiteralPath \$env:MIGRATION_FILE\)/);
   assert.match(workflow, /Compile the forward migration and roll it back/);
   assert.match(workflow, /BEGIN;`n\$bodySql`nROLLBACK;/);
   assert.match(workflow, /rolled_back = \$true/);
