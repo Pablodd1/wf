@@ -219,10 +219,11 @@ test('workflow installs one forward repair in one atomic transaction', () => {
 
 test('forward digest repair never reads a candidate CTE outside its statement', () => {
   const normalizedBase = candidateDriven.replace(/\r\n/g, '\n');
+  const normalizedRepair = digestScopeRepair.replace(/\r\n/g, '\n');
   let effective = normalizedBase;
   for (const pair of [['old_declaration','new_declaration'],['old_select','new_select'],['old_return','new_return']]) {
-    const oldText = digestScopeRepair.match(new RegExp(`\\$${pair[0]}\\$([\\s\\S]*?)\\$${pair[0]}\\$`))?.[1];
-    const newText = digestScopeRepair.match(new RegExp(`\\$${pair[1]}\\$([\\s\\S]*?)\\$${pair[1]}\\$`))?.[1];
+    const oldText = normalizedRepair.match(new RegExp(`\\$${pair[0]}\\$([\\s\\S]*?)\\$${pair[0]}\\$`))?.[1];
+    const newText = normalizedRepair.match(new RegExp(`\\$${pair[1]}\\$([\\s\\S]*?)\\$${pair[1]}\\$`))?.[1];
     assert.ok(oldText && newText && effective.includes(oldText));
     effective = effective.replace(oldText,newText);
   }
