@@ -110,9 +110,10 @@ test('forward repair fences raw pages and removes unbounded reconciliation', () 
   assert.match(workflow, /20260815234500_qnsa_non_watch_linkage_plan_fence\.sql/);
   assert.match(workflow, /NON_WATCH_LINKAGE_PAGE_SIZE: '500'/);
   assert.match(workflow, /non_watch_lane_link_exists/);
+  const normalizedMigration = migration.replace(/\r\n/g, '\n');
   for (const marker of ['old_limit', 'old_page', 'old_identity']) {
     const oldContract = planFence.match(new RegExp(`\\$${marker}\\$([\\s\\S]*?)\\$${marker}\\$`))?.[1];
-    assert.ok(oldContract && migration.includes(oldContract),
+    assert.ok(oldContract && normalizedMigration.includes(oldContract.replace(/\r\n/g, '\n')),
       `${marker} repair fence must match the installed base contract exactly`);
   }
 });
