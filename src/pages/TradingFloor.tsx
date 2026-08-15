@@ -1227,8 +1227,19 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         )}
       </div>
 
-      <div className="mt-4 border-y py-3" style={{ borderColor: BORDER }}>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-y py-3" style={{ borderColor: BORDER }}>
         <div className="font-mono text-[18px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
+        <span
+          className="text-xs font-semibold"
+          style={{ color: isRatedDealer ? GOLD_BRIGHT : MUTED }}
+          aria-label={isRatedDealer
+            ? (hasNumericRating ? `Dealer rating ${Number(listing.seller_rating).toFixed(1)} from ${listing.seller_review_count} reviews` : `Rated dealer with ${listing.seller_review_count} positive feedback records`)
+            : 'Dealer not rated'}
+        >
+          {isRatedDealer
+            ? `★ ${hasNumericRating ? Number(listing.seller_rating).toFixed(1) : 'Rated'} (${Number(listing.seller_review_count).toLocaleString()})`
+            : 'Not rated'}
+        </span>
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
