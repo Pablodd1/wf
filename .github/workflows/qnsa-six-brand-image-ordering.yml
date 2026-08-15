@@ -135,7 +135,8 @@ jobs:
             WHERE trading_floor_enabled=true
               AND canonical_brand IN ('Rolex','Patek Philippe','Audemars Piguet','Richard Mille','Cartier','Zenith')
           ), lanes(has_image) AS (VALUES (true),(false)), sampled AS (
-            SELECT enabled.canonical_brand, lanes.has_image, count(candidate.id)::integer sampled_rows
+            SELECT enabled.canonical_brand, lanes.has_image,
+              (candidate.id IS NOT NULL) AS has_candidate
             FROM enabled CROSS JOIN lanes
             LEFT JOIN LATERAL (
               SELECT l.id
@@ -152,17 +153,16 @@ jobs:
                   ~* '^https?://[^[:space:]]+$') DESC,
                 (COALESCE(l.price_usd,l.price_normalized,0)>0) DESC,
                 l.created_at DESC,l.id DESC
-              LIMIT 501
+              LIMIT 1
             ) candidate ON true
-            GROUP BY enabled.canonical_brand,lanes.has_image
           )
           SELECT jsonb_build_object(
-            'maximum_rows_per_brand_lane',501,
+            'maximum_rows_per_brand_lane',1,
             'enabled_brands',(SELECT count(*) FROM enabled),
             'lane_entries',count(*),
             'lanes',COALESCE(jsonb_agg(jsonb_build_object(
               'brand',canonical_brand,'has_image',has_image,
-              'sampled_rows',sampled_rows,'limit_reached',sampled_rows=501
+              'has_candidate',has_candidate
             ) ORDER BY canonical_brand,has_image DESC),'[]'::jsonb)
           ) evidence FROM sampled;
           "@
@@ -170,7 +170,7 @@ jobs:
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $e = $result[0].evidence
           $e | ConvertTo-Json -Depth 8 | Tee-Object -FilePath qnsa-six-brand-image-census.json
-          if ([long]$e.enabled_brands -ne 6 -or [long]$e.lane_entries -ne 12 -or [long]$e.maximum_rows_per_brand_lane -ne 501) {
+          if ([long]$e.enabled_brands -ne 6 -or [long]$e.lane_entries -ne 12 -or [long]$e.maximum_rows_per_brand_lane -ne 1) {
             throw 'Bounded six-brand source census failed'
           }
 

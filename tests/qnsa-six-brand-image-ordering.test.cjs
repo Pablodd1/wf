@@ -102,8 +102,8 @@ test('targeted workflow is pinned to QNSA and has audit-only plus explicit apply
   assert.match(workflow, /Representative candidate query did not choose a proven bounded image-order index/);
   assert.match(workflow, /idx_qnsa_listing_\(global\|reference\)_image_price_order_20260813/);
   assert.match(workflow, /Audit a bounded source census for every enabled brand and media lane/);
-  assert.match(workflow, /LIMIT 501/);
-  assert.match(workflow, /maximum_rows_per_brand_lane',501/);
+  assert.match(workflow, /LIMIT 1/);
+  assert.match(workflow, /maximum_rows_per_brand_lane',1/);
   assert.match(workflow, /enabled_brands -ne 6/);
   assert.match(workflow, /lane_entries -ne 12/);
   assert.match(workflow, /image_contract_violations/);
