@@ -540,7 +540,15 @@ export default function PriceResearch() {
   const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
   const [pModel, setPModel] = useState('');
-  const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; analytics_ready?: boolean; sample_capped?: boolean; avg_price: number | null }[]>([]);
+  const [pRefs, setPRefs] = useState<{
+    reference: string;
+    listing_count: number;
+    analytics_ready?: boolean;
+    sample_capped?: boolean;
+    avg_price: number | null;
+    evidence_resolution?: 'EXACT_REFERENCE_ON_SELECTION' | string;
+  }[]>([]);
+  const [referenceQuery, setReferenceQuery] = useState('');
   const [modelImages, setModelImages] = useState<Record<string, string>>({});
   const [referenceImages, setReferenceImages] = useState<Record<string, string>>({});
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
@@ -555,7 +563,7 @@ export default function PriceResearch() {
   const [mStats, setMStats] = useState<ModelStats | null>(null);
 
   const loadModels = useCallback(async (brand: string) => {
-setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelImages({}); setReferenceImages({}); setModelQuery(''); setPickerError(''); setMStats(null);
+setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelImages({}); setReferenceImages({}); setModelQuery(''); setReferenceQuery(''); setPickerError(''); setMStats(null);
     if (!brand) return;
     setPLoading('models');
     try {
@@ -584,7 +592,7 @@ setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs(
   }, []);
 
   const loadRefs = useCallback(async (brand: string, model: string) => {
-setPModel(model); setPRefs([]); setReferenceImages({}); setPickerError(''); setMStats(null);
+setPModel(model); setPRefs([]); setReferenceQuery(''); setReferenceImages({}); setPickerError(''); setMStats(null);
     if (!brand || !model) return;
     setPLoading('refs');
     try {
@@ -1015,6 +1023,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     })
     .slice(0, COMPARABLE_LISTING_PREVIEW_LIMIT);
   const visibleModels = pModels.filter(item => displayCatalogModel(item.model).toLowerCase().includes(modelQuery.trim().toLowerCase()));
+  const normalizedReferenceQuery = referenceQuery.trim().toUpperCase();
+  const visibleRefs = pRefs.filter(item => !normalizedReferenceQuery || item.reference.toUpperCase().includes(normalizedReferenceQuery));
   const visibleBrands = showAllBrands
     ? pBrands
     : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
@@ -1182,9 +1192,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         <div className="mb-6 border-y py-5" style={{ borderColor: BORDER, display: data ? 'none' : undefined }}>
           {(pBrand || pModel) && (
             <nav aria-label="Catalog selection" className="mb-4 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
-              <button type="button" onClick={() => { setPBrand(''); setPModel(''); setPModels([]); setPRefs([]); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Brands</button>
+              <button type="button" onClick={() => { setPBrand(''); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setReferenceQuery(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Brands</button>
               {pBrand && <span aria-hidden="true">/</span>}
-              {pBrand && <button type="button" onClick={() => { setPModel(''); setPRefs([]); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{pBrand}</button>}
+              {pBrand && <button type="button" onClick={() => { setPModel(''); setPRefs([]); setReferenceQuery(''); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{pBrand}</button>}
               {pModel && <span aria-hidden="true">/</span>}
               {pModel && <span>{displayCatalogModel(pModel)}</span>}
             </nav>
@@ -1308,8 +1318,22 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
           {/* Reference cards */}
           {pBrand && pModel && pRefs.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {pRefs.map(r => (
+            <>
+              <label style={{ display: 'block', marginBottom: 10 }}>
+                <span className="sr-only">Search references for {pBrand} {displayCatalogModel(pModel)}</span>
+                <input
+                  type="search"
+                  value={referenceQuery}
+                  onChange={event => setReferenceQuery(event.target.value)}
+                  placeholder={`Search all ${pRefs.length} exact references`}
+                  style={{ width: 'min(100%, 420px)', height: 38, border: `1px solid ${BORDER}`, borderRadius: 7, background: WHITE, color: TEXT, padding: '0 12px', fontSize: 13 }}
+                />
+              </label>
+              <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>
+                {visibleRefs.length} of {pRefs.length} exact references · select one to load exact WTS, WTB, no-price, and outlier accounting
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {visibleRefs.map(r => (
                 <button key={r.reference} onClick={() => { setQuery(r.reference); setQueryBrand(pBrand); void fetchData(r.reference, '', pBrand); }}
                   style={{
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
@@ -1319,12 +1343,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   <span style={{ minWidth: 0 }}>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</span>
                     <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>
-                      {r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} observations · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}
+                      {r.evidence_resolution === 'EXACT_REFERENCE_ON_SELECTION' || r.listing_count <= 0
+                        ? 'Open to load exact market data'
+                        : <>{r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} source {r.listing_count === 1 ? 'listing' : 'listings'} · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}</>}
                     </span>
                   </span>
                 </button>
               ))}
-            </div>
+              </div>
+              {visibleRefs.length === 0 && <div style={{ fontSize: 12, color: MUTED, marginTop: 12 }}>No exact reference matches “{referenceQuery}”.</div>}
+            </>
           )}
         </div>
 
@@ -1422,11 +1450,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 20 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 6 }}>Reference activity</h3>
                 <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.55, marginBottom: 14 }}>
-                  Every source listing counts toward marketplace activity. Only qualified, positively priced WTS evidence is used in the price range and graphics.
+                  {data.sampleCapped
+                    ? 'This reference exceeds the bounded evidence window. The figures below reconcile the loaded sample, not a full-reference census.'
+                    : 'Every loaded source listing counts toward marketplace activity. Only qualified, positively priced WTS evidence is used in the price range and graphics.'}
                 </p>
                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Reference listing activity">
                   {[
-                    ['All source listings', data.reconciliation?.total_tracked_listings ?? data.total_tracked_listings ?? data.totalListings ?? 0],
+                    [data.sampleCapped ? 'Loaded source sample' : 'All source listings', data.reconciliation?.total_tracked_listings ?? data.total_tracked_listings ?? data.totalListings ?? 0],
                     ['Priced WTS used', data.reconciliation?.wts_eligible_analytics_count ?? data.wts_eligible_analytics_count ?? data.count ?? 0],
                     ['Price not supplied', data.reconciliation?.excluded_breakdown?.unpriced ?? data.excluded_breakdown?.unpriced ?? 0],
                     ['WTB demand', data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? 0],

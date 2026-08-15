@@ -2,11 +2,12 @@
  * CATALOG MODELS — /api/catalog-models?brand=Rolex
  *
  * Returns catalog-confirmed models without scanning the multi-million-row live
- * listing table. The references endpoint verifies real listing evidence before
- * showing a reference. Uncatalogued references remain directly searchable and
- * are never presented as model names.
+ * listing table. Browse identity is deterministic catalog metadata; exact
+ * listing evidence is resolved only after a reference is selected.
+ * Uncatalogued references remain directly searchable and are never presented
+ * as model names.
  */
-const { listCatalogReferences, lookupCatalog } = require('./_lib/catalog');
+const { listCanonicalCatalogReferences, lookupCatalog } = require('./_lib/catalog');
 const { getClient } = require('./_lib/supabase');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
@@ -136,7 +137,7 @@ module.exports = async function handler(req, res) {
       // The reviewed-reference allowlist gates analytics display downstream,
       // not the browse tree (gating here emptied RM/Cartier back into the
       // timeout-prone DB scan).
-      const catalogReferences = listCatalogReferences(brand);
+      const catalogReferences = listCanonicalCatalogReferences(brand);
       if (catalogReferences.length) {
         const models = new Map();
         for (const entry of catalogReferences) {
@@ -190,7 +191,7 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(payload);
     }
     if (brand.toLowerCase() === 'zenith') {
-      const catalogReferences = listCatalogReferences('Zenith');
+      const catalogReferences = listCanonicalCatalogReferences('Zenith');
       const models = new Map();
       for (const entry of catalogReferences) {
         if (!entry.model) continue;
@@ -213,7 +214,7 @@ module.exports = async function handler(req, res) {
       _cache.set(brand, { at: Date.now(), payload });
       return res.status(200).json(payload);
     }
-    const catalogReferences = listCatalogReferences(brand)
+    const catalogReferences = listCanonicalCatalogReferences(brand)
       .filter(entry => isPublicationReferenceAllowed(brand, entry.reference));
     const models = new Map();
     for (const entry of catalogReferences) {

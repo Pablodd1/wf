@@ -60,4 +60,12 @@ test('Price Research presents uncategorized catalog identities as individually b
   assert.match(research, /Other exact references/);
   assert.match(research, /exact references · click to browse individually/);
   assert.match(research, /loadRefs\(pBrand, m\.model\)/);
+  assert.match(research, /Search references for \{pBrand\} \{displayCatalogModel\(pModel\)\}/);
+  assert.match(research, /Search all \$\{pRefs\.length\} exact references/);
+  assert.match(research, /select one to load exact WTS, WTB, no-price, and outlier accounting/);
+  assert.match(research, /visibleRefs\.map\(r =>/);
+  assert.match(research, /EXACT_REFERENCE_ON_SELECTION/);
+  assert.match(research, /Open to load exact market data/);
+  assert.match(research, /This reference exceeds the bounded evidence window/);
+  assert.match(research, /Loaded source sample/);
 });

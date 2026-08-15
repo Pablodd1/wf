@@ -438,14 +438,46 @@ function listCatalogReferences(brand, model = null) {
     .sort((a, b) => a.model.localeCompare(b.model) || a.reference.localeCompare(b.reference));
 }
 
+/**
+ * Return only identities carried by the deterministic catalog-source file.
+ *
+ * `listCatalogReferences` intentionally retains legacy/enrichment identities
+ * for private exact lookup compatibility. Those legacy files also contain
+ * observed listing tokens (prices, currencies, years and message fragments),
+ * so they must not be used to build the public Price Research browse tree.
+ */
+function listCanonicalCatalogReferences(brand, model = null) {
+  loadCatalogs();
+  const expectedBrand = normalizeBrand(brand);
+  const FALLBACK_MODEL = 'Reference-only listings';
+  const unique = new Map();
+
+  for (const entry of _sourceByBrandReference.values()) {
+    if (normalizeBrand(entry.brand) !== expectedBrand || !entry.reference) continue;
+    const reference = String(entry.reference).trim();
+    const curated = applyCuration(entry, normalizeRef(reference));
+    const canonical = {
+      reference,
+      brand: curated.brand || entry.brand,
+      model: curated.model || entry.model || FALLBACK_MODEL,
+    };
+    const key = normalizeRef(reference);
+    if (!unique.has(key)) unique.set(key, canonical);
+  }
+
+  return [...unique.values()]
+    .filter(entry => !model || entry.model === model)
+    .sort((a, b) => a.model.localeCompare(b.model) || a.reference.localeCompare(b.reference));
+}
+
 function listCatalogBrands() {
   loadCatalogs();
   const brands = new Map();
   for (const entry of _sourceByBrandReference.values()) {
-    if (!entry.brand || !entry.model) continue;
+    if (!entry.brand || !entry.reference) continue;
     const current = brands.get(entry.brand) || { references: new Set(), models: new Set() };
     current.references.add(entry.reference);
-    current.models.add(entry.model);
+    current.models.add(entry.model || 'Reference-only listings');
     brands.set(entry.brand, current);
   }
   return [...brands.entries()]
@@ -578,6 +610,7 @@ module.exports = {
   normalizeRef,
   catalogStats,
   listCatalogReferences,
+  listCanonicalCatalogReferences,
   listCatalogBrands,
   listCatalogSuggestions,
 };

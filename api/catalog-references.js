@@ -1,12 +1,12 @@
 /**
  * CATALOG REFERENCES — /api/catalog-references?brand=Rolex&model=Submariner
  *
- * Returns catalog references only when an indexed exact lookup finds real,
- * approved listing evidence. Each result carries a bounded price/dial sample,
- * avoiding the former full-brand scan over millions of production rows.
+ * Returns deterministic catalog reference identities for model browsing.
+ * Catalog presence never implies a market observation or analytics readiness;
+ * exact approved evidence is resolved by /api/price-research after selection.
  */
 const { getClient } = require('./_lib/supabase');
-const { listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
+const { listCanonicalCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   loadReviewedWorkbookBrandRows,
@@ -300,7 +300,7 @@ module.exports = async function handler(req, res) {
       // analytics are resolved only after an exact reference is selected, via
       // the bounded QNSA release RPC; never reuse the retired text-ID workbook
       // range or present catalog metadata as live market evidence.
-      const out = listCatalogReferences('Zenith', model).map(entry => ({
+      const out = listCanonicalCatalogReferences('Zenith', model).map(entry => ({
         reference: entry.reference,
         listing_count: 0,
         eligible_observation_count: 0,
@@ -309,6 +309,7 @@ module.exports = async function handler(req, res) {
         avg_price: null,
         dial_colors: [],
         identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
       }));
       const payload = {
         success: true,
@@ -323,19 +324,22 @@ module.exports = async function handler(req, res) {
       _cache.set(cacheKey, { at: Date.now(), payload });
       return res.status(200).json(payload);
     }
-    const catalogReferences = listCatalogReferences(brand, model)
+    const catalogReferences = listCanonicalCatalogReferences(brand, model)
       .filter(entry => isPublicationReferenceAllowed(brand, entry.reference));
 
-    // Try fast pre-aggregated catalog references first (instant response)
+    // Catalog identity is metadata. Exact market evidence is resolved only
+    // after selection; never manufacture one observation from catalog presence.
     const out = catalogReferences.map(entry => {
-      const catalog = lookupCatalog(entry.reference, brand);
       return {
         reference: entry.reference,
-        listing_count: catalog?.totalMentions || entry.totalMentions || 1,
-        analytics_ready: true,
+        listing_count: 0,
+        eligible_observation_count: 0,
+        analytics_ready: false,
         sample_capped: false,
-        avg_price: catalog?.avgPrice || entry.avgPrice || null,
-        dial_colors: (catalog?.dialColors || []).map(dial_color => ({ dial_color, count: 1 })),
+        avg_price: null,
+        dial_colors: [],
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
       };
     });
 
@@ -345,6 +349,9 @@ module.exports = async function handler(req, res) {
       model,
       reference_count: out.length,
       references: out,
+      identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+      evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+      sample_capped: false,
     };
     _cache.set(cacheKey, { at: Date.now(), payload });
     return res.status(200).json(payload);
