@@ -1,0 +1,110 @@
+name: QNSA reviewed luxury-item feed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_NON_WATCH or APPLY_QNSA_NON_WATCH
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-non-watch-feed-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ inputs.confirmation == 'AUDIT_QNSA_NON_WATCH' || inputs.confirmation == 'APPLY_QNSA_NON_WATCH' }}
+    runs-on: windows-latest
+    environment: production
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_RUN_KEY: mariadb-normalized-20260811-codex-v1
+      MIGRATION_FILE: supabase/migrations/20260815103000_qnsa_non_watch_bounded_feed.sql
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate target and compile forward contract in rollback transaction
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          if ($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Refusing non-QNSA target.' }
+          if (-not (Test-Path -LiteralPath $env:MIGRATION_FILE)) { throw 'Allowlisted migration is missing.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $migration = [string](Get-Content -Raw -LiteralPath $env:MIGRATION_FILE)
+          $body = @{ query = "BEGIN;`n$migration`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Audit reconciled source eligibility before any write
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SET statement_timeout = '20s';
+          WITH eligible AS (
+            SELECT l.id, upper(l.category) AS category
+            FROM staging.listings l
+            JOIN public.raw_message_versions rv
+              ON rv.id = l.raw_message_version_id
+             AND rv.source_record_id = l.source_record_id
+             AND rv.source_hash = l.source_hash
+            WHERE l.normalization_run_key = '$env:EXPECTED_RUN_KEY'
+              AND upper(l.category) IN ('HANDBAG','JEWELRY','ACCESSORY')
+              AND l.parent_id IS NULL
+              AND COALESCE(l.is_bundle,false) = false
+              AND l.provenance_metadata->>'bundle_status' = 'SINGLE_CANDIDATE'
+              AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
+              AND lower(COALESCE(l.trading_floor_status,'')) NOT IN
+                ('bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate','withdrawn','rejected','hidden','deleted','archived')
+              AND upper(COALESCE(l.verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+          )
+          SELECT jsonb_build_object(
+            'handbags', count(*) FILTER (WHERE category='HANDBAG'),
+            'jewelry', count(*) FILTER (WHERE category='JEWELRY'),
+            'accessories', count(*) FILTER (WHERE category='ACCESSORY')
+          ) AS evidence FROM eligible;
+          "@
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 4
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $evidence = $result[0].evidence
+          $evidence | ConvertTo-Json -Depth 4
+          if ([long]$evidence.handbags -lt 1 -or [long]$evidence.jewelry -lt 1 -or [long]$evidence.accessories -lt 1) {
+            throw 'One or more reviewed luxury categories have no eligible source rows.'
+          }
+      - name: Apply only the allowlisted forward contract
+        if: ${{ inputs.confirmation == 'APPLY_QNSA_NON_WATCH' }}
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $migration = [string](Get-Content -Raw -LiteralPath $env:MIGRATION_FILE)
+          $body = @{ query = $migration; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Verify bounded feed contract
+        if: ${{ inputs.confirmation == 'APPLY_QNSA_NON_WATCH' }}
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SET statement_timeout = '15s';
+          SELECT jsonb_build_object(
+            'handbags', (SELECT count(*) FROM public.qnsa_non_watch_market_page_rows('HANDBAG', 2, 0, NULL, false, NULL, NULL)),
+            'jewelry', (SELECT count(*) FROM public.qnsa_non_watch_market_page_rows('JEWELRY', 2, 0, NULL, false, NULL, NULL)),
+            'accessories', (SELECT count(*) FROM public.qnsa_non_watch_market_page_rows('ACCESSORY', 2, 0, NULL, false, NULL, NULL))
+          ) AS smoke;
+          "@
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 4
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $smoke = $result[0].smoke
+          $smoke | ConvertTo-Json -Depth 4
+          if ([long]$smoke.handbags -lt 1 -or [long]$smoke.jewelry -lt 1 -or [long]$smoke.accessories -lt 1) {
+            throw 'Bounded luxury feed smoke failed.'
+          }

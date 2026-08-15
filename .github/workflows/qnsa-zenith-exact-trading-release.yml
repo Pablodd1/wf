@@ -1,0 +1,101 @@
+name: QNSA Zenith exact Trading release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        required: true
+        default: audit
+        type: choice
+        options: [audit, apply]
+      confirmation:
+        description: Type AUDIT_QNSA_ZENITH_EXACT or APPLY_QNSA_ZENITH_EXACT
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-zenith-exact-trading-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    environment: production
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      MIGRATION_FILE: supabase/migrations/20260815121500_qnsa_zenith_exact_reference_rows.sql
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate, compile, and audit exact cohort
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $expected = if ('${{ inputs.mode }}' -eq 'apply') { 'APPLY_QNSA_ZENITH_EXACT' } else { 'AUDIT_QNSA_ZENITH_EXACT' }
+          if ('${{ inputs.confirmation }}' -cne $expected) { throw "Confirmation must be $expected" }
+          if ($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh' -or -not $env:SUPABASE_ACCESS_TOKEN) { throw 'Pinned QNSA credentials unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $migration = Get-Content -Raw -LiteralPath $env:MIGRATION_FILE
+          $compile = @{ query = "BEGIN;`n$migration`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $compile | Out-Null
+          $sql = @"
+          SET statement_timeout='15s';
+          SELECT jsonb_build_object(
+            'source_rows', count(*),
+            'invalid_lineage', count(*) FILTER (WHERE rv.id IS NULL),
+            'bundle_or_child', count(*) FILTER (WHERE l.parent_id IS NOT NULL OR COALESCE(l.is_bundle,false)),
+            'wrong_reference', count(*) FILTER (WHERE l.reference_normalized <> '03.2522.400')
+          ) evidence
+          FROM staging.listings l
+          JOIN staging.qnsa_zenith_identity_reconciliation_audit audit
+            ON audit.listing_id=l.id AND audit.normalization_run_key=l.normalization_run_key
+           AND audit.reconciliation_run_key='zenith-identity-20260814-v1'
+           AND audit.decision='RELEASE_SAFE' AND audit.corrected_reference=l.reference_normalized
+          LEFT JOIN public.raw_message_versions rv
+            ON rv.id=l.raw_message_version_id AND rv.source_record_id=l.source_record_id AND rv.source_hash=l.source_hash
+          WHERE l.brand_normalized='Zenith' AND l.reference_normalized='03.2522.400'
+            AND l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE';
+          "@
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $e = $result[0].evidence
+          $e | ConvertTo-Json -Depth 4 | Set-Content qnsa-zenith-exact-audit.json
+          if ([long]$e.source_rows -lt 1 -or [long]$e.invalid_lineage -ne 0 -or [long]$e.bundle_or_child -ne 0 -or [long]$e.wrong_reference -ne 0) { throw 'Zenith exact cohort audit failed.' }
+
+      - name: Apply only exact Zenith function
+        if: ${{ inputs.mode == 'apply' }}
+        shell: powershell
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $body = @{ query = (Get-Content -Raw -LiteralPath $env:MIGRATION_FILE); read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body | Out-Null
+
+      - name: Smoke exact Zenith RPC
+        if: ${{ inputs.mode == 'apply' }}
+        shell: powershell
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          WITH rows AS (SELECT q.row_data FROM public.qnsa_zenith_reference_rows('03.2522.400',0,50,NULL) AS q(row_data))
+          SELECT jsonb_build_object(
+            'rows', count(*),
+            'wrong_reference', count(*) FILTER (WHERE row_data->>'normalized_reference'<>'03.2522.400'),
+            'bundle_or_child', count(*) FILTER (WHERE NULLIF(row_data->>'parent_id','') IS NOT NULL),
+            'unconsented_phone', count(*) FILTER (WHERE COALESCE((row_data->>'contact_publication_approved')::boolean,false)=false AND NULLIF(row_data->>'seller_phone','') IS NOT NULL)
+          ) evidence FROM rows;
+          "@
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $e = $result[0].evidence
+          $e | ConvertTo-Json -Depth 4 | Set-Content qnsa-zenith-exact-smoke.json
+          if ([long]$e.rows -lt 1 -or [long]$e.wrong_reference -ne 0 -or [long]$e.bundle_or_child -ne 0 -or [long]$e.unconsented_phone -ne 0) { throw 'Zenith exact RPC smoke failed.' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-zenith-exact-${{ inputs.mode }}-${{ github.run_id }}
+          path: qnsa-zenith-exact-*.json
+          if-no-files-found: error
