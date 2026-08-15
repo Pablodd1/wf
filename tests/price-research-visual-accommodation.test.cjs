@@ -27,3 +27,12 @@ test('Price Research shows compact full-width WTS evidence and keeps WTB aggrega
   assert.match(page, /WTB \/ WTS ratio/);
   assert.match(page, /wtbDemandCount\.toLocaleString\(\)/);
 });
+
+test('Price Research uses more desktop width while retaining responsive gutters', () => {
+  const page = read('src/pages/PriceResearch.tsx');
+  const wideShells = page.match(/max-w-\[1440px\]/g) || [];
+  assert.equal(wideShells.length, 2);
+  assert.doesNotMatch(page, /max-w-6xl/);
+  assert.match(page, /px-4 sm:px-6 lg:px-8/);
+  assert.match(page, /overflow-x-hidden/);
+});

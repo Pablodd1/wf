@@ -1054,7 +1054,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       <div style={{ paddingTop: 12 }}><CurrencyConverter /></div>
 
       <header style={{ backgroundColor: '#09090d', color: WHITE, padding: '22px 0 24px' }}>
-        <div className="mx-auto max-w-6xl px-4">
+        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8">
           <div className="grid gap-4 md:grid-cols-[minmax(0,0.75fr)_minmax(360px,1.25fr)] md:items-end">
             <div>
               <h1 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
@@ -1185,7 +1185,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:py-8">
+      <div className="mx-auto w-full max-w-[1440px] overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {/* ── Drill-down: Browse by Model (real listings only) ─────── */}
         <div className="mb-6 border-y py-5" style={{ borderColor: BORDER, display: data ? 'none' : undefined }}>
           {(pBrand || pModel) && (
