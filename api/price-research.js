@@ -86,6 +86,7 @@ function configuredReviewedPriceSource(brand) {
 
 function qnsaReferenceRowToMarketRow(row) {
   const source = row?.row_data || row || {};
+  const contactApproved = source.contact_publication_approved === true;
   const correctedWatchFields = normalizeWatchConditionFields({
     dial_color: source.dial_color || source.catalog_dial,
     condition: source.condition,
@@ -105,7 +106,7 @@ function qnsaReferenceRowToMarketRow(row) {
     dealer_id: source.dealer_id,
     source: source.source_file || 'MARIADB_IMMUTABLE_RAW',
     seller_name: source.seller_name,
-    seller_phone: source.seller_phone,
+    seller_phone: contactApproved ? (source.seller_phone || null) : null,
     price_raw: source.source_price_amount,
     price_usd: source.verified_price_usd || source.workbook_price_usd,
     currency: source.source_currency,
@@ -118,8 +119,13 @@ function qnsaReferenceRowToMarketRow(row) {
     image_urls: source.user_image_url ? [source.user_image_url] : [],
     has_images: source.has_exact_source_image === true,
     owner_reviewed_identity: true,
-    contact_publication_approved: source.contact_publication_approved === true,
+    contact_publication_approved: contactApproved,
   };
+}
+
+function consentApprovedPhone(row) {
+  if (row?.contact_publication_approved !== true) return null;
+  return row.seller_phone || row.phone_number || null;
 }
 
 function isPendingQnsaBrandRelease(brand) {
@@ -394,7 +400,8 @@ async function loadQnsaVerifiedTradingPrices(client, {
     listing_type: row.listing_type,
     dealer_id: row.dealer_id,
     seller_name: row.seller_name,
-    seller_phone: row.seller_phone,
+    seller_phone: consentApprovedPhone(row),
+    contact_publication_approved: row.contact_publication_approved === true,
     confidence: row.confidence,
     verdict: row.verdict,
     listing_status: row.trading_floor_status,
@@ -454,7 +461,8 @@ async function loadQnsaTradingDemand(client, {
     dealer_id: row.dealer_id,
     source: 'MARIADB_IMMUTABLE_RAW',
     seller_name: row.seller_name,
-    seller_phone: row.seller_phone,
+    seller_phone: consentApprovedPhone(row),
+    contact_publication_approved: row.contact_publication_approved === true,
     thumbnail_url: row.user_image_url,
     image_urls: row.user_image_url ? [row.user_image_url] : [],
     has_images: row.has_exact_source_image === true,
@@ -631,7 +639,8 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     .sort((a, b) => b.count - a.count);
 
   const demandRowsSerialized = eligible.map(row => {
-    const phone = row.seller_phone || row.phone_number || null;
+    const contactApproved = row.contact_publication_approved === true;
+    const phone = consentApprovedPhone(row);
     const phoneDigits = phone ? String(phone).replace(/[^0-9]/g, '') : '';
     const whatsappUrl = phoneDigits.length >= 7 ? `https://wa.me/${phoneDigits}` : null;
     const imgCandidate = row.thumbnail_url || row.image_url || row.display_image_url || (Array.isArray(row.image_urls) ? row.image_urls[0] : null) || null;
@@ -647,6 +656,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
       seller_name: row.seller_name || row.posted_by || null,
       seller_phone: phone,
       whatsapp_url: whatsappUrl,
+      contact_publication_approved: contactApproved,
       image_url: imgCandidate,
       image_urls: Array.isArray(row.image_urls) ? row.image_urls : (imgCandidate ? [imgCandidate] : []),
       has_images: Boolean(row.has_images || imgCandidate),
@@ -1594,11 +1604,11 @@ module.exports = async function handler(req, res) {
         image_urls: r.image_urls || null,
         has_images: r.has_images || false,
         seller_name: r.seller_name || null,
-        seller_phone: r.seller_phone || null,
+        seller_phone: consentApprovedPhone(r),
         verdict: r.verdict || null,
         confidence: r.confidence || null,
         listing_status: r.listing_status || null,
-        contact_publication_approved: r.contact_publication_approved || false,
+        contact_publication_approved: r.contact_publication_approved === true,
         source_file: r.source_file || null,
       })),
       rows: serializedComparables.map(r => ({
@@ -1612,11 +1622,11 @@ module.exports = async function handler(req, res) {
         image_urls: r.image_urls || null,
         has_images: r.has_images || false,
         seller_name: r.seller_name || null,
-        seller_phone: r.seller_phone || null,
+        seller_phone: consentApprovedPhone(r),
         verdict: r.verdict || null,
         confidence: r.confidence || null,
         listing_status: r.listing_status || null,
-        contact_publication_approved: r.contact_publication_approved || false,
+        contact_publication_approved: r.contact_publication_approved === true,
         source_file: r.source_file || null,
         stored_price_usd: r.stored_price_usd, price_normalization: r.price_normalization,
         is_outlier: r.is_outlier, outlier_reason: r.outlier_reason,
@@ -1633,3 +1643,4 @@ module.exports.qnsaReferenceRowToMarketRow = qnsaReferenceRowToMarketRow;
 module.exports.loadApprovedDirectSubmissionRows = loadApprovedDirectSubmissionRows;
 module.exports.loadZenithReviewedTradingRows = loadZenithReviewedTradingRows;
 module.exports.isPendingQnsaBrandRelease = isPendingQnsaBrandRelease;
+module.exports.consentApprovedPhone = consentApprovedPhone;

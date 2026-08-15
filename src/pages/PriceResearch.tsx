@@ -62,6 +62,7 @@ interface WtbListingData {
   seller_name?: string | null;
   seller_phone?: string | null;
   whatsapp_url?: string | null;
+  contact_publication_approved?: boolean;
   image_url?: string | null;
   image_urls?: string[] | null;
   has_images?: boolean;
@@ -201,6 +202,7 @@ interface ReviewedMarketRecord {
   seller_name?: string | null;
   phone_number?: string | null;
   seller_phone?: string | null;
+  contact_publication_approved?: boolean;
   raw_message?: string | null;
   raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
   raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
@@ -1978,7 +1980,8 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
   const title = [brand, record.model, reference].filter((value, index, values) => value && values.indexOf(value) === index).join(' ');
   const imageUrl = record.display_image_url || record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
   const poster = sellerSummary?.seller?.name || record.posted_by || record.seller_name || '';
-  const phone = sellerSummary?.seller?.phone || record.phone_number || record.seller_phone || '';
+  const phone = sellerSummary?.seller?.phone
+    || (record.contact_publication_approved === true ? (record.phone_number || record.seller_phone || '') : '');
   const price = reviewedPriceLabel(record);
   const sellerAnalytics = sellerSummary?.analytics;
   const sellerMetrics: Array<[string, number]> = [
@@ -2097,7 +2100,9 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
       : 'Price not available';
   const excludedFromAverages = row.is_outlier === true || !hasUsdPrice;
   const sellerName = row.seller_name || row.posted_by || row['Posted By'] || '';
-  const sellerPhone = row.seller_phone || row.phone_number || row['Phone Number'] || '';
+  const sellerPhone = row.contact_publication_approved === true
+    ? (row.seller_phone || row.phone_number || row['Phone Number'] || '')
+    : '';
   const evidenceStatus = excludedFromAverages
     ? `Excluded from averages · ${exclusionLabel}`
     : 'Included in qualified comparable average';
@@ -2200,7 +2205,9 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
     .filter(value => value && !/^unknown$/i.test(value))
     .join(', ');
   const summaryPosterName = summary.seller_name || summary.posted_by || summary['Posted By'] || '';
-  const summaryPosterPhone = summary.seller_phone || summary.phone_number || summary['Phone Number'] || '';
+  const summaryPosterPhone = summary.contact_publication_approved === true
+    ? (summary.seller_phone || summary.phone_number || summary['Phone Number'] || '')
+    : '';
   // The summary price is the exact value used by the comparable-set and
   // outlier calculations. A legacy detail row may still contain an older
   // currency conversion, so it must never replace the analytics value here.
@@ -2295,7 +2302,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
 
                 <DetailCard title="Posted by">
                   <div style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{seller?.dealer_name || summary.seller_name || summary.posted_by || 'Poster not supplied'}</div>
-                  {(seller?.phone_display || summary.seller_phone || summary.phone_number) && <div style={{ color: NAVY, fontSize: 13, fontWeight: 700, marginTop: 8 }}>{seller?.phone_display || summary.seller_phone || summary.phone_number}</div>}
+                  {(seller?.phone_display || summaryPosterPhone) && <div style={{ color: NAVY, fontSize: 13, fontWeight: 700, marginTop: 8 }}>{seller?.phone_display || summaryPosterPhone}</div>}
                   {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
                   {(seller?.dealer_rating != null || seller?.dealer_review_count != null || seller?.dealer_group_count != null) && (
                     <div className="grid grid-cols-3 gap-3" style={{ marginTop: 16 }}>
@@ -2617,8 +2624,10 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
   const [imageFailed, setImageFailed] = useState(false);
   const brandRef = [row.brand, row.reference].filter(Boolean).join(' ');
   const title = row.model ? `${brandRef} (${row.model})` : brandRef;
-  const phone = row.seller_phone;
-  const whatsappUrl = row.whatsapp_url || (phone ? `https://wa.me/${phone.replace(/[^0-9]/g, '')}` : null);
+  const phone = row.contact_publication_approved === true ? row.seller_phone : null;
+  const whatsappUrl = row.contact_publication_approved === true
+    ? row.whatsapp_url || (phone ? `https://wa.me/${phone.replace(/[^0-9]/g, '')}` : null)
+    : null;
   const sellerName = row.seller_name || 'Buyer / Dealer';
   const imgUrl = row.has_images === false
     ? null
@@ -2730,14 +2739,15 @@ function mapWtbToRowData(row: WtbListingData): RowData {
     source_price_amount: row.price_raw ? Number(row.price_raw) : null,
     source_currency: row.currency || null,
     posted_by: row.seller_name || null,
-    phone_number: row.seller_phone || null,
+    phone_number: row.contact_publication_approved === true ? row.seller_phone || null : null,
     seller_name: row.seller_name || null,
-    seller_phone: row.seller_phone || null,
+    seller_phone: row.contact_publication_approved === true ? row.seller_phone || null : null,
     raw_message: row.raw_message || null,
     image_url: row.image_url || null,
     thumbnail_url: row.image_url || null,
     image_urls: row.image_urls || (row.image_url ? [row.image_url] : []),
     has_images: Boolean(row.has_images || row.image_url),
-    whatsapp_url: row.whatsapp_url || null,
+    whatsapp_url: row.contact_publication_approved === true ? row.whatsapp_url || null : null,
+    contact_publication_approved: row.contact_publication_approved === true,
   };
 }

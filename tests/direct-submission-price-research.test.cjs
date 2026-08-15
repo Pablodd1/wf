@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { directSubmissionToMarketRow } = require('../api/price-research.js');
+const { consentApprovedPhone, directSubmissionToMarketRow, qnsaReferenceRowToMarketRow } = require('../api/price-research.js');
 
 function approvedSubmission(overrides = {}) {
   return {
@@ -42,6 +42,24 @@ test('registered dealer phone is returned only with explicit contact publication
   }));
   assert.equal(row.seller_phone, '+13055550101');
   assert.equal(row.contact_publication_approved, true);
+});
+
+test('historical research phones fail closed without explicit publication consent', () => {
+  assert.equal(consentApprovedPhone({ seller_phone: '+13055550101' }), null);
+  assert.equal(consentApprovedPhone({ seller_phone: '+13055550101', contact_publication_approved: false }), null);
+  assert.equal(consentApprovedPhone({ seller_phone: '+13055550101', contact_publication_approved: true }), '+13055550101');
+
+  const unapproved = qnsaReferenceRowToMarketRow({
+    id: 'historical-1', seller_phone: '+13055550101', contact_publication_approved: false,
+  });
+  assert.equal(unapproved.seller_phone, null);
+  assert.equal(unapproved.contact_publication_approved, false);
+
+  const approved = qnsaReferenceRowToMarketRow({
+    id: 'historical-2', seller_phone: '+13055550101', contact_publication_approved: true,
+  });
+  assert.equal(approved.seller_phone, '+13055550101');
+  assert.equal(approved.contact_publication_approved, true);
 });
 
 test('unapproved, unconfirmed, bundled, and non-USD WTS evidence fails closed', () => {
