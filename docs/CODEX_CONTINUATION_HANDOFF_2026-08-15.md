@@ -4,7 +4,7 @@
 
 - Repository: `Pablodd1/wf`
 - Workspace: `C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate`
-- Production baseline: `7c5a3d44450a1b80b043c9d65562f47e9ac4aaff`
+- Production baseline: `69f41394bd8a42ed9d8bac536e1a1d036c5923a6`
 - Production site: `https://watchfacts-poc.vercel.app`
 - Canonical Supabase: QNSA `qnsafosakvonzgfcsphh`
 - Never restore or mix retired BPTR `bptrvfncppbjnchsaxtb`.
@@ -51,7 +51,13 @@ These are release-feed snapshot counts, not proof that every row is customer-saf
 | Accessory | 167 | 109 | 46 | 12 |
 | **Total** | **2,692** |  |  |  |
 
-This lane is not fully normalized. Of the 2,692 released rows, 2,483 currently have an unspecified maker. Ambiguous/unclassified items must remain withheld. Do not claim all non-watch luxury inventory is complete.
+PR #545 is deployed and adds customer-safe runtime identity and Dealer Directory enrichment without rewriting raw or staging data. It canonicalizes defensible maker aliases, derives Hermès only from signature Birkin/Constance or contextual Kelly evidence, preserves a separate full source description, renders source images without placeholders, and labels missing makers for review rather than guessing.
+
+The post-deploy full cursor reconciliation returned 2,008 unique customer-visible rows with zero repeated IDs: 608 handbags, 1,296 jewelry items, and 104 accessories. Every returned row retained its raw message and exact source image. The 2,692-row release-feed snapshot therefore includes 684 rows withheld by stricter customer identity/admission checks. Of the visible rows, 1,126 still require maker review (19 handbags, 1,047 jewelry items, 60 accessories). This is safe accounting, not complete automatic maker normalization.
+
+No returned non-watch row currently matches the exact Dealer Directory link ledger. Do not fabricate a dealer association. Exact linkage enrichment is active for watches and was live-verified on Rolex 116508: the matched row links internally to the canonical dealer profile and carries source-backed feedback/group counts while keeping phone private.
+
+Visual production acceptance passed on Luxury Item Research and Trading Floor after deployment. The page shows category totals, filters, image, type, canonical maker or review status, normalized name, condition, WTS/WTB, price evidence, date, seller, location, raw source evidence, and an internal dealer link when an exact listing ledger match exists.
 
 ## Critical truth about Green API and incoming chats
 
@@ -71,7 +77,7 @@ Therefore do not claim that new Green API messages reaching DigitalOcean are bei
 2. Complete Zenith Price Research qualification. Representative `03.2522.400` currently has 20 tracked rows but only one qualified priced WTS; analytics is not ready.
 3. Prove one authenticated POST IT end-to-end canary: raw/version/job, review, Trading Floor, Price Research, dealer binding, media, and rollback.
 4. Implement and prove the Green API shadow adapter and reconciliation described above.
-5. Normalize the 2,483 non-watch rows with unspecified maker without guessing.
+5. Review the 1,126 customer-visible non-watch rows still missing maker evidence and the 684 release-feed rows withheld by stricter identity/admission checks. Do not guess.
 
 ## Controlled brand order
 
