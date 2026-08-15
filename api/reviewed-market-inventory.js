@@ -866,7 +866,9 @@ function encodeInventoryCursor({ lane, offset, page, keyset = null, brandKeysets
   const payload = {
     v: 1,
     l: lane === 'images' ? 'i' : 'n',
-    o: offset,
+    // Composite streams are keyset-only. Carrying a source-row offset makes
+    // the v2 token self-invalid and can skip rows after the global merge.
+    o: brandKeysets ? 0 : offset,
     p: page,
   };
   if (brandKeysets) {
@@ -1517,7 +1519,7 @@ module.exports = async function handler(req, res) {
                   p_after_id: windowCursor?.id ?? null,
                   p_limit: pageSize,
                   p_listing_type: listingType || null,
-                  p_scan_limit: 100,
+                  p_scan_limit: 500,
                 }),
               });
               if (!response.ok) {

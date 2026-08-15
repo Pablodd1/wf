@@ -121,12 +121,13 @@ test('versioned six-brand cursor round trips exact per-brand keysets', () => {
     brand, inventory.sixBrandRowKeyset(row(index + 1, 23 - index)),
   ]));
   const token = inventory.encodeInventoryCursor({
-    lane: 'images', offset: 0, page: 4, brandKeysets,
+    lane: 'images', offset: 9876, page: 4, brandKeysets,
   });
   assert.ok(token.length < 2048);
   const decoded = inventory.parseInventoryCursor(token, 50);
   assert.equal(decoded.lane, 'images');
   assert.equal(decoded.page, 4);
+  assert.equal(decoded.offset, 0, 'v2 cursors must ignore source-row offsets');
   assert.deepEqual(decoded.brandKeysets, brandKeysets);
 });
 
@@ -160,7 +161,7 @@ test('broad six-brand requests fan out in parallel with bounded scans and fail c
   const block = source.slice(start, end);
   assert.match(block, /Promise\.all\(requestedBrands\.map/);
   assert.match(block, /p_brand: brandName/);
-  assert.match(block, /p_scan_limit: 100/);
+  assert.match(block, /p_scan_limit: 500/);
   assert.match(block, /if \(!response\.ok\)[\s\S]*throw new Error/);
   assert.match(block, /if \(!envelope\) throw new Error/);
   assert.match(source, /!brand \|\| SIX_REVIEWED_WATCH_BRANDS\.includes\(brand\)/);
@@ -230,13 +231,13 @@ test('bounded refill never scans more than five windows per brand', async () => 
     fetchWindow: async () => {
       calls += 1;
       const boundary = row(600 - calls, 24 - calls);
-      return { rows: [], has_more: true, next_cursor: cursorFor(boundary), scanned_count: 100 };
+      return { rows: [], has_more: true, next_cursor: cursorFor(boundary), scanned_count: 500 };
     },
   });
   assert.equal(calls, 5);
   assert.equal(result.windows, 5);
   assert.equal(result.envelope.has_more, true);
-  assert.equal(result.envelope.scanned_count, 500);
+  assert.equal(result.envelope.scanned_count, 2500);
 });
 
 test('bounded refill rejects a non-progressing internal sparse cursor', async () => {
