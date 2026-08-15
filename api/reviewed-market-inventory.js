@@ -553,7 +553,8 @@ function mapDealerSubmission(row) {
     : { dial_color: cleanExactText(claimed.dial_color, 80) || null, condition: claimed.condition || null };
   const dialColor = correctedWatchFields.dial_color;
   const sellerName = cleanExactText(claimed.poster_name, 160) || null;
-  const sellerPhone = cleanExactText(claimed.poster_phone, 50) || null;
+  const contactApproved = claimed.contact_publication_approved === true;
+  const sellerPhone = contactApproved ? (cleanExactText(claimed.poster_phone, 50) || null) : null;
   const hasCompleteIdentity = row.category !== 'WATCH' || Boolean(brand && model && reference && dialColor);
   const priceEligible = row.category === 'WATCH' && hasCompleteIdentity && priceUsd !== null;
   const luxuryIdentity = row.category === 'WATCH' ? null : normalizeLuxuryIdentity({
@@ -591,7 +592,7 @@ function mapDealerSubmission(row) {
       : 'UNAVAILABLE',
     seller_group_count: Number(claimed.group_count || 0),
     seller_credential_status: cleanExactText(claimed.credential_status, 30) || null,
-    contact_publication_approved: true, price_usd: priceUsd, price_raw: priceRaw,
+    contact_publication_approved: contactApproved, price_usd: priceUsd, price_raw: priceRaw,
     currency, workbook_price_usd: null, workbook_price_review_reason: null,
     source_price_amount: priceRaw, source_price_text: priceRaw == null ? null : String(priceRaw),
     source_currency: currency, price_evidence_status: priceEligible ? EXPLICIT_USD_STATUS : priceRaw == null ? 'NO_PRICE_SUPPLIED' : 'NON_USD_USER_SUPPLIED',
@@ -672,7 +673,7 @@ async function enrichRecordsWithDealerDirectory(client, records = []) {
       dealer_company_name: dealer.company_name || null,
       dealer_country_code: dealer.country_code || null,
       dealer_city: dealer.city || null,
-      dealer_profile_path: `/dealer/profile/${dealer.id}`,
+      dealer_profile_path: `/reference-check/${dealer.id}`,
       seller_rating: ratingStatus === 'SOURCE_SUPPLIED' ? numericRating : null,
       seller_review_count: reviewCount,
       seller_rating_evidence_status: ratingStatus,
@@ -930,9 +931,10 @@ function parseInventoryCursor(value, pageSize) {
       keyset = { hasPrice: decoded.k.h, createdAt: createdAt.toISOString(), id };
     }
     let brandKeysets;
+    let brandScope;
     if (decoded?.v === 2) {
       if (offset !== 0 || Object.keys(decoded).some(key =>
-        !['v', 'l', 'o', 'p', 'b'].includes(key))) return null;
+        !['v', 'l', 'o', 'p', 'b', 's'].includes(key))) return null;
       if (!decoded?.b || typeof decoded.b !== 'object' || Array.isArray(decoded.b)) return null;
       brandKeysets = {};
       for (const brand of SIX_REVIEWED_WATCH_BRANDS) {
@@ -948,15 +950,22 @@ function parseInventoryCursor(value, pageSize) {
       }
       if (Object.keys(decoded.b).some(code =>
         !Object.values(SIX_REVIEWED_BRAND_CURSOR_CODES).includes(code))) return null;
+      if (decoded.s !== undefined) {
+        if (!Array.isArray(decoded.s) || decoded.s.length === 0
+          || new Set(decoded.s).size !== decoded.s.length
+          || decoded.s.some(code => !Object.values(SIX_REVIEWED_BRAND_CURSOR_CODES).includes(code))) return null;
+        brandScope = decoded.s.map(code => Object.entries(SIX_REVIEWED_BRAND_CURSOR_CODES)
+          .find(([, compact]) => compact === code)?.[0]);
+      }
     }
     return { lane, offset, page, ...(keyset ? { keyset } : {}),
-      ...(brandKeysets ? { brandKeysets } : {}) };
+      ...(brandKeysets ? { brandKeysets } : {}), ...(brandScope ? { brandScope } : {}) };
   } catch {
     return null;
   }
 }
 
-function encodeInventoryCursor({ lane, offset, page, keyset = null, brandKeysets = null }) {
+function encodeInventoryCursor({ lane, offset, page, keyset = null, brandKeysets = null, brandScope = null }) {
   const payload = {
     v: 1,
     l: lane === 'images' ? 'i' : 'n',
@@ -974,6 +983,9 @@ function encodeInventoryCursor({ lane, offset, page, keyset = null, brandKeysets
       payload.b[SIX_REVIEWED_BRAND_CURSOR_CODES[brand]] = {
         h: value.hasPrice, c: value.createdAt, i: value.id,
       };
+    }
+    if (Array.isArray(brandScope) && brandScope.length > 0) {
+      payload.s = brandScope.map(brand => SIX_REVIEWED_BRAND_CURSOR_CODES[brand]);
     }
   }
   if (keyset) payload.k = { h: keyset.hasPrice, c: keyset.createdAt, i: keyset.id };
@@ -1337,7 +1349,13 @@ module.exports = async function handler(req, res) {
     // Only an explicit brand filter is exact. Free-text brand/model/seller terms
     // remain case-insensitive searches; parsing them as exact brand names made
     // aliases such as "patek" incorrectly exclude "Patek Philippe".
-    const requestedBrand = cleanExactText(req.query?.brand, 80);
+    const brandQueryValues = (Array.isArray(req.query?.brand) ? req.query.brand : [req.query?.brand])
+      .map(value => cleanExactText(value, 80))
+      .filter(Boolean);
+    const requestedBrands = [...new Set(brandQueryValues.map(value =>
+      SIX_REVIEWED_WATCH_BRANDS.find(brand => brand.toLowerCase() === value.toLowerCase()) || value))];
+    const requestedBrand = requestedBrands.length === 1 ? requestedBrands[0] : '';
+    const multiBrandSelection = requestedBrands.length > 1;
     const requestedReference = cleanExactText(req.query?.reference || parsedSearch.reference, 80);
     const reference = referenceComparisonKey(requestedReference);
     const requestedDial = cleanExactText(req.query?.dial || parsedSearch.dial, 40);
@@ -1368,6 +1386,27 @@ module.exports = async function handler(req, res) {
     }
     if (dateWindow && !postedAfter) {
       return res.status(400).json({ status: 'error', error: 'Invalid posting date window' });
+    }
+    if (multiBrandSelection) {
+      const unsupportedBrands = requestedBrands.filter(brand => !SIX_REVIEWED_WATCH_BRANDS.includes(brand));
+      const unsupportedFacets = [
+        requestedItem !== 'watches' ? 'category (must be Watches)' : '',
+        search ? 'search' : '',
+        requestedReference ? 'exact reference' : '',
+        requestedDial ? 'dial' : '',
+        condition ? 'condition' : '',
+        pricedOnly ? 'price supplied' : '',
+        region ? 'location' : '',
+        rating ? 'dealer rating' : '',
+        dateWindow ? 'posted date' : '',
+      ].filter(Boolean);
+      if (unsupportedBrands.length || unsupportedFacets.length) {
+        return res.status(400).json({
+          status: 'error',
+          error: `Multi-brand pagination currently supports released watch brands with listing type and image-only filters. ${unsupportedBrands.length ? `Unsupported brands: ${unsupportedBrands.join(', ')}. ` : ''}${unsupportedFacets.length ? `Remove: ${unsupportedFacets.join(', ')}.` : ''}`.trim(),
+          pendingMigration: 'Extend qnsa_six_brand_image_lane_page with array-valued indexed predicates and bind the full facet fingerprint into its keyset cursor.',
+        });
+      }
     }
     if (requestedReference && !reference) {
       return res.status(400).json({ status: 'error', error: 'Invalid exact reference' });
@@ -1407,7 +1446,7 @@ module.exports = async function handler(req, res) {
     }
     // The snapshot is an exact census of the enabled reconciled market-feed
     // run. Totals stay withheld for predicates the snapshot does not encode.
-    const publicInventoryTotal = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+    const publicInventoryTotal = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source' && !multiBrandSelection
       ? snapshotInventoryTotal(summary, {
           search, reference, dial: requestedDial, imagesOnly, condition, region,
           rating, postedAfter, itemCategory, brand, listingType, pricedOnly,
@@ -1524,6 +1563,7 @@ module.exports = async function handler(req, res) {
     const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
     const sixBrandBroadScope = qnsaBroadPage && watchFeed
       && (!brand || SIX_REVIEWED_WATCH_BRANDS.includes(brand));
+    const sixBrandScope = requestedBrands.length > 0 ? requestedBrands : SIX_REVIEWED_WATCH_BRANDS;
     if (sixBrandBroadScope && pagination !== 'cursor' && page > 1) {
       return res.status(400).json({
         status: 'error',
@@ -1536,6 +1576,17 @@ module.exports = async function handler(req, res) {
         status: 'error',
         error: 'This Trading Floor cursor is stale; refresh to start the safe six-brand feed.',
       });
+    }
+    if (multiBrandSelection && pagination === 'cursor' && cursorProvided && page > 1) {
+      const cursorScope = [...(inventoryCursor?.brandScope || [])].sort();
+      const requestedScope = [...sixBrandScope].sort();
+      if (cursorScope.length !== requestedScope.length
+        || cursorScope.some((brand, index) => brand !== requestedScope[index])) {
+        return res.status(400).json({
+          status: 'error',
+          error: 'This Trading Floor cursor belongs to a different multi-brand selection. Refresh to start the selected brand feed.',
+        });
+      }
     }
     const qnsaUnpartitionedMedia = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       && !imagesOnly && !sixBrandBroadScope;
@@ -1598,9 +1649,9 @@ module.exports = async function handler(req, res) {
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
       if (sixBrandBroadScope) {
-        const requestedBrands = brand ? [brand] : SIX_REVIEWED_WATCH_BRANDS;
+        const streamBrands = sixBrandScope;
         const previousBrandKeysets = inventoryCursor?.brandKeysets || {};
-        const entries = await Promise.all(requestedBrands.map(brandName => {
+        const entries = await Promise.all(streamBrands.map(brandName => {
           const brandCursor = previousBrandKeysets[brandName] || null;
           return refillSixBrandStream({
             brand: brandName,
@@ -1812,7 +1863,9 @@ module.exports = async function handler(req, res) {
           posting_date: row.listing_date || row.created_at,
           seller_name: row.seller_name,
           seller_phone: row.seller_phone,
-          contact_publication_approved: Boolean(row.seller_phone),
+          // The bounded Price Research RPC returns source identity evidence,
+          // not an explicit contact-publication consent decision.
+          contact_publication_approved: false,
           raw_message: row.raw_message,
           listing_type: row.listing_type,
           brand_scope: row.brand,
@@ -2073,6 +2126,7 @@ module.exports = async function handler(req, res) {
           brandKeysets: sixBrandBroadScope
             ? qnsaCandidateCursorMeta?.nextBrandKeysets || {}
             : null,
+          brandScope: sixBrandBroadScope ? sixBrandScope : null,
         })
       : null;
     const publicationBrands = publicationBrandsFromSummary(summary);

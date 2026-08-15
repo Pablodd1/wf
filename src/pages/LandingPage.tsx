@@ -6,7 +6,7 @@ import { MarketActivityTicker } from '@/components/MarketActivityTicker';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 const networkStats = [
-  ['Source-backed', 'Dealer directory'],
+  ['Source-backed', 'Reference Check'],
   ['1.39M', 'Historical source records'],
   ['WTS + WTB', 'Market activity'],
   ['Dated', 'Price evidence'],

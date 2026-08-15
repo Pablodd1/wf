@@ -31,7 +31,17 @@ test('approved registered WTS becomes source-backed Price Research evidence', ()
   assert.equal(row.analytics_currency_status, 'VERIFIED');
   assert.equal(row.owner_reviewed_identity, true);
   assert.equal(row.raw_message, 'WTS Rolex Daytona 116500LN White USD 30000');
+  assert.equal(row.seller_phone, null);
+  assert.equal(row.contact_publication_approved, false);
+});
+
+test('registered dealer phone is returned only with explicit contact publication consent', () => {
+  const source = approvedSubmission();
+  const row = directSubmissionToMarketRow(approvedSubmission({
+    claimed_fields: { ...source.claimed_fields, contact_publication_approved: true },
+  }));
   assert.equal(row.seller_phone, '+13055550101');
+  assert.equal(row.contact_publication_approved, true);
 });
 
 test('unapproved, unconfirmed, bundled, and non-USD WTS evidence fails closed', () => {

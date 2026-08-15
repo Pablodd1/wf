@@ -18,9 +18,9 @@ const portalLinks = [
     icon: Globe2,
   },
   {
-    title: 'Dealer Directory',
+    title: 'Reference Check',
     description: 'Review verified counterparties, ratings, market activity, and current inventory.',
-    to: '/dealers',
+    to: '/reference-check',
     icon: Users,
   },
   {

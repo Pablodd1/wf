@@ -88,16 +88,16 @@ export default function DealerDirectory() {
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{view === 'rated' ? 'Curated Luxury rated dealer evidence' : view === 'top-rated' ? 'Curated Luxury public-source leaderboard' : view === 'legacy' ? 'Curated Luxury legacy profile evidence' : 'Curated Luxury live dealer network'}</p>
           <div className="mt-3 grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
             <div>
-              <h1 className="font-serif text-4xl sm:text-5xl">Dealer directory</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{view === 'rated' ? 'Rated Dealers preserves the captured public feedback directory. Feedback counts remain source evidence and are never converted into fictional five-point scores.' : view === 'top-rated' ? 'Top Rated Dealers preserves the public source rank, feedback count, WTS activity, WTB demand, location, groups, and source profile workflow without inventing a numeric star rating.' : view === 'legacy' ? 'Legacy profiles use stable source profile IDs. WTS and WTB values are dated source snapshots—not permanent live totals—and missing ratings, groups, or contacts remain unknown.' : 'Live Directory connects verified dealer identities to their currently released WTS and WTB listings, reviews, demographics and group evidence.'}</p>
+              <h1 className="font-serif text-4xl sm:text-5xl">Reference Check</h1>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{view === 'rated' ? 'Rated Dealers preserves the captured public feedback directory. Feedback counts remain source evidence and are never converted into fictional five-point scores.' : view === 'top-rated' ? 'Top Rated Dealers preserves the public source rank, feedback count, WTS activity, WTB demand, location, groups, and source profile workflow without inventing a numeric star rating.' : view === 'legacy' ? 'Legacy profiles use stable source profile IDs. WTS and WTB values are dated source snapshots—not permanent live totals—and missing ratings, groups, or contacts remain unknown.' : 'Reference Check connects verified dealer identities to their currently released WTS and WTB listings, reviews, business profile data and group evidence.'}</p>
             </div>
             <label className="relative block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={17} />
               <input value={searchInput} onChange={event => setSearchInput(event.target.value)} placeholder="Search by dealer name or phone number" aria-label="Search dealers by name or phone number" className="h-12 w-full border border-white/15 bg-[#111118] pl-10 pr-3 text-sm outline-none focus:border-[#c9a96e]" />
             </label>
           </div>
-          <div className="mt-7 flex flex-wrap gap-2" role="tablist" aria-label="Dealer directory views">
-            <button type="button" role="tab" aria-selected={view === 'reference'} onClick={() => setView('reference')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'reference' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Search size={15} /> Live Directory</button>
+          <div className="mt-7 flex flex-wrap gap-2" role="tablist" aria-label="Reference Check views">
+            <button type="button" role="tab" aria-selected={view === 'reference'} onClick={() => setView('reference')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'reference' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Search size={15} /> Reference Check</button>
             <button type="button" role="tab" aria-selected={view === 'rated'} onClick={() => setView('rated')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'rated' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Star size={15} /> Rated Dealers</button>
             <button type="button" role="tab" aria-selected={view === 'top-rated'} onClick={() => setView('top-rated')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'top-rated' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Trophy size={15} /> Top Rated Dealers</button>
             <button type="button" role="tab" aria-selected={view === 'legacy'} onClick={() => setView('legacy')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'legacy' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><CalendarDays size={15} /> Legacy Profiles</button>
@@ -127,7 +127,7 @@ export default function DealerDirectory() {
                   {view !== 'top-rated' && <BadgeCheck size={19} className="text-[#c9a96e]" aria-label="Verified dealer" />}
                 </div>
                 <h2 className="mt-7 pr-12 text-xl font-semibold">
-                  <Link to={`/dealer/profile/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>
+                  <Link to={`/reference-check/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>
                 </h2>
                 <p className="mt-1 text-xs text-white/42">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
                 {dealer.verified_phone && <p className="mt-2 font-mono text-xs text-white/55">{dealer.verified_phone}</p>}
@@ -145,7 +145,7 @@ export default function DealerDirectory() {
                 {view === 'reference' && linkagePending && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Listing activity is awaiting exact verified seller linkage; zero is not inferred.</p>}
                 {view === 'legacy' && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Historical snapshot · {stats?.snapshot_count || 0} captured observations · live totals require verified listing lineage.</p>}
                 <div className="mt-5 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
-                  <Link to={`/dealer/profile/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
+                  <Link to={`/reference-check/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
                 </div>
               </article>
             );

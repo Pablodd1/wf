@@ -35,7 +35,7 @@ test('Top Rated preserves source rank and feedback without inventing a numeric r
   assert.deepEqual(profiles.map(profile => profile.source_rank), Array.from({ length: 25 }, (_, index) => index + 1));
   assert.ok(profiles.every(profile => profile.rating === null));
   assert.ok(profiles.every(profile => profile.review_count >= 0));
-  assert.ok(profiles.every(profile => /^\+\d{7,15}$/.test(profile.verified_phone)));
+  assert.ok(profiles.every(profile => profile.verified_phone === null));
   assert.ok(profiles.every(profile => profile.source_url?.startsWith('https://watchfacts.com/user/')));
 });
 
@@ -57,18 +57,20 @@ test('every rated dealer card resolves to an internal profile payload', () => {
     assert.equal(payload?.dealer?.id, dealer.id);
     assert.equal(payload?.dealer?.rating, null);
     assert.equal(payload?.dealer?.review_count, dealer.review_count);
+    assert.equal(payload?.dealer?.verified_phone, null);
+    assert.equal(payload?.stats?.verified_contact_info, null);
     assert.equal(payload?.source_links, undefined);
     assert.equal(payload?.dealer?.source_url, undefined);
     assert.equal(payload?.source_provenance?.source_url, undefined);
   }
 });
 
-test('public WhatsApp links provide searchable source phone numbers', async () => {
+test('source phones remain private reconciliation evidence and are not publicly searchable', async () => {
   assert.equal(sourcePhone({ whatsapp_url: 'https://wa.me/17147340511' }), '+17147340511');
   const directory = await invoke(dealersHandler, { mode: 'top-rated', pageSize: '25', q: '7147340511' });
   assert.equal(directory.statusCode, 200);
-  assert.equal(directory.payload.total, 1);
-  assert.equal(directory.payload.dealers[0].display_name, 'Jaztime Watches');
+  assert.equal(directory.payload.total, 0);
+  assert.deepEqual(directory.payload.dealers, []);
 });
 
 test('Top Rated and source profile API handlers return the complete source-backed workflow', async () => {
@@ -143,6 +145,7 @@ test('public dealer API payloads never expose private provenance URLs', async ()
     const response = await invoke(dealersHandler, query);
     assert.equal(response.statusCode, 200);
     assert.doesNotMatch(JSON.stringify(response.payload), /https:\/\/watchfacts\.com\//i);
+    assert.ok(response.payload.dealers.every(dealer => dealer.verified_phone == null));
   }
   for (const id of ['watchfacts-source-3435', 'watchfacts-legacy-9641']) {
     const response = await invoke(dealerProfileHandler, { id });
@@ -151,10 +154,10 @@ test('public dealer API payloads never expose private provenance URLs', async ()
   }
 });
 
-test('Dealer Directory opens on the live canonical directory while evidence views remain available', () => {
+test('Reference Check opens on the live canonical directory while evidence views remain available', () => {
   const directory = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerDirectory.tsx'), 'utf8');
   assert.match(directory, /useState<DirectoryView>\('reference'\)/);
-  assert.match(directory, /Live Directory/);
+  assert.match(directory, /Reference Check/);
   assert.match(directory, /> Rated Dealers</);
   assert.match(directory, /Top Rated Dealers/);
 });
@@ -166,6 +169,6 @@ test('Workspace removes the redundant public market-access block and preserves t
   assert.doesNotMatch(workspace, /title: 'Trading Floor'/);
   assert.doesNotMatch(workspace, /title: 'Price Research'/);
   assert.match(workspace, /title: 'POST IT'/);
-  assert.match(workspace, /title: 'Dealer Directory'/);
+  assert.match(workspace, /title: 'Reference Check'/);
   assert.match(workspace, /title: 'Dealer Account'/);
 });

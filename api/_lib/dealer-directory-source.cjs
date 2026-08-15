@@ -59,7 +59,9 @@ function ratedProfileSummary(profile, rank) {
     rating: null,
     review_count: nonNegativeInteger(profile.review_count) || 0,
     trust_status: profile.trust_status || summary.trust_status,
-    verified_phone: profile.phone ? `+${profile.phone}` : summary.verified_phone,
+    // A phone published by a legacy/source directory is private reconciliation
+    // evidence. It is not Curated Luxury contact-consent evidence.
+    verified_phone: null,
     source_rank: rank,
     source_system: RATED_SOURCE_SYSTEM,
     source_url: profile.profile_url || summary.source_url,
@@ -127,7 +129,9 @@ function profileSummary(profile, rank) {
     source_system: SOURCE_SYSTEM,
     source_url: profile.profile_url || null,
     source_crawled_at: crawl.crawled_at || null,
-    verified_phone: sourcePhone(profile),
+    // Keep source phones available to the private identity reconciliation
+    // helpers, but never copy them into a public snapshot profile.
+    verified_phone: null,
     stats: {
       wts_posts: nonNegativeInteger(profile.wts) || 0,
       wtb_posts: nonNegativeInteger(profile.wtb) || 0,

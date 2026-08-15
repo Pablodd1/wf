@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { Footer } from '@/components/Footer';
 import { MarketNav } from '@/components/MarketNav';
+import { ListingDealerEvidence } from '@/components/ListingDealerEvidence';
 
 type BrandCoverage = { brand: string; listing_count: number };
 type CategoryCoverage = {
@@ -29,6 +30,8 @@ type LuxuryObservation = {
   source_price_amount?: number | null;
   source_currency?: string | null;
   seller_name?: string | null;
+  seller_phone?: string | null;
+  contact_publication_approved?: boolean;
   seller_rating?: number | null;
   seller_review_count?: number | null;
   seller_rating_evidence_status?: 'SOURCE_SUPPLIED' | 'SOURCE_FEEDBACK_COUNT' | 'UNAVAILABLE';
@@ -184,7 +187,7 @@ export default function LuxuryResearch() {
                       <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.listing_type || 'Unspecified'}</td>
                       <td className="border-b border-[#3f3324]/10 px-4 py-3">{formatLuxuryPrice(row)}</td>
                       <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.listing_date ? new Date(row.listing_date).toLocaleDateString() : 'Not supplied'}</td>
-                      <td className="border-b border-[#3f3324]/10 px-4 py-3"><div>{row.seller_name || 'Not supplied'}</div>{row.seller_rating_evidence_status === 'SOURCE_SUPPLIED' && row.seller_rating ? <div className="mt-1 text-[10px] text-[#9a7127]">★ {Number(row.seller_rating).toFixed(1)} ({row.seller_review_count || 0})</div> : row.seller_rating_evidence_status === 'SOURCE_FEEDBACK_COUNT' ? <div className="mt-1 text-[10px] text-[#9a7127]">★ Rated ({row.seller_review_count || 0})</div> : null}{row.dealer_profile_path && <Link to={row.dealer_profile_path} className="mt-1 inline-flex text-[10px] font-semibold underline">Dealer profile</Link>}</td>
+                      <td className="border-b border-[#3f3324]/10 px-4 py-3"><ListingDealerEvidence sellerName={row.seller_name} sellerPhone={row.seller_phone} contactPublicationApproved={row.contact_publication_approved === true} rating={row.seller_rating} reviewCount={row.seller_review_count} ratingEvidenceStatus={row.seller_rating_evidence_status} groupCount={row.seller_group_count} profilePath={row.dealer_profile_path} /></td>
                       <td className="border-b border-[#3f3324]/10 px-4 py-3">{row.location || 'Not supplied'}</td>
                       <td className="max-w-[310px] border-b border-[#3f3324]/10 px-4 py-3 leading-5">{row.raw_message || 'Not supplied'}</td>
                     </tr>)}</tbody>

@@ -19,16 +19,20 @@ test('soft credentialing offers a restricted guest workspace session', () => {
 
 test('Trading Floor filter rail stays visible and rating badges match the filter contract', () => {
   const floor = read('src/pages/TradingFloor.tsx');
+  const dealerEvidence = read('src/components/ListingDealerEvidence.tsx');
   assert.match(floor, /filters-sidebar/);
   assert.match(floor, /md:sticky md:top-5/);
   assert.match(floor, /md:max-h-\[calc\(100vh-40px\)\]/);
   assert.match(floor, /overflow-y-auto/);
-  assert.match(floor, /Number\(listing\.seller_rating\)\.toFixed\(1\)/);
-  assert.match(floor, />Not rated<\/span>/);
-  assert.match(floor, /seller_rating_evidence_status === 'SOURCE_SUPPLIED'/);
+  assert.match(floor, /<DealerRatingBadge/);
+  assert.match(floor, /<ListingDealerEvidence/);
+  assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_SUPPLIED'/);
+  assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_FEEDBACK_COUNT'/);
+  assert.match(dealerEvidence, />Not rated<\/span>/);
+  assert.match(dealerEvidence, /contactPublicationApproved \?/);
 });
 
-test('Dealer Directory searches by name or phone and uses the profile workflow route', () => {
+test('Reference Check searches by name or consented phone and uses the canonical profile route', () => {
   const directory = read('src/pages/DealerDirectory.tsx');
   const app = read('src/App.tsx');
   const api = read('api/dealers.js');
@@ -36,8 +40,9 @@ test('Dealer Directory searches by name or phone and uses the profile workflow r
   assert.match(directory, /setSearch\(searchInput\.trim\(\)\)/);
   assert.doesNotMatch(directory, /setTimeout\(\(\) => \{ setLoading\(true\)/);
   assert.match(directory, /const controller = new AbortController\(\);\s*setLoading\(true\);/);
-  assert.match(directory, /`\/dealer\/profile\/\$\{dealer\.slug \|\| dealer\.id\}`/);
-  assert.match(app, /path="\/dealer\/profile\/:dealerId"/);
+  assert.match(directory, /`\/reference-check\/\$\{dealer\.slug \|\| dealer\.id\}`/);
+  assert.match(app, /path="\/reference-check\/:dealerId"/);
+  assert.match(app, /path="\/dealer\/profile\/:dealerId" element=\{<LegacyDealerProfileRedirect \/>\}/);
   assert.match(api, /phoneMatchedDealerIds/);
   assert.match(api, /display_name\.ilike/);
 });

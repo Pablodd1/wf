@@ -28,7 +28,7 @@ function credentialedLocation(dealer) {
 
 async function loadCredentialedPoster(client, user) {
   const { data: dealer, error } = await client.from('dealers')
-    .select('id,display_name,company_name,country_code,city,avatar_url,status,rating,review_count,whatsapp_group_count,metadata')
+    .select('id,display_name,company_name,country_code,city,avatar_url,status,contact_consent,rating,review_count,whatsapp_group_count,metadata')
     .eq('auth_user_id', user.id).maybeSingle();
   if (error) throw error;
   if (!dealer) return null;
@@ -51,6 +51,7 @@ async function loadCredentialedPoster(client, user) {
     location: credentialedLocation(dealer),
     avatar_url: clean(dealer.avatar_url, 2000),
     credential_status: dealer.status,
+    contact_publication_approved: dealer.contact_consent === true,
     rating: dealer.rating == null ? null : Number(dealer.rating),
     review_count: Number(dealer.review_count || 0),
     group_count: Number(dealer.whatsapp_group_count || 0),
@@ -185,6 +186,7 @@ async function handler(req, res) {
     poster_name: poster.name, poster_phone: poster.phone, location: poster.location,
     dealer_rating: poster.rating, review_count: poster.review_count,
     group_count: poster.group_count, credential_status: poster.credential_status,
+    contact_publication_approved: poster.contact_publication_approved === true,
     account_type: poster.account_type, preferred_language: poster.preferred_language,
     telegram_username: poster.telegram_username,
     source_evidence_confirmed: true, source_evidence_confirmed_at: new Date().toISOString(),
@@ -208,11 +210,19 @@ async function handler(req, res) {
     review_status: 'PENDING_REVIEW', normalized_at: null,
   }));
   const { data, error } = await authorization.client.from('dealer_listing_submissions').insert(submissionRows)
-    .select('id,review_status,publication_status,created_at,intent,category,claimed_fields,image_urls,poster_image_url');
+    .select('id,raw_message_version_id,review_status,publication_status,created_at,intent,category,claimed_fields,image_urls,poster_image_url');
   if (error) {
     console.error('[dealer-submissions]', error.message);
     if (error.code === '23505') return res.status(409).json({ error: 'This exact item post already exists.' });
     return res.status(500).json({ error: 'Unable to save the submission.' });
+  }
+  if (!data.every(item => item.raw_message_version_id)) {
+    const affectedIds = data.map(item => item.id);
+    await authorization.client.from('dealer_listing_submissions')
+      .update({ publication_status: 'QUEUE_FAILED', review_status: 'IN_REVIEW' })
+      .in('id', affectedIds);
+    console.error('[dealer-submissions-lineage] immutable raw version pointer missing');
+    return res.status(500).json({ error: 'Items were saved, but immutable source lineage needs attention.' });
   }
 
   const submissionIds = data.map(item => item.id);
@@ -226,10 +236,11 @@ async function handler(req, res) {
     console.error('[dealer-submissions-queue]', queueError.message);
     return res.status(500).json({ error: 'Items were saved, but the review queue needs attention.' });
   }
+  const responseSubmissions = data.map(({ raw_message_version_id: _rawVersionId, ...item }) => item);
   return res.status(202).json({
     success: true,
-    submissions: data,
-    submission: data[0],
+    submissions: responseSubmissions,
+    submission: responseSubmissions[0],
     bulk_submission_id: bulkSubmissionId,
     publication: 'QUEUED_FOR_REVIEW',
     queue: queued || [],

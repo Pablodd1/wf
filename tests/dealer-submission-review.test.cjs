@@ -21,12 +21,21 @@ test('review normalization rejects invalid prices', () => {
   assert.match(normalizedFields({ normalized_fields: { price_amount: '-1' } }).error, /positive amount/);
 });
 
-test('review API is reviewer-only and delegates publication to the audited database transaction', () => {
+test('review API is reviewer-only and holds approval until shared publication gates are proven', () => {
   const route = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealer-submission-review.js'), 'utf8');
   assert.match(route, /new Set\(\['reviewer', 'admin'\]\)/);
   assert.match(route, /authorizeDealer\(req, res, REVIEW_ROLES\)/);
+  assert.match(route, /DEALER_SUBMISSION_PUBLICATION_HELD/);
   assert.match(route, /review_dealer_submission/);
   assert.doesNotMatch(route, /schema\('staging'\)\.from\('listings'\)\.insert/);
+});
+
+test('database safety hold preserves rejection but cannot materialize an approval', () => {
+  const migration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260815180000_hold_direct_submission_publication.sql'), 'utf8');
+  assert.match(migration, /DEALER_SUBMISSION_PUBLICATION_HELD/);
+  assert.match(migration, /review_status = 'REJECTED'/);
+  assert.doesNotMatch(migration, /INSERT INTO staging\.listings/i);
+  assert.doesNotMatch(migration, /publication_status = 'PUBLISHED'/i);
 });
 
 test('review UI shows raw evidence, seller demographics, images, normalization, and approval controls', () => {
@@ -36,7 +45,7 @@ test('review UI shows raw evidence, seller demographics, images, normalization, 
   assert.match(lane, /poster_name/);
   assert.match(lane, /item\.image_urls/);
   assert.match(lane, /catalog_confirmed/);
-  assert.match(lane, /Approve & publish/);
+  assert.match(lane, /Approval held for validation/);
   assert.match(queue, /Post an Item/);
   assert.match(queue, /DealerSubmissionReviewLane/);
 });

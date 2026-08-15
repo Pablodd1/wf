@@ -159,7 +159,7 @@ test('Price Research returns outlier analytics publicly (no auth gate)', () => {
   assert.match(route, /Cache-Control', 'no-store/);
 });
 
-test('Trading Floor click-through shows source evidence and only verified seller analytics', () => {
+test('Trading Floor click-through shows source evidence and consent-gated dealer analytics', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
@@ -171,5 +171,7 @@ test('Trading Floor click-through shows source evidence and only verified seller
   assert.match(page, /For sale/);
   assert.match(page, /Want to buy/);
   assert.match(page, /Source-supplied contact/);
-  assert.doesNotMatch(page, /verified dealer|common groups|dealer_review_count/);
+  assert.match(page, /ListingDealerEvidence/);
+  assert.match(page, /contactPublicationApproved=\{listing\.contact_publication_approved === true\}/);
+  assert.match(page, /ratingEvidenceStatus=\{listing\.seller_rating_evidence_status\}/);
 });

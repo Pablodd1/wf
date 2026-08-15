@@ -91,7 +91,7 @@ export function DealerSubmissionReviewLane() {
 
   return <section className="space-y-4">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <div><h2 className="text-lg font-bold text-text-primary">Post an Item review</h2><p className="mt-1 text-xs text-text-muted">Immutable user evidence, credential demographics, images, normalization, and publication decision.</p></div>
+      <div><h2 className="text-lg font-bold text-text-primary">Post an Item review</h2><p className="mt-1 text-xs text-text-muted">Immutable user evidence remains available for review. Publication is held until the shared normalization and release gates pass.</p></div>
       <button type="button" onClick={() => void load()} className="inline-flex items-center gap-2 rounded-lg border border-border-default px-3 py-2 text-xs text-text-secondary"><RefreshCw size={14} /> Refresh</button>
     </div>
     {error && <div role="alert" className="rounded-lg border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-200">{error}</div>}
@@ -114,7 +114,7 @@ export function DealerSubmissionReviewLane() {
         </div>
         {item.category === 'WATCH' && <label className="mt-4 flex items-start gap-2 text-xs text-text-secondary"><input type="checkbox" checked={draft.catalog_confirmed} onChange={event => set({ catalog_confirmed: event.target.checked })} /> Catalog identity confirmed. Only catalog-confirmed WTS watches with verified USD can enter Price Research calculations.</label>}
         <textarea value={draft.review_notes} onChange={event => set({ review_notes: event.target.value })} placeholder="Reviewer notes" className="mt-4 min-h-20 w-full rounded-lg border border-border-default bg-bg-secondary p-3 text-sm text-text-primary" />
-        <div className="mt-4 flex flex-wrap gap-3"><button type="button" disabled={busy === item.id} onClick={() => void decide(item, 'APPROVE')} className="inline-flex items-center gap-2 rounded-lg bg-gold-primary px-4 py-2 text-xs font-bold text-black disabled:opacity-50"><CheckCircle2 size={15} /> Approve & publish</button><button type="button" disabled={busy === item.id} onClick={() => void decide(item, 'REJECT')} className="inline-flex items-center gap-2 rounded-lg border border-red-400/40 px-4 py-2 text-xs font-bold text-red-300 disabled:opacity-50"><XCircle size={15} /> Reject</button></div>
+        <div className="mt-4 flex flex-wrap gap-3"><button type="button" disabled aria-disabled="true" title="Publication is held until all shared validation gates pass" className="inline-flex items-center gap-2 rounded-lg bg-gold-primary px-4 py-2 text-xs font-bold text-black opacity-45"><CheckCircle2 size={15} /> Approval held for validation</button><button type="button" disabled={busy === item.id} onClick={() => void decide(item, 'REJECT')} className="inline-flex items-center gap-2 rounded-lg border border-red-400/40 px-4 py-2 text-xs font-bold text-red-300 disabled:opacity-50"><XCircle size={15} /> Reject</button></div>
       </article>;
     })}
   </section>;

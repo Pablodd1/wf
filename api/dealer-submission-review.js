@@ -59,6 +59,12 @@ module.exports = async function handler(req, res) {
   const decision = clean(req.body?.decision, 20)?.toUpperCase();
   if (!submissionId || !/^[0-9a-f-]{36}$/i.test(submissionId)) return res.status(400).json({ error: 'A valid submission ID is required.' });
   if (!DECISIONS.has(decision)) return res.status(400).json({ error: 'Choose APPROVE or REJECT.' });
+  if (decision === 'APPROVE') {
+    return res.status(409).json({
+      error: 'Approval is paused until immutable normalization, identity, currency, duplicate, and media gates are verified.',
+      code: 'DEALER_SUBMISSION_PUBLICATION_HELD',
+    });
+  }
   const normalized = normalizedFields(req.body);
   if (normalized.error) return res.status(400).json({ error: normalized.error });
 

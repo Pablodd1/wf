@@ -17,6 +17,7 @@ import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
 import { MarketActivityTicker } from '../components/MarketActivityTicker';
+import { DealerRatingBadge, ListingDealerEvidence, sourceBackedDealerRating } from '../components/ListingDealerEvidence';
 
 const GOLD = '#9A7127';
 const GOLD_BRIGHT = '#7B5719';
@@ -111,6 +112,7 @@ interface ListingRecord {
   raw_message_truncated?: boolean;
   seller_name?: string | null;
   seller_phone?: string | null;
+  contact_publication_approved?: boolean;
   seller_avatar_url?: string | null;
   seller_rating?: number | null;
   seller_review_count?: number | null;
@@ -217,15 +219,6 @@ function hasListingPrice(listing: ListingRecord) {
     .some(value => Number.isFinite(Number(value)) && Number(value) > 0);
 }
 
-function listingIdentityKey(listing: ListingRecord) {
-  const brand = cleanValue(listing.brand).toLocaleUpperCase();
-  const reference = cleanValue(listing.reference)
-    .toLocaleUpperCase()
-    .replace(/[^A-Z0-9]/g, '');
-  const model = cleanValue(listing.model).toLocaleUpperCase();
-  return `${brand}\u001f${reference || model}`;
-}
-
 function compareListingsForDisplay(left: ListingRecord, right: ListingRecord) {
   const imageDifference = Number(hasListingImage(right)) - Number(hasListingImage(left));
   if (imageDifference !== 0) return imageDifference;
@@ -233,19 +226,6 @@ function compareListingsForDisplay(left: ListingRecord, right: ListingRecord) {
   if (priceDifference !== 0) return priceDifference;
   return new Date(right.listing_date || right.created_at || 0).getTime()
     - new Date(left.listing_date || left.created_at || 0).getTime();
-}
-
-function locationMatches(listingLocation: unknown, requestedLocation: unknown) {
-  const normalize = (value: unknown) => cleanValue(
-    typeof value === 'string' || typeof value === 'number' ? value : null,
-  )
-    .toLocaleLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const location = normalize(listingLocation);
-  const requested = normalize(requestedLocation);
-  return requested.length > 0 && location.includes(requested);
 }
 
 /** Detects bundle/multi-watch listings */
@@ -276,7 +256,10 @@ export default function TradingFloor() {
     : '';
   const search = searchParams.get('q') || '';
   const exactReference = searchParams.get('reference') || '';
-  const requestedBrand = searchParams.get('brand') || '';
+  const requestedBrands = useMemo(
+    () => [...new Set(searchParams.getAll('brand').map(value => value.trim()).filter(Boolean))],
+    [searchParams],
+  );
   const imagesOnly = searchParams.get('images') === 'true';
   const pricedOnly = searchParams.get('priced') === 'true';
   const locationFilter = searchParams.get('location') || '';
@@ -290,8 +273,10 @@ export default function TradingFloor() {
     : '';
   const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
   const [releaseBrandTotals, setReleaseBrandTotals] = useState<Record<string, number>>({});
-  const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
-  const brandFilter: BrandFilter = matchedBrand || requestedBrand;
+  const brandFilters = useMemo(() => requestedBrands.map(requestedBrand =>
+    releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase()) || requestedBrand),
+  [releaseBrands, requestedBrands]);
+  const brandFilter: BrandFilter = brandFilters.length === 1 ? brandFilters[0] : '';
   const [searchInput, setSearchInput] = useState(search);
   const [catalogSuggestions, setCatalogSuggestions] = useState<CatalogSuggestion[]>([]);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
@@ -314,10 +299,10 @@ export default function TradingFloor() {
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search, exactReference, imagesOnly, pricedOnly, locationFilter, ratingFilter, dateFilter].join('\u001f');
+  const viewKey = [brandFilters.join('\u001e'), categoryFilter, intentFilter, search, exactReference, imagesOnly, pricedOnly, locationFilter, ratingFilter, dateFilter].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
-    Boolean(brandFilter),
+    brandFilters.length > 0,
     categoryFilter !== 'all',
     Boolean(intentFilter),
     imagesOnly,
@@ -329,15 +314,10 @@ export default function TradingFloor() {
   const locationOptions = useMemo(() => [...new Set(listings
     .map(listing => cleanValue(listing.location || listing.seller_country || listing.region))
     .filter(Boolean))].sort((a, b) => a.localeCompare(b)), [listings]);
-  const visibleListings = useMemo(() => listings.filter(listing => {
-    if (imagesOnly && !hasListingImage(listing)) return false;
-    if (pricedOnly && getListingMeta(listing).priceLabel.includes('not supplied')) return false;
-    if (locationFilter) {
-      const location = cleanValue(listing.location || listing.seller_country || listing.region);
-      if (!locationMatches(location, locationFilter)) return false;
-    }
-    return true;
-  }).sort(compareListingsForDisplay), [imagesOnly, listings, locationFilter, pricedOnly]);
+  // Every facet is applied by the reviewed inventory endpoint before its
+  // cursor window is returned. Re-filtering a server page here would produce
+  // sparse cards and misleading Next/Back counts.
+  const visibleListings = useMemo(() => [...listings].sort(compareListingsForDisplay), [listings]);
   const unfilteredBrandTotal = brandFilter
     && categoryFilter === 'watches'
     && !intentFilter && !search && !exactReference && !imagesOnly && !pricedOnly
@@ -355,11 +335,12 @@ export default function TradingFloor() {
     listScrollPositionRef.current = null;
   }, []);
 
-  const updateViewParams = useCallback((updates: Record<string, string | null>) => {
+  const updateViewParams = useCallback((updates: Record<string, string | string[] | null>) => {
     const next = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(updates)) {
-      if (value) next.set(key, value);
-      else next.delete(key);
+      next.delete(key);
+      if (Array.isArray(value)) value.filter(Boolean).forEach(entry => next.append(key, entry));
+      else if (value) next.set(key, value);
     }
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
@@ -507,7 +488,7 @@ export default function TradingFloor() {
       try {
         const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
         if (cursor) params.set('cursor', cursor);
-        if (brandFilter) params.set('brand', brandFilter);
+        brandFilters.forEach(brand => params.append('brand', brand));
         if (intentFilter) params.set('type', intentFilter);
         // Once the customer chooses a catalog reference, the exact server
         // predicate is authoritative. Keeping the display label in `q` caused
@@ -571,7 +552,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [brandFilter, categoryFilter, cursor, dateFilter, exactReference, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, ratingFilter, search]);
+  }, [brandFilters, categoryFilter, cursor, dateFilter, exactReference, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, ratingFilter, search]);
 
   const showPagination = !selectedListing && (cursorHistory.length > 0 || (hasMore && nextCursor));
   const changePage = (direction: 'previous' | 'next') => {
@@ -789,7 +770,7 @@ export default function TradingFloor() {
 
       {filtersOpen && (
         <MobileFilterSheet
-          brand={brandFilter}
+          brands={brandFilters}
           releaseBrands={releaseBrands}
           category={categoryFilter}
           intent={intentFilter}
@@ -803,7 +784,7 @@ export default function TradingFloor() {
             setFiltersOpen(false);
             resetResults();
             updateViewParams({
-              brand: next.brand || null,
+              brand: next.brands,
               item: next.category === 'all' ? null : next.category,
               type: next.intent || null,
               images: next.imagesOnly ? 'true' : null,
@@ -845,7 +826,7 @@ export default function TradingFloor() {
           <div className="grid gap-6 md:grid-cols-[230px_minmax(0,1fr)]">
             <aside className="filters-sidebar hidden self-start overflow-y-auto rounded-md border bg-white p-5 md:sticky md:top-5 md:block md:max-h-[calc(100vh-40px)]" style={{ borderColor: BORDER }} aria-label="Marketplace filters">
               <DesktopFilters
-                brand={brandFilter}
+                brands={brandFilters}
                 releaseBrands={releaseBrands}
                 category={categoryFilter}
                 intent={intentFilter}
@@ -939,7 +920,7 @@ function FilterCheck({ checked, disabled = false, label, onChange }: { checked: 
 }
 
 function DesktopFilters({
-  brand,
+  brands,
   releaseBrands,
   category,
   intent,
@@ -951,7 +932,7 @@ function DesktopFilters({
   date,
   onChange,
 }: {
-  brand: BrandFilter;
+  brands: string[];
   releaseBrands: string[];
   category: CategoryFilter;
   intent: IntentFilter;
@@ -961,23 +942,30 @@ function DesktopFilters({
   locations: string[];
   rating: RatingFilter;
   date: DateFilter;
-  onChange: (updates: Record<string, string | null>) => void;
+  onChange: (updates: Record<string, string | string[] | null>) => void;
 }) {
+  const toggleBrand = (value: string) => {
+    const nextBrands = brands.includes(value)
+      ? brands.filter(brand => brand !== value)
+      : [...brands, value];
+    onChange({ brand: nextBrands, item: nextBrands.length ? 'watches' : null });
+  };
   return (
     <div className="space-y-7">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
-        {(brand || category !== 'all' || intent || imagesOnly || pricedOnly || location || rating || date) && (
+        {(brands.length > 0 || category !== 'all' || intent || imagesOnly || pricedOnly || location || rating || date) && (
           <button type="button" onClick={() => onChange({ brand: null, item: null, type: null, images: null, priced: null, location: null, rating: null, date: null })} className="text-xs font-semibold underline underline-offset-4" style={{ color: GOLD_BRIGHT }}>Clear</button>
         )}
       </div>
 
       <fieldset>
-        <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Brand</label>
-        <select id="brand-filter" value={brand} onChange={event => onChange({ brand: event.target.value || null })} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none" style={{ borderColor: BORDER, color: INK }}>
-          <option value="">All brands</option>
-          {releaseBrands.map(value => <option key={value} value={value}>{value}</option>)}
-        </select>
+        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Brands</legend>
+        <FilterCheck checked={brands.length === 0} label="All brands" onChange={() => onChange({ brand: null })} />
+        {releaseBrands.map(value => (
+          <FilterCheck key={value} checked={brands.includes(value)} label={value} onChange={() => toggleBrand(value)} />
+        ))}
+        <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>Multiple released watch brands use repeated URL filters and independent server keysets. Multi-brand browsing supports listing type and image-only filters.</p>
       </fieldset>
 
       <fieldset>
@@ -1043,7 +1031,7 @@ function DesktopFilters({
 }
 
 function MobileFilterSheet({
-  brand,
+  brands,
   releaseBrands,
   category,
   intent,
@@ -1056,7 +1044,7 @@ function MobileFilterSheet({
   onApply,
   onClose,
 }: {
-  brand: BrandFilter;
+  brands: string[];
   releaseBrands: string[];
   category: CategoryFilter;
   intent: IntentFilter;
@@ -1066,10 +1054,10 @@ function MobileFilterSheet({
   locations: string[];
   rating: RatingFilter;
   date: DateFilter;
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; location: string; rating: RatingFilter; date: DateFilter }) => void;
+  onApply: (filters: { brands: string[]; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; location: string; rating: RatingFilter; date: DateFilter }) => void;
   onClose: () => void;
 }) {
-  const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
+  const [draftBrands, setDraftBrands] = useState<string[]>(brands);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
   const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
@@ -1098,11 +1086,12 @@ function MobileFilterSheet({
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
           <FilterGroup label="Brands">
             {releaseBrands.length > 0 && (
-              <FilterChoice active={!draftBrand} label="All brands" onClick={() => setDraftBrand('')} />
+              <FilterChoice active={draftBrands.length === 0} label="All brands" onClick={() => setDraftBrands([])} />
             )}
             {releaseBrands.map(value => (
-              <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
+              <FilterChoice key={value} active={draftBrands.includes(value)} label={value} onClick={() => setDraftBrands(current => current.includes(value) ? current.filter(brand => brand !== value) : [...current, value])} />
             ))}
+            <p className="w-full text-xs leading-5" style={{ color: MUTED }}>Select multiple released watch brands. Listing type and image-only can be combined safely; unsupported combinations show an explicit error.</p>
           </FilterGroup>
           <FilterGroup label="Category">
             {CATEGORY_OPTIONS.map(option => (
@@ -1149,7 +1138,7 @@ function MobileFilterSheet({
 
         <footer className="grid shrink-0 grid-cols-2 gap-3 border-t p-4" style={{ borderColor: BORDER, background: SURFACE }}>
           <button type="button" onClick={() => {
-            setDraftBrand('');
+            setDraftBrands([]);
             setDraftCategory('all');
             setDraftIntent('');
             setDraftImagesOnly(false);
@@ -1158,7 +1147,7 @@ function MobileFilterSheet({
             setDraftRating('');
             setDraftDate('');
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, location: draftLocation, rating: draftRating, date: draftDate })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brands: draftBrands, category: draftBrands.length ? 'watches' : draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, location: draftLocation, rating: draftRating, date: draftDate })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
         </footer>
       </section>
     </div>
@@ -1188,10 +1177,12 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const [imageAvailable, setImageAvailable] = useState(() => hasListingImage(listing));
   const cardHasImage = imageAvailable && hasListingImage(listing);
-  const hasNumericRating = listing.seller_rating_evidence_status === 'SOURCE_SUPPLIED'
-    && Number(listing.seller_rating) > 0;
-  const isRatedDealer = (hasNumericRating || listing.seller_rating_evidence_status === 'SOURCE_FEEDBACK_COUNT')
-    && Number(listing.seller_review_count) > 0;
+  const dealerRating = sourceBackedDealerRating({
+    rating: listing.seller_rating,
+    reviewCount: listing.seller_review_count,
+    ratingEvidenceStatus: listing.seller_rating_evidence_status,
+  });
+  const isRatedDealer = dealerRating !== null;
 
   return (
     <article
@@ -1229,17 +1220,11 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-y py-3" style={{ borderColor: BORDER }}>
         <div className="font-mono text-[18px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
-        <span
-          className="text-xs font-semibold"
-          style={{ color: isRatedDealer ? GOLD_BRIGHT : MUTED }}
-          aria-label={isRatedDealer
-            ? (hasNumericRating ? `Dealer rating ${Number(listing.seller_rating).toFixed(1)} from ${listing.seller_review_count} reviews` : `Rated dealer with ${listing.seller_review_count} positive feedback records`)
-            : 'Dealer not rated'}
-        >
-          {isRatedDealer
-            ? `★ ${hasNumericRating ? Number(listing.seller_rating).toFixed(1) : 'Rated'} (${Number(listing.seller_review_count).toLocaleString()})`
-            : 'Not rated'}
-        </span>
+        <DealerRatingBadge
+          rating={listing.seller_rating}
+          reviewCount={listing.seller_review_count}
+          ratingEvidenceStatus={listing.seller_rating_evidence_status}
+        />
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
@@ -1255,15 +1240,19 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       {(cleanValue(listing.seller_name) || listing['Posted By']) && (
         <div className="mt-3 flex items-center gap-2 border-t pt-3 text-sm" style={{ borderColor: BORDER, color: MUTED }}>
           {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="" className="h-8 w-8 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
-          <span>
-            Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer'}</span>
-            {isRatedDealer
-              ? <span className="ml-1 text-xs font-semibold" style={{ color: GOLD_BRIGHT }} aria-label={hasNumericRating ? `Dealer rating ${Number(listing.seller_rating).toFixed(1)} from ${listing.seller_review_count} reviews` : `Rated dealer with ${listing.seller_review_count} positive feedback records`}>★ {hasNumericRating ? Number(listing.seller_rating).toFixed(1) : 'Rated'} ({Number(listing.seller_review_count).toLocaleString()})</span>
-              : <span className="ml-1 text-xs font-medium" style={{ color: MUTED }}>Not rated</span>}
-            {listing.dealer_profile_path && (
-              <Link to={listing.dealer_profile_path} onClick={event => event.stopPropagation()} className="ml-2 text-xs font-semibold underline underline-offset-2" style={{ color: GOLD_BRIGHT }}>Dealer profile</Link>
-            )}
-          </span>
+          <div onClick={event => event.stopPropagation()}>
+            <span className="text-xs" style={{ color: MUTED }}>Posted by</span>
+            <ListingDealerEvidence
+              sellerName={cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer'}
+              sellerPhone={listing.seller_phone}
+              contactPublicationApproved={listing.contact_publication_approved === true}
+              rating={listing.seller_rating}
+              reviewCount={listing.seller_review_count}
+              ratingEvidenceStatus={listing.seller_rating_evidence_status}
+              groupCount={listing.seller_group_count}
+              profilePath={listing.dealer_profile_path}
+            />
+          </div>
         </div>
       )}
 

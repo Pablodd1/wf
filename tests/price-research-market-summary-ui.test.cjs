@@ -7,13 +7,21 @@ const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
 
-test('Price Research visibly restores liquidity, WTB/WTS ratio and outlier analytics', () => {
-  assert.match(source, /Liquidity, demand and outlier summary/);
+test('Price Research visibly preserves qualified WTS and WTB demand without the outlier summary card', () => {
+  assert.match(source, /Liquidity and demand summary/);
   assert.match(source, /Featured listings for sale/);
   assert.match(source, /WTB \/ WTS ratio/);
-  assert.match(source, /Statistical price outliers/);
+  assert.doesNotMatch(source, /Statistical price outliers/);
   assert.match(source, /wtbDemandCount \/ qualifiedWtsCount/);
-  assert.match(source, /3\.0× IQR fences/);
+  assert.match(source, /Q1 - 3\.0 \* IQR <= price <= Q3 \+ 3\.0 \* IQR/);
+  assert.match(source, /Exclusions remain preserved for authorized audit and analysis/);
+});
+
+test('Reference activity is replaced by one compact WTB Demand summary', () => {
+  assert.doesNotMatch(source, />Reference activity</);
+  assert.match(source, /data-testid="wtb-demand-summary"/);
+  assert.match(source, />WTB Demand</);
+  assert.match(source, /WTB activity remains strictly separate from WTS asking-price averages and graphics/);
 });
 
 test('WTB demand section derives a live ratio when legacy indicators are unavailable', () => {

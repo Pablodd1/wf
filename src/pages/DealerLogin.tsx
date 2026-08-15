@@ -15,7 +15,7 @@ function requiredRolesFor(path?: string): DealerRole[] | null {
   if (route === '/dashboard' || route === '/admin' || route === '/multi-listings') return ['admin'];
   if (route === '/review' || route === '/review-queue' || route === '/reprocess') return ['reviewer', 'admin'];
   if (route === '/demo' || route === '/demo-mode') return ['admin'];
-  if (route.startsWith('/dealer') || route === '/analytics' || route === '/clean' || route === '/dealers') {
+  if (route.startsWith('/dealer') || route.startsWith('/reference-check') || route === '/analytics' || route === '/clean' || route === '/dealers') {
     return ['dealer', 'reviewer', 'admin'];
   }
   return null;

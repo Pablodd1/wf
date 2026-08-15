@@ -21,14 +21,16 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /label: 'TRADING FLOOR', to: '\/trading'/);
   assert.match(header, /label: 'LANDING PAGE', to: '\/'/);
   assert.match(header, /label: 'PRICE RESEARCH', to: '\/price-research'/);
-  assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
+  assert.match(header, /label: 'REFERENCE CHECK', to: '\/reference-check'/);
   assert.match(header, /label: 'POST IT', to: '\/dealer\/post'/);
   assert.doesNotMatch(header, /luxuryapp-wf-w5o1/);
   assert.match(header, /label: 'DEALER ACCOUNT', to: '\/dealer\/account\/profile'/);
   assert.match(header, /label: 'HIRE FI'/);
   const landingLinks = header.match(/const LANDING_LINKS: HeaderLink\[\] = \[[\s\S]*?\];/)?.[0] || '';
   assert.match(landingLinks, /label: 'TRADING FLOOR', to: '\/trading'/);
+  assert.match(landingLinks, /label: 'POST IT', to: '\/dealer\/post'/);
   assert.match(landingLinks, /label: 'HIRE FI'/);
+  assert.match(landingLinks, /label: 'VIRTUAL AUTHENTICATOR'[\s\S]*VIRTUAL_AUTHENTICATOR_URL/);
   assert.match(landingLinks, /label: 'WORKSPACE', to: '\/dealer\/workspace'/);
   assert.doesNotMatch(landingLinks, /PRICE RESEARCH|MEMBERSHIP/);
   assert.doesNotMatch(header, /label: 'ADM PANEL'/);
@@ -36,8 +38,8 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.doesNotMatch(header, /!landing && <LanguageToggle/);
   assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
   assert.match(footer, /\['POST IT', '\/dealer\/post'\]/);
-  assert.match(footer, /APP_POST_SMART_URL = 'https:\/\/91933fc4\.curatedlux\.pages\.dev'/);
-  assert.match(footer, /href=\{APP_POST_SMART_URL\}[\s\S]*APP POST SMART/);
+  assert.match(header, /VIRTUAL_AUTHENTICATOR_URL = 'https:\/\/91933fc4\.curatedlux\.pages\.dev'/);
+  assert.match(footer, /href=\{VIRTUAL_AUTHENTICATOR_URL\}[\s\S]*VIRTUAL AUTHENTICATOR/);
   assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
   assert.doesNotMatch(postItem, /LUXURY_APP_URL|Luxury App|<iframe/);
   assert.match(postItem, /Open for testing/);

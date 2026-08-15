@@ -154,6 +154,9 @@ test('legacy direct-publication migration is superseded by a forward review-pipe
   assert.match(correction, /WHEN s\.intent = 'WTB' THEN 'ineligible_demand'/);
   assert.match(correction, /ELSE 'eligible'/);
   assert.match(correction, /REVOKE ALL ON FUNCTION[\s\S]*FROM PUBLIC, anon, authenticated/);
+  const hold = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260815180000_hold_direct_submission_publication.sql'), 'utf8');
+  assert.match(hold, /DEALER_SUBMISSION_PUBLICATION_HELD/);
+  assert.doesNotMatch(hold, /INSERT INTO staging\.listings/i);
 });
 
 test('direct submissions gain immutable raw-version lineage before reviewed publication', () => {
@@ -174,11 +177,14 @@ test('every authenticated posting event receives a stable batch receipt', () => 
   assert.match(route, /bulk_submission_id: bulkSubmissionId/);
   assert.match(route, /publication: 'QUEUED_FOR_REVIEW'/);
   assert.match(route, /immutable_raw_version_saved: true/);
+  assert.match(route, /select\('id,raw_message_version_id,/);
+  assert.match(route, /data\.every\(item => item\.raw_message_version_id\)/);
   assert.match(route, /trading_floor: 'AFTER_APPROVAL'/);
   assert.match(route, /price_research: 'WTS_ONLY_AFTER_IDENTITY_PRICE_CURRENCY_AND_DUPLICATE_GATES'/);
   assert.match(route, /wtb_demand: 'AFTER_APPROVAL'/);
   assert.match(route, /enqueue_dealer_submission_batch/);
   assert.match(route, /source_evidence_confirmed !== true/);
   assert.match(route, /source_evidence_confirmed_at/);
+  assert.match(route, /contact_publication_approved: poster\.contact_publication_approved === true/);
   assert.doesNotMatch(route, /trading_floor_status: validated\.isBundle \? 'bundle_pending_separation' : 'published'/);
 });

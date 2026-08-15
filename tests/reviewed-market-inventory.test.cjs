@@ -159,7 +159,7 @@ test('exact listing links enrich cards with the canonical dealer profile without
   assert.equal(record.source_seller_name, 'Source Alias');
   assert.equal(record.seller_name, 'Verified Dealer');
   assert.equal(record.dealer_id, 'dealer-1');
-  assert.equal(record.dealer_profile_path, '/dealer/profile/dealer-1');
+  assert.equal(record.dealer_profile_path, '/reference-check/dealer-1');
   assert.equal(record.seller_rating, null);
   assert.equal(record.seller_review_count, 22);
   assert.equal(record.seller_rating_evidence_status, 'SOURCE_FEEDBACK_COUNT');
@@ -171,13 +171,28 @@ test('exact listing links enrich cards with the canonical dealer profile without
 test('reviewed direct submissions support category, intent, image, price, and location filters together', () => {
   const record = api.mapDealerSubmission({
     id: 'bag-1', intent: 'WTS', category: 'HANDBAG', raw_message: 'WTS Birkin 30 USD 25000',
-    claimed_fields: { title: 'Birkin 30', price_amount: 25000, currency: 'USD', location: 'Miami, US', poster_name: 'Dealer' },
+    claimed_fields: { title: 'Birkin 30', price_amount: 25000, currency: 'USD', location: 'Miami, US', poster_name: 'Dealer', poster_phone: '+13055550101' },
     image_urls: ['https://example.com/bag.jpg'], review_status: 'APPROVED', publication_status: 'PUBLISHED', created_at: '2026-08-09T12:00:00Z',
   });
+  assert.equal(record.seller_phone, null);
+  assert.equal(record.contact_publication_approved, false);
   assert.equal(api.directSubmissionMatches(record, { itemCategory: 'HANDBAG', listingType: 'WTS', imagesOnly: true, pricedOnly: true, region: 'Miami, US' }), true);
   assert.equal(api.directSubmissionMatches(record, { itemCategory: 'JEWELRY' }), false);
   assert.equal(api.directSubmissionMatches(record, { search: 'MIAMI' }), true);
   assert.equal(api.directSubmissionMatches(record, { region: 'miami' }), true);
+});
+
+test('reviewed direct submission contact requires the stored explicit consent snapshot', () => {
+  const record = api.mapDealerSubmission({
+    id: 'watch-consented', intent: 'WTS', category: 'WATCH', raw_message: 'WTS Rolex 116500LN White USD 30000',
+    claimed_fields: {
+      brand: 'Rolex', model: 'Daytona', reference: '116500LN', dial_color: 'White',
+      poster_name: 'Dealer', poster_phone: '+13055550101', contact_publication_approved: true,
+    },
+    image_urls: ['https://example.com/watch.jpg'], review_status: 'APPROVED', publication_status: 'PUBLISHED', created_at: '2026-08-09T12:00:00Z',
+  });
+  assert.equal(record.seller_phone, '+13055550101');
+  assert.equal(record.contact_publication_approved, true);
 });
 
 test('location filters are case-insensitive and preserve punctuation boundaries', () => {
@@ -362,7 +377,8 @@ const workflow = fs.readFileSync(
 test('parses a combined exact-reference and dial search into indexed filters', () => {
   assert.match(source, /parseTradingSearch\(search\)/);
   assert.match(source, /req\.query\?\.reference \|\| parsedSearch\.reference/);
-  assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand, 80\)/);
+  assert.match(source, /const brandQueryValues = \(Array\.isArray\(req\.query\?\.brand\)/);
+  assert.match(source, /const requestedBrand = requestedBrands\.length === 1 \? requestedBrands\[0\] : ''/);
   assert.match(source, /genericSearch && !genericSearch\.includes\(' '\) && !requestedReference && !requestedDial/);
   assert.match(source, /filter\(record => !search \|\| searchTermsMatch\(record, search\)\)/);
   assert.match(source, /queryParams\.set\('dial_color'/);
@@ -784,7 +800,8 @@ test('enabled reviewed brands stay discoverable while count metadata is offline'
 });
 
 test('public brand filters preserve punctuation and use only supported exact snapshot totals', () => {
-  assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand, 80\)/);
+  assert.match(source, /const requestedBrands = \[\.\.\.new Set\(brandQueryValues/);
+  assert.match(source, /const requestedBrand = requestedBrands\.length === 1 \? requestedBrands\[0\] : ''/);
   assert.match(source, /const brand = requestedBrand/);
   assert.match(source, /snapshotInventoryTotal\(summary/);
   assert.match(source, /'withheld_for_unsupported_filter'/);
@@ -999,4 +1016,5 @@ test('Zenith exact Trading Floor lookups use the reconciled punctuation-preservi
   assert.match(migration, /'seller_phone', CASE WHEN COALESCE\(l\.contact_consent, false\) THEN/);
   assert.match(migration, /'contact_publication_approved', COALESCE\(l\.contact_consent, false\)/);
   assert.doesNotMatch(migration, /'contact_publication_approved'[\s\S]{0,300}from_number[\s\S]{0,80}IS NOT NULL/);
+  assert.doesNotMatch(source, /contact_publication_approved:\s*Boolean\(row\.seller_phone\)/);
 });

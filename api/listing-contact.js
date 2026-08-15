@@ -16,6 +16,11 @@ function hasOwnerApprovedPublicContact(flags) {
   return Array.isArray(flags) && flags.includes('OWNER_APPROVED_CONTACT_PUBLIC');
 }
 
+function hasApprovedPublicContact(listing) {
+  return listing?.contact_publication_approved === true
+    || hasOwnerApprovedPublicContact(listing?.flags);
+}
+
 function whatsappUrl(phone, listing) {
   const item = [listing.brand, listing.reference].filter(Boolean).join(' ');
   const isBuyerRequest = ['WTB', 'NTQ'].includes(String(listing.listing_type || '').toUpperCase());
@@ -112,7 +117,7 @@ module.exports = async function handler(req, res) {
     if (!publicListing) {
       const { data: wbListing } = await client
         .from('reviewed_workbook_inventory')
-        .select('id,brand,reference,posted_by,phone_number,listing_type')
+        .select('id,brand,reference,posted_by,phone_number,contact_publication_approved,listing_type')
         .eq('id', id)
         .maybeSingle();
       if (wbListing) publicListing = wbListing;
@@ -129,7 +134,7 @@ module.exports = async function handler(req, res) {
     if (!listing) {
       const { data: wbListing } = await client
         .from('reviewed_workbook_inventory')
-        .select('id,brand,reference,posted_by,phone_number,listing_type')
+        .select('id,brand,reference,posted_by,phone_number,contact_publication_approved,listing_type')
         .eq('id', id)
         .maybeSingle();
       if (wbListing) {
@@ -140,6 +145,7 @@ module.exports = async function handler(req, res) {
           listing_type: wbListing.listing_type || 'WTS',
           seller_name: wbListing.posted_by || null,
           seller_phone: wbListing.phone_number || null,
+          contact_publication_approved: wbListing.contact_publication_approved === true,
         };
       }
     }
@@ -154,8 +160,10 @@ module.exports = async function handler(req, res) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
     if (listing.seller_phone || listing.seller_name) {
-      const phone = normalizePhone(listing.seller_phone);
-      const dealerStats = listing.seller_phone ? await ownerApprovedContactStats(client, listing.seller_phone) : null;
+      const contactApproved = hasApprovedPublicContact(listing);
+      const approvedPhone = contactApproved ? listing.seller_phone : null;
+      const phone = normalizePhone(approvedPhone);
+      const dealerStats = approvedPhone ? await ownerApprovedContactStats(client, approvedPhone) : null;
       const profile = {
         dealer_name: listing.seller_name || 'Curated Luxury member',
         dealer_company: null,
@@ -165,7 +173,7 @@ module.exports = async function handler(req, res) {
         dealer_review_count: 0,
         dealer_group_count: 0,
         dealer_stats: dealerStats,
-        phone_display: listing.seller_phone || null,
+        phone_display: approvedPhone || null,
         contact_source: 'WORKBOOK_SELLER_CONTACT',
       };
       return res.status(200).json({
@@ -204,7 +212,7 @@ module.exports = async function handler(req, res) {
       dealer_city: dealer.city || null,
       dealer_avatar_url: dealer.avatar_url || null,
       dealer_profile_summary: dealer.profile_summary || null,
-      dealer_profile_url: `/dealers/${dealer.slug || dealer.id}`,
+      dealer_profile_url: `/reference-check/${dealer.slug || dealer.id}`,
       dealer_rating: dealer.rating,
       dealer_review_count: dealer.review_count,
       dealer_group_count: dealer.whatsapp_group_count,
@@ -212,6 +220,10 @@ module.exports = async function handler(req, res) {
       // A future aggregate must count only APPLIED listing lineage.
       dealer_stats: null,
     };
+    if (dealer.contact_consent !== true) {
+      return res.status(200).json({ success: true, contact_available: false, reason: 'CONTACT_CONSENT_NOT_GRANTED', ...profile });
+    }
+
     const { data: identities, error: identityError } = await client
       .from('dealer_source_identities')
       .select('source_identity,identity_type,verification_status')
@@ -233,3 +245,5 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Unable to verify dealer contact' });
   }
 };
+
+module.exports.hasApprovedPublicContact = hasApprovedPublicContact;

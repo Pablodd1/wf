@@ -38,13 +38,12 @@ test('qualified WTS range and dial-colored charts remain explicit', () => {
   assert.doesNotMatch(source, /Catalog-valid dial cohorts/);
 });
 
-test('unpriced source activity is counted visibly but excluded from pricing graphics', () => {
-  assert.match(source, /Reference activity/);
-  assert.match(source, /Every source listing counts toward marketplace activity/);
-  assert.match(source, /Only qualified, positively priced WTS evidence is used in the price range and graphics/);
-  assert.match(source, /\['Price not supplied', data\.reconciliation\?\.excluded_breakdown\?\.unpriced/);
-  assert.match(source, /remain visible after priced listings for the same model\/reference/);
-  assert.match(source, /excluded from Minimum, Average, Maximum, and chart calculations/);
+test('compact demand summary keeps WTB separate while pricing graphics remain WTS-only', () => {
+  assert.doesNotMatch(source, />Reference activity</);
+  assert.match(source, /data-testid="wtb-demand-summary"/);
+  assert.match(source, /WTB activity remains strictly separate from WTS asking-price averages and graphics/);
+  assert.match(source, /Qualified observations power the chart and statistics/);
+  assert.match(source, /excluded sale evidence remains visible with its reason and never alters the averages/);
 });
 
 test('listing evidence preserves raw message and seller facts while suppressing invalid images', () => {

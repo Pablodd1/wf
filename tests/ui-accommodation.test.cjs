@@ -16,11 +16,11 @@ test('primary navigation exposes the complete Workspace customer flow and clean 
   assert.doesNotMatch(header, /label: 'DEALER LOGIN'/);
   assert.match(header, /label: 'POST IT', to: '\/dealer\/post'/);
   assert.match(header, /label: 'DEALER ACCOUNT', to: '\/dealer\/account\/profile'/);
-  assert.match(header, /label: 'DEALER DIRECTORY', to: '\/dealers'/);
+  assert.match(header, /label: 'REFERENCE CHECK', to: '\/reference-check'/);
   assert.ok(header.indexOf("label: 'TRADING FLOOR'") < header.indexOf("label: 'PRICE RESEARCH'"));
   assert.ok(header.indexOf("label: 'PRICE RESEARCH'") < header.indexOf("label: 'POST IT'"));
   assert.ok(header.indexOf("label: 'POST IT'") < header.indexOf("label: 'HIRE FI'"));
-  assert.ok(header.indexOf("label: 'HIRE FI'") < header.indexOf("label: 'DEALER DIRECTORY'"));
+  assert.ok(header.indexOf("label: 'HIRE FI'") < header.indexOf("label: 'REFERENCE CHECK'"));
   assert.match(rail, /Let Fi search the world/);
   assert.match(rail, /sm:text-base/);
   assert.doesNotMatch(rail, /Instagram|Facebook|Linkedin|Twitter/);
@@ -59,9 +59,10 @@ test('customer Workspace routes are visible without a route-level authentication
   assert.match(app, /path="\/dealer\/workspace" element=\{<DealerPortal \/>\}/);
   assert.match(app, /path="\/dealer\/post" element=\{<DealerSubmitListing \/>\}/);
   assert.match(app, /path="\/dealer\/account\/:section" element=\{<DealerAccount \/>\}/);
-  assert.match(app, /path="\/dealers" element=\{<DealerDirectory \/>\}/);
+  assert.match(app, /path="\/reference-check" element=\{<DealerDirectory \/>\}/);
+  assert.match(app, /path="\/dealers" element=\{<LegacyDealerDirectoryRedirect \/>\}/);
   assert.doesNotMatch(app, /path="\/dealer\/(?:workspace|post|account\/)[^\n]*<DealerGate>/);
-  for (const title of ['POST IT', 'Hire FI', 'Dealer Directory', 'Dealer Account']) {
+  for (const title of ['POST IT', 'Hire FI', 'Reference Check', 'Dealer Account']) {
     assert.match(portal, new RegExp(`title: '${title}'`));
   }
   assert.doesNotMatch(portal, /title: 'Trading Floor'/);
@@ -178,10 +179,10 @@ test('footer provides the complete social media watch dealer glossary in an acce
   }
 });
 
-test('dealer directory separates the verified Live Directory from provenance-backed Top Rated profiles', () => {
+test('Reference Check separates the verified directory from provenance-backed Top Rated profiles', () => {
   const directory = read('src/pages/DealerDirectory.tsx');
 
-  assert.match(directory, /Live Directory/);
+  assert.match(directory, /Reference Check/);
   assert.match(directory, /Top Rated Dealers/);
   assert.match(directory, /review_count\.toLocaleString\(\).*reviews/);
   assert.match(directory, /member_since/);

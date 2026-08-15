@@ -57,9 +57,11 @@ test('Richard Mille without exact rating evidence stays visibly unrated', () => 
 test('later-brand fallback preserves rating filter and card disclosure contract', () => {
   const api = fs.readFileSync(path.join(__dirname, '..', 'api', 'reviewed-market-inventory.js'), 'utf8');
   const floor = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
+  const dealerEvidence = fs.readFileSync(path.join(__dirname, '..', 'src', 'components', 'ListingDealerEvidence.tsx'), 'utf8');
   const fallback = api.slice(api.indexOf('if (laterReviewedBrand && qnsaBroadPage && records.length === 0'));
   assert.match(fallback, /\.filter\(record => ratingMatches\(record, rating\)\)/);
-  assert.match(floor, /seller_rating_evidence_status === 'SOURCE_FEEDBACK_COUNT'/);
-  assert.match(floor, />Not rated<\/span>/);
-  assert.match(floor, /seller_review_count\) > 0/);
+  assert.match(floor, /<DealerRatingBadge/);
+  assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_FEEDBACK_COUNT'/);
+  assert.match(dealerEvidence, />Not rated<\/span>/);
+  assert.match(dealerEvidence, /reviewCount > 0/);
 });

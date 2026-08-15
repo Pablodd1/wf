@@ -100,3 +100,71 @@ Therefore do not claim that new Green API messages reaching DigitalOcean are bei
 ## Time record
 
 The observed collaboration spans August 11–15, 2026, approximately four calendar days. Exact active hours were not instrumented. The owner referenced 27 hours at an earlier checkpoint; the final active total cannot be stated accurately from available evidence.
+
+## August 15 continuation — market evidence, Reference Check, and POST IT safety
+
+This continuation was executed on a review branch after a fresh live health and
+release-summary check. Production remained on QNSA `qnsafosakvonzgfcsphh`.
+
+### Implemented in the pending review branch
+
+- Price Research replaces the large Reference activity panel with one compact
+  WTB Demand summary and removes the visible Statistical Price Outliers card.
+  The backend, methodology, excluded evidence, and 3.0x IQR accounting remain
+  unchanged and tested.
+- Trading Floor supports multiple released watch brands using repeated `brand`
+  parameters. Each selected brand keeps its own indexed keyset stream; the API
+  merges before pagination and binds the selected brand scope into the cursor.
+  Unsupported multi-brand combinations return an explicit 400 rather than
+  filtering a page client-side.
+- Watch and luxury-item rows share one dealer-evidence renderer. Numeric scores
+  require source-supplied rating evidence and positive reviews; feedback-only
+  evidence renders `Rated (N)`; public phone requires explicit consent.
+- Customer-facing Dealer Directory terminology becomes Reference Check with
+  canonical `/reference-check` routes and query-preserving legacy redirects.
+- Legacy source-snapshot phone values are no longer public contact evidence.
+- POST IT remains available for authenticated intake, but approval/publication
+  is held until the shared normalization, identity, currency, duplicate,
+  bundle, media, and contact-consent gates pass an authenticated E2E canary.
+  Intake now fails closed if immutable `raw_message_version_id` lineage is not
+  returned. Landing navigation includes POST IT and the existing CuratedLux
+  external link is labeled Virtual Authenticator.
+
+### Fresh six-brand acceptance evidence
+
+- Live release total remained 545,184: Rolex 281,480; Patek Philippe 126,571;
+  Audemars Piguet 84,958; Richard Mille 39,958; Cartier 11,753; Zenith 464.
+- Two cursor pages per brand produced 587 unique rows with zero duplicate IDs,
+  zero wrong-brand rows, and zero deterministic multi-item/bundle leaks in the
+  bounded sample. All 587 retained raw evidence, seller name, and source image.
+- Dealer/profile evidence remains the major completeness gap: only 2 of the 587
+  broad sampled rows had linked source-backed rating/profile evidence.
+- Qualified representative Price Research cohorts passed for Rolex 116500LN,
+  Patek 5712/1A, AP 26470ST.OO.A028CR.01, RM RM030TI, Cartier WSSA0032, and
+  Zenith 49.9010.9004/01.R947.
+- The designated Zenith gate `03.2522.400` remains NOT READY: 20 tracked rows,
+  one qualified WTS, 19 required-field exclusions, and no statistics/forecast.
+
+### Still pending before Panerai
+
+1. Apply and live-verify the POST IT publication-hold migration, then run the
+   authenticated E2E canaries. Do not claim POST IT publication complete while
+   the safety hold is active.
+2. Reconcile historical direct-submission rows that may carry fabricated contact
+   consent; do not modify immutable raw evidence.
+3. Generalize exact dealer linkage to customer-admitted handbags, jewelry, and
+   accessories. UI support is ready, but production non-watch dealer linkage is
+   not complete.
+4. Complete the unified multi-listing quarantine across historical, POST IT,
+   Trading Floor, and Price Research paths.
+5. Qualify or explicitly retain-with-reason Zenith `03.2522.400`; a different
+   strong Zenith cohort does not satisfy the designated release gate.
+6. Prove Green API signed/idempotent shadow ingestion and exact source-event to
+   raw-version/job/candidate/outcome reconciliation. DigitalOcean remains media
+   storage, not the canonical dealer/listing database.
+7. Extend indexed array predicates before enabling multi-select for rating,
+   location, price, date, and mixed watch/non-watch categories. Current safe
+   multi-select scope is released watch brands plus supported AND facets.
+
+Panerai remains blocked until these gates are cleared and accepted live. Omega
+remains after Panerai.

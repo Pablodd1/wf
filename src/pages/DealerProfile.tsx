@@ -64,11 +64,11 @@ export default function DealerProfile() {
             items={[
               { label: 'Home', to: '/' },
               { label: 'Trading Floor', to: '/trading' },
-              { label: 'Dealers', to: '/dealers' },
+              { label: 'Reference Check', to: '/reference-check' },
               { label: name },
             ]}
-            backTo="/dealers"
-            backLabel="Back to Dealer Directory"
+            backTo="/reference-check"
+            backLabel="Back to Reference Check"
           />
           <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_auto] lg:items-end">
             <div className="flex items-start gap-5">

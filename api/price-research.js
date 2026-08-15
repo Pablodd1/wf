@@ -179,6 +179,7 @@ function directSubmissionToMarketRow(row) {
   const verifiedUsd = Number.isFinite(amount) && amount > 0 && ['USD', 'USDT'].includes(currency);
   const imageUrls = Array.isArray(row?.image_urls) ? row.image_urls.filter(Boolean) : [];
   const isBundle = claimed.is_bundle === true;
+  const contactApproved = claimed.contact_publication_approved === true;
   const correctedWatchFields = normalizeWatchConditionFields({
     dial_color: claimed.dial_color,
     condition: claimed.condition,
@@ -206,7 +207,7 @@ function directSubmissionToMarketRow(row) {
     dealer_id: row.dealer_id,
     source: 'AUTHENTICATED_DIRECT_SUBMISSION',
     seller_name: claimed.poster_name || null,
-    seller_phone: claimed.poster_phone || null,
+    seller_phone: contactApproved ? (claimed.poster_phone || null) : null,
     price_raw: claimed.price_amount ?? null,
     price_usd: intent === 'WTS' && verifiedUsd ? amount : null,
     currency,
@@ -219,7 +220,7 @@ function directSubmissionToMarketRow(row) {
     image_urls: !isBundle ? imageUrls : [],
     has_images: !isBundle && imageUrls.length > 0,
     owner_reviewed_identity: true,
-    contact_publication_approved: true,
+    contact_publication_approved: contactApproved,
     flags: isBundle ? ['BUNDLE_SPLIT_REQUIRED'] : [],
     bundle_candidate_count: isBundle ? 2 : 1,
     analytics_currency_status: verifiedUsd ? 'VERIFIED' : 'UNVERIFIED',

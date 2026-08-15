@@ -4,6 +4,7 @@ import { LanguageToggle } from './LanguageToggle';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 const LUXFI_URL = 'https://luxfi.ai/#add-fi';
+const VIRTUAL_AUTHENTICATOR_URL = 'https://91933fc4.curatedlux.pages.dev';
 
 type HeaderLink = {
   label: string;
@@ -18,13 +19,15 @@ const HEADER_LINKS: HeaderLink[] = [
   { label: 'PRICE RESEARCH', to: '/price-research' },
   { label: 'POST IT', to: '/dealer/post' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
-  { label: 'DEALER DIRECTORY', to: '/dealers' },
+  { label: 'REFERENCE CHECK', to: '/reference-check' },
   { label: 'DEALER ACCOUNT', to: '/dealer/account/profile' },
 ];
 
 const LANDING_LINKS: HeaderLink[] = [
   { label: 'TRADING FLOOR', to: '/trading' },
+  { label: 'POST IT', to: '/dealer/post' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
+  { label: 'VIRTUAL AUTHENTICATOR', href: VIRTUAL_AUTHENTICATOR_URL, external: true },
   { label: 'WORKSPACE', to: '/dealer/workspace' },
 ];
 
@@ -96,4 +99,4 @@ export function MarketHeader({ compact = false, className = '', landing = false,
   );
 }
 
-export { LUXFI_URL };
+export { LUXFI_URL, VIRTUAL_AUTHENTICATOR_URL };

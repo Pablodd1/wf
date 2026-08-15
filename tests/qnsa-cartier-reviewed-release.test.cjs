@@ -10,6 +10,7 @@ const migration = fs.readFileSync(path.join(root, 'supabase/migrations/202608140
 const research = fs.readFileSync(path.join(root, 'api/price-research.js'), 'utf8');
 const inventory = fs.readFileSync(path.join(root, 'api/reviewed-market-inventory.js'), 'utf8');
 const floor = fs.readFileSync(path.join(root, 'src/pages/TradingFloor.tsx'), 'utf8');
+const dealerEvidence = fs.readFileSync(path.join(root, 'src/components/ListingDealerEvidence.tsx'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/qnsa-cartier-reviewed-release.yml'), 'utf8');
 
 test('Cartier release installs disabled without copying normalized or raw rows', () => {
@@ -32,6 +33,8 @@ test('Cartier is admitted through reviewed Trading and Price Research gates', ()
 });
 
 test('Trading cards always disclose rating state without fabricating a score', () => {
-  assert.match(floor, />Not rated<\/span>/);
-  assert.match(floor, /seller_rating_evidence_status === 'SOURCE_SUPPLIED'/);
+  assert.match(floor, /<DealerRatingBadge/);
+  assert.match(dealerEvidence, />Not rated<\/span>/);
+  assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_SUPPLIED'/);
+  assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_FEEDBACK_COUNT'/);
 });

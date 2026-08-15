@@ -930,10 +930,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     ?? 0;
   const liveWtbWtsRatio = qualifiedWtsCount > 0 ? wtbDemandCount / qualifiedWtsCount : null;
   const displayedWtbWtsRatio = data?.liquidity?.wtb_fs_ratio ?? liveWtbWtsRatio;
-  const statisticalOutlierCount = data?.methodology?.statistical_outlier_count
-    ?? data?.reconciliation?.excluded_breakdown?.outliers
-    ?? data?.outliersRemoved
-    ?? 0;
   const displayDialAnalysis: DialPoint[] = data?.dial_analysis?.length
     ? data.dial_analysis
     : data?.stats
@@ -1458,30 +1454,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             )}
 
-            {/* ── Stats Cards ──────────────────────────────────── */}
+            {/* ── Demand and pricing summary ───────────────────── */}
             <div className="grid grid-cols-1 gap-6 mb-8">
-              <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 20 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 6 }}>Reference activity</h3>
-                <p style={{ fontSize: 12, color: MUTED, lineHeight: 1.55, marginBottom: 14 }}>
-                  {data.sampleCapped
-                    ? 'This reference exceeds the bounded evidence window. The figures below reconcile the loaded sample, not a full-reference census.'
-                    : 'Every loaded source listing counts toward marketplace activity. Only qualified, positively priced WTS evidence is used in the price range and graphics.'}
-                </p>
-                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3" aria-label="Reference listing activity">
-                  {[
-                    [data.sampleCapped ? 'Loaded source sample' : 'All source listings', data.reconciliation?.total_tracked_listings ?? data.total_tracked_listings ?? data.totalListings ?? 0],
-                    ['Priced WTS used', data.reconciliation?.wts_eligible_analytics_count ?? data.wts_eligible_analytics_count ?? data.count ?? 0],
-                    ['Price not supplied', data.reconciliation?.excluded_breakdown?.unpriced ?? data.excluded_breakdown?.unpriced ?? 0],
-                    ['WTB demand', data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? 0],
-                  ].map(([label, value]) => (
-                    <div key={String(label)} style={{ background: LIGHT_GRAY, borderRadius: 8, padding: '11px 12px' }}>
-                      <div style={{ color: NAVY, fontSize: 20, fontWeight: 800 }}>{Number(value).toLocaleString()}</div>
-                      <div style={{ color: MUTED, fontSize: 11, marginTop: 2 }}>{label}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ color: '#8a6500', fontSize: 11, marginTop: 10 }}>
-                  Price not supplied records remain visible after priced listings for the same model/reference and are excluded from Minimum, Average, Maximum, and chart calculations.
+              <div data-testid="wtb-demand-summary" style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 20 }}>
+                <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>WTB Demand</div>
+                <div style={{ color: BLUE, fontSize: 28, fontWeight: 800, marginTop: 5 }}>{wtbDemandCount.toLocaleString()}</div>
+                <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
+                  Source-backed buyer signals for this reference. WTB activity remains strictly separate from WTS asking-price averages and graphics.
                 </div>
               </div>
               {/* Pricing Summary */}
@@ -1517,7 +1496,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             </div>
 
             {/* ── Dedicated Demand Signals Section (WTB Buyer Demand) ── */}
-            <section aria-label="Liquidity, demand and outlier summary" className="grid grid-cols-1 gap-4 lg:grid-cols-3 mb-8">
+            <section aria-label="Liquidity and demand summary" className="grid grid-cols-1 gap-4 lg:grid-cols-2 mb-8">
               <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 18 }}>
                 <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>Featured listings for sale</div>
                 <div style={{ color: NAVY, fontSize: 26, fontWeight: 800, marginTop: 5 }}>{qualifiedWtsCount.toLocaleString()}</div>
@@ -1531,11 +1510,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>
                   {wtbDemandCount.toLocaleString()} buyer signals versus {qualifiedWtsCount.toLocaleString()} qualified sale offers.
                 </div>
-              </div>
-              <div style={{ backgroundColor: '#fff9e8', border: '1px solid #ead59b', borderRadius: 8, padding: 18 }}>
-                <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>Statistical price outliers</div>
-                <div style={{ color: '#8a6500', fontSize: 26, fontWeight: 800, marginTop: 5 }}>{statisticalOutlierCount.toLocaleString()}</div>
-                <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>Preserved as evidence and excluded from averages using the disclosed 3.0× IQR fences.</div>
               </div>
             </section>
 

@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = file => fs.readFileSync(path.join(root, file), 'utf8');
 
-test('home restores cream dealer-network landing and only requested public tabs', () => {
+test('home restores cream dealer-network landing and exposes the approved transaction tabs', () => {
   const home = read('src/pages/LandingPage.tsx');
   const header = read('src/components/MarketHeader.tsx');
   assert.match(home, /The trading floor for the world's dealer network/);
@@ -14,7 +14,9 @@ test('home restores cream dealer-network landing and only requested public tabs'
   assert.doesNotMatch(home, /curated-luxury-hero\.(?:webm|mp4)/);
   const landingLinks = header.match(/const LANDING_LINKS[\s\S]*?\];/)?.[0] || '';
   assert.match(landingLinks, /TRADING FLOOR/);
+  assert.match(landingLinks, /POST IT/);
   assert.match(landingLinks, /HIRE FI/);
+  assert.match(landingLinks, /VIRTUAL AUTHENTICATOR/);
   assert.match(landingLinks, /WORKSPACE/);
   assert.doesNotMatch(landingLinks, /PRICE RESEARCH|MEMBERSHIP/);
   assert.match(header, /curated-luxury-logo\.png/);
