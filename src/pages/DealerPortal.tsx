@@ -1,13 +1,12 @@
-import { ArrowLeft, ArrowRight, Globe2, MessageCircle, PlusCircle, ShieldCheck, Smartphone, Users } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Globe2, MessageCircle, PlusCircle, ShieldCheck, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { COMMUNITY_GROUPS, CONTACT_WHATSAPP_URL } from '@/components/Footer';
 import { LUXFI_URL } from '@/components/MarketHeader';
-import { demoDealerLabels } from '@/data/demoDealerWorkflows';
 
 const portalLinks = [
   {
     title: 'POST IT',
-    description: 'Coming soon: organize photos and seller details once, then send each item through a faster moderated publication workflow.',
+    description: 'Organize photos and seller details once, then send each item through the moderated publication workflow.',
     to: '/dealer/post',
     icon: PlusCircle,
   },
@@ -61,11 +60,6 @@ export default function DealerPortal() {
 
         </section>
 
-        <section className="border-y border-amber-300/20 bg-amber-300/[0.05] p-5 sm:p-6" aria-labelledby="demo-workflows-heading">
-          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-amber-200">Testing and visual review</p>
-          <div className="mt-2 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between"><div><h2 id="demo-workflows-heading" className="text-xl font-semibold">Three synthetic dealer workflows</h2><p className="mt-2 max-w-2xl text-sm leading-6 text-white/50">Preview complete demographics, reputation, WTS/WTB activity, non-watch categories, moderated batches, and Post an Item without creating authentication accounts or production data.</p></div><div className="flex flex-wrap gap-2">{Object.entries(demoDealerLabels).map(([id, label]) => <Link key={id} to={`/dealer/account/profile?demoUser=${id}`} className="border border-white/15 px-3 py-2 text-xs text-white/70 hover:border-[#c9a96e] hover:text-[#c9a96e]">{label}</Link>)}</div></div>
-        </section>
-
         <section className="border-t border-white/10 py-10" aria-labelledby="community-heading">
           <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
             <div>
@@ -87,37 +81,6 @@ export default function DealerPortal() {
                 <div className="mt-5 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.1em] text-white/45 group-hover:text-[#c9a96e]">Join group <ArrowRight size={14} /></div>
               </a>
             ))}
-          </div>
-        </section>
-
-        <section className="border-t border-white/10 py-10" aria-labelledby="install-heading">
-          <div className="grid gap-6 lg:grid-cols-[0.8fr_1.2fr]">
-            <div className="border border-white/12 bg-[#111118] p-7">
-              <div className="flex h-12 w-12 items-center justify-center border border-[#c9a96e]/40 text-[#c9a96e]"><Smartphone size={22} /></div>
-              <div className="mt-6 flex flex-wrap items-center gap-3"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">Quick access</p><span className="border border-[#c9a96e]/40 bg-[#c9a96e]/10 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-[#ead6aa]">Coming soon</span></div>
-              <h2 id="install-heading" className="mt-2 font-serif text-3xl">Add Curated Luxury to your phone</h2>
-              <p className="mt-3 text-sm leading-6 text-white/55">A dedicated Curated Luxury phone experience is being prepared. Installation is not active during this beta.</p>
-              <div className="mt-7 border border-white/10 bg-black/20 px-4 py-3 text-xs leading-5 text-white/45">Coming soon for supported Android and iPhone devices.</div>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="border border-white/12 p-6">
-                <div className="text-sm font-semibold text-white">Android · Coming soon</div>
-                <ol className="mt-4 space-y-3 text-sm leading-6 text-white/55">
-                  <li>1. Open Curated Luxury in Chrome.</li>
-                  <li>2. Open the browser menu.</li>
-                  <li>3. Choose Install app or Add to Home screen.</li>
-                </ol>
-              </div>
-              <div className="border border-white/12 p-6">
-                <div className="text-sm font-semibold text-white">iPhone · Coming soon</div>
-                <ol className="mt-4 space-y-3 text-sm leading-6 text-white/55">
-                  <li>1. Open Curated Luxury in Safari.</li>
-                  <li>2. Tap the Share button.</li>
-                  <li>3. Choose Add to Home Screen.</li>
-                </ol>
-              </div>
-            </div>
           </div>
         </section>
 

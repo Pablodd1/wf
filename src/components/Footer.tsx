@@ -134,6 +134,7 @@ export function Footer() {
             <button type="button" onClick={() => setGlossaryOpen(true)} className="text-left text-white/50 transition-colors hover:text-white">{t('Glossary')}</button>
             <Link to="/info/company" className="text-white/50 transition-colors hover:text-white">{t('Company')}</Link>
             <Link to="/info/community" className="text-white/50 transition-colors hover:text-white">{t('Community')}</Link>
+            <Link to="/privacy" className="text-white/50 transition-colors hover:text-white">{t('Privacy')}</Link>
           </div>
         </div>
         <div className="border-t border-white/10 pt-5 text-center text-[11px] text-white/30">© 2026 Curated Luxury. All Rights Reserved.</div>

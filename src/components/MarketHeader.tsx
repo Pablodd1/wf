@@ -23,9 +23,7 @@ const HEADER_LINKS: HeaderLink[] = [
 
 const LANDING_LINKS: HeaderLink[] = [
   { label: 'TRADING FLOOR', to: '/trading' },
-  { label: 'PRICE RESEARCH', to: '/price-research' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
-  { label: 'MEMBERSHIP', href: '#membership' },
   { label: 'WORKSPACE', to: '/dealer/workspace' },
 ];
 
@@ -43,11 +41,11 @@ export function MarketHeader({ compact = false, className = '', landing = false,
   const wantsToBuy = location.pathname === '/trading' && new URLSearchParams(location.search).get('type') === 'WTB';
 
   return (
-    <header className={`relative z-40 border-b border-[#3f3324]/15 bg-[#f3ecdf]/95 text-[#211b15] backdrop-blur-md ${className}`}>
+    <header className={`relative z-40 border-b backdrop-blur-md ${landing ? 'border-white/15 bg-black/25 text-white' : 'border-[#3f3324]/15 bg-[#f3ecdf]/95 text-[#211b15]'} ${className}`}>
       <div className={`mx-auto flex max-w-7xl flex-col items-stretch gap-2 px-4 ${compact ? 'py-2.5' : 'py-3.5'} sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:px-6 lg:px-8`}>
         {showLogo ? (
           <Link to="/" aria-label="Curated Luxury home" className="flex min-w-0 shrink-0 items-center">
-            <span className="font-serif text-xl font-semibold tracking-[-0.025em]">Curated Luxury</span>
+            <img src={landing ? '/images/curated-luxury-logo-dark.png' : '/images/curated-luxury-logo.png'} alt="Curated Luxury" className="h-9 w-auto max-w-[225px] object-contain object-left" />
           </Link>
         ) : (
           <span className="sr-only">Curated Luxury</span>
@@ -67,8 +65,8 @@ export function MarketHeader({ compact = false, className = '', landing = false,
             const linkBtnClass = [
               'flex h-11 shrink-0 items-center justify-center gap-1 px-3 text-center text-[10px] font-semibold transition-colors whitespace-nowrap sm:gap-1.5 sm:px-4 sm:text-[11px]',
               active
-                ? 'border-b-2 border-[#9a7127] text-[#211b15]'
-                : 'text-[#4f4438] hover:bg-white/50 hover:text-[#211b15]',
+                ? `border-b-2 border-[#c9a96e] ${landing ? 'text-white' : 'text-[#211b15]'}`
+                : landing ? 'text-white/75 hover:bg-white/10 hover:text-white' : 'text-[#4f4438] hover:bg-white/50 hover:text-[#211b15]',
             ].join(' ');
 
             if (link.external) {

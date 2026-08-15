@@ -124,7 +124,7 @@ test('Price Research uses dial colors, closed methodology, images, and complete 
   assert.match(research, /<DetailCard title="Posted by"/);
 });
 
-test('Workspace includes official community access and marks phone installation as coming soon', () => {
+test('Workspace includes official community access without testing or phone-installation copy', () => {
   const portal = read('src/pages/DealerPortal.tsx');
   const footer = read('src/components/Footer.tsx');
   const groups = read('src/components/JoinGroupsCta.tsx');
@@ -137,8 +137,7 @@ test('Workspace includes official community access and marks phone installation 
   assert.match(footer, /Rolex US Only Sales/);
   assert.match(portal, /href=\{group\.href\}/);
   assert.match(groups, /export const GROUPS_URL = 'https:\/\/watchfacts\.com\//);
-  assert.match(portal, /Add Curated Luxury to your phone/);
-  assert.match(portal, /Coming soon/);
+  assert.doesNotMatch(portal, /Add Curated Luxury to your phone|Coming soon|Three synthetic dealer workflows/);
   assert.doesNotMatch(portal, /beforeinstallprompt/);
   assert.match(index, /rel="manifest" href="\/manifest\.webmanifest"/);
   assert.equal(manifest.display, 'standalone');
@@ -214,8 +213,8 @@ test('home and Post an Item share a persistent multilingual interface without ch
   assert.match(toggle, /aria-label=\{t\('Language'\)\}/);
   assert.match(main, /<LanguageProvider>/);
   assert.match(header, /<LanguageToggle compact/);
-  assert.match(home, /t\("The trading floor for the world's dealer network"\)/);
-  assert.match(home, /t\('Your AI agent, negotiating every match'\)/);
+  assert.match(home, /curated-luxury-hero\.webm/);
+  assert.match(home, /Exceptional objects/);
   assert.match(post, /<LanguageToggle/);
   assert.match(post, /Original listing or request message/);
   assert.match(post, /value=\{item\.raw_message\}/);
