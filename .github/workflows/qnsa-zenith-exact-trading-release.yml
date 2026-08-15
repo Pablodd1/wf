@@ -89,7 +89,9 @@ jobs:
             'unconsented_phone', count(*) FILTER (WHERE COALESCE((row_data->>'contact_publication_approved')::boolean,false)=false AND NULLIF(row_data->>'seller_phone','') IS NOT NULL)
           ) evidence FROM rows;
           "@
-          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+          # The function is intentionally service-only. Use the management
+          # execution role for this SELECT-only post-apply smoke.
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $e = $result[0].evidence
           $e | ConvertTo-Json -Depth 4 | Set-Content qnsa-zenith-exact-smoke.json

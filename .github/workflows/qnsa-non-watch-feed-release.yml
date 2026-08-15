@@ -111,7 +111,9 @@ jobs:
             'accessories', (SELECT count(*) FROM public.qnsa_non_watch_market_page_rows('ACCESSORY', 2, 0, NULL, false, NULL, NULL))
           ) AS smoke;
           "@
-          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 4
+          # The function is intentionally service-only. Use the management
+          # execution role for this SELECT-only post-apply smoke.
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
           $smoke = $result[0].smoke
           $smoke | ConvertTo-Json -Depth 4
