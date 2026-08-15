@@ -55,7 +55,7 @@ test('keyset accounting advances by the exact selected-or-scanned candidate boun
 
 test('QNSA workflow audits and applies only the new forward timeout repair', () => {
   assert.match(workflow,
-    /MIGRATION_FILE: supabase\/migrations\/20260815141000_qnsa_six_brand_candidate_bound_fix\.sql/);
+    /MIGRATION_FILE: supabase\/migrations\/20260815150000_qnsa_first_three_singleton_compat\.sql/);
   assert.match(workflow,
     /price_token_helper'[\s\S]*reviewed_workbook_reference_is_price_token_v2\(text,numeric,text\)/);
   assert.match(workflow, /Compile the forward migration and roll it back/);
