@@ -511,6 +511,7 @@ function isTradingFloorSourceRow(row) {
     'QNSA_ROLEX_PATEK_REVIEWED_V1',
     'QNSA_GENERAL_MARKET_FEED_V1',
     'QNSA_REVIEWED_LATER_BRAND_V1',
+    'QNSA_SIX_BRAND_IMAGE_LANE_V1',
   ]
     .includes(row?.publication_lane)
     && row?.normalization_run_complete === true

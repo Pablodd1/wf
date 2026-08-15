@@ -245,6 +245,20 @@ test('only reconciled Rolex, Patek, and Audemars Piguet pending-review singles e
   assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Rolex', raw_lineage_verified: false }), false);
 });
 
+test('the bounded six-brand image lane is admitted through the same reviewed QNSA gate', () => {
+  const row = {
+    item_category: 'WATCH', listing_type: 'WTS', canonical_brand: 'Rolex',
+    publication_lane: 'QNSA_SIX_BRAND_IMAGE_LANE_V1',
+    normalization_run_complete: true, raw_lineage_verified: true,
+    publication_state: 'PENDING_VERIFICATION',
+    trading_floor_status: 'PUBLISHED_PENDING_VERIFICATION',
+    parent_id: null, is_bundle: false,
+  };
+  assert.equal(api.isTradingFloorSourceRow(row), true);
+  assert.equal(api.isTradingFloorSourceRow({ ...row, raw_lineage_verified: false }), false);
+  assert.equal(api.isTradingFloorSourceRow({ ...row, is_bundle: true }), false);
+});
+
 test('reviewed QNSA release rows and source-backed ratings reach the card contract', () => {
   assert.match(source, /'QNSA_ROLEX_PATEK_REVIEWED_V1'/);
   assert.match(source, /'QNSA_GENERAL_MARKET_FEED_V1'/);
