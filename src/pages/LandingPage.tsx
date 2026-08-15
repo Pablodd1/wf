@@ -21,10 +21,10 @@ export default function LandingPage() {
           <source src="/video/curated-luxury-hero.mp4" type="video/mp4" />
         </video>
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(4,4,7,.88)_0%,rgba(4,4,7,.54)_48%,rgba(4,4,7,.2)_100%)]" />
-        <div className="relative mx-auto flex min-h-[86vh] max-w-7xl items-end px-5 pb-16 pt-40 sm:px-8 sm:pb-24 lg:px-12">
-          <div className="max-w-3xl">
+        <div className="relative mx-auto flex min-h-[86vh] max-w-7xl items-center px-5 pb-12 pt-36 sm:px-8 sm:pt-40 lg:px-12">
+          <div className="max-w-4xl">
             <p className="font-mono text-[10px] font-semibold uppercase tracking-[0.24em] text-[#d5b56f]">Curated access · source-backed intelligence</p>
-            <h1 id="home-hero-title" className="mt-5 font-serif text-[clamp(3.4rem,8vw,7.4rem)] leading-[0.88] tracking-[-0.045em]">Exceptional objects.<br />Intelligent access.</h1>
+            <h1 id="home-hero-title" className="mt-5 font-serif text-[clamp(2.8rem,6.2vw,6rem)] leading-[0.92] tracking-[-0.04em]">Exceptional objects.<br />Intelligent access.</h1>
             <p className="mt-7 max-w-xl text-sm leading-7 text-white/65 sm:text-base">Trade watches and luxury objects through a global dealer network, with structured evidence, price research, and Fi working beside you.</p>
             <div className="mt-9 flex flex-col gap-3 sm:flex-row">
               <Link to="/trading" className="inline-flex min-h-12 items-center justify-center gap-2 bg-[#c39a4c] px-7 text-sm font-semibold text-[#100d09]">Enter Trading Floor <ArrowRight size={16} /></Link>
