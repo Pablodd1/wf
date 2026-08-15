@@ -126,3 +126,21 @@ already installed the bounded reconciliation/plan fence and completed 703
 bounded pages. The candidate migration therefore does not duplicate or replace
 that historical DDL; both the workflow audit and runner inspect its installed
 definition and fail closed if the population-wide predecessor reappears.
+
+## Candidate digest scope incident
+
+Canary `31915693447` exposed a PostgreSQL CTE lifetime error: the installed
+candidate RPC calculated its page in one `WITH candidate_page ... SELECT INTO`
+statement, then tried to query `candidate_page` again from the later return
+statement. `20260816000500_qnsa_non_watch_candidate_digest_scope_repair.sql`
+captures the page digest as another scalar in the original `SELECT INTO` and
+returns that variable, so no CTE name crosses a statement boundary.
+
+The error occurred in the single RPC statement. The function's insert branch is
+textually before the failing return expression, so it is not accurate to claim
+the database never attempted that branch. However, PostgreSQL statement
+atomicity rolled the entire failed RPC back, so no link insert from that page
+could commit; the runner never received a page result and therefore never
+reached postflight reconciliation. The workflow now atomically installs only
+the new repair, and both audit and runner inspect the installed definition to
+ensure the return statement contains no `FROM candidate_page` reference.

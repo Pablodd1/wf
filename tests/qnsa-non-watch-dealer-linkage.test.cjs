@@ -11,6 +11,8 @@ const planFence = fs.readFileSync(path.join(__dirname,
   '../supabase/migrations/20260815234500_qnsa_non_watch_linkage_plan_fence.sql'), 'utf8');
 const candidateDriven = fs.readFileSync(path.join(__dirname,
   '../supabase/migrations/20260815235500_qnsa_non_watch_candidate_driven_linkage.sql'), 'utf8');
+const digestScopeRepair = fs.readFileSync(path.join(__dirname,
+  '../supabase/migrations/20260816000500_qnsa_non_watch_candidate_digest_scope_repair.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(__dirname,
   '../.github/workflows/qnsa-non-watch-dealer-linkage.yml'), 'utf8');
 const runner = fs.readFileSync(path.join(__dirname,
@@ -159,7 +161,7 @@ test('candidate-driven runner freezes all category boundaries and reconciles com
   assert.match(runner, /WITH categories\(category\) AS \(VALUES \('HANDBAG'\),\('JEWELRY'\),\('ACCESSORY'\)\)/);
   assert.match(runner, /boundaries\[category\]\.createdAt/);
   assert.match(runner, /Frozen non-watch release control changed during full linkage/);
-  assert.match(workflow, /20260815235500_qnsa_non_watch_candidate_driven_linkage\.sql/);
+  assert.match(workflow, /20260816000500_qnsa_non_watch_candidate_digest_scope_repair\.sql/);
 });
 
 test('forward repair fences raw pages and removes unbounded reconciliation', () => {
@@ -185,8 +187,9 @@ test('forward repair fences raw pages and removes unbounded reconciliation', () 
   }
 });
 
-test('workflow installs one forward migration in one atomic transaction', () => {
-  assert.match(workflow, /Get-ForwardMigrationBody 'supabase\/migrations\/20260815235500_qnsa_non_watch_candidate_driven_linkage\.sql'/);
+test('workflow installs one forward repair in one atomic transaction', () => {
+  assert.match(workflow, /Get-ForwardMigrationBody 'supabase\/migrations\/20260816000500_qnsa_non_watch_candidate_digest_scope_repair\.sql'/);
+  assert.doesNotMatch(workflow, /Get-ForwardMigrationBody 'supabase\/migrations\/20260815235500_qnsa_non_watch_candidate_driven_linkage\.sql'/);
   assert.match(workflow, /\$atomicSql = "BEGIN;`n\$migrationBody`nCOMMIT;"/);
   assert.match(workflow, /\$body = @\{ query = \$atomicSql; read_only = \$false \}/);
   assert.doesNotMatch(workflow, /\$sql \+=/);
@@ -202,11 +205,37 @@ test('workflow installs one forward migration in one atomic transaction', () => 
   assert.doesNotMatch(candidateDriven,
     /CREATE OR REPLACE FUNCTION public\.qnsa_non_watch_dealer_linkage_reconciliation/);
 
-  const lines = candidateDriven.replace(/\r\n/g, '\n').split('\n');
+  assert.match(workflow, /candidate_digest_scope_safe/);
+  assert.match(runner, /!capacity\?\.candidate_digest_scope_safe/);
+
+  const lines = digestScopeRepair.replace(/\r\n/g, '\n').split('\n');
   const beginIndex = lines.findIndex(line => line.trim() === 'BEGIN;');
   const commitIndex = lines.findLastIndex(line => line.trim() === 'COMMIT;');
   const body = lines.filter((_, index) => index !== beginIndex && index !== commitIndex).join('\n');
   assert.ok(beginIndex >= 0 && commitIndex > beginIndex);
-  assert.match(body, /AS \$\$[\s\S]*?\nBEGIN\n[\s\S]*?END;/);
+  assert.match(body, /DO \$repair\$[\s\S]*?\nBEGIN\n[\s\S]*?END\n\$repair\$;/);
   assert.match(`BEGIN;\n${body}\nCOMMIT;`, /^BEGIN;[\s\S]*COMMIT;$/);
+});
+
+test('forward digest repair never reads a candidate CTE outside its statement', () => {
+  const normalizedBase = candidateDriven.replace(/\r\n/g, '\n');
+  let effective = normalizedBase;
+  for (const pair of [['old_declaration','new_declaration'],['old_select','new_select'],['old_return','new_return']]) {
+    const oldText = digestScopeRepair.match(new RegExp(`\\$${pair[0]}\\$([\\s\\S]*?)\\$${pair[0]}\\$`))?.[1];
+    const newText = digestScopeRepair.match(new RegExp(`\\$${pair[1]}\\$([\\s\\S]*?)\\$${pair[1]}\\$`))?.[1];
+    assert.ok(oldText && newText && effective.includes(oldText));
+    effective = effective.replace(oldText,newText);
+  }
+  const candidateStart = effective.indexOf(
+    'CREATE OR REPLACE FUNCTION public.qnsa_non_watch_dealer_candidate_link_page');
+  assert.ok(candidateStart >= 0, 'candidate linkage function must exist');
+  const candidateFunction = effective.slice(candidateStart);
+  const returnStart = candidateFunction.indexOf('RETURN jsonb_build_object');
+  assert.ok(returnStart >= 0, 'candidate linkage function must return a result');
+  const returnStatement = candidateFunction.slice(returnStart);
+  assert.match(returnStatement, /'candidate_page_digest',v_candidate_page_digest/);
+  assert.doesNotMatch(returnStatement, /FROM candidate_page/);
+  assert.match(digestScopeRepair,
+    /position\('FROM candidate_page' in substring\(v_definition[\s\S]*RETURN jsonb_build_object/);
+  assert.match(digestScopeRepair, /EXECUTE v_definition/);
 });

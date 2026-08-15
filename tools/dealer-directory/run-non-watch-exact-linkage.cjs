@@ -110,6 +110,13 @@ async function run(options = {}) {
         FROM (SELECT pg_get_functiondef(to_regprocedure(
           'public.qnsa_non_watch_dealer_linkage_reconciliation()'
         )) AS definition) contract),false),
+      'candidate_digest_scope_safe', COALESCE((SELECT
+        position('v_candidate_page_digest' in definition)>0
+          AND position('FROM candidate_page' in substring(definition
+            from position('RETURN jsonb_build_object' in definition)))=0
+        FROM (SELECT pg_get_functiondef(to_regprocedure(
+          'public.qnsa_non_watch_dealer_candidate_link_page(text,text,timestamptz,uuid,timestamptz,uuid,integer,boolean,integer)'
+        )) AS definition) contract),false),
       'enabled_non_watch_run', (SELECT enabled_run_key FROM public.qnsa_market_feed_control
         WHERE singleton=true AND enabled=true),
       'enabled_non_watch_categories', (SELECT enabled_categories FROM public.qnsa_market_feed_control
@@ -118,6 +125,7 @@ async function run(options = {}) {
   const capacity = capacityRows?.[0]?.capacity;
   if (!capacity?.raw_version_primary_key_valid || !capacity?.non_watch_category_index_valid
       || !capacity?.bounded_reconciliation_contract
+      || !capacity?.candidate_digest_scope_safe
       || !capacity?.enabled_non_watch_run) {
     throw new Error('Required category/raw indexes or non-watch release control are unavailable');
   }
