@@ -119,7 +119,10 @@ jobs:
           GROUP BY brand_normalized
           ORDER BY brand_normalized;
           '@
-          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+          # The Management API read-only role cannot execute the service-only
+          # price-token helper. Use its execution role while keeping the SQL
+          # itself SELECT-only; the workflow contract rejects mutation verbs.
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $evidence = @($result | ForEach-Object { $_.evidence })
           if ($evidence.Count -ne 3) { throw 'Expected three bounded brand audits' }
