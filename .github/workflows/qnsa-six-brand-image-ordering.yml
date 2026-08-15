@@ -28,7 +28,7 @@ jobs:
     env:
       PROJECT_REF: qnsafosakvonzgfcsphh
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      MIGRATION_FILE: supabase/migrations/20260815140000_qnsa_six_brand_helper_install.sql
+      MIGRATION_FILE: supabase/migrations/20260815141000_qnsa_six_brand_candidate_bound_fix.sql
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +62,7 @@ jobs:
             'release_control', to_regclass('public.qnsa_two_brand_release_control') IS NOT NULL,
             'raw_versions', to_regclass('public.raw_message_versions') IS NOT NULL,
             'zenith_audit', to_regclass('staging.qnsa_zenith_identity_reconciliation_audit') IS NOT NULL,
+            'price_token_helper', to_regprocedure('public.reviewed_workbook_reference_is_price_token_v2(text,numeric,text)') IS NOT NULL,
             'index_definition', COALESCE(pg_get_indexdef(to_regclass('staging.idx_qnsa_listing_global_image_price_order_20260813')), '')
           ) evidence;
           "@
@@ -69,7 +70,7 @@ jobs:
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $e = $result[0].evidence
           $e | ConvertTo-Json -Depth 6 | Tee-Object -FilePath qnsa-six-brand-image-preflight.json
-          if ($e.existing_order_index -ne $true -or $e.release_control -ne $true -or $e.raw_versions -ne $true -or $e.zenith_audit -ne $true) {
+          if ($e.existing_order_index -ne $true -or $e.release_control -ne $true -or $e.raw_versions -ne $true -or $e.zenith_audit -ne $true -or $e.price_token_helper -ne $true) {
             throw 'Required existing index/schema contract is absent'
           }
           if ($e.index_definition -notmatch 'normalization_run_key' -or $e.index_definition -notmatch 'brand_normalized' -or $e.index_definition -notmatch 'created_at DESC' -or $e.index_definition -notmatch 'id DESC') {
@@ -102,9 +103,7 @@ jobs:
           FROM staging.listings l
           WHERE l.normalization_run_key='$runKey'
             AND l.brand_normalized='Rolex'
-            AND upper(COALESCE(l.category,''))='WATCH'
             AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
-            AND l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
             AND (btrim(COALESCE(l.image_url,l.source_media_url_candidate,''))
               ~* '^https?://[^[:space:]]+$')=true
           ORDER BY
