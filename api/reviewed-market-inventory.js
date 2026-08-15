@@ -950,6 +950,59 @@ function validateSixBrandStreamEnvelope(envelope, previousKeyset = null) {
   return true;
 }
 
+async function refillSixBrandStream({
+  brand, previousKeyset = null, pageSize, fetchWindow, maxWindows = 5,
+}) {
+  const rows = [];
+  const seenIds = new Set();
+  let cursor = previousKeyset;
+  let hasMore = true;
+  let scannedCount = 0;
+  let windows = 0;
+  let finalCursor = previousKeyset;
+
+  while (hasMore && rows.length < pageSize && windows < maxWindows) {
+    const envelope = await fetchWindow(cursor);
+    if (!envelope || !validateSixBrandStreamEnvelope(envelope, cursor)) {
+      throw new Error(`QNSA six-brand ${brand} returned a non-progressing envelope`);
+    }
+    for (const row of envelope.rows) {
+      if (cleanExactText(row?.brand_scope || row?.canonical_brand, 80) !== brand
+        || !sixBrandRowKeyset(row) || seenIds.has(String(row.id))) {
+        throw new Error(`QNSA six-brand ${brand} returned an out-of-contract row`);
+      }
+      seenIds.add(String(row.id));
+      rows.push(row);
+    }
+    windows += 1;
+    scannedCount += Number(envelope.scanned_count || 0);
+    hasMore = envelope.has_more === true;
+    const scannedCursor = parseSixBrandKeyset(envelope.next_cursor);
+    // Every returned row is retained in this per-brand buffer, so consuming
+    // the RPC's exact scanned boundary before the next refill cannot skip it.
+    if (scannedCursor) {
+      finalCursor = scannedCursor;
+      cursor = scannedCursor;
+    }
+  }
+
+  return {
+    brand,
+    windows,
+    envelope: {
+      rows,
+      has_more: hasMore,
+      next_cursor: finalCursor ? {
+        has_price: finalCursor.hasPrice,
+        created_at: finalCursor.createdAt,
+        id: finalCursor.id,
+      } : null,
+      scanned_count: scannedCount,
+      eligible_count: rows.length,
+    },
+  };
+}
+
 function mergeSixBrandEnvelopes(entries, limit, previousKeysets = {}) {
   const taggedRows = entries.flatMap(entry => (entry.envelope?.rows || [])
     .map(row => ({ brand: entry.brand, row })))
@@ -1445,35 +1498,37 @@ module.exports = async function handler(req, res) {
       if (sixBrandBroadScope) {
         const requestedBrands = brand ? [brand] : SIX_REVIEWED_WATCH_BRANDS;
         const previousBrandKeysets = inventoryCursor?.brandKeysets || {};
-        const entries = await Promise.all(requestedBrands.map(async brandName => {
+        const entries = await Promise.all(requestedBrands.map(brandName => {
           const brandCursor = previousBrandKeysets[brandName] || null;
-          const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_six_brand_image_lane_page`, {
-            method: 'POST',
-            headers: { ...headers, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              p_brand: brandName,
-              p_has_image: requestedLane === 'images',
-              p_after_has_price: brandCursor?.hasPrice ?? null,
-              p_after_created_at: brandCursor?.createdAt ?? null,
-              p_after_id: brandCursor?.id ?? null,
-              p_limit: pageSize,
-              p_listing_type: listingType || null,
-              p_scan_limit: 100,
-            }),
+          return refillSixBrandStream({
+            brand: brandName,
+            previousKeyset: brandCursor,
+            pageSize,
+            maxWindows: 5,
+            fetchWindow: async windowCursor => {
+              const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_six_brand_image_lane_page`, {
+                method: 'POST',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  p_brand: brandName,
+                  p_has_image: requestedLane === 'images',
+                  p_after_has_price: windowCursor?.hasPrice ?? null,
+                  p_after_created_at: windowCursor?.createdAt ?? null,
+                  p_after_id: windowCursor?.id ?? null,
+                  p_limit: pageSize,
+                  p_listing_type: listingType || null,
+                  p_scan_limit: 100,
+                }),
+              });
+              if (!response.ok) {
+                const body = await response.text();
+                throw new Error(`QNSA six-brand ${brandName} page failed: ${response.status} ${body.slice(0, 200)}`);
+              }
+              const envelope = parseSixBrandEnvelope(await response.json());
+              if (!envelope) throw new Error(`QNSA six-brand ${brandName} returned a malformed envelope`);
+              return envelope;
+            },
           });
-          if (!response.ok) {
-            const body = await response.text();
-            throw new Error(`QNSA six-brand ${brandName} page failed: ${response.status} ${body.slice(0, 200)}`);
-          }
-          const envelope = parseSixBrandEnvelope(await response.json());
-          if (!envelope) throw new Error(`QNSA six-brand ${brandName} returned a malformed envelope`);
-          if (envelope.rows.some(row =>
-            cleanExactText(row?.brand_scope || row?.canonical_brand, 80) !== brandName
-            || !sixBrandRowKeyset(row))
-            || !validateSixBrandStreamEnvelope(envelope, brandCursor)) {
-            throw new Error(`QNSA six-brand ${brandName} returned an out-of-contract row`);
-          }
-          return { brand: brandName, envelope };
         }));
         const returnedIds = entries.flatMap(entry =>
           entry.envelope.rows.map(row => String(row.id)));
@@ -1967,6 +2022,7 @@ module.exports.compareSixBrandRows = compareSixBrandRows;
 module.exports.parseSixBrandEnvelope = parseSixBrandEnvelope;
 module.exports.parseSixBrandKeyset = parseSixBrandKeyset;
 module.exports.validateSixBrandStreamEnvelope = validateSixBrandStreamEnvelope;
+module.exports.refillSixBrandStream = refillSixBrandStream;
 module.exports.mergeSixBrandEnvelopes = mergeSixBrandEnvelopes;
 module.exports.publicationBrandsFromSummary = publicationBrandsFromSummary;
 module.exports.boundedPage = boundedPage;

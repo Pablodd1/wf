@@ -203,3 +203,51 @@ test('six-brand route excludes the non-paginated direct-submission overlay', () 
   assert.match(source,
     /Six-brand pages use only the canonical immutable\/staging release[\s\S]*unp[\s\S]*seventh stream/);
 });
+
+test('bounded refill crosses initial sparse windows and populates the same customer page', async () => {
+  const boundaries = [row(300, 23), row(200, 22)];
+  const eligible = { ...row(100, 21), brand_scope: 'Rolex' };
+  const replies = [
+    { rows: [], has_more: true, next_cursor: cursorFor(boundaries[0]), scanned_count: 100 },
+    { rows: [], has_more: true, next_cursor: cursorFor(boundaries[1]), scanned_count: 100 },
+    { rows: [eligible], has_more: false, next_cursor: cursorFor(eligible), scanned_count: 40 },
+  ];
+  let calls = 0;
+  const result = await inventory.refillSixBrandStream({
+    brand: 'Rolex', pageSize: 50,
+    fetchWindow: async () => replies[calls++],
+  });
+  assert.equal(calls, 3);
+  assert.equal(result.windows, 3);
+  assert.deepEqual(result.envelope.rows.map(value => value.id), [eligible.id]);
+  assert.equal(result.envelope.scanned_count, 240);
+});
+
+test('bounded refill never scans more than five windows per brand', async () => {
+  let calls = 0;
+  const result = await inventory.refillSixBrandStream({
+    brand: 'Rolex', pageSize: 50, maxWindows: 5,
+    fetchWindow: async () => {
+      calls += 1;
+      const boundary = row(600 - calls, 24 - calls);
+      return { rows: [], has_more: true, next_cursor: cursorFor(boundary), scanned_count: 100 };
+    },
+  });
+  assert.equal(calls, 5);
+  assert.equal(result.windows, 5);
+  assert.equal(result.envelope.has_more, true);
+  assert.equal(result.envelope.scanned_count, 500);
+});
+
+test('bounded refill rejects a non-progressing internal sparse cursor', async () => {
+  const boundary = row(300, 23);
+  let calls = 0;
+  await assert.rejects(() => inventory.refillSixBrandStream({
+    brand: 'Rolex', pageSize: 50,
+    fetchWindow: async () => {
+      calls += 1;
+      return { rows: [], has_more: true, next_cursor: cursorFor(boundary), scanned_count: 100 };
+    },
+  }), /non-progressing envelope/);
+  assert.equal(calls, 2);
+});
