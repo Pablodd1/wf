@@ -1334,7 +1334,20 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {visibleRefs.map(r => (
-                <button key={r.reference} onClick={() => { setQuery(r.reference); setQueryBrand(pBrand); void fetchData(r.reference, '', pBrand); }}
+                <button key={r.reference} onClick={() => {
+                  setSelectedCatalogReference({
+                    brand: pBrand,
+                    model: pModel,
+                    reference: r.reference,
+                    dial_colors: [],
+                    match_type: 'exact_reference',
+                  });
+                  setReferenceSuggestionsOpen(false);
+                  setReferenceSuggestions([]);
+                  setQuery(r.reference);
+                  setQueryBrand(pBrand);
+                  void fetchData(r.reference, '', pBrand);
+                }}
                   style={{
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,

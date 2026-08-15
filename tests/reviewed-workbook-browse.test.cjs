@@ -68,4 +68,7 @@ test('Price Research presents uncategorized catalog identities as individually b
   assert.match(research, /Open to load exact market data/);
   assert.match(research, /This reference exceeds the bounded evidence window/);
   assert.match(research, /Loaded source sample/);
+  assert.match(research, /setSelectedCatalogReference\(\{/);
+  assert.match(research, /match_type: 'exact_reference'/);
+  assert.match(research, /setReferenceSuggestionsOpen\(false\)/);
 });
