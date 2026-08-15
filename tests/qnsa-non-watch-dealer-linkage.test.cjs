@@ -7,6 +7,8 @@ const test = require('node:test');
 
 const migration = fs.readFileSync(path.join(__dirname,
   '../supabase/migrations/20260815223000_qnsa_non_watch_exact_phone_linkage.sql'), 'utf8');
+const planFence = fs.readFileSync(path.join(__dirname,
+  '../supabase/migrations/20260815234500_qnsa_non_watch_linkage_plan_fence.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(__dirname,
   '../.github/workflows/qnsa-non-watch-dealer-linkage.yml'), 'utf8');
 const runner = fs.readFileSync(path.join(__dirname,
@@ -74,6 +76,12 @@ test('runner reconciles applied deltas and requires full cursor exhaustion', () 
   assert.match(runner, /totals\.scanned !== finalCount/);
   assert.match(runner, /applied_non_watch_links[\s\S]*totals\.applied/);
   assert.match(runner, /raw_text_logged: false, pii_logged: false/);
+  assert.match(runner, /EXPLAIN \(FORMAT TEXT, COSTS TRUE\)/);
+  assert.match(runner, /raw_message_versions_pkey/);
+  assert.match(runner, /idx_staging_mariadb_raw_version/);
+  assert.match(runner, /Nested Loop/);
+  assert.ok(runner.indexOf('const before = await reconciliation')
+    < runner.indexOf('while (!cursorExhausted)'));
 });
 
 test('runner input validation is bounded and QNSA pinned', () => {
@@ -85,4 +93,26 @@ test('runner input validation is bounded and QNSA pinned', () => {
   assert.equal(safeUuid('123e4567-e89b-12d3-a456-426614174000'),
     '123e4567-e89b-12d3-a456-426614174000');
   assert.throws(() => safeUuid('not-a-uuid'));
+});
+
+test('forward repair fences raw pages and removes unbounded reconciliation', () => {
+  assert.match(planFence, /LIMIT v_limit/);
+  assert.match(planFence, /JOIN LATERAL/);
+  assert.match(planFence, /idx_staging_mariadb_raw_version/);
+  assert.match(planFence, /OFFSET 0/);
+  assert.match(planFence, /COALESCE\(p_limit, 500\), 1\), 1000/);
+  const reconciliation = planFence.match(
+    /CREATE OR REPLACE FUNCTION public\.qnsa_non_watch_dealer_linkage_reconciliation\(\)[\s\S]*?\n\$\$;/)?.[0] || '';
+  assert.match(reconciliation, /source_system='QNSA_NON_WATCH_RELEASE_GATED_RAW_LINEAGE'/);
+  assert.doesNotMatch(reconciliation, /qnsa_market_feed_control/);
+  assert.doesNotMatch(reconciliation, /JOIN staging\.listings/);
+  assert.doesNotMatch(reconciliation, /eligible_released_non_watch/);
+  assert.match(workflow, /20260815234500_qnsa_non_watch_linkage_plan_fence\.sql/);
+  assert.match(workflow, /NON_WATCH_LINKAGE_PAGE_SIZE: '500'/);
+  assert.match(workflow, /non_watch_lane_link_exists/);
+  for (const marker of ['old_limit', 'old_page', 'old_identity']) {
+    const oldContract = planFence.match(new RegExp(`\\$${marker}\\$([\\s\\S]*?)\\$${marker}\\$`))?.[1];
+    assert.ok(oldContract && migration.includes(oldContract),
+      `${marker} repair fence must match the installed base contract exactly`);
+  }
 });

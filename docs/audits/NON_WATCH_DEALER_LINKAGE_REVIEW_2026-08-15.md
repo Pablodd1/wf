@@ -64,3 +64,25 @@ Artifacts exclude raw messages and contact values.
 - This lane cannot link records whose upstream raw sender phone is absent or has
   no unique verified canonical identity. Those must remain visibly unlinked;
   they must not be guessed from seller names.
+
+## First canary incident and forward repair
+
+Canary workflow run `31913677763` installed the service-only contract, then
+timed out in the runner's first preflight call to
+`qnsa_non_watch_dealer_linkage_reconciliation`. That version calculated the
+entire released non-watch staging population before the runner entered its
+page/apply loop. The failing runner invocation therefore performed zero link
+writes: reconciliation is called before the loop, it is a STABLE SQL function,
+and the management statement failed atomically.
+
+`20260815234500_qnsa_non_watch_linkage_plan_fence.sql` is the forward repair:
+
+- reconciliation now touches only the small private linkage and identity
+  ledgers; it no longer aggregates released staging inventory;
+- raw UUID pages are capped at 1,000 (workflow default 500), materialized first,
+  and use a parameterized `LATERAL ... OFFSET 0` staging lookup through
+  `idx_staging_mariadb_raw_version`;
+- the runner refuses to continue unless EXPLAIN shows the raw primary key, the
+  staging raw-version index, and the bounded nested-loop shape;
+- the read-only audit exposes `non_watch_lane_link_exists`; a false result after
+  the failed run is the durable post-failure proof that no canary link survived.

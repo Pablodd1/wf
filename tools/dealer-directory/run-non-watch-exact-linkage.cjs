@@ -35,7 +35,7 @@ async function run(options = {}) {
   const fetchImpl = options.fetchImpl || fetch;
   const config = { projectRef: env.SUPABASE_PROJECT_REF, accessToken: env.SUPABASE_ACCESS_TOKEN };
   const mode = String(env.NON_WATCH_LINKAGE_MODE || '').toLowerCase();
-  const pageSize = boundedInteger(env.NON_WATCH_LINKAGE_PAGE_SIZE, 1000, 1, 5000, 'NON_WATCH_LINKAGE_PAGE_SIZE');
+  const pageSize = boundedInteger(env.NON_WATCH_LINKAGE_PAGE_SIZE, 500, 1, 1000, 'NON_WATCH_LINKAGE_PAGE_SIZE');
   const canaryLimit = boundedInteger(env.NON_WATCH_LINKAGE_CANARY_LIMIT, 10, 1, 10, 'NON_WATCH_LINKAGE_CANARY_LIMIT');
   const maxPages = boundedInteger(env.NON_WATCH_LINKAGE_MAX_PAGES, 5000, 1, 10000, 'NON_WATCH_LINKAGE_MAX_PAGES');
   const delayMs = boundedInteger(env.NON_WATCH_LINKAGE_DELAY_MS, mode === 'full' ? 50 : 0, 0, 5000, 'NON_WATCH_LINKAGE_DELAY_MS');
@@ -64,6 +64,47 @@ async function run(options = {}) {
   if (!capacity?.raw_version_primary_key_valid || !capacity?.raw_version_lineage_index
       || !capacity?.enabled_non_watch_run) {
     throw new Error('Required immutable lineage indexes or non-watch release control are unavailable');
+  }
+
+  const rawPlanRows = await managementQuery(config, `
+    EXPLAIN (FORMAT TEXT, COSTS TRUE)
+    SELECT raw_version.id FROM public.raw_message_versions AS raw_version
+    WHERE raw_version.id > COALESCE(NULL::uuid,
+      '00000000-0000-0000-0000-000000000000'::uuid)
+    ORDER BY raw_version.id LIMIT ${pageSize + 1}`, true, fetchImpl);
+  const lineagePlanRows = await managementQuery(config, `
+    EXPLAIN (FORMAT TEXT, COSTS TRUE)
+    SELECT listing.id FROM staging.listings AS listing
+    WHERE listing.raw_message_version_id='00000000-0000-0000-0000-000000000000'::uuid`, true, fetchImpl);
+  const boundedJoinPlanRows = await managementQuery(config, `
+    EXPLAIN (FORMAT TEXT, COSTS TRUE)
+    WITH raw_page AS MATERIALIZED (
+      SELECT raw_version.id, raw_version.source_record_id, raw_version.source_hash
+      FROM public.raw_message_versions AS raw_version
+      WHERE raw_version.id > COALESCE(NULL::uuid,
+        '00000000-0000-0000-0000-000000000000'::uuid)
+      ORDER BY raw_version.id LIMIT ${pageSize}
+    )
+    SELECT listing.id FROM raw_page AS page
+    JOIN LATERAL (
+      SELECT candidate_listing.id
+      FROM staging.listings AS candidate_listing
+      WHERE candidate_listing.raw_message_version_id=page.id
+        AND candidate_listing.source_record_id=page.source_record_id
+        AND candidate_listing.source_hash=page.source_hash
+      OFFSET 0
+    ) AS listing ON true`, true, fetchImpl);
+  const planText = rows => (rows || [])
+    .map(row => String(row['QUERY PLAN'] || row['query plan'] || '')).join('\n');
+  const rawPlan = planText(rawPlanRows);
+  const lineagePlan = planText(lineagePlanRows);
+  const boundedJoinPlan = planText(boundedJoinPlanRows);
+  if (!/raw_message_versions_pkey/i.test(rawPlan)
+      || !/idx_staging_mariadb_raw_version/i.test(lineagePlan)
+      || !/Nested Loop/i.test(boundedJoinPlan)
+      || !/raw_message_versions_pkey/i.test(boundedJoinPlan)
+      || !/idx_staging_mariadb_raw_version/i.test(boundedJoinPlan)) {
+    throw new Error('EXPLAIN did not preserve bounded raw-page-first lineage plan');
   }
 
   const before = await reconciliation(config, fetchImpl);
@@ -124,6 +165,8 @@ async function run(options = {}) {
   }
 
   return { mode, run_key: RUN_KEY, project_ref: EXPECTED_PROJECT, capacity,
+    explain: { required_indexes: ['raw_message_versions_pkey',
+      'idx_staging_mariadb_raw_version'], bounded_nested_loop_verified: true },
     cursor_exhausted: cursorExhausted, before, totals, after,
     raw_text_logged: false, pii_logged: false };
 }

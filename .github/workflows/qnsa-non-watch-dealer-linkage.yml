@@ -30,7 +30,7 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
       NON_WATCH_LINKAGE_MODE: ${{ inputs.mode }}
-      NON_WATCH_LINKAGE_PAGE_SIZE: '1000'
+      NON_WATCH_LINKAGE_PAGE_SIZE: '500'
       NON_WATCH_LINKAGE_CANARY_LIMIT: '10'
       NON_WATCH_LINKAGE_MAX_PAGES: '5000'
       NON_WATCH_LINKAGE_DELAY_MS: ${{ inputs.mode == 'full' && '50' || '0' }}
@@ -69,6 +69,7 @@ jobs:
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           if ($env:NON_WATCH_LINKAGE_MODE -ne 'audit') {
             [string]$migration = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815223000_qnsa_non_watch_exact_phone_linkage.sql'
+            $migration += "`n" + [string](Get-Content -Raw -LiteralPath 'supabase/migrations/20260815234500_qnsa_non_watch_linkage_plan_fence.sql')
             $compileSql = $migration -replace '(?im)^\s*(BEGIN|COMMIT);\s*$', ''
             $compileBody = @{ query = "BEGIN;`n$compileSql`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
             Invoke-RestMethod -Method Post `
@@ -139,6 +140,11 @@ jobs:
                 AND (link_method<>'EXACT_VERIFIED_PHONE' OR link_status<>'APPLIED')
               LIMIT 1
             ),
+            'non_watch_lane_link_exists', EXISTS (
+              SELECT 1 FROM public.dealer_listing_links
+              WHERE source_system='QNSA_NON_WATCH_RELEASE_GATED_RAW_LINEAGE'
+              LIMIT 1
+            ),
             'link_ledger_estimated_rows', COALESCE((SELECT reltuples::bigint FROM pg_class
               WHERE oid='public.dealer_listing_links'::regclass), 0)
           ) AS evidence;
@@ -165,6 +171,7 @@ jobs:
           if ($env:SUPABASE_PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Unexpected Supabase project.' }
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           [string]$sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815223000_qnsa_non_watch_exact_phone_linkage.sql'
+          $sql += "`n" + [string](Get-Content -Raw -LiteralPath 'supabase/migrations/20260815234500_qnsa_non_watch_linkage_plan_fence.sql')
           $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
           Invoke-RestMethod -Method Post `
             -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
