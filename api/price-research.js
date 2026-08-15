@@ -116,6 +116,13 @@ function qnsaReferenceRowToMarketRow(row) {
   };
 }
 
+function isPendingQnsaBrandRelease(brand) {
+  const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
+  const normalizedBrand = String(brand || '').trim().toLowerCase();
+  return requested === QNSA_PRICE_RESEARCH_SOURCE
+    && ['panerai', 'omega'].includes(normalizedBrand);
+}
+
 function unwrapQnsaJsonEnvelope(data, functionName) {
   if (Array.isArray(data) && data.length === 1 && data[0]?.[functionName]) {
     return data[0][functionName];
@@ -727,6 +734,12 @@ module.exports = async function handler(req, res) {
   // even when an older deployment allowlist has not yet been expanded.
   const client = getClient();
   const configuredSourceTable = configuredReviewedPriceSource(brand);
+  if (isPendingQnsaBrandRelease(brand)) {
+    return res.status(404).json({
+      error: 'Brand is not included in this release',
+      release_status: 'PENDING_CANARY',
+    });
+  }
   const preloadReferences = listEquivalentReferences(rawRef, brand);
   let preloadedReviewedWorkbookRows = [];
   if (!configuredSourceTable) {
@@ -1603,3 +1616,4 @@ module.exports = async function handler(req, res) {
 module.exports.directSubmissionToMarketRow = directSubmissionToMarketRow;
 module.exports.loadApprovedDirectSubmissionRows = loadApprovedDirectSubmissionRows;
 module.exports.loadZenithReviewedTradingRows = loadZenithReviewedTradingRows;
+module.exports.isPendingQnsaBrandRelease = isPendingQnsaBrandRelease;
