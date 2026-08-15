@@ -7,6 +7,7 @@
  */
 const { readFileSync } = require('fs');
 const { resolve } = require('path');
+const { normalizeCanonicalModel } = require('./catalog-taxonomy');
 
 const PUBLIC_DIR = resolve(process.cwd(), 'public');
 
@@ -456,10 +457,11 @@ function listCanonicalCatalogReferences(brand, model = null) {
     if (normalizeBrand(entry.brand) !== expectedBrand || !entry.reference) continue;
     const reference = String(entry.reference).trim();
     const curated = applyCuration(entry, normalizeRef(reference));
+    const canonicalBrand = curated.brand || entry.brand;
     const canonical = {
       reference,
-      brand: curated.brand || entry.brand,
-      model: curated.model || entry.model || FALLBACK_MODEL,
+      brand: canonicalBrand,
+      model: normalizeCanonicalModel(curated.model || entry.model || FALLBACK_MODEL, canonicalBrand),
     };
     const key = normalizeRef(reference);
     if (!unique.has(key)) unique.set(key, canonical);
@@ -477,7 +479,7 @@ function listCatalogBrands() {
     if (!entry.brand || !entry.reference) continue;
     const current = brands.get(entry.brand) || { references: new Set(), models: new Set() };
     current.references.add(entry.reference);
-    current.models.add(entry.model || 'Reference-only listings');
+    current.models.add(normalizeCanonicalModel(entry.model || 'Reference-only listings', entry.brand));
     brands.set(entry.brand, current);
   }
   return [...brands.entries()]

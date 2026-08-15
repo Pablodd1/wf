@@ -33,6 +33,20 @@ test('brand totals include canonical references still awaiting model taxonomy', 
   assert.equal(rolex.model_count, new Set(listCanonicalCatalogReferences('Rolex').map(entry => entry.model)).size);
 });
 
+test('canonical model rollups retain every source reference in the matching browse group', () => {
+  for (const brand of ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith']) {
+    const all = listCanonicalCatalogReferences(brand);
+    const models = new Set(all.map(entry => entry.model));
+    const grouped = [...models].flatMap(model => listCanonicalCatalogReferences(brand, model));
+    assert.equal(grouped.length, all.length, `${brand} browse groups must account for every reference`);
+    assert.deepEqual(
+      new Set(grouped.map(entry => entry.reference)),
+      new Set(all.map(entry => entry.reference)),
+      `${brand} browse groups must not drop references during model rollup`,
+    );
+  }
+});
+
 test('catalog reference API does not fabricate an observation or analytics readiness', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'catalog-references.js'), 'utf8');
   assert.match(source, /listCanonicalCatalogReferences/);
