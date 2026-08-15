@@ -235,7 +235,7 @@ export default function DealerSubmitListing() {
       <div className="mx-auto max-w-7xl px-5 py-7 sm:px-8 lg:px-12">
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 pb-5">
           <Link to="/dealer/workspace" className="flex items-center gap-2 text-sm text-white/60 hover:text-white"><ArrowLeft size={16} /> {t('Workspace')}</Link>
-          <div className="flex items-center gap-2"><span className="hidden items-center gap-2 text-xs text-[#c9a96e] sm:flex"><ShieldCheck size={15} /> {t('Registration required to save')}</span><LanguageToggle /></div>
+          <div className="flex items-center gap-2"><Link to="/trading" className="border border-[#c9a96e]/60 px-3 py-2 text-xs font-semibold text-[#e3c98e] hover:bg-[#c9a96e] hover:text-black">{t('TRADING FLOOR')}</Link><span className="hidden items-center gap-2 text-xs text-[#c9a96e] sm:flex"><ShieldCheck size={15} /> {t('Registration required to save')}</span><LanguageToggle /></div>
         </header>
 
         {demoPoster && <aside className="mt-5 border border-amber-300/30 bg-amber-300/[0.08] p-4" aria-label="Synthetic posting workflow">

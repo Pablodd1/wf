@@ -89,16 +89,6 @@ interface CatalogSuggestionsResponse {
   suggestions?: CatalogSuggestion[];
 }
 
-interface BrandCoverage {
-  brand: string;
-  trading_floor_listings: number;
-  wts_with_supplied_price: number;
-  wts_without_supplied_price: number;
-  wtb_activity: number;
-  searchable_catalog_references: number;
-  reconciles: boolean;
-}
-
 interface ForecastData {
   ready: boolean;
   provisional?: boolean;
@@ -553,7 +543,6 @@ export default function PriceResearch() {
   const [referenceImages, setReferenceImages] = useState<Record<string, string>>({});
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
   const [pickerError, setPickerError] = useState('');
-  const [brandCoverage, setBrandCoverage] = useState<BrandCoverage[]>([]);
 
   // ── Per-model market stats (min-5 exposure, avg + date range) ──
   interface ModelStats {
@@ -752,19 +741,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         }
       })
       .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load reviewed inventory brands:', error); });
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/price-research-coverage', { signal: controller.signal })
-      .then(response => response.ok ? response.json() : null)
-      .then(payload => {
-        if (payload?.success && Array.isArray(payload.brands)) {
-          setBrandCoverage(payload.brands.filter((brand: BrandCoverage) => brand.reconciles));
-        }
-      })
-      .catch(error => { if (error?.name !== 'AbortError') console.error('Failed to load market coverage:', error); });
     return () => controller.abort();
   }, []);
 
@@ -1200,34 +1176,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       </header>
 
       <div className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:py-8">
-        {!data && brandCoverage.length > 0 && (
-          <section aria-labelledby="brand-market-coverage" className="mb-6">
-            <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <h2 id="brand-market-coverage" className="text-lg font-bold" style={{ color: NAVY }}>Brand market coverage</h2>
-                <p className="mt-1 max-w-3xl text-xs leading-5" style={{ color: MUTED }}>
-                  Exact released activity counts. WTS with supplied price is a candidate pool; currency, identity, dial, repost and 3.0× IQR gates run after an exact reference is selected.
-                </p>
-              </div>
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD }}>Exact qualified totals remain reference-specific</span>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {brandCoverage.filter(item => ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Cartier'].includes(item.brand)).map(brand => (
-                <button key={brand.brand} type="button" onClick={() => void loadModels(brand.brand)} className="rounded-lg border p-4 text-left transition hover:-translate-y-0.5 hover:shadow-md" style={{ borderColor: BORDER, background: WHITE }}>
-                  <span className="block text-sm font-bold" style={{ color: NAVY }}>{brand.brand}</span>
-                  <span className="mt-2 block text-xl font-bold" style={{ color: TEXT }}>{brand.trading_floor_listings.toLocaleString()}</span>
-                  <span className="block text-[11px] uppercase tracking-[0.06em]" style={{ color: MUTED }}>Trading Floor observations</span>
-                  <span className="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs" style={{ color: MUTED }}>
-                    <span>WTS with supplied price</span><strong className="text-right" style={{ color: TEXT }}>{brand.wts_with_supplied_price.toLocaleString()}</strong>
-                    <span>WTS without price</span><strong className="text-right" style={{ color: TEXT }}>{brand.wts_without_supplied_price.toLocaleString()}</strong>
-                    <span>WTB demand</span><strong className="text-right" style={{ color: TEXT }}>{brand.wtb_activity.toLocaleString()}</strong>
-                    <span>Catalog references</span><strong className="text-right" style={{ color: TEXT }}>{brand.searchable_catalog_references.toLocaleString()}</strong>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </section>
-        )}
         {/* ── Drill-down: Browse by Model (real listings only) ─────── */}
         <div className="mb-6 border-y py-5" style={{ borderColor: BORDER, display: data ? 'none' : undefined }}>
           {(pBrand || pModel) && (

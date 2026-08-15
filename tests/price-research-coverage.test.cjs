@@ -54,11 +54,9 @@ test('coverage API reads only the bounded market-count snapshot and labels exact
   assert.match(api, /3\.0x IQR/);
 });
 
-test('Price Research renders brand coverage without presenting supplied prices as qualified analytics', () => {
+test('Price Research keeps the coverage data service private and omits the removed market coverage section', () => {
   const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
-  assert.match(page, /\/api\/price-research-coverage/);
-  assert.match(page, /Brand market coverage/);
-  assert.match(page, /WTS with supplied price/);
-  assert.match(page, /Exact qualified totals remain reference-specific/);
-  assert.doesNotMatch(page, /brand\.price_research_qualified_wts\.toLocaleString/);
+  assert.doesNotMatch(page, /\/api\/price-research-coverage/);
+  assert.doesNotMatch(page, /Brand market coverage/);
+  assert.doesNotMatch(page, /Exact qualified totals remain reference-specific/);
 });

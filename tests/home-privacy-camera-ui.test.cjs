@@ -20,8 +20,12 @@ test('home restores dark video hero and only requested public tabs', () => {
 
 test('workspace omits synthetic demos and phone installation instructions', () => {
   const portal = read('src/pages/DealerPortal.tsx');
+  const post = read('src/pages/DealerSubmitListing.tsx');
+  const account = read('src/pages/DealerAccount.tsx');
+  const privacy = read('src/pages/PrivacyPolicy.tsx');
   assert.doesNotMatch(portal, /Testing and visual review|Three synthetic dealer workflows|demoUser=/);
   assert.doesNotMatch(portal, /Android · Coming soon|iPhone · Coming soon|Add to Home Screen/);
+  for (const source of [portal, post, account, privacy]) assert.match(source, /to="\/trading"/);
 });
 
 test('privacy is public and POST IT supports camera plus file selection', () => {

@@ -39,7 +39,10 @@ export default function DealerPortal() {
           <Link to="/" className="flex items-center gap-2 text-sm text-white/60 transition-colors hover:text-white">
             <ArrowLeft size={16} /> Curated Luxury
           </Link>
-          <Link to="/dealer/account/profile" className="border border-white/15 px-3 py-2 text-xs font-semibold text-white/65 transition-colors hover:border-white/40 hover:text-white">Dealer Account</Link>
+          <nav aria-label="Workspace navigation" className="flex items-center gap-2">
+            <Link to="/trading" className="border border-[#c9a96e]/60 px-3 py-2 text-xs font-semibold text-[#e3c98e] transition-colors hover:bg-[#c9a96e] hover:text-black">Trading Floor</Link>
+            <Link to="/dealer/account/profile" className="border border-white/15 px-3 py-2 text-xs font-semibold text-white/65 transition-colors hover:border-white/40 hover:text-white">Dealer Account</Link>
+          </nav>
         </header>
 
         <section className="grid gap-4 py-10 md:grid-cols-2" aria-label="Workspace tools">
