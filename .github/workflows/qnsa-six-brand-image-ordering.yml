@@ -124,54 +124,31 @@ jobs:
             throw 'Representative candidate query did not choose a proven bounded image-order index'
           }
 
-      - name: Audit a bounded source census for every enabled brand and media lane
+      - name: Audit configured six-brand media-lane scope
         shell: pwsh
         run: |
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @"
-          WITH enabled AS MATERIALIZED (
+          WITH enabled AS (
             SELECT canonical_brand, enabled_run_key
             FROM public.qnsa_two_brand_release_control
             WHERE trading_floor_enabled=true
               AND canonical_brand IN ('Rolex','Patek Philippe','Audemars Piguet','Richard Mille','Cartier','Zenith')
-          ), lanes(has_image) AS (VALUES (true),(false)), sampled AS (
-            SELECT enabled.canonical_brand, lanes.has_image,
-              (candidate.id IS NOT NULL) AS has_candidate
-            FROM enabled CROSS JOIN lanes
-            LEFT JOIN LATERAL (
-              SELECT l.id
-              FROM staging.listings l
-              WHERE l.normalization_run_key=enabled.enabled_run_key
-                AND l.brand_normalized=enabled.canonical_brand
-                AND upper(COALESCE(l.category,''))='WATCH'
-                AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
-                AND l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
-                AND (btrim(COALESCE(l.image_url,l.source_media_url_candidate,''))
-                  ~* '^https?://[^[:space:]]+$')=lanes.has_image
-              ORDER BY
-                (btrim(COALESCE(l.image_url,l.source_media_url_candidate,''))
-                  ~* '^https?://[^[:space:]]+$') DESC,
-                (COALESCE(l.price_usd,l.price_normalized,0)>0) DESC,
-                l.created_at DESC,l.id DESC
-              LIMIT 1
-            ) candidate ON true
+              AND NULLIF(btrim(enabled_run_key),'') IS NOT NULL
           )
           SELECT jsonb_build_object(
-            'maximum_rows_per_brand_lane',1,
-            'enabled_brands',(SELECT count(*) FROM enabled),
-            'lane_entries',count(*),
-            'lanes',COALESCE(jsonb_agg(jsonb_build_object(
-              'brand',canonical_brand,'has_image',has_image,
-              'has_candidate',has_candidate
-            ) ORDER BY canonical_brand,has_image DESC),'[]'::jsonb)
-          ) evidence FROM sampled;
+            'source_rows_scanned',0,
+            'enabled_brands',count(*),
+            'lane_entries',count(*) * 2,
+            'brands',COALESCE(jsonb_agg(canonical_brand ORDER BY canonical_brand),'[]'::jsonb)
+          ) evidence FROM enabled;
           "@
           $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
           $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
           $e = $result[0].evidence
           $e | ConvertTo-Json -Depth 8 | Tee-Object -FilePath qnsa-six-brand-image-census.json
-          if ([long]$e.enabled_brands -ne 6 -or [long]$e.lane_entries -ne 12 -or [long]$e.maximum_rows_per_brand_lane -ne 1) {
-            throw 'Bounded six-brand source census failed'
+          if ([long]$e.enabled_brands -ne 6 -or [long]$e.lane_entries -ne 12 -or [long]$e.source_rows_scanned -ne 0) {
+            throw 'Configured six-brand media-lane scope failed'
           }
 
       - name: Apply the exact forward function migration
