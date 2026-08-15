@@ -28,7 +28,7 @@ jobs:
     env:
       PROJECT_REF: qnsafosakvonzgfcsphh
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      MIGRATION_FILE: supabase/migrations/20260815110000_qnsa_six_brand_image_lane_page.sql
+      MIGRATION_FILE: supabase/migrations/20260815134500_qnsa_six_brand_image_lane_signature_fix.sql
     steps:
       - uses: actions/checkout@v4
 

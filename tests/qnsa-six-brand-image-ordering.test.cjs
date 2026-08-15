@@ -7,12 +7,15 @@ const test = require('node:test');
 
 const root = path.join(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
-  '20260815110000_qnsa_six_brand_image_lane_page.sql'), 'utf8');
+  '20260815134500_qnsa_six_brand_image_lane_signature_fix.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
   'qnsa-six-brand-image-ordering.yml'), 'utf8');
 
 test('six-brand lane function is forward-only and reuses the existing image-order index', () => {
   assert.match(migration, /CREATE OR REPLACE FUNCTION public\.qnsa_six_brand_image_lane_page/);
+  assert.match(migration, /l\.reference_normalized::text/);
+  assert.match(migration, /l\.price_normalized::numeric/);
+  assert.match(migration, /l\.currency_normalized::text/);
   assert.match(migration, /idx_qnsa_listing_global_image_price_order_20260813/);
   assert.match(migration, /SET enable_sort = off/i);
   assert.doesNotMatch(migration, /CREATE\s+(?:UNIQUE\s+)?INDEX|REINDEX|ANALYZE|VACUUM/i);
