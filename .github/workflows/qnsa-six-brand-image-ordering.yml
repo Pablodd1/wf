@@ -119,8 +119,9 @@ jobs:
           $planText = $plan | ConvertTo-Json -Depth 30
           $planText | Set-Content qnsa-six-brand-image-plan.json
           Write-Output $planText
-          if ($planText -notmatch 'idx_qnsa_listing_global_image_price_order_20260813') {
-            throw 'Representative candidate query did not choose the existing image-order index'
+          if ($planText -match 'Seq Scan' -or $planText -notmatch 'Index Scan' -or
+              $planText -notmatch 'idx_qnsa_listing_(global|reference)_image_price_order_20260813') {
+            throw 'Representative candidate query did not choose a proven bounded image-order index'
           }
 
       - name: Audit a bounded source census for every enabled brand and media lane
