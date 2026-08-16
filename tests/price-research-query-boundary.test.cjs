@@ -90,16 +90,19 @@ test('QNSA reviewed release sources are explicit and fail closed', () => {
 
 test('QNSA analytics uses the indexed Trading release and skips supplemental dial scans', () => {
   assert.match(source, /sourceTable === QNSA_PRICE_RESEARCH_SOURCE[\s\S]*loadQnsaVerifiedTradingPrices/);
-  assert.match(source, /\.eq\('has_verified_usd_price', true\)/);
+  const qnsaLoader = source.slice(
+    source.indexOf('async function loadQnsaVerifiedTradingPrices'),
+    source.indexOf('// Look up a human model name'),
+  );
+  assert.doesNotMatch(qnsaLoader, /\.eq\('has_verified_usd_price', true\)/);
+  assert.match(qnsaLoader, /genuine no-price and incomplete rows remain[\s\S]*visible as excluded evidence/);
+  assert.match(qnsaLoader, /price_usd: row\.has_verified_usd_price === true/);
+  assert.match(qnsaLoader, /const mergedRows = new Map/);
   assert.match(source, /!usingQnsaReviewedSource[\s\S]*supplementalCatalogDials\.length/);
   assert.match(source, /loadQnsaTradingDemand[\s\S]*\.from\(QNSA_TRADING_SOURCE\)/);
   assert.match(source, /client\.rpc\('qnsa_three_brand_fx_price_research_rows'/);
   assert.match(source, /isMissingRpcError[\s\S]*client\.rpc\('qnsa_bounded_price_research_rows'/);
   assert.match(source, /if \(!familyPrefix\)[\s\S]*loadQnsaPriceRpcRows/);
-  const qnsaLoader = source.slice(
-    source.indexOf('async function loadQnsaVerifiedTradingPrices'),
-    source.indexOf('// Look up a human model name'),
-  );
   assert.doesNotMatch(qnsaLoader, /\.order\('posting_date'/);
 });
 

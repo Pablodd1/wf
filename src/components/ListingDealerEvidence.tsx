@@ -56,7 +56,6 @@ export function ListingDealerEvidence({
   groupCount,
   profilePath,
 }: DealerEvidence) {
-  const publishedPhone = contactPublicationApproved ? String(sellerPhone || '').trim() : '';
   const publishedGroupCount = Number(groupCount);
   return (
     <div className="space-y-1">
@@ -70,7 +69,6 @@ export function ListingDealerEvidence({
       {Number.isFinite(publishedGroupCount) && publishedGroupCount > 0 && (
         <div className="text-[10px] text-[#6B7280]">{publishedGroupCount.toLocaleString()} source-backed groups</div>
       )}
-      {publishedPhone && <div className="text-[10px] text-[#6B7280]">Contact: {publishedPhone}</div>}
       {profilePath && <Link to={profilePath} className="inline-flex text-[10px] font-semibold text-[#7B5719] underline underline-offset-2">Reference Check profile</Link>}
     </div>
   );

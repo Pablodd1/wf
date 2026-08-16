@@ -11,9 +11,9 @@ const read = relativePath => fs.readFileSync(path.join(root, relativePath), 'utf
 test('owner-approved workbook contacts are public only through the explicit record flag', () => {
   const route = read('api/listing-contact.js');
   assert.match(route, /OWNER_APPROVED_CONTACT_PUBLIC/);
-  assert.match(route, /hasOwnerApprovedPublicContact\(listing\.flags\)/);
-  assert.match(route, /phone_display: listing\.seller_phone/);
-  assert.match(route, /contact_source: 'OWNER_APPROVED_WORKBOOK'/);
+  assert.match(route, /hasOwnerApprovedPublicContact\(listing\?\.flags\)/);
+  assert.doesNotMatch(route, /phone_display:/);
+  assert.match(route, /contact_source: 'WORKBOOK_SELLER_CONTACT'/);
   assert.match(route, /ownerApprovedContactStats/);
   assert.match(route, /wts_posts/);
   assert.match(route, /wtb_posts/);
@@ -29,7 +29,8 @@ test('Trading Floor shows USD only for source-confirmed eligible evidence', () =
   assert.doesNotMatch(page, /Price on request/);
   assert.match(page, /Workbook-reviewed USD - not in averages/);
   assert.match(page, /Original source price · no USD conversion/);
-  assert.match(page, /contact\.phone_display/);
+  assert.match(page, /contact\?\.contact_channels\?\.whatsapp/);
+  assert.doesNotMatch(page, /\{contact\?\.phone_display/);
   assert.match(page, /sellerAnalytics\.wts_posts/);
   assert.match(page, /sellerAnalytics\.wtb_posts/);
   assert.match(page, /raw_message_scope === 'normalized_summary'[\s\S]*Unverified workbook summary text is withheld from the customer view/);

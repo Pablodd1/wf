@@ -49,10 +49,10 @@ test('compact demand summary keeps WTB separate while pricing graphics remain WT
 test('listing evidence preserves raw message and seller facts while suppressing invalid images', () => {
   assert.match(source, /row\.raw_message \?\? row\.raw_line/);
   assert.match(source, /Posted by:/);
-  assert.match(source, /Contact:/);
+  assert.doesNotMatch(source, /Contact:\s*\{publishedPhone\}/);
   assert.match(source, /row\.seller_name \|\| row\.posted_by/);
   assert.match(source, /const summaryPosterName = summary\.seller_name \|\| summary\.posted_by/);
-  assert.match(source, /const summaryPosterPhone = summary\.contact_publication_approved === true/);
+  assert.doesNotMatch(source, /const summaryPosterPhone/);
   assert.doesNotMatch(source, /const summaryPosterPhone = summary\.seller_phone \|\| summary\.phone_number/);
   assert.match(source, /row\.seller_phone \|\| row\.phone_number/);
   assert.match(source, /row\.has_images === false \? '' : imageCandidate/);

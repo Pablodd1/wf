@@ -28,11 +28,19 @@ function hasCrossBrandReferenceContradiction(listing) {
     && !PATEK_RAW_EVIDENCE.test(rawMessage);
 }
 
+function redactPublicContactEvidence(value) {
+  return String(value || '')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[contact withheld]')
+    .replace(/\b(?:whats?app|wa|phone|tel|call|contact)\s*[:=-]?\s*\+?[\d ()-]{7,25}/gi, '[contact withheld]')
+    .replace(/\+\d[\d ()-]{7,24}/g, '[contact withheld]');
+}
+
 function sanitizeDealerListing(listing) {
   const identityReviewRequired = hasCrossBrandReferenceContradiction(listing);
   const priceReviewRequired = identityReviewRequired || hasAmbiguousShorthandPrice(listing);
   return {
     ...listing,
+    ...(listing?.raw_message ? { raw_message: redactPublicContactEvidence(listing.raw_message) } : {}),
     ...(identityReviewRequired ? {
       brand: null,
       model: null,
@@ -301,3 +309,4 @@ module.exports.hasAmbiguousShorthandPrice = hasAmbiguousShorthandPrice;
 module.exports.hasCrossBrandReferenceContradiction = hasCrossBrandReferenceContradiction;
 module.exports.sanitizeDealerListing = sanitizeDealerListing;
 module.exports.sanitizeDealerProfile = sanitizeDealerProfile;
+module.exports.redactPublicContactEvidence = redactPublicContactEvidence;

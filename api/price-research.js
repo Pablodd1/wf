@@ -295,6 +295,7 @@ async function loadQnsaVerifiedTradingPrices(client, {
   familyPrefix,
   limit,
 }) {
+  let rpcMarketRows = [];
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
@@ -302,7 +303,7 @@ async function loadQnsaVerifiedTradingPrices(client, {
       p_listing_type: 'WTS',
       p_limit: limit,
     });
-    if (!rpcError && (rpcRows || []).length) return (rpcRows || []).map(row => {
+    if (!rpcError && (rpcRows || []).length) rpcMarketRows = (rpcRows || []).map(row => {
       const effective = applyEffectivePrice(row);
       return effective.price_correction_applied
         ? { ...effective, price_usd: effective.verified_price_usd }
@@ -313,7 +314,7 @@ async function loadQnsaVerifiedTradingPrices(client, {
     // set for a released exact reference. Recover that bounded public cohort so
     // downstream eligibility accounts for unpriced evidence without allowing it
     // into averages. Never use this fallback for an RPC error.
-    if (!rpcError && String(brand || '').trim().toLowerCase() === 'zenith') {
+    if (!rpcError && rpcMarketRows.length === 0 && String(brand || '').trim().toLowerCase() === 'zenith') {
       const recovered = [];
       for (const reference of [...new Set(referenceVariants || [])].slice(0, 8)) {
         const { data, error } = await client.rpc('qnsa_trading_floor_reference_rows', {
@@ -360,8 +361,10 @@ async function loadQnsaVerifiedTradingPrices(client, {
       .eq('brand_scope', brand)
       .eq('listing_type', 'WTS')
       // The effective view promotes only qualified sidecar corrections into
-      // this flag. Unpriced and incomplete corrections remain excluded.
-      .eq('has_verified_usd_price', true);
+      // Load the complete released exact-reference cohort. Price eligibility is
+      // decided downstream so genuine no-price and incomplete rows remain
+      // visible as excluded evidence without entering averages.
+      ;
     query = familyPrefix
       ? query.like('normalized_reference', `${familyPrefix}%`)
       : query.in('normalized_reference', referenceVariants);
@@ -371,17 +374,21 @@ async function loadQnsaVerifiedTradingPrices(client, {
   if (error && /42703|does not exist/i.test(`${error.code || ''} ${error.message || error}`)) {
     ({ data, error } = await execute(baseColumns));
   }
-  if (error) throw error;
-  return (data || [])
+  if (error) {
+    if (rpcMarketRows.length) return rpcMarketRows;
+    throw error;
+  }
+  const releasedRows = (data || [])
     .map(applyEffectivePrice)
-    .filter(row => row.has_verified_usd_price === true && Number(row.verified_price_usd) > 0)
     .map(row => ({
     id: row.id,
     brand: row.canonical_brand,
     model: row.catalog_model,
     reference: row.normalized_reference,
     price_raw: row.source_price_amount,
-    price_usd: row.verified_price_usd,
+    price_usd: row.has_verified_usd_price === true && Number(row.verified_price_usd) > 0
+      ? row.verified_price_usd
+      : null,
     currency: row.source_currency,
     raw_message: row.raw_message,
     flags: [],
@@ -410,6 +417,9 @@ async function loadQnsaVerifiedTradingPrices(client, {
     image_urls: row.user_image_url ? [row.user_image_url] : [],
     has_images: row.has_exact_source_image === true,
     }));
+  const mergedRows = new Map(releasedRows.map(row => [String(row.id), row]));
+  for (const row of rpcMarketRows) mergedRows.set(String(row.id), row);
+  return [...mergedRows.values()];
 }
 
 async function loadQnsaTradingDemand(client, {

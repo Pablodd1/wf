@@ -16,6 +16,14 @@ function hasOwnerApprovedPublicContact(flags) {
   return Array.isArray(flags) && flags.includes('OWNER_APPROVED_CONTACT_PUBLIC');
 }
 
+function normalizeTelegramUsername(value) {
+  const candidate = String(value || '').trim()
+    .replace(/^https?:\/\/(?:www\.)?t\.me\//i, '')
+    .replace(/^@/, '')
+    .split(/[/?#]/, 1)[0];
+  return /^[A-Za-z0-9_]{5,32}$/.test(candidate) ? candidate : null;
+}
+
 function hasApprovedPublicContact(listing) {
   return listing?.contact_publication_approved === true
     || hasOwnerApprovedPublicContact(listing?.flags);
@@ -28,6 +36,26 @@ function whatsappUrl(phone, listing) {
     ? `Hello, I may be able to help with your request for ${item || 'this luxury item'} shown on Curated Luxury. Are you still looking?`
     : `Hello, I am interested in the ${item || 'luxury listing'} shown on Curated Luxury. Is it still available?`);
   return `https://wa.me/${phone}?text=${message}`;
+}
+
+function telegramUrl(username, listing) {
+  const item = [listing.brand, listing.reference].filter(Boolean).join(' ');
+  const message = encodeURIComponent(`Hello, I am contacting you about ${item || 'this luxury listing'} on Curated Luxury.`);
+  return `https://t.me/${username}?text=${message}`;
+}
+
+function sendContactResult(res, { payload, externalChannels, id, surface, requestedChannel }) {
+  if (requestedChannel) {
+    const destination = externalChannels[requestedChannel];
+    if (!destination) return res.status(404).json({ error: 'Requested contact channel unavailable' });
+    res.setHeader('Location', destination);
+    return res.status(302).end();
+  }
+  const contactChannels = Object.fromEntries(Object.keys(externalChannels).map(channel => [
+    channel,
+    `/api/listing-contact?id=${encodeURIComponent(id)}&surface=${encodeURIComponent(surface)}&channel=${channel}`,
+  ]));
+  return res.status(200).json({ ...payload, contact_channels: contactChannels });
 }
 
 async function ownerApprovedContactStats(client, sellerPhone) {
@@ -88,6 +116,10 @@ module.exports = async function handler(req, res) {
   const surface = String(req.query?.surface || 'trading-floor').trim().toLowerCase();
   if (!['trading-floor', 'price-research'].includes(surface)) {
     return res.status(400).json({ error: 'Valid listing surface required' });
+  }
+  const requestedChannel = String(req.query?.channel || '').trim().toLowerCase();
+  if (requestedChannel && !['whatsapp', 'telegram'].includes(requestedChannel)) {
+    return res.status(400).json({ error: 'Valid contact channel required' });
   }
 
   try {
@@ -173,14 +205,14 @@ module.exports = async function handler(req, res) {
         dealer_review_count: 0,
         dealer_group_count: 0,
         dealer_stats: dealerStats,
-        phone_display: approvedPhone || null,
         contact_source: 'WORKBOOK_SELLER_CONTACT',
       };
-      return res.status(200).json({
-        success: true,
-        contact_available: Boolean(phone || listing.seller_name),
-        ...profile,
-        whatsapp_url: phone ? whatsappUrl(phone, resolvedListing) : undefined,
+      return sendContactResult(res, {
+        payload: { success: true, contact_available: Boolean(phone || listing.seller_name), ...profile },
+        externalChannels: phone ? { whatsapp: whatsappUrl(phone, resolvedListing) } : {},
+        id,
+        surface,
+        requestedChannel,
       });
     }
     if (!listing.dealer_id) return res.status(200).json({ success: true, contact_available: false, reason: 'DEALER_UNRESOLVED' });
@@ -228,17 +260,24 @@ module.exports = async function handler(req, res) {
       .from('dealer_source_identities')
       .select('source_identity,identity_type,verification_status')
       .eq('dealer_id', dealer.id).eq('verification_status', 'VERIFIED')
-      .in('identity_type', ['PHONE', 'WHATSAPP', 'phone', 'whatsapp']).limit(10);
+      .in('identity_type', ['PHONE', 'WHATSAPP', 'TELEGRAM', 'phone', 'whatsapp', 'telegram']).limit(20);
     if (identityError) throw identityError;
     const phone = (identities || []).map(item => normalizePhone(item.source_identity)).find(Boolean);
-    if (!phone) return res.status(200).json({ success: true, contact_available: false, reason: 'VERIFIED_PHONE_UNAVAILABLE', ...profile });
+    const telegram = (identities || [])
+      .filter(item => String(item.identity_type || '').toUpperCase() === 'TELEGRAM')
+      .map(item => normalizeTelegramUsername(item.source_identity))
+      .find(Boolean);
+    if (!phone && !telegram) return res.status(200).json({ success: true, contact_available: false, reason: 'VERIFIED_CONTACT_UNAVAILABLE', ...profile });
 
-    return res.status(200).json({
-      success: true,
-      contact_available: true,
-      ...profile,
-      phone_display: identities.find(item => normalizePhone(item.source_identity) === phone)?.source_identity || `+${phone}`,
-      whatsapp_url: whatsappUrl(phone, resolvedListing),
+    return sendContactResult(res, {
+      payload: { success: true, contact_available: true, ...profile },
+      externalChannels: {
+        ...(phone ? { whatsapp: whatsappUrl(phone, resolvedListing) } : {}),
+        ...(telegram ? { telegram: telegramUrl(telegram, resolvedListing) } : {}),
+      },
+      id,
+      surface,
+      requestedChannel,
     });
   } catch (error) {
     console.error('[listing-contact]', error.message);
@@ -247,3 +286,5 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.hasApprovedPublicContact = hasApprovedPublicContact;
+module.exports.normalizeTelegramUsername = normalizeTelegramUsername;
+module.exports.sendContactResult = sendContactResult;

@@ -9,6 +9,7 @@ import {
   List,
   MessageCircle,
   Search,
+  Send,
   X,
 } from 'lucide-react';
 import { rateMarketPrice } from '../lib/marketPriceRating';
@@ -164,9 +165,8 @@ interface CatalogSuggestionsResponse {
 interface ListingContact {
   contact_available: boolean;
   dealer_name?: string;
-  phone_display?: string;
   contact_source?: string;
-  whatsapp_url?: string;
+  contact_channels?: { whatsapp?: string; telegram?: string };
   reason?: string;
 }
 
@@ -1490,7 +1490,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
         <div className="order-3 rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
           <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Posted by</h2>
-          {(contact?.dealer_name || contact?.phone_display || listing['Posted By'] || listing['Phone Number'] || listing.seller_name || listing.seller_phone) && (
+          {(contact?.dealer_name || listing['Posted By'] || listing.seller_name) && (
             <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
               <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
                 Source-supplied contact
@@ -1504,11 +1504,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
                   {listing.dealer_profile_path && <Link to={listing.dealer_profile_path} className="mt-2 inline-flex text-xs font-semibold underline underline-offset-2" style={{ color: GOLD_BRIGHT }}>Open verified dealer profile</Link>}
                 </div>
               </div>
-              {(contact?.phone_display || listing['Phone Number'] || listing.seller_phone) && (
-                <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
-                  {contact?.phone_display || listing['Phone Number'] || listing.seller_phone}
-                </div>
-              )}
               {(listing.location || listing.seller_country || listing['Location']) && (
                 <div className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: MUTED }}>
                   <Globe2 size={13} style={{ color: GOLD_BRIGHT }} />
@@ -1539,19 +1534,21 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </div>
           )}
           {(() => {
-            const waUrl = contact?.whatsapp_url || (() => {
-              const ph = contact?.phone_display || listing['Phone Number'] || listing.seller_phone;
-              const digits = String(ph || '').replace(/\D/g, '');
-              return digits.length >= 7 ? `https://wa.me/${digits}` : null;
-            })();
-            return waUrl ? (
+            const waUrl = contact?.contact_channels?.whatsapp;
+            const telegramUrl = contact?.contact_channels?.telegram;
+            return waUrl || telegramUrl ? (
               <>
                 <p className="mt-3 text-sm" style={{ color: MUTED }}>
-                  Contact {contact?.dealer_name || listing['Posted By'] || listing.seller_name || 'the source poster'} using WhatsApp.
+                  Contact {contact?.dealer_name || listing['Posted By'] || listing.seller_name || 'the source poster'} using an available verified channel.
                 </p>
-                <a href={waUrl} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
-                  <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
-                </a>
+                <div className="mt-5 grid gap-2 sm:grid-cols-2">
+                  {waUrl && <a href={waUrl} target="_blank" rel="noreferrer" className="flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
+                    <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
+                  </a>}
+                  {telegramUrl && <a href={telegramUrl} target="_blank" rel="noreferrer" className="flex h-12 items-center justify-center gap-2 rounded-full bg-[#229ED9] font-semibold text-white">
+                    <Send size={18} /> Continue on Telegram
+                  </a>}
+                </div>
               </>
             ) : (contact?.dealer_name || listing['Posted By'] || listing.seller_name) ? (
               <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
@@ -1629,13 +1626,13 @@ function sourcePosterContact(listing: ListingRecord): ListingContact | null {
   const phone = String(listing.seller_phone || listing['Phone Number'] || listing.phone_number || '').trim();
   const name = cleanValue(listing.seller_name || listing['Posted By'] || listing.posted_by);
   if (!phone && !name) return null;
-  const digits = phone.replace(/[^\d]/g, '');
   return {
     contact_available: Boolean(phone || name),
     dealer_name: name || undefined,
-    phone_display: phone || undefined,
     contact_source: 'OWNER_APPROVED_WORKBOOK',
-    whatsapp_url: digits.length >= 7 ? `https://wa.me/${digits}` : undefined,
+    contact_channels: phone ? {
+      whatsapp: `/api/listing-contact?id=${encodeURIComponent(listing.id)}&surface=trading-floor&channel=whatsapp`,
+    } : {},
     reason: undefined,
   };
 }

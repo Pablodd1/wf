@@ -180,9 +180,8 @@ interface ListingSellerData {
     last_post_at: string | null;
     posting_years?: number;
   } | null;
-  phone_display?: string;
   contact_source?: string;
-  whatsapp_url?: string;
+  contact_channels?: { whatsapp?: string; telegram?: string };
   reason?: string;
 }
 
@@ -819,7 +818,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             setListingSeller({
               contact_available: Boolean(contactPayload.contact_available),
               dealer_name: contactPayload.seller?.name || undefined,
-              phone_display: contactPayload.seller?.phone || undefined,
+              contact_channels: contactPayload.contact_available
+                ? { whatsapp: `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research&channel=whatsapp` }
+                : {},
               contact_source: 'OWNER_APPROVED_WORKBOOK',
               dealer_country: reputation?.country || null,
               dealer_city: reputation?.city || null,
@@ -2242,18 +2243,12 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
     .filter(value => value && !/^unknown$/i.test(value))
     .join(', ');
   const summaryPosterName = summary.seller_name || summary.posted_by || summary['Posted By'] || '';
-  const summaryPosterPhone = summary.contact_publication_approved === true
-    ? (summary.seller_phone || summary.phone_number || summary['Phone Number'] || '')
-    : '';
   const dealerEvidenceReviewCount = summary.seller_review_count ?? seller?.dealer_review_count ?? null;
   const dealerEvidenceRating = summary.seller_rating ?? seller?.dealer_rating ?? null;
   const dealerEvidenceStatus = summary.seller_rating_evidence_status
     || (Number(dealerEvidenceRating) > 0 && Number(dealerEvidenceReviewCount) > 0
       ? 'SOURCE_SUPPLIED'
       : Number(dealerEvidenceReviewCount) > 0 ? 'SOURCE_FEEDBACK_COUNT' : 'UNAVAILABLE');
-  const dealerEvidencePhone = seller?.contact_available === true
-    ? seller.phone_display || summaryPosterPhone
-    : summaryPosterPhone;
   const dealerEvidenceProfile = summary.dealer_profile_path || seller?.dealer_profile_url || null;
   // The summary price is the exact value used by the comparable-set and
   // outlier calculations. A legacy detail row may still contain an older
@@ -2350,8 +2345,8 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                 <DetailCard title="Posted by">
                   <ListingDealerEvidence
                     sellerName={seller?.dealer_name || summary.seller_name || summary.posted_by || null}
-                    sellerPhone={dealerEvidencePhone || null}
-                    contactPublicationApproved={Boolean(dealerEvidencePhone)}
+                    sellerPhone={null}
+                    contactPublicationApproved={false}
                     rating={dealerEvidenceRating}
                     reviewCount={dealerEvidenceReviewCount}
                     ratingEvidenceStatus={dealerEvidenceStatus}
@@ -2461,12 +2456,12 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
               )}
 
               <DetailCard title="Posted by">
-                {seller?.dealer_name || seller?.phone_display || summaryPosterName || summaryPosterPhone || dealerEvidenceProfile ? (
+                {seller?.dealer_name || summaryPosterName || dealerEvidenceProfile ? (
                   <>
                     <ListingDealerEvidence
                       sellerName={seller?.dealer_name || summaryPosterName || null}
-                      sellerPhone={dealerEvidencePhone || null}
-                      contactPublicationApproved={Boolean(dealerEvidencePhone)}
+                      sellerPhone={null}
+                      contactPublicationApproved={false}
                       rating={dealerEvidenceRating}
                       reviewCount={dealerEvidenceReviewCount}
                       ratingEvidenceStatus={dealerEvidenceStatus}
@@ -2492,11 +2487,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                     <div className="flex flex-wrap gap-3" style={{ marginTop: 18 }}>
                       {seller?.dealer_profile_url && <Link to={seller.dealer_profile_url} style={{ color: NAVY, border: `1px solid ${BORDER}`, padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>View profile</Link>}
                       {(() => {
-                        const waUrl = seller?.whatsapp_url || (() => {
-                          const rawPhone = seller?.phone_display || summaryPosterPhone;
-                          const digits = String(rawPhone || '').replace(/\D/g, '');
-                          return digits.length >= 7 ? `https://wa.me/${digits}` : null;
-                        })();
+                        const waUrl = seller?.contact_channels?.whatsapp;
                         return waUrl ? (
                           <a href={waUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2" style={{ color: '#07140b', background: '#25D366', padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 800 }}>
                             <MessageCircle size={15} /> Contact on WhatsApp
