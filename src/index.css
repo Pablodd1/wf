@@ -45,11 +45,6 @@
     will-change: transform;
   }
 
-  .market-activity-viewport:hover .market-activity-track,
-  .market-activity-viewport:focus-within .market-activity-track {
-    animation-play-state: paused;
-  }
-
   @keyframes market-activity-scroll {
     from { transform: translate3d(0, 0, 0); }
     to { transform: translate3d(-50%, 0, 0); }

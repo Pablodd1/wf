@@ -279,6 +279,7 @@ export default function TradingFloor() {
     : '';
   const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
   const [releaseBrandTotals, setReleaseBrandTotals] = useState<Record<string, number>>({});
+  const [releaseWatchTotal, setReleaseWatchTotal] = useState<number | null>(null);
   const brandFilters = useMemo(() => requestedBrands.map(requestedBrand =>
     releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase()) || requestedBrand),
   [releaseBrands, requestedBrands]);
@@ -375,17 +376,31 @@ export default function TradingFloor() {
   }, []);
 
   useEffect(() => {
-    const controller = new AbortController();
-    fetch('/api/live-release-summary', { signal: controller.signal })
-      .then(response => response.ok ? response.json() : Promise.reject(new Error('Release summary unavailable')))
-      .then(payload => {
-        const totals = Object.fromEntries((payload.brands || [])
-          .filter((entry: { brand?: string; listing_count?: number }) => entry.brand && Number.isFinite(Number(entry.listing_count)))
-          .map((entry: { brand: string; listing_count: number }) => [entry.brand, Number(entry.listing_count)]));
-        setReleaseBrandTotals(totals);
-      })
-      .catch(() => undefined);
-    return () => controller.abort();
+    let active = true;
+    let controller: AbortController | null = null;
+    const loadLiveTotals = () => {
+      controller?.abort();
+      controller = new AbortController();
+      fetch('/api/live-release-summary', { signal: controller.signal, cache: 'no-store' })
+        .then(response => response.ok ? response.json() : Promise.reject(new Error('Release summary unavailable')))
+        .then(payload => {
+          if (!active) return;
+          const totals = Object.fromEntries((payload.brands || [])
+            .filter((entry: { brand?: string; listing_count?: number }) => entry.brand && Number.isFinite(Number(entry.listing_count)))
+            .map((entry: { brand: string; listing_count: number }) => [entry.brand, Number(entry.listing_count)]));
+          setReleaseBrandTotals(totals);
+          const watchTotal = Number(payload.total_listing_count);
+          if (Number.isFinite(watchTotal)) setReleaseWatchTotal(watchTotal);
+        })
+        .catch(() => undefined);
+    };
+    loadLiveTotals();
+    const timer = window.setInterval(loadLiveTotals, 60_000);
+    return () => {
+      active = false;
+      controller?.abort();
+      window.clearInterval(timer);
+    };
   }, []);
 
   useEffect(() => {
@@ -664,6 +679,8 @@ export default function TradingFloor() {
               <p className="mt-1 text-sm" style={{ color: MUTED }}>
                 {unfilteredBrandTotal !== null
                   ? `${unfilteredBrandTotal.toLocaleString()} ${brandFilter} listings globally`
+                  : releaseWatchTotal !== null && ['all', 'watches'].includes(categoryFilter)
+                  ? `${releaseWatchTotal.toLocaleString()} watches in the Trading Floor · live database total`
                   : total === null
                   ? `${((cursorHistory.length * pageSize) + visibleListings.length).toLocaleString()} viewed so far${hasMore ? ' · more listings available' : ''}`
                   : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings globally`}

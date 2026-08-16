@@ -18,7 +18,7 @@ const { buildLuxuryResearchCoverage } = require('./_lib/luxury-research-coverage
 
 const DEFAULT_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith'];
 const QNSA_MARKET_SOURCE = 'qnsa_rolex_patek_trading_floor_source';
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 60 * 1000;
 let cached = null;
 
 async function loadQnsaSummary(client) {
@@ -117,7 +117,7 @@ async function loadSummary() {
 
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 

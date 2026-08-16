@@ -118,12 +118,12 @@ export function MarketActivityTicker() {
   );
 
   return (
-    <div className="market-activity-viewport overflow-hidden bg-[#211b15] py-2 text-[#d8b36b]" aria-label={t('Live market activity')}>
+    <div className="market-activity-viewport overflow-hidden bg-[#211b15] py-1.5 text-[#d8b36b]" aria-label={t('Live market activity')}>
       <span className="sr-only" aria-live="polite">
         {records.length > 0 ? `${records.length} current market updates loaded.` : 'Loading current market activity.'}
       </span>
       <div
-        className="market-activity-track flex w-max whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.08em]"
+        className="market-activity-track flex w-max whitespace-nowrap font-mono text-[9px] uppercase tracking-[0.08em] sm:text-[10px]"
         style={tickerStyle}
         data-testid="market-activity-track"
       >

@@ -106,6 +106,8 @@ test('Trading Floor uses the server-ranked reviewed release and fails closed on 
   assert.match(floor, /paginationControls\('top'\)/);
   assert.match(floor, /paginationControls\('bottom'\)/);
   assert.match(floor, /fetch\('\/api\/live-release-summary'/);
+  assert.match(floor, /setReleaseWatchTotal\(watchTotal\)/);
+  assert.match(floor, /watches in the Trading Floor · live database total/);
   assert.match(floor, /unfilteredBrandTotal\.toLocaleString\(\)/);
   assert.match(floor, /'Trading Floor pages top'/);
   assert.match(floor, /Page \{cursorHistory\.length \+ 1\}/);

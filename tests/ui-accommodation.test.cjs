@@ -83,7 +83,7 @@ test('Trading Floor preserves source text and orders price intelligence before p
   assert.match(floor, /label="Price supplied"/);
   assert.ok(floor.indexOf(': sourcePrice') < floor.indexOf(': reviewedWorkbookUsd !== null'));
   assert.doesNotMatch(floor, /currency not supplied/);
-  assert.match(floor, /USD \$\{sourceText\}/);
+  assert.match(floor, /\$\{sourceText\} · currency unverified/);
   assert.match(floor, /Original source price · no USD conversion/);
   assert.match(floor, /Location/);
   assert.match(floor, /Rated dealers/);
@@ -158,8 +158,8 @@ test('footer provides direct contact, community groups, marketplace opportunitie
   assert.match(footer, /t\.me\/watchfactsUS/);
   assert.match(footer, /to="\/cl-login"[\s\S]*CL Login/);
   assert.match(footer, /Aduenas@watchfacts\.com/);
-  assert.match(footer, /type="submit"/);
-  assert.match(footer, /mailto:\$\{CONTACT_EMAIL\}/);
+  assert.doesNotMatch(footer, /aria-label="Contact form"/);
+  assert.doesNotMatch(footer, /type="submit"/);
 });
 
 test('footer provides the complete social media watch dealer glossary in an accessible modal', () => {

@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const ticker = fs.readFileSync(path.join(root, 'src/components/MarketActivityTicker.tsx'), 'utf8');
+const styles = fs.readFileSync(path.join(root, 'src/index.css'), 'utf8');
 const floor = fs.readFileSync(path.join(root, 'src/pages/TradingFloor.tsx'), 'utf8');
 const dealerEvidence = fs.readFileSync(path.join(root, 'src/components/ListingDealerEvidence.tsx'), 'utf8');
 
@@ -18,6 +19,8 @@ test('market activity ticker uses bounded released listing evidence rather than 
   assert.match(ticker, /REFRESH_INTERVAL_MS = 90_000/);
   assert.match(ticker, /data-testid="market-activity-track"/);
   assert.match(ticker, /activityGroup\(true\)/);
+  assert.match(styles, /translate3d\(-50%, 0, 0\)/);
+  assert.doesNotMatch(styles, /animation-play-state:\s*paused/);
   assert.doesNotMatch(ticker, /Patek 5712\/1A matched/);
   assert.doesNotMatch(ticker, /WTB posted · Miami network/);
 });

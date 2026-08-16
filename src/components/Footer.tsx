@@ -1,4 +1,4 @@
-import { ExternalLink, MessageCircle, Send, X } from 'lucide-react';
+import { ExternalLink, MessageCircle, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { LUXFI_URL, VIRTUAL_AUTHENTICATOR_URL } from './MarketHeader';
@@ -84,23 +84,6 @@ export function Footer() {
             <a href={CONTACT_WHATSAPP_URL} target="_blank" rel="noreferrer" className="mt-6 inline-flex min-h-11 items-center gap-2 bg-[#25D366] px-5 text-sm font-bold text-[#07130a]">
               <MessageCircle size={17} /> {t('Contact us on WhatsApp')}
             </a>
-            <form className="mt-7 grid gap-3" aria-label="Contact form" onSubmit={event => {
-              event.preventDefault();
-              const values = Object.fromEntries(new FormData(event.currentTarget));
-              const subject = `Curated Luxury contact from ${String(values.name || 'website visitor')}`;
-              const body = [`Name: ${String(values.name || '')}`, `Email: ${String(values.email || '')}`, '', String(values.message || '')].join('\n');
-              window.location.href = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
-            }}>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-xs text-white/55">{t('Name')}<input name="name" required className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white" /></label>
-                <label className="text-xs text-white/55">{t('Email')}<input name="email" type="email" required className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm text-white" /></label>
-              </div>
-              <label className="text-xs text-white/55">{t('How can we help?')}<textarea name="message" required rows={4} className="mt-2 w-full border border-white/15 bg-[#111118] px-3 py-3 text-sm text-white" /></label>
-              <button type="submit" className="flex min-h-11 items-center justify-center gap-2 border border-[#c9a96e] px-5 text-sm font-semibold text-[#e6cf9a] transition-colors hover:bg-[#c9a96e] hover:text-[#09090d]">
-                <Send size={15} /> {t('Send email')}
-              </button>
-              <p className="text-[11px] leading-5 text-white/35"><a className="text-white/60 hover:text-[#c9a96e]" href={`mailto:${CONTACT_EMAIL}`}>{t('Email Curated Luxury at')}</a>.</p>
-            </form>
           </section>
 
           <section aria-labelledby="footer-groups-heading">
