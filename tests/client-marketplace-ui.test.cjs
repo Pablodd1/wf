@@ -192,3 +192,12 @@ test('Trading Floor keeps brand dependencies stable after publication metadata l
   assert.match(source, /setReleaseBrands\(current => current\.length === data\.publicationBrands!\.length/);
   assert.match(source, /current\.every\(\(brand, index\) => brand === data\.publicationBrands!\[index\]\)/);
 });
+
+test('Trading Floor lets only the newest inventory request control loading state', () => {
+  const source = read('src/pages/TradingFloor.tsx');
+
+  assert.match(source, /const inventoryRequestIdRef = useRef\(0\)/);
+  assert.match(source, /const requestId = \+\+inventoryRequestIdRef\.current/);
+  assert.match(source, /inventoryRequestIdRef\.current === requestId\) setLoading\(false\)/);
+  assert.match(source, /controller\.abort\(\);[\s\S]*inventoryRequestIdRef\.current === requestId/);
+});

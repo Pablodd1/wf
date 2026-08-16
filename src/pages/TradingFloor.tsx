@@ -305,6 +305,7 @@ export default function TradingFloor() {
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
+  const inventoryRequestIdRef = useRef(0);
   const viewKey = [brandFilters.join('\u001e'), categoryFilter, intentFilter, search, exactReference, imagesOnly, pricedOnly, locationFilter, ratingFilter, dateFilter].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
@@ -486,6 +487,7 @@ export default function TradingFloor() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const requestId = ++inventoryRequestIdRef.current;
     
     async function load() {
       setLoading(true);
@@ -592,12 +594,15 @@ export default function TradingFloor() {
             : error.message || 'Failed to load listings');
         }
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        if (inventoryRequestIdRef.current === requestId) setLoading(false);
       }
     }
 
     void load();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (inventoryRequestIdRef.current === requestId) inventoryRequestIdRef.current += 1;
+    };
   }, [brandFilters, categoryFilter, cursor, dateFilter, exactReference, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, ratingFilter, search]);
 
   const showPagination = !selectedListing && (cursorHistory.length > 0 || (hasMore && nextCursor));
