@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('node:assert/strict');
+const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
@@ -17,6 +18,32 @@ const workflow = fs.readFileSync(path.join(__dirname,
   '../.github/workflows/qnsa-non-watch-dealer-linkage.yml'), 'utf8');
 const runner = fs.readFileSync(path.join(__dirname,
   '../tools/dealer-directory/run-non-watch-exact-linkage.cjs'), 'utf8');
+
+function extractPowerShellRunBlocks(yaml) {
+  const lines = yaml.replace(/\r\n/g, '\n').split('\n');
+  const blocks = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const shell = lines[index].match(/^(\s*)shell:\s*pwsh\s*$/);
+    if (!shell) continue;
+    const shellIndent = shell[1].length;
+    const runIndex = index + 1;
+    const run = lines[runIndex]?.match(/^(\s*)run:\s*\|\s*$/);
+    assert.ok(run && run[1].length === shellIndent,
+      'PowerShell workflow step must have an adjacent literal run block');
+    const contentIndent = shellIndent + 2;
+    const script = [];
+    for (let lineIndex = runIndex + 1; lineIndex < lines.length; lineIndex += 1) {
+      const line = lines[lineIndex];
+      if (line.trim() === '') { script.push(''); continue; }
+      const indent = line.match(/^\s*/)[0].length;
+      if (indent <= shellIndent) break;
+      assert.ok(indent >= contentIndent, 'PowerShell run line is under-indented');
+      script.push(line.slice(contentIndent));
+    }
+    blocks.push(script.join('\n'));
+  }
+  return blocks;
+}
 
 test('non-watch linkage is exact-lineage, singleton-only, and never name inferred', () => {
   assert.match(migration, /raw_version\.source_record_id = listing\.source_record_id/);
@@ -65,6 +92,28 @@ test('workflow offers read-only audit and requires explicit capped write confirm
   assert.match(workflow, /SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.doesNotMatch(workflow, /raw_payload\s+AS\s+evidence|raw_message\s+AS\s+evidence/i);
   assert.doesNotMatch(workflow, /matched_phone[\s\S]*Set-Content/i);
+});
+
+test('every YAML-stripped PowerShell run block parses without syntax errors', () => {
+  const blocks = extractPowerShellRunBlocks(workflow);
+  assert.ok(blocks.length >= 2, 'expected workflow PowerShell run blocks');
+  const parser = [
+    '$source = [Console]::In.ReadToEnd()',
+    '$tokens = $null',
+    '$parseErrors = $null',
+    '[System.Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens, [ref]$parseErrors) | Out-Null',
+    'if ($parseErrors.Count -gt 0) {',
+    '  $parseErrors | ForEach-Object { [Console]::Error.WriteLine($_.Message) }',
+    '  exit 1',
+    '}',
+  ].join('\n');
+  for (const [index, block] of blocks.entries()) {
+    const parsed = spawnSync('pwsh',
+      ['-NoLogo','-NoProfile','-NonInteractive','-Command',parser],
+      { input: block, encoding: 'utf8' });
+    assert.equal(parsed.status,0,
+      `PowerShell block ${index + 1} failed parsing: ${parsed.stderr || parsed.error || ''}`);
+  }
 });
 
 test('audit uses split bounded evidence instead of population-wide aggregate joins', () => {
