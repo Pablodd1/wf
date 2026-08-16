@@ -183,3 +183,12 @@ test('customer workflows expose direct official Curated Luxury contact and commu
   assert.match(floor, /import \{ Footer \}/);
   assert.match(research, /Footer as CommunityFooter/);
 });
+
+test('Trading Floor keeps brand dependencies stable after publication metadata loads', () => {
+  const source = read('src/pages/TradingFloor.tsx');
+
+  assert.match(source, /const requestedBrandKey = searchParams\.getAll\('brand'\)/);
+  assert.match(source, /\[requestedBrandKey\],/);
+  assert.match(source, /setReleaseBrands\(current => current\.length === data\.publicationBrands!\.length/);
+  assert.match(source, /current\.every\(\(brand, index\) => brand === data\.publicationBrands!\[index\]\)/);
+});

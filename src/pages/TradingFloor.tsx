@@ -258,9 +258,13 @@ export default function TradingFloor() {
     : '';
   const search = searchParams.get('q') || '';
   const exactReference = searchParams.get('reference') || '';
+  const requestedBrandKey = searchParams.getAll('brand')
+    .map(value => value.trim())
+    .filter(Boolean)
+    .join('\u001e');
   const requestedBrands = useMemo(
-    () => [...new Set(searchParams.getAll('brand').map(value => value.trim()).filter(Boolean))],
-    [searchParams],
+    () => [...new Set(requestedBrandKey.split('\u001e').filter(Boolean))],
+    [requestedBrandKey],
   );
   const imagesOnly = searchParams.get('images') === 'true';
   const pricedOnly = searchParams.get('priced') === 'true';
@@ -565,7 +569,10 @@ export default function TradingFloor() {
         }
 
         if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
-          setReleaseBrands(data.publicationBrands);
+          setReleaseBrands(current => current.length === data.publicationBrands!.length
+            && current.every((brand, index) => brand === data.publicationBrands![index])
+            ? current
+            : data.publicationBrands!);
         }
         const nextListings = (data.records || [])
           .filter(listing => !isBundleListing(listing))
