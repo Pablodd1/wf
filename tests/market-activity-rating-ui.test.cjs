@@ -10,9 +10,14 @@ const dealerEvidence = fs.readFileSync(path.join(root, 'src/components/ListingDe
 
 test('market activity ticker uses bounded released listing evidence rather than fixed marketing claims', () => {
   assert.match(ticker, /RELEASED_BRANDS/);
+  assert.match(ticker, /LUXURY_CATEGORIES/);
   assert.match(ticker, /reviewed-market-inventory\?brand=/);
+  assert.match(ticker, /reviewed-market-inventory\?item=/);
   assert.match(ticker, /pageSize=1&pagination=cursor/);
-  assert.match(ticker, /REFRESH_INTERVAL_MS = 45_000/);
+  assert.match(ticker, /Promise\.allSettled/);
+  assert.match(ticker, /REFRESH_INTERVAL_MS = 90_000/);
+  assert.match(ticker, /data-testid="market-activity-track"/);
+  assert.match(ticker, /activityGroup\(true\)/);
   assert.doesNotMatch(ticker, /Patek 5712\/1A matched/);
   assert.doesNotMatch(ticker, /WTB posted · Miami network/);
 });

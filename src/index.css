@@ -39,6 +39,32 @@
       background-position: 50% 42%;
     }
   }
+
+  .market-activity-track {
+    animation: market-activity-scroll var(--market-ticker-duration, 60s) linear infinite;
+    will-change: transform;
+  }
+
+  .market-activity-viewport:hover .market-activity-track,
+  .market-activity-viewport:focus-within .market-activity-track {
+    animation-play-state: paused;
+  }
+
+  @keyframes market-activity-scroll {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(-50%, 0, 0); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .market-activity-viewport {
+      overflow-x: auto;
+    }
+
+    .market-activity-track {
+      animation: none;
+      transform: none;
+    }
+  }
 }
 
 @layer base {
