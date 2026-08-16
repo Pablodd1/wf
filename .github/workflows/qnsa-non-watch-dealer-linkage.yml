@@ -71,6 +71,24 @@ jobs:
           $ErrorActionPreference = 'Stop'
           if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          function Invoke-ReadOnlyAuditQuery([string]$query) {
+            $body = @{ query = $query; read_only = $true } | ConvertTo-Json -Depth 3
+            return Invoke-RestMethod -Method Post `
+              -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $body
+          }
+          function Test-CandidateDigestScopeSafe {
+            $rows = Invoke-ReadOnlyAuditQuery @"
+            SELECT COALESCE((SELECT
+              position('v_candidate_page_digest' in definition)>0
+                AND position('FROM candidate_page' in substring(definition
+                  from position('RETURN jsonb_build_object' in definition)))=0
+              FROM (SELECT pg_get_functiondef(to_regprocedure(
+                'public.qnsa_non_watch_dealer_candidate_link_page(text,text,timestamptz,uuid,timestamptz,uuid,integer,boolean,integer)'
+              )) AS definition) contract),false) AS safe;
+            "@
+            return $rows[0].safe -eq $true
+          }
           function Get-ForwardMigrationBody([string]$path) {
             $lines = @(Get-Content -LiteralPath $path)
             $beginIndex = -1
@@ -87,18 +105,16 @@ jobs:
             }
             return ($bodyLines -join "`n")
           }
-          if ($env:NON_WATCH_LINKAGE_MODE -ne 'audit') {
+          $candidateDigestInitiallySafe = Test-CandidateDigestScopeSafe
+          $digestRepairRequired = $env:NON_WATCH_LINKAGE_MODE -ne 'audit' -and -not $candidateDigestInitiallySafe
+          "NON_WATCH_DIGEST_REPAIR_REQUIRED=$($digestRepairRequired.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if ($digestRepairRequired) {
             $migrationBody = Get-ForwardMigrationBody 'supabase/migrations/20260816000500_qnsa_non_watch_candidate_digest_scope_repair.sql'
             $compileBody = @{ query = "BEGIN;`n$migrationBody`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
             Invoke-RestMethod -Method Post `
               -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
               -Headers $headers -ContentType 'application/json' -Body $compileBody | Out-Null
-          }
-          function Invoke-ReadOnlyAuditQuery([string]$query) {
-            $body = @{ query = $query; read_only = $true } | ConvertTo-Json -Depth 3
-            return Invoke-RestMethod -Method Post `
-              -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
-              -Headers $headers -ContentType 'application/json' -Body $body
           }
           $controlSql = @"
           SELECT jsonb_build_object(
@@ -227,12 +243,36 @@ jobs:
             }
             return ($bodyLines -join "`n")
           }
-          $migrationBody = Get-ForwardMigrationBody 'supabase/migrations/20260816000500_qnsa_non_watch_candidate_digest_scope_repair.sql'
-          $atomicSql = "BEGIN;`n$migrationBody`nCOMMIT;"
-          $body = @{ query = $atomicSql; read_only = $false } | ConvertTo-Json -Depth 3
-          Invoke-RestMethod -Method Post `
-            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
-            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          $verifySql = @"
+          SELECT COALESCE((SELECT
+            position('v_candidate_page_digest' in definition)>0
+              AND position('FROM candidate_page' in substring(definition
+                from position('RETURN jsonb_build_object' in definition)))=0
+            FROM (SELECT pg_get_functiondef(to_regprocedure(
+              'public.qnsa_non_watch_dealer_candidate_link_page(text,text,timestamptz,uuid,timestamptz,uuid,integer,boolean,integer)'
+            )) AS definition) contract),false) AS safe;
+          "@
+          function Test-CandidateDigestScopeSafe {
+            $readBody = @{ query = $verifySql; read_only = $true } | ConvertTo-Json -Depth 3
+            $rows = Invoke-RestMethod -Method Post `
+              -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $readBody
+            return $rows[0].safe -eq $true
+          }
+          $candidateDigestSafeBeforeInstall = Test-CandidateDigestScopeSafe
+          if ($env:NON_WATCH_DIGEST_REPAIR_REQUIRED -eq 'true' -and -not $candidateDigestSafeBeforeInstall) {
+            $migrationBody = Get-ForwardMigrationBody 'supabase/migrations/20260816000500_qnsa_non_watch_candidate_digest_scope_repair.sql'
+            $atomicSql = "BEGIN;`n$migrationBody`nCOMMIT;"
+            $body = @{ query = $atomicSql; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post `
+              -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          } else {
+            Write-Host 'Candidate digest scope is already safe; skipping repair install.'
+          }
+          if (-not (Test-CandidateDigestScopeSafe)) {
+            throw 'Candidate digest scope repair is not installed safely.'
+          }
 
       - name: Run capped canary or full reconciliation
         if: ${{ inputs.install_contract && inputs.mode != 'audit' }}

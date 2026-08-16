@@ -49,7 +49,8 @@ test('workflow offers read-only audit and requires explicit capped write confirm
   assert.match(workflow, /FULL_QNSA_NON_WATCH_LINKAGE/);
   assert.match(workflow, /NON_WATCH_LINKAGE_CANARY_LIMIT: '10'/);
   assert.match(workflow, /concurrency:[\s\S]*group: qnsa-non-watch-dealer-linkage-production[\s\S]*cancel-in-progress: false/);
-  assert.match(workflow, /if \(\$env:NON_WATCH_LINKAGE_MODE -ne 'audit'\)/);
+  assert.match(workflow,
+    /\$digestRepairRequired = \$env:NON_WATCH_LINKAGE_MODE -ne 'audit' -and -not \$candidateDigestInitiallySafe/);
   assert.match(workflow, /read_only = \$true/);
   assert.match(workflow, /qnsa_market_feed_count_snapshot/);
   assert.match(workflow, /orphan_link_exists[\s\S]*NOT EXISTS/);
@@ -215,6 +216,26 @@ test('workflow installs one forward repair in one atomic transaction', () => {
   assert.ok(beginIndex >= 0 && commitIndex > beginIndex);
   assert.match(body, /DO \$repair\$[\s\S]*?\nBEGIN\n[\s\S]*?END\n\$repair\$;/);
   assert.match(`BEGIN;\n${body}\nCOMMIT;`, /^BEGIN;[\s\S]*COMMIT;$/);
+});
+
+test('repeat canary and full runs skip an already-safe digest repair', () => {
+  const compileStart = workflow.indexOf('- name: Compile contract and run read-only audit');
+  const installStart = workflow.indexOf('- name: Install forward-only linkage contract');
+  const runnerStart = workflow.indexOf('- name: Run capped canary or full reconciliation');
+  assert.ok(compileStart >= 0 && installStart > compileStart && runnerStart > installStart);
+  const compileStep = workflow.slice(compileStart,installStart);
+  const installStep = workflow.slice(installStart,runnerStart);
+
+  assert.match(compileStep,
+    /\$candidateDigestInitiallySafe = Test-CandidateDigestScopeSafe[\s\S]*?\$digestRepairRequired = \$env:NON_WATCH_LINKAGE_MODE -ne 'audit' -and -not \$candidateDigestInitiallySafe/);
+  assert.match(compileStep,
+    /NON_WATCH_DIGEST_REPAIR_REQUIRED=[\s\S]*?if \(\$digestRepairRequired\) \{[\s\S]*?Get-ForwardMigrationBody 'supabase\/migrations\/20260816000500_qnsa_non_watch_candidate_digest_scope_repair\.sql'/);
+  assert.match(installStep, /\$candidateDigestSafeBeforeInstall = Test-CandidateDigestScopeSafe/);
+  assert.match(installStep,
+    /if \(\$env:NON_WATCH_DIGEST_REPAIR_REQUIRED -eq 'true' -and -not \$candidateDigestSafeBeforeInstall\) \{[\s\S]*?Get-ForwardMigrationBody/);
+  assert.match(installStep, /already safe; skipping repair install/);
+  assert.match(installStep,
+    /if \(-not \(Test-CandidateDigestScopeSafe\)\) \{[\s\S]*?not installed safely/);
 });
 
 test('forward digest repair never reads a candidate CTE outside its statement', () => {
