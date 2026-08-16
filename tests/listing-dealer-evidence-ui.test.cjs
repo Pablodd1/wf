@@ -7,10 +7,12 @@ const test = require('node:test');
 
 const read = relative => fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
 
-test('Trading Floor and Luxury Research share the same dealer evidence renderer', () => {
+test('Trading Floor, Price Research, and Luxury Research share the same dealer evidence renderer', () => {
   const floor = read('src/pages/TradingFloor.tsx');
+  const priceResearch = read('src/pages/PriceResearch.tsx');
   const luxury = read('src/pages/LuxuryResearch.tsx');
   assert.match(floor, /<ListingDealerEvidence/);
+  assert.match(priceResearch, /<ListingDealerEvidence/);
   assert.match(luxury, /<ListingDealerEvidence/);
 });
 

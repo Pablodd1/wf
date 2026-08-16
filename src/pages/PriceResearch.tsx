@@ -7,6 +7,7 @@ import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer as CommunityFooter } from '../components/Footer';
 import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
 import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
+import { DealerRatingBadge, ListingDealerEvidence, type DealerRatingEvidenceStatus } from '../components/ListingDealerEvidence';
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
@@ -48,6 +49,12 @@ interface RowData {
   listing_type?: string | null;
   intent?: string | null;
   contact_publication_approved?: boolean;
+  dealer_id?: string | null;
+  dealer_profile_path?: string | null;
+  seller_rating?: number | null;
+  seller_review_count?: number | null;
+  seller_rating_evidence_status?: DealerRatingEvidenceStatus | null;
+  seller_group_count?: number | null;
 }
 
 interface WtbListingData {
@@ -63,6 +70,12 @@ interface WtbListingData {
   seller_phone?: string | null;
   whatsapp_url?: string | null;
   contact_publication_approved?: boolean;
+  dealer_id?: string | null;
+  dealer_profile_path?: string | null;
+  seller_rating?: number | null;
+  seller_review_count?: number | null;
+  seller_rating_evidence_status?: DealerRatingEvidenceStatus | null;
+  seller_group_count?: number | null;
   image_url?: string | null;
   image_urls?: string[] | null;
   has_images?: boolean;
@@ -203,6 +216,12 @@ interface ReviewedMarketRecord {
   phone_number?: string | null;
   seller_phone?: string | null;
   contact_publication_approved?: boolean;
+  dealer_id?: string | null;
+  dealer_profile_path?: string | null;
+  seller_rating?: number | null;
+  seller_review_count?: number | null;
+  seller_rating_evidence_status?: DealerRatingEvidenceStatus | null;
+  seller_group_count?: number | null;
   raw_message?: string | null;
   raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
   raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
@@ -2033,10 +2052,18 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
       </div>
       <ReviewedPriceContext record={record} analytics={analytics} />
 
-      {(poster || phone || record.listing_date || record.posting_date) && (
+      {(poster || phone || record.listing_date || record.posting_date || record.dealer_profile_path) && (
         <div style={{ marginTop: 14, padding: 12, background: LIGHT_GRAY, borderRadius: 7, fontSize: 12, color: TEXT }}>
-          {poster && <div><strong>Posted by:</strong> {poster}</div>}
-          {phone && <div style={{ marginTop: 3 }}><strong>Contact:</strong> {phone}</div>}
+          <ListingDealerEvidence
+            sellerName={poster || null}
+            sellerPhone={phone || null}
+            contactPublicationApproved={record.contact_publication_approved === true}
+            rating={record.seller_rating}
+            reviewCount={record.seller_review_count}
+            ratingEvidenceStatus={record.seller_rating_evidence_status}
+            groupCount={record.seller_group_count}
+            profilePath={record.dealer_profile_path}
+          />
           {(record.listing_date || record.posting_date) && <div style={{ marginTop: 3, color: MUTED }}>{String(record.listing_date || record.posting_date).split('T')[0]}</div>}
           <button type="button" onClick={() => void toggleSeller()} style={{ marginTop: 10, border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, borderRadius: 6, minHeight: 38, padding: '7px 10px', fontSize: 11, fontWeight: 800 }}>
             {sellerOpen ? 'Hide seller activity' : 'View seller activity'}
@@ -2155,12 +2182,22 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
             {rawMessage}
           </div>
         )}
-        {(sellerName || sellerPhone) && (
-          <div className="flex flex-wrap gap-x-3 gap-y-1" style={{ color: MUTED, fontSize: 11, marginTop: 7 }}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: MUTED, fontSize: 11, marginTop: 7 }}>
+          {(sellerName || sellerPhone) && (
+            <>
             {sellerName && <span>Posted by: <strong style={{ color: TEXT }}>{sellerName}</strong></span>}
             {sellerPhone && <span>Contact: <strong style={{ color: NAVY }}>{sellerPhone}</strong></span>}
-          </div>
-        )}
+            </>
+          )}
+          <DealerRatingBadge
+            rating={row.seller_rating}
+            reviewCount={row.seller_review_count}
+            ratingEvidenceStatus={row.seller_rating_evidence_status}
+          />
+          <span style={{ fontSize: 10 }}>
+            {row.dealer_profile_path ? 'Reference Check linked' : 'Reference Check unlinked'}
+          </span>
+        </div>
       </div>
       <div className="hidden sm:block" style={{ textAlign: 'right', flexShrink: 0 }}>
         <div style={{ fontSize: 14, fontWeight: 600, color: excludedFromAverages ? '#8a6500' : GOLD }}>{priceLabel}</div>
@@ -2208,6 +2245,16 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
   const summaryPosterPhone = summary.contact_publication_approved === true
     ? (summary.seller_phone || summary.phone_number || summary['Phone Number'] || '')
     : '';
+  const dealerEvidenceReviewCount = summary.seller_review_count ?? seller?.dealer_review_count ?? null;
+  const dealerEvidenceRating = summary.seller_rating ?? seller?.dealer_rating ?? null;
+  const dealerEvidenceStatus = summary.seller_rating_evidence_status
+    || (Number(dealerEvidenceRating) > 0 && Number(dealerEvidenceReviewCount) > 0
+      ? 'SOURCE_SUPPLIED'
+      : Number(dealerEvidenceReviewCount) > 0 ? 'SOURCE_FEEDBACK_COUNT' : 'UNAVAILABLE');
+  const dealerEvidencePhone = seller?.contact_available === true
+    ? seller.phone_display || summaryPosterPhone
+    : summaryPosterPhone;
+  const dealerEvidenceProfile = summary.dealer_profile_path || seller?.dealer_profile_url || null;
   // The summary price is the exact value used by the comparable-set and
   // outlier calculations. A legacy detail row may still contain an older
   // currency conversion, so it must never replace the analytics value here.
@@ -2301,16 +2348,17 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                 </DetailCard>
 
                 <DetailCard title="Posted by">
-                  <div style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{seller?.dealer_name || summary.seller_name || summary.posted_by || 'Poster not supplied'}</div>
-                  {(seller?.phone_display || summaryPosterPhone) && <div style={{ color: NAVY, fontSize: 13, fontWeight: 700, marginTop: 8 }}>{seller?.phone_display || summaryPosterPhone}</div>}
+                  <ListingDealerEvidence
+                    sellerName={seller?.dealer_name || summary.seller_name || summary.posted_by || null}
+                    sellerPhone={dealerEvidencePhone || null}
+                    contactPublicationApproved={Boolean(dealerEvidencePhone)}
+                    rating={dealerEvidenceRating}
+                    reviewCount={dealerEvidenceReviewCount}
+                    ratingEvidenceStatus={dealerEvidenceStatus}
+                    groupCount={summary.seller_group_count ?? seller?.dealer_group_count ?? null}
+                    profilePath={dealerEvidenceProfile}
+                  />
                   {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
-                  {(seller?.dealer_rating != null || seller?.dealer_review_count != null || seller?.dealer_group_count != null) && (
-                    <div className="grid grid-cols-3 gap-3" style={{ marginTop: 16 }}>
-                      <Metric label="Rating" value={seller?.dealer_rating == null ? '—' : seller.dealer_rating.toFixed(1)} />
-                      <Metric label="Reviews" value={Number(seller?.dealer_review_count || 0).toLocaleString()} />
-                      <Metric label="Groups" value={Number(seller?.dealer_group_count || 0).toLocaleString()} />
-                    </div>
-                  )}
                 </DetailCard>
               </div>
             </section>
@@ -2413,20 +2461,20 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
               )}
 
               <DetailCard title="Posted by">
-                {seller?.dealer_name || seller?.phone_display || summaryPosterName || summaryPosterPhone ? (
+                {seller?.dealer_name || seller?.phone_display || summaryPosterName || summaryPosterPhone || dealerEvidenceProfile ? (
                   <>
-                    {(seller?.dealer_name || summaryPosterName) && (
-                      <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>
-                        {seller?.dealer_name || summaryPosterName}
-                      </div>
-                    )}
+                    <ListingDealerEvidence
+                      sellerName={seller?.dealer_name || summaryPosterName || null}
+                      sellerPhone={dealerEvidencePhone || null}
+                      contactPublicationApproved={Boolean(dealerEvidencePhone)}
+                      rating={dealerEvidenceRating}
+                      reviewCount={dealerEvidenceReviewCount}
+                      ratingEvidenceStatus={dealerEvidenceStatus}
+                      groupCount={summary.seller_group_count ?? seller?.dealer_group_count ?? null}
+                      profilePath={dealerEvidenceProfile}
+                    />
                     {seller?.dealer_company && <div style={{ color: MUTED, fontSize: 13, marginTop: 3 }}>{seller.dealer_company}</div>}
                     {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
-                    {(seller?.phone_display || summaryPosterPhone) && (
-                      <div style={{ color: NAVY, fontSize: 13, fontWeight: 800, marginTop: 8 }}>
-                        {seller?.phone_display || summaryPosterPhone}
-                      </div>
-                    )}
                     {seller?.dealer_stats ? (
                       <>
                         <div className="grid grid-cols-2 gap-3" style={{ marginTop: 16 }} aria-label="Source poster activity">
@@ -2441,13 +2489,6 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                         )}
                       </>
                     ) : null}
-                    {(seller?.dealer_rating != null || seller?.dealer_review_count != null || seller?.dealer_group_count != null) && (
-                      <div className="grid grid-cols-3 gap-3" style={{ marginTop: 16 }} aria-label="Verified seller reputation">
-                        <Metric label="Rating" value={seller.dealer_rating == null ? '—' : seller.dealer_rating.toFixed(1)} />
-                        <Metric label="Reviews" value={Number(seller.dealer_review_count || 0).toLocaleString()} />
-                        <Metric label="Groups" value={Number(seller.dealer_group_count || 0).toLocaleString()} />
-                      </div>
-                    )}
                     <div className="flex flex-wrap gap-3" style={{ marginTop: 18 }}>
                       {seller?.dealer_profile_url && <Link to={seller.dealer_profile_url} style={{ color: NAVY, border: `1px solid ${BORDER}`, padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>View profile</Link>}
                       {(() => {

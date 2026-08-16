@@ -45,9 +45,15 @@ test('featured-sale rows preserve source evidence while excluded rows never alte
 
 test('all serialized sale evidence is explicitly typed WTS', () => {
   const api = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
-  const outlierBlock = api.split('outlier_rows: canReviewExcludedEvidence ?')[1].split('analytics_ready:')[0];
-  const retainedBlock = api.split('retained_rows:')[1].split('rows: serializedComparables')[0];
-  const comparableBlock = api.split('rows: serializedComparables')[1].split('})),')[0];
+  const extractSerializedBlock = (declaration, nextDeclaration) => {
+    const start = api.indexOf(`const ${declaration} =`);
+    const end = api.indexOf(`const ${nextDeclaration} =`, start);
+    assert.ok(start >= 0 && end > start, `${declaration} serialization block must exist`);
+    return api.slice(start, end);
+  };
+  const comparableBlock = extractSerializedBlock('comparableEvidenceRows', 'retainedDealerEvidenceRows');
+  const retainedBlock = extractSerializedBlock('retainedDealerEvidenceRows', 'outlierDealerEvidenceRows');
+  const outlierBlock = extractSerializedBlock('outlierDealerEvidenceRows', 'combinedDealerEvidenceRows');
   assert.match(outlierBlock, /listing_type: 'WTS'/);
   assert.match(retainedBlock, /listing_type: 'WTS'/);
   assert.match(comparableBlock, /listing_type: 'WTS'/);

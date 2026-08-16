@@ -1808,11 +1808,14 @@ function formatSourcePrice(listing: ListingRecord) {
   if (sourceText && currency) {
     return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (sourceText) return sourceTextIncludesCurrency(sourceText, 'USD') ? sourceText : `USD ${sourceText}`;
+  // A bare `$` or amount without retained currency evidence is not USD proof.
+  // Keep the dealer's source amount visible without changing normalization or
+  // admitting it to analytics, and make the unresolved currency explicit.
+  if (sourceText) return `${sourceText} · currency unverified`;
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
   if (!Number.isFinite(amount) || amount <= 0) return '';
-  if (!currency) return `USD ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
+  if (!currency) return `Source amount ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)} · currency unverified`;
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 

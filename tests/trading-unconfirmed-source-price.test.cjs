@@ -21,7 +21,47 @@ test('forward view labels retained bare-dollar evidence without promoting it to 
 });
 
 test('Trading Floor distinguishes currency-unconfirmed evidence from no supplied price', () => {
-  assert.match(trading, /price_evidence_status\)\.toUpperCase\(\) === 'CURRENCY_UNCONFIRMED'/);
-  assert.match(trading, /currency \$\{currencyUnconfirmed \? 'not confirmed' : 'not supplied'\}/);
+  assert.match(trading, /if \(sourceText\) return `\$\{sourceText\} · currency unverified`/);
+  assert.match(trading, /if \(!currency\) return `Source amount \$\{new Intl\.NumberFormat[\s\S]*?· currency unverified`/);
+  assert.doesNotMatch(trading, /if \(!currency\) return `USD /);
   assert.match(trading, /: 'Price not supplied'/);
+});
+
+test('Trading Floor never relabels AP, RM, or Cartier bare-dollar amounts as USD', () => {
+  const sourceTextIncludesCurrency = trading.match(
+    /function sourceTextIncludesCurrency[\s\S]*?\n\}/,
+  )?.[0].replace(/: string/g, '');
+  const formatSourcePrice = trading.match(
+    /function formatSourcePrice[\s\S]*?\n\}/,
+  )?.[0].replace(/: ListingRecord/g, '');
+  assert.ok(sourceTextIncludesCurrency && formatSourcePrice, 'price display helpers must remain inspectable');
+
+  const cleanValue = value => {
+    if (value == null) return '';
+    const text = String(value).trim();
+    return !text || /^(?:unknown|null)$/i.test(text) ? '' : text;
+  };
+  const formatter = Function(
+    'cleanValue',
+    `'use strict'; ${sourceTextIncludesCurrency}; ${formatSourcePrice}; return formatSourcePrice;`,
+  )(cleanValue);
+
+  for (const fixture of [
+    { brand: 'Audemars Piguet', reference: '14370', source_price_amount: 6490, raw_message: '... $6,490' },
+    { brand: 'Richard Mille', reference: 'RM029', source_price_amount: 64760, raw_message: '... $64,760' },
+    { brand: 'Cartier', reference: 'WABB0049', source_price_amount: 28000, raw_message: '... $28,000' },
+  ]) {
+    const displayed = formatter({
+      ...fixture,
+      source_price_text: null,
+      source_currency: null,
+      currency: null,
+      price_raw: fixture.source_price_amount,
+    });
+    assert.equal(
+      displayed,
+      `Source amount ${fixture.source_price_amount.toLocaleString('en-US')} · currency unverified`,
+    );
+    assert.doesNotMatch(displayed, /\bUSD\b/);
+  }
 });
