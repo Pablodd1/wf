@@ -160,9 +160,11 @@ Research contact-consent repair was merged through PR #560 at
    the safety hold is active.
 2. Reconcile historical direct-submission rows that may carry fabricated contact
    consent; do not modify immutable raw evidence.
-3. Generalize exact dealer linkage to customer-admitted handbags, jewelry, and
-   accessories. UI support is ready, but production non-watch dealer linkage is
-   not complete.
+3. Keep the completed exact non-watch dealer linkage lane in the normal
+   incoming-data orchestration. The August 16 full reconciliation linked every
+   currently eligible handbag, jewelry, and accessory candidate, but newly
+   ingested rows will still require this bounded lane after live ingestion is
+   restored.
 4. Complete the unified multi-listing quarantine across historical, POST IT,
    Trading Floor, and Price Research paths.
 5. Qualify or explicitly retain-with-reason Zenith `03.2522.400`; a different
@@ -176,3 +178,66 @@ Research contact-consent repair was merged through PR #560 at
 
 Panerai remains blocked until these gates are cleared and accepted live. Omega
 remains after Panerai.
+
+## August 16 continuation — non-watch dealer linkage completed
+
+Production remained pinned to QNSA `qnsafosakvonzgfcsphh`. No immutable raw
+message, normalized listing, image, price, or source record was changed by this
+work. The only customer-data mutation was insertion of exact, private dealer to
+listing links after unique verified-phone and immutable-lineage checks.
+
+### Deployed application and safety repairs
+
+- PR #563 deployed exact-reference contact-consent enforcement, malformed-price
+  holds, bounded verified multi-image enrichment, and the listing-integrity
+  audit/reporting lane.
+- PR #566 deployed conservative watch-part classification and the bounded WTB
+  empty-page follow logic. Rolex 116500LN now excludes the known bezel listing
+  from the watch route while preserving it as an `ACCESSORY` with raw evidence,
+  seller, image, reference, and source price outside watch analytics.
+- PRs #569–#572 deployed the candidate-driven non-watch linkage workflow,
+  frozen census/digest reconciliation, serialized database lease, CTE-scope
+  repair, repeat-safe repair detection, and native PowerShell workflow parsing
+  tests. Linkage workflow production SHA: `6402a29ea8db17deb102d2f4e2c3842cf3a57cfd`.
+
+### Production linkage evidence
+
+- The original bounded raw-ledger canary run `31914163791` succeeded with 703
+  pages, 351,500 raw versions scanned, 10 exact links inserted, zero conflicts,
+  zero orphans, and zero non-applied rows.
+- The candidate-driven canary run `31916311901` completed in 42 seconds. It
+  scanned 2,685 category-qualified candidates in seven pages, inserted 10 more
+  links, and reconciled the private ledger from 10 to 20 links with zero
+  conflicts/orphans/non-applied rows.
+- The final FULL run `31916905422` completed successfully. Frozen, apply, and
+  final traversals each scanned the same 2,685 candidates with identical
+  per-category digests. It inserted the one remaining exact match, moving the
+  ledger from 20 to 21 links across nine verified dealers. All category streams
+  exhausted; duplicate verified phones, conflicts, orphans, and non-applied
+  links remained zero. Sanitized artifacts logged neither raw text nor PII.
+- A complete public cursor crawl returned 2,008 unique luxury rows: 608
+  handbags, 1,296 jewelry rows, and 104 accessories. Thirteen customer-visible
+  rows now carry an internal `/reference-check/...` profile plus source-backed
+  feedback (seven handbags and six jewelry rows). Zero public rows exposed an
+  unconsented phone. Eight of the 21 private exact links are outside the current
+  customer-admitted public subset and remain preserved rather than forced into
+  display.
+
+### Remaining production truth
+
+- Dealer linkage is complete for the currently frozen non-watch release
+  candidates, but it is not continuous because the live incoming-message lane
+  is not proven connected to QNSA.
+- Read-only production evidence still shows historical raw/staging freshness
+  ending August 10–11, 2026; QNSA `raw.payloads`, `raw.payload_versions`, and
+  processing jobs were zero at the last audit. Vercel had no Green API or
+  `INGEST_API_TOKEN` configuration, and Railway source-worker state could not be
+  verified without access. Do not claim new group-chat messages are dynamically
+  normalized or published.
+- Historical MariaDB/QNSA evidence preserves only one `front_image` per source
+  record. Additional historical photos cannot be recovered without an upstream
+  media re-import. POST IT preserves 1–5 images for single listings; ambiguous
+  bundle media remains withheld.
+- Panerai remains blocked by the unified multi-listing quarantine, designated
+  Zenith Price Research gate, authenticated POST IT E2E canary, and proven Green
+  API shadow/reconciliation lane. Omega remains after Panerai.
