@@ -25,6 +25,7 @@ const HEADER_LINKS: HeaderLink[] = [
 
 const LANDING_LINKS: HeaderLink[] = [
   { label: 'TRADING FLOOR', to: '/trading' },
+  { label: 'PRICE RESEARCH', to: '/price-research' },
   { label: 'POST IT', to: '/dealer/post' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
   { label: 'VIRTUAL AUTHENTICATOR', href: VIRTUAL_AUTHENTICATOR_URL, external: true },

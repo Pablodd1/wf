@@ -14,11 +14,12 @@ test('home restores cream dealer-network landing and exposes the approved transa
   assert.doesNotMatch(home, /curated-luxury-hero\.(?:webm|mp4)/);
   const landingLinks = header.match(/const LANDING_LINKS[\s\S]*?\];/)?.[0] || '';
   assert.match(landingLinks, /TRADING FLOOR/);
+  assert.match(landingLinks, /PRICE RESEARCH/);
   assert.match(landingLinks, /POST IT/);
   assert.match(landingLinks, /HIRE FI/);
   assert.match(landingLinks, /VIRTUAL AUTHENTICATOR/);
   assert.match(landingLinks, /WORKSPACE/);
-  assert.doesNotMatch(landingLinks, /PRICE RESEARCH|MEMBERSHIP/);
+  assert.doesNotMatch(landingLinks, /MEMBERSHIP/);
   assert.match(header, /curated-luxury-logo\.png/);
 });
 

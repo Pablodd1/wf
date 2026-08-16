@@ -28,11 +28,12 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(header, /label: 'HIRE FI'/);
   const landingLinks = header.match(/const LANDING_LINKS: HeaderLink\[\] = \[[\s\S]*?\];/)?.[0] || '';
   assert.match(landingLinks, /label: 'TRADING FLOOR', to: '\/trading'/);
+  assert.match(landingLinks, /label: 'PRICE RESEARCH', to: '\/price-research'/);
   assert.match(landingLinks, /label: 'POST IT', to: '\/dealer\/post'/);
   assert.match(landingLinks, /label: 'HIRE FI'/);
   assert.match(landingLinks, /label: 'VIRTUAL AUTHENTICATOR'[\s\S]*VIRTUAL_AUTHENTICATOR_URL/);
   assert.match(landingLinks, /label: 'WORKSPACE', to: '\/dealer\/workspace'/);
-  assert.doesNotMatch(landingLinks, /PRICE RESEARCH|MEMBERSHIP/);
+  assert.doesNotMatch(landingLinks, /MEMBERSHIP/);
   assert.doesNotMatch(header, /label: 'ADM PANEL'/);
   assert.match(header, /<LanguageToggle compact \/>/);
   assert.doesNotMatch(header, /!landing && <LanguageToggle/);
