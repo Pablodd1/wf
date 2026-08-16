@@ -437,6 +437,7 @@ interface PriceData {
 
 const NAVY = '#1a2744';
 const GOLD = '#c9a03a';
+const REFERENCE_PICKER_PAGE_SIZE = 6;
 const WHITE = '#ffffff';
 const LIGHT_GRAY = '#f8f9fa';
 const BORDER = '#e9ecef';
@@ -573,6 +574,8 @@ export default function PriceResearch() {
   const [referenceQuery, setReferenceQuery] = useState('');
   const [modelImages, setModelImages] = useState<Record<string, string>>({});
   const [referenceImages, setReferenceImages] = useState<Record<string, string>>({});
+  const [referenceEvidence, setReferenceEvidence] = useState<Record<string, { count: number; hasMore: boolean; image?: string }>>({});
+  const [referencePage, setReferencePage] = useState(1);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
   const [pickerError, setPickerError] = useState('');
 
@@ -585,7 +588,7 @@ export default function PriceResearch() {
   const [mStats, setMStats] = useState<ModelStats | null>(null);
 
   const loadModels = useCallback(async (brand: string) => {
-setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelImages({}); setReferenceImages({}); setModelQuery(''); setReferenceQuery(''); setPickerError(''); setMStats(null);
+setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelImages({}); setReferenceImages({}); setReferenceEvidence({}); setReferencePage(1); setModelQuery(''); setReferenceQuery(''); setPickerError(''); setMStats(null);
     if (!brand) return;
     setPLoading('models');
     try {
@@ -614,7 +617,7 @@ setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs(
   }, []);
 
   const loadRefs = useCallback(async (brand: string, model: string) => {
-setPModel(model); setPRefs([]); setReferenceQuery(''); setReferenceImages({}); setPickerError(''); setMStats(null);
+setPModel(model); setPRefs([]); setReferenceQuery(''); setReferenceImages({}); setReferenceEvidence({}); setReferencePage(1); setPickerError(''); setMStats(null);
     if (!brand || !model) return;
     setPLoading('refs');
     try {
@@ -1044,7 +1047,58 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     .slice(0, COMPARABLE_LISTING_PREVIEW_LIMIT);
   const visibleModels = pModels.filter(item => displayCatalogModel(item.model).toLowerCase().includes(modelQuery.trim().toLowerCase()));
   const normalizedReferenceQuery = referenceQuery.trim().toUpperCase();
-  const visibleRefs = pRefs.filter(item => !normalizedReferenceQuery || item.reference.toUpperCase().includes(normalizedReferenceQuery));
+  const filteredRefs = pRefs.filter(item => !normalizedReferenceQuery || item.reference.toUpperCase().includes(normalizedReferenceQuery));
+  const referencePageCount = Math.max(1, Math.ceil(filteredRefs.length / REFERENCE_PICKER_PAGE_SIZE));
+  const visibleReferencePage = Math.min(referencePage, referencePageCount);
+  const visibleRefs = filteredRefs.slice(
+    (visibleReferencePage - 1) * REFERENCE_PICKER_PAGE_SIZE,
+    visibleReferencePage * REFERENCE_PICKER_PAGE_SIZE,
+  );
+  const visibleReferenceKey = visibleRefs.map(item => item.reference).join('\u001e');
+
+  useEffect(() => {
+    if (referencePage > referencePageCount) setReferencePage(referencePageCount);
+  }, [referencePage, referencePageCount]);
+
+  useEffect(() => {
+    if (!pBrand || !visibleRefs.length) return;
+    const pending = visibleRefs.filter(item => !referenceEvidence[item.reference.toUpperCase()]);
+    if (!pending.length) return;
+    const controller = new AbortController();
+    void Promise.allSettled(pending.map(async item => {
+      const params = new URLSearchParams({
+        brand: pBrand,
+        reference: item.reference,
+        item: 'watches',
+        pageSize: '50',
+        pagination: 'cursor',
+      });
+      const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal: controller.signal });
+      if (!response.ok) throw new Error('Reference evidence unavailable');
+      const payload = await response.json() as ReviewedMarketResponse & { hasMore?: boolean };
+      const exactRows = (payload.records || []).filter(record =>
+        String(record.reference || '').trim().toUpperCase() === item.reference.trim().toUpperCase()
+        && !record.multi_listing,
+      );
+      if (!exactRows.length) return null;
+      const image = exactRows
+        .map(record => record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '')
+        .find(Boolean) || '';
+      return { reference: item.reference.toUpperCase(), count: exactRows.length, hasMore: Boolean(payload.hasMore), image };
+    })).then(results => {
+      if (controller.signal.aborted) return;
+      setReferenceEvidence(current => {
+        const next = { ...current };
+        for (const result of results) {
+          if (result.status === 'fulfilled' && result.value) next[result.value.reference] = result.value;
+        }
+        return next;
+      });
+    });
+    return () => controller.abort();
+  // The serialized page key keeps this bounded effect stable across evidence updates.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pBrand, visibleReferenceKey]);
   const visibleBrands = showAllBrands
     ? pBrands
     : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
@@ -1344,13 +1398,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 <input
                   type="search"
                   value={referenceQuery}
-                  onChange={event => setReferenceQuery(event.target.value)}
+                  onChange={event => { setReferenceQuery(event.target.value); setReferencePage(1); }}
                   placeholder={`Search all ${pRefs.length} exact references`}
                   style={{ width: 'min(100%, 420px)', height: 38, border: `1px solid ${BORDER}`, borderRadius: 7, background: WHITE, color: TEXT, padding: '0 12px', fontSize: 13 }}
                 />
               </label>
               <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>
-                {visibleRefs.length} of {pRefs.length} exact references · select one to load exact WTS, WTB, no-price, and outlier accounting
+                {filteredRefs.length} matching exact references · page {visibleReferencePage} of {referencePageCount} · select one to load full WTS, WTB, no-price, and outlier accounting
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
               {visibleRefs.map(r => (
@@ -1372,11 +1426,14 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,
                   }}>
-                  {referenceImages[r.reference.toUpperCase()] && <img src={referenceImages[r.reference.toUpperCase()]} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
+                  {(referenceEvidence[r.reference.toUpperCase()]?.image || referenceImages[r.reference.toUpperCase()]) && <img src={referenceEvidence[r.reference.toUpperCase()]?.image || referenceImages[r.reference.toUpperCase()]} alt={`${pBrand} ${pModel} ${r.reference} source listing`} loading="lazy" style={{ width: 52, height: 52, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
                   <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 10, color: MUTED, marginBottom: 2 }}>{displayCatalogModel(pModel)}</span>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</span>
                     <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>
-                      {r.evidence_resolution === 'EXACT_REFERENCE_ON_SELECTION' || r.listing_count <= 0
+                      {referenceEvidence[r.reference.toUpperCase()]
+                        ? <>{referenceEvidence[r.reference.toUpperCase()].count.toLocaleString()}{referenceEvidence[r.reference.toUpperCase()].hasMore ? '+' : ''} released {referenceEvidence[r.reference.toUpperCase()].count === 1 ? 'observation' : 'observations'} · open full data</>
+                        : r.evidence_resolution === 'EXACT_REFERENCE_ON_SELECTION' || r.listing_count <= 0
                         ? 'Open to load exact market data'
                         : <>{r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} source {r.listing_count === 1 ? 'listing' : 'listings'} · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}</>}
                     </span>
@@ -1384,6 +1441,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 </button>
               ))}
               </div>
+              {referencePageCount > 1 && (
+                <nav aria-label="Reference pages" className="mt-4 flex items-center justify-center gap-3">
+                  <button type="button" disabled={visibleReferencePage <= 1} onClick={() => setReferencePage(page => Math.max(1, page - 1))} className="min-h-11 rounded-md border px-4 text-xs font-bold disabled:opacity-40" style={{ borderColor: BORDER, color: NAVY, background: WHITE }}>Previous references</button>
+                  <span style={{ fontSize: 11, color: MUTED }}>Page {visibleReferencePage} of {referencePageCount}</span>
+                  <button type="button" disabled={visibleReferencePage >= referencePageCount} onClick={() => setReferencePage(page => Math.min(referencePageCount, page + 1))} className="min-h-11 rounded-md border px-4 text-xs font-bold disabled:opacity-40" style={{ borderColor: GOLD, color: NAVY, background: WHITE }}>Next references</button>
+                </nav>
+              )}
               {visibleRefs.length === 0 && <div style={{ fontSize: 12, color: MUTED, marginTop: 12 }}>No exact reference matches “{referenceQuery}”.</div>}
             </>
           )}
@@ -2521,19 +2585,6 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                 )}
               </DetailCard>
 
-              <DetailCard title="Watch details">
-                <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
-                  {observedDate && <DetailField label="Observed" value={observedDate} />}
-                  <DetailField label="Asking price as posted" value={detail?.price_raw != null && detail?.currency ? `${detail.price_raw} ${detail.currency}` : null} />
-                  <DetailField label="Condition" value={detail?.condition} />
-                  <DetailField label="Model" value={detail?.model || null} />
-                  <DetailField label="Dial" value={detail?.dial_color || summary.dial_color} />
-                  <DetailField label="Year" value={detail?.year || summary.year} />
-                  {detail?.region && !/^unknown$/i.test(detail.region) && <DetailField label="Region" value={detail.region} />}
-                </div>
-                {detail?.accessories && detail.accessories.length > 0 && <div style={{ marginTop: 20 }}><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Accessories stated in source</div><div className="flex flex-wrap gap-2">{detail.accessories.map(item => <span key={item} style={{ background: LIGHT_GRAY, border: `1px solid ${BORDER}`, padding: '5px 9px', borderRadius: 5, fontSize: 12 }}>{item}</span>)}</div></div>}
-              </DetailCard>
-
             </section>
           </div>
         )}
@@ -2548,11 +2599,6 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function DetailCard({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
   return <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 20, marginBottom: 20 }}><div className="flex items-center justify-between gap-3" style={{ marginBottom: 18 }}><h2 style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{title}</h2>{action}</div>{children}</div>;
-}
-
-function DetailField({ label, value }: { label: string; value: string | number | null | undefined }) {
-  const missing = value == null || value === '';
-  return <div><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>{label}</div><div style={{ color: missing ? MUTED : TEXT, fontSize: 13, overflowWrap: 'anywhere' }}>{missing ? 'Not provided' : value}</div></div>;
 }
 
 function forecastReason(reason?: string) {

@@ -62,12 +62,14 @@ test('Price Research presents uncategorized catalog identities as individually b
   assert.match(research, /loadRefs\(pBrand, m\.model\)/);
   assert.match(research, /Search references for \{pBrand\} \{displayCatalogModel\(pModel\)\}/);
   assert.match(research, /Search all \$\{pRefs\.length\} exact references/);
-  assert.match(research, /select one to load exact WTS, WTB, no-price, and outlier accounting/);
+  assert.match(research, /select one to load full WTS, WTB, no-price, and outlier accounting/);
   assert.match(research, /visibleRefs\.map\(r =>/);
+  assert.match(research, /REFERENCE_PICKER_PAGE_SIZE = 6/);
+  assert.match(research, /aria-label="Reference pages"/);
+  assert.match(research, /released \{referenceEvidence\[r\.reference\.toUpperCase\(\)\]\.count === 1 \? 'observation' : 'observations'\}/);
+  assert.match(research, /source listing/);
   assert.match(research, /EXACT_REFERENCE_ON_SELECTION/);
   assert.match(research, /Open to load exact market data/);
-  assert.match(research, /This reference exceeds the bounded evidence window/);
-  assert.match(research, /Loaded source sample/);
   assert.match(research, /setSelectedCatalogReference\(\{/);
   assert.match(research, /match_type: 'exact_reference'/);
   assert.match(research, /setReferenceSuggestionsOpen\(false\)/);
