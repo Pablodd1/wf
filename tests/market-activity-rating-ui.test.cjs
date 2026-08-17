@@ -20,6 +20,7 @@ test('market activity ticker uses bounded released listing evidence rather than 
   assert.match(ticker, /data-testid="market-activity-track"/);
   assert.match(ticker, /activityGroup\(true\)/);
   assert.match(styles, /translate3d\(-50%, 0, 0\)/);
+  assert.doesNotMatch(styles, /\.market-activity-track\s*\{\s*animation:\s*none/s);
   assert.doesNotMatch(styles, /animation-play-state:\s*paused/);
   assert.doesNotMatch(ticker, /Patek 5712\/1A matched/);
   assert.doesNotMatch(ticker, /WTB posted · Miami network/);

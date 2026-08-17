@@ -75,7 +75,7 @@ export function Footer() {
   }, [glossaryOpen]);
   return (
     <footer className="border-t border-white/10 bg-[#08080c] px-5 py-12 text-white sm:px-8 lg:px-12">
-      <div className="mx-auto max-w-7xl">
+      <div className="mx-auto w-full max-w-[1600px]">
         <div className="grid gap-10 border-b border-white/10 pb-10 lg:grid-cols-[0.8fr_1.2fr]">
           <section aria-labelledby="footer-contact-heading">
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#c9a96e]">{t('Contact')}</p>

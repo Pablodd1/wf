@@ -688,7 +688,7 @@ export default function TradingFloor() {
       <MarketActivityTicker />
       <MarketNav />
       <div style={{ background: PAGE, borderBottom: `1px solid ${BORDER}` }}>
-        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
+        <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-4 px-4 py-5 sm:px-6 lg:px-8 xl:px-10">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="font-mono text-[10px] uppercase tracking-[0.14em]" style={{ color: GOLD_BRIGHT }}>Curated Luxury</p>
@@ -711,7 +711,7 @@ export default function TradingFloor() {
           </div>
 
           <div className="sticky top-0 z-20 -mx-4 flex gap-2 border-y px-4 py-3 md:static md:mx-0 md:border-0 md:p-0" style={{ borderColor: BORDER, background: SURFACE }}>
-            <div ref={searchBoxRef} className="relative min-w-0 flex-1 md:max-w-[560px]">
+            <div ref={searchBoxRef} className="relative min-w-0 flex-1 lg:max-w-[760px] xl:max-w-[900px]">
               <label htmlFor="trading-floor-search" className="sr-only">Search Trading Floor inventory</label>
               <Search className="pointer-events-none absolute left-3 top-[22px] -translate-y-1/2" size={16} style={{ color: MUTED }} />
               <input
@@ -883,7 +883,7 @@ export default function TradingFloor() {
         />
       )}
 
-      <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-6">
+      <div ref={resultsTopRef} className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8 xl:px-10">
         <div className="mb-5 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
             {loading && listings.length === 0 ? (
@@ -908,7 +908,7 @@ export default function TradingFloor() {
         {selectedListing ? (
           <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={closeListing} />
         ) : (
-          <div className="grid gap-6 md:grid-cols-[230px_minmax(0,1fr)]">
+          <div className="grid gap-6 md:grid-cols-[240px_minmax(0,1fr)] lg:grid-cols-[260px_minmax(0,1fr)] xl:gap-8">
             <aside className="filters-sidebar hidden self-start overflow-y-auto rounded-md border bg-white p-5 md:sticky md:top-5 md:block md:max-h-[calc(100vh-40px)]" style={{ borderColor: BORDER }} aria-label="Marketplace filters">
               <DesktopFilters
                 brands={brandFilters}
@@ -937,7 +937,7 @@ export default function TradingFloor() {
               </div>
             ) : (
               <div className={viewMode === 'grid'
-                ? 'grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3'
+                ? 'grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4'
                 : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}
               >
                 {visibleListings.map(listing => (
@@ -1271,7 +1271,6 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
   const listingIntent = String(listing.intent || listing.listing_type || '').trim().toUpperCase();
   const canRatePrice = listing.item_category === 'WATCH'
     && listingIntent === 'WTS'
-    && listing.price_research_eligible === true
     && Boolean(listing.brand && listing.reference && listing.dial_color)
     && Number.isFinite(Number(listing.price_usd))
     && Number(listing.price_usd) > 0;

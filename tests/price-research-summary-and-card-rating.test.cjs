@@ -296,6 +296,7 @@ test('pages make one batch request and client rejects cross-reference summaries'
 test('Trading Floor always renders price rating but withholds without selected-dial evidence', () => {
   assert.match(floor, /Price rating: \{cardPriceRatingLabel\}/);
   assert.match(floor, /Boolean\(listing\.brand && listing\.reference && listing\.dial_color\)/);
+  assert.doesNotMatch(floor, /canRatePrice[\s\S]{0,180}price_research_eligible/);
   assert.match(floor, /selected_dial_qualified_count/);
   assert.match(floor, /comparableCount >= 2 \? priceSummary\?\.stats \|\| null : null/);
   assert.match(floor, /displayedCardPriceRating\.rating\.code === 'NOT_RATED'/);

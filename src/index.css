@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
+body,
+#root {
+  min-height: 100%;
+  width: 100%;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+}
+
 @layer utilities {
   .luxury-wordmark {
     color: #d8bd80;
@@ -52,12 +64,11 @@
 
   @media (prefers-reduced-motion: reduce) {
     .market-activity-viewport {
-      overflow-x: auto;
+      overflow: hidden;
     }
 
     .market-activity-track {
-      animation: none;
-      transform: none;
+      animation-duration: max(90s, var(--market-ticker-duration, 60s));
     }
   }
 }
