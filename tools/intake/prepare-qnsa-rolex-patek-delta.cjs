@@ -27,7 +27,7 @@ function migrationSql(root) {
 }
 
 async function prepare({ mode, token, root, envFile }) {
-  if (!['audit', 'canary', 'full'].includes(mode)) throw new Error('invalid release mode');
+  if (!['schema', 'audit', 'canary', 'full'].includes(mode)) throw new Error('invalid release mode');
   if (!token || !envFile) throw new Error('management token and QNSA_ENV_FILE are required');
   const sql = migrationSql(root);
   await request('/database/query', token, { query: `BEGIN;\n${sql}\nROLLBACK;`, read_only: false });

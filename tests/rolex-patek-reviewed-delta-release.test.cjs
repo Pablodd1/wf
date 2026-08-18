@@ -85,3 +85,13 @@ test('workflow authenticates package and enforces audit before bounded DML', () 
   assert.match(builder, /encryptAsset/);
   assert.match(builder, /fs\.rmSync\(stage, \{ recursive: true, force: true \}\)/);
 });
+
+test('schema workflow is QNSA-only, confirmation-gated, and contains no inventory import', () => {
+  const workflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'qnsa-rolex-patek-delta-schema.yml'), 'utf8');
+  assert.match(workflow, /APPLY_QNSA_ROLEX_PATEK_DELTA_SCHEMA/);
+  assert.match(workflow, /environment: production/);
+  assert.match(workflow, /SUPABASE_ACCESS_TOKEN/);
+  assert.match(workflow, /RELEASE_MODE: schema/);
+  assert.match(workflow, /prepare-qnsa-rolex-patek-delta\.cjs/);
+  assert.doesNotMatch(workflow, /rolex_patek_delta_release\.py|reviewed_workbook_inventory/);
+});
