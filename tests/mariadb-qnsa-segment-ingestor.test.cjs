@@ -1,5 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
@@ -92,4 +93,27 @@ test('rollback-only schema audit executes a database contract test on pinned QNS
   assert.match(dbTest, /cbe8a26566fc555c22d6a7a0b7db75bef97905d333d1f4f55ce2a3b61ff73940/);
   assert.match(dbTest, /processing_status[\s\S]*COPIED_RAW/);
   assert.match(dbTest, /publication_status <> 'PRIVATE_SHADOW_ONLY'/);
+});
+
+test('private schema install is checksum pinned, atomic, empty and customer-write-free', () => {
+  const workflow = fs.readFileSync(path.join(__dirname, '..', '.github', 'workflows', 'qnsa-live-shadow-schema-install.yml'), 'utf8');
+  const migration = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'migrations', '20260818150000_live_shadow_segment_ingest.sql'));
+  const preflight = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'tests', 'live_shadow_schema_install_preflight.sql'), 'utf8');
+  const postflight = fs.readFileSync(path.join(__dirname, '..', 'supabase', 'tests', 'live_shadow_schema_install_postflight.sql'), 'utf8');
+  const hash = crypto.createHash('sha256').update(migration.toString('utf8').replaceAll('\r\n', '\n')).digest('hex');
+  assert.match(workflow, new RegExp(`EXPECTED_NORMALIZED_LF_MIGRATION_SHA256: ${hash}`));
+  assert.match(workflow, /APPLY_QNSA_LIVE_SHADOW_PRIVATE_SCHEMA_ONLY/);
+  assert.match(workflow, /PROJECT_REF: qnsafosakvonzgfcsphh/);
+  assert.match(workflow, /SET LOCAL lock_timeout = '5s'/);
+  assert.match(workflow, /SET LOCAL statement_timeout = '30s'/);
+  assert.match(workflow, /BEGIN;[\s\S]*COMMIT;/);
+  assert.match(preflight, /already exists; use the read-only verifier instead of blind reapply/);
+  assert.match(postflight, /cardinality\(v_target_oids\) <> 3/);
+  assert.match(postflight, /pg_stat_xact_all_tables/);
+  assert.match(postflight, /new private live shadow tables are not empty/);
+  assert.match(postflight, /aclexplode/);
+  assert.match(postflight, /TRUNCATE'[\s\S]*REFERENCES'[\s\S]*TRIGGER'/);
+  assert.match(postflight, /function overload set is not exact/);
+  assert.match(postflight, /NOT has_function_privilege\('service_role',v_rpc,'EXECUTE'\)/);
+  assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY|MARIADB_PASSWORD|MARIADB_HOST/);
 });
