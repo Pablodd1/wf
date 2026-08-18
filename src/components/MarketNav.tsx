@@ -2,6 +2,7 @@ import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MarketHeader } from './MarketHeader';
+import { MarketTickerBanner } from './MarketTickerBanner';
 
 export function MarketNav() {
   const location = useLocation();
@@ -21,6 +22,7 @@ export function MarketNav() {
 
   return (
     <div className="bg-[#f3ecdf] text-[#211b15]">
+      <MarketTickerBanner />
       <MarketHeader compact />
       <nav className="border-b border-[#3f3324]/15" aria-label="Dealer navigation">
         <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 overflow-x-auto px-4 py-2 text-xs sm:gap-6 sm:px-6 lg:px-8 xl:px-10">
