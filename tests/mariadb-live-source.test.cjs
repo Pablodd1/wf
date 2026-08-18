@@ -12,13 +12,18 @@ const {
   readJsonLines,
   sourceRecord,
 } = require('../tools/mariadb-live/lib.cjs');
-const { acquireOutputLock } = require('../tools/mariadb-live/collect.cjs');
+const { acquireOutputLock, config: collectConfig } = require('../tools/mariadb-live/collect.cjs');
 const {
   atomicGzip,
   publishAccountability,
   prepareOutput: prepareContinuousOutput,
   reconciliation,
 } = require('../tools/mariadb-live/continuous-worker.cjs');
+const {
+  assertExplainPlan,
+  assertSourceIndex,
+  sourceTransport,
+} = require('../tools/mariadb-live/source-preflight.cjs');
 
 test('accountability publisher sends counts only to the service ledger', async () => {
   const previousEnabled = process.env.PIPELINE_ACCOUNTABILITY_ENABLED;
@@ -209,7 +214,44 @@ test('continuous worker declares failures and retries under an internal supervis
     'utf8',
   );
   assert.match(source, /async function supervise\(\)/);
+  assert.match(source, /if \(error\.code === 'OUTPUT_LOCK_HELD'\) throw error/);
   assert.match(source, /status: 'ERROR_RETRYING'/);
   assert.match(source, /declared_errors: \['WORKER_EXECUTION_FAILED'\]/);
   assert.match(source, /await sleep\(retryDelayMs\)/);
+});
+
+test('continuous source requires verified transport and indexed cursor preflight', () => {
+  assert.throws(() => sourceTransport({}), /verified TLS CA|private tunnel/);
+  assert.deepEqual(sourceTransport({ MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true' }), {
+    ssl: null,
+    transport: 'PRIVATE_TUNNEL_VERIFIED',
+  });
+  const proved = assertSourceIndex([
+    { Key_name: 'created_id', Seq_in_index: 1, Column_name: 'created_on' },
+    { Key_name: 'created_id', Seq_in_index: 2, Column_name: 'id' },
+  ]);
+  assert.deepEqual(proved, new Set(['created_id']));
+  assert.throws(() => assertSourceIndex([
+    { Key_name: 'created_only', Seq_in_index: 1, Column_name: 'created_on' },
+  ]), /composite/);
+  assert.doesNotThrow(() => assertExplainPlan([{ key: 'created_id', type: 'range' }], proved));
+  assert.throws(() => assertExplainPlan([{ key: 'wrong_index', type: 'range' }], proved), /proved composite/);
+  assert.throws(() => assertExplainPlan([{ key: null, type: 'ALL' }], proved), /proved composite/);
+  assert.throws(() => assertExplainPlan([{ key: 'created_id', type: 'index' }], proved), /proved composite/);
+});
+
+test('bounded collector configuration also fails closed without verified transport', () => {
+  const base = { MARIADB_HOST: 'db.example', MARIADB_USER: 'reader', MARIADB_PASSWORD: 'secret' };
+  assert.throws(() => collectConfig(base), /verified TLS CA|private tunnel/);
+  const configured = collectConfig({
+    ...base,
+    MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true',
+    MARIADB_IMPORT_MAX_ROWS: '10',
+    MARIADB_IMPORT_START_AT: '2026-08-10 10:27:49',
+    MARIADB_IMPORT_START_ID: 'bf31863e-05f2-48d1-be58-ce1ded9d6b05',
+  });
+  assert.equal(configured.transport.transport, 'PRIVATE_TUNNEL_VERIFIED');
+  assert.equal(configured.maxRows, 10);
+  assert.equal(configured.startAt, '2026-08-10 10:27:49');
+  assert.equal(configured.startId, 'bf31863e-05f2-48d1-be58-ce1ded9d6b05');
 });

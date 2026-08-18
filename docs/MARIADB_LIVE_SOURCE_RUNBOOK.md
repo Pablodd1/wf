@@ -40,6 +40,8 @@ with privileges beyond `USAGE`, `SELECT`, and `SHOW VIEW`.
 ## Bounded collection canary
 
 ```powershell
+$env:MARIADB_IMPORT_START_AT='2026-08-10 10:27:49'
+$env:MARIADB_IMPORT_START_ID='<exact prior reconciled source id>'
 $env:MARIADB_IMPORT_MAX_ROWS='1000'
 $env:MARIADB_IMPORT_BATCH_SIZE='250'
 $env:MARIADB_IMPORT_OUTPUT='audit-output/mariadb-live/canary-001'
@@ -90,12 +92,24 @@ volume mounted at `/data`. Do not reuse the customer API service. Configure the
 MariaDB secrets in Railway, then set:
 
 ```text
-NIXPACKS_START_CMD=npm run mariadb:continuous-worker
+WF_START_COMMAND=npm run mariadb:continuous-worker
 MARIADB_CONTINUOUS_OUTPUT=/data/mariadb-live
 MARIADB_CONTINUOUS_START_AT=1970-01-01 00:00:00
 MARIADB_CONTINUOUS_BATCH_SIZE=1000
 MARIADB_CONTINUOUS_POLL_MS=30000
+MARIADB_TLS_CA_FILE=/run/secrets/mariadb-ca.pem
 ```
+
+`railway.json` reads `WF_START_COMMAND`; `NIXPACKS_START_CMD` does not select
+the service process. Keep one dedicated replica and verify the persistent
+volume checkpoint before enabling any downstream segment bridge.
+
+The source connection fails closed unless `MARIADB_TLS_CA_FILE` verifies the
+server certificate. An infrastructure-managed private tunnel may instead set
+`MARIADB_PRIVATE_TUNNEL_VERIFIED=true`; document and independently verify that
+tunnel before deployment. Startup also refuses to scan unless MariaDB exposes
+a composite `(created_on, id)` index and `EXPLAIN` selects a bounded index
+plan. Never use synthetic seed counts; restore the exact durable checkpoint.
 
 After applying `20260802160000_source_pipeline_accountability.sql`, the same
 service may publish counts and reconciliation only to the owner dashboard:

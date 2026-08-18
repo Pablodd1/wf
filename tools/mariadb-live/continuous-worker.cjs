@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const mysql = require('mysql2/promise');
-const { sourceSelectList } = require('./collect.cjs');
+const { acquireOutputLock, sourceSelectList } = require('./collect.cjs');
 const {
   CONTRACT,
   assertReadOnlyGrants,
@@ -16,6 +16,7 @@ const {
   sourceRecord,
 } = require('./lib.cjs');
 const { normalizeSourceRecord } = require('./normalize-local.cjs');
+const { preflightSource, sourceTransport } = require('./source-preflight.cjs');
 
 const WORKER_CONTRACT = 'wf-mariadb-continuous-shadow-v2';
 const ACCOUNTABILITY_SOURCE_KEY = 'mariadb-thecollective-inventory-auctions';
@@ -70,6 +71,10 @@ function prepareOutput(output, startAt, startId = '') {
       compressed_bytes: 0,
     };
     const reconciled = reconciliation(state);
+    if (state.source_input_rows || state.raw_output_rows || state.collection_error_rows
+      || state.normalization_output_rows || state.normalization_error_rows) {
+      throw new Error('Seed counts are prohibited; restore the exact durable checkpoint instead');
+    }
     if (!reconciled.source_reconciled || !reconciled.normalization_reconciled) {
       throw new Error('Continuous worker seed counts do not reconcile');
     }
@@ -210,8 +215,12 @@ async function run() {
   const batchSize = boundedInteger(process.env.MARIADB_CONTINUOUS_BATCH_SIZE, 1000, 10, 5000, 'MARIADB_CONTINUOUS_BATCH_SIZE');
   const pollMs = boundedInteger(process.env.MARIADB_CONTINUOUS_POLL_MS, 30000, 5000, 3600000, 'MARIADB_CONTINUOUS_POLL_MS');
   const exitWhenCaughtUp = process.env.MARIADB_CONTINUOUS_EXIT_WHEN_CAUGHT_UP === 'true';
-  const { paths, state } = prepareOutput(output, startAt, startId);
-  const db = await mysql.createConnection({
+  const transport = sourceTransport(process.env);
+  const releaseOutputLock = acquireOutputLock(output);
+  let db;
+  try {
+    const { paths, state } = prepareOutput(output, startAt, startId);
+    db = await mysql.createConnection({
     host: process.env.MARIADB_HOST,
     port: boundedInteger(process.env.MARIADB_PORT, 3306, 1, 65535, 'MARIADB_PORT'),
     user: process.env.MARIADB_USER,
@@ -220,11 +229,12 @@ async function run() {
     connectTimeout: 10000,
     dateStrings: true,
     charset: 'utf8mb4',
-  });
-  try {
+    ...(transport.ssl ? { ssl: transport.ssl } : {}),
+    });
     const [grantRows] = await db.query('SHOW GRANTS FOR CURRENT_USER()');
     assertReadOnlyGrants(grantRows.map(row => Object.values(row)[0]));
     await db.query('SET SESSION TRANSACTION READ ONLY');
+    await preflightSource(db, state);
     const selectColumns = await sourceSelectList(db);
     for (;;) {
       const [rows] = await db.execute(
@@ -270,7 +280,8 @@ async function run() {
       }
     }
   } finally {
-    await db.end();
+    if (db) await db.end();
+    releaseOutputLock();
   }
 }
 
@@ -281,6 +292,7 @@ async function supervise() {
       await run();
       return;
     } catch (error) {
+      if (error.code === 'OUTPUT_LOCK_HELD') throw error;
       consecutiveFailures += 1;
       const retryDelayMs = Math.min(300000, 30000 * (2 ** Math.min(4, consecutiveFailures - 1)));
       const output = path.resolve(process.env.MARIADB_CONTINUOUS_OUTPUT || '/data/mariadb-live-v2');
@@ -311,4 +323,13 @@ if (require.main === module) {
   });
 }
 
-module.exports = { atomicGzip, prepareOutput, publishAccountability, reconciliation, run, supervise, withAccountability, writeBatchSegments };
+module.exports = {
+  atomicGzip,
+  prepareOutput,
+  publishAccountability,
+  reconciliation,
+  run,
+  supervise,
+  withAccountability,
+  writeBatchSegments,
+};

@@ -14,6 +14,7 @@ const {
   jsonLine,
   sourceRecord,
 } = require('./lib.cjs');
+const { preflightSource, sourceTransport } = require('./source-preflight.cjs');
 
 const SELECT_COLUMNS = SOURCE_COLUMNS.join(',');
 
@@ -51,6 +52,8 @@ function config(env = process.env) {
     maxRows,
     output: path.resolve(env.MARIADB_IMPORT_OUTPUT || 'audit-output/mariadb-live/canary'),
     startAt: env.MARIADB_IMPORT_START_AT || '1970-01-01 00:00:00',
+    startId: env.MARIADB_IMPORT_START_ID || '',
+    transport: sourceTransport(env),
   };
 }
 
@@ -70,7 +73,7 @@ function prepareOutput(runConfig) {
     output_rows: 0,
     error_rows: 0,
     last_created_on: runConfig.startAt,
-    last_id: '',
+    last_id: runConfig.startId,
     record_bytes: 0,
     error_bytes: 0,
     started_at: new Date().toISOString(),
@@ -133,10 +136,14 @@ function acquireOutputLock(output) {
         // An unreadable lock cannot prove a live owner and is treated as stale.
       }
       if (owner?.hostname && owner.hostname !== os.hostname()) {
-        throw new Error(`Collector output is locked by another host: ${owner.hostname}`);
+        const locked = new Error(`Collector output is locked by another host: ${owner.hostname}`);
+        locked.code = 'OUTPUT_LOCK_HELD';
+        throw locked;
       }
       if (processIsAlive(Number(owner?.pid))) {
-        throw new Error(`Collector output is already active under process ${owner.pid}`);
+        const locked = new Error(`Collector output is already active under process ${owner.pid}`);
+        locked.code = 'OUTPUT_LOCK_HELD';
+        throw locked;
       }
       try {
         fs.unlinkSync(lockPath);
@@ -163,10 +170,12 @@ async function runLocked(runConfig) {
       connectTimeout: 10_000,
       dateStrings: true,
       charset: 'utf8mb4',
+      ...(runConfig.transport.ssl ? { ssl: runConfig.transport.ssl } : {}),
     });
     const [grantRows] = await db.query('SHOW GRANTS FOR CURRENT_USER()');
     assertReadOnlyGrants(grantRows.map(row => Object.values(row)[0]));
     await db.query('SET SESSION TRANSACTION READ ONLY');
+    await preflightSource(db, checkpoint);
     const selectColumns = await sourceSelectList(db);
 
     while (state.input_rows < runConfig.maxRows) {
