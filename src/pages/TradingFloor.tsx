@@ -565,6 +565,57 @@ export default function TradingFloor() {
             </button>
           </div>
 
+          {/* Category & Intent Tabs */}
+          <div className="flex flex-col gap-3 pt-1">
+            {/* Category Tabs */}
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-[#3f3324]/10 pb-2.5">
+              {CATEGORY_OPTIONS.map(option => {
+                const active = categoryFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      resetResults();
+                      updateViewParams({ item: option.value === 'all' ? null : option.value });
+                    }}
+                    className={`flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                      active
+                        ? 'bg-[#9A7127] text-white shadow-sm'
+                        : 'bg-white/80 text-[#6B7280] hover:bg-white hover:text-[#171717] border border-[#DED8CD]'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Intent Tabs */}
+            <div className="flex flex-wrap items-center gap-2">
+              {INTENT_OPTIONS.map(option => {
+                const active = (intentFilter || '') === (option.value || '');
+                return (
+                  <button
+                    key={option.value || 'all'}
+                    type="button"
+                    onClick={() => {
+                      resetResults();
+                      updateViewParams({ type: option.value || null });
+                    }}
+                    className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
+                      active
+                        ? 'bg-[#211B15] text-[#F3ECDF] font-semibold shadow-xs'
+                        : 'bg-white/60 text-[#675B4D] hover:bg-white border border-[#DED8CD]'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <CurrencyConverter compact />
         </div>
       </div>

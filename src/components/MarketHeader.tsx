@@ -18,7 +18,9 @@ const HEADER_LINKS: HeaderLink[] = [
   { label: 'PRICE RESEARCH', to: '/price-research' },
   { label: 'POST IT', to: '/dealer/post' },
   { label: 'HIRE FI', href: LUXFI_URL, external: true },
-  { label: 'REFERENCE CHECK', to: '/reference-check' },
+  { label: 'REFERENCE CHECK', to: '/dealers' },
+  { label: 'WORKSPACE', to: '/dealer/workspace' },
+  { label: 'VIRTUAL AUTHENTICATOR', href: VIRTUAL_AUTHENTICATOR_URL, external: true },
   { label: 'DEALER ACCOUNT', to: '/dealer/account/profile' },
 ];
 
