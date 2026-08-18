@@ -95,6 +95,7 @@ BEGIN
     LEFT JOIN live_shadow_install_xact_baseline baseline USING(relid)
     WHERE stats.schemaname NOT IN ('pg_catalog','information_schema','extensions')
       AND NOT (stats.schemaname='staging' AND stats.relname LIKE 'live_shadow_%')
+      AND stats.relid <> 'pg_temp.live_shadow_install_xact_baseline'::regclass
       AND (
         stats.n_tup_ins <> COALESCE(baseline.n_tup_ins,0)
         OR stats.n_tup_upd <> COALESCE(baseline.n_tup_upd,0)
