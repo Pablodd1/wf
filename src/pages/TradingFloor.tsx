@@ -280,7 +280,7 @@ export default function TradingFloor() {
   const dynamicDisplayTotal = useMemo(() => {
     if (total !== null && total > 0) return total;
     if (brandFilter && BRAND_TOTALS[brandFilter]) return BRAND_TOTALS[brandFilter];
-    return 117744;
+    return 3527754; // Master dataset: 3,527,754 total listings
   }, [total, brandFilter]);
 
   const visibleListings = useMemo(() => {
@@ -435,7 +435,9 @@ export default function TradingFloor() {
 
         if (data.status === 'ok' && Array.isArray(data.records) && data.records.length > 0) {
           if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
-            setReleaseBrands(data.publicationBrands);
+            setReleaseBrands(prev => [...new Set([...MASTER_BRAND_LIST, ...data.publicationBrands])]);
+          } else {
+            setReleaseBrands(MASTER_BRAND_LIST);
           }
           nextListings = data.records;
           totalCount = data.total == null ? null : Number(data.total);
@@ -595,7 +597,6 @@ export default function TradingFloor() {
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketNav />
-      <MarketTickerBanner />
       <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 10px 28px rgba(41,37,36,0.08)' }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -1144,35 +1145,10 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
   );
 }
 
-const BRAND_FALLBACK_IMAGES: Record<string, string> = {
-  'rolex': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80',
-  'patek philippe': 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?auto=format&fit=crop&w=600&q=80',
-  'audemars piguet': 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=600&q=80',
-  'richard mille': 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=600&q=80',
-  'cartier': 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=600&q=80',
-  'omega': 'https://images.unsplash.com/photo-1533139502658-0198f920d8e8?auto=format&fit=crop&w=600&q=80',
-  'tudor': 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?auto=format&fit=crop&w=600&q=80',
-  'tag heuer': 'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=600&q=80',
-  'vacheron constantin': 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=600&q=80',
-  'breguet': 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=600&q=80',
-  'iwc': 'https://images.unsplash.com/photo-1548169874-53e85f753f1e?auto=format&fit=crop&w=600&q=80',
-  'breitling': 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=600&q=80',
-  'panerai': 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=600&q=80',
-  'hublot': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80',
-  'zenith': 'https://images.unsplash.com/photo-1533139502658-0198f920d8e8?auto=format&fit=crop&w=600&q=80',
-  'grand seiko': 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?auto=format&fit=crop&w=600&q=80',
-  'a. lange & söhne': 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=600&q=80',
-  'f.p. journe': 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?auto=format&fit=crop&w=600&q=80',
-  'blancpain': 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=600&q=80',
-  'bulgari': 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=600&q=80',
-  'default': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'
-};
-
 function getListingImageSrc(listing: ListingRecord): string | null {
   const direct = listing.thumbnail_url || listing.image_urls?.find(Boolean);
-  if (direct && direct.trim().length > 0) return direct.trim();
-  const bKey = String(listing.brand || '').toLowerCase().trim();
-  return BRAND_FALLBACK_IMAGES[bKey] || BRAND_FALLBACK_IMAGES['default'];
+  if (direct && direct.trim().length > 0 && !direct.includes('unsplash.com')) return direct.trim();
+  return null;
 }
 
 function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
@@ -1187,12 +1163,20 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
     >
       {/* 1. Watch Image */}
       <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
-        <img
-          src={imageUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'}
-          alt={meta.title}
-          className="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]"
-          loading="lazy"
-        />
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt={meta.title}
+            className="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]"
+            loading="lazy"
+          />
+        ) : (
+          <div className="h-[340px] w-full flex flex-col items-center justify-center bg-[#F2EDE4] border border-[#E5DACB] text-[#8C827A] p-6 text-center">
+            <img src="/watch-silhouette.svg" alt="No image" className="h-24 w-24 opacity-30 mb-3 object-contain" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#A3978C]">Source image pending</span>
+            <span className="text-[11px] text-[#A3978C] mt-1 font-mono">{listing.brand} {listing.reference || ''}</span>
+          </div>
+        )}
       </button>
 
       {/* 2. Category & Intent (e.g. WATCH · FOR SALE) */}
@@ -1282,10 +1266,10 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const mainImage = getListingImageSrc(listing);
   const images = useMemo(() => {
-    const directImages = (listing.image_urls || []).filter(Boolean);
+    const directImages = (listing.image_urls || []).filter(u => Boolean(u && !u.includes('unsplash.com')));
     if (directImages.length > 0) return directImages;
-    if (mainImage) return [mainImage];
-    return ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'];
+    if (mainImage && !mainImage.includes('unsplash.com')) return [mainImage];
+    return [];
   }, [listing, mainImage]);
 
   const visibleImageIndex = activeImage < images.length ? activeImage : 0;
@@ -1387,13 +1371,21 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
       <div className="grid gap-6 lg:grid-cols-[minmax(320px,460px)_1fr]">
         {/* Left Column: Watch Image */}
-        <div className="rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-3 shadow-xs">
-          <img
-            src={images[visibleImageIndex] || mainImage || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'}
-            alt={`${meta.title} source listing image`}
-            className="h-[520px] w-full rounded-md object-contain lg:h-[620px]"
-            onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
-          />
+        <div className="rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-3 shadow-xs flex flex-col justify-center">
+          {images.length > 0 && images[visibleImageIndex] ? (
+            <img
+              src={images[visibleImageIndex]}
+              alt={`${meta.title} source listing image`}
+              className="h-[520px] w-full rounded-md object-contain lg:h-[620px]"
+              onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
+            />
+          ) : (
+            <div className="h-[520px] lg:h-[620px] w-full flex flex-col items-center justify-center bg-[#F2EDE4] rounded-md border border-[#E5DACB] text-[#8C827A] p-8 text-center">
+              <img src="/watch-silhouette.svg" alt="No image" className="h-36 w-36 opacity-30 mb-4 object-contain" />
+              <span className="text-sm font-semibold uppercase tracking-wider text-[#A3978C]">Source image not supplied</span>
+              <span className="text-xs text-[#A3978C] mt-2 font-mono">{listing.brand} {listing.reference || ''}</span>
+            </div>
+          )}
           {images.length > 1 && (
             <div className="mt-3 flex gap-2 overflow-x-auto">
               {images.map((url, index) => (
