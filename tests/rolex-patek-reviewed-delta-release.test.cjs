@@ -56,6 +56,9 @@ test('workflow authenticates package and enforces audit before bounded DML', () 
   assert.match(workflow, /options: \[audit, canary, full\]/);
   assert.match(workflow, /SUPABASE_ACCESS_TOKEN/);
   assert.match(workflow, /UNBUNDLED_IMPORT_AES_KEY_B64/);
+  assert.match(workflow, /releases\/assets\/\$asset_id/);
+  assert.match(workflow, /Accept: application\/octet-stream/);
+  assert.doesNotMatch(workflow, /gh release download/);
   assert.match(workflow, /--mode audit[\s\S]*--mode "\$RELEASE_MODE"/);
   assert.match(workflow, /--rollback-output "\$RUNNER_TEMP\/private\/rollback\.json"/);
   assert.match(workflow, /--run-key "rpdelta_\$\{RELEASE_MODE\}_\$\{GITHUB_RUN_ID\}_\$\{GITHUB_RUN_ATTEMPT\}"/);

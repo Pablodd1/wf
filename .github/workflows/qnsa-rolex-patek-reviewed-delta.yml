@@ -80,8 +80,10 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/rp-asset" "$RUNNER_TEMP/rp-package"
-          gh release download "$ASSET_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET_NAME" --dir "$RUNNER_TEMP/rp-asset"
           export ENC="$RUNNER_TEMP/rp-asset/$ASSET_NAME"
+          asset_id="$(gh api "repos/$GITHUB_REPOSITORY/releases" --paginate --jq ".[] | select(.tag_name == \"$ASSET_TAG\") | .assets[] | select(.name == \"$ASSET_NAME\") | .id" | head -n 1)"
+          test -n "$asset_id"
+          gh api "repos/$GITHUB_REPOSITORY/releases/assets/$asset_id" -H 'Accept: application/octet-stream' > "$ENC"
           node -e 'const fs=require("fs"),c=require("crypto");const h=c.createHash("sha256").update(fs.readFileSync(process.env.ENC)).digest("hex");if(h.toLowerCase()!==process.env.ASSET_SHA256.toLowerCase())throw Error("asset SHA mismatch")'
           node tools/intake/decrypt-unbundled-release-asset.cjs --input "$ENC" --output "$RUNNER_TEMP/rp.zip"
           mapfile -t entries < <(unzip -Z1 "$RUNNER_TEMP/rp.zip")
