@@ -143,6 +143,28 @@ class RequalificationTests(unittest.TestCase):
     def test_plain_karat_material_is_not_a_price(self):
         self.assertEqual(requal.price("Vacheron Constantin 6406 18K gold"), (None, "PRICE_NOT_SUPPLIED"))
 
+    def test_dimension_reference_replaced_by_true_omega_reference(self):
+        source = base("WTS Omega 131.28.29.20.99.001 29mm $12000", "29MM")
+        source.update({"brand": "Omega"})
+        row, reasons = requal.qualify(source)
+        self.assertEqual(reasons, [])
+        self.assertEqual(row["reference"], "131.28.29.20.99.001")
+        self.assertEqual(row["reference_evidence_status"], "DIMENSION_REFERENCE_REPLACED_FROM_SOURCE")
+        self.assertFalse(row["price_research_eligible"])
+
+    def test_dimension_reference_replaced_by_true_rolex_reference(self):
+        source = base("WTB Rolex 227700 31mm", "31MM")
+        row, reasons = requal.qualify(source)
+        self.assertEqual(reasons, [])
+        self.assertEqual(row["reference"], "227700")
+        self.assertEqual(row["listing_type"], "WTB")
+
+    def test_patek_reference_cannot_publish_under_rolex_header(self):
+        source = base("WTS Rolex header bleed Patek Philippe 5205R $45000", "5205R")
+        row, reasons = requal.qualify(source)
+        self.assertIsNone(row)
+        self.assertIn("BRAND_REFERENCE_CONFLICT", reasons)
+
 
 if __name__ == "__main__":
     unittest.main()

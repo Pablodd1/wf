@@ -86,17 +86,31 @@ def supported(value: str, raw: str) -> bool:
 
 
 def valid_reference(reference: str, raw: str) -> bool:
-    token = normalized(reference)
+    resolved, _status = source_reference_resolution(reference, raw)
+    token = normalized(resolved or reference)
     return (len(token) >= 4 and any(ch.isdigit() for ch in token)
             and not re.fullmatch(r"(?:19|20)\d{2}", token)
             and not reference_is_price(reference, raw)
             and not BAD_REFERENCE.fullmatch(reference.strip())
-            and source_reference_resolution(reference, raw)[0] is not None)
+            and resolved is not None)
 
 
 def source_reference_resolution(reference: str, raw: str):
     target = normalized(reference)
     tokens = [(token, normalized(token)) for token in re.findall(r"(?i)\b[A-Z0-9][A-Z0-9./-]{3,30}\b", raw)]
+    if re.fullmatch(r"\d+(?:MM|CM)", target):
+        prices = explicit_price_tokens(raw)
+        alternatives = {}
+        for original, clean in tokens:
+            comparable = clean[:-1] if re.fullmatch(r"\d+K", clean) else clean
+            if clean == target or re.fullmatch(r"\d+(?:G|KG|MM|CM)", clean): continue
+            if re.fullmatch(r"(?:19|20)\d{2}", clean): continue
+            if not any(char.isdigit() for char in clean): continue
+            if (comparable.lstrip("0") or "0") in prices: continue
+            alternatives[clean] = original
+        if len(alternatives) == 1:
+            return next(iter(alternatives.values())), "DIMENSION_REFERENCE_REPLACED_FROM_SOURCE"
+        return None, "DIMENSION_REFERENCE_AMBIGUOUS"
     exact = [original for original, clean in tokens if clean == target]
     if exact:
         return exact[0], "EXACT_CHILD_REFERENCE"
@@ -151,6 +165,8 @@ def brand_reference_compatible(brand: str, reference: str) -> bool:
             return False
     if re.fullmatch(r"(?:116|126|136|226|326|336)\d{3}[A-Z]*", token) and brand != "Rolex":
         return False
+    if token in {"5205R"} and brand != "Patek Philippe":
+        return False
     return True
 
 
@@ -192,8 +208,9 @@ def qualify(row: dict):
     if not raw: reasons.append("RAW_MISSING")
     if ACCESSORY.search(raw): reasons.append("NON_WATCH_SUBSTANCE")
     if not brand_supported(brand, raw): reasons.append("BRAND_NOT_EXPLICIT_IN_CHILD_RAW")
+    resolved_reference, reference_status = source_reference_resolution(reference, raw)
     if not valid_reference(reference, raw): reasons.append("REFERENCE_NOT_EXACT_IN_CHILD_RAW")
-    elif not brand_reference_compatible(brand, reference): reasons.append("BRAND_REFERENCE_CONFLICT")
+    elif not brand_reference_compatible(brand, resolved_reference): reasons.append("BRAND_REFERENCE_CONFLICT")
     # Alternative references are multi-child ambiguity even without prices
     # (for example WTB/NTQ "1205V or 2305V").
     if len(plausible_reference_tokens(raw)) >= 2:
@@ -209,7 +226,6 @@ def qualify(row: dict):
         reasons.append("SELL_INTENT_NOT_EXPLICIT")
     if reasons:
         return None, reasons
-    resolved_reference, reference_status = source_reference_resolution(reference, raw)
     raw_hash = sha256(raw.encode("utf-8")).hexdigest()
     source_id = row.get("listing_id", "").strip()
     deterministic = "unbundleq_" + sha256((source_id + "|" + raw_hash + "|" + brand + "|" + normalized(resolved_reference) + "|" + intent).encode()).hexdigest()
@@ -235,7 +251,7 @@ def qualify(row: dict):
     }, []
 
 
-def audit(paths: list[Path], max_rows: int, manifest_limit: int) -> dict:
+def audit(paths: list[Path], max_rows: int, manifest_limit: int, start_row: int = 0) -> dict:
     counts, holds, manifest, duplicates = Counter(), Counter(), [], []
     canonical_by_exact = {}
     for path in paths:
@@ -252,6 +268,8 @@ def audit(paths: list[Path], max_rows: int, manifest_limit: int) -> dict:
                 holds["WORKBOOK_SCHEMA_MISSING"] += 1
                 continue
             for row_number, source in enumerate(iterator, start=2):
+                if row_number - 2 < start_row:
+                    continue
                 if counts["rows_scanned"] >= max_rows: break
                 counts["rows_scanned"] += 1
                 record = {key: (source[pos].strip() if pos < len(source) else "") for key, pos in positions.items()}
@@ -279,7 +297,7 @@ def audit(paths: list[Path], max_rows: int, manifest_limit: int) -> dict:
         "mode": "READ_ONLY_BOUNDED_UNBUNDLED_REQUALIFICATION",
         "database_writes": 0,
         "source_workbooks_modified": False,
-        "bounds": {"max_rows": max_rows, "manifest_limit": manifest_limit},
+        "bounds": {"start_row": start_row, "max_rows": max_rows, "manifest_limit": manifest_limit},
         "counts": dict(counts),
         "hold_reasons": dict(holds),
         "manifest": manifest,
@@ -293,11 +311,12 @@ def main():
     parser.add_argument("--input", action="append", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--max-rows", type=int, default=100_000)
+    parser.add_argument("--start-row", type=int, default=0)
     parser.add_argument("--manifest-limit", type=int, default=100)
     args = parser.parse_args()
-    if not 1 <= args.max_rows <= 1_000_000 or not 0 <= args.manifest_limit <= 1000:
+    if not 1 <= args.max_rows <= 1_000_000 or not 0 <= args.start_row <= 1_000_000 or not 0 <= args.manifest_limit <= 1000:
         raise SystemExit("bounds outside safe limits")
-    report = audit([Path(value) for value in args.input], args.max_rows, args.manifest_limit)
+    report = audit([Path(value) for value in args.input], args.max_rows, args.manifest_limit, args.start_row)
     output = Path(args.output); output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({"mode": report["mode"], **report["counts"], "database_writes": 0}))
