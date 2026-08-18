@@ -108,8 +108,10 @@ test('private schema install is checksum pinned, atomic, empty and customer-writ
   assert.match(workflow, /SET LOCAL statement_timeout = '30s'/);
   assert.match(workflow, /BEGIN;[\s\S]*COMMIT;/);
   assert.match(preflight, /already exists; use the read-only verifier instead of blind reapply/);
+  assert.match(preflight, /CREATE TEMP TABLE live_shadow_install_xact_baseline ON COMMIT DROP/);
   assert.match(postflight, /cardinality\(v_target_oids\) <> 3/);
   assert.match(postflight, /pg_stat_xact_all_tables/);
+  assert.match(postflight, /LEFT JOIN live_shadow_install_xact_baseline baseline USING\(relid\)/);
   assert.match(postflight, /new private live shadow tables are not empty/);
   assert.match(postflight, /aclexplode/);
   assert.match(postflight, /TRUNCATE'[\s\S]*REFERENCES'[\s\S]*TRIGGER'/);

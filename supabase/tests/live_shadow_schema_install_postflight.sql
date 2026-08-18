@@ -90,12 +90,15 @@ BEGIN
   ) THEN RAISE EXCEPTION 'zero-publication table constraint is missing'; END IF;
 
   IF EXISTS (
-    SELECT 1 FROM pg_stat_xact_all_tables
-    WHERE schemaname NOT IN ('pg_catalog','information_schema','extensions','staging')
-      AND (n_tup_ins <> 0 OR n_tup_upd <> 0 OR n_tup_del <> 0)
-  ) OR EXISTS (
-    SELECT 1 FROM pg_stat_xact_all_tables
-    WHERE schemaname='staging' AND relname NOT LIKE 'live_shadow_%'
-      AND (n_tup_ins <> 0 OR n_tup_upd <> 0 OR n_tup_del <> 0)
+    SELECT 1
+    FROM pg_stat_xact_all_tables stats
+    LEFT JOIN live_shadow_install_xact_baseline baseline USING(relid)
+    WHERE stats.schemaname NOT IN ('pg_catalog','information_schema','extensions')
+      AND NOT (stats.schemaname='staging' AND stats.relname LIKE 'live_shadow_%')
+      AND (
+        stats.n_tup_ins <> COALESCE(baseline.n_tup_ins,0)
+        OR stats.n_tup_upd <> COALESCE(baseline.n_tup_upd,0)
+        OR stats.n_tup_del <> COALESCE(baseline.n_tup_del,0)
+      )
   ) THEN RAISE EXCEPTION 'schema install changed an existing application table'; END IF;
 END $postflight$;
