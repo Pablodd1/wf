@@ -10,6 +10,7 @@ const root = path.join(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'tools/intake/rolex_patek_delta_release.py'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/qnsa-rolex-patek-reviewed-delta.yml'), 'utf8');
 const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20260817120000_qnsa_rolex_patek_delta_lineage.sql'), 'utf8');
+const overlapRepair = fs.readFileSync(path.join(root, 'supabase/migrations/20260817123000_qnsa_rolex_patek_delta_overlap_index_repair.sql'), 'utf8');
 
 test('delta importer is fail-closed and preserves owner USD evidence labels', () => {
   assert.match(source, /QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1/);
@@ -82,6 +83,14 @@ test('workflow authenticates package and enforces audit before bounded DML', () 
   assert.match(pipelineMigration, /idx_raw_payloads_message_lookup ON raw\.payloads\(source_platform, source_group_id, source_message_id\)/);
   const preparer = require('../tools/intake/prepare-qnsa-rolex-patek-delta.cjs');
   assert.doesNotThrow(() => preparer.migrationSql(root));
+  assert.equal(preparer.MIGRATIONS.at(-1), 'supabase/migrations/20260817123000_qnsa_rolex_patek_delta_overlap_index_repair.sql');
+  assert.match(overlapRepair, /l\.id = ANY\(\$1::uuid\[\]\)/);
+  assert.doesNotMatch(overlapRepair, /l\.id::text\s*=|p\.(?:source_platform|source_group_id|source_message_id|payload_checksum)::text\s*=/);
+  assert.match(overlapRepair, /p\.payload_checksum = w\.payload_checksum/);
+  assert.match(overlapRepair, /p\.source_platform = w\.source_platform/);
+  assert.match(overlapRepair, /p\.source_group_id IS NOT DISTINCT FROM w\.source_group_id/);
+  assert.match(overlapRepair, /p\.source_message_id = w\.source_message_id/);
+  assert.match(overlapRepair, /source_platform varchar\(50\)/);
   const builder = fs.readFileSync(path.join(root, 'tools/intake/prepare-rolex-patek-delta-asset.cjs'), 'utf8');
   assert.match(builder, /Rolex_Codex_Reconciliation_Master_2026-08-17\.xlsx/);
   assert.match(builder, /Patek_Philippe_Codex_Reconciliation_Master_2026-08-17\.xlsx/);

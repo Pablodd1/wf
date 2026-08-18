@@ -5,6 +5,8 @@ const path = require('node:path');
 
 const PROJECT_REF = 'qnsafosakvonzgfcsphh';
 const MIGRATION = 'supabase/migrations/20260817120000_qnsa_rolex_patek_delta_lineage.sql';
+const REPAIR_MIGRATION = 'supabase/migrations/20260817123000_qnsa_rolex_patek_delta_overlap_index_repair.sql';
+const MIGRATIONS = [MIGRATION, REPAIR_MIGRATION];
 
 async function request(route, token, body) {
   const response = await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}${route}`, {
@@ -16,9 +18,9 @@ async function request(route, token, body) {
   return response.json();
 }
 
-function migrationSql(root) {
-  const sql = fs.readFileSync(path.join(root, MIGRATION), 'utf8');
-  const body = sql.replace(/^\s*(?:BEGIN|COMMIT)\s*;\s*$/gim, '').trim();
+function migrationSql(root, migrations = MIGRATIONS) {
+  const body = migrations.map(file => fs.readFileSync(path.join(root, file), 'utf8')
+    .replace(/^\s*(?:BEGIN|COMMIT)\s*;\s*$/gim, '').trim()).join('\n\n');
   const withoutFunctions = body.replace(/CREATE OR REPLACE FUNCTION[\s\S]*?\$\$\s*;/gi, '');
   if (/^\s*(?:INSERT\s+INTO|UPDATE\s+|DELETE\s+FROM|TRUNCATE|COPY)\b/im.test(withoutFunctions)) {
     throw new Error('delta lineage migration may not contain top-level inventory DML');
@@ -65,4 +67,4 @@ if (require.main === module) prepare({
   process.exitCode = 1;
 });
 
-module.exports = { MIGRATION, PROJECT_REF, migrationSql, prepare };
+module.exports = { MIGRATION, MIGRATIONS, PROJECT_REF, REPAIR_MIGRATION, migrationSql, prepare };
