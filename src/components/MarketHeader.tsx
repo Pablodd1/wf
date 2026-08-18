@@ -4,7 +4,7 @@ import { LanguageToggle } from './LanguageToggle';
 import { useLanguage } from '@/i18n/LanguageContext';
 
 const LUXFI_URL = 'https://luxfi.ai/#add-fi';
-const VIRTUAL_AUTHENTICATOR_URL = 'https://91933fc4.curatedlux.pages.dev';
+const VIRTUAL_AUTHENTICATOR_URL = 'https://curatedlux.pages.dev/valuation';
 
 type HeaderLink = {
   label: string;

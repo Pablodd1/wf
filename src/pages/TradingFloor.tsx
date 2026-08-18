@@ -1161,23 +1161,17 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       className="flex flex-col rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
       style={{ borderColor: selected ? GOLD : '#EBE3D5' }}
     >
-      {/* 1. Watch Image */}
-      <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
-        {imageUrl ? (
+      {/* 1. Watch Image — only rendered when a real source URL exists */}
+      {imageUrl && (
+        <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
           <img
             src={imageUrl}
             alt={meta.title}
             className="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]"
             loading="lazy"
           />
-        ) : (
-          <div className="h-[340px] w-full flex flex-col items-center justify-center bg-[#F2EDE4] border border-[#E5DACB] text-[#8C827A] p-6 text-center">
-            <img src="/watch-silhouette.svg" alt="No image" className="h-24 w-24 opacity-30 mb-3 object-contain" />
-            <span className="text-xs font-semibold uppercase tracking-wider text-[#A3978C]">Source image pending</span>
-            <span className="text-[11px] text-[#A3978C] mt-1 font-mono">{listing.brand} {listing.reference || ''}</span>
-          </div>
-        )}
-      </button>
+        </button>
+      )}
 
       {/* 2. Category & Intent (e.g. WATCH · FOR SALE) */}
       <div className="mt-4">
@@ -1369,39 +1363,35 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         Open full price research
       </a>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(320px,460px)_1fr]">
-        {/* Left Column: Watch Image */}
-        <div className="rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-3 shadow-xs flex flex-col justify-center">
-          {images.length > 0 && images[visibleImageIndex] ? (
-            <img
-              src={images[visibleImageIndex]}
-              alt={`${meta.title} source listing image`}
-              className="h-[520px] w-full rounded-md object-contain lg:h-[620px]"
-              onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
-            />
-          ) : (
-            <div className="h-[520px] lg:h-[620px] w-full flex flex-col items-center justify-center bg-[#F2EDE4] rounded-md border border-[#E5DACB] text-[#8C827A] p-8 text-center">
-              <img src="/watch-silhouette.svg" alt="No image" className="h-36 w-36 opacity-30 mb-4 object-contain" />
-              <span className="text-sm font-semibold uppercase tracking-wider text-[#A3978C]">Source image not supplied</span>
-              <span className="text-xs text-[#A3978C] mt-2 font-mono">{listing.brand} {listing.reference || ''}</span>
-            </div>
-          )}
-          {images.length > 1 && (
-            <div className="mt-3 flex gap-2 overflow-x-auto">
-              {images.map((url, index) => (
-                <button
-                  type="button"
-                  key={url}
-                  onClick={() => setActiveImage(index)}
-                  aria-label={`Show listing image ${index + 1}`}
-                  className={`h-16 w-16 shrink-0 overflow-hidden rounded-md border p-0.5 ${index === visibleImageIndex ? 'border-[#8A5826]' : 'border-[#EBE3D5]'}`}
-                >
-                  <img src={url} alt="" className="h-full w-full object-cover" onError={() => setFailedImages(current => new Set(current).add(url))} />
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+      <div className={`grid gap-6 ${images.length > 0 ? 'lg:grid-cols-[minmax(320px,460px)_1fr]' : ''}`}>
+        {/* Left Column: Watch Image — only when real source images exist */}
+        {images.length > 0 && (
+          <div className="rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-3 shadow-xs flex flex-col justify-center">
+            {images[visibleImageIndex] ? (
+              <img
+                src={images[visibleImageIndex]}
+                alt={`${meta.title} source listing image`}
+                className="h-[520px] w-full rounded-md object-contain lg:h-[620px]"
+                onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
+              />
+            ) : null}
+            {images.length > 1 && (
+              <div className="mt-3 flex gap-2 overflow-x-auto">
+                {images.map((url, index) => (
+                  <button
+                    type="button"
+                    key={url}
+                    onClick={() => setActiveImage(index)}
+                    aria-label={`Show listing image ${index + 1}`}
+                    className={`h-16 w-16 shrink-0 overflow-hidden rounded-md border p-0.5 ${index === visibleImageIndex ? 'border-[#8A5826]' : 'border-[#EBE3D5]'}`}
+                  >
+                    <img src={url} alt="" className="h-full w-full object-cover" onError={() => setFailedImages(current => new Set(current).add(url))} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Right Column: 3 Cards */}
         <div className="flex flex-col gap-4">
