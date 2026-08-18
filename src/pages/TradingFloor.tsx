@@ -435,7 +435,7 @@ export default function TradingFloor() {
 
         if (data.status === 'ok' && Array.isArray(data.records) && data.records.length > 0) {
           if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
-            setReleaseBrands(prev => [...new Set([...MASTER_BRAND_LIST, ...data.publicationBrands])]);
+            setReleaseBrands([...new Set([...MASTER_BRAND_LIST, ...(data.publicationBrands || [])])]);
           } else {
             setReleaseBrands(MASTER_BRAND_LIST);
           }
