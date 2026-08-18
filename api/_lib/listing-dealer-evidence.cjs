@@ -33,11 +33,13 @@ function sourceBackedDealerEvidence(dealer, linkMethod = null) {
 
 async function enrichRowsWithExactDealerEvidence(client, rows = []) {
   if (!Array.isArray(rows) || rows.length === 0) return [];
-  const ids = [...new Set(rows
+  const allIds = [...new Set(rows
     .map(row => String(row?.id || '').trim())
-    .filter(id => UUID_PATTERN.test(id)))]
+    .filter(Boolean))]
     .slice(0, MAX_EVIDENCE_ROWS);
-  if (ids.length === 0) return rows;
+  const ids = allIds.filter(id => UUID_PATTERN.test(id));
+  const reviewedIds = allIds.filter(id => id.startsWith('admission_') || id.startsWith('rpdelta_'));
+  if (ids.length === 0 && reviewedIds.length === 0) return rows;
 
   try {
     const links = [];
@@ -49,6 +51,19 @@ async function enrichRowsWithExactDealerEvidence(client, rows = []) {
         .in('listing_id', batch);
       if (error) throw error;
       links.push(...(data || []));
+    }
+    for (const batch of chunks(reviewedIds)) {
+      const { data, error } = await client
+        .from('reviewed_workbook_dealer_links')
+        .select('reviewed_listing_id,dealer_id,link_method')
+        .eq('link_status', 'APPLIED')
+        .in('reviewed_listing_id', batch);
+      if (error) throw error;
+      links.push(...(data || []).map(link => ({
+        listing_id: link.reviewed_listing_id,
+        dealer_id: link.dealer_id,
+        link_method: link.link_method,
+      })));
     }
     if (links.length === 0) return rows;
 

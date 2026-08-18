@@ -1,0 +1,124 @@
+name: QNSA Rolex Patek reviewed delta
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        required: true
+        default: audit
+        type: choice
+        options: [audit, canary, full]
+      asset_tag:
+        required: true
+        type: string
+      asset_name:
+        required: true
+        type: string
+      asset_sha256:
+        required: true
+        type: string
+      confirmation:
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-rolex-patek-reviewed-delta-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      RELEASE_MODE: ${{ inputs.mode }}
+      ASSET_TAG: ${{ inputs.asset_tag }}
+      ASSET_NAME: ${{ inputs.asset_name }}
+      ASSET_SHA256: ${{ inputs.asset_sha256 }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: npm ci
+
+      - name: Validate bounded dispatch
+        shell: bash
+        env:
+          HAS_MGMT: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+          HAS_AES: ${{ secrets.ROLEX_PATEK_DELTA_AES_KEY_B64 != '' }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const mode=process.env.RELEASE_MODE;
+            const expected={audit:"AUDIT_QNSA_ROLEX_PATEK_DELTA",canary:"CANARY_QNSA_ROLEX_PATEK_DELTA",full:"FULL_QNSA_ROLEX_PATEK_DELTA"}[mode];
+            if(!expected || process.env.CONFIRMATION!==expected) throw new Error("confirmation mismatch");
+            if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(process.env.ASSET_TAG||"")) throw new Error("invalid tag");
+            if(!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.enc$/.test(process.env.ASSET_NAME||"")) throw new Error("invalid asset name");
+            if(!/^[0-9a-f]{64}$/i.test(process.env.ASSET_SHA256||"")) throw new Error("invalid SHA");
+            if(process.env.HAS_MGMT!=="true" || process.env.HAS_AES!=="true") throw new Error("required secrets unavailable");
+          '
+
+      - name: Compile schema and obtain ephemeral canonical QNSA key
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          QNSA_ENV_FILE: ${{ runner.temp }}/qnsa.env
+        run: node tools/intake/prepare-qnsa-rolex-patek-delta.cjs
+
+      - name: Download and authenticate encrypted workbook package
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          UNBUNDLED_IMPORT_AES_KEY_B64: ${{ secrets.ROLEX_PATEK_DELTA_AES_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/rp-asset" "$RUNNER_TEMP/rp-package"
+          gh release download "$ASSET_TAG" --repo "$GITHUB_REPOSITORY" --pattern "$ASSET_NAME" --dir "$RUNNER_TEMP/rp-asset"
+          export ENC="$RUNNER_TEMP/rp-asset/$ASSET_NAME"
+          node -e 'const fs=require("fs"),c=require("crypto");const h=c.createHash("sha256").update(fs.readFileSync(process.env.ENC)).digest("hex");if(h.toLowerCase()!==process.env.ASSET_SHA256.toLowerCase())throw Error("asset SHA mismatch")'
+          node tools/intake/decrypt-unbundled-release-asset.cjs --input "$ENC" --output "$RUNNER_TEMP/rp.zip"
+          mapfile -t entries < <(unzip -Z1 "$RUNNER_TEMP/rp.zip")
+          test "${#entries[@]}" -eq 3
+          for entry in "${entries[@]}"; do [[ "$entry" != */* && "$entry" != *".."* ]]; done
+          printf '%s\n' "${entries[@]}" | sort > "$RUNNER_TEMP/entries.txt"
+          printf '%s\n' CODEX_INTEGRATION_MANIFEST.json Patek_Philippe_Codex_Reconciliation_Master_2026-08-17.xlsx Rolex_Codex_Reconciliation_Master_2026-08-17.xlsx | sort | diff -u - "$RUNNER_TEMP/entries.txt"
+          unzip -q "$RUNNER_TEMP/rp.zip" -d "$RUNNER_TEMP/rp-package"
+          node -e '
+            const fs=require("fs"),c=require("crypto"),p=process.env.RUNNER_TEMP+"/rp-package/";
+            const m=JSON.parse(fs.readFileSync(p+"CODEX_INTEGRATION_MANIFEST.json"));
+            if(m.schema_version!==1||m.files.length!==2)throw Error("manifest invalid");
+            const allow=new Set(["Rolex_Codex_Reconciliation_Master_2026-08-17.xlsx","Patek_Philippe_Codex_Reconciliation_Master_2026-08-17.xlsx"]);
+            for(const x of m.files){if(!allow.delete(x.filename)||!/^[0-9a-f]{64}$/i.test(x.sha256))throw Error("manifest allowlist mismatch");const h=c.createHash("sha256").update(fs.readFileSync(p+x.filename)).digest("hex");if(h!==x.sha256.toLowerCase())throw Error("workbook hash mismatch")};if(allow.size)throw Error("workbook missing");
+          '
+
+      - name: Audit then execute selected bounded mode
+        shell: bash
+        run: |
+          set -euo pipefail
+          set -a; source "$RUNNER_TEMP/qnsa.env"; set +a
+          mkdir -p "$RUNNER_TEMP/output" "$RUNNER_TEMP/private"
+          export APPLY_QNSA_ROLEX_PATEK_DELTA=true
+          export CANARY_QNSA_ROLEX_PATEK_DELTA_CONFIRMATION=CANARY_QNSA_ROLEX_PATEK_DELTA
+          export FULL_QNSA_ROLEX_PATEK_DELTA_CONFIRMATION=FULL_QNSA_ROLEX_PATEK_DELTA
+          args=(--input "$RUNNER_TEMP/rp-package/Rolex_Codex_Reconciliation_Master_2026-08-17.xlsx" --input "$RUNNER_TEMP/rp-package/Patek_Philippe_Codex_Reconciliation_Master_2026-08-17.xlsx" --env-file "$RUNNER_TEMP/qnsa.env")
+          python tools/intake/rolex_patek_delta_release.py "${args[@]}" --mode audit --output "$RUNNER_TEMP/output/preflight.json"
+          if [[ "$RELEASE_MODE" != audit ]]; then
+            python tools/intake/rolex_patek_delta_release.py "${args[@]}" --mode "$RELEASE_MODE" --run-key "rpdelta_${RELEASE_MODE}_${GITHUB_RUN_ID}_${GITHUB_RUN_ATTEMPT}" --output "$RUNNER_TEMP/output/result.json" --rollback-output "$RUNNER_TEMP/private/rollback.json"
+          else
+            cp "$RUNNER_TEMP/output/preflight.json" "$RUNNER_TEMP/output/result.json"
+          fi
+
+      - name: Upload sanitized reconciliation only
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-patek-delta-${{ inputs.mode }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/output/*.json
+          retention-days: 14
+          if-no-files-found: error

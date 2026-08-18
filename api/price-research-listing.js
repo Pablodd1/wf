@@ -166,7 +166,7 @@ module.exports = async function handler(req, res) {
     if (!strictGate) {
       const workbookListing = await loadReviewedWorkbookListing(client, id);
       if (workbookListing) {
-        const publicSource = String(workbookListing.raw_message || '').trim();
+        const publicSource = redactPublicSource(workbookListing.raw_message).trim();
         let dialColor = workbookListing.dial_color;
         if ((!dialColor || dialColor === 'UNKNOWN') && (workbookListing.has_images || workbookListing.thumbnail_url || workbookListing.image_urls?.length)) {
           const imageUrl = workbookListing.thumbnail_url || workbookListing.image_urls?.[0];
@@ -195,8 +195,8 @@ module.exports = async function handler(req, res) {
             condition: workbookListing.condition,
             price_raw: workbookListing.source_price_amount,
             price_usd: workbookListing.price_usd,
-            price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
-            currency: workbookListing.source_currency || 'USD',
+            price_evidence_status: workbookListing.price_evidence_status || 'PRICE_NOT_SUPPLIED',
+            currency: workbookListing.source_currency || null,
             raw_message: publicSource || null,
             raw_message_scope: publicSource ? 'reviewed_workbook_source' : 'unavailable',
             raw_message_truncated: false,
@@ -206,12 +206,13 @@ module.exports = async function handler(req, res) {
             source: workbookListing.source,
             source_type: workbookListing.source_type,
             listing_type: workbookListing.listing_type,
+            seller_name: workbookListing.seller_name || null,
             listing_status: workbookListing.listing_status,
             confidence: workbookListing.confidence,
             image_urls: workbookListing.image_urls,
             thumbnail_url: workbookListing.thumbnail_url,
             has_images: workbookListing.has_images,
-            image_evidence_type: workbookListing.has_images ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
+            image_evidence_type: workbookListing.image_evidence_type || (workbookListing.has_images ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE'),
             image_evidence_label: workbookListing.has_images ? 'Source-supplied listing image' : null,
             image_evidence_notice: workbookListing.has_images
               ? 'Exact image URL retained with this reviewed source listing.'

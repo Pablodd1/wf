@@ -2,6 +2,9 @@
 
 const { applyEffectivePrice } = require('./corrected-price-source.cjs');
 const { isReviewedWorkbookBrowseBrand } = require('./reviewed-workbook-browse.cjs');
+const {
+  loadRolexPatekOverlayRows,
+} = require('./rolex-patek-reviewed-overlay.cjs');
 
 const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
 
@@ -15,12 +18,16 @@ function mapWorkbookAnalyticsRow(row) {
   const isBundle = String(row.listing_type || '').toUpperCase() === 'BUNDLE';
   const imageCandidate = clean(row.final_image_url) || clean(row.user_image_url);
   const exactImage = !isBundle && (row.has_exact_source_image === true || Boolean(imageCandidate)) ? imageCandidate : null;
+  const imageEvidenceType = exactImage
+    ? (clean(row.image_evidence_type) === 'SELLER_LISTING_IMAGE' ? 'SELLER_LISTING_IMAGE' : 'SOURCE_LISTING_IMAGE')
+    : 'NO_IMAGE';
   const contactApproved = row.contact_publication_approved === true;
   const explicitAdmissionUsd = row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
     ? Number(row.workbook_price_usd)
     : null;
   const verifiedUsd = row.verified_price_usd == null ? explicitAdmissionUsd : Number(row.verified_price_usd);
-  const hasVerifiedUsd = (row.has_verified_usd_price === true
+  const hasVerifiedUsd = String(row.listing_type || '').toUpperCase() === 'WTS'
+    && (row.has_verified_usd_price === true
     || (row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH' && Number(row.workbook_price_usd) > 0))
     && Number.isFinite(verifiedUsd)
     && verifiedUsd > 0;
@@ -58,12 +65,16 @@ function mapWorkbookAnalyticsRow(row) {
     analytics_currency_status: priceUsd === null ? 'CURRENCY_UNVERIFIED' : 'VERIFIED',
     source_price_amount: row.source_price_amount == null ? null : Number(row.source_price_amount),
     source_currency: clean(row.source_currency),
+    price_evidence_status: clean(row.price_evidence_status),
     workbook_source_file: clean(row.source_file),
+    source_file_sha256: clean(row.source_file_sha256),
     workbook_source_row_number: row.source_row_number == null ? null : Number(row.source_row_number),
     workbook_source_record_id: clean(row.source_record_id),
+    source_record_id: clean(row.source_record_id),
     thumbnail_url: exactImage,
     image_urls: exactImage ? [exactImage] : [],
     has_images: Boolean(exactImage),
+    image_evidence_type: imageEvidenceType,
     seller_name: clean(row.seller_name) || clean(row.posted_by),
     seller_phone: contactApproved ? (clean(row.seller_phone) || clean(row.phone_number)) : null,
     contact_publication_approved: contactApproved,
@@ -96,7 +107,7 @@ const ADMISSION_WORKBOOK_COLUMNS = [
   'brand_scope,supplied_brand,canonical_brand,model,catalog_model,raw_reference',
   'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
   'source_price_amount,source_currency,price_evidence_status,confidence,verification_status',
-  'user_image_url,workbook_price_usd,imported_at,seller_name:posted_by,phone_number',
+  'user_image_url,workbook_price_usd,imported_at,image_evidence_type,seller_name:posted_by,phone_number',
   'contact_publication_approved',
 ].join(',');
 
@@ -185,8 +196,22 @@ async function loadReviewedWorkbookEvidenceRows(client, { brand, references, lim
   return (data || []).map(mapWorkbookAnalyticsRow);
 }
 
+async function loadRolexPatekOverlayEvidenceRows(client, { brand, references, limit = 10000 }) {
+  const { rows } = await loadRolexPatekOverlayRows(client, {
+    brand,
+    references,
+    listingTypes: ['WTS', 'WTB'],
+    limit,
+  });
+  return rows.map(mapWorkbookAnalyticsRow).map(row => ({
+    ...row,
+    owner_reviewed_identity: true,
+    reviewed_overlay: true,
+  }));
+}
+
 async function loadReviewedWorkbookListing(client, id) {
-  if (String(id || '').startsWith('admission_')) {
+  if (String(id || '').startsWith('admission_') || String(id || '').startsWith('rpdelta_')) {
     const { data, error } = await client
       .from('reviewed_workbook_inventory')
       .select(ADMISSION_WORKBOOK_COLUMNS)
@@ -221,6 +246,7 @@ module.exports = {
   ADMISSION_WORKBOOK_COLUMNS,
   isMissingColumnError,
   loadReviewedWorkbookEvidenceRows,
+  loadRolexPatekOverlayEvidenceRows,
   loadReviewedWorkbookAnalyticsRows,
   loadReviewedWorkbookListing,
   mapWorkbookAnalyticsRow,

@@ -14,28 +14,33 @@ test('blocks private and reserved image destinations', () => {
   assert.equal(isPrivateAddress('8.8.8.8'), false);
 });
 
-test('passes dealer contact paths and watch references unredacted', () => {
+test('redacts dealer contact paths while preserving watch references and prices', () => {
   const raw = '[7/12, 7:19 AM] +852 6236 1307: Rolex 116500LN USD 30,000\nWhatsApp: +1 (305) 555-1212';
   const redacted = redactPublicSource(raw);
-  assert.equal(redacted, raw);
+  assert.match(redacted, /Rolex 116500LN USD 30,000/);
+  assert.doesNotMatch(redacted, /6236|305|555|1212/);
 });
 
-test('passes WhatsApp links and raw source text unredacted', () => {
+test('redacts WhatsApp links while preserving raw watch evidence', () => {
   const raw = 'Rolex 52506 HKD 380K contact https://wa.me/85262361307';
   const redacted = redactPublicSource(raw);
-  assert.equal(redacted, raw);
+  assert.match(redacted, /Rolex 52506 HKD 380K contact/);
+  assert.doesNotMatch(redacted, /wa\.me|62361307/);
 });
 
-test('passes standalone phone and email unredacted', () => {
+test('redacts standalone international phone and email without corrupting watch evidence', () => {
   const raw = 'Dealer +852 6236 1307 john@example.com Rolex 116500LN USD 30,000';
   const redacted = redactPublicSource(raw);
-  assert.equal(redacted, raw);
+  assert.match(redacted, /Rolex 116500LN USD 30,000/);
+  assert.doesNotMatch(redacted, /6236|john@example/);
 });
 
-test('passes poster headings and messaging handles unredacted', () => {
+test('redacts contact-labeled messaging handles and links but preserves poster headings', () => {
   const raw = '[7/12/2026, 7:19 AM] Jane Dealer: Rolex 116500LN USD 30,000\nTelegram: @jane_watches\nhttps://t.me/jane_watches';
   const redacted = redactPublicSource(raw);
-  assert.equal(redacted, raw);
+  assert.match(redacted, /Jane Dealer: Rolex 116500LN USD 30,000/);
+  assert.doesNotMatch(redacted, /@jane_watches|t\.me/);
+  assert.match(redacted, /Telegram \[handle redacted\]/);
 });
 
 test('neutralizes spreadsheet formulas and quotes CSV values', () => {
@@ -165,7 +170,9 @@ test('Trading Floor click-through shows source evidence and consent-gated dealer
   const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
   assert.match(page, /api\/reviewed-market-inventory/);
   assert.match(page, /api\/reviewed-seller-summary/);
-  assert.doesNotMatch(page, /api\/(?:price-research-listing|listing-contact|trading-listing)\?id=/);
+  assert.match(page, /api\/listing-contact\?/);
+  assert.match(page, /if \(payload\.contact_available\)/);
+  assert.doesNotMatch(page, /https:\/\/wa\.me\/\$\{listing\./);
   assert.match(page, /Original raw message/);
   assert.match(page, /sellerAnalytics/);
   assert.match(page, /For sale/);

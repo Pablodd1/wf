@@ -75,6 +75,7 @@
     "import:approved-admission-workbook": "node tools/intake/import-approved-admission-workbook.cjs",
     "reconcile:approved-unbundled-inventory": "node tools/intake/reconcile-approved-unbundled-inventory.cjs",
     "prepare:unbundled-release-asset": "node tools/intake/prepare-unbundled-release-asset.cjs",
+    "prepare:rolex-patek-delta-asset": "node tools/intake/prepare-rolex-patek-delta-asset.cjs",
     "prepare:tag-heuer-admission": "node tools/intake/prepare-tag-heuer-admission.cjs",
     "prepare:franck-muller-admission": "node tools/intake/prepare-franck-muller-admission.cjs",
     "prepare:brand-admission": "node tools/intake/prepare-franck-muller-admission.cjs",

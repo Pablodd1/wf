@@ -100,7 +100,7 @@ interface ListingRecord {
   has_images: boolean;
   thumbnail_url: string | null;
   image_urls?: string[];
-  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
   image_evidence_notice?: string | null;
   region: string | null;
@@ -139,12 +139,19 @@ interface ListingRecord {
   'Location'?: string | null;
   source_file?: string | null;
   source_row_number?: number | null;
+  source_record_id?: string | null;
 }
 
 interface TradingFloorResponse {
   status: string;
   error?: string;
   records?: ListingRecord[];
+  reviewedOverlayRecords?: ListingRecord[];
+  reviewedOverlay?: {
+    total?: number | null;
+    returned?: number;
+    exact_lineage_duplicates_held?: number;
+  };
   total?: number | null;
   totalIsEstimate?: boolean;
   nextCursor?: string | null;
@@ -283,6 +290,7 @@ export default function TradingFloor() {
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [totalIsEstimate, setTotalIsEstimate] = useState(false);
+  const [reviewedOverlayTotal, setReviewedOverlayTotal] = useState(0);
   const [cursor, setCursor] = useState<string | null>(null);
   const [cursorHistory, setCursorHistory] = useState<Array<string | null>>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -610,11 +618,23 @@ export default function TradingFloor() {
             ? current
             : data.publicationBrands!);
         }
-        const nextListings = data.records || [];
+        const listingKeys = (listing: ListingRecord) => [
+          listing.id ? `id:${listing.id}` : '',
+          listing.source_record_id ? `record:${listing.source_record_id}` : '',
+        ].filter(Boolean);
+        const seenListingKeys = new Set<string>();
+        const nextListings = [...(data.records || []), ...(data.reviewedOverlayRecords || [])]
+          .filter(listing => {
+            const keys = listingKeys(listing);
+            if (keys.some(key => seenListingKeys.has(key))) return false;
+            keys.forEach(key => seenListingKeys.add(key));
+            return true;
+          });
         setListings(nextListings);
         const parsedTotal = data.total == null ? null : Number(data.total);
         setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
         setTotalIsEstimate(parsedTotal !== null && Boolean(data.totalIsEstimate));
+        setReviewedOverlayTotal(Math.max(0, Number(data.reviewedOverlay?.total || 0)));
         setNextCursor(data.nextCursor || null);
         setHasMore(Boolean(data.hasMore && data.nextCursor));
         if (!cursor) setSelectedListing(null);
@@ -701,6 +721,9 @@ export default function TradingFloor() {
                   : total === null
                   ? `${((cursorHistory.length * pageSize) + visibleListings.length).toLocaleString()} viewed so far${hasMore ? ' · more listings available' : ''}`
                   : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings globally`}
+                {reviewedOverlayTotal > 0
+                  ? ` · ${reviewedOverlayTotal.toLocaleString()} reviewed additions`
+                  : ''}
               </p>
             </div>
 

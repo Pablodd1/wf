@@ -16,7 +16,7 @@ function referenceEvidenceKey(brand: string, reference: string) {
 
 function exactSourceImageUrl(record: ReviewedMarketRecord) {
   if (record.has_images !== true || record.multi_listing === true || record.is_unbundled_child === true) return '';
-  if (!['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(String(record.image_evidence_type || '').toUpperCase())) return '';
+  if (!['SELLER_LISTING_IMAGE', 'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(String(record.image_evidence_type || '').toUpperCase())) return '';
   const candidate = record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
   return /^https?:\/\/[^\s]+$/i.test(candidate) ? candidate : '';
 }
@@ -54,7 +54,7 @@ interface RowData {
   thumbnail_url?: string | null;
   image_urls?: string[] | null;
   has_images?: boolean;
-  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
   whatsapp_url?: string | null;
   verdict?: string | null;
@@ -165,7 +165,7 @@ interface ListingDetailData {
   accessories: string[];
   image_urls: string[];
   has_images: boolean;
-  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
   image_evidence_notice?: string | null;
   region: string | null;
@@ -267,7 +267,7 @@ interface ReviewedMarketRecord {
   has_images?: boolean;
   multi_listing?: boolean;
   is_unbundled_child?: boolean;
-  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   review_reasons?: string[] | null;
   seller_analytics?: {
     total_posts?: number | null;
@@ -2370,7 +2370,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
   const [activeImage, setActiveImage] = useState(0);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const [copied, setCopied] = useState(false);
-  const sourceImageEvidence = ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
+  const sourceImageEvidence = ['SELLER_LISTING_IMAGE', 'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
     .includes(String(detail?.image_evidence_type || ''));
   const detailImages = sourceImageEvidence ? (detail?.image_urls || []) : [];
   const summaryImages = [summary.thumbnail_url, summary.display_image_url, summary.image_url, ...(summary.image_urls || [])];

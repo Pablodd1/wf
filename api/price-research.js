@@ -33,11 +33,14 @@ const { selectDialGroup } = require('./_lib/dial-cohort-selection.cjs');
 const { buildWtsReconciliation } = require('./_lib/price-research-reconciliation.cjs');
 const {
   loadReviewedWorkbookEvidenceRows,
+  loadRolexPatekOverlayEvidenceRows,
 } = require('./_lib/reviewed-workbook-analytics.cjs');
+const { mergeByExactLineage } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
 const { loadVerifiedDemandIdentityRows } = require('./_lib/verified-demand-identity.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { enrichRowsWithExactDealerEvidence } = require('./_lib/listing-dealer-evidence.cjs');
+const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -657,7 +660,7 @@ function isCustomerPricedSaleEvidence(row) {
   return Number.isFinite(Number(row?.price_usd)) && Number(row.price_usd) > 0;
 }
 
-async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null, familyPrefix = null, pagination = {}) {
+async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null, familyPrefix = null, pagination = {}, overlayRows = []) {
   // ponytail: admit all demand-side records. classifyDemandEligibility
   // handles per-row quality downstream.
   let data;
@@ -706,6 +709,9 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     const merged = new Map((data || []).map(row => [String(row.id), row]));
     for (const row of directDemandRows) merged.set(String(row.id), row);
     data = [...merged.values()];
+  }
+  if (overlayRows.length) {
+    data = mergeByExactLineage(data || [], overlayRows).rows;
   }
   let demandRows = (data || [])
     .map(row => ({ ...row, ...normalizeWatchConditionFields(row) }))
@@ -775,7 +781,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
       dial_color: row.dial_color || null,
       condition: row.condition || null,
       listing_type: row.listing_type || 'WTB',
-      raw_message: row.raw_message || null,
+      raw_message: row.raw_message ? redactPublicSource(row.raw_message) : null,
       seller_name: row.seller_name || row.posted_by || null,
       seller_phone: phone,
       whatsapp_url: whatsappUrl,
@@ -1167,6 +1173,24 @@ module.exports = async function handler(req, res) {
       for (const row of recoveredRows) rowsById.set(String(row.id), row);
       rows = [...rowsById.values()];
     }
+    // Post-cutoff owner-reviewed Rolex/Patek rows are an additive overlay. They
+    // supplement the existing QNSA cohort and never select a replacement feed.
+    // Exact lineage keys are the only cross-source deduplication boundary;
+    // same-reference offers from different dealers/messages remain separate.
+    let rolexPatekOverlayRows = [];
+    try {
+      rolexPatekOverlayRows = await loadRolexPatekOverlayEvidenceRows(client, {
+        brand,
+        references: referenceVariants,
+        limit: sampleLimit,
+      });
+    } catch (overlayError) {
+      console.warn('[price-research] reviewed Rolex/Patek overlay unavailable; preserving QNSA cohort:', overlayError.message);
+    }
+    const overlayWtsRows = rolexPatekOverlayRows
+      .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS');
+    const overlayMerge = mergeByExactLineage(rows || [], overlayWtsRows);
+    rows = overlayMerge.rows;
     // Reviewed workbooks are the customer-visible canonical inventory. Load
     // every approved WTS/WTB row first; downstream gates independently decide
     // which WTS prices may enter analytics.
@@ -1536,6 +1560,7 @@ module.exports = async function handler(req, res) {
       preloadedReviewedWorkbookEvidenceRows,
       familyPrefix,
       { page: demandPage, pageSize: demandPageSize },
+      rolexPatekOverlayRows.filter(row => String(row.listing_type || '').toUpperCase() === 'WTB'),
     );
     const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
 
@@ -1551,13 +1576,14 @@ module.exports = async function handler(req, res) {
     const comparableEvidenceRows = serializedComparables.map(r => ({
       id: r.id,
       listing_type: 'WTS',
-      raw_message: r.raw_message || null,
+      raw_message: r.raw_message ? redactPublicSource(r.raw_message) : null,
       price_usd: r.price_usd, created_at: r.created_at, listing_date: r.listing_date,
       dial_color: r.dial_color, condition: r.condition,
       source: r.source, year: r.year,
       thumbnail_url: r.thumbnail_url || null,
       image_urls: r.image_urls || null,
       has_images: r.has_images || false,
+      image_evidence_type: r.image_evidence_type || null,
       seller_name: r.seller_name || null,
       seller_phone: consentApprovedPhone(r),
       verdict: r.verdict || null,
@@ -1571,7 +1597,7 @@ module.exports = async function handler(req, res) {
     const outlierDealerEvidenceRows = serializedOutliers.map(r => ({
       id: r.id,
       listing_type: 'WTS',
-      raw_message: r.raw_message || null,
+      raw_message: r.raw_message ? redactPublicSource(r.raw_message) : null,
       price_usd: r.price_usd,
       created_at: r.created_at,
       listing_date: r.listing_date,
@@ -1588,6 +1614,7 @@ module.exports = async function handler(req, res) {
       thumbnail_url: r.thumbnail_url || null,
       image_urls: r.image_urls || null,
       has_images: r.has_images || false,
+      image_evidence_type: r.image_evidence_type || null,
       seller_name: r.seller_name || null,
       seller_phone: consentApprovedPhone(r),
       verdict: r.verdict || null,
@@ -1656,6 +1683,20 @@ module.exports = async function handler(req, res) {
       analytics_source: usingReviewedWorkbook
         ? 'reviewed_workbook_market_source_v2'
         : sourceTable,
+      reviewed_overlay: {
+        source: 'reviewed_workbook_inventory',
+        tier: 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1',
+        accepted_usd_statuses: [
+          'SOURCE_EXPLICIT_USD_MATCH',
+          'OWNER_DOLLAR_USD_POLICY',
+          'OWNER_K_USD_POLICY',
+        ],
+        owner_policy_statuses_remain_distinct_from_source_explicit: true,
+        input_wts_count: overlayWtsRows.length,
+        added_wts_count: overlayMerge.overlay_added_count,
+        exact_lineage_duplicates_held: overlayMerge.overlay_duplicate_count,
+        wtb_count: rolexPatekOverlayRows.filter(row => String(row.listing_type || '').toUpperCase() === 'WTB').length,
+      },
       total_tracked_listings: totalTrackedListings,
       wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
       wtb_demand_count: wtbDemandCount,
