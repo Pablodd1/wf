@@ -283,6 +283,8 @@ export default function TradingFloor() {
     return 3527754; // Master dataset: 3,527,754 total listings
   }, [total, brandFilter]);
 
+  const globalInventoryTotal = 3527754;
+
   const visibleListings = useMemo(() => {
     const filtered = listings.filter(listing => {
       if (imagesOnly && !hasListingImage(listing)) return false;
@@ -603,7 +605,7 @@ export default function TradingFloor() {
             <div>
               <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
               <p className="mt-1 text-sm font-medium" style={{ color: MUTED }}>
-                {dynamicDisplayTotal.toLocaleString()} listings
+                {dynamicDisplayTotal.toLocaleString()} verified listings{dynamicDisplayTotal < globalInventoryTotal ? ` · ${globalInventoryTotal.toLocaleString()} global inventory` : ''}
               </p>
             </div>
 
@@ -942,17 +944,6 @@ function DesktopFilters({
             </select>
           </fieldset>
 
-          <fieldset>
-            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Category</legend>
-            {CATEGORY_OPTIONS.map(option => (
-              <FilterCheck
-                key={option.value}
-                checked={category === option.value}
-                label={option.label}
-                onChange={() => onChange({ item: option.value === 'all' ? null : option.value, type: !['all', 'watches'].includes(option.value) ? null : intent || null })}
-              />
-            ))}
-          </fieldset>
 
           <fieldset>
             <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Listing type</legend>
@@ -1071,14 +1062,6 @@ function MobileFilterSheet({
             )}
             {releaseBrands.map(value => (
               <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
-            ))}
-          </FilterGroup>
-          <FilterGroup label="Category">
-            {CATEGORY_OPTIONS.map(option => (
-              <FilterChoice key={option.value} active={draftCategory === option.value} label={option.label} onClick={() => {
-                setDraftCategory(option.value);
-                if (!['all', 'watches'].includes(option.value)) setDraftIntent('');
-              }} />
             ))}
           </FilterGroup>
           <FilterGroup label="Availability">
@@ -1438,7 +1421,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               {benchmark.loading ? 'Calculating...' : (benchmark.rating?.label || 'Calculating...')}
             </div>
             <div className="mt-1 text-xs text-[#8B95A2]">
-              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.description || 'Comparing against verified dealer observations.')}
+              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.reason || 'Comparing against verified dealer observations.')}
             </div>
           </div>
 

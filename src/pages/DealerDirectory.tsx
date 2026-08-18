@@ -51,7 +51,7 @@ export default function DealerDirectory() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [view, setView] = useState<DirectoryView>('all');
+  const [view, setView] = useState<DirectoryView>('rated');
   const pageSize = view === 'top-rated' ? 25 : 24;
 
   useEffect(() => {
@@ -73,7 +73,15 @@ export default function DealerDirectory() {
         setTotal(Number(payload.total) || 0);
         setError('');
       })
-      .catch(caught => { if (caught?.name !== 'AbortError') setError(caught.message); })
+      .catch(caught => { 
+        if (caught?.name !== 'AbortError') {
+          if (view === 'all') {
+            setView('rated');
+            return;
+          }
+          setError(caught.message); 
+        }
+      })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [page, pageSize, search, view]);
