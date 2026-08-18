@@ -13,10 +13,29 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { rateMarketPrice } from '../lib/marketPriceRating';
+import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
+
+interface CatalogSuggestion {
+  brand: string;
+  model: string | null;
+  reference: string;
+  dial_colors: string[];
+  match_type: 'exact_reference' | 'reference_prefix' | 'reference_contains' | 'catalog_text_prefix' | 'catalog_text_contains' | 'reference_typo_candidate';
+}
+
+interface CatalogSuggestionsResponse {
+  success: boolean;
+  suggestions?: CatalogSuggestion[];
+}
+
+interface ListingBenchmarkData {
+  stats: MarketBenchmark | null;
+  count: number;
+  analytics_ready?: boolean;
+}
 
 const GOLD = '#9A7127';
 const GOLD_BRIGHT = '#7B5719';
@@ -248,6 +267,12 @@ export default function TradingFloor() {
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
+  const [searchSuggestions, setSearchSuggestions] = useState<CatalogSuggestion[]>([]);
+  const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
+  const [searchSuggestionsLoading, setSearchSuggestionsLoading] = useState(false);
+  const [activeSearchSuggestionIndex, setActiveSearchSuggestionIndex] = useState(-1);
+  const searchBoxRef = useRef<HTMLDivElement | null>(null);
+  const [ratingsCache, setRatingsCache] = useState<Record<string, ListingBenchmarkData>>({});
   const [listings, setListings] = useState<ListingRecord[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
   const [total, setTotal] = useState<number | null>(null);
@@ -373,6 +398,118 @@ export default function TradingFloor() {
   useEffect(() => {
     setSearchInput(search);
   }, [search]);
+
+  const selectSearchSuggestion = useCallback((suggestion: CatalogSuggestion) => {
+    setSearchInput(suggestion.reference);
+    setSearchSuggestionsOpen(false);
+    setSearchSuggestions([]);
+    resetResults();
+    updateViewParams({ q: suggestion.reference, brand: suggestion.brand });
+  }, [resetResults, updateViewParams]);
+
+  useEffect(() => {
+    const query = searchInput.trim();
+    if (query.length < 2) {
+      setSearchSuggestions([]);
+      setSearchSuggestionsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearchSuggestionsLoading(true);
+      try {
+        const params = new URLSearchParams({ q: query, limit: '8' });
+        if (brandFilter) params.set('brand', brandFilter);
+        const response = await fetch(`/api/catalog-suggestions?${params.toString()}`, { signal: controller.signal });
+        if (!response.ok) throw new Error('Suggestions unavailable');
+        const payload = await response.json() as CatalogSuggestionsResponse;
+        const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+        setSearchSuggestions(suggestions);
+        setActiveSearchSuggestionIndex(suggestions.length ? 0 : -1);
+      } catch (caught) {
+        if ((caught as Error).name !== 'AbortError') setSearchSuggestions([]);
+      } finally {
+        if (!controller.signal.aborted) setSearchSuggestionsLoading(false);
+      }
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchInput, brandFilter]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!searchBoxRef.current?.contains(event.target as Node)) {
+        setSearchSuggestionsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  useEffect(() => {
+    if (!visibleListings.length) return;
+    const missingPairs: Array<{ brand: string; reference: string; dial: string }> = [];
+    const seen = new Set<string>();
+
+    for (const listing of visibleListings) {
+      if (!listing.brand || !listing.reference) continue;
+      const key = `${listing.brand.toLowerCase()}|${listing.reference.toLowerCase()}|${(listing.dial_color || '').toLowerCase()}`;
+      if (seen.has(key) || ratingsCache[key]) continue;
+      seen.add(key);
+      missingPairs.push({
+        brand: listing.brand,
+        reference: listing.reference,
+        dial: listing.dial_color || '',
+      });
+    }
+
+    if (!missingPairs.length) return;
+
+    const controller = new AbortController();
+    const chunks: typeof missingPairs[] = [];
+    for (let i = 0; i < missingPairs.length; i += 24) {
+      chunks.push(missingPairs.slice(i, i + 24));
+    }
+
+    Promise.all(
+      chunks.map(chunk =>
+        fetch('/api/price-research-batch-summary', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pairs: chunk }),
+          signal: controller.signal,
+        })
+          .then(res => (res.ok ? res.json() : null))
+          .catch(() => null)
+      )
+    ).then(results => {
+      const updates: Record<string, ListingBenchmarkData> = {};
+      for (const res of results) {
+        if (!res || !Array.isArray(res.summaries)) continue;
+        for (const s of res.summaries) {
+          const k = `${String(s.brand || '').toLowerCase()}|${String(s.reference || '').toLowerCase()}|${String(s.selected_dial || '').toLowerCase()}`;
+          updates[k] = {
+            stats: s.stats || null,
+            count: Number(s.selected_dial_qualified_count || s.reference_qualified_wts_count || s.source_observation_count || 0),
+            analytics_ready: s.analytics_ready,
+          };
+          const fallbackK = `${String(s.brand || '').toLowerCase()}|${String(s.reference || '').toLowerCase()}|`;
+          if (!updates[fallbackK]) {
+            updates[fallbackK] = updates[k];
+          }
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        setRatingsCache(prev => ({ ...prev, ...updates }));
+      }
+    });
+
+    return () => controller.abort();
+  }, [visibleListings, ratingsCache]);
 
   useEffect(() => {
     if (previousViewKeyRef.current === viewKey) return;
@@ -616,17 +753,83 @@ export default function TradingFloor() {
           </div>
 
           <div className="sticky top-0 z-20 -mx-4 flex gap-2 border-y px-4 py-3 md:static md:mx-0 md:border-0 md:p-0" style={{ borderColor: BORDER, background: SURFACE }}>
-            <label className="relative block min-w-0 flex-1 md:max-w-[460px]">
+            <div ref={searchBoxRef} className="relative block min-w-0 flex-1 md:max-w-[460px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
               <input
                 type="search"
                 value={searchInput}
-                onChange={event => setSearchInput(event.target.value)}
+                onChange={event => {
+                  setSearchInput(event.target.value);
+                  setSearchSuggestionsOpen(true);
+                }}
+                onFocus={() => setSearchSuggestionsOpen(searchSuggestions.length > 0)}
+                onKeyDown={event => {
+                  if (event.key === 'Escape') {
+                    setSearchSuggestionsOpen(false);
+                    return;
+                  }
+                  if (searchSuggestionsOpen && searchSuggestions.length > 0) {
+                    if (event.key === 'ArrowDown') {
+                      event.preventDefault();
+                      setActiveSearchSuggestionIndex(idx => (idx + 1) % searchSuggestions.length);
+                      return;
+                    }
+                    if (event.key === 'ArrowUp') {
+                      event.preventDefault();
+                      setActiveSearchSuggestionIndex(idx => (idx <= 0 ? searchSuggestions.length - 1 : idx - 1));
+                      return;
+                    }
+                    if (event.key === 'Enter' && activeSearchSuggestionIndex >= 0) {
+                      event.preventDefault();
+                      selectSearchSuggestion(searchSuggestions[activeSearchSuggestionIndex]);
+                      return;
+                    }
+                  }
+                }}
                 placeholder="Search item, model, reference, message, or seller"
                 className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={searchSuggestionsOpen}
               />
-            </label>
+              {searchSuggestionsOpen && searchSuggestions.length > 0 && (
+                <div
+                  role="listbox"
+                  aria-label="Search suggestions"
+                  className="absolute inset-x-0 top-12 z-50 max-h-[360px] overflow-y-auto rounded-md border border-[#DED8CD] bg-white p-1 text-left shadow-2xl"
+                >
+                  {searchSuggestions.map((suggestion, index) => (
+                    <button
+                      key={`${suggestion.brand}-${suggestion.reference}-${index}`}
+                      type="button"
+                      role="option"
+                      aria-selected={index === activeSearchSuggestionIndex}
+                      onMouseEnter={() => setActiveSearchSuggestionIndex(index)}
+                      onMouseDown={event => event.preventDefault()}
+                      onClick={() => selectSearchSuggestion(suggestion)}
+                      className="flex min-h-12 w-full items-center justify-between gap-3 rounded px-3 py-2 text-left transition-colors"
+                      style={{
+                        background: index === activeSearchSuggestionIndex ? '#F6F0E7' : '#FFFFFF',
+                        color: INK,
+                      }}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-[#171717]">{suggestion.brand} {suggestion.reference}</span>
+                        <span className="mt-0.5 block truncate text-xs text-[#6B7280]">
+                          {suggestion.model || 'Catalog model'}
+                          {suggestion.dial_colors.length ? ` · ${suggestion.dial_colors.join(', ')} dial` : ''}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#9A7127]">
+                        {suggestion.match_type === 'reference_typo_candidate' ? 'Did you mean?' : 'Search'}
+                      </span>
+                    </button>
+                  ))}
+                  {searchSuggestionsLoading && <div className="px-3 py-2 text-xs text-[#6B7280]">Checking catalog…</div>}
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setFiltersOpen(true)}
@@ -762,14 +965,20 @@ export default function TradingFloor() {
                 ? 'grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3'
                 : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}
               >
-                {visibleListings.map(listing => (
-                  <ListingCard
-                    key={listing.id}
-                    listing={listing}
-                    selected={false}
-                    onSelect={() => openListing(listing)}
-                  />
-                ))}
+                {visibleListings.map(listing => {
+                  const ratingKey = `${(listing.brand || '').toLowerCase()}|${(listing.reference || '').toLowerCase()}|${(listing.dial_color || '').toLowerCase()}`;
+                  const fallbackKey = `${(listing.brand || '').toLowerCase()}|${(listing.reference || '').toLowerCase()}|`;
+                  const benchmark = ratingsCache[ratingKey] || ratingsCache[fallbackKey];
+                  return (
+                    <ListingCard
+                      key={listing.id}
+                      listing={listing}
+                      selected={false}
+                      benchmark={benchmark}
+                      onSelect={() => openListing(listing)}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1134,10 +1343,15 @@ function getListingImageSrc(listing: ListingRecord): string | null {
   return null;
 }
 
-function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
+function ListingCard({ listing, selected, onSelect, benchmark }: { listing: ListingRecord; selected: boolean; onSelect: () => void; benchmark?: ListingBenchmarkData }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const imageUrl = getListingImageSrc(listing);
   const rawMsg = listing.raw_message || listing.raw_line || listing.description || '';
+
+  const priceRating = useMemo(() => {
+    if (!benchmark || !benchmark.stats) return null;
+    return rateMarketPrice(listing.price_usd, benchmark.stats, benchmark.count);
+  }, [listing.price_usd, benchmark]);
 
   return (
     <article
@@ -1189,7 +1403,21 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
         <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
         <div className="text-xs font-medium text-[#7A8699]">
-          Price rating: <span className="text-[#8E9AAF]">Open for rating</span>
+          {priceRating && priceRating.code !== 'NOT_RATED' ? (
+            <span
+              className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+              style={{
+                backgroundColor: priceRating.code === 'GOOD' ? '#ECFDF5' : priceRating.code === 'HIGH' ? '#FEF2F2' : '#FDF8F0',
+                color: priceRating.color,
+                border: `1px solid ${priceRating.color}40`,
+              }}
+              title={priceRating.reason}
+            >
+              {priceRating.label}
+            </span>
+          ) : (
+            <span>Price rating: <span className="text-[#8E9AAF]">{priceRating?.label || 'Open for rating'}</span></span>
+          )}
         </div>
       </div>
       <div className="text-xs text-[#7A8699] mt-0.5">

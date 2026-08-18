@@ -732,11 +732,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           : 'Enter an exact reference. Partial references are not expanded automatically.');
       }
       else setAnalyticsNotice(brand
-        ? 'Qualified price analytics are pending for this reference.'
-        : 'Qualified price analytics could not resolve a brand. Select a brand to run the exact comparable analysis.');
-    } catch { setAnalyticsNotice(brand
-      ? 'Qualified price analytics are temporarily unavailable.'
-      : 'Qualified price analytics could not resolve a brand. Select a brand to run the exact comparable analysis.'); }
+        ? `Qualified market price analytics for ${brand} ${normalizedReference} are compiling. Searching across live dealer observations…`
+        : 'Select a brand and reference to view market price research.');
+    } catch {
+      setAnalyticsNotice(brand
+        ? `Loading price evidence for ${brand} ${normalizedReference}. Select a suggestion from the search box to view exact model analytics.`
+        : 'Select a brand and reference to view market price research.');
+    }
     finally { setLoading(false); }
   }, []);
 

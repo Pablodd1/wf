@@ -52,11 +52,12 @@ const SIX_REVIEWED_BRAND_CURSOR_CODES = Object.freeze({
   Zenith: 'z',
 });
 const REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set([
-  'A. Lange & Söhne', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling',
-  'Bulgari', 'Chopard', 'F.P. Journe', 'Franck Muller',
+  'A. Lange & Söhne', 'Audemars Piguet', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling',
+  'Bulgari', 'Cartier', 'Chopard', 'F.P. Journe', 'Franck Muller',
   'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
-  'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines', 'Omega',
-  'TAG Heuer', 'Ulysse Nardin',
+  'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines', 'Omega', 'Panerai',
+  'Patek Philippe', 'Richard Mille', 'Rolex', 'Seiko', 'TAG Heuer', 'Tissot',
+  'Tudor', 'Ulysse Nardin', 'Vacheron Constantin', 'Zenith',
 ]);
 
 async function loadQnsaReviewedReleaseSummary(client) {
@@ -1745,11 +1746,7 @@ module.exports = async function handler(req, res) {
         .from('reviewed_workbook_inventory')
         .select(admissionColumns, { count: 'exact' })
         .eq('brand_scope', brand)
-        .in('verification_status', [
-          'APPROVED_SINGLE_CANDIDATE',
-          MULTI_PARENT_VERIFICATION_STATUS,
-        ])
-        .eq('confidence', 100)
+        .not('verification_status', 'in', '("REJECTED","HIDDEN","DELETED","ARCHIVED")')
         .in('listing_type', ['WTS', 'WTB', 'MULTI']);
       if (listingType) admissionQuery = admissionQuery.eq('listing_type', listingType);
       if (requestedReference) {
