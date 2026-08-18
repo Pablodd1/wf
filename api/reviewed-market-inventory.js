@@ -106,7 +106,14 @@ function unavailableQnsaReleaseSummary() {
     reconciled: false,
     count_snapshot_available: false,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Cartier', 'IWC', 'Omega', 'Tudor', 'Panerai', 'Hublot', 'Breitling', 'Jaeger-LeCoultre', 'Grand Seiko', 'Zenith'].map(brand => ({
+    brands: [
+      'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier',
+      'TAG Heuer', 'Omega', 'Tudor', 'Vacheron Constantin', 'Breguet', 'Hublot',
+      'A. Lange & Söhne', 'Blancpain', 'Bulgari', 'Panerai', 'IWC', 'F.P. Journe',
+      'Zenith', 'Chopard', 'Jaeger-LeCoultre', 'Breitling', 'Grand Seiko',
+      'H. Moser & Cie', 'Jacob & Co', 'Longines', 'Franck Muller', 'Ulysse Nardin',
+      'Girard-Perregaux', 'Glashütte Original', 'Tissot', 'Bell & Ross', 'Seiko'
+    ].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,

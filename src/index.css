@@ -62,6 +62,22 @@ body {
     to { transform: translate3d(-50%, 0, 0); }
   }
 
+  @keyframes ticker-scroll {
+    0% { transform: translate3d(0, 0, 0); }
+    100% { transform: translate3d(-50%, 0, 0); }
+  }
+
+  .animate-ticker-scroll {
+    display: flex;
+    width: max-content;
+    animation: ticker-scroll 50s linear infinite;
+    will-change: transform;
+  }
+
+  .animate-ticker-scroll:hover {
+    animation-play-state: paused;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .market-activity-viewport {
       overflow: hidden;

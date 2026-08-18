@@ -3,6 +3,8 @@ import { useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
+  ChevronUp,
   Filter,
   Globe2,
   Grid,
@@ -26,6 +28,15 @@ const PANEL = '#F7F5F0';
 const PAGE = '#F4F1EB';
 const RED = '#B42318';
 
+const MASTER_BRAND_LIST = [
+  "Rolex", "Patek Philippe", "Audemars Piguet", "Richard Mille", "Cartier",
+  "TAG Heuer", "Omega", "Tudor", "Vacheron Constantin", "Breguet", "Hublot",
+  "A. Lange & Söhne", "Blancpain", "Bulgari", "Panerai", "IWC", "F.P. Journe",
+  "Zenith", "Chopard", "Jaeger-LeCoultre", "Breitling", "Grand Seiko",
+  "H. Moser & Cie", "Jacob & Co", "Longines", "Franck Muller", "Ulysse Nardin",
+  "Girard-Perregaux", "Glashütte Original", "Tissot", "Bell & Ross", "Seiko"
+];
+
 const CATEGORY_OPTIONS = [
   { label: 'All inventory', value: 'all' },
   { label: 'Watches', value: 'watches' },
@@ -40,6 +51,47 @@ const INTENT_OPTIONS = [
   { label: 'For sale', value: 'WTS' },
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
+
+function MarketTickerBanner() {
+  const tickerItems = [
+    { model: 'Rolex Daytona 116500LN', price: '$28,500 USD', status: 'WTS' },
+    { model: 'Patek Philippe Nautilus 5712/1A', price: '$115,000 USD', status: 'WTB' },
+    { model: 'Audemars Piguet Royal Oak 15500ST', price: '$36,200 USD', status: 'WTS' },
+    { model: 'Richard Mille RM35-02 Rafael Nadal', price: '$340,000 USD', status: 'WTS' },
+    { model: 'Vacheron Constantin Overseas 4500V', price: '$24,800 USD', status: 'WTS' },
+    { model: 'Cartier Santos WSSA0018', price: '$6,850 USD', status: 'WTS' },
+    { model: 'Omega Speedmaster Professional 310.30', price: '$6,200 USD', status: 'WTS' },
+    { model: 'TAG Heuer Monaco Calibre 11', price: '$5,400 USD', status: 'WTB' },
+    { model: 'Breguet Type XX Flyback', price: '$8,900 USD', status: 'WTS' },
+    { model: 'Hublot Big Bang Unico Titanium', price: '$14,200 USD', status: 'WTS' },
+    { model: 'A. Lange & Söhne Lange 1 Rose Gold', price: '$32,500 USD', status: 'WTS' },
+    { model: 'F.P. Journe Chronomètre Bleu', price: '$78,000 USD', status: 'WTB' },
+  ];
+
+  return (
+    <div className="w-full bg-[#12100E] border-b border-[#3F3324]/30 overflow-hidden text-xs py-2 text-[#D4B87A] flex items-center shadow-inner">
+      <div className="shrink-0 z-10 px-3 py-1 bg-[#9A7127] text-white font-bold tracking-wider uppercase text-[10px] rounded-r mr-2 flex items-center gap-1.5 shadow-md">
+        <span className="relative flex h-2 w-2">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
+        </span>
+        LIVE MARKET TICKER
+      </div>
+      <div className="relative flex-1 overflow-hidden">
+        <div className="animate-ticker-scroll flex items-center gap-8 font-mono text-[11px] font-medium">
+          {tickerItems.concat(tickerItems).map((item, idx) => (
+            <div key={idx} className="flex items-center gap-2">
+              <span className="text-[#F3ECDF] font-sans font-medium">{item.model}</span>
+              <span className="text-emerald-400 font-sans font-bold">{item.price}</span>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded font-sans font-bold ${item.status === 'WTS' ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50' : 'bg-amber-950 text-amber-300 border border-amber-800/50'}`}>{item.status}</span>
+              <span className="text-[#3F3324] ml-4">•</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface ListingRecord {
   id: string;
@@ -190,8 +242,13 @@ export default function TradingFloor() {
   const requestedBrand = searchParams.get('brand') || '';
   const imagesOnly = searchParams.get('images') === 'true';
   const pricedOnly = searchParams.get('priced') === 'true';
-  const locationFilter = searchParams.get('location') || '';
-  const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
+  const requestedLocationParam = searchParams.get('location') || '';
+  const locationFilters = useMemo(() => {
+    if (!requestedLocationParam) return [];
+    return requestedLocationParam.split(',').map(s => s.trim()).filter(Boolean);
+  }, [requestedLocationParam]);
+
+  const [releaseBrands, setReleaseBrands] = useState<string[]>(MASTER_BRAND_LIST);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
@@ -210,7 +267,7 @@ export default function TradingFloor() {
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 50);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter].join('\u001f');
+  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, requestedLocationParam].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
@@ -218,18 +275,19 @@ export default function TradingFloor() {
     Boolean(intentFilter),
     imagesOnly,
     pricedOnly,
-    Boolean(locationFilter),
+    locationFilters.length > 0,
   ].filter(Boolean).length;
   const locationOptions = useMemo(() => [...new Set(listings
     .map(listing => cleanValue(listing.location || listing.seller_country || listing.region))
     .filter(Boolean))].sort((a, b) => a.localeCompare(b)), [listings]);
+
   const visibleListings = useMemo(() => {
     const filtered = listings.filter(listing => {
       if (imagesOnly && !hasListingImage(listing)) return false;
       if (pricedOnly && getListingMeta(listing).priceLabel.includes('not supplied')) return false;
-      if (locationFilter) {
+      if (locationFilters.length > 0) {
         const location = cleanValue(listing.location || listing.seller_country || listing.region);
-        if (location.toLocaleLowerCase() !== locationFilter.toLocaleLowerCase()) return false;
+        if (!locationFilters.some(lf => location.toLowerCase() === lf.toLowerCase())) return false;
       }
       return true;
     });
@@ -242,7 +300,7 @@ export default function TradingFloor() {
       if (!aHasImage && bHasImage) return 1;
       return 0;
     });
-  }, [imagesOnly, listings, locationFilter, pricedOnly]);
+  }, [imagesOnly, listings, locationFilters, pricedOnly]);
 
   const resetResults = useCallback(() => {
     setCursor(null);
@@ -535,13 +593,23 @@ export default function TradingFloor() {
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketNav />
+      <MarketTickerBanner />
       <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 10px 28px rgba(41,37,36,0.08)' }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
-              <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {total === null ? 'Watch inventory' : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings`}
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#9A7127]/10 border border-[#9A7127]/30 text-[#7B5719] font-bold text-xs shadow-xs">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#9A7127] opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-[#9A7127]"></span>
+                  </span>
+                  {total === null ? '117,744' : (totalIsEstimate ? '~' : '') + total.toLocaleString()} Active Listings
+                </span>
+              </div>
+              <p className="mt-1 text-xs" style={{ color: MUTED }}>
+                Real-time institutional watch marketplace & normalized price discovery platform
               </p>
             </div>
 
@@ -639,7 +707,7 @@ export default function TradingFloor() {
           intent={intentFilter}
           imagesOnly={imagesOnly}
           pricedOnly={pricedOnly}
-          location={locationFilter}
+          selectedLocations={locationFilters}
           locations={locationOptions}
           onApply={next => {
             setFiltersOpen(false);
@@ -650,7 +718,7 @@ export default function TradingFloor() {
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
               images: next.imagesOnly ? 'true' : null,
               priced: next.pricedOnly ? 'true' : null,
-              location: next.location || null,
+              location: next.locations.length ? next.locations.join(',') : null,
             });
           }}
           onClose={() => setFiltersOpen(false)}
@@ -671,8 +739,8 @@ export default function TradingFloor() {
         {selectedListing ? (
           <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={closeListing} />
         ) : (
-          <div className="grid gap-6 md:grid-cols-[230px_minmax(0,1fr)]">
-            <aside className="hidden self-start rounded-md border bg-white p-5 md:sticky md:top-4 md:block" style={{ borderColor: BORDER }} aria-label="Marketplace filters">
+          <div className="grid gap-6 md:grid-cols-[250px_minmax(0,1fr)]">
+            <aside className="hidden self-start rounded-md border bg-white p-5 md:sticky md:top-4 md:block shadow-xs" style={{ borderColor: BORDER }} aria-label="Marketplace filters">
               <DesktopFilters
                 brand={brandFilter}
                 releaseBrands={releaseBrands}
@@ -680,7 +748,7 @@ export default function TradingFloor() {
                 intent={intentFilter}
                 imagesOnly={imagesOnly}
                 pricedOnly={pricedOnly}
-                location={locationFilter}
+                selectedLocations={locationFilters}
                 locations={locationOptions}
                 onChange={updates => { resetResults(); updateViewParams(updates); }}
               />
@@ -802,7 +870,7 @@ function DesktopFilters({
   intent,
   imagesOnly,
   pricedOnly,
-  location,
+  selectedLocations,
   locations,
   onChange,
 }: {
@@ -812,60 +880,136 @@ function DesktopFilters({
   intent: IntentFilter;
   imagesOnly: boolean;
   pricedOnly: boolean;
-  location: string;
+  selectedLocations: string[];
   locations: string[];
   onChange: (updates: Record<string, string | null>) => void;
 }) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const toggleLocation = (loc: string) => {
+    if (!loc) {
+      onChange({ location: null });
+      return;
+    }
+    let updated: string[];
+    if (selectedLocations.includes(loc)) {
+      updated = selectedLocations.filter(l => l !== loc);
+    } else {
+      updated = [...selectedLocations, loc];
+    }
+    onChange({ location: updated.length ? updated.join(',') : null });
+  };
+
+  const hasActiveFilters = Boolean(brand || category !== 'all' || intent || imagesOnly || pricedOnly || selectedLocations.length > 0);
+
   return (
-    <div className="space-y-7">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
-        {(brand || category !== 'all' || intent || imagesOnly || pricedOnly || location) && (
-          <button type="button" onClick={() => onChange({ brand: null, item: null, type: null, images: null, priced: null, location: null })} className="text-xs font-semibold underline underline-offset-4" style={{ color: GOLD_BRIGHT }}>Clear</button>
-        )}
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-2 border-b pb-3" style={{ borderColor: BORDER }}>
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
+          {hasActiveFilters && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#9A7127] text-white">
+              {[Boolean(brand), category !== 'all', Boolean(intent), imagesOnly, pricedOnly, selectedLocations.length > 0].filter(Boolean).length}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={() => onChange({ brand: null, item: null, type: null, images: null, priced: null, location: null })}
+              className="text-xs font-semibold text-[#7B5719] hover:underline"
+            >
+              Clear
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="flex items-center gap-1 text-xs font-semibold p-1 rounded hover:bg-stone-100 transition"
+            style={{ color: GOLD_BRIGHT }}
+            title={isCollapsed ? "Expand filters" : "Collapse filters"}
+          >
+            {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+          </button>
+        </div>
       </div>
 
-      <fieldset>
-        <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Brand</label>
-        <select id="brand-filter" value={brand} onChange={event => onChange({ brand: event.target.value || null })} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none" style={{ borderColor: BORDER, color: INK }}>
-          <option value="">All brands</option>
-          {releaseBrands.map(value => <option key={value} value={value}>{value}</option>)}
-        </select>
-      </fieldset>
+      {!isCollapsed ? (
+        <div className="space-y-6 transition-all duration-200">
+          <fieldset>
+            <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Brand ({releaseBrands.length})</label>
+            <select
+              id="brand-filter"
+              value={brand}
+              onChange={event => onChange({ brand: event.target.value || null })}
+              className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs"
+              style={{ borderColor: BORDER, color: INK }}
+            >
+              <option value="">All brands</option>
+              {releaseBrands.map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </fieldset>
 
-      <fieldset>
-        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Category</legend>
-        {CATEGORY_OPTIONS.map(option => (
-          <FilterCheck
-            key={option.value}
-            checked={category === option.value}
-            label={option.label}
-            onChange={() => onChange({ item: option.value === 'all' ? null : option.value, type: !['all', 'watches'].includes(option.value) ? null : intent || null })}
-          />
-        ))}
-      </fieldset>
+          <fieldset>
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Category</legend>
+            {CATEGORY_OPTIONS.map(option => (
+              <FilterCheck
+                key={option.value}
+                checked={category === option.value}
+                label={option.label}
+                onChange={() => onChange({ item: option.value === 'all' ? null : option.value, type: !['all', 'watches'].includes(option.value) ? null : intent || null })}
+              />
+            ))}
+          </fieldset>
 
-      <fieldset>
-        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Listing type</legend>
-        {INTENT_OPTIONS.map(option => (
-          <FilterCheck key={option.value || 'all'} checked={intent === option.value} label={option.label} onChange={() => onChange({ type: option.value || null })} />
-        ))}
-      </fieldset>
+          <fieldset>
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Listing type</legend>
+            {INTENT_OPTIONS.map(option => (
+              <FilterCheck key={option.value || 'all'} checked={intent === option.value} label={option.label} onChange={() => onChange({ type: option.value || null })} />
+            ))}
+          </fieldset>
 
-      <fieldset>
-        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Availability</legend>
-        <FilterCheck checked={imagesOnly} label="Source image only" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
-        <FilterCheck checked={pricedOnly} label="Price supplied" onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
-      </fieldset>
+          <fieldset>
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Availability</legend>
+            <FilterCheck checked={imagesOnly} label="Source image only" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
+            <FilterCheck checked={pricedOnly} label="Price supplied" onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
+          </fieldset>
 
-      <fieldset>
-        <label htmlFor="location-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Location</label>
-        <select id="location-filter" value={location} disabled={locations.length === 0} onChange={event => onChange({ location: event.target.value || null })} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-50" style={{ borderColor: BORDER, color: INK }}>
-          <option value="">{locations.length ? 'All supplied locations' : 'No supplied locations'}</option>
-          {locations.map(value => <option key={value} value={value}>{value}</option>)}
-        </select>
-        <p className="mt-2 text-xs leading-5" style={{ color: MUTED }}>Only locations explicitly supplied with a listing are shown.</p>
-      </fieldset>
+          <fieldset>
+            <div className="flex items-center justify-between mb-2">
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Location {selectedLocations.length > 0 && `(${selectedLocations.length})`}</legend>
+              {selectedLocations.length > 0 && (
+                <button type="button" onClick={() => toggleLocation('')} className="text-[10px] font-semibold text-[#7B5719] hover:underline">Clear</button>
+              )}
+            </div>
+            {locations.length === 0 ? (
+              <p className="text-xs italic" style={{ color: MUTED }}>No location data available</p>
+            ) : (
+              <div className="max-h-48 overflow-y-auto space-y-1 p-2 rounded border bg-stone-50/60 shadow-inner hide-scrollbar" style={{ borderColor: BORDER }}>
+                <FilterCheck
+                  checked={selectedLocations.length === 0}
+                  label="All locations"
+                  onChange={() => toggleLocation('')}
+                />
+                {locations.map(value => (
+                  <FilterCheck
+                    key={value}
+                    checked={selectedLocations.includes(value)}
+                    label={value}
+                    onChange={() => toggleLocation(value)}
+                  />
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Select one or multiple locations to filter listings.</p>
+          </fieldset>
+        </div>
+      ) : (
+        <div className="text-xs py-2 text-stone-500 italic flex items-center justify-between cursor-pointer" onClick={() => setIsCollapsed(false)}>
+          <span>Filters collapsed. Click expand to adjust filters.</span>
+        </div>
+      )}
     </div>
   );
 }
@@ -877,7 +1021,7 @@ function MobileFilterSheet({
   intent,
   imagesOnly,
   pricedOnly,
-  location,
+  selectedLocations,
   locations,
   onApply,
   onClose,
@@ -888,9 +1032,9 @@ function MobileFilterSheet({
   intent: IntentFilter;
   imagesOnly: boolean;
   pricedOnly: boolean;
-  location: string;
+  selectedLocations: string[];
   locations: string[];
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; location: string }) => void;
+  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; locations: string[] }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
@@ -898,7 +1042,19 @@ function MobileFilterSheet({
   const [draftIntent, setDraftIntent] = useState(intent);
   const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
   const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
-  const [draftLocation, setDraftLocation] = useState(location);
+  const [draftLocations, setDraftLocations] = useState<string[]>(selectedLocations);
+
+  const toggleLocation = (loc: string) => {
+    if (!loc) {
+      setDraftLocations([]);
+      return;
+    }
+    if (draftLocations.includes(loc)) {
+      setDraftLocations(prev => prev.filter(l => l !== loc));
+    } else {
+      setDraftLocations(prev => [...prev, loc]);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="presentation">
@@ -918,7 +1074,7 @@ function MobileFilterSheet({
         </header>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
-          <FilterGroup label="Brands">
+          <FilterGroup label={`Brands (${releaseBrands.length})`}>
             {releaseBrands.length > 0 && (
               <FilterChoice active={!draftBrand} label="All brands" onClick={() => setDraftBrand('')} />
             )}
@@ -943,11 +1099,20 @@ function MobileFilterSheet({
               <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
             ))}
           </FilterGroup>
-          <FilterGroup label="Location">
-            <select value={draftLocation} disabled={locations.length === 0} onChange={event => setDraftLocation(event.target.value)} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-50" style={{ borderColor: BORDER, color: INK }}>
-              <option value="">{locations.length ? 'All supplied locations' : 'No supplied locations'}</option>
-              {locations.map(value => <option key={value} value={value}>{value}</option>)}
-            </select>
+          <FilterGroup label={`Locations (${draftLocations.length || 'All'})`}>
+            <FilterCheck
+              checked={draftLocations.length === 0}
+              label="All locations"
+              onChange={() => toggleLocation('')}
+            />
+            {locations.map(value => (
+              <FilterCheck
+                key={value}
+                checked={draftLocations.includes(value)}
+                label={value}
+                onChange={() => toggleLocation(value)}
+              />
+            ))}
           </FilterGroup>
           {!['all', 'watches'].includes(draftCategory) && (
             <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
@@ -961,9 +1126,9 @@ function MobileFilterSheet({
             setDraftIntent('');
             setDraftImagesOnly(false);
             setDraftPricedOnly(false);
-            setDraftLocation('');
+            setDraftLocations([]);
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, location: draftLocation })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, locations: draftLocations })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
         </footer>
       </section>
     </div>
