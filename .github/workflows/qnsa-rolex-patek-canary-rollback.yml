@@ -1,0 +1,58 @@
+name: QNSA Rolex Patek canary rollback
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type ROLLBACK_QNSA_ROLEX_PATEK_CANARY_32092474203
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-rolex-patek-delta-production
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Roll back the exact failed-image canary
+        shell: pwsh
+        env:
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: qnsafosakvonzgfcsphh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:INPUT_CONFIRMATION -ne 'ROLLBACK_QNSA_ROLEX_PATEK_CANARY_32092474203') { throw 'Exact rollback confirmation is required.' }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $sql = @"
+          DO `$rollback`$
+          DECLARE
+            v_ids text[];
+            v_deleted integer;
+          BEGIN
+            SELECT rollback_ids INTO v_ids
+            FROM public.reviewed_workbook_delta_release_runs
+            WHERE run_key = 'rpdelta_canary_32092474203_1'
+              AND tier = 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1'
+              AND status = 'APPLIED'
+            FOR UPDATE;
+            IF COALESCE(cardinality(v_ids), 0) <> 10 THEN
+              RAISE EXCEPTION 'Expected exactly 10 rollback ids';
+            END IF;
+            SELECT public.rollback_qnsa_rolex_patek_delta('rpdelta_canary_32092474203_1', v_ids)
+              INTO v_deleted;
+            IF v_deleted <> 10 THEN
+              RAISE EXCEPTION 'Expected 10 deleted rows, got %', v_deleted;
+            END IF;
+          END
+          `$rollback`$;
+          "@
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $body = @{ query = $sql } | ConvertTo-Json -Compress
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null

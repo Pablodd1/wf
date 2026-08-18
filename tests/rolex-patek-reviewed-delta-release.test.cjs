@@ -11,6 +11,7 @@ const source = fs.readFileSync(path.join(root, 'tools/intake/rolex_patek_delta_r
 const workflow = fs.readFileSync(path.join(root, '.github/workflows/qnsa-rolex-patek-reviewed-delta.yml'), 'utf8');
 const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20260817120000_qnsa_rolex_patek_delta_lineage.sql'), 'utf8');
 const overlapRepair = fs.readFileSync(path.join(root, 'supabase/migrations/20260817123000_qnsa_rolex_patek_delta_overlap_index_repair.sql'), 'utf8');
+const canaryRollback = fs.readFileSync(path.join(root, '.github/workflows/qnsa-rolex-patek-canary-rollback.yml'), 'utf8');
 
 test('delta importer is fail-closed and preserves owner USD evidence labels', () => {
   assert.match(source, /QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1/);
@@ -49,6 +50,14 @@ print(json.dumps(m.inventory_row(r,pkg,'rpdelta_canary_test')))`;
   assert.equal(row.image_evidence_type, 'SELLER_LISTING_IMAGE');
   assert.equal(row.phone_number, null);
   assert.equal(row.contact_publication_approved, false);
+  const imageCode = String.raw`
+import importlib.util, pathlib
+p=pathlib.Path(r'${path.join(root, 'tools/intake/rolex_patek_delta_release.py').replace(/\\/g, '\\\\')}')
+s=importlib.util.spec_from_file_location('rp',p);m=importlib.util.module_from_spec(s);s.loader.exec_module(m)
+print(m.canonical_source_image_url('https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/6a60f28aa37c6_front_image.jpg'))`;
+  const imageResult = spawnSync('python', ['-c', imageCode], { cwd: root, encoding: 'utf8' });
+  assert.equal(imageResult.status, 0, imageResult.stderr);
+  assert.equal(imageResult.stdout.trim(), 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/6a60f28aa37c6_front_image.jpg');
 });
 
 test('workflow authenticates package and enforces audit before bounded DML', () => {
@@ -88,6 +97,12 @@ test('workflow authenticates package and enforces audit before bounded DML', () 
   assert.doesNotMatch(overlapRepair, /l\.id::text\s*=|p\.(?:source_platform|source_group_id|source_message_id|payload_checksum)::text\s*=/);
   assert.match(overlapRepair, /p\.payload_checksum = w\.payload_checksum/);
   assert.match(overlapRepair, /p\.source_platform = w\.source_platform/);
+  assert.match(canaryRollback, /qnsafosakvonzgfcsphh/);
+  assert.match(canaryRollback, /rpdelta_canary_32092474203_1/);
+  assert.match(canaryRollback, /status = 'APPLIED'/);
+  assert.match(canaryRollback, /cardinality\(v_ids\), 0\) <> 10/);
+  assert.match(canaryRollback, /v_deleted <> 10/);
+  assert.doesNotMatch(canaryRollback, /\$\{\{ inputs\.confirmation \}\}[^\n]*run:/);
   assert.match(overlapRepair, /p\.source_group_id IS NOT DISTINCT FROM w\.source_group_id/);
   assert.match(overlapRepair, /p\.source_message_id = w\.source_message_id/);
   assert.match(overlapRepair, /source_platform varchar\(50\)/);

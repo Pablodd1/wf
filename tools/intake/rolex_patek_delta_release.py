@@ -87,6 +87,14 @@ def exact_ref_supported(reference: str, raw: str) -> bool:
     return len(target) >= 4 and any(char.isdigit() for char in target) and target in norm_ref(raw)
 
 
+def canonical_source_image_url(url: str) -> str:
+    url = (url or "").strip()
+    prefix = "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/"
+    if url.startswith(prefix) and not url.startswith(prefix + "full/"):
+        return prefix + "full/" + url[len(prefix):]
+    return url
+
+
 def price_policy(raw: str, workbook_price: str, intent: str):
     if intent == "WTB":
         return None, None, "WTB_PRICE_WITHHELD"
@@ -169,7 +177,8 @@ def extract(path: Path) -> dict:
                 "listing_type": intent, "raw_message": raw,
                 "price_usd": price, "source_currency": currency,
                 "source_price_amount": value(row, "source_price_amount"),
-                "price_status": price_status, "source_image_url": value(row, "source_image_url"),
+                "price_status": price_status,
+                "source_image_url": canonical_source_image_url(value(row, "source_image_url")),
             })
         for row in provisional:
             if not row["source_message_id"] or message_counts[row["source_message_id"]] != 1:
@@ -205,7 +214,7 @@ def extract(path: Path) -> dict:
         for row in candidates:
             image = image_by_id.get(row["listing_id"], {})
             exact = (image.get("source_message_id") == row["source_message_id"]
-                     and image.get("image_url") == row["source_image_url"]
+                     and canonical_source_image_url(image.get("image_url")) == row["source_image_url"]
                      and image.get("association_status") == "EXACT_LISTING_IMAGE")
             if not exact:
                 row["source_image_url"] = ""
