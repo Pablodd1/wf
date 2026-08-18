@@ -395,6 +395,20 @@ test('explicit listing condition overrides an inherited section condition', () =
   assert.equal(candidates[1].context.condition_context, 'New');
 });
 
+test('owner policy treats bare K dealer shorthand as USD while named currency wins', () => {
+  const bare = extractPriceObservations('Rolex Daytona 126508 85k');
+  assert.equal(bare.length, 1);
+  assert.equal(bare[0].amount_original, 85000);
+  assert.equal(bare[0].currency_original, 'USD');
+  assert.equal(bare[0].currency_evidence, 'usd_defaulted_by_policy');
+
+  const named = extractPriceObservations('Rolex Daytona 126508 85k HKD');
+  assert.equal(named.length, 1);
+  assert.equal(named[0].amount_original, 85000);
+  assert.equal(named[0].currency_original, 'HKD');
+  assert.equal(named[0].currency_evidence, 'explicit_line_currency');
+});
+
 test('normalizes global currency codes and unambiguous local symbols on either side of prices', () => {
   const cases = [
     ['USD18000', 18_000, 'USD'],

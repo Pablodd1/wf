@@ -304,7 +304,9 @@ function extractPriceObservations(text, context = {}) {
     const bare = bareMatches.reverse().find(match => {
       const amount = parseNumber(match[1], match[2]);
       const token = String(match[1] || '').replace(/[^0-9A-Z]/gi, '').toUpperCase();
-      return amount > 0 && !(amount >= 1950 && amount <= 2030) && token !== reference;
+      const adjacentSymbol = `${line.slice(Math.max(0, match.index - 1), match.index)}${line.slice(match.index + match[0].length, match.index + match[0].length + 1)}`;
+      return amount > 0 && !(amount >= 1950 && amount <= 2030)
+        && token !== reference && !/[¥￥]/.test(adjacentSymbol);
     });
     if (bare) {
       const multiplier = String(bare[2] || '').toLowerCase();
@@ -315,7 +317,11 @@ function extractPriceObservations(text, context = {}) {
       // a price. An explicit adjacent currency still follows the rules above.
       const hasDefaultablePriceCue = Boolean(context.currency_context)
         || /(?:^|\b)(?:price|asking|ask|net|obo|yours\s+for)\b/i.test(line)
-        || line.trim() === bare[0].trim();
+        || line.trim() === bare[0].trim()
+        // Owner policy: dealer shorthand such as "Rolex 126508 85k" is a
+        // USD asking price unless an explicit currency token says otherwise.
+        // Explicit HKD/AED/EUR/etc. is parsed before this fallback and wins.
+        || multiplier === 'k';
       if (!(integerToken && millionScale) && hasDefaultablePriceCue) {
         add(bare[0], bare[1], bare[2], context.currency_context || 'USD', bare.index,
           context.currency_context ? 'section_currency' : 'usd_defaulted_by_policy');
