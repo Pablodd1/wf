@@ -1,10 +1,3 @@
-#!/usr/bin/env python3
-"""
-WatchFacts Ingestion Pipeline - DigitalOcean & MySQL Reader Daemon
-Polls raw listing payloads from DigitalOcean Spaces / MySQL source,
-creates immutable payload logs in `raw.payloads`, and enqueues jobs into `jobs.processing_jobs`.
-"""
-
 import os
 import sys
 import json
@@ -12,100 +5,149 @@ import uuid
 import hashlib
 import pymysql
 import psycopg2
+import psycopg2.extras
 from datetime import datetime
+import argparse
+import time
 
-# Environment-driven credentials (NO HARDCODED SECRETS)
-MYSQL_HOST = os.environ.get("MYSQL_HOST", "161.35.0.209")
+# Environment-driven credentials
+MYSQL_HOST = os.environ.get("MYSQL_HOST")
 MYSQL_PORT = int(os.environ.get("MYSQL_PORT", "3306"))
-MYSQL_USER = os.environ.get("MYSQL_USER", "john")
+MYSQL_USER = os.environ.get("MYSQL_USER")
 MYSQL_PASS = os.environ.get("MYSQL_PASS")
 MYSQL_DB   = os.environ.get("MYSQL_DB", "thecollective_inventory")
 
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_URL")
-PGHOST = os.environ.get("PGHOST", "db.qnsafosakvonzgfcsphh.supabase.co")
+PGHOST = os.environ.get("PGHOST")
 PGPORT = os.environ.get("PGPORT", "5432")
-PGUSER = os.environ.get("PGUSER", "postgres")
+PGUSER = os.environ.get("PGUSER")
 PGPASSWORD = os.environ.get("PGPASSWORD")
 PGDATABASE = os.environ.get("PGDATABASE", "postgres")
 
-IS_SQLITE = False
-SQLITE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scratch", "pipeline_fallback.db")
-
 def get_target_db():
-    global IS_SQLITE
     if DATABASE_URL and DATABASE_URL.startswith("postgresql://"):
         try:
-            return (psycopg2.connect(DATABASE_URL), False)
+            return psycopg2.connect(DATABASE_URL)
         except Exception:
             pass
     if PGPASSWORD:
         try:
             conn = psycopg2.connect(
                 host=PGHOST, port=PGPORT, user=PGUSER, password=PGPASSWORD,
-                dbname=PGDATABASE, connect_timeout=5
+                dbname=PGDATABASE, connect_timeout=15
             )
-            return (conn, False)
-        except Exception:
-            pass
-    import sqlite3
-    os.makedirs(os.path.dirname(SQLITE_PATH), exist_ok=True)
-    conn = sqlite3.connect(SQLITE_PATH)
-    conn.row_factory = sqlite3.Row
-    return (conn, True)
+            return conn
+        except Exception as e:
+            print(f"Postgres connection error: {e}")
+            raise e
+    raise Exception("No Postgres credentials")
 
-def calculate_checksum(text):
-    return hashlib.sha256(text.encode('utf-8', errors='ignore')).hexdigest()
+def sanitize_text(text):
+    if text is None:
+        return ""
+    return str(text).replace('\x00', '')
 
-def db_exec(cur, is_sqlite, query, args=None):
-    if is_sqlite:
-        query = query.replace("%s", "?")
-    if args:
-        cur.execute(query, args)
-    else:
-        cur.execute(query)
+def fetch_and_enqueue_source_messages(batch_size=1000):
+    conn_tgt = get_target_db()
+    cur_tgt = conn_tgt.cursor()
 
-def fetch_and_enqueue_source_messages(batch_size=100):
-    """
-    Polls source MySQL auctions, inserts into raw.payloads and enqueues jobs in jobs.processing_jobs.
-    """
-    print(f"Polling up to {batch_size} source records from MySQL...")
+    # 1. Active-Migration Locking
+    cur_tgt.execute("SELECT pg_try_advisory_lock(9999);")
+    locked = cur_tgt.fetchone()[0]
+    if not locked:
+        print("Another reader is already running (failed to acquire advisory lock).")
+        conn_tgt.close()
+        return -1
+
+    # 2. Backpressure check
+    cur_tgt.execute("SELECT count(*) FROM jobs.processing_jobs WHERE status IN ('queued', 'processing');")
+    queue_depth = cur_tgt.fetchone()[0]
+    if queue_depth > 25000:
+        print(f"Queue depth is {queue_depth}. Pausing ingestion...")
+        conn_tgt.close()
+        return 0
+
+    # 3. Retrieve or Initialize Migration State
+    cur_tgt.execute("SELECT id, max_source_id, current_cursor FROM jobs.migration_state WHERE status = 'active' LIMIT 1")
+    state = cur_tgt.fetchone()
+
+    if not state:
+        print("No active migration state found. Initializing...")
+        try:
+            conn_src = pymysql.connect(
+                host=MYSQL_HOST, port=MYSQL_PORT, user=MYSQL_USER, password=MYSQL_PASS,
+                database=MYSQL_DB, connect_timeout=15, charset='utf8mb4'
+            )
+            cursor_src = conn_src.cursor(pymysql.cursors.DictCursor)
+            cursor_src.execute("SELECT COUNT(*) as max_id FROM auctions")
+            max_id = cursor_src.fetchone()['max_id'] or 0
+            conn_src.close()
+            
+            cur_tgt.execute(
+                "INSERT INTO jobs.migration_state (max_source_id, current_cursor, status) VALUES (%s, %s, 'active') RETURNING id, max_source_id, current_cursor",
+                (max_id, 0)
+            )
+            state = cur_tgt.fetchone()
+            conn_tgt.commit()
+            print(f"Initialized migration state: total_records={max_id}")
+        except Exception as e:
+            print(f"Error connecting to MySQL to init state: {e}")
+            conn_tgt.close()
+            return 0
+
+    state_id, max_source_id, current_cursor = state
+
+    if max_source_id > 0 and current_cursor >= max_source_id:
+        print("Migration complete (cursor reached max_source_id).")
+        cur_tgt.execute("UPDATE jobs.migration_state SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = %s", (state_id,))
+        conn_tgt.commit()
+        conn_tgt.close()
+        return -1
+
+    print(f"Polling up to {batch_size} source records from MySQL (offset={current_cursor}, total={max_source_id})...")
+    
     try:
         conn_src = pymysql.connect(
             host=MYSQL_HOST, port=MYSQL_PORT, user=MYSQL_USER, password=MYSQL_PASS,
             database=MYSQL_DB, connect_timeout=15, charset='utf8mb4'
         )
         cursor_src = conn_src.cursor(pymysql.cursors.DictCursor)
+        # Offset Pagination
         cursor_src.execute("""
             SELECT a.id, a.title, a.description, a.front_image, a.type, a.comments,
                    a.from_name, a.from_number, a.phone_code, a.region, a.created_on
             FROM auctions a
-            WHERE (a.description IS NOT NULL AND a.description != '')
-               OR (a.title IS NOT NULL AND a.title != '')
-            ORDER BY a.id DESC
-            LIMIT %s;
-        """, (batch_size,))
+            WHERE ((a.description IS NOT NULL AND a.description != '')
+               OR (a.title IS NOT NULL AND a.title != ''))
+            ORDER BY a.created_on DESC
+            LIMIT %s OFFSET %s;
+        """, (batch_size, current_cursor))
         rows = cursor_src.fetchall()
         conn_src.close()
+
     except Exception as e:
         print(f"Error connecting to source MySQL: {e}")
+        conn_tgt.close()
         return 0
 
     received_count = len(rows)
-    versions_inserted_count = 0
-    jobs_inserted_count = 0
-    suppressed_count = 0
+    print(f"Received {received_count} raw records from MySQL...")
+    if received_count == 0:
+        print("No more records returned from MySQL.")
+        cur_tgt.execute("UPDATE jobs.migration_state SET status = 'completed', completed_at = CURRENT_TIMESTAMP WHERE id = %s", (state_id,))
+        conn_tgt.commit()
+        conn_tgt.close()
+        return -1
 
-    conn_tgt, is_sqlite = get_target_db()
-    cur_tgt = conn_tgt.cursor()
-
-    payload_table = "payloads" if is_sqlite else "raw.payloads"
-    versions_table = "payload_versions" if is_sqlite else "raw.payload_versions"
-    jobs_table = "processing_jobs" if is_sqlite else "jobs.processing_jobs"
+    payloads_data = []
+    versions_data = []
+    jobs_data = []
+    skipped_count = 0
 
     for r in rows:
-        msg_text = r['description'] or r['title'] or r['comments'] or ''
+        msg_text = sanitize_text(r['description'] or r['title'] or r['comments'] or '')
         if not msg_text.strip():
-            suppressed_count += 1
+            skipped_count += 1
             continue
 
         source_platform = r.get('type') or 'auction'
@@ -118,7 +160,6 @@ def fetch_and_enqueue_source_messages(batch_size=100):
 
         orig_img_refs = [raw_img] if raw_img else []
 
-        # Extract normalized DO object key (only if not an http URL and not invalid)
         if raw_img and not raw_img.lower().startswith('http') and not any(c in raw_img for c in ('..', '/', '\\')):
             do_object_key = raw_img
         else:
@@ -127,107 +168,126 @@ def fetch_and_enqueue_source_messages(batch_size=100):
         media_fingerprint = hashlib.sha256(raw_img.encode('utf-8')).hexdigest() if raw_img else "no_media"
         orig_ts = str(r['created_on']) if r.get('created_on') else datetime.utcnow().isoformat() + "Z"
 
-        # Stable payload envelope identity (1 row per source message)
         payload_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.payload.{source_platform}.{source_group_id}.{source_msg_id}"))
         payload_checksum = hashlib.sha256(f"{source_platform}:{source_group_id}:{source_msg_id}".encode('utf-8')).hexdigest()
 
-        # Immutable version identity (1 row per content version)
         version_material = f"{source_platform}:{source_group_id}:{source_msg_id}:{msg_text}:{media_fingerprint}"
         version_checksum = hashlib.sha256(version_material.encode('utf-8')).hexdigest()
         version_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.version.{version_checksum}"))
         job_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, f"watchfacts.job.{version_checksum}"))
 
-        if is_sqlite:
-            # 1. Envelope
-            cur_tgt.execute(f"""
-                INSERT OR IGNORE INTO {payload_table} (
-                    id, source_platform, source_group_id, source_group_name, source_message_id,
-                    source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum,
-                    original_image_references, do_object_key
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """, (
-                payload_id, source_platform, source_group_id, r.get('region'),
-                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, payload_checksum,
-                json.dumps(orig_img_refs), do_object_key
-            ))
+        payloads_data.append((
+            payload_id, source_platform, source_group_id, r.get('region'),
+            source_msg_id, sanitize_text(r.get('from_number')), sanitize_text(r.get('from_name')), msg_text, orig_ts, payload_checksum,
+            orig_img_refs, do_object_key
+        ))
 
-            # 2. Version
-            cur_tgt.execute(f"""
-                INSERT OR IGNORE INTO {versions_table} (
-                    id, raw_payload_id, version_checksum, original_message_text, original_timestamp,
-                    original_image_references, do_object_key, media_fingerprint
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-            """, (
-                version_id, payload_id, version_checksum, msg_text, orig_ts,
-                json.dumps(orig_img_refs), do_object_key, media_fingerprint
-            ))
-            if cur_tgt.rowcount > 0:
-                versions_inserted_count += 1
-                # 3. Job (only on new version)
-                cur_tgt.execute(f"""
-                    INSERT OR IGNORE INTO {jobs_table} (id, raw_payload_id, payload_version_id, status)
-                    VALUES (?, ?, ?, 'queued');
-                """, (job_id, payload_id, version_id))
-                if cur_tgt.rowcount > 0:
-                    jobs_inserted_count += 1
-            else:
-                suppressed_count += 1
+        versions_data.append((
+            version_id, payload_id, version_checksum, msg_text, orig_ts,
+            orig_img_refs, do_object_key, media_fingerprint
+        ))
 
-        else:
-            # 1. Envelope (PostgreSQL)
-            cur_tgt.execute(f"""
-                INSERT INTO {payload_table} (
-                    id, source_platform, source_group_id, source_group_name, source_message_id,
-                    source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum,
-                    original_image_references, do_object_key
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                ) ON CONFLICT (source_platform, source_group_id, source_message_id) DO UPDATE
-                SET original_message_text = EXCLUDED.original_message_text
-                RETURNING id;
-            """, (
-                payload_id, source_platform, source_group_id, r.get('region'),
-                source_msg_id, r.get('from_number'), r.get('from_name'), msg_text, orig_ts, payload_checksum,
-                orig_img_refs, do_object_key
-            ))
-            res = cur_tgt.fetchone()
-            actual_payload_id = res[0] if res else payload_id
+        jobs_data.append((job_id, payload_id, version_id, 'queued'))
 
-            # 2. Version (PostgreSQL)
-            cur_tgt.execute(f"""
-                INSERT INTO {versions_table} (
-                    id, raw_payload_id, version_checksum, original_message_text, original_timestamp,
-                    original_image_references, do_object_key, media_fingerprint
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s
-                ) ON CONFLICT (version_checksum) DO NOTHING
-                RETURNING id;
-            """, (
-                version_id, actual_payload_id, version_checksum, msg_text, orig_ts,
-                orig_img_refs, do_object_key, media_fingerprint
-            ))
-            v_res = cur_tgt.fetchone()
+    if not payloads_data:
+        # Move cursor forward
+        new_cursor = current_cursor + received_count
+        cur_tgt.execute(
+            "UPDATE jobs.migration_state SET current_cursor = %s, received_count = received_count + %s, suppressed_count = suppressed_count + %s WHERE id = %s", 
+            (new_cursor, received_count, skipped_count, state_id)
+        )
+        conn_tgt.commit()
+        conn_tgt.close()
+        return received_count
 
-            if v_res:
-                versions_inserted_count += 1
-                actual_version_id = v_res[0]
-                # 3. Job (PostgreSQL - only on new version)
-                cur_tgt.execute(f"""
-                    INSERT INTO {jobs_table} (id, raw_payload_id, payload_version_id, status)
-                    VALUES (%s, %s, %s, 'queued'::jobs.processing_status)
-                    ON CONFLICT (id) DO NOTHING
-                    RETURNING id;
-                """, (job_id, actual_payload_id, actual_version_id))
-                j_res = cur_tgt.fetchone()
-                if j_res:
-                    jobs_inserted_count += 1
-            else:
-                suppressed_count += 1
+    try:
+        psycopg2.extras.execute_values(
+            cur_tgt,
+            """
+            INSERT INTO raw.payloads (
+                id, source_platform, source_group_id, source_group_name, source_message_id,
+                source_sender_id, source_sender_name, original_message_text, original_timestamp, payload_checksum,
+                original_image_references, do_object_key
+            ) VALUES %s
+            ON CONFLICT (source_platform, source_group_id, source_message_id) DO UPDATE
+            SET original_message_text = EXCLUDED.original_message_text
+            """,
+            payloads_data
+        )
 
-    conn_tgt.commit()
-    conn_tgt.close()
-    print(f"Reader Summary: received={received_count}, versions_inserted={versions_inserted_count}, jobs_inserted={jobs_inserted_count}, suppressed={suppressed_count}")
-    return jobs_inserted_count
+        psycopg2.extras.execute_values(
+            cur_tgt,
+            """
+            INSERT INTO raw.payload_versions (
+                id, raw_payload_id, version_checksum, original_message_text, original_timestamp,
+                original_image_references, do_object_key, media_fingerprint
+            ) VALUES %s
+            ON CONFLICT (version_checksum) DO NOTHING
+            """,
+            versions_data
+        )
+
+        psycopg2.extras.execute_values(
+            cur_tgt,
+            """
+            INSERT INTO jobs.processing_jobs (id, raw_payload_id, payload_version_id, status)
+            VALUES %s
+            ON CONFLICT (id) DO NOTHING
+            """,
+            jobs_data
+        )
+
+        new_cursor = current_cursor + received_count
+        cur_tgt.execute(
+            "UPDATE jobs.migration_state SET current_cursor = %s, received_count = received_count + %s, inserted_count = inserted_count + %s, suppressed_count = suppressed_count + %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (new_cursor, received_count, len(payloads_data), skipped_count, state_id)
+        )
+
+        conn_tgt.commit()
+        conn_tgt.close()
+        
+        print(f"Batch inserted. Updated cursor to {new_cursor}")
+
+    except Exception as e:
+        print(f"Error inserting to Postgres: {e}")
+        conn_tgt.rollback()
+        cur_tgt.execute("UPDATE jobs.migration_state SET failed_count = failed_count + %s WHERE id = %s", (received_count, state_id))
+        conn_tgt.commit()
+        conn_tgt.close()
+        return 0
+
+    return received_count
 
 if __name__ == "__main__":
-    fetch_and_enqueue_source_messages(batch_size=100)
+    parser = argparse.ArgumentParser(description="WatchFacts Historical Migration Reader")
+    parser.add_argument("--canary", type=int, default=None, help="Process a fixed number of records and stop")
+    parser.add_argument("--batch-size", type=int, default=1000, help="Batch size for polling MySQL")
+    args = parser.parse_args()
+
+    print("Starting continuous reader daemon...")
+    processed_total = 0
+
+    while True:
+        try:
+            batch_limit = args.batch_size
+            if args.canary:
+                remaining = args.canary - processed_total
+                if remaining <= 0:
+                    print(f"Canary limit of {args.canary} reached. Exiting.")
+                    break
+                batch_limit = min(batch_limit, remaining)
+
+            received = fetch_and_enqueue_source_messages(batch_size=batch_limit)
+            
+            if received == -1:
+                break # Locked or Completed
+            
+            if received > 0:
+                processed_total += received
+                time.sleep(0.1)
+            else:
+                time.sleep(10)
+                
+        except KeyboardInterrupt:
+            print("Stopping...")
+            break

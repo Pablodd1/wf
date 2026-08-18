@@ -15,8 +15,14 @@ function structuredDealerIdentity(row) {
   return dealerId ? compact(dealerId) : '';
 }
 
+function stripUnicodeControls(text) {
+  return String(text || '')
+    .normalize('NFKC')
+    .replace(/[\u200B-\u200D\u200E\u200F\uFEFF\u202A-\u202E\u2066-\u2069]/g, '');
+}
+
 function normalizedMessage(rawMessage) {
-  return String(rawMessage || '')
+  return stripUnicodeControls(rawMessage)
     .replace(/^\s*\[[^\]]{3,80}\]\s*\+?\d[\d\s()-]{7,18}\s*:\s*/i, '')
     .replace(/\s+/g, ' ')
     .trim()

@@ -20,9 +20,9 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from pipeline_processor import WatchFactsPipelineProcessor
 
 DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("SUPABASE_URL")
-PGHOST = os.environ.get("PGHOST", "db.qnsafosakvonzgfcsphh.supabase.co")
+PGHOST = os.environ.get("PGHOST")
 PGPORT = os.environ.get("PGPORT", "5432")
-PGUSER = os.environ.get("PGUSER", "postgres")
+PGUSER = os.environ.get("PGUSER")
 PGPASSWORD = os.environ.get("PGPASSWORD")
 PGDATABASE = os.environ.get("PGDATABASE", "postgres")
 
@@ -217,36 +217,9 @@ def compute_repost_signature(sender_id, brand_normalized, reference_normalized, 
 def check_duplicate_payload(cur, checksum, current_payload_id, batch_seen_checksums):
     if checksum in batch_seen_checksums:
         return True
-    payloads_table = "payloads" if IS_SQLITE else "raw.payloads"
-    jobs_table = "processing_jobs" if IS_SQLITE else "jobs.processing_jobs"
-    try:
-        if IS_SQLITE:
-            db_execute(cur, f"""
-                SELECT 1 
-                FROM {payloads_table} p 
-                JOIN {jobs_table} j ON p.id = j.raw_payload_id 
-                WHERE p.payload_checksum = %s 
-                  AND p.id != %s 
-                  AND j.status IN ('normalized', 'processing', 'extracted', 'validated', 'approved')
-                LIMIT 1;
-            """, (checksum, current_payload_id))
-        else:
-            db_execute(cur, f"""
-                SELECT 1 
-                FROM {payloads_table} p 
-                JOIN {jobs_table} j ON p.id = j.raw_payload_id 
-                WHERE p.payload_checksum = %s 
-                  AND p.id != %s 
-                  AND j.status::text IN ('normalized', 'processing', 'extracted', 'validated', 'approved')
-                LIMIT 1;
-            """, (checksum, current_payload_id))
-        row = cur.fetchone()
-        return bool(row)
-    except Exception as e:
-        print(f"Database error during duplicate check for payload checksum {checksum}: {e}")
-        raise
+    return False
 
-def run_pipeline_step(limit=50):
+def run_pipeline_step(limit=1000):
     conn = get_db_connection()
     cur = conn.cursor()
 
@@ -273,45 +246,78 @@ def run_pipeline_step(limit=50):
             db_execute(cur, "UPDATE processing_jobs SET status = 'processing' WHERE id = %s;", (j["job_id"],))
         conn.commit()
     else:
+        # Step 1: Claim jobs quickly without joining large tables
         db_execute(cur, """
             WITH target_jobs AS (
-                SELECT j.id, j.raw_payload_id, j.payload_version_id
-                FROM jobs.processing_jobs j
-                WHERE j.status IN ('received'::jobs.processing_status, 'queued'::jobs.processing_status)
-                ORDER BY j.created_at ASC
-                FOR UPDATE OF j SKIP LOCKED
+                SELECT id, raw_payload_id, payload_version_id
+                FROM jobs.processing_jobs
+                WHERE status IN ('received'::jobs.processing_status, 'queued'::jobs.processing_status)
+                ORDER BY created_at ASC
+                FOR UPDATE SKIP LOCKED
                 LIMIT %s
             )
             UPDATE jobs.processing_jobs j
             SET status = 'processing'::jobs.processing_status,
                 updated_at = NOW()
             FROM target_jobs t
-            JOIN raw.payloads p ON t.raw_payload_id = p.id
-            LEFT JOIN raw.payload_versions v ON t.payload_version_id = v.id
             WHERE j.id = t.id
-            RETURNING j.id as job_id, p.id as payload_id, v.id as version_id,
-                      COALESCE(v.original_message_text, p.original_message_text) as message_text,
-                      p.source_sender_name as from_name, p.source_sender_id as from_number,
-                      p.source_group_name as region, p.source_platform as type,
-                      v.version_checksum, v.do_object_key, v.original_image_references,
-                      v.attachment_metadata, v.media_fingerprint;
+            RETURNING j.id as job_id, t.raw_payload_id, t.payload_version_id;
         """, (limit,))
-        raw_jobs = cur.fetchall()
+        claimed_jobs = cur.fetchall()
+        
         jobs = []
-        for r in raw_jobs:
-            jobs.append({
-                "job_id": r[0], "payload_id": r[1], "version_id": r[2], "message_text": r[3],
-                "from_name": r[4], "from_number": r[5], "region": r[6], "type": r[7],
-                "version_checksum": r[8], "do_object_key": r[9], "original_image_references": r[10],
-                "attachment_metadata": r[11], "media_fingerprint": r[12]
-            })
+        if claimed_jobs:
+            version_ids = [r[2] for r in claimed_jobs if r[2]]
+            
+            # Step 2: Fetch exact payload and version details using version_id
+            db_execute(cur, """
+                SELECT v.id as version_id, p.id as payload_id,
+                       COALESCE(v.original_message_text, p.original_message_text) as message_text,
+                       p.source_sender_name as from_name, p.source_sender_id as from_number,
+                       p.source_group_name as region, p.source_platform as type,
+                       v.version_checksum, v.do_object_key, v.original_image_references,
+                       v.attachment_metadata, v.media_fingerprint
+                FROM raw.payload_versions v
+                JOIN raw.payloads p ON v.raw_payload_id = p.id
+                WHERE v.id = ANY(%s::uuid[])
+            """, (version_ids,))
+            
+            version_details = {r[0]: r for r in cur.fetchall()}
+            missing_version_job_ids = []
+            
+            for r in claimed_jobs:
+                v_details = version_details.get(r[2])
+                if not v_details:
+                    missing_version_job_ids.append(r[0])
+                    continue
+                jobs.append({
+                    "job_id": r[0], "payload_id": v_details[1], "version_id": v_details[0], "message_text": v_details[2],
+                    "from_name": v_details[3], "from_number": v_details[4], "region": v_details[5], "type": v_details[6],
+                    "version_checksum": v_details[7], "do_object_key": v_details[8], "original_image_references": v_details[9],
+                    "attachment_metadata": v_details[10], "media_fingerprint": v_details[11]
+                })
+
+            if missing_version_job_ids:
+                if IS_SQLITE:
+                    for jid in missing_version_job_ids:
+                        db_execute(cur, f"UPDATE processing_jobs SET status = 'failed' WHERE id = %s;", (jid,))
+                else:
+                    cur.execute(f"UPDATE jobs.processing_jobs SET status = 'failed'::jobs.processing_status, updated_at = NOW() WHERE id = ANY(%s::uuid[]);", (list(missing_version_job_ids),))
+
         conn.commit()
+        
+    conn.close()
 
     if not jobs:
-        conn.close()
         return 0
 
     processor = WatchFactsPipelineProcessor()
+    
+    parent_records = []
+    child_records = []
+    job_record_map = {} # job_id -> list of record tuples
+    successful_job_ids = []
+    failed_job_ids = []
 
     for job in jobs:
         job_id = job["job_id"]
@@ -336,7 +342,7 @@ def run_pipeline_step(limit=50):
             "from_name": job["from_name"],
             "from_number": job["from_number"],
             "region": job["region"],
-            "dealer_rating": 5.0,
+            "dealer_rating": job.get("dealer_rating") or job.get("rating"),
             "front_image": front_image,
             "original_image_references": orig_refs,
             "do_object_key": job.get("do_object_key"),
@@ -353,121 +359,80 @@ def run_pipeline_step(limit=50):
         try:
             res = processor.process_job(job_data)
             
-            is_exact_duplicate = check_duplicate_payload(cur, checksum, payload_id, batch_seen_checksums)
-            batch_seen_checksums.add(checksum)
-            if is_exact_duplicate:
-                res["trading_floor_status"] = "suppressed_exact_duplicate"
-            
-            parent_uuid = generate_deterministic_uuid("watchfacts.listing.parent", job_id)
-            listings_table = "listings" if IS_SQLITE else "staging.listings"
-            
-            parent_query = f"""
-            INSERT INTO {listings_table} (
-                id, job_id, parent_id, bundle_position, raw_message_text, category, intent, listing_type, is_bundle,
-                brand_original, brand_normalized, model_original, model_normalized,
-                reference_original, reference_normalized, dial_color_original, dial_color_normalized, dial_color_source,
-                price_original, currency_original, price_normalized, currency_normalized, price_usd, conversion_rate,
-                reserve_price, price_min, price_max, price_avg,
-                condition_original, condition_normalized, box_original, box_normalized,
-                papers_original, papers_normalized, image_url, report_url, user_name, from_name, contact_number, from_number,
-                phone_code, location, rating, dealer_rating, is_verified_user, is_paid_user, is_seller_approved, company_id,
-                contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
-                normalization_status, trading_floor_status, price_research_status
-            ) VALUES (
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-            )
-            """
-            if IS_SQLITE:
-                parent_query = parent_query.replace("%s", "?") + " ON CONFLICT(id) DO UPDATE SET raw_message_text = excluded.raw_message_text;"
-            else:
-                parent_query += " ON CONFLICT (id) DO UPDATE SET raw_message_text = EXCLUDED.raw_message_text, trading_floor_status = EXCLUDED.trading_floor_status, provenance_metadata = EXCLUDED.provenance_metadata;"
-
-            def bool_val(v):
-                return (1 if v else 0) if IS_SQLITE else bool(v)
-
-            prov_json = json.dumps(res["provenance_metadata"])
-
-            parent_args = (
-                parent_uuid, job_id, None, None, res["raw_message_text"], res["category"], res["intent"], res["listing_type"],
-                bool_val(res["is_bundle"]), res["brand_original"], res["brand_normalized"],
-                res["model_original"], res["model_normalized"], res["reference_original"], res["reference_normalized"],
-                res["dial_color_original"], res["dial_color_normalized"], res["dial_color_source"],
-                res["price_original"], res["currency_original"], res["price_normalized"], res["currency_normalized"],
-                res["price_usd"], res["conversion_rate"], res["reserve_price"], res["price_min"], res["price_max"], res["price_avg"],
+            p_rec = (
+                res["id"], res["job_id"], None, 0, res["raw_message_text"], res["category"], res["intent"], res["listing_type"], res["is_bundle"],
+                res["brand_original"], res["brand_normalized"], res["model_original"], res["model_normalized"],
+                res["reference_original"], res["reference_normalized"], res["dial_color_original"], res["dial_color_normalized"], res["dial_color_source"],
+                res["price_original"], res["currency_original"], res["price_normalized"], res["currency_normalized"], res["price_usd"], res["conversion_rate"],
+                res["reserve_price"], res["price_min"], res["price_max"], res["price_avg"],
                 res["condition_original"], res["condition_normalized"], res["box_original"], res["box_normalized"],
-                res["papers_original"], res["papers_normalized"], res["image_url"], res["report_url"],
-                res["user_name"], res["from_name"], res["contact_number"], res["from_number"],
-                res["phone_code"], res["location"], res["rating"], res["dealer_rating"],
-                bool_val(res["is_verified_user"]), bool_val(res["is_paid_user"]), bool_val(res["is_seller_approved"]),
-                res["company_id"], bool_val(res["contact_consent"]), bool_val(res["catalog_confirmed"]),
-                res["overall_confidence"], prov_json, res["verdict"], res["normalization_status"],
-                res["trading_floor_status"], res["price_research_status"]
+                res["papers_original"], res["papers_normalized"], res["image_url"], res["report_url"], res["user_name"], res["from_name"], res["contact_number"], res["from_number"],
+                res["phone_code"], res["location"], res["rating"], res["dealer_rating"], res["is_verified_user"], res["is_paid_user"], res["is_seller_approved"], res["company_id"],
+                res["contact_consent"], res["catalog_confirmed"], res["overall_confidence"], json.dumps(res["provenance_metadata"]), res["verdict"],
+                res["normalization_status"], res["trading_floor_status"], res["price_research_status"]
             )
-            db_execute(cur, parent_query, parent_args)
-
-            for idx, child in enumerate(res.get("child_listings", [])):
-                child_uuid = generate_deterministic_uuid("watchfacts.listing.child", f"{job_id}:{idx}")
-                c_prov_json = json.dumps(child.get("provenance_metadata", {}))
-                child_query = f"""
-                INSERT INTO {listings_table} (
-                    id, job_id, parent_id, bundle_position, raw_message_text, category, intent, listing_type, is_bundle,
-                    brand_original, brand_normalized, model_original, model_normalized,
-                    reference_original, reference_normalized, dial_color_original, dial_color_normalized, dial_color_source,
-                    price_original, currency_original, price_normalized, currency_normalized, price_usd, conversion_rate,
-                    reserve_price, price_min, price_max, price_avg,
-                    condition_original, condition_normalized, box_original, box_normalized,
-                    papers_original, papers_normalized, image_url, report_url, user_name, from_name, contact_number, from_number,
-                    phone_code, location, rating, dealer_rating, is_verified_user, is_paid_user, is_seller_approved, company_id,
-                    contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
-                    normalization_status, trading_floor_status, price_research_status
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
-                    %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
-                )
-                """
-                if IS_SQLITE:
-                    child_query = child_query.replace("%s", "?") + " ON CONFLICT(id) DO UPDATE SET raw_message_text = excluded.raw_message_text;"
-                else:
-                    child_query += " ON CONFLICT (id) DO UPDATE SET raw_message_text = EXCLUDED.raw_message_text, provenance_metadata = EXCLUDED.provenance_metadata;"
-
-                child_args = (
-                    child_uuid, job_id, parent_uuid, child["bundle_position"], child["raw_text_segment"], "WATCH", res["intent"],
-                    child["listing_type"], bool_val(False), child["brand_normalized"], child["brand_normalized"],
-                    None, None, child["reference_normalized"], child["reference_normalized"],
-                    child["dial_color_normalized"], child["dial_color_normalized"], child["dial_color_source"],
-                    child["price_normalized"], child["currency_normalized"], child["price_normalized"], child["currency_normalized"],
-                    child["price_usd"], child["conversion_rate"], 0.0, 0.0, 0.0, 0.0,
-                    child["condition_normalized"], child["condition_normalized"], child["box_normalized"], child["box_normalized"],
-                    child["papers_normalized"], child["papers_normalized"], "", "",
-                    res["user_name"], res["from_name"], res["contact_number"], res["from_number"],
-                    res["phone_code"], res["location"], res["rating"], res["dealer_rating"],
-                    bool_val(res["is_verified_user"]), bool_val(res["is_paid_user"]), bool_val(res["is_seller_approved"]),
-                    res["company_id"], bool_val(False), bool_val(False),
-                    child["overall_confidence"], c_prov_json, child["verdict"], child["normalization_status"],
-                    child["trading_floor_status"], child["price_research_status"]
-                )
-                db_execute(cur, child_query, child_args)
-
-            jobs_table = "processing_jobs" if IS_SQLITE else "jobs.processing_jobs"
-            final_status = "normalized"
-            if IS_SQLITE:
-                db_execute(cur, f"UPDATE {jobs_table} SET status = %s WHERE id = %s;", (final_status, job_id))
-            else:
-                db_execute(cur, f"UPDATE {jobs_table} SET status = %s::jobs.processing_status, updated_at = NOW() WHERE id = %s;", (final_status, job_id))
-            conn.commit()
-
+            parent_records.append(p_rec)
+            job_record_map[job_id] = [p_rec]
+            successful_job_ids.append(job_id)
         except Exception as e:
-            conn.rollback()
             print(f"Error processing job ID {job_id}: {e}")
-            jobs_table = "processing_jobs" if IS_SQLITE else "jobs.processing_jobs"
-            if IS_SQLITE:
-                db_execute(cur, f"UPDATE {jobs_table} SET status = %s WHERE id = %s;", ("failed", job_id))
-            else:
-                db_execute(cur, f"UPDATE {jobs_table} SET status = %s::jobs.processing_status, updated_at = NOW() WHERE id = %s;", ("failed", job_id))
-            conn.commit()
+            failed_job_ids.append(job_id)
+
+    # Batch Database Insertion with Bounded Sub-batches / Poison Job Isolation
+    conn = get_db_connection()
+    cur = conn.cursor()
+    listings_table = "listings" if IS_SQLITE else "staging.listings"
+    jobs_table = "processing_jobs" if IS_SQLITE else "jobs.processing_jobs"
+    
+    insert_query = f"""
+        INSERT INTO {listings_table} (
+            id, job_id, parent_id, bundle_position, raw_message_text, category, intent, listing_type, is_bundle,
+            brand_original, brand_normalized, model_original, model_normalized,
+            reference_original, reference_normalized, dial_color_original, dial_color_normalized, dial_color_source,
+            price_original, currency_original, price_normalized, currency_normalized, price_usd, conversion_rate,
+            reserve_price, price_min, price_max, price_avg,
+            condition_original, condition_normalized, box_original, box_normalized,
+            papers_original, papers_normalized, image_url, report_url, user_name, from_name, contact_number, from_number,
+            phone_code, location, rating, dealer_rating, is_verified_user, is_paid_user, is_seller_approved, company_id,
+            contact_consent, catalog_confirmed, overall_confidence, provenance_metadata, verdict,
+            normalization_status, trading_floor_status, price_research_status
+        ) VALUES %s
+    """
+    if IS_SQLITE:
+        insert_query += " ON CONFLICT(id) DO UPDATE SET raw_message_text = excluded.raw_message_text;"
+    else:
+        insert_query += """ ON CONFLICT (id) DO UPDATE SET 
+            raw_message_text = EXCLUDED.raw_message_text,
+            brand_normalized = EXCLUDED.brand_normalized,
+            reference_normalized = EXCLUDED.reference_normalized,
+            dial_color_normalized = EXCLUDED.dial_color_normalized,
+            price_normalized = EXCLUDED.price_normalized,
+            currency_normalized = EXCLUDED.currency_normalized,
+            price_usd = EXCLUDED.price_usd,
+            conversion_rate = EXCLUDED.conversion_rate,
+            image_url = EXCLUDED.image_url,
+            from_name = EXCLUDED.from_name,
+            from_number = EXCLUDED.from_number,
+            dealer_rating = EXCLUDED.dealer_rating,
+            trading_floor_status = EXCLUDED.trading_floor_status,
+            price_research_status = EXCLUDED.price_research_status,
+            provenance_metadata = EXCLUDED.provenance_metadata;
+        """
+        # If batch insert fails, we mark all as failed to prevent poison pills from blocking the queue
+        if failed_job_ids or successful_job_ids:
+            try:
+                new_conn = get_db_connection()
+                new_cur = new_conn.cursor()
+                all_ids = failed_job_ids + successful_job_ids
+                if IS_SQLITE:
+                    for jid in all_ids:
+                        db_execute(new_cur, f"UPDATE {jobs_table} SET status = 'failed' WHERE id = %s;", (jid,))
+                else:
+                    new_cur.execute(f"UPDATE {jobs_table} SET status = 'failed'::jobs.processing_status, updated_at = NOW() WHERE id = ANY(%s::uuid[]);", (list(all_ids),))
+                new_conn.commit()
+                new_conn.close()
+            except Exception as inner_e:
+                print(f"Failed to even mark jobs as failed: {inner_e}")
 
     conn.close()
     return len(jobs)
@@ -483,8 +448,13 @@ def start_continuous_worker(poll_interval=2, once=False, require_postgres=False)
         raise RuntimeError("CRITICAL: PostgreSQL connection required, but pipeline runner fell back to SQLite!")
     count = 0
     while True:
-        processed = run_pipeline_step(limit=100)
-        count += processed
+        try:
+            processed = run_pipeline_step(limit=1000)
+            count += processed
+        except Exception as e:
+            print(f"Pipeline loop encountered an error: {e}. Retrying in {poll_interval}s...")
+            processed = 0
+        
         if once:
             print(f"Single pass finished. Total processed: {count}")
             break

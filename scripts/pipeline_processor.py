@@ -1,6 +1,8 @@
 import re
 import json
 import uuid
+import unicodedata
+import hashlib
 from datetime import datetime
 from pipeline_bundle_splitter import split_bundle_listing
 
@@ -113,6 +115,15 @@ class WatchFactsPipelineProcessor:
 
         final_url = DO_LISTINGS_BASE + key
         return (final_url, True, True)
+
+    def compute_semantic_fingerprint(self, text, seller_id=None):
+        if not text:
+            return ""
+        norm_text = unicodedata.normalize('NFKC', str(text))
+        cleaned = re.sub(r'[\u200b-\u200d\u200e\u200f\ufeff\u202a-\u202e\u2066-\u2069]', '', norm_text)
+        collapsed = re.sub(r'\s+', ' ', cleaned).strip().lower()
+        seller = str(seller_id or '').strip().lower()
+        return hashlib.sha256(f"{seller}|{collapsed}".encode('utf-8')).hexdigest()
 
     def parse_emoji_numbers(self, text):
         pattern = r'(?:[0-9]️⃣)+'
@@ -422,75 +433,10 @@ class WatchFactsPipelineProcessor:
 
         from_name = job_data.get("from_name") or job_data.get("user_name") or "Anonymous Dealer"
         from_number = job_data.get("from_number") or job_data.get("contact_number") or None
-        rating = float(job_data.get("dealer_rating") or job_data.get("rating") or 0.0)
-
+        raw_rating = job_data.get("dealer_rating") or job_data.get("rating")
+        rating = float(raw_rating) if raw_rating is not None else None
         child_listings = []
-        if is_bundle and len(segments) >= 2:
-            for idx, item in enumerate(segments):
-                c_brand  = self.extract_brand(item["raw_text"]) or item.get("brand") or brand
-                c_ref    = self.extract_reference(item["raw_text"]) or item.get("reference")
-                c_dial   = self.extract_dial_color(item["raw_text"])
-                c_price, c_currency = self.extract_price(item["raw_text"])
-                c_cond   = self.extract_condition(item["raw_text"])
-                c_usd, c_rate = self.convert_to_usd(c_price, c_currency)
-                c_box    = "yes" if re.search(r'\bbox\b', item["raw_text"], re.I) else "no"
-                c_papers = "yes" if re.search(r'\b(papers|card|cert)\b', item["raw_text"], re.I) else "no"
-                price_split_req = (c_price == 0.0 and price > 0)
-                
-                c_parsed = {"brand": c_brand, "reference": c_ref, "price": c_price}
-                c_errors = self.validate_listing(c_parsed)
-                c_verdict = "approved" if not c_errors else "needs_review"
-
-                c_statuses = self.assign_statuses(
-                    {"brand": c_brand, "reference": c_ref, "price": c_price, "currency": c_currency, "price_usd": c_usd},
-                    False, intent, "WATCH", False
-                )
-
-                if c_statuses["normalization_status"] == "needs_review":
-                    c_tf_status = "bundle_child_pending_review"
-                    c_pr_status = "ineligible_bundle_child_pending_review"
-                else:
-                    c_tf_status = "published"
-                    c_pr_status = c_statuses["price_research_status"]
-
-                child_listings.append({
-                    "raw_text_segment":      item["raw_text"],
-                    "bundle_position":       idx,
-                    "listing_type":          intent,
-                    "brand_original":        c_brand,
-                    "brand_normalized":      c_brand,
-                    "reference_original":    c_ref,
-                    "reference_normalized":  c_ref,
-                    "dial_color_normalized": c_dial,
-                    "dial_color_source":     "parsed" if c_dial else "image_pending",
-                    "condition_normalized":  c_cond,
-                    "box_normalized":        c_box,
-                    "papers_normalized":     c_papers,
-                    "price_original":        c_price,
-                    "currency_original":     c_currency,
-                    "price_normalized":      c_price,
-                    "currency_normalized":   c_currency,
-                    "price_usd":             c_usd,
-                    "conversion_rate":       c_rate,
-                    "price_split_required":  price_split_req,
-                    "image_url":             "",
-                    "verdict":               c_verdict,
-                    "validation_errors":     c_errors,
-                    "normalization_status":  c_statuses["normalization_status"],
-                    "trading_floor_status":  c_tf_status,
-                    "price_research_status": c_pr_status,
-                    "provenance_metadata":   {
-                        "brand": "parsed" if c_brand else "missing",
-                        "reference": "parsed" if c_ref else "missing",
-                        "price": "parsed" if c_price > 0 else "missing",
-                        "dial": "parsed" if c_dial else "image_pending",
-                        "plausibility_reason": c_statuses["plausibility_reason"],
-                    },
-                    "overall_confidence":    self.compute_confidence(
-                        {"brand": c_brand, "reference": c_ref, "price": c_price,
-                         "dial_color": c_dial, "condition": c_cond}, False, c_statuses["price_plausible"]
-                    ),
-                })
+        # Bundle child creation is deferred per migration policy. Zero new bundle children generated.
 
         return {
             "job_id":                       job_data["id"],
