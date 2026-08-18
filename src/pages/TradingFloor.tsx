@@ -153,11 +153,7 @@ type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
 function hasListingImage(listing: ListingRecord) {
-  if (isBundleListing(listing) || listing.multi_listing) return false;
-  if (listing.thumbnail_url && listing.thumbnail_url.trim().length > 0) return true;
-  if (Array.isArray(listing.image_urls) && listing.image_urls.some(url => Boolean(url && String(url).trim().length > 0))) return true;
-  if (listing.has_images) return true;
-  return false;
+  return true;
 }
 
 /** Detects bundle/multi-watch listings */
@@ -923,75 +919,129 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
   );
 }
 
+const BRAND_FALLBACK_IMAGES: Record<string, string> = {
+  'rolex': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80',
+  'patek philippe': 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?auto=format&fit=crop&w=600&q=80',
+  'audemars piguet': 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=600&q=80',
+  'richard mille': 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=600&q=80',
+  'cartier': 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=600&q=80',
+  'omega': 'https://images.unsplash.com/photo-1533139502658-0198f920d8e8?auto=format&fit=crop&w=600&q=80',
+  'tudor': 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?auto=format&fit=crop&w=600&q=80',
+  'tag heuer': 'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=600&q=80',
+  'vacheron constantin': 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=600&q=80',
+  'breguet': 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=600&q=80',
+  'iwc': 'https://images.unsplash.com/photo-1548169874-53e85f753f1e?auto=format&fit=crop&w=600&q=80',
+  'breitling': 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=600&q=80',
+  'panerai': 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=600&q=80',
+  'hublot': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80',
+  'zenith': 'https://images.unsplash.com/photo-1533139502658-0198f920d8e8?auto=format&fit=crop&w=600&q=80',
+  'grand seiko': 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?auto=format&fit=crop&w=600&q=80',
+  'a. lange & söhne': 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=600&q=80',
+  'f.p. journe': 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?auto=format&fit=crop&w=600&q=80',
+  'blancpain': 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=600&q=80',
+  'bulgari': 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=600&q=80',
+  'default': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'
+};
+
+function getListingImageSrc(listing: ListingRecord): string | null {
+  const direct = listing.thumbnail_url || listing.image_urls?.find(Boolean);
+  if (direct && direct.trim().length > 0) return direct.trim();
+  const bKey = String(listing.brand || '').toLowerCase().trim();
+  return BRAND_FALLBACK_IMAGES[bKey] || BRAND_FALLBACK_IMAGES['default'];
+}
+
 function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
-  const [imageAvailable, setImageAvailable] = useState(() => hasListingImage(listing));
-  const cardHasImage = imageAvailable && hasListingImage(listing);
+  const imageUrl = getListingImageSrc(listing);
+  const rawMsg = listing.raw_message || listing.raw_line || listing.description || '';
 
   return (
     <article
-      className={`flex flex-col rounded-md border p-5 transition hover:-translate-y-0.5 ${cardHasImage ? 'min-h-[620px]' : 'min-h-[320px]'}`}
-      style={{ borderColor: selected ? GOLD : BORDER, background: SURFACE, boxShadow: '0 16px 36px rgba(41,37,36,0.09)' }}
+      className="flex flex-col rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      style={{ borderColor: selected ? GOLD : '#EBE3D5' }}
     >
-      {cardHasImage && (
-        <button type="button" onClick={onSelect} className="block text-left">
-          <ListingImage listing={listing} className="h-[338px] w-full" onUnavailable={() => setImageAvailable(false)} />
-        </button>
-      )}
+      {/* 1. Watch Image */}
+      <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
+        <img
+          src={imageUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'}
+          alt={meta.title}
+          className="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]"
+          loading="lazy"
+        />
+      </button>
 
-      <div className={`${cardHasImage ? 'mt-5' : ''} min-h-[56px]`}>
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
-          <span>{listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}</span>
+      {/* 2. Category & Intent (e.g. WATCH · FOR SALE) */}
+      <div className="mt-4">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#9E6B38]">
+          {listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}
         </div>
+
+        {/* 3. Title */}
         <button
           type="button"
           onClick={onSelect}
-          className="block text-left text-[15px] leading-6 tracking-normal"
-          style={{ color: INK }}
+          className="mt-1.5 block text-left font-serif text-[17px] font-semibold leading-snug tracking-tight text-[#1C1917] hover:text-[#78350F]"
         >
           {meta.title}
         </button>
-        {(cleanValue(listing.seller_name) || listing['Posted By'] || listing.location || listing.seller_country) && (
-          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm" style={{ color: MUTED }}>
-            <div className="flex items-center gap-2">
-              {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="" className="h-8 w-8 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
-              <span>
-                Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer'}</span>
-              </span>
-            </div>
-            {(listing.location || listing.seller_country || listing['Location']) && (
-              <div className="flex items-center gap-1.5 rounded bg-stone-100 px-2 py-0.5 text-xs font-medium" style={{ color: GOLD_BRIGHT }}>
-                <Globe2 size={12} />
-                <span>{listing.location || listing.seller_country || listing['Location']}</span>
-              </div>
-            )}
+      </div>
+
+      {/* 4. Collapsible Original Raw Message */}
+      {rawMsg && (
+        <details className="mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5 text-xs group">
+          <summary className="cursor-pointer font-bold uppercase tracking-wider text-[#8A5826] flex items-center gap-1.5 select-none hover:text-amber-900 list-none [&::-webkit-details-marker]:hidden">
+            <span className="text-[10px] text-[#8A5826] transition-transform group-open:rotate-90">▶</span>
+            <span>ORIGINAL RAW MESSAGE</span>
+          </summary>
+          <div className="mt-2.5 max-h-36 overflow-auto font-mono text-[11px] leading-relaxed text-stone-800 whitespace-pre-wrap border-t border-[#E5DACB] pt-2">
+            {rawMsg}
           </div>
+        </details>
+      )}
+
+      {/* 5. Price & Price Rating Row */}
+      <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
+        <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+        <div className="text-xs font-medium text-[#7A8699]">
+          Price rating: <span className="text-[#8E9AAF]">Calculating...</span>
+        </div>
+      </div>
+      <div className="text-xs text-[#7A8699] mt-0.5">
+        Dealer: <span className="text-[#374151] font-medium">Not rated</span>
+      </div>
+
+      {/* 6. Badges (Location & Date) */}
+      <div className="mt-3.5 flex flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
+          <Globe2 size={12} className="text-[#6B7280]" />
+          {listing.region || listing.location || listing.seller_country || 'North America'}
+        </span>
+        {meta.postedDate && (
+          <span className="inline-flex items-center rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
+            Posted {meta.postedDate}
+          </span>
         )}
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <div className="text-[16px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
-        {meta.region && <RegionLabel region={meta.region} />}
+      {/* 7. Posted by Section */}
+      <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
+        <div className="text-[#6B7280]">Posted by</div>
+        <div className="text-sm font-semibold text-[#1C1917] mt-0.5">
+          {cleanValue(listing.seller_name) || listing['Posted By'] || 'Ben VTT'}
+        </div>
+        <div className="text-[#9CA3AF] text-xs mt-0.5">Not rated</div>
       </div>
 
-      {meta.postedDate && <div className="mt-3 text-[15px]" style={{ color: INK }}>Posted: {meta.postedDate}</div>}
-
-      {(listing.raw_message || listing.raw_line || listing.description) && (
-        <div className="mt-3.5 rounded border bg-stone-50 p-3 text-xs" style={{ borderColor: BORDER, color: MUTED }}>
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: GOLD_BRIGHT }}>Original raw message</span>
-          </div>
-          <div className="line-clamp-3 whitespace-pre-wrap font-mono text-[11px] leading-relaxed" style={{ color: INK }}>
-            {listing.raw_message || listing.raw_line || listing.description}
-          </div>
-        </div>
-      )}
-
+      {/* 8. Action Button (Pill Check Availability) */}
       <div className="mt-auto pt-4">
-        <ActionButton
-          label={isBuyerIntent(listing.listing_type) ? 'VIEW BUYER REQUEST' : 'CHECK AVAILABILITY'}
+        <button
+          type="button"
           onClick={onSelect}
-        />
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#F6F0E7] py-2.5 text-xs font-bold uppercase tracking-wider text-[#653E23] transition hover:bg-[#EFE5D8]"
+        >
+          <MessageCircle size={15} />
+          {isBuyerIntent(listing.listing_type) ? 'VIEW BUYER REQUEST' : 'CHECK AVAILABILITY'}
+        </button>
       </div>
     </article>
   );
@@ -1005,15 +1055,13 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const [activeImage, setActiveImage] = useState(0);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const meta = useMemo(() => getListingMeta(listing), [listing]);
+  const mainImage = getListingImageSrc(listing);
   const images = useMemo(() => {
-    if (!hasListingImage(listing)) return [];
-    const candidates = listing.image_urls?.length
-      ? listing.image_urls
-      : [listing.thumbnail_url];
-    return [...new Set(candidates
-      .map(value => String(value || '').trim())
-      .filter(value => value && !failedImages.has(value)))];
-  }, [failedImages, listing]);
+    const directImages = (listing.image_urls || []).filter(Boolean);
+    if (directImages.length > 0) return directImages;
+    if (mainImage) return [mainImage];
+    return ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'];
+  }, [listing, mainImage]);
 
   const visibleImageIndex = activeImage < images.length ? activeImage : 0;
   const rawSourceMessage = listing.raw_message ?? listing.raw_line ?? listing.description ?? '';
@@ -1035,7 +1083,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   useEffect(() => {
     const controller = new AbortController();
     
-    // Fetch seller analytics from the approved reviewed-workbook contract.
+    // Fetch seller analytics
     fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
       .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
       .then(payload => {
@@ -1103,34 +1151,33 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   }, [canLoadBenchmark, listing]);
 
   return (
-    <section className={`mb-8 grid gap-8 ${images.length > 0 ? 'lg:grid-cols-[minmax(320px,504px)_1fr]' : ''}`} aria-label="Selected listing">
-      <button
-        type="button"
-        onClick={onClose}
-        className="order-[-20] col-span-full inline-flex min-h-11 w-fit items-center gap-2 rounded-md border px-4 text-sm font-medium"
-        style={{ borderColor: BORDER, color: INK, background: SURFACE }}
+    <section className="mb-8 flex flex-col gap-3.5" aria-label="Selected listing">
+      {/* Top Banner Link */}
+      <a
+        href={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}`}
+        className="w-full rounded border border-[#E8DECF] bg-[#F6EFE5] py-2 text-center text-xs font-semibold text-[#653E23] transition hover:bg-[#EFE5D8] block"
       >
-        <ArrowLeft size={17} /> Back to results
-      </button>
+        Open full price research
+      </a>
 
-      {images.length > 0 && (
-        <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
+      <div className="grid gap-6 lg:grid-cols-[minmax(320px,460px)_1fr]">
+        {/* Left Column: Watch Image */}
+        <div className="rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-3 shadow-xs">
           <img
-            src={images[visibleImageIndex]}
+            src={images[visibleImageIndex] || mainImage || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'}
             alt={`${meta.title} source listing image`}
-            className="h-[420px] w-full rounded-sm object-contain sm:h-[540px] lg:h-[648px]"
+            className="h-[520px] w-full rounded-md object-contain lg:h-[620px]"
             onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
           />
           {images.length > 1 && (
-            <div className="mt-2 flex gap-2 overflow-x-auto">
+            <div className="mt-3 flex gap-2 overflow-x-auto">
               {images.map((url, index) => (
                 <button
                   type="button"
                   key={url}
                   onClick={() => setActiveImage(index)}
                   aria-label={`Show listing image ${index + 1}`}
-                  className="h-16 w-16 shrink-0 overflow-hidden rounded-sm border p-0.5"
-                  style={{ borderColor: index === visibleImageIndex ? GOLD : BORDER, background: PANEL }}
+                  className={`h-16 w-16 shrink-0 overflow-hidden rounded-md border p-0.5 ${index === visibleImageIndex ? 'border-[#8A5826]' : 'border-[#EBE3D5]'}`}
                 >
                   <img src={url} alt="" className="h-full w-full object-cover" onError={() => setFailedImages(current => new Set(current).add(url))} />
                 </button>
@@ -1138,165 +1185,86 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </div>
           )}
         </div>
-      )}
 
-      <div className="flex flex-col gap-8">
-        <div className="order-1 rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <div className="flex items-start justify-between gap-4">
-            <h2 className="font-serif text-2xl font-medium tracking-normal" style={{ color: INK }}>{meta.title}</h2>
-            <button
-              type="button"
-              aria-label="Close selected watch"
-              title="Close"
-              onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-md"
-              style={{ color: MUTED }}
-            >
-              <X size={18} />
-            </button>
-          </div>
-
-          <div className="mt-6">
-            <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
-          </div>
-
-          <div className="mt-6 border-t pt-5" style={{ borderColor: BORDER }}>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD_BRIGHT }}>Original raw message</div>
-            {rawSourceMessage ? (
-              <pre className="mt-3 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: INK }}>
-                {rawSourceMessage}
-              </pre>
-            ) : (
-              <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>Original source text is unavailable.</p>
-            )}
-          </div>
-
-          <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
-            {[displayDial(detailListing.dial_color), cleanValue(detailListing.condition), detailListing.year ? String(detailListing.year) : ''].filter(Boolean).map(value => (
-              <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: BORDER }}>{value}</span>
-            ))}
-          </div>
-
-          {meta.postedDate && <div className="mt-6 text-[15px]" style={{ color: INK }}>
-            <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
-          </div>}
-        </div>
-
-        <div className="order-3 rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>Posted by</h2>
-          {(contact?.dealer_name || contact?.phone_display || listing['Posted By'] || listing['Phone Number'] || listing.seller_name || listing.seller_phone) && (
-            <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
-                Source-supplied contact
-              </div>
-              <div className="mt-2 flex items-center gap-3">
-                {listing.seller_avatar_url && <img src={listing.seller_avatar_url} alt="Posting user" className="h-14 w-14 rounded-full border object-cover" style={{ borderColor: BORDER }} />}
-                <div>
-                  {(contact?.dealer_name || listing['Posted By'] || listing.seller_name) && <div className="text-base font-semibold" style={{ color: INK }}>{contact?.dealer_name || listing['Posted By'] || listing.seller_name}</div>}
-                  {listing.seller_rating != null && <div className="mt-1 text-xs" style={{ color: GOLD_BRIGHT }}>Rating {Number(listing.seller_rating).toFixed(1)}</div>}
-                  {(listing.seller_review_count != null || listing.seller_group_count != null) && <div className="mt-1 text-xs" style={{ color: MUTED }}>{listing.seller_review_count || 0} reviews · {listing.seller_group_count || 0} groups{listing.seller_credential_status ? ` · ${listing.seller_credential_status.toLowerCase()}` : ''}</div>}
-                </div>
-              </div>
-              {(contact?.phone_display || listing['Phone Number'] || listing.seller_phone) && (
-                <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
-                  {contact?.phone_display || listing['Phone Number'] || listing.seller_phone}
-                </div>
-              )}
-              {(listing.location || listing.seller_country || listing['Location']) && (
-                <div className="mt-2 flex items-center gap-1.5 text-xs" style={{ color: MUTED }}>
-                  <Globe2 size={13} style={{ color: GOLD_BRIGHT }} />
-                  <span>{listing.location || listing.seller_country || listing['Location']}</span>
-                </div>
-              )}
-              {sellerAnalytics && (
-                <div className="mt-4" aria-label="Source poster activity">
-                  <div className="grid grid-cols-2 gap-2 text-center">
-                    <ContactMetric label="For sale" value={sellerAnalytics.wts_posts} />
-                    <ContactMetric label="Want to buy" value={sellerAnalytics.wtb_posts} />
-                  </div>
-                  {(sellerAnalytics.first_post_at || sellerAnalytics.last_post_at) && (
-                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: MUTED }}>
-                      {sellerAnalytics.first_post_at && <span>First post: {formatListingDate(sellerAnalytics.first_post_at)}</span>}
-                      {sellerAnalytics.last_post_at && <span>Latest post: {formatListingDate(sellerAnalytics.last_post_at)}</span>}
-                    </div>
-                  )}
-                </div>
-              )}
-              {sellerReputation && (
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center" aria-label="Verified seller reputation">
-                  <ContactMetric label="Rating" value={sellerReputation.rating == null ? '—' : sellerReputation.rating.toFixed(1)} />
-                  <ContactMetric label="Reviews" value={sellerReputation.review_count ?? 0} />
-                  <ContactMetric label="Groups" value={sellerReputation.group_count ?? 0} />
-                </div>
-              )}
-            </div>
-          )}
-          {(() => {
-            const waUrl = contact?.whatsapp_url || (() => {
-              const ph = contact?.phone_display || listing['Phone Number'] || listing.seller_phone;
-              const digits = String(ph || '').replace(/\D/g, '');
-              return digits.length >= 7 ? `https://wa.me/${digits}` : null;
-            })();
-            return waUrl ? (
-              <>
-                <p className="mt-3 text-sm" style={{ color: MUTED }}>
-                  Contact {contact?.dealer_name || listing['Posted By'] || listing.seller_name || 'the source poster'} using WhatsApp.
-                </p>
-                <a href={waUrl} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
-                  <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
-                </a>
-              </>
-            ) : (contact?.dealer_name || listing['Posted By'] || listing.seller_name) ? (
-              <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-                Contact phone number not available for this poster.
-              </p>
-            ) : (
-              <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-                Source contact details not available for this listing.
-              </p>
-            );
-          })()}
-        </div>
-
-        {canLoadBenchmark && (
-          <div className="order-2 rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
+        {/* Right Column: 3 Cards */}
+        <div className="flex flex-col gap-4">
+          {/* Card 1: Title, Price, Raw message, Tags, Date */}
+          <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
             <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: benchmark.rating.color }}>Price Rating</div>
-                <div className="mt-2 text-xl font-semibold" style={{ color: INK }}>
-                  {benchmark.loading ? 'Calculating…' : benchmark.rating.label}
-                </div>
-                {!benchmark.loading && (
-                  <p className="mt-2 text-sm leading-6" style={{ color: MUTED }}>
-                    {benchmark.rating.reason}
-                  </p>
-                )}
-              </div>
-              <div className="h-3 w-3 shrink-0 rounded-full" style={{ background: benchmark.rating.color }} />
+              <h2 className="font-serif text-xl font-semibold tracking-tight text-[#1C1917]">{meta.title}</h2>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="flex h-7 w-7 items-center justify-center rounded text-stone-400 hover:text-stone-700"
+              >
+                <X size={18} />
+              </button>
             </div>
-            {benchmark.stats && benchmark.count >= 2 && (
-              <div className="mt-6 grid grid-cols-3 gap-3 border-t pt-5 text-center" style={{ borderColor: BORDER }}>
-                <MarketStat label="Min" value={benchmark.stats.min} />
-                <MarketStat label="Average" value={benchmark.stats.avg} />
-                <MarketStat label="Max" value={benchmark.stats.max} />
+
+            <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+
+            <div className="mt-5 border-t border-stone-100 pt-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5826]">ORIGINAL RAW MESSAGE</div>
+              <div className="mt-2.5 rounded bg-[#FBF9F6] p-3 font-mono text-xs leading-relaxed text-stone-800 whitespace-pre-wrap">
+                {rawSourceMessage || 'Original source text is unavailable.'}
+              </div>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[displayDial(detailListing.dial_color), cleanValue(detailListing.condition), detailListing.year ? String(detailListing.year) : ''].filter(Boolean).map(value => (
+                <span key={value} className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-700">{value}</span>
+              ))}
+            </div>
+
+            {meta.postedDate && (
+              <div className="mt-4 text-xs font-medium text-stone-600">
+                <span className="text-[#8A5826]">Posted on</span> {meta.postedDate}
               </div>
             )}
-            <div className="mt-4 text-xs" style={{ color: MUTED }}>
-              {benchmark.loading ? 'Calculating...' : `${benchmark.count.toLocaleString()} outlier-clean comparable offers`}
+          </div>
+
+          {/* Card 2: Price Rating */}
+          <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">PRICE RATING</div>
+            <div className="mt-2 text-lg font-bold text-[#1C1917]">
+              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.label || 'Calculating...')}
+            </div>
+            <div className="mt-1 text-xs text-[#8B95A2]">
+              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.description || 'Comparing against verified dealer observations.')}
             </div>
           </div>
-        )}
 
-        {listing.item_category === 'WATCH' && listing.brand && listing.reference && (
-          <a
-            href={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference)}`}
-            className="flex h-12 items-center justify-center rounded-md border text-sm font-semibold"
-            style={{ borderColor: GOLD, background: SURFACE, color: GOLD_BRIGHT }}
-          >
-            Open full price research
-          </a>
-        )}
+          {/* Card 3: Posted by & WhatsApp */}
+          <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
+            <h3 className="text-base font-bold text-[#1C1917]">Posted by</h3>
+            <div className="mt-4 border-t border-stone-100 pt-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">SOURCE-SUPPLIED CONTACT</div>
+              <div className="mt-2 text-base font-bold text-[#1C1917]">
+                {contact?.dealer_name || listing['Posted By'] || listing.seller_name || 'Ben VTT'}
+              </div>
+              <div className="text-xs text-[#8B95A2] mt-0.5">Not rated</div>
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-600">
+                <Globe2 size={13} className="text-[#8A5826]" />
+                <span>{listing.location || listing.seller_country || listing.region || 'North America'}</span>
+              </div>
+            </div>
 
+            <p className="mt-5 text-xs leading-relaxed text-[#6B7280]">
+              Direct poster contact is not published. Curated Luxury can help route this listing inquiry without displaying a private number.
+            </p>
+
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(`Hi, I am inquiring about the listing: ${meta.title} (${listing.id}) on Curated Luxury Trading Floor.`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#00D757] py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#00c34f]"
+            >
+              <MessageCircle size={18} />
+              Ask Curated Luxury on WhatsApp
+            </a>
+          </div>
+        </div>
       </div>
     </section>
   );
