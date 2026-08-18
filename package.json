@@ -41,6 +41,7 @@
     "mariadb:stage-normalized": "node tools/mariadb-live/import-normalized-staging.cjs",
     "mariadb:monitor": "node tools/mariadb-live/monitor.cjs",
     "mariadb:continuous-worker": "node tools/mariadb-live/continuous-worker.cjs",
+    "mariadb:segment-bridge": "node tools/mariadb-live/segment-bridge.cjs",
     "inspect:price-research-cohort": "node tools/price-quality/inspect-live-price-cohort.cjs",
     "audit:emoji-prices": "node tools/price-quality/audit-emoji-prices.cjs",
     "stage:price-canary": "node tools/price-quality/stage-price-canary.cjs",

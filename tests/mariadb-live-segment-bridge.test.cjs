@@ -46,6 +46,8 @@ test('bridge advances only after idempotent raw and staging reconciliation', asy
     assert.equal(report.last_sequence, 1);
     assert.equal(request.publication_authorized, false);
     assert.equal(request.raw_records[0].raw_sha256, rows[0].raw_sha256);
+    assert.match(request.raw_file_sha256, /^[0-9a-f]{64}$/);
+    assert.match(request.proposal_file_sha256, /^[0-9a-f]{64}$/);
     assert.equal(request.staging_records[0].contact_publication_approved, false);
     assert.equal(request.staging_records[0].public_image_eligible, false);
     assert.equal(request.staging_records[0].candidate.listing_type, 'WTS');

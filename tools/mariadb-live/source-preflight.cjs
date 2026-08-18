@@ -33,7 +33,7 @@ function assertSourceIndex(rows) {
 function assertExplainPlan(rows, provedIndexes) {
   const plan = rows[0] || {};
   const accessType = String(plan.type || '').toUpperCase();
-  const boundedAccessTypes = new Set(['RANGE', 'REF', 'EQ_REF', 'CONST', 'SYSTEM']);
+  const boundedAccessTypes = new Set(['RANGE']);
   if (!plan.key || !boundedAccessTypes.has(accessType)
     || !(provedIndexes instanceof Set) || !provedIndexes.has(plan.key)) {
     throw new Error('MariaDB cursor EXPLAIN did not select a proved composite cursor index');

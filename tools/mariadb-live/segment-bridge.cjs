@@ -151,7 +151,7 @@ function deadLetter(file, segment, error) {
 async function runBridgeLocked(options = {}) {
   const sourceRoot = path.resolve(options.sourceRoot);
   const output = path.resolve(options.output);
-  const maxRows = boundedInteger(options.maxRows, 1000, 1, 5000, 'SEGMENT_BRIDGE_MAX_ROWS');
+  const maxRows = boundedInteger(options.maxRows, 500, 1, 500, 'SEGMENT_BRIDGE_MAX_ROWS');
   const maxSegments = boundedInteger(options.maxSegments, 1, 1, 100, 'SEGMENT_BRIDGE_MAX_SEGMENTS');
   const maxPendingSegments = boundedInteger(options.maxPendingSegments, 100, 1, 10000, 'SEGMENT_BRIDGE_MAX_PENDING_SEGMENTS');
   const minFreeBytes = boundedInteger(options.minFreeBytes, 1024 * 1024 * 1024, 0, Number.MAX_SAFE_INTEGER, 'SEGMENT_BRIDGE_MIN_FREE_BYTES');
@@ -169,11 +169,13 @@ async function runBridgeLocked(options = {}) {
     try {
       if (segment.sequence !== state.last_sequence + 1) throw new Error('Segment sequence gap detected');
       const loaded = await loadSegment(segment, state, maxRows);
+      const rawFileSha256 = sha256File(segment.raw);
+      const proposalFileSha256 = sha256File(segment.proposal);
       const token = crypto.createHash('sha256').update(stableJson({
         contract: BRIDGE_CONTRACT,
         sequence: segment.sequence,
-        raw_sha256: sha256File(segment.raw),
-        proposal_sha256: sha256File(segment.proposal),
+        raw_sha256: rawFileSha256,
+        proposal_sha256: proposalFileSha256,
       })).digest('hex');
       const nextChain = crypto.createHash('sha256')
         .update(`${state.segment_chain_sha256}\n${token}`)
@@ -186,6 +188,8 @@ async function runBridgeLocked(options = {}) {
         next_cursor: loaded.cursor,
         expected_previous_segment_chain_sha256: state.segment_chain_sha256,
         next_segment_chain_sha256: nextChain,
+        raw_file_sha256: rawFileSha256,
+        proposal_file_sha256: proposalFileSha256,
         raw_records: loaded.raw,
         staging_records: loaded.staging,
         publication_authorized: false,
@@ -220,6 +224,37 @@ async function runBridge(options = {}) {
     return await runBridgeLocked(options);
   } finally {
     release();
+  }
+}
+
+if (require.main === module) {
+  const { createQnsaSegmentIngestor } = require('./qnsa-segment-ingestor.cjs');
+  const required = ['MARIADB_SEGMENT_SOURCE_ROOT', 'MARIADB_SEGMENT_BRIDGE_OUTPUT'];
+  const missing = required.filter(name => !process.env[name]);
+  if (missing.length) {
+    process.stderr.write(`${JSON.stringify({ event: 'mariadb_segment_bridge_error', error_message: `Missing required environment variables: ${missing.join(', ')}` })}\n`);
+    process.exitCode = 1;
+  } else {
+    runBridge({
+      sourceRoot: process.env.MARIADB_SEGMENT_SOURCE_ROOT,
+      output: process.env.MARIADB_SEGMENT_BRIDGE_OUTPUT,
+      maxRows: Number(process.env.MARIADB_SEGMENT_MAX_ROWS || 500),
+      maxSegments: Number(process.env.MARIADB_SEGMENT_MAX_SEGMENTS || 1),
+      maxPendingSegments: Number(process.env.MARIADB_SEGMENT_MAX_PENDING || 100),
+      minFreeBytes: Number(process.env.MARIADB_SEGMENT_MIN_FREE_BYTES || 1024 * 1024 * 1024),
+      ingestSegment: createQnsaSegmentIngestor(),
+    }).then(report => {
+      process.stdout.write(`${JSON.stringify({ event: 'mariadb_segment_bridge_checkpoint', ...report, publication_writes: 0 })}\n`);
+    }).catch(error => {
+      process.stderr.write(`${JSON.stringify({
+        event: 'mariadb_segment_bridge_error',
+        error_name: error.name || 'Error',
+        error_code: /^[A-Z0-9_]{1,64}$/.test(String(error.code || '')) ? String(error.code) : 'SECURE_OPERATOR_REVIEW_REQUIRED',
+        error_message: 'Secure operator review required; source or server error text is not logged',
+        publication_writes: 0,
+      })}\n`);
+      process.exitCode = 1;
+    });
   }
 }
 

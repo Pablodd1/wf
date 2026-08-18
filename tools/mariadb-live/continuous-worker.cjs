@@ -212,7 +212,7 @@ async function run() {
   const output = path.resolve(process.env.MARIADB_CONTINUOUS_OUTPUT || '/data/mariadb-live-v2');
   const startAt = process.env.MARIADB_CONTINUOUS_START_AT || '1970-01-01 00:00:00';
   const startId = process.env.MARIADB_CONTINUOUS_START_ID || '';
-  const batchSize = boundedInteger(process.env.MARIADB_CONTINUOUS_BATCH_SIZE, 1000, 10, 5000, 'MARIADB_CONTINUOUS_BATCH_SIZE');
+  const batchSize = boundedInteger(process.env.MARIADB_CONTINUOUS_BATCH_SIZE, 500, 10, 500, 'MARIADB_CONTINUOUS_BATCH_SIZE');
   const pollMs = boundedInteger(process.env.MARIADB_CONTINUOUS_POLL_MS, 30000, 5000, 3600000, 'MARIADB_CONTINUOUS_POLL_MS');
   const exitWhenCaughtUp = process.env.MARIADB_CONTINUOUS_EXIT_WHEN_CAUGHT_UP === 'true';
   const transport = sourceTransport(process.env);

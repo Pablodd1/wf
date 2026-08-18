@@ -1,0 +1,50 @@
+name: QNSA Live Shadow Schema Audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_LIVE_SHADOW_SCHEMA_NO_PERSISTENT_WRITES
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qnsa-live-shadow-schema-audit
+  cancel-in-progress: false
+
+jobs:
+  compile-and-test:
+    environment: production
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile and execute rollback-only database contract test
+        shell: pwsh
+        env:
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if ($env:INPUT_CONFIRMATION -cne 'AUDIT_QNSA_LIVE_SHADOW_SCHEMA_NO_PERSISTENT_WRITES') {
+            throw 'Exact audit confirmation is required.'
+          }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $migrationPath = 'supabase/migrations/20260818150000_live_shadow_segment_ingest.sql'
+          $testPath = 'supabase/tests/live_shadow_segment_ingest.sql'
+          $migration = Get-Content -LiteralPath $migrationPath -Raw
+          $migration = $migration -replace '(?im)^\s*BEGIN\s*;\s*$', ''
+          $migration = $migration -replace '(?im)^\s*COMMIT\s*;\s*$', ''
+          $contractTest = Get-Content -LiteralPath $testPath -Raw
+          $sql = "BEGIN;`nSET LOCAL statement_timeout = '30s';`n$migration`n$contractTest`nROLLBACK;"
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Method Post `
+            -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          Write-Output '{"schema_compiled":true,"database_contract_passed":true,"persistent_writes":0,"project":"qnsafosakvonzgfcsphh"}'
