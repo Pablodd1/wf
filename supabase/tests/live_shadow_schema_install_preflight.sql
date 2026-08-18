@@ -12,5 +12,5 @@ END $preflight$;
 CREATE TEMP TABLE live_shadow_install_xact_baseline ON COMMIT DROP AS
 SELECT relid, n_tup_ins, n_tup_upd, n_tup_del
 FROM pg_stat_xact_all_tables
-WHERE schemaname NOT IN ('pg_catalog','information_schema','extensions')
+WHERE schemaname NOT IN ('pg_catalog','pg_toast','information_schema','extensions')
   AND NOT (schemaname='staging' AND relname LIKE 'live_shadow_%');

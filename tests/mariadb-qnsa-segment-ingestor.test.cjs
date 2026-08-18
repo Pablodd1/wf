@@ -109,8 +109,10 @@ test('private schema install is checksum pinned, atomic, empty and customer-writ
   assert.match(workflow, /BEGIN;[\s\S]*COMMIT;/);
   assert.match(preflight, /already exists; use the read-only verifier instead of blind reapply/);
   assert.match(preflight, /CREATE TEMP TABLE live_shadow_install_xact_baseline ON COMMIT DROP/);
+  assert.match(preflight, /NOT IN \('pg_catalog','pg_toast','information_schema','extensions'\)/);
   assert.match(postflight, /cardinality\(v_target_oids\) <> 3/);
   assert.match(postflight, /pg_stat_xact_all_tables/);
+  assert.match(postflight, /NOT IN \('pg_catalog','pg_toast','information_schema','extensions'\)/);
   assert.match(postflight, /LEFT JOIN live_shadow_install_xact_baseline baseline USING\(relid\)/);
   assert.match(postflight, /stats\.relid <> 'pg_temp\.live_shadow_install_xact_baseline'::regclass/);
   assert.match(postflight, /schema install changed application table counters/);
