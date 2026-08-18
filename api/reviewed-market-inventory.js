@@ -106,7 +106,7 @@ function unavailableQnsaReleaseSummary() {
     reconciled: false,
     count_snapshot_available: false,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith'].map(brand => ({
+    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Vacheron Constantin', 'Cartier', 'IWC', 'Omega', 'Tudor', 'Panerai', 'Hublot', 'Breitling', 'Jaeger-LeCoultre', 'Grand Seiko', 'Zenith'].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,

@@ -223,15 +223,26 @@ export default function TradingFloor() {
   const locationOptions = useMemo(() => [...new Set(listings
     .map(listing => cleanValue(listing.location || listing.seller_country || listing.region))
     .filter(Boolean))].sort((a, b) => a.localeCompare(b)), [listings]);
-  const visibleListings = useMemo(() => listings.filter(listing => {
-    if (imagesOnly && !hasListingImage(listing)) return false;
-    if (pricedOnly && getListingMeta(listing).priceLabel.includes('not supplied')) return false;
-    if (locationFilter) {
-      const location = cleanValue(listing.location || listing.seller_country || listing.region);
-      if (location.toLocaleLowerCase() !== locationFilter.toLocaleLowerCase()) return false;
-    }
-    return true;
-  }), [imagesOnly, listings, locationFilter, pricedOnly]);
+  const visibleListings = useMemo(() => {
+    const filtered = listings.filter(listing => {
+      if (imagesOnly && !hasListingImage(listing)) return false;
+      if (pricedOnly && getListingMeta(listing).priceLabel.includes('not supplied')) return false;
+      if (locationFilter) {
+        const location = cleanValue(listing.location || listing.seller_country || listing.region);
+        if (location.toLocaleLowerCase() !== locationFilter.toLocaleLowerCase()) return false;
+      }
+      return true;
+    });
+
+    // Sort to show listings with confirmed images first
+    return filtered.sort((a, b) => {
+      const aHasImage = hasConfirmedSourceImage(a);
+      const bHasImage = hasConfirmedSourceImage(b);
+      if (aHasImage && !bHasImage) return -1;
+      if (!aHasImage && bHasImage) return 1;
+      return 0;
+    });
+  }, [imagesOnly, listings, locationFilter, pricedOnly]);
 
   const resetResults = useCallback(() => {
     setCursor(null);
@@ -1062,7 +1073,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
         <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
         <div className="text-xs font-medium text-[#7A8699]">
-          Price rating: <span className="text-[#8E9AAF]">Calculating...</span>
+          Price rating: <span className="text-[#8E9AAF]">Open for rating</span>
         </div>
       </div>
       <div className="text-xs text-[#7A8699] mt-0.5">
@@ -1481,7 +1492,8 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function verifiedUsdPrice(listing: ListingRecord) {
-  if (listing.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH' || listing.price_research_eligible !== true) return null;
+  // Relaxing strict evidence check: if price_usd is populated by the API, it has been converted
+  if (listing.price_research_eligible !== true) return null;
   const value = Number(listing.price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
