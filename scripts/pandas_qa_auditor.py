@@ -42,7 +42,7 @@ DIAL_KEYWORDS_ORDER = [
     ('mother of pearl', 'Mother of Pearl'), ('mop', 'Mother of Pearl'),
     ('ice blue', 'Ice Blue'), ('olive green', 'Olive Green'), ('olive', 'Olive Green'),
     ('tiffany blue', 'Tiffany Blue'), ('tiffany', 'Tiffany Blue'),
-    ('mint green', 'Mint Green'), ('navy blue', 'Navy Blue'),
+    ('navy blue', 'Navy Blue'),
     ('wimbledon', 'Wimbledon'), ('aubergine', 'Aubergine'),
     ('rhodium', 'Rhodium'), ('meteorite', 'Meteorite'), ('skeleton', 'Skeleton'),
     ('champagne', 'Champagne'), ('champ', 'Champagne'),
@@ -182,12 +182,16 @@ def audit_file_pandas(fpath):
     dial_source = np.full(len(df), 'UNKNOWN', dtype=object)
 
     # Step 1: Supplied Dial Color
+    condition_leakage = df['Dial Color'].str.lower().isin(['mint', 'mint condition', 'mint green'])
+    df.loc[condition_leakage, 'Dial Color'] = ''
     is_supplied = (df['Dial Color'] != '') & (~df['Dial Color'].str.lower().isin(['unknown', 'none', 'null', 'n/a']))
     dial_source[is_supplied] = 'SUPPLIED'
 
     # Step 2: Raw Text Keyword Match
     unresolved_mask = dial_source == 'UNKNOWN'
-    raw_lines = df.loc[unresolved_mask, 'raw_line'].str.lower()
+    raw_lines = df.loc[unresolved_mask, 'raw_line'].str.lower().str.replace(
+        r'\bmint\s+green\b(?!\s+dial\b)', 'mint', regex=True
+    )
 
     for kw, canonical in DIAL_KEYWORDS_ORDER:
         pattern = r'\b' + re.escape(kw) + r'\b'

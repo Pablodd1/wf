@@ -55,6 +55,22 @@ test('multi-item parents never publish a shared image as one watch', () => {
   assert.equal(record.has_images, false);
   assert.equal(record.thumbnail_url, null);
   assert.deepEqual(record.image_urls, []);
+  assert.equal(record.evidence_coverage.image.available, false);
+});
+
+test('unbundled children never inherit the shared parent image', () => {
+  const record = mapReviewedRecord(reviewedRow({
+    parent_id: 'bundle-parent-1',
+    model: 'Submariner',
+    user_image_url: 'https://example.com/multi-watch-parent.jpg',
+    has_exact_source_image: true,
+  }));
+  assert.equal(record.multi_listing, false);
+  assert.equal(record.is_unbundled_child, true);
+  assert.equal(record.has_images, false);
+  assert.equal(record.thumbnail_url, null);
+  assert.deepEqual(record.image_urls, []);
+  assert.equal(record.evidence_coverage.image.available, false);
 });
 
 test('seller phone remains public when supplied by the source listing', () => {

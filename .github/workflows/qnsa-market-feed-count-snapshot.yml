@@ -1,0 +1,94 @@
+name: QNSA market feed count snapshot
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type REFRESH_QNSA_MARKET_COUNTS
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-market-feed-count-snapshot
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: ${{ inputs.confirmation == 'REFRESH_QNSA_MARKET_COUNTS' }}
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply bounded snapshot contract and reconcile pages
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN -or $env:PROJECT_REF -ne $env:EXPECTED_PROJECT_REF) {
+            throw 'Pinned QNSA production authorization is unavailable.'
+          }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $migration = Get-Content -Raw -LiteralPath 'supabase/migrations/20260813120000_qnsa_market_feed_count_snapshot.sql'
+          $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260813123000_qnsa_market_feed_count_bounded_refresh.sql')
+          $body = @{ query = [string]$migration; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          $cursor = '00000000-0000-0000-0000-000000000000'
+          $runKey = $null
+          $scanned = 0L
+          $totals = @{}
+          do {
+            $sql = "SELECT * FROM public.qnsa_market_feed_count_page('$cursor'::uuid, 5000);"
+            # Management read_only uses a restricted role that cannot execute
+            # the protected SECURITY DEFINER page function. The function body
+            # itself is SELECT-only; use the authorized management role here.
+            $pageBody = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
+            $pageResult = @(Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $pageBody)[0]
+            $pageRows = [int]$pageResult.page_rows
+            if (-not $runKey) { $runKey = [string]$pageResult.normalization_run_key }
+            if ($runKey -ne [string]$pageResult.normalization_run_key) { throw 'Enabled run changed during snapshot scan.' }
+            foreach ($group in @($pageResult.counts)) {
+              $key = "$($group.category)|$($group.brand)|$($group.listing_type)|$($group.supplied_price)"
+              if (-not $totals.ContainsKey($key)) { $totals[$key] = [ordered]@{ category=$group.category; brand=$group.brand; listing_type=$group.listing_type; supplied_price=[bool]$group.supplied_price; row_count=0L } }
+              $totals[$key].row_count += [long]$group.row_count
+            }
+            $scanned += $pageRows
+            if ($pageRows -gt 0) { $cursor = [string]$pageResult.next_cursor }
+            Write-Output "scanned=$scanned cursor=$cursor groups=$($totals.Count)"
+          } while ($pageRows -gt 0)
+          if ($scanned -lt 1 -or -not $runKey -or $totals.Count -lt 1) { throw 'Bounded census returned no data.' }
+          $countsJson = @($totals.Values) | ConvertTo-Json -Compress -Depth 5
+          $escapedCounts = $countsJson.Replace("'", "''")
+          $escapedRun = $runKey.Replace("'", "''")
+          $replaceSql = "SELECT * FROM public.replace_qnsa_market_feed_count_snapshot('$escapedRun', '$escapedCounts'::jsonb);"
+          $replaceBody = @{ query = $replaceSql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $replaceBody
+          $result | ConvertTo-Json -Depth 8
+
+      - name: Verify three-brand counts and instant API
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SELECT brand, sum(row_count)::bigint AS listing_count
+          FROM public.qnsa_market_feed_count_snapshot
+          WHERE category='WATCH' AND brand IN ('Rolex','Patek Philippe','Audemars Piguet')
+          GROUP BY brand ORDER BY brand;
+          "@
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $counts = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          if (@($counts).Count -ne 3 -or @($counts | Where-Object { [long]$_.listing_count -lt 1 }).Count -ne 0) {
+            throw 'Three-brand market counts did not reconcile.'
+          }
+          $counts | ConvertTo-Json -Depth 5
+          $api = Invoke-RestMethod -Uri "https://watchfacts-poc.vercel.app/api/live-release-summary?refresh=$env:GITHUB_SHA" -TimeoutSec 15
+          if (@($api.brands).Count -lt 3 -or [long]$api.total_listing_count -lt 1) {
+            throw 'Customer count API did not return the refreshed snapshot.'
+          }
+          $api | ConvertTo-Json -Depth 6

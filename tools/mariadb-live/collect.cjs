@@ -1,24 +1,38 @@
 'use strict';
 
 const fs = require('node:fs');
+const os = require('node:os');
 const path = require('node:path');
 const mysql = require('mysql2/promise');
 const {
   CONTRACT,
+  SOURCE_COLUMNS,
   assertReadOnlyGrants,
   atomicJson,
   boundedInteger,
   csv,
+  jsonLine,
   sourceRecord,
 } = require('./lib.cjs');
+const { preflightSource, sourceTransport } = require('./source-preflight.cjs');
 
-const SELECT_COLUMNS = [
-  'id', 'open_unique_key', 'created_on', 'updated_on', 'origin', 'type', 'status',
-  'is_bundle', 'category_id', 'company_id', 'from_number', 'from_name', 'region',
-  'title', 'description', 'brand', 'model', 'reference', 'normalized_reference',
-  'dial_color', 'condition_id', 'box', 'papers', 'price', 'reserve_price',
-  'front_image',
-].join(',');
+const SELECT_COLUMNS = SOURCE_COLUMNS.join(',');
+
+async function sourceSelectList(db) {
+  const [rows] = await db.execute(
+    `SELECT COLUMN_NAME column_name
+       FROM information_schema.columns
+      WHERE table_schema = DATABASE() AND table_name = ?`,
+    ['auctions'],
+  );
+  const available = new Set(rows.map(row => String(row.column_name)));
+  for (const required of ['id', 'created_on']) {
+    if (!available.has(required)) throw new Error(`Required source column is missing: auctions.${required}`);
+  }
+  return SOURCE_COLUMNS
+    .map(column => available.has(column) ? `\`${column}\`` : `NULL AS \`${column}\``)
+    .join(',');
+}
 
 function config(env = process.env) {
   const required = ['MARIADB_HOST', 'MARIADB_USER', 'MARIADB_PASSWORD'];
@@ -38,6 +52,8 @@ function config(env = process.env) {
     maxRows,
     output: path.resolve(env.MARIADB_IMPORT_OUTPUT || 'audit-output/mariadb-live/canary'),
     startAt: env.MARIADB_IMPORT_START_AT || '1970-01-01 00:00:00',
+    startId: env.MARIADB_IMPORT_START_ID || '',
+    transport: sourceTransport(env),
   };
 }
 
@@ -57,7 +73,7 @@ function prepareOutput(runConfig) {
     output_rows: 0,
     error_rows: 0,
     last_created_on: runConfig.startAt,
-    last_id: '',
+    last_id: runConfig.startId,
     record_bytes: 0,
     error_bytes: 0,
     started_at: new Date().toISOString(),
@@ -79,8 +95,67 @@ function prepareOutput(runConfig) {
   return { paths, checkpoint };
 }
 
-async function run() {
-  const runConfig = config();
+function processIsAlive(pid) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === 'EPERM';
+  }
+}
+
+function acquireOutputLock(output) {
+  fs.mkdirSync(output, { recursive: true });
+  const lockPath = path.join(output, '.collector.lock');
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const descriptor = fs.openSync(lockPath, 'wx');
+      fs.writeFileSync(descriptor, JSON.stringify({
+        pid: process.pid,
+        hostname: os.hostname(),
+        started_at: new Date().toISOString(),
+      }));
+      let released = false;
+      return () => {
+        if (released) return;
+        released = true;
+        fs.closeSync(descriptor);
+        try {
+          fs.unlinkSync(lockPath);
+        } catch (error) {
+          if (error?.code !== 'ENOENT') throw error;
+        }
+      };
+    } catch (error) {
+      if (error?.code !== 'EEXIST') throw error;
+      let owner = null;
+      try {
+        owner = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+      } catch {
+        // An unreadable lock cannot prove a live owner and is treated as stale.
+      }
+      if (owner?.hostname && owner.hostname !== os.hostname()) {
+        const locked = new Error(`Collector output is locked by another host: ${owner.hostname}`);
+        locked.code = 'OUTPUT_LOCK_HELD';
+        throw locked;
+      }
+      if (processIsAlive(Number(owner?.pid))) {
+        const locked = new Error(`Collector output is already active under process ${owner.pid}`);
+        locked.code = 'OUTPUT_LOCK_HELD';
+        throw locked;
+      }
+      try {
+        fs.unlinkSync(lockPath);
+      } catch (unlinkError) {
+        if (unlinkError?.code !== 'ENOENT') throw unlinkError;
+      }
+    }
+  }
+  throw new Error('Unable to acquire the collector output lock');
+}
+
+async function runLocked(runConfig) {
   const { paths, checkpoint } = prepareOutput(runConfig);
   let db;
   let state = { ...checkpoint };
@@ -95,15 +170,18 @@ async function run() {
       connectTimeout: 10_000,
       dateStrings: true,
       charset: 'utf8mb4',
+      ...(runConfig.transport.ssl ? { ssl: runConfig.transport.ssl } : {}),
     });
     const [grantRows] = await db.query('SHOW GRANTS FOR CURRENT_USER()');
     assertReadOnlyGrants(grantRows.map(row => Object.values(row)[0]));
     await db.query('SET SESSION TRANSACTION READ ONLY');
+    await preflightSource(db, checkpoint);
+    const selectColumns = await sourceSelectList(db);
 
     while (state.input_rows < runConfig.maxRows) {
       const limit = Math.min(runConfig.batchSize, runConfig.maxRows - state.input_rows);
       const [rows] = await db.execute(
-        `SELECT ${SELECT_COLUMNS} FROM auctions
+        `SELECT ${selectColumns} FROM auctions
          WHERE created_on > ? OR (created_on = ? AND id > ?)
          ORDER BY created_on ASC, id ASC LIMIT ${limit}`,
         [state.last_created_on, state.last_created_on, state.last_id],
@@ -119,7 +197,7 @@ async function run() {
         state.last_created_on = row.created_on;
         state.last_id = String(row.id);
         try {
-          recordLines.push(`${JSON.stringify(sourceRecord(row))}\n`);
+          recordLines.push(jsonLine(sourceRecord(row)));
           state.output_rows += 1;
         } catch (error) {
           errorLines.push(`${csv(row.id)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`);
@@ -176,6 +254,16 @@ async function run() {
   process.stdout.write(`${JSON.stringify({ event: 'mariadb_collection_complete', ...reconciliation, caught_up: caughtUp })}\n`);
 }
 
+async function run() {
+  const runConfig = config();
+  const releaseLock = acquireOutputLock(runConfig.output);
+  try {
+    return await runLocked(runConfig);
+  } finally {
+    releaseLock();
+  }
+}
+
 if (require.main === module) {
   run().catch(error => {
     process.stderr.write(`${JSON.stringify({ event: 'mariadb_collection_error', error_name: error.name || 'Error', error_message: error.message || String(error) })}\n`);
@@ -183,4 +271,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { SELECT_COLUMNS, config, prepareOutput, run };
+module.exports = { SELECT_COLUMNS, acquireOutputLock, config, prepareOutput, run, runLocked, sourceSelectList };

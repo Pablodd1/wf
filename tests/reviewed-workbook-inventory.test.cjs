@@ -74,6 +74,8 @@ test('row conversion preserves raw evidence and holds non-USD Price Research adm
   assert.equal(row.display_image_url, 'https://example.test/exact.jpg');
   assert.equal(row.posted_by, 'Example Dealer');
   assert.equal(row.phone_number, '+1 555 0100');
+  assert.equal(row.contact_publication_approved, false);
+  assert.equal(row.contact_publication_basis, null);
 });
 
 test('reviewer API normalizes exact-reference filters without broad wildcards', () => {

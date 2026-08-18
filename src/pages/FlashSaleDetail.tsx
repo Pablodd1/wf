@@ -91,7 +91,6 @@ export default function FlashSaleDetail() {
         <div className="mb-6">
           <Breadcrumb
             items={[
-              { label: 'Home', to: '/' },
               { label: 'Trading Floor', to: '/trading' },
               { label: listing?.brand ? `${listing.brand} ${listing.reference || ''}`.trim() : `Listing ${id}` },
             ]}

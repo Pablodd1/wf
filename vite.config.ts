@@ -6,6 +6,11 @@ import { inspectAttr } from 'plugin-inspect-react-code'
 // https://vite.dev/config/
 export default defineConfig({
   base: './',
+  define: {
+    'import.meta.env.VITE_APP_BUILD_ID': JSON.stringify(
+      process.env.VERCEL_GIT_COMMIT_SHA || process.env.VERCEL_DEPLOYMENT_ID || 'local',
+    ),
+  },
   plugins: [inspectAttr(), react()],
   server: {
     port: 3000,

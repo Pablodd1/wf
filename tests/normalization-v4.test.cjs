@@ -57,8 +57,20 @@ HKD ~ Without Box
   assert.equal(candidates[0].prices[0].amount_original, 283000);
 });
 
-test('does not assume USD for a bare dollar sign without context', () => {
-  assert.deepEqual(extractPriceObservations('126500 White $283000', {}), []);
+test('defaults a bare dollar sign to USD and preserves policy provenance', () => {
+  const prices = extractPriceObservations('126500 White $283000', {});
+  assert.equal(prices.length, 1);
+  assert.equal(prices[0].amount_original, 283000);
+  assert.equal(prices[0].currency_original, 'USD');
+  assert.equal(prices[0].currency_evidence, 'usd_defaulted_by_policy');
+});
+
+test('defaults suffix dollar and unsupplied numeric asking amounts to USD', () => {
+  for (const [message, expected] of [['116688 $37k', 37000], ['336935 60000$', 60000], ['126500 18,000', 18000]]) {
+    const prices = extractPriceObservations(message, {});
+    assert.equal(prices.at(-1).amount_original, expected, message);
+    assert.equal(prices.at(-1).currency_original, 'USD', message);
+  }
 });
 
 test('parses Chinese HKD labels and ten-thousand multipliers without a USD fallback', () => {
@@ -97,9 +109,13 @@ test('parses explicit mil, mill, and million multipliers on either side of HKD',
   }
 });
 
-test('does not assign a currency to a multiplier without explicit or inherited evidence', () => {
-  assert.deepEqual(extractPriceObservations('380 mil'), []);
-  assert.deepEqual(extractPriceObservations('1.2 million'), []);
+test('defaults unlabelled numeric multiplier asking prices to USD', () => {
+  for (const [raw, expected] of [['380 mil', 380000], ['1.2 million', 1200000]]) {
+    const prices = extractPriceObservations(raw);
+    assert.equal(prices[0].amount_original, expected);
+    assert.equal(prices[0].currency_original, 'USD');
+    assert.equal(prices[0].currency_evidence, 'usd_defaulted_by_policy');
+  }
 });
 
 test('inherits Chinese HKD section context for bare dollar prices', () => {
@@ -190,9 +206,11 @@ RM35-03 blue N11/25 HKD 3.51m
 
 test('classifies looking-for listings as WTB without changing inventory defaults', () => {
   const wtb = segmentDealerMessage('Looking for 126500LN white dial');
+  const lookingToBuy = segmentDealerMessage('Looking to buy 7118/1A open to dial');
   const ntq = segmentDealerMessage('NTQ - 5821/1a green');
   const wts = segmentDealerMessage('126610LN N6/26 HKD 114000');
   assert.equal(wtb[0].context.intent_context, 'WTB');
+  assert.equal(lookingToBuy[0].context.intent_context, 'WTB');
   assert.equal(ntq[0].context.intent_context, 'WTB');
   assert.equal(wts[0].context.intent_context, 'WTS');
 });
@@ -222,7 +240,8 @@ test('keeps a bare six-digit reference when the following price uses a separate 
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].reference, '126333');
   assert.equal(candidates[0].context.brand_context, 'Rolex');
-  assert.deepEqual(candidates[0].prices, []);
+  assert.equal(candidates[0].prices[0].amount_original, 14500);
+  assert.equal(candidates[0].prices[0].currency_original, 'USD');
 });
 
 test('recognizes Cartier and dotted Hublot reference formats', () => {
@@ -269,7 +288,8 @@ test('accepts HK only beside a price without treating location text as currency 
   assert.equal(prefix[0].currency_original, 'HKD');
 
   const locationOnly = segmentDealerMessage('126334 Used 2023 $125000 arrive HK');
-  assert.deepEqual(locationOnly[0].prices, []);
+  assert.equal(locationOnly[0].prices[0].amount_original, 125000);
+  assert.equal(locationOnly[0].prices[0].currency_original, 'USD');
   assert.equal(locationOnly[0].context.currency_context, undefined);
 });
 
@@ -373,4 +393,117 @@ test('explicit listing condition overrides an inherited section condition', () =
   assert.equal(candidates.length, 2);
   assert.equal(candidates[0].context.condition_context, 'Used');
   assert.equal(candidates[1].context.condition_context, 'New');
+});
+
+test('owner policy treats bare K dealer shorthand as USD while named currency wins', () => {
+  const bare = extractPriceObservations('Rolex Daytona 126508 85k');
+  assert.equal(bare.length, 1);
+  assert.equal(bare[0].amount_original, 85000);
+  assert.equal(bare[0].currency_original, 'USD');
+  assert.equal(bare[0].currency_evidence, 'usd_defaulted_by_policy');
+
+  const named = extractPriceObservations('Rolex Daytona 126508 85k HKD');
+  assert.equal(named.length, 1);
+  assert.equal(named[0].amount_original, 85000);
+  assert.equal(named[0].currency_original, 'HKD');
+  assert.equal(named[0].currency_evidence, 'explicit_line_currency');
+});
+
+test('normalizes global currency codes and unambiguous local symbols on either side of prices', () => {
+  const cases = [
+    ['USD18000', 18_000, 'USD'],
+    ['18kUSDT', 18_000, 'USDT'],
+    ['298,000HKN', 298_000, 'HKD'],
+    ['HNK305k', 305_000, 'HKD'],
+    ['HDK 380 mil', 380_000, 'HKD'],
+    ['EUR18.000', 18_000, 'EUR'],
+    ['4.5m\u20ac', 4_500_000, 'EUR'],
+    ['\u00a320,000', 20_000, 'GBP'],
+    ['25000CHF', 25_000, 'CHF'],
+    ['S$18k', 18_000, 'SGD'],
+    ['AED100k', 100_000, 'AED'],
+    ['100kSAR', 100_000, 'SAR'],
+    ['CN\u00a5200k', 200_000, 'CNY'],
+    ['3mJP\u00a5', 3_000_000, 'JPY'],
+    ['\u20a945m', 45_000_000, 'KRW'],
+    ['1.2m\u0e3f', 1_200_000, 'THB'],
+    ['C$20k', 20_000, 'CAD'],
+    ['30kA$', 30_000, 'AUD'],
+    ['NZ$40000', 40_000, 'NZD'],
+    ['RM 50k', 50_000, 'MYR'],
+    ['50000RM', 50_000, 'MYR'],
+    ['Rp250m', 250_000_000, 'IDR'],
+    ['\u20b92.5m', 2_500_000, 'INR'],
+    ['1m\u20b1', 1_000_000, 'PHP'],
+    ['NT$800k', 800_000, 'TWD'],
+    ['900m\u20ab', 900_000_000, 'VND'],
+  ];
+
+  for (const [raw, amount, currency] of cases) {
+    const prices = extractPriceObservations(raw);
+    assert.deepEqual(
+      prices.map(price => [price.amount_original, price.currency_original]),
+      [[amount, currency]],
+      raw,
+    );
+  }
+});
+
+test('supports defensible additional ISO currency tokens without assuming one-to-one USD', () => {
+  const cases = [
+    ['R$100k', 100_000, 'BRL'],
+    ['MXN350k', 350_000, 'MXN'],
+    ['400kZAR', 400_000, 'ZAR'],
+    ['SEK 200000', 200_000, 'SEK'],
+    ['200000NOK', 200_000, 'NOK'],
+    ['DKK180k', 180_000, 'DKK'],
+  ];
+  for (const [raw, amount, currency] of cases) {
+    const [price] = extractPriceObservations(raw);
+    assert.equal(price.amount_original, amount, raw);
+    assert.equal(price.currency_original, currency, raw);
+    assert.equal(price.amount_usd, null, raw);
+  }
+});
+
+test('keeps symbol ambiguity and local-dollar precedence explicit', () => {
+  assert.deepEqual(extractPriceObservations('\u00a5200k'), []);
+  assert.deepEqual(extractPriceObservations('200k\uffe5'), []);
+
+  const cny = extractPriceObservations('\u00a5200k', { currency_context: 'CNY' });
+  const jpy = extractPriceObservations('200k\uffe5', { currency_context: 'JPY' });
+  const inlineCny = extractPriceObservations('CNY \u00a5200k');
+  const inlineJpy = extractPriceObservations('JPY \uffe5200k');
+  assert.deepEqual(cny.map(price => [price.amount_original, price.currency_original]), [[200_000, 'CNY']]);
+  assert.deepEqual(jpy.map(price => [price.amount_original, price.currency_original]), [[200_000, 'JPY']]);
+  assert.deepEqual(inlineCny.map(price => [price.amount_original, price.currency_original]), [[200_000, 'CNY']]);
+  assert.deepEqual(inlineJpy.map(price => [price.amount_original, price.currency_original]), [[200_000, 'JPY']]);
+
+  assert.equal(extractPriceObservations('$18k')[0].currency_original, 'USD');
+  assert.equal(extractPriceObservations('HK$18k')[0].currency_original, 'HKD');
+  assert.equal(extractPriceObservations('C$18k')[0].currency_original, 'CAD');
+  assert.equal(extractPriceObservations('A$18k')[0].currency_original, 'AUD');
+  assert.equal(extractPriceObservations('S$18k')[0].currency_original, 'SGD');
+  assert.equal(extractPriceObservations('NT$18k')[0].currency_original, 'TWD');
+
+  assert.deepEqual(
+    extractPriceObservations('HKD100k / $13k').map(price => [price.amount_original, price.currency_original]),
+    [[100_000, 'HKD'], [13_000, 'USD']],
+  );
+});
+
+test('global currency support preserves reference year date and bundle guards', () => {
+  assert.deepEqual(extractPriceObservations('RM11-03'), []);
+  assert.deepEqual(extractPriceObservations('15202ST 2025/8 JPY'), []);
+  assert.deepEqual(extractPriceObservations('Rolex 126500LN USD'), []);
+
+  const richardMille = extractPriceObservations('RM11-03 USD250k');
+  assert.deepEqual(richardMille.map(price => [price.amount_original, price.currency_original]), [[250_000, 'USD']]);
+
+  const noCurrency = extractPriceObservations('116688 37000');
+  assert.deepEqual(noCurrency.map(price => [price.amount_original, price.currency_original]), [[37_000, 'USD']]);
+
+  const bundle = segmentDealerMessage('WTS AP 15500ST C$40k\nRolex 126500LN USD30k');
+  assert.equal(bundle.length, 2);
+  assert.deepEqual(bundle.map(item => item.prices[0].currency_original), ['CAD', 'USD']);
 });

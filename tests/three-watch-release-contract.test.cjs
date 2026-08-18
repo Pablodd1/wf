@@ -83,7 +83,7 @@ test('market analytics ignore condition while retaining it on listing evidence',
   assert.match(api, /listing_description_retained: true/);
   assert.doesNotMatch(research, /params\.set\('condition'/);
   assert.doesNotMatch(floor, /if \(listing\.condition\) params\.set\('condition'/);
-  assert.match(research, /<DetailField label="Condition" value=\{detail\.condition\}/);
+  assert.match(research, /\{row\.condition && <span[^>]*>· \{row\.condition\}<\/span>\}/);
   assert.match(floor, /cleanValue\(detailListing\.condition\)/);
 });
 

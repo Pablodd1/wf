@@ -45,35 +45,39 @@ test('2a. Edge Case Seller Phone Numbers & WhatsApp URL Extraction', async (t) =
   }
 });
 
-test('2b. Unredacted Raw Source Messages across different sources', async (t) => {
+test('2b. Public raw source keeps watch evidence while redacting contact PII', async (t) => {
   const rawMessageCases = [
     {
       source: 'oceandigital',
       msg: '[OceanDigital Chatbot] WTS Rolex Daytona 116500LN panda dial $28,500. Contact John at +1 (555) 987-6543 or john@dealers.com. http://t.me/oceandigital',
+      evidence: /Rolex Daytona 116500LN panda dial \$28,500/,
     },
     {
       source: 'telegram',
       msg: 'WTS Patek 5711/1A Blue Dial 2021 Complete Box & Papers. Price: $95,000 USD. DM @patek_dealer or call +44 7911 123456',
+      evidence: /Patek 5711\/1A Blue Dial 2021.*\$95,000 USD/,
     },
     {
       source: 'whatsapp_group',
       msg: 'WTB Audemars Piguet Royal Oak 15500ST Black dial. Budget $32k. WhatsApp me +971 50 123 4567. Fast deal!',
+      evidence: /Audemars Piguet Royal Oak 15500ST Black dial.*\$32k/,
     },
     {
       source: 'forum_post',
       msg: 'For Sale: Grand Seiko SBGA211 Snowflake. Excellent condition. $4,200 shipped CONUS. Email: seller@watchnet.com',
+      evidence: /Grand Seiko SBGA211 Snowflake.*\$4,200/,
     },
     {
       source: 'special_chars',
       msg: 'WTS ***SPECIAL DEAL*** Rolex Submariner 126610LN @ $13,500! Contact: [REDACTED_TEST_STRING_DO_NOT_FILTER] +1-800-555-0199',
+      evidence: /Rolex Submariner 126610LN @ \$13,500/,
     },
   ];
 
   for (const tc of rawMessageCases) {
     const redacted = redactPublicSource(tc.msg);
-    assert.equal(redacted, tc.msg, `redactPublicSource must return message 100% untouched for source "${tc.source}"`);
-    assert.ok(!redacted.includes('[CONTACT REDACTED]'), `Should not inject [CONTACT REDACTED] tag`);
-    assert.ok(redacted.length === tc.msg.length, `Length must match original message length exactly`);
+    assert.match(redacted, tc.evidence, `watch identity and price must remain for source "${tc.source}"`);
+    assert.doesNotMatch(redacted, /john@dealers|seller@watchnet|t\.me|@patek_dealer|555\)?[\s.-]*987|7911[\s.-]*123456|50[\s.-]*123[\s.-]*4567|555[\s.-]*0199/i);
   }
 });
 

@@ -7,15 +7,23 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   assertReadOnlyGrants,
+  jsonLine,
   normalizationInput,
+  readJsonLines,
   sourceRecord,
 } = require('../tools/mariadb-live/lib.cjs');
+const { acquireOutputLock, config: collectConfig } = require('../tools/mariadb-live/collect.cjs');
 const {
   atomicGzip,
   publishAccountability,
   prepareOutput: prepareContinuousOutput,
   reconciliation,
 } = require('../tools/mariadb-live/continuous-worker.cjs');
+const {
+  assertExplainPlan,
+  assertSourceIndex,
+  sourceTransport,
+} = require('../tools/mariadb-live/source-preflight.cjs');
 
 test('accountability publisher sends counts only to the service ledger', async () => {
   const previousEnabled = process.env.PIPELINE_ACCOUNTABILITY_ENABLED;
@@ -84,8 +92,12 @@ test('MariaDB source wrapper preserves immutable evidence and stable lineage', (
     type: 'sale',
     status: 'open',
     is_bundle: 0,
-    title: 'Rolex 126500LN USD 31,000',
-    description: null,
+    title: 'Structured title must remain available',
+    description: '  Rolex 126500LN USD 31,000\nUntouched seller line  ',
+    comments: 'original comment',
+    from_name: ' Dealer Name ',
+    from_number: '+1 555 0100',
+    phone_code: '1',
     brand: 'Rolex',
     reference: '126500LN',
     normalized_reference: '126500LN',
@@ -95,8 +107,13 @@ test('MariaDB source wrapper preserves immutable evidence and stable lineage', (
   };
   const wrapped = sourceRecord(row, '2026-08-02T00:15:00.000Z');
   assert.equal(wrapped.source_record_id, `mysql_auctions_${row.id}`);
-  assert.equal(wrapped.raw_message, row.title);
+  assert.equal(wrapped.raw_message, row.description);
+  assert.equal(wrapped.raw_message_source, 'description');
   assert.equal(wrapped.raw_data.title, row.title);
+  assert.equal(wrapped.raw_data.description, row.description);
+  assert.equal(wrapped.raw_data.comments, row.comments);
+  assert.equal(wrapped.raw_data.from_name, row.from_name);
+  assert.equal(wrapped.raw_data.from_number, row.from_number);
   assert.equal(wrapped.raw_data.price, row.price);
   assert.match(wrapped.raw_sha256, /^[a-f0-9]{64}$/);
 });
@@ -121,6 +138,39 @@ test('collector refuses a MariaDB account with write privileges', () => {
   assert.throws(() => assertReadOnlyGrants([
     "GRANT SELECT, INSERT ON `thecollective_inventory`.* TO 'writer'@'%'",
   ]), /beyond read-only/);
+});
+
+test('JSONL transport preserves Unicode line separators as source evidence', async () => {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-mariadb-jsonl-'));
+  try {
+    const safeFile = path.join(output, 'safe.jsonl');
+    const legacyFile = path.join(output, 'legacy.jsonl');
+    const value = { raw_message: `First line\u2028Second line` };
+    fs.writeFileSync(safeFile, jsonLine(value));
+    fs.writeFileSync(legacyFile, `${JSON.stringify(value)}\n`);
+    assert.doesNotMatch(fs.readFileSync(safeFile, 'utf8'), /\u2028/);
+    assert.match(fs.readFileSync(safeFile, 'utf8'), /\\u2028/);
+    for (const file of [safeFile, legacyFile]) {
+      const rows = [];
+      for await (const line of readJsonLines(file)) rows.push(JSON.parse(line));
+      assert.deepEqual(rows, [value]);
+    }
+  } finally {
+    fs.rmSync(output, { recursive: true, force: true });
+  }
+});
+
+test('collector output lock blocks concurrent writers and releases cleanly', () => {
+  const output = fs.mkdtempSync(path.join(os.tmpdir(), 'wf-mariadb-lock-'));
+  try {
+    const release = acquireOutputLock(output);
+    assert.throws(() => acquireOutputLock(output), /already active/);
+    release();
+    const releaseAgain = acquireOutputLock(output);
+    releaseAgain();
+  } finally {
+    fs.rmSync(output, { recursive: true, force: true });
+  }
 });
 
 test('continuous worker checkpoints local shadow files and reconciles both stages', () => {
@@ -164,7 +214,44 @@ test('continuous worker declares failures and retries under an internal supervis
     'utf8',
   );
   assert.match(source, /async function supervise\(\)/);
+  assert.match(source, /if \(error\.code === 'OUTPUT_LOCK_HELD'\) throw error/);
   assert.match(source, /status: 'ERROR_RETRYING'/);
   assert.match(source, /declared_errors: \['WORKER_EXECUTION_FAILED'\]/);
   assert.match(source, /await sleep\(retryDelayMs\)/);
+});
+
+test('continuous source requires verified transport and indexed cursor preflight', () => {
+  assert.throws(() => sourceTransport({}), /verified TLS CA|private tunnel/);
+  assert.deepEqual(sourceTransport({ MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true' }), {
+    ssl: null,
+    transport: 'PRIVATE_TUNNEL_VERIFIED',
+  });
+  const proved = assertSourceIndex([
+    { Key_name: 'created_id', Seq_in_index: 1, Column_name: 'created_on' },
+    { Key_name: 'created_id', Seq_in_index: 2, Column_name: 'id' },
+  ]);
+  assert.deepEqual(proved, new Set(['created_id']));
+  assert.throws(() => assertSourceIndex([
+    { Key_name: 'created_only', Seq_in_index: 1, Column_name: 'created_on' },
+  ]), /composite/);
+  assert.doesNotThrow(() => assertExplainPlan([{ key: 'created_id', type: 'range' }], proved));
+  assert.throws(() => assertExplainPlan([{ key: 'wrong_index', type: 'range' }], proved), /proved composite/);
+  assert.throws(() => assertExplainPlan([{ key: null, type: 'ALL' }], proved), /proved composite/);
+  assert.throws(() => assertExplainPlan([{ key: 'created_id', type: 'index' }], proved), /proved composite/);
+});
+
+test('bounded collector configuration also fails closed without verified transport', () => {
+  const base = { MARIADB_HOST: 'db.example', MARIADB_USER: 'reader', MARIADB_PASSWORD: 'secret' };
+  assert.throws(() => collectConfig(base), /verified TLS CA|private tunnel/);
+  const configured = collectConfig({
+    ...base,
+    MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true',
+    MARIADB_IMPORT_MAX_ROWS: '10',
+    MARIADB_IMPORT_START_AT: '2026-08-10 10:27:49',
+    MARIADB_IMPORT_START_ID: 'bf31863e-05f2-48d1-be58-ce1ded9d6b05',
+  });
+  assert.equal(configured.transport.transport, 'PRIVATE_TUNNEL_VERIFIED');
+  assert.equal(configured.maxRows, 10);
+  assert.equal(configured.startAt, '2026-08-10 10:27:49');
+  assert.equal(configured.startId, 'bf31863e-05f2-48d1-be58-ce1ded9d6b05');
 });

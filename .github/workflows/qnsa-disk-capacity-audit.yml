@@ -1,0 +1,55 @@
+name: QNSA read-only disk capacity audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_DISK_READ_ONLY
+        required: true
+        type: string
+      minimum_headroom_gib:
+        description: Required free filesystem headroom in GiB
+        required: true
+        default: '0.25'
+        type: string
+
+concurrency:
+  group: qnsa-read-only-disk-capacity-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: ${{ inputs.confirmation == 'AUDIT_QNSA_DISK_READ_ONLY' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
+      MINIMUM_HEADROOM_GIB: ${{ inputs.minimum_headroom_gib }}
+      DISK_AUDIT_PATH: qnsa-disk-capacity-audit.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate read-only audit authorization
+        run: |
+          test "$SUPABASE_PROJECT_REF" = "$EXPECTED_PROJECT_REF"
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test "$MINIMUM_HEADROOM_GIB" != ""
+      - name: Read configured disk, utilization, and autoscale state
+        run: node tools/supabase/audit-disk-capacity.cjs
+      - name: Enforce minimum filesystem headroom
+        run: node -e "const a=require('./qnsa-disk-capacity-audit.json'); if(!a.gate.headroom_satisfied) throw new Error('QNSA disk headroom gate failed')"
+      - name: Upload sanitized disk evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-read-only-disk-audit-${{ github.run_id }}
+          path: qnsa-disk-capacity-audit.json
+          if-no-files-found: error
+          retention-days: 30

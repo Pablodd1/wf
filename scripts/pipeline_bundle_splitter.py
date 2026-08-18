@@ -3,13 +3,65 @@ import re
 BRANDS = [
     'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille',
     'Vacheron Constantin', 'Omega', 'Cartier', 'Tudor', 'IWC',
-    'Hublot', 'Breitling', 'Tag Heuer', 'Panerai', 'Jaeger-LeCoultre'
+    'Hublot', 'Breitling', 'Tag Heuer', 'Panerai', 'Jaeger-LeCoultre',
+    'Zenith'
 ]
+
+AP_ALIAS_PATTERN = re.compile(r'(?<![A-Za-z0-9])(?:AP|A\.P\.)(?![A-Za-z0-9])', re.I)
+PATEK_ALIAS_PATTERN = re.compile(r'(?<![A-Za-z0-9])PP(?![A-Za-z0-9])', re.I)
+RM_ALIAS_PATTERN = re.compile(r'(?<![A-Za-z0-9])RM(?![A-Za-z0-9])', re.I)
+VC_ALIAS_PATTERN = re.compile(r'(?<![A-Za-z0-9])VC(?![A-Za-z0-9])', re.I)
 
 # Common inline separators used in chat lists
 EMOJI_SEPARATORS = [
     "\U0001f195", "\u2705", "\u2b50\ufe0f", "\u2b50", "\U0001f525", "\U0001f31f", "\U0001f48e", "\u2022", "-", "/"
 ]
+
+MULTI_ITEM_LANGUAGE = re.compile(
+    r'\b(bundle|multi[\s-]?listing|multiple watches|several watches|two watches|'
+    r'both watches|pair of watches|set of watches|lot of watches|watch lot|stock list|package deal|combo deal)\b',
+    re.I,
+)
+MULTI_ITEM_QUANTITY = re.compile(r'\b(x\s*[2-9]|[2-9]\s*x|[2-9]\s*(pcs|pieces|watches))\b', re.I)
+MULTI_REQUEST = re.compile(r'\b(WTB|NTQ|looking for|seeking|wanted|need)\b', re.I)
+
+def detect_multi_item_risk(raw_text):
+    """Conservative parent quarantine; never fabricates child identities."""
+    text = str(raw_text or '')
+    if not text.strip():
+        return False
+    segments = split_bundle_listing(text)
+    if len(segments) >= 2 or MULTI_ITEM_LANGUAGE.search(text) or MULTI_ITEM_QUANTITY.search(text):
+        return True
+    rm_refs = {
+        re.sub(r'[\s.-]', '', value.upper())
+        for value in re.findall(r'\bRM\s*\d{2,3}(?:-\d{2})?(?:-[A-Z0-9]{1,4})?\b', text, re.I)
+    }
+    rm_price_tokens = re.findall(
+        r'(?:USDTT?|USDT|HKD|EUR|GBP|CHF|SGD|AED|CNY|JPY)\s*\d|'
+        r'\d(?:[\d.,]*\d)?\s*(?:USDTT?|USDT|HKD|EUR|GBP|CHF|SGD|AED|CNY|JPY)',
+        text,
+        re.I,
+    )
+    if len(rm_refs) >= 2 and len(rm_price_tokens) >= 2:
+        return True
+    if len(rm_refs) >= 2 and MULTI_REQUEST.search(text) and re.search(r'[,;]|\s*/\s*|\s+or\s+|\s+and\s+', text, re.I):
+        return True
+    zenith_refs = {
+        value.upper()
+        for value in re.findall(r'\b\d{2}\.\d{4}\.\d{3,4}\/[0-9A-Z]+(?:\.[0-9A-Z]+)*\b', text, re.I)
+    }
+    if len(zenith_refs) >= 2 and len(rm_price_tokens) >= 2:
+        return True
+    if len(zenith_refs) >= 2 and MULTI_REQUEST.search(text) and re.search(r'[,;]|\s+or\s+|\s+and\s+', text, re.I):
+        return True
+    reviewed_brands = sum(bool(pattern.search(text)) for pattern in [
+        re.compile(r'\bRolex\b', re.I), re.compile(r'\b(?:Patek(?: Philippe)?|PP)\b', re.I),
+        re.compile(r'\b(?:Audemars(?: Piguet)?|AP)\b', re.I),
+        re.compile(r'\b(?:Richard Mille|RM(?=\s*\d))\b', re.I), re.compile(r'\bCartier\b', re.I),
+        re.compile(r'\bZenith\b', re.I),
+    ])
+    return reviewed_brands >= 2
 
 def split_bundle_listing(raw_text):
     """
@@ -112,13 +164,13 @@ def detect_brand_header(text):
     for b in BRANDS:
         if b.lower() in text_lower:
             return b
-    if 'pp' in text_lower or 'patek' in text_lower:
+    if PATEK_ALIAS_PATTERN.search(text) or 'patek' in text_lower:
         return 'Patek Philippe'
-    if 'ap' in text_lower or 'audemars' in text_lower:
+    if AP_ALIAS_PATTERN.search(text) or 'audemars' in text_lower:
         return 'Audemars Piguet'
-    if 'rm' in text_lower or 'richard' in text_lower:
+    if RM_ALIAS_PATTERN.search(text) or 'richard' in text_lower:
         return 'Richard Mille'
-    if 'vc' in text_lower or 'vacheron' in text_lower:
+    if VC_ALIAS_PATTERN.search(text) or 'vacheron' in text_lower:
         return 'Vacheron Constantin'
     return None
 
@@ -127,13 +179,13 @@ def infer_brand(text):
     for b in BRANDS:
         if b.lower() in text_lower:
             return b
-    if 'pp' in text_lower or 'patek' in text_lower:
+    if PATEK_ALIAS_PATTERN.search(text) or 'patek' in text_lower:
         return 'Patek Philippe'
-    if 'ap' in text_lower or 'audemars' in text_lower:
+    if AP_ALIAS_PATTERN.search(text) or 'audemars' in text_lower:
         return 'Audemars Piguet'
-    if 'rm' in text_lower or 'richard' in text_lower:
+    if RM_ALIAS_PATTERN.search(text) or 'richard' in text_lower:
         return 'Richard Mille'
-    if 'vc' in text_lower or 'vacheron' in text_lower:
+    if VC_ALIAS_PATTERN.search(text) or 'vacheron' in text_lower:
         return 'Vacheron Constantin'
     return None
 

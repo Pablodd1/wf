@@ -9,8 +9,6 @@ const { extractPriceObservations } = require('../../api/_lib/normalization-v4.cj
 
 const INVENTORY_TABLE = 'reviewed_workbook_inventory';
 const CHECKPOINT_TABLE = 'reviewed_workbook_import_checkpoints';
-const CONTACT_PUBLICATION_BASIS =
-  'OWNER_CONFIRMED_VOLUNTARY_PUBLICATION_2026-07-31';
 const REQUIRED_HEADERS = [
   'Auction ID',
   'Posting Date',
@@ -263,8 +261,11 @@ function rowForImport({ source, fileName, fileSha256, worksheet, rowNumber, runI
       ? 'SELLER_LISTING_IMAGE'
       : (catalogImage || finalImage ? 'REFERENCE_IMAGE' : null),
     review_reasons: [...new Set(reasons)],
-    contact_publication_approved: true,
-    contact_publication_basis: CONTACT_PUBLICATION_BASIS,
+    // A workbook containing a phone number is not evidence that the seller
+    // consented to public contact. Preserve the private source value for
+    // service-only reconciliation, but fail closed for every import.
+    contact_publication_approved: false,
+    contact_publication_basis: null,
     updated_at: new Date().toISOString(),
   };
 }

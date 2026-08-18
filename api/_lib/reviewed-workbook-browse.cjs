@@ -5,18 +5,54 @@ const PAGE_SIZE = 1000;
 const MAX_ROWS_PER_BRAND = 10000;
 const MINIMUM_ANALYTICS_SAMPLE = 5;
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
+// These owner-reviewed admissions are intentionally browsed from their
+// released workbook evidence rather than from the static catalog. The catalog
+// is identity metadata; it cannot supply observed listing/reference counts.
+const REVIEWED_WORKBOOK_BROWSE_BRANDS = new Set([
+  'a. lange & söhne',
+  'bell & ross',
+  'blancpain',
+  'breguet',
+  'breitling',
+  'bulgari',
+  'chopard',
+  'f.p. journe',
+  'franck muller',
+  'girard-perregaux',
+  'glashütte original',
+  'grand seiko',
+  'h. moser & cie',
+  'hublot',
+  'iwc',
+  'jacob & co',
+  'jaeger-lecoultre',
+  'longines',
+  'omega',
+  'tag heuer',
+  'ulysse nardin',
+]);
 const KNOWN_WATCH_BRANDS = [
   'A. Lange & Söhne',
   'Audemars Piguet',
+  'Breguet',
+  'Bulgari',
   'Cartier',
+  'Franck Muller',
+  'Girard-Perregaux',
+  'Glashütte Original',
+  'Grand Seiko',
+  'H. Moser & Cie',
   'IWC',
+  'Jacob & Co',
   'Omega',
   'Panerai',
   'Patek Philippe',
   'Piaget',
   'Richard Mille',
   'Rolex',
+  'TAG Heuer',
   'Tudor',
+  'Ulysse Nardin',
   'Vacheron Constantin',
   'Zenith',
 ];
@@ -49,11 +85,17 @@ function rowReference(row) {
     || clean(row.catalog_reference);
 }
 
+function isReviewedWorkbookBrowseBrand(value) {
+  return REVIEWED_WORKBOOK_BROWSE_BRANDS.has(clean(value).toLowerCase());
+}
+
 async function loadReviewedWorkbookBrandRows(client, brand) {
+  const admissionSource = isReviewedWorkbookBrowseBrand(brand);
+  const sourceTable = admissionSource ? 'reviewed_workbook_inventory' : MARKET_SOURCE_VIEW;
   const rows = [];
   for (let from = 0; from < MAX_ROWS_PER_BRAND; from += PAGE_SIZE) {
-    const { data, error } = await client
-      .from(MARKET_SOURCE_VIEW)
+    let query = client
+      .from(sourceTable)
       .select([
         'id',
         'brand_scope',
@@ -66,18 +108,46 @@ async function loadReviewedWorkbookBrandRows(client, brand) {
         'dial_color',
         'catalog_dial',
         'listing_type',
+        'posting_date',
         'price_evidence_status',
+        'workbook_price_usd',
+        'has_verified_usd_price',
         'verified_price_usd',
-      ].join(','))
-      .eq('brand_scope', brand)
-      .eq('has_complete_identity', true)
+      ].filter(column => !admissionSource || !['public_reference', 'has_verified_usd_price', 'verified_price_usd'].includes(column)).join(','))
+      .eq('brand_scope', brand);
+    query = admissionSource
+      ? query.eq('verification_status', 'APPROVED_SINGLE_CANDIDATE').eq('confidence', 100).in('listing_type', ['WTS', 'WTB'])
+      : query.eq('has_complete_identity', true);
+    const { data, error } = await query
       .order('id', { ascending: true })
       .range(from, from + PAGE_SIZE - 1);
     if (error) throw error;
-    rows.push(...(data || []));
+    rows.push(...(data || []).map(row => admissionSource ? {
+      ...row,
+      public_reference: row.normalized_reference || row.raw_reference || row.catalog_reference,
+      has_verified_usd_price: row.listing_type === 'WTS'
+        && row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
+        && Number(row.workbook_price_usd) > 0,
+      verified_price_usd: row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
+        ? Number(row.workbook_price_usd) || null
+        : null,
+    } : row));
     if (!data || data.length < PAGE_SIZE) return { rows, truncated: false };
   }
   return { rows, truncated: true };
+}
+
+async function loadReviewedWorkbookBrandCount(client, brand) {
+  if (!isReviewedWorkbookBrowseBrand(brand)) return 0;
+  const { count, error } = await client
+    .from('reviewed_workbook_inventory')
+    .select('id', { count: 'exact', head: true })
+    .eq('brand_scope', brand)
+    .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
+    .eq('confidence', 100)
+    .in('listing_type', ['WTS', 'WTB']);
+  if (error) throw error;
+  return Number(count || 0);
 }
 
 function summarizeReviewedWorkbookModels(rows) {
@@ -111,7 +181,8 @@ function summarizeReviewedWorkbookReferences(rows, requestedModel, truncated = f
     const verifiedPrice = Number(row.verified_price_usd);
     if (
       String(row.listing_type || '').toUpperCase() === 'WTS'
-      && row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
+      && (row.has_verified_usd_price === true
+        || ['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(row.price_evidence_status))
       && Number.isFinite(verifiedPrice)
       && verifiedPrice > 0
     ) {
@@ -141,6 +212,9 @@ function summarizeReviewedWorkbookReferences(rows, requestedModel, truncated = f
 
 module.exports = {
   MARKET_SOURCE_VIEW,
+  REVIEWED_WORKBOOK_BROWSE_BRANDS,
+  isReviewedWorkbookBrowseBrand,
+  loadReviewedWorkbookBrandCount,
   loadReviewedWorkbookBrandRows,
   rowModel,
   rowReference,

@@ -41,7 +41,7 @@ DIAL_KEYWORDS_ORDER = [
     ('mother of pearl', 'Mother of Pearl'), ('mop', 'Mother of Pearl'),
     ('ice blue', 'Ice Blue'), ('olive green', 'Olive Green'), ('olive', 'Olive Green'),
     ('tiffany blue', 'Tiffany Blue'), ('tiffany', 'Tiffany Blue'),
-    ('mint green', 'Mint Green'), ('navy blue', 'Navy Blue'),
+    ('navy blue', 'Navy Blue'),
     ('wimbledon', 'Wimbledon'), ('aubergine', 'Aubergine'),
     ('rhodium', 'Rhodium'), ('meteorite', 'Meteorite'), ('skeleton', 'Skeleton'),
     ('champagne', 'Champagne'), ('chocolate', 'Chocolate'), ('salmon', 'Salmon'),
@@ -199,10 +199,10 @@ def audit_and_enrich_file(fpath):
         dial_color = dial_val
         dial_source = 'UNKNOWN'
 
-        if dial_val and dial_val.lower() not in ['unknown', 'none', 'null', 'n/a', '']:
+        if dial_val and dial_val.lower() not in ['unknown', 'none', 'null', 'n/a', '', 'mint', 'mint condition', 'mint green']:
             dial_source = 'SUPPLIED'
         else:
-            raw_lower = raw_val.lower()
+            raw_lower = re.sub(r'\bmint\s+green\b(?!\s+dial\b)', 'mint', raw_val.lower())
             for kw, canonical in DIAL_KEYWORDS_ORDER:
                 if re.search(r'\b' + re.escape(kw) + r'\b', raw_lower):
                     dial_color = canonical

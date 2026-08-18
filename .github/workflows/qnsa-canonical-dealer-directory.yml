@@ -1,0 +1,49 @@
+name: QNSA canonical dealer directory
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type DEPLOY_QNSA_CANONICAL_DEALER_DIRECTORY
+        required: true
+        type: string
+
+jobs:
+  deploy:
+    if: ${{ inputs.confirmation == 'DEPLOY_QNSA_CANONICAL_DEALER_DIRECTORY' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply forward-only canonical directory contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260814203000_qnsa_canonical_dealer_directory.sql'
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260814203500_qnsa_canonical_dealer_public_link_sync.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260814204000_qnsa_canonical_dealer_batched_link_sync.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260814204500_qnsa_canonical_dealer_bucket_link_sync.sql')
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+      - name: Reconcile snapshots and released listing lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/dealer-directory/sync-canonical-directory.cjs | tee canonical-directory-reconciliation.json
+      - name: Upload sanitized reconciliation
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-directory-reconciliation
+          path: canonical-directory-reconciliation.json
+          retention-days: 14

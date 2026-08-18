@@ -14,6 +14,7 @@ const {
   THREE_WATCH_RELEASE_REFERENCES,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
+  isReviewedReleaseReference,
   isReviewedZenithIdentityCorrectionRecord,
   normalizePublicationReference,
   publicationReferencePostgrestFilter,
@@ -43,6 +44,14 @@ test('reference normalization preserves identity while ignoring punctuation and 
   assert.equal(isPublicationReferenceAllowed('Patek Philippe', '57121A001', configured), false);
 });
 
+test('default reviewed references remain exact even under a full-brand deployment', () => {
+  assert.equal(isReviewedReleaseReference('Patek Philippe', '5712'), true);
+  assert.equal(isReviewedReleaseReference('Patek Philippe', '5712/1A'), true);
+  assert.equal(isReviewedReleaseReference('Patek Philippe', '571'), false);
+  assert.equal(isReviewedReleaseReference('Rolex', '116500LN'), true);
+  assert.equal(isReviewedReleaseReference('Rolex', '116500'), false);
+});
+
 test('PostgREST release filter is a bounded exact IN predicate', () => {
   assert.equal(
     publicationReferencePostgrestFilter(configured),
@@ -59,7 +68,7 @@ test('an unset reference release configuration fails closed to the reviewed rele
   assert.equal(isPublicationReferenceAllowed('Rolex', '126610LN', ''), false);
   assert.equal(
     publicationReferencePostgrestFilter(''),
-    'in.("116610LN","116500LN","52506","5712/1A","5712/1A-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")',
+    'in.("116610LN","116500LN","126500LN","52506","5712/1A","5712/1A-001","5712","5712G","5712G-001","5712R","5712R-001","5712/1R","5712/1R-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")',
   );
 });
 

@@ -14,7 +14,7 @@ class TestPipelineEndToEnd(unittest.TestCase):
 
     def test_e2e_single_listing_flow(self):
         """Test full pipeline flow for a single watch listing."""
-        msg_text = "Rolex 116508 John Mayer 2020 Good Condition Watch and card $68,000"
+        msg_text = "Rolex 116508 John Mayer 2020 Good Condition Watch and card USD 68,000"
         payload_checksum = hashlib.sha256(msg_text.encode('utf-8')).hexdigest()
         raw_payload_id = str(uuid.uuid4())
         job_id = str(uuid.uuid4())
@@ -80,11 +80,12 @@ class TestPipelineEndToEnd(unittest.TestCase):
         self.assertEqual(result["trading_floor_status"], "bundle_pending_separation")
         self.assertEqual(result["price_research_status"], "ineligible_bundle")
 
-        # Normalized children should be published on Trading Floor with parent lineage
+        # Parsed children remain deferred until their lineage and evidence are reviewed.
         children = result.get("child_listings", [])
         self.assertGreater(len(children), 0)
         for child in children:
-            self.assertEqual(child["trading_floor_status"], "published")
+            self.assertEqual(child["trading_floor_status"], "bundle_child_pending_review")
+            self.assertEqual(child["price_research_status"], "ineligible_bundle_child_pending_review")
 
     def test_e2e_rm_price_validation(self):
         """Test Richard Mille price validation check."""
@@ -104,7 +105,7 @@ class TestPipelineEndToEnd(unittest.TestCase):
 
     def test_e2e_wtb_watch_classification(self):
         """Test WTB watch classification."""
-        msg_text = "Looking for Rolex 126333 White Index Oyster BNIB $12000"
+        msg_text = "Looking for Rolex 126333 White Index Oyster BNIB USD 12000"
         job_id = str(uuid.uuid4())
         job_data = {
             "id": job_id,
@@ -137,6 +138,56 @@ class TestPipelineEndToEnd(unittest.TestCase):
         res3 = self.processor.extract_price("Patek 5980 4.5m HKD")
         self.assertEqual(res3[0], 4500000.0)
         self.assertEqual(res3[1], "HKD")
+
+    def test_bare_dollar_and_numeric_amounts_default_to_usd(self):
+        bare_dollar = self.processor.process_job({
+            "id": str(uuid.uuid4()),
+            "message_text": "WTS Rolex 116500LN $31500",
+            "type": "sale",
+        })
+        self.assertEqual(bare_dollar["price_normalized"], 31500.0)
+        self.assertEqual(bare_dollar["currency_normalized"], "USD")
+        self.assertEqual(bare_dollar["price_usd"], 31500.0)
+        self.assertEqual(bare_dollar["price_research_status"], "eligible")
+        self.assertEqual(bare_dollar["provenance_metadata"]["currency_evidence"], "usd_defaulted_by_policy")
+
+        for message, expected in (
+            ("WTS Rolex 116688 $37k", 37000.0),
+            ("WTS Patek Philippe 336935 60000$", 60000.0),
+            ("WTS Rolex 116500LN 18000", 18000.0),
+            ("WTS Rolex 126500LN 106000 usdt", 106000.0),
+        ):
+            result = self.processor.process_job({
+                "id": str(uuid.uuid4()), "message_text": message, "type": "sale",
+            })
+            self.assertEqual(result["price_usd"], expected, message)
+
+        no_price = self.processor.process_job({
+            "id": str(uuid.uuid4()),
+            "message_text": "WTS Rolex 116500LN DM for price",
+            "type": "sale",
+        })
+        self.assertEqual(no_price["price_normalized"], 0.0)
+        self.assertIsNone(no_price["currency_normalized"])
+        self.assertIsNone(no_price["price_usd"])
+        self.assertEqual(no_price["price_research_status"], "ineligible_no_price")
+
+    def test_asian_currency_aliases_use_dated_verified_fx(self):
+        processor = WatchFactsPipelineProcessor(
+            fx_rates={"HKD": 0.128, "CNY": 0.139, "JPY": 0.0068},
+            fx_observed_at="2026-08-11T00:00:00Z",
+            fx_source="test-fixture",
+        )
+        cases = (
+            ("WTS Rolex 116500LN 298,000 HKD", 38144.0, "HKD"),
+            ("WTS Rolex 116500LN 305k HKN", 39040.0, "HKD"),
+            ("WTS Rolex 116500LN 300000 RMB", 41700.0, "CNY"),
+        )
+        for message, expected, currency in cases:
+            result = processor.process_job({"id": str(uuid.uuid4()), "message_text": message, "type": "sale"})
+            self.assertEqual(result["currency_normalized"], currency)
+            self.assertEqual(result["price_usd"], expected)
+            self.assertEqual(result["conversion_timestamp"], "2026-08-11T00:00:00Z")
 
     def test_seller_information_public(self):
         """Test that seller information is publicly preserved and unmasked."""

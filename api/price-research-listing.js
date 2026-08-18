@@ -26,6 +26,73 @@ const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs')
 const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
 const { loadReviewedWorkbookListing } = require('./_lib/reviewed-workbook-analytics.cjs');
 
+const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source';
+
+function isMissingQnsaDetailSource(error) {
+  return /42P01|PGRST205|relation .* does not exist|could not find the table/i
+    .test(`${error?.code || ''} ${error?.message || error || ''}`);
+}
+
+async function loadQnsaReleaseListing(client, id) {
+  const { data, error } = await client
+    .from(QNSA_PRICE_RESEARCH_SOURCE)
+    // The reviewed source is a versioned public contract. Selecting the row
+    // avoids coupling this endpoint to optional projection columns added by
+    // individual release migrations while the response mapper remains
+    // deliberately allow-listed below.
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error && isMissingQnsaDetailSource(error)) return null;
+  if (error) throw error;
+  return data || null;
+}
+
+function qnsaListingResponse(listing) {
+  const imageUrls = Array.isArray(listing.image_urls)
+    ? listing.image_urls.filter(Boolean)
+    : [listing.thumbnail_url].filter(Boolean);
+  const rawMessage = String(listing.raw_message || '').trim();
+  return {
+    success: true,
+    listing: {
+      id: String(listing.id),
+      brand: listing.brand,
+      model: listing.model || null,
+      reference: listing.reference,
+      dial_color: listing.dial_color || null,
+      condition: listing.condition || null,
+      price_raw: listing.price_raw == null ? null : Number(listing.price_raw),
+      price_usd: listing.price_usd == null ? null : Number(listing.price_usd),
+      price_evidence_status: Number(listing.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED',
+      currency: listing.currency || null,
+      raw_message: rawMessage || null,
+      raw_message_scope: rawMessage ? 'original_post' : 'unavailable',
+      raw_message_truncated: false,
+      source_message_available_to_reviewers: Boolean(rawMessage),
+      created_at: listing.created_at,
+      listing_date: listing.listing_date || listing.created_at,
+      source: listing.source || 'MARIADB_IMMUTABLE_RAW',
+      source_type: 'qnsa_reviewed_release',
+      listing_type: listing.listing_type || 'WTS',
+      listing_status: listing.listing_status || null,
+      confidence: listing.confidence == null ? null : Number(listing.confidence),
+      accessories: [],
+      image_urls: imageUrls,
+      has_images: listing.has_images === true && imageUrls.length > 0,
+      image_evidence_type: listing.has_images === true && imageUrls.length > 0 ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
+      image_evidence_label: listing.has_images === true && imageUrls.length > 0 ? 'Source-supplied listing image' : null,
+      image_evidence_notice: listing.has_images === true && imageUrls.length > 0
+        ? 'Exact image retained with this immutable source listing.'
+        : null,
+      image_provenance: listing.has_images === true && imageUrls.length > 0 ? 'source_supplied' : 'none',
+      region: listing.location || null,
+      data_quality_issues: [],
+      data_quality_review_required: false,
+    },
+  };
+}
+
 function normalizeAccessories(value) {
   if (!value) return [];
   if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean).slice(0, 20);
@@ -81,6 +148,14 @@ module.exports = async function handler(req, res) {
     } catch {
       // Public evidence remains available when optional reviewer resolution fails.
     }
+    let qnsaListing = null;
+    try {
+      qnsaListing = await loadQnsaReleaseListing(client, id);
+    } catch (qnsaDetailError) {
+      console.warn('[price-research-listing] QNSA detail source unavailable; checking legacy release sources:', qnsaDetailError.message);
+    }
+    if (qnsaListing) return res.status(200).json(qnsaListingResponse(qnsaListing));
+
     const strictResult = await client
       .from('price_research_verified_source')
       .select('id,brand,model,reference,dial_color')
@@ -91,7 +166,7 @@ module.exports = async function handler(req, res) {
     if (!strictGate) {
       const workbookListing = await loadReviewedWorkbookListing(client, id);
       if (workbookListing) {
-        const publicSource = String(workbookListing.raw_message || '').trim();
+        const publicSource = redactPublicSource(workbookListing.raw_message).trim();
         let dialColor = workbookListing.dial_color;
         if ((!dialColor || dialColor === 'UNKNOWN') && (workbookListing.has_images || workbookListing.thumbnail_url || workbookListing.image_urls?.length)) {
           const imageUrl = workbookListing.thumbnail_url || workbookListing.image_urls?.[0];
@@ -120,8 +195,8 @@ module.exports = async function handler(req, res) {
             condition: workbookListing.condition,
             price_raw: workbookListing.source_price_amount,
             price_usd: workbookListing.price_usd,
-            price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
-            currency: workbookListing.source_currency || 'USD',
+            price_evidence_status: workbookListing.price_evidence_status || 'PRICE_NOT_SUPPLIED',
+            currency: workbookListing.source_currency || null,
             raw_message: publicSource || null,
             raw_message_scope: publicSource ? 'reviewed_workbook_source' : 'unavailable',
             raw_message_truncated: false,
@@ -131,12 +206,13 @@ module.exports = async function handler(req, res) {
             source: workbookListing.source,
             source_type: workbookListing.source_type,
             listing_type: workbookListing.listing_type,
+            seller_name: workbookListing.seller_name || null,
             listing_status: workbookListing.listing_status,
             confidence: workbookListing.confidence,
             image_urls: workbookListing.image_urls,
             thumbnail_url: workbookListing.thumbnail_url,
             has_images: workbookListing.has_images,
-            image_evidence_type: workbookListing.has_images ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
+            image_evidence_type: workbookListing.image_evidence_type || (workbookListing.has_images ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE'),
             image_evidence_label: workbookListing.has_images ? 'Source-supplied listing image' : null,
             image_evidence_notice: workbookListing.has_images
               ? 'Exact image URL retained with this reviewed source listing.'

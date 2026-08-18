@@ -15,7 +15,7 @@ const {
 } = require('../duplicate-audit/duplicate-signatures.cjs');
 const { redactPublicSource } = require('../../api/_lib/source-redaction.cjs');
 
-const VERSION = 'watches-only-report-v1+v4.2-line-condition';
+const VERSION = 'watches-only-report-v1+v4.3-mint-condition';
 const EXPECTED_HEADERS = [
   'id', 'origin', 'type', 'from_name', 'phone_code', 'from_number',
   'raw_message', 'brand', 'model', 'price', 'currency', 'usd_price',

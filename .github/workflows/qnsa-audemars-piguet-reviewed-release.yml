@@ -1,0 +1,184 @@
+name: QNSA Audemars Piguet reviewed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_AUDEMARS or ENABLE_QNSA_AUDEMARS
+        required: true
+        type: string
+      mode:
+        description: Audit normalized candidates without publication, or enable both public lanes
+        required: true
+        default: audit
+        type: choice
+        options: [audit, enable]
+      run_key:
+        description: Completed normalized staging run to audit or release
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+
+concurrency:
+  group: qnsa-audemars-piguet-reviewed-release
+  cancel-in-progress: false
+
+jobs:
+  reviewed-release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      NORMALIZED_RUN_KEY: ${{ inputs.run_key }}
+      RELEASE_MIGRATION: supabase/migrations/20260812210000_qnsa_audemars_piguet_reviewed_release.sql
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate explicit authorization and pinned target
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $expected = if ('${{ inputs.mode }}' -eq 'enable') { 'ENABLE_QNSA_AUDEMARS' } else { 'AUDIT_QNSA_AUDEMARS' }
+          if ('${{ inputs.confirmation }}' -cne $expected) { throw "Confirmation must exactly match $expected." }
+          if ($env:SUPABASE_PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Workflow is pinned to QNSA.' }
+          if ($env:NORMALIZED_RUN_KEY -notmatch '^[A-Za-z0-9._:-]{1,100}$') { throw 'Invalid run key.' }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+
+      - name: Apply forward-only Audemars Piguet contract extension
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sql = Get-Content -Raw -LiteralPath $env:RELEASE_MIGRATION
+          if ($sql -match '(?i)(INSERT|UPDATE|DELETE)\s+(INTO\s+|FROM\s+)?public\.watch_records') {
+            throw 'Migration attempts to mutate retired public.watch_records.'
+          }
+          if ($sql -match '(?i)(DELETE\s+FROM|TRUNCATE\s+TABLE)\s+(staging\.listings|public\.raw_message_versions)') {
+            throw 'Migration attempts a destructive source-fact operation.'
+          }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Verify completed run, arm disabled lane, and audit candidates
+        id: audit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          # Arm the compatibility view in a separate statement. PostgreSQL
+          # statement snapshots do not expose a data-modifying CTE's control
+          # update to a view scanned by the same statement.
+          $armSql = @"
+            UPDATE public.qnsa_two_brand_release_control
+            SET trading_floor_enabled = false,
+                price_research_enabled = false,
+                enabled_run_key = '$($env:NORMALIZED_RUN_KEY)',
+                enabled_at = NULL,
+                disabled_at = now(),
+                change_reason = 'Audemars Piguet normalized-candidate audit; public release remains disabled',
+                updated_at = now()
+            WHERE canonical_brand = 'Audemars Piguet'
+            RETURNING canonical_brand;
+          "@
+          $armBody = @{ query = [string]$armSql; read_only = $false } | ConvertTo-Json -Depth 3
+          $armed = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $armBody
+          if ($armed.Count -ne 1) { throw 'Audemars Piguet release control was not armed.' }
+
+          $sql = @"
+          WITH checkpoint AS (
+            SELECT status, error_rows
+            FROM staging.mariadb_normalization_import_checkpoints
+            WHERE run_key = '$($env:NORMALIZED_RUN_KEY)'
+          ), candidates AS (
+            SELECT *
+            FROM public.qnsa_rolex_patek_reviewed_release_base
+            WHERE brand_normalized = 'Audemars Piguet'
+          )
+          SELECT jsonb_build_object(
+            'checkpoint_status', (SELECT status FROM checkpoint),
+            'checkpoint_error_rows', (SELECT error_rows FROM checkpoint),
+            'armed_rows', 1,
+            'candidate_total', count(*),
+            'wts_total', count(*) FILTER (WHERE listing_type = 'WTS'),
+            'wtb_total', count(*) FILTER (WHERE listing_type = 'WTB'),
+            'priced_wts_total', count(*) FILTER (
+              WHERE listing_type = 'WTS' AND price_usd > 0
+                AND (currency_normalized IN ('USD','USDT') OR (conversion_rate > 0 AND conversion_timestamp IS NOT NULL))
+            ),
+            'no_price_total', count(*) FILTER (WHERE price_usd IS NULL OR price_usd <= 0),
+            'with_source_image_total', count(*) FILTER (WHERE public_image_eligible),
+            'distinct_references', count(DISTINCT reference_normalized),
+            'lineage_failures', count(*) FILTER (
+              WHERE raw_message_version_id IS NULL OR source_record_id IS NULL
+                OR source_hash !~ '^[0-9a-f]{64}$' OR source_candidate_hash !~ '^[0-9a-f]{64}$'
+            ),
+            'bundle_or_child_leaks', count(*) FILTER (WHERE parent_id IS NOT NULL)
+          ) AS evidence
+          FROM candidates;
+          "@
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $evidence = $result[0].evidence
+          $evidence | ConvertTo-Json -Depth 6
+          if ($evidence.checkpoint_status -ne 'NORMALIZATION_STAGED' -or [long]$evidence.checkpoint_error_rows -ne 0) { throw 'Run is not completed and error-free.' }
+          if ([long]$evidence.armed_rows -ne 1) { throw 'Audemars Piguet release control was not armed.' }
+          if ([long]$evidence.candidate_total -lt 1 -or [long]$evidence.wts_total -lt 1 -or [long]$evidence.priced_wts_total -lt 1) { throw 'No usable normalized Audemars Piguet cohort is available.' }
+          if ([long]$evidence.lineage_failures -ne 0 -or [long]$evidence.bundle_or_child_leaks -ne 0) { throw 'Candidate audit found lineage or bundle leakage.' }
+
+      - name: Enable audited Audemars Piguet release
+        if: inputs.mode == 'enable'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          UPDATE public.qnsa_two_brand_release_control
+          SET trading_floor_enabled = true,
+              price_research_enabled = true,
+              enabled_at = now(),
+              disabled_at = NULL,
+              change_reason = 'Explicit ENABLE_QNSA_AUDEMARS after normalized candidate audit',
+              updated_at = now()
+          WHERE canonical_brand = 'Audemars Piguet'
+            AND enabled_run_key = '$($env:NORMALIZED_RUN_KEY)'
+          RETURNING canonical_brand;
+          "@
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          if ($result.Count -ne 1) { throw 'Audemars Piguet enable transition did not affect exactly one row.' }
+
+      - name: Verify fail-closed audit or enabled customer views
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $expected = if ('${{ inputs.mode }}' -eq 'enable') { 'true' } else { 'false' }
+          $sql = @"
+          SELECT jsonb_build_object(
+            'trading_enabled', trading_floor_enabled,
+            'research_enabled', price_research_enabled
+          ) AS evidence
+          FROM public.qnsa_two_brand_release_control
+          WHERE canonical_brand = 'Audemars Piguet';
+          "@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $evidence = $result[0].evidence
+          $evidence | ConvertTo-Json -Depth 5
+          if ('${{ inputs.mode }}' -eq 'enable') {
+            if ($evidence.trading_enabled -ne $true -or $evidence.research_enabled -ne $true) { throw 'Enabled Audemars Piguet customer controls are disabled.' }
+            # Existence probes stop on the first eligible row and avoid a
+            # full count over layered customer views under the DB timeout.
+            $probeSql = "SELECT jsonb_build_object('trading_exists', EXISTS (SELECT 1 FROM public.qnsa_rolex_patek_trading_floor_source WHERE canonical_brand = 'Audemars Piguet' LIMIT 1), 'priced_wts_exists', EXISTS (SELECT 1 FROM public.qnsa_rolex_patek_price_research_source WHERE brand = 'Audemars Piguet' LIMIT 1), 'wtb_exists', EXISTS (SELECT 1 FROM public.qnsa_rolex_patek_wtb_demand_source WHERE brand = 'Audemars Piguet' LIMIT 1)) AS evidence;"
+            $probeBody = @{ query = [string]$probeSql; read_only = $true } | ConvertTo-Json -Depth 3
+            $probeResult = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $probeBody
+            $probe = $probeResult[0].evidence
+            $probe | ConvertTo-Json -Depth 5
+            if ($probe.trading_exists -ne $true -or $probe.priced_wts_exists -ne $true) { throw 'Enabled Audemars Piguet customer views are empty.' }
+          } else {
+            if ($evidence.trading_enabled -ne $false -or $evidence.research_enabled -ne $false) { throw 'Audit mode did not remain fail-closed.' }
+          }

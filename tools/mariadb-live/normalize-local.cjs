@@ -2,19 +2,35 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const readline = require('node:readline');
 const { analyzeRecord } = require('../shadow-reprocess/shadow-reprocess.cjs');
 const { confirmCatalogCandidate } = require('../../api/_lib/catalog-confirmation.cjs');
 const { buildPromotionDecision } = require('../shadow-reprocess/promotion-policy.cjs');
-const { atomicJson, boundedInteger, csv, normalizationInput } = require('./lib.cjs');
+const { atomicJson, boundedInteger, csv, jsonLine, normalizationInput, readJsonLines } = require('./lib.cjs');
+
+function loadFxSnapshot(filePath) {
+  if (!filePath) return null;
+  const resolved = path.resolve(filePath);
+  if (!fs.existsSync(resolved)) throw new Error(`FX snapshot does not exist: ${resolved}`);
+  const snapshot = JSON.parse(fs.readFileSync(resolved, 'utf8'));
+  if (!snapshot.observed_at || !snapshot.source || !snapshot.usd_per_unit || typeof snapshot.usd_per_unit !== 'object') {
+    throw new Error('FX snapshot must contain observed_at, source, and usd_per_unit');
+  }
+  if (!Number.isFinite(Date.parse(snapshot.observed_at))) throw new Error('FX snapshot observed_at is invalid');
+  for (const [currency, value] of Object.entries(snapshot.usd_per_unit)) {
+    if (!/^[A-Z]{3,4}$/.test(currency) || !Number.isFinite(Number(value)) || Number(value) <= 0) {
+      throw new Error(`FX snapshot contains an invalid USD-per-unit rate for ${currency}`);
+    }
+  }
+  return snapshot;
+}
 
 function increment(map, key) {
   map[key] = (map[key] || 0) + 1;
 }
 
-function normalizeSourceRecord(source) {
+function normalizeSourceRecord(source, options = {}) {
   const normalizedInput = normalizationInput(source);
-  const shadow = analyzeRecord(normalizedInput);
+  const shadow = analyzeRecord(normalizedInput, { fxSnapshot: options.fxSnapshot || null });
   const confirmation = shadow.candidate_count === 1
     ? confirmCatalogCandidate(shadow.proposed_candidates[0])
     : null;
@@ -36,10 +52,38 @@ function normalizeSourceRecord(source) {
   };
 }
 
-async function run() {
-  const input = path.resolve(process.env.MARIADB_NORMALIZE_INPUT || 'audit-output/mariadb-live/canary/raw-records.jsonl');
-  const output = path.resolve(process.env.MARIADB_NORMALIZE_OUTPUT || path.dirname(input));
-  const maxRows = boundedInteger(process.env.MARIADB_NORMALIZE_MAX_ROWS, 100_000, 1, 10_000_000, 'MARIADB_NORMALIZE_MAX_ROWS');
+async function readExistingProgress(paths) {
+  const reasons = {};
+  const dispositions = {};
+  const bundles = {};
+  let outputRows = 0;
+  let errorRows = 0;
+  for await (const line of readJsonLines(paths.proposals)) {
+    if (!line.trim()) continue;
+    const proposal = JSON.parse(line);
+    increment(bundles, proposal.bundle_status);
+    increment(dispositions, proposal.review_disposition);
+    for (const reason of proposal.review_reasons || []) increment(reasons, reason);
+    outputRows += 1;
+  }
+  let lineNumber = 0;
+  for await (const line of readJsonLines(paths.errors)) {
+    lineNumber += 1;
+    if (lineNumber === 1 || !line.trim()) continue;
+    errorRows += 1;
+  }
+  return { reasons, dispositions, bundles, outputRows, errorRows, inputRows: outputRows + errorRows };
+}
+
+async function run(options = {}) {
+  const env = options.env || process.env;
+  const input = path.resolve(env.MARIADB_NORMALIZE_INPUT || 'audit-output/mariadb-live/canary/raw-records.jsonl');
+  const output = path.resolve(env.MARIADB_NORMALIZE_OUTPUT || path.dirname(input));
+  const maxRows = boundedInteger(env.MARIADB_NORMALIZE_MAX_ROWS, 100_000, 1, 10_000_000, 'MARIADB_NORMALIZE_MAX_ROWS');
+  const startRow = boundedInteger(env.MARIADB_NORMALIZE_START_ROW, 0, 0, 10_000_000, 'MARIADB_NORMALIZE_START_ROW');
+  const flushRows = boundedInteger(env.MARIADB_NORMALIZE_FLUSH_ROWS, 500, 1, 5000, 'MARIADB_NORMALIZE_FLUSH_ROWS');
+  const resume = env.MARIADB_NORMALIZE_RESUME === '1';
+  const fxSnapshot = loadFxSnapshot(env.MARIADB_NORMALIZE_FX_SNAPSHOT || null);
   if (!fs.existsSync(input)) throw new Error(`Input does not exist: ${input}`);
   fs.mkdirSync(output, { recursive: true });
   const paths = {
@@ -49,42 +93,73 @@ async function run() {
     blockers: path.join(output, 'blockers-by-reason.csv'),
     reconciliation: path.join(output, 'normalization-reconciliation.json'),
   };
-  for (const target of Object.values(paths)) {
-    if (fs.existsSync(target)) throw new Error(`Output already exists: ${target}`);
+  if (resume) {
+    if (!fs.existsSync(paths.proposals) || !fs.existsSync(paths.errors)) {
+      throw new Error('Resume requires existing proposals and errors evidence');
+    }
+    for (const target of [paths.coverage, paths.blockers, paths.reconciliation]) {
+      if (fs.existsSync(target)) throw new Error(`Resume refused because completed output exists: ${target}`);
+    }
+  } else {
+    for (const target of Object.values(paths)) {
+      if (fs.existsSync(target)) throw new Error(`Output already exists: ${target}`);
+    }
+    fs.writeFileSync(paths.errors, 'source_record_id,error_name,error_message\n');
   }
-  fs.writeFileSync(paths.errors, 'source_record_id,error_name,error_message\n');
-  const inputStream = fs.createReadStream(input, { encoding: 'utf8' });
-  const lines = readline.createInterface({ input: inputStream, crlfDelay: Infinity });
-  const reasons = {};
-  const dispositions = {};
-  const bundles = {};
-  let inputRows = 0;
-  let outputRows = 0;
-  let errorRows = 0;
+  const lines = readJsonLines(input);
+  const existing = resume
+    ? await readExistingProgress(paths)
+    : { reasons: {}, dispositions: {}, bundles: {}, inputRows: 0, outputRows: 0, errorRows: 0 };
+  const { reasons, dispositions, bundles } = existing;
+  let inputRows = existing.inputRows;
+  let outputRows = existing.outputRows;
+  let errorRows = existing.errorRows;
+  const resumedRows = inputRows;
+  let sourceInputRows = 0;
+  let bufferedRows = 0;
+  let proposalBuffer = '';
+  let errorBuffer = '';
+
+  function flush() {
+    if (proposalBuffer) fs.appendFileSync(paths.proposals, proposalBuffer);
+    if (errorBuffer) fs.appendFileSync(paths.errors, errorBuffer);
+    proposalBuffer = '';
+    errorBuffer = '';
+    bufferedRows = 0;
+  }
+
   for await (const line of lines) {
-    if (inputRows >= maxRows) break;
     if (!line.trim()) continue;
+    sourceInputRows += 1;
+    if (sourceInputRows <= startRow + resumedRows) continue;
+    if (inputRows >= maxRows) break;
     inputRows += 1;
     let sourceId = null;
     try {
       const source = JSON.parse(line);
       sourceId = source.source_record_id;
-      const proposal = normalizeSourceRecord(source);
+      const proposal = normalizeSourceRecord(source, { fxSnapshot });
       increment(bundles, proposal.bundle_status);
       increment(dispositions, proposal.review_disposition);
       for (const reason of proposal.review_reasons) increment(reasons, reason);
-      fs.appendFileSync(paths.proposals, `${JSON.stringify(proposal)}\n`);
+      proposalBuffer += jsonLine(proposal);
       outputRows += 1;
     } catch (error) {
-      fs.appendFileSync(paths.errors, `${csv(sourceId)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`);
+      errorBuffer += `${csv(sourceId)},${csv(error.name || 'Error')},${csv(error.message || String(error))}\n`;
       errorRows += 1;
     }
+    bufferedRows += 1;
+    if (bufferedRows >= flushRows) flush();
   }
+  flush();
   const reconciled = inputRows === outputRows + errorRows;
   const coverage = {
     contract: 'wf-mariadb-local-normalization-v1',
     generated_at: new Date().toISOString(),
-    normalization_version: 'v4.2-line-condition',
+    normalization_version: 'v4.3-mint-condition',
+    source_start_row: startRow + 1,
+    source_end_row: startRow + inputRows,
+    resumed_rows: resumedRows,
     input_rows: inputRows,
     output_rows: outputRows,
     error_rows: errorRows,
@@ -120,4 +195,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { normalizeSourceRecord, run };
+module.exports = { loadFxSnapshot, normalizeSourceRecord, readExistingProgress, run };

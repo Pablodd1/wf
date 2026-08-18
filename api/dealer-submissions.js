@@ -2,6 +2,7 @@
 
 const crypto = require('node:crypto');
 const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
+const { multiItemRisk } = require('./_lib/unsplit-bundle-filter.cjs');
 
 const INTENTS = new Set(['WTS', 'WTB']);
 const CATEGORIES = new Set(['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY', 'OTHER']);
@@ -28,7 +29,7 @@ function credentialedLocation(dealer) {
 async function loadCredentialedPoster(client, user) {
   try {
     const { data: dealer, error } = await client.from('dealers')
-      .select('id,display_name,company_name,country_code,city,avatar_url,status,rating,review_count,whatsapp_group_count')
+      .select('id,display_name,company_name,country_code,city,avatar_url,status,contact_consent,rating,review_count,whatsapp_group_count,metadata')
       .eq('auth_user_id', user.id).maybeSingle();
     if (error || !dealer) return null;
 
@@ -51,9 +52,13 @@ async function loadCredentialedPoster(client, user) {
     location: credentialedLocation(dealer),
     avatar_url: clean(dealer.avatar_url, 2000),
     credential_status: dealer.status,
+    contact_publication_approved: dealer.contact_consent === true,
     rating: dealer.rating == null ? null : Number(dealer.rating),
     review_count: Number(dealer.review_count || 0),
     group_count: Number(dealer.whatsapp_group_count || 0),
+    account_type: clean(dealer.metadata?.account_type, 30),
+    preferred_language: clean(dealer.metadata?.preferred_language, 20),
+    telegram_username: clean(dealer.metadata?.telegram_username, 100),
   };
   } catch (err) {
     console.error('[dealer-submissions-credential] Database missing or error:', err.message);
@@ -77,20 +82,26 @@ function ownedMediaUrl(value, userId) {
 }
 
 function validateSubmission(body = {}) {
-  const isBundle = body.is_bundle === true;
+  const submittedAsBundle = body.is_bundle === true;
   const intent = clean(body.intent, 3)?.toUpperCase();
   const category = clean(body.category, 20)?.toUpperCase();
-  const rawInput = String(body.raw_message || '').trim();
-  const rawMessage = rawInput || null;
+  const rawInput = typeof body.raw_message === 'string' ? body.raw_message : '';
+  // Validate with trimmed text but retain the submitted bytes exactly. Leading
+  // whitespace, trailing whitespace, and line breaks are source evidence.
+  const rawMessage = rawInput.trim() ? rawInput : null;
+  const detectedMultiItem = category === 'WATCH' ? multiItemRisk(rawMessage) : { is_multi: false, reasons: [] };
+  const isBundle = submittedAsBundle || detectedMultiItem.is_multi;
   if (!INTENTS.has(intent)) return { error: 'Choose For sale or Want to buy.' };
   if (!CATEGORIES.has(category)) return { error: 'Choose a valid category.' };
-  if (isBundle && (intent !== 'WTS' || category !== 'WATCH')) return { error: 'A deferred bundle must be a For sale watch listing.' };
+  if (isBundle && category !== 'WATCH') return { error: 'A deferred multi-item post must contain watches.' };
   if (!rawMessage || rawMessage.length < 3) return { error: 'Enter the original listing or request message.' };
   if (rawMessage.length > 10000) return { error: 'Original message is limited to 10,000 characters.' };
 
   const claimed = {
     brand: clean(body.brand), model: clean(body.model), reference: clean(body.reference),
     dial_color: clean(body.dial_color), condition: clean(body.condition, 40),
+    material: clean(body.material, 120), size: clean(body.size, 80),
+    year: clean(body.year, 20), completeness: clean(body.completeness, 160),
     price_amount: body.price_amount == null || body.price_amount === '' ? null : Number(body.price_amount),
     currency: clean(body.currency, 8)?.toUpperCase() || null,
     title: clean(body.title, 240),
@@ -98,6 +109,12 @@ function validateSubmission(body = {}) {
   if (category === 'WATCH' && !isBundle) {
     const missing = ['brand', 'model', 'reference', 'dial_color'].filter(field => !claimed[field]);
     if (missing.length) return { error: `Required watch fields: ${missing.join(', ')}.` };
+  }
+  if (category !== 'WATCH' && !isBundle && (!claimed.brand || !claimed.title)) {
+    return { error: 'Required luxury-item fields: brand or maker, item name or style.' };
+  }
+  if (claimed.year && !/^(?:18|19|20)\d{2}$/.test(claimed.year)) {
+    return { error: 'Year must be a four-digit year between 1800 and 2099.' };
   }
   if (claimed.price_amount != null && (!Number.isFinite(claimed.price_amount) || claimed.price_amount <= 0 || claimed.price_amount > 1_000_000_000)) {
     return { error: 'Enter a valid positive price.' };
@@ -107,7 +124,7 @@ function validateSubmission(body = {}) {
   const imageUrls = Array.isArray(body.image_urls) ? body.image_urls.map(value => clean(value, 2000)).filter(Boolean).slice(0, 5) : [];
   if (!imageUrls.length) return { error: 'Add at least one item photo.' };
   if (imageUrls.some(value => !/^https:\/\//i.test(value))) return { error: 'Invalid item photo URL.' };
-  return { intent, category, rawMessage, claimed, imageUrls, isBundle };
+  return { intent, category, rawMessage, claimed, imageUrls, isBundle, multiItemReasons: detectedMultiItem.reasons };
 }
 
 function validateBatch(body = {}) {
@@ -144,6 +161,9 @@ async function handler(req, res) {
 
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
   if (!sameOrigin(req)) return res.status(403).json({ error: 'Invalid request origin.' });
+  if (req.body?.source_evidence_confirmed !== true) {
+    return res.status(400).json({ error: 'Confirm that every raw message and photo belongs to the submitted item or request.' });
+  }
   const batch = validateBatch(req.body);
   if (batch.error) return res.status(400).json({ error: batch.error });
   const posterError = credentialError(poster);
@@ -171,70 +191,75 @@ async function handler(req, res) {
     poster_name: poster.name, poster_phone: poster.phone, location: poster.location,
     dealer_rating: poster.rating, review_count: poster.review_count,
     group_count: poster.group_count, credential_status: poster.credential_status,
+    contact_publication_approved: poster.contact_publication_approved === true,
+    account_type: poster.account_type, preferred_language: poster.preferred_language,
+    telegram_username: poster.telegram_username,
+    source_evidence_confirmed: true, source_evidence_confirmed_at: new Date().toISOString(),
   };
   const submissionRows = batch.items.map(validated => ({
+    id: crypto.randomUUID(),
     auth_user_id: authorization.user.id, dealer_id: poster.dealer_id,
     intent: validated.intent, category: validated.category, raw_message: validated.rawMessage,
-    claimed_fields: { ...validated.claimed, ...posterSnapshot, is_bundle: validated.isBundle }, image_urls: validated.imageUrls,
+    claimed_fields: {
+      ...validated.claimed,
+      ...posterSnapshot,
+      is_bundle: validated.isBundle,
+      multi_item_detection_reasons: validated.multiItemReasons,
+    }, image_urls: validated.imageUrls,
     poster_image_url: posterImageUrl,
     submission_checksum: crypto.createHash('sha256').update(JSON.stringify({
       intent: validated.intent, category: validated.category, raw_message: validated.rawMessage, is_bundle: validated.isBundle,
       claimed: validated.claimed, image_urls: validated.imageUrls,
     })).digest('hex'),
-    bulk_submission_id: bulkSubmissionId, publication_status: 'PUBLISHED',
-    review_status: validated.isBundle ? 'IN_REVIEW' : 'APPROVED', normalized_at: new Date().toISOString(),
+    bulk_submission_id: bulkSubmissionId, publication_status: 'QUEUED',
+    review_status: 'PENDING_REVIEW', normalized_at: null,
   }));
   const { data, error } = await authorization.client.from('dealer_listing_submissions').insert(submissionRows)
-    .select('id,review_status,publication_status,created_at,intent,category,claimed_fields,image_urls,poster_image_url');
+    .select('id,raw_message_version_id,review_status,publication_status,created_at,intent,category,claimed_fields,image_urls,poster_image_url');
   if (error) {
     console.error('[dealer-submissions]', error.message);
     if (error.code === '23505') return res.status(409).json({ error: 'This exact item post already exists.' });
     return res.status(500).json({ error: 'Unable to save the submission.' });
   }
-
-  const stagingRows = data.map((submission, index) => {
-    const validated = batch.items[index];
-    const price = validated.claimed.price_amount;
-    return {
-      source_submission_id: submission.id, dealer_id: poster.dealer_id,
-      raw_message_text: validated.rawMessage, category: validated.category,
-      intent: validated.intent, listing_type: validated.isBundle ? 'BUNDLE' : validated.intent, is_bundle: validated.isBundle,
-      brand_original: validated.claimed.brand, brand_normalized: validated.claimed.brand,
-      model_original: validated.claimed.model, model_normalized: validated.claimed.model,
-      reference_original: validated.claimed.reference, reference_normalized: validated.claimed.reference,
-      dial_color_original: validated.claimed.dial_color, dial_color_normalized: validated.claimed.dial_color,
-      condition_original: validated.claimed.condition, condition_normalized: validated.claimed.condition,
-      price_original: price, price_normalized: price,
-      price_usd: validated.claimed.currency === 'USD' ? price : null,
-      currency_original: validated.claimed.currency, currency_normalized: validated.claimed.currency,
-      image_url: validated.imageUrls[0], image_urls: validated.imageUrls,
-      user_image_url: posterImageUrl,
-      user_name: poster.name, from_name: poster.name,
-      contact_number: poster.phone, from_number: poster.phone,
-      location: poster.location, rating: poster.rating, dealer_rating: poster.rating,
-      contact_consent: true, is_verified_user: poster.credential_status === 'VERIFIED',
-      is_seller_approved: poster.credential_status === 'VERIFIED', are_attributes_extracted: !validated.isBundle,
-      identification_status: validated.isBundle ? 'bundle_pending_separation' : validated.category === 'WATCH' ? 'identified' : 'normalized',
-      verdict: validated.isBundle ? 'needs_review' : 'approved',
-      normalization_status: validated.isBundle ? 'needs_review' : 'normalized',
-      trading_floor_status: validated.isBundle ? 'bundle_pending_separation' : 'published',
-      price_research_status: validated.isBundle ? 'ineligible_bundle' : validated.category !== 'WATCH' ? 'ineligible_non_watch' : price == null ? 'ineligible_no_price' : validated.claimed.currency === 'USD' ? 'eligible' : 'provisional_needs_review',
-      provenance_metadata: {
-        source: 'authenticated_user_form', submission_id: submission.id,
-        bulk_submission_id: bulkSubmissionId,
-        poster_image_url: posterImageUrl,
-        credential_stamp: { auth_user_id: poster.auth_user_id, dealer_id: poster.dealer_id, status: poster.credential_status },
-      },
-      overall_confidence: validated.isBundle ? 0 : 1,
-    };
-  });
-  const { error: publicationError } = await authorization.client.schema('staging').from('listings').insert(stagingRows);
-  if (publicationError) {
-    await authorization.client.from('dealer_listing_submissions').update({ publication_status: 'PUBLICATION_FAILED', review_status: 'IN_REVIEW' }).in('id', data.map(item => item.id));
-    console.error('[dealer-submissions-publication]', publicationError.message);
-    return res.status(500).json({ error: 'Listings were saved, but publication needs attention.' });
+  if (!data.every(item => item.raw_message_version_id)) {
+    const affectedIds = data.map(item => item.id);
+    await authorization.client.from('dealer_listing_submissions')
+      .update({ publication_status: 'QUEUE_FAILED', review_status: 'IN_REVIEW' })
+      .in('id', affectedIds);
+    console.error('[dealer-submissions-lineage] immutable raw version pointer missing');
+    return res.status(500).json({ error: 'Items were saved, but immutable source lineage needs attention.' });
   }
-  return res.status(201).json({ success: true, submissions: data, submission: data[0], bulk_submission_id: bulkSubmissionId, publication: 'PUBLISHED', count: data.length });
+
+  const submissionIds = data.map(item => item.id);
+  const { data: queued, error: queueError } = await authorization.client.rpc('enqueue_dealer_submission_batch', {
+    p_submission_ids: submissionIds,
+  });
+  if (queueError) {
+    await authorization.client.from('dealer_listing_submissions')
+      .update({ publication_status: 'QUEUE_FAILED', review_status: 'IN_REVIEW' })
+      .in('id', submissionIds);
+    console.error('[dealer-submissions-queue]', queueError.message);
+    return res.status(500).json({ error: 'Items were saved, but the review queue needs attention.' });
+  }
+  const responseSubmissions = data.map(({ raw_message_version_id: _rawVersionId, ...item }) => item);
+  return res.status(202).json({
+    success: true,
+    submissions: responseSubmissions,
+    submission: responseSubmissions[0],
+    bulk_submission_id: bulkSubmissionId,
+    publication: 'QUEUED_FOR_REVIEW',
+    queue: queued || [],
+    count: data.length,
+    accounting: {
+      submission_saved: true,
+      immutable_raw_version_saved: true,
+      dealer_history_recorded: true,
+      review_queue: 'QUEUED',
+      trading_floor: 'AFTER_APPROVAL',
+      price_research: 'WTS_ONLY_AFTER_IDENTITY_PRICE_CURRENCY_AND_DUPLICATE_GATES',
+      wtb_demand: 'AFTER_APPROVAL',
+    },
+  });
 }
 
 module.exports = handler;

@@ -40,6 +40,8 @@ with privileges beyond `USAGE`, `SELECT`, and `SHOW VIEW`.
 ## Bounded collection canary
 
 ```powershell
+$env:MARIADB_IMPORT_START_AT='2026-08-10 10:27:49'
+$env:MARIADB_IMPORT_START_ID='<exact prior reconciled source id>'
 $env:MARIADB_IMPORT_MAX_ROWS='1000'
 $env:MARIADB_IMPORT_BATCH_SIZE='250'
 $env:MARIADB_IMPORT_OUTPUT='audit-output/mariadb-live/canary-001'
@@ -90,12 +92,50 @@ volume mounted at `/data`. Do not reuse the customer API service. Configure the
 MariaDB secrets in Railway, then set:
 
 ```text
-NIXPACKS_START_CMD=npm run mariadb:continuous-worker
+WF_START_COMMAND=npm run mariadb:continuous-worker
 MARIADB_CONTINUOUS_OUTPUT=/data/mariadb-live
 MARIADB_CONTINUOUS_START_AT=1970-01-01 00:00:00
-MARIADB_CONTINUOUS_BATCH_SIZE=1000
+MARIADB_CONTINUOUS_BATCH_SIZE=500
 MARIADB_CONTINUOUS_POLL_MS=30000
+MARIADB_TLS_CA_FILE=/run/secrets/mariadb-ca.pem
 ```
+
+The private QNSA bridge is a separate one-replica process. It requires:
+
+```text
+WF_START_COMMAND=npm run mariadb:segment-bridge
+MARIADB_SEGMENT_SOURCE_ROOT=/data/mariadb-live
+MARIADB_SEGMENT_BRIDGE_OUTPUT=/data/mariadb-live-bridge
+MARIADB_SEGMENT_MAX_ROWS=500
+MARIADB_SEGMENT_MAX_SEGMENTS=1
+MARIADB_SEGMENT_BRIDGE_CONFIRMATION=INGEST_QNSA_LIVE_SHADOW_SEGMENTS_NO_PUBLICATION
+SUPABASE_URL=https://qnsafosakvonzgfcsphh.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<server secret>
+```
+
+It writes only immutable raw evidence and the private
+`staging.live_shadow_*` ledger through `ingest_live_shadow_segment`. It never
+writes `staging.listings`, completes a historical normalization run, or changes
+customer publication, release, dealer, or analytics tables. Promotion remains
+a separate reviewed operation.
+
+Before the first schema apply, dispatch `QNSA Live Shadow Schema Audit` with
+the exact rollback-only confirmation. That audit compiles the forward migration
+and runs the JavaScript-to-PostgreSQL hash/replay contract inside one transaction
+that always rolls back. Its fixed sequence-1 fixture is intentionally a
+first-deployment audit; after a live checkpoint exists, use a versioned test lane
+rather than replaying this fixture against the active lane.
+
+`railway.json` reads `WF_START_COMMAND`; `NIXPACKS_START_CMD` does not select
+the service process. Keep one dedicated replica and verify the persistent
+volume checkpoint before enabling any downstream segment bridge.
+
+The source connection fails closed unless `MARIADB_TLS_CA_FILE` verifies the
+server certificate. An infrastructure-managed private tunnel may instead set
+`MARIADB_PRIVATE_TUNNEL_VERIFIED=true`; document and independently verify that
+tunnel before deployment. Startup also refuses to scan unless MariaDB exposes
+a composite `(created_on, id)` index and `EXPLAIN` selects a bounded index
+plan. Never use synthetic seed counts; restore the exact durable checkpoint.
 
 After applying `20260802160000_source_pipeline_accountability.sql`, the same
 service may publish counts and reconciliation only to the owner dashboard:

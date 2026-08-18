@@ -1,60 +1,207 @@
 'use strict';
 
 const { getClient } = require('./_lib/supabase');
+const { legacyProfiles, ratedProfiles, topRatedProfiles, withoutPrivateProvenance } = require('./_lib/dealer-directory-source.cjs');
+const { directoryDealersWithLinkageState, loadCompletedDealerIds } = require('./_lib/dealer-linkage-state.cjs');
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value || ''), 10);
   return Number.isFinite(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
 }
 
+function digits(value) {
+  return String(value || '').replace(/[^0-9]/g, '');
+}
+
+function canonicalDirectoryFallbackAllowed(error) {
+  const code = String(error?.code || '').trim();
+  const message = String(error?.message || '');
+  return code === '57014'
+    || /canceling statement due to statement timeout|statement timeout/i.test(message)
+    || /function .*qnsa_dealer_directory_page.*does not exist|schema cache/i.test(message);
+}
+
+function optionalDealerStatsUnavailable(error) {
+  if (!error) return false;
+  return /relation .*dealer_profile_stats.* does not exist|dealer_profile_stats.*schema cache/i
+    .test(`${error.code || ''} ${error.message || error}`);
+}
+
+async function loadVerifiedPhones(client, dealerIds) {
+  if (!dealerIds.length) return new Map();
+  const { data, error } = await client
+    .from('dealer_source_identities')
+    .select('dealer_id,source_identity,identity_type,verification_status')
+    .in('dealer_id', dealerIds)
+    .eq('verification_status', 'VERIFIED')
+    .in('identity_type', ['PHONE', 'WHATSAPP', 'phone', 'whatsapp']);
+  if (error) throw error;
+  const result = new Map();
+  for (const identity of data || []) {
+    if (!result.has(identity.dealer_id)) result.set(identity.dealer_id, identity.source_identity);
+  }
+  return result;
+}
+
+async function phoneMatchedDealerIds(client, search) {
+  const needle = digits(search);
+  if (needle.length < 4) return null;
+  const { data, error } = await client
+    .from('dealer_source_identities')
+    .select('dealer_id,source_identity')
+    .eq('verification_status', 'VERIFIED')
+    .in('identity_type', ['PHONE', 'WHATSAPP', 'phone', 'whatsapp'])
+    .limit(5000);
+  if (error) throw error;
+  return [...new Set((data || [])
+    .filter(row => digits(row.source_identity).includes(needle))
+    .map(row => row.dealer_id))];
+}
+
+function publicDealer(dealer, stats, verifiedPhone, sourceRank) {
+  const contactApproved = dealer.contact_consent === true;
+  const {
+    contact_consent: _contactConsent,
+    ...publicProfile
+  } = dealer;
+  return {
+    ...publicProfile,
+    source_rank: sourceRank,
+    source_system: 'WATCHFACTS_VERIFIED_DEALERS',
+    verified_phone: contactApproved ? verifiedPhone : null,
+    stats: stats || null,
+  };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
+  res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=120, stale-while-revalidate=300');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const client = getClient();
-
   const page = boundedInteger(req.query?.page, 1, 1, 100000);
-  const pageSize = boundedInteger(req.query?.pageSize, 24, 1, 100);
+  const requestedPageSize = boundedInteger(req.query?.pageSize, 24, 1, 100);
   const search = String(req.query?.q || '').trim().slice(0, 100);
+  const mode = String(req.query?.mode || '').trim().toLowerCase();
+  const pageSize = mode === 'top-rated' ? Math.min(25, requestedPageSize)
+    : mode === 'rated' ? Math.min(100, requestedPageSize)
+    : requestedPageSize;
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
 
   try {
+    if (mode === 'top-rated' || mode === 'rated') {
+      const normalizedSearch = search.toLocaleLowerCase();
+      const matchingProfiles = (mode === 'rated' ? ratedProfiles() : topRatedProfiles())
+        .filter(profile => !normalizedSearch
+          || [profile.display_name, profile.company_name]
+            .some(value => String(value || '').toLocaleLowerCase().includes(normalizedSearch)));
+      const sourceProfiles = matchingProfiles.slice(from, from + pageSize).map(withoutPrivateProvenance);
+      return res.status(200).json({
+        success: true,
+        page,
+        pageSize,
+        total: matchingProfiles.length,
+        dealers: sourceProfiles,
+        source: mode === 'rated' ? 'public-rated-dealers-snapshot' : 'public-source-snapshot',
+      });
+    }
+    if (mode === 'legacy') {
+      const normalizedSearch = search.toLocaleLowerCase();
+      const profiles = legacyProfiles().filter(profile => !normalizedSearch
+        || [profile.display_name, profile.legacy_profile_id, profile.country_code]
+          .some(value => String(value || '').toLocaleLowerCase().includes(normalizedSearch)));
+      const legacyFrom = (page - 1) * pageSize;
+      return res.status(200).json({
+        success: true, page, pageSize, total: profiles.length,
+        dealers: profiles.slice(legacyFrom, legacyFrom + pageSize).map(withoutPrivateProvenance),
+        source: 'legacy-profile-audit',
+      });
+    }
+    const client = getClient();
+    const { data: canonicalPage, error: canonicalError } = await client.rpc('qnsa_dealer_directory_page', {
+      p_search: search || null,
+      p_limit: pageSize,
+      p_offset: from,
+    });
+    if (!canonicalError && canonicalPage) {
+      const canonicalDealers = canonicalPage.dealers || [];
+      const completedDealerIds = await loadCompletedDealerIds(client, canonicalDealers.map(dealer => dealer.id));
+      return res.status(200).json({
+        success: true,
+        page,
+        pageSize,
+        total: Number(canonicalPage.total || 0),
+        dealers: directoryDealersWithLinkageState(canonicalDealers, completedDealerIds),
+        source: 'canonical-database',
+      });
+    }
+    if (canonicalError && !canonicalDirectoryFallbackAllowed(canonicalError)) {
+      throw canonicalError;
+    }
+    const phoneIds = mode === 'top-rated' ? null : await phoneMatchedDealerIds(client, search);
+    if (phoneIds !== null && !phoneIds.length) {
+      return res.status(200).json({
+        success: true, page, pageSize, total: 0, dealers: [], source: 'database',
+      });
+    }
+
     let query = client
       .from('dealers')
-      .select('id,slug,display_name,company_name,country_code,city,rating,review_count,whatsapp_group_count,avatar_url,profile_summary,verified_at', { count: 'exact' })
+      .select('id,slug,display_name,company_name,country_code,city,rating,review_count,whatsapp_group_count,avatar_url,profile_summary,verified_at,contact_consent', { count: 'exact' })
       .eq('status', 'VERIFIED')
       .order('rating', { ascending: false, nullsFirst: false })
+      .order('review_count', { ascending: false })
       .order('display_name', { ascending: true })
       .range(from, to);
 
-    if (search) {
+    if (phoneIds !== null) {
+      query = query.in('id', phoneIds).eq('contact_consent', true);
+    } else if (search) {
       const escaped = search.replace(/[%_,()]/g, ' ').trim();
-      if (escaped) query = query.or(`display_name.ilike.%${escaped}%,company_name.ilike.%${escaped}%,city.ilike.%${escaped}%`);
+      if (escaped) {
+        query = query.or(`display_name.ilike.%${escaped}%,company_name.ilike.%${escaped}%,city.ilike.%${escaped}%`);
+      }
     }
 
     const { data: dealers, count, error } = await query;
     if (error) throw error;
     const ids = (dealers || []).map(item => item.id);
-    const { data: stats, error: statsError } = ids.length
-      ? await client.from('dealer_profile_stats').select('*').in('dealer_id', ids)
-      : { data: [], error: null };
-    if (statsError) throw statsError;
+    const [{ data: stats, error: statsError }, phonesByDealer] = await Promise.all([
+      ids.length
+        ? client.from('dealer_profile_stats').select('*').in('dealer_id', ids)
+        : Promise.resolve({ data: [], error: null }),
+      loadVerifiedPhones(client, (dealers || [])
+        .filter(dealer => dealer.contact_consent === true)
+        .map(dealer => dealer.id)),
+    ]);
+    if (statsError && !optionalDealerStatsUnavailable(statsError)) throw statsError;
     const statsById = new Map((stats || []).map(item => [item.dealer_id, item]));
+    const publicDealers = (dealers || []).map((dealer, index) => publicDealer(
+      dealer,
+      statsById.get(dealer.id),
+      phonesByDealer.get(dealer.id) || null,
+      from + index + 1,
+    ));
 
     return res.status(200).json({
       success: true,
       page,
       pageSize,
       total: count || 0,
-      dealers: (dealers || []).map(dealer => ({ ...dealer, stats: statsById.get(dealer.id) || null })),
+      dealers: publicDealers,
+      source: 'database',
     });
   } catch (error) {
     console.error('[dealers]', error.message);
     const missingSchema = /relation .* does not exist|column .* does not exist|schema cache/i.test(error.message);
     return res.status(missingSchema ? 503 : 500).json({
-      error: missingSchema ? 'Dealer profiles are awaiting the production migration.' : 'Unable to load dealer profiles.',
+      error: missingSchema
+        ? 'Verified dealer profiles are awaiting the production migration.'
+        : 'Unable to load dealer profiles.',
     });
   }
 };
+
+module.exports.publicDealer = publicDealer;
+module.exports.canonicalDirectoryFallbackAllowed = canonicalDirectoryFallbackAllowed;
+module.exports.optionalDealerStatsUnavailable = optionalDealerStatsUnavailable;

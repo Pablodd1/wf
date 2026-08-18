@@ -49,7 +49,7 @@ function normalizeRow(row, rowNumber) {
 
   const displayName = first(row, ['display_name', 'name', 'full_name', 'dealer_name']);
   const companyName = first(row, ['company_name', 'company', 'business']);
-  const phone = first(row, ['phone_normalized', 'phone', 'whatsapp', 'whatsapp_phone']);
+  const phone = first(row, ['phone_normalized', 'phone', 'whatsapp', 'whatsapp_phone', 'whatsapp_url', 'chat_url']);
   const groups = first(row, ['whatsapp_group_count', 'group_count', 'common_groups']);
   const original = { ...row };
   return {
@@ -58,10 +58,10 @@ function normalizeRow(row, rowNumber) {
     display_name: displayName,
     company_name: companyName,
     phone_normalized: normalizePhone(phone),
-    country_code: first(row, ['country_code', 'country']),
+    country_code: first(row, ['country_code', 'country', 'region']),
     city: first(row, ['city', 'location']),
     rating: rating(first(row, ['rating', 'score'])),
-    review_count: integer(first(row, ['review_count', 'feedback_count', 'reviews'])),
+    review_count: integer(first(row, ['review_count', 'feedback_count', 'profile_rating_count', 'feedback_received'])),
     whatsapp_group_count: integer(groups),
     avatar_url: first(row, ['avatar_url', 'avatar', 'image_url']),
     directory_url: directoryUrl,
@@ -75,8 +75,16 @@ async function rowsFromFile(inputPath) {
   const extension = path.extname(inputPath).toLowerCase();
   if (extension === '.json') {
     const parsed = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
-    if (!Array.isArray(parsed)) throw new Error('JSON export must contain an array of rows');
-    return parsed;
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && Array.isArray(parsed.profiles)) {
+      return parsed.profiles.map((profile, index) => ({
+        ...profile,
+        source_rank: index + 1,
+        source_snapshot_url: parsed.source || null,
+        source_crawled_at: parsed.crawled_at || null,
+      }));
+    }
+    throw new Error('JSON export must contain an array of rows or a profiles array');
   }
   if (extension === '.jsonl' || extension === '.ndjson') {
     const rows = [];

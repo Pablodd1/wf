@@ -7,6 +7,7 @@
  */
 const { readFileSync } = require('fs');
 const { resolve } = require('path');
+const { normalizeCanonicalModel } = require('./catalog-taxonomy');
 
 const PUBLIC_DIR = resolve(process.cwd(), 'public');
 
@@ -18,6 +19,8 @@ let _collapsedByBrandReference = null;
 let _collapsedByReference = null;
 let _curationOverrides = null;
 let _curationAliases = null;
+const LOOKUP_CACHE_MAX = 100_000;
+const _lookupCache = new Map();
 
 function normalizeRef(ref) {
   return String(ref || '').toUpperCase().replace(/[^A-Z0-9/\\-]/g, '');
@@ -290,7 +293,7 @@ function legacyMatch(map, reference, expectedBrand, matchType) {
   return null;
 }
 
-function lookupCatalog(reference, expectedBrand = null) {
+function lookupCatalogUncached(reference, expectedBrand = null) {
   loadCatalogs();
   const empty = {
     found: false,
@@ -352,6 +355,20 @@ function lookupCatalog(reference, expectedBrand = null) {
   // Prefer a modeled canonical-family candidate above, but retain that exact
   // evidence when no useful catalog candidate exists.
   return incompleteExact || empty;
+}
+
+function lookupCatalog(reference, expectedBrand = null) {
+  const cacheKey = `${normalizeBrand(expectedBrand)}|${normalizeRef(reference)}`;
+  const cached = _lookupCache.get(cacheKey);
+  if (cached) return cached;
+
+  const result = lookupCatalogUncached(reference, expectedBrand);
+  if (_lookupCache.size >= LOOKUP_CACHE_MAX) {
+    const oldest = _lookupCache.keys().next().value;
+    _lookupCache.delete(oldest);
+  }
+  _lookupCache.set(cacheKey, result);
+  return result;
 }
 
 function listEquivalentReferences(reference, expectedBrand = null) {
@@ -422,14 +439,47 @@ function listCatalogReferences(brand, model = null) {
     .sort((a, b) => a.model.localeCompare(b.model) || a.reference.localeCompare(b.reference));
 }
 
+/**
+ * Return only identities carried by the deterministic catalog-source file.
+ *
+ * `listCatalogReferences` intentionally retains legacy/enrichment identities
+ * for private exact lookup compatibility. Those legacy files also contain
+ * observed listing tokens (prices, currencies, years and message fragments),
+ * so they must not be used to build the public Price Research browse tree.
+ */
+function listCanonicalCatalogReferences(brand, model = null) {
+  loadCatalogs();
+  const expectedBrand = normalizeBrand(brand);
+  const FALLBACK_MODEL = 'Reference-only listings';
+  const unique = new Map();
+
+  for (const entry of _sourceByBrandReference.values()) {
+    if (normalizeBrand(entry.brand) !== expectedBrand || !entry.reference) continue;
+    const reference = String(entry.reference).trim();
+    const curated = applyCuration(entry, normalizeRef(reference));
+    const canonicalBrand = curated.brand || entry.brand;
+    const canonical = {
+      reference,
+      brand: canonicalBrand,
+      model: normalizeCanonicalModel(curated.model || entry.model || FALLBACK_MODEL, canonicalBrand),
+    };
+    const key = normalizeRef(reference);
+    if (!unique.has(key)) unique.set(key, canonical);
+  }
+
+  return [...unique.values()]
+    .filter(entry => !model || entry.model === model)
+    .sort((a, b) => a.model.localeCompare(b.model) || a.reference.localeCompare(b.reference));
+}
+
 function listCatalogBrands() {
   loadCatalogs();
   const brands = new Map();
   for (const entry of _sourceByBrandReference.values()) {
-    if (!entry.brand || !entry.model) continue;
+    if (!entry.brand || !entry.reference) continue;
     const current = brands.get(entry.brand) || { references: new Set(), models: new Set() };
     current.references.add(entry.reference);
-    current.models.add(entry.model);
+    current.models.add(normalizeCanonicalModel(entry.model || 'Reference-only listings', entry.brand));
     brands.set(entry.brand, current);
   }
   return [...brands.entries()]
@@ -441,6 +491,119 @@ function listCatalogBrands() {
     .sort((a, b) => b.reference_count - a.reference_count || a.brand.localeCompare(b.brand));
 }
 
+function levenshteinDistance(left, right) {
+  const a = String(left || '');
+  const b = String(right || '');
+  if (a === b) return 0;
+  if (!a.length) return b.length;
+  if (!b.length) return a.length;
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let diagonal = previous[0];
+    previous[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const above = previous[j];
+      previous[j] = Math.min(
+        previous[j] + 1,
+        previous[j - 1] + 1,
+        diagonal + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      diagonal = above;
+    }
+  }
+  return previous[b.length];
+}
+
+/**
+ * Return bounded, catalog-backed reference suggestions for marketplace search.
+ * Suggestions are presentation candidates only: callers must not treat a
+ * prefix or typo match as a confirmed listing identity until the user selects
+ * the exact reference.
+ */
+function listCatalogSuggestions(query, { brand = null, limit = 10 } = {}) {
+  loadCatalogs();
+  const rawQuery = String(query || '').trim();
+  const queryKey = collapseRef(rawQuery);
+  const queryText = rawQuery.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+  if (queryKey.length < 2 && queryText.length < 2) return [];
+
+  const expectedBrand = normalizeBrand(brand);
+  // Autocomplete is a public identity surface, so it must use only the
+  // deterministic catalog-source cache. The legacy catalog/enrichment files
+  // contain observed listing strings (for example condition/year suffixes)
+  // that remain useful as private lookup evidence but are not canonical
+  // reference suggestions.
+  const candidates = [..._sourceByBrandReference.values()];
+
+  const unique = new Map();
+  for (const entry of candidates) {
+    const reference = normalizeRef(entry.reference);
+    const referenceKey = collapseRef(reference);
+    const entryBrand = canonicalBrand(entry.brand) || entry.brand || '';
+    const brandKey = normalizeBrand(entryBrand);
+    if (!reference || !entryBrand || (expectedBrand && brandKey !== expectedBrand)) continue;
+
+    const model = String(entry.model || '').trim();
+    const searchableText = `${entryBrand} ${model} ${reference}`.toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+    let score = Number.POSITIVE_INFINITY;
+    let matchType = null;
+    if (referenceKey === queryKey) {
+      score = 0;
+      matchType = 'exact_reference';
+    } else if (referenceKey.startsWith(queryKey)) {
+      score = 10 + Math.min(referenceKey.length - queryKey.length, 9);
+      matchType = 'reference_prefix';
+    } else if (queryKey.length >= 3 && referenceKey.includes(queryKey)) {
+      score = 25 + referenceKey.indexOf(queryKey);
+      matchType = 'reference_contains';
+    } else if (queryText && searchableText.startsWith(queryText)) {
+      score = 35;
+      matchType = 'catalog_text_prefix';
+    } else if (queryText.length >= 3 && searchableText.includes(queryText)) {
+      score = 45 + searchableText.indexOf(queryText) / 100;
+      matchType = 'catalog_text_contains';
+    } else if (/\d/.test(queryKey) && queryKey.length >= 5) {
+      const tolerance = queryKey.length >= 9 ? 2 : 1;
+      const distance = Math.abs(referenceKey.length - queryKey.length) <= tolerance
+        ? levenshteinDistance(referenceKey, queryKey)
+        : tolerance + 1;
+      if (distance <= tolerance) {
+        score = 60 + distance + Math.abs(referenceKey.length - queryKey.length) / 10;
+        matchType = 'reference_typo_candidate';
+      }
+    }
+    if (!matchType) continue;
+
+    const curated = applyCuration(entry, reference);
+    const variantImage = Array.isArray(curated.variants)
+      ? curated.variants.find(variant => /^https?:\/\//i.test(String(variant?.image_url || '')))?.image_url
+      : null;
+    const key = `${brandKey}|${referenceKey}`;
+    const suggestion = {
+      brand: entryBrand,
+      model: curated.model || model || null,
+      reference,
+      dial_colors: curated.dialColors || [],
+      image_url: variantImage || null,
+      match_type: matchType,
+      score,
+      source: curated.source || entry.source || 'catalog',
+    };
+    const existing = unique.get(key);
+    const sourcePriority = suggestion.source === 'catalog_curation' || suggestion.source === 'local_catalog_v1' ? 0 : 1;
+    const existingPriority = existing?.source === 'catalog_curation' || existing?.source === 'local_catalog_v1' ? 0 : 1;
+    if (!existing || score < existing.score || (score === existing.score && sourcePriority < existingPriority)) {
+      unique.set(key, suggestion);
+    }
+  }
+
+  return [...unique.values()]
+    .sort((left, right) => left.score - right.score
+      || left.brand.localeCompare(right.brand)
+      || left.reference.localeCompare(right.reference))
+    .slice(0, Math.min(Math.max(Number(limit) || 10, 1), 20));
+}
+
 module.exports = {
   lookupCatalog,
   listEquivalentReferences,
@@ -449,5 +612,7 @@ module.exports = {
   normalizeRef,
   catalogStats,
   listCatalogReferences,
+  listCanonicalCatalogReferences,
   listCatalogBrands,
+  listCatalogSuggestions,
 };

@@ -1,0 +1,126 @@
+name: Supabase intent image ordering gate
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-intent-image-ordering-gate
+  cancel-in-progress: false
+
+jobs:
+  apply-index:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      MIGRATION_FILE: supabase/migrations/20260810033500_recover_reviewed_workbook_type_image_order.sql
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate required secrets and migration scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+          test -f "$MIGRATION_FILE"
+          grep -q "CREATE INDEX CONCURRENTLY IF NOT EXISTS" "$MIGRATION_FILE"
+          ! grep -Eiq "(DROP|TRUNCATE|DELETE|UPDATE|INSERT|staging\.listings)" "$MIGRATION_FILE"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve the production session pooler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/config/database/pooler" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -o "$RUNNER_TEMP/pooler.json"
+          jq -e 'type == "array" and length > 0' "$RUNNER_TEMP/pooler.json" >/dev/null
+          jq -c '[.[] | select(.database_type == "PRIMARY" and .pool_mode == "session")][0] // [.[] | select(.database_type == "PRIMARY")][0]' \
+            "$RUNNER_TEMP/pooler.json" > "$RUNNER_TEMP/primary-pooler.json"
+          jq -e '.db_host and .db_port and .db_user and .db_name' "$RUNNER_TEMP/primary-pooler.json" >/dev/null
+          echo "PGHOST=$(jq -r '.db_host' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGPORT=$(jq -r '.db_port' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGUSER=$(jq -r '.db_user' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGDATABASE=$(jq -r '.db_name' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+
+      - name: Preflight current production architecture
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          result="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT
+              (to_regclass('public.reviewed_workbook_inventory') IS NOT NULL)::int || '|' ||
+              (to_regclass('public.reviewed_workbook_market_source_v2') IS NOT NULL)::int || '|' ||
+              (pg_get_viewdef('public.reviewed_workbook_market_source_v2'::regclass, true)
+                NOT ILIKE '%staging.listings%')::int;
+          ")"
+          test "$result" = "1|1|1"
+
+      - name: Apply the exact forward index migration
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          index_state="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT CASE
+              WHEN target.indexrelid IS NULL THEN 'missing'
+              WHEN indisvalid AND indisready AND indislive THEN 'valid'
+              ELSE 'invalid'
+            END
+            FROM (SELECT to_regclass(
+              'public.idx_reviewed_workbook_inventory_type_exact_image_id_desc'
+            ) AS indexrelid) target
+            LEFT JOIN pg_index ON pg_index.indexrelid = target.indexrelid;
+          ")"
+          echo "Current intent/image index state: ${index_state}"
+          if [ "$index_state" = "invalid" ]; then
+            psql -X -v ON_ERROR_STOP=1 -c "
+              DROP INDEX CONCURRENTLY IF EXISTS
+                public.idx_reviewed_workbook_inventory_type_exact_image_id_desc;
+            "
+          fi
+          if [ "$index_state" != "valid" ]; then
+            psql -X -v ON_ERROR_STOP=1 -f "$MIGRATION_FILE"
+          fi
+
+      - name: Verify WTB and WTS image-lane query plans
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          for intent in WTB WTS; do
+            psql -X -v ON_ERROR_STOP=1 -c "
+              EXPLAIN (COSTS, VERBOSE)
+              SELECT id
+              FROM public.reviewed_workbook_inventory
+              WHERE listing_type = '${intent}'
+                AND COALESCE(
+                  NULLIF(btrim(user_image_url), '') ~* '^https?://[^[:space:]]+$',
+                  false
+                ) = true
+              ORDER BY id DESC
+              LIMIT 50;
+            " | tee "$RUNNER_TEMP/${intent}-image-order-plan.txt"
+            grep -q "idx_reviewed_workbook_inventory_type_exact_image_id_desc" \
+              "$RUNNER_TEMP/${intent}-image-order-plan.txt"
+          done

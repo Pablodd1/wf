@@ -21,10 +21,10 @@ test('Trading Floor omits unavailable location and posting date instead of rende
   assert.doesNotMatch(trading, /Location not published/);
 });
 
-test('Price Research shows location and observed date only when source evidence supplies them', () => {
+test('Price Research keeps source-backed chronology in the chart and omits the duplicate watch-details card', () => {
   assert.match(research, /const sellerLocation = \[seller\?\.dealer_city, seller\?\.dealer_country\]/);
   assert.match(research, /sellerLocation && <div[^>]*>\{sellerLocation\}<\/div>/);
-  assert.match(research, /observedDate && <DetailField label="Observed" value=\{observedDate\}/);
-  assert.match(research, /detail\.region && !\/\^unknown\$\/i\.test\(detail\.region\) && <DetailField label="Region"/);
+  assert.match(research, /Selected listing\{observedDate \? ` · \$\{observedDate\}` : ''\}/);
+  assert.doesNotMatch(research, /<DetailCard title="Watch details">/);
   assert.doesNotMatch(research, /Location not published/);
 });

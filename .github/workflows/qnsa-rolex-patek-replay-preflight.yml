@@ -1,0 +1,152 @@
+name: QNSA Rolex and Patek replay preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_TWO_BRAND_REPLAY
+        required: true
+        type: string
+      run_key:
+        description: Exact immutable normalized-staging run key to audit
+        required: true
+        type: string
+      database_limit_gib:
+        description: Confirmed database volume limit in GiB
+        required: true
+        type: string
+      minimum_headroom_gib:
+        description: Required free headroom before replay starts
+        required: true
+        default: '4'
+        type: string
+      max_pending_jobs:
+        description: Stop when received, queued, and processing jobs exceed this count
+        required: true
+        default: '1000'
+        type: string
+      max_failed_jobs:
+        description: Stop when failed or dead-letter jobs exceed this count
+        required: true
+        default: '0'
+        type: string
+
+concurrency:
+  group: qnsa-rolex-patek-replay-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: ${{ inputs.confirmation == 'AUDIT_TWO_BRAND_REPLAY' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
+      NORMALIZED_RUN_KEY: ${{ inputs.run_key }}
+      DATABASE_LIMIT_GIB: ${{ inputs.database_limit_gib }}
+      MINIMUM_HEADROOM_GIB: ${{ inputs.minimum_headroom_gib }}
+      MAX_PENDING_JOBS: ${{ inputs.max_pending_jobs }}
+      MAX_FAILED_JOBS: ${{ inputs.max_failed_jobs }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate explicit audit inputs
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          if ($env:SUPABASE_PROJECT_REF -ne $env:EXPECTED_PROJECT_REF) { throw 'Unexpected Supabase project.' }
+          if ($env:NORMALIZED_RUN_KEY -notmatch '^[A-Za-z0-9._:-]{1,100}$') { throw 'Invalid normalized run key.' }
+          foreach ($name in @('DATABASE_LIMIT_GIB', 'MINIMUM_HEADROOM_GIB', 'MAX_PENDING_JOBS', 'MAX_FAILED_JOBS')) {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            $parsed = 0.0
+            if (-not [double]::TryParse($value, [ref]$parsed) -or $parsed -lt 0) {
+              throw "$name must be a non-negative number."
+            }
+          }
+          if ([double]$env:DATABASE_LIMIT_GIB -le 0) { throw 'DATABASE_LIMIT_GIB must be greater than zero.' }
+
+      - name: Collect read-only replay safety snapshot
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $escapedRunKey = $env:NORMALIZED_RUN_KEY.Replace("'", "''")
+          $sql = @"
+          SELECT jsonb_build_object(
+            'project_ref', '$($env:SUPABASE_PROJECT_REF)',
+            'database_gib', round(pg_database_size(current_database())::numeric / 1073741824, 3),
+            'raw_checkpoint', (
+              SELECT jsonb_build_object(
+                'status', status,
+                'input_rows', input_rows,
+                'error_rows', error_rows
+              )
+              FROM public.mariadb_raw_import_checkpoints
+              ORDER BY updated_at DESC
+              LIMIT 1
+            ),
+            'job_statuses', COALESCE((
+              SELECT jsonb_agg(jsonb_build_object('status', status::text, 'row_count', row_count))
+              FROM (
+                SELECT status, count(*) AS row_count
+                FROM jobs.processing_jobs
+                GROUP BY status
+              ) AS counts
+            ), '[]'::jsonb),
+            'active_normalization_runs', COALESCE((
+              SELECT jsonb_agg(jsonb_build_object(
+                'run_key', run_key,
+                'status', status,
+                'input_rows', input_rows,
+                'error_rows', error_rows
+              ) ORDER BY updated_at DESC)
+              FROM staging.mariadb_normalization_import_checkpoints
+              WHERE status = 'STAGING_NORMALIZATION'
+            ), '[]'::jsonb),
+            'target_checkpoint', (
+              SELECT jsonb_build_object(
+                'run_key', run_key,
+                'status', status,
+                'input_rows', input_rows,
+                'staged_rows', staged_rows,
+                'existing_rows', existing_rows,
+                'deferred_rows', deferred_rows,
+                'error_rows', error_rows
+              )
+              FROM staging.mariadb_normalization_import_checkpoints
+              WHERE run_key = '$escapedRunKey'
+            )
+          ) AS snapshot;
+          "@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          if (-not $result -or -not $result[0].snapshot) { throw 'Replay preflight returned no snapshot.' }
+          $result[0].snapshot | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 replay-preflight-snapshot.json
+
+      - name: Enforce capacity, queue, lineage, and resume thresholds
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node tools/mariadb-live/evaluate-replay-preflight.cjs replay-preflight-snapshot.json | Tee-Object -FilePath replay-preflight-result.json
+          if ($LASTEXITCODE -ne 0) { throw 'Replay preflight failed closed. Do not start or resume ingestion.' }
+
+      - name: Upload read-only evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-two-brand-replay-preflight-${{ github.run_id }}
+          path: |
+            replay-preflight-snapshot.json
+            replay-preflight-result.json
+          if-no-files-found: warn
+          retention-days: 30

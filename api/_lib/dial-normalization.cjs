@@ -1,5 +1,7 @@
 'use strict';
 
+const { normalizeWatchDial, withoutConditionOnlyMintGreen } = require('./watch-condition-normalization.cjs');
+
 const UNKNOWN_DIALS = new Set([
   '', '-', '--', 'N/A', 'N A', 'NA', 'NONE', 'NULL', 'UNKNOWN', 'UNK', 'UNSPECIFIED',
   'NOT SPECIFIED', 'NOT AVAILABLE', 'NOT KNOWN', 'NO COLOR', 'UNKNOWN COLOR', 'UNKNOW',
@@ -97,6 +99,9 @@ function titleCase(value) {
 function normalizeDialValue(raw) {
   const cleaned = cleanDialText(raw).replace(/\s+DIAL$/i, '').trim();
   const key = comparisonKey(cleaned);
+  if (['MINT', 'MINT CONDITION', 'MINT GREEN'].includes(key)) {
+    return { value: null, known: false, changed: Boolean(cleaned), reason: 'condition_leakage' };
+  }
   if (!key || UNKNOWN_DIALS.has(key)) {
     return { value: null, known: false, changed: Boolean(cleaned), reason: 'placeholder' };
   }
@@ -136,7 +141,7 @@ function containsExplicitDialTerm(text, term) {
 }
 
 function extractDialFromText(rawText, catalogDials = []) {
-  const text = cleanDialText(rawText);
+  const text = cleanDialText(withoutConditionOnlyMintGreen(rawText));
   if (!text) return null;
   const catalogCandidates = uniqueCatalogDials(catalogDials).sort((a, b) => b.length - a.length);
   const genericCandidates = KNOWN_DIAL_TERMS.sort((a, b) => b.length - a.length);
@@ -172,7 +177,7 @@ function alignDealerDialAliasToCatalog(value, catalogDials = []) {
 }
 
 function resolveDial({ sourceDial, rawText, catalogDials = [] }) {
-  const source = normalizeDialValue(sourceDial);
+  const source = normalizeDialValue(normalizeWatchDial(sourceDial, rawText));
   const catalog = uniqueCatalogDials(catalogDials);
   const fromText = extractDialFromText(rawText, catalog);
 

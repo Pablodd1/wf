@@ -6,6 +6,7 @@ const REVIEWED_ID = /^(?:workbook_[a-f0-9]{64}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f
 const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
 
 function approvedPhone(listing) {
+  if (listing?.contact_publication_approved !== true) return null;
   if (typeof listing?.phone_number !== 'string' || !listing.phone_number.trim()) return null;
   return listing.phone_number;
 }
@@ -39,7 +40,7 @@ async function loadVerifiedReputation(client, listing) {
     rating: dealer.rating == null ? null : Number(dealer.rating),
     review_count: Number(dealer.review_count || 0),
     group_count: Number(dealer.whatsapp_group_count || 0),
-    profile_url: `/dealers/${dealer.slug || dealer.id}`,
+    profile_url: `/reference-check/${dealer.slug || dealer.id}`,
   };
 }
 

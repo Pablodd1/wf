@@ -1,0 +1,240 @@
+name: QNSA two-brand price correction canary
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_TWO_BRAND_PRICE_CANARY_100
+        required: true
+        type: string
+      run_key:
+        description: Existing completed normalized-staging run to correct
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+      database_limit_gib:
+        description: Confirmed database volume limit in GiB
+        required: true
+        type: string
+      minimum_headroom_gib:
+        description: Required free database headroom
+        required: true
+        default: '2'
+        type: string
+
+concurrency:
+  group: qnsa-two-brand-price-correction
+  cancel-in-progress: false
+
+jobs:
+  correct-100:
+    if: ${{ inputs.confirmation == 'APPLY_TWO_BRAND_PRICE_CANARY_100' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
+      NORMALIZED_RUN_KEY: ${{ inputs.run_key }}
+      DATABASE_LIMIT_GIB: ${{ inputs.database_limit_gib }}
+      MINIMUM_HEADROOM_GIB: ${{ inputs.minimum_headroom_gib }}
+      MAX_PENDING_JOBS: '1000'
+      MAX_FAILED_JOBS: '0'
+      REPLAY_PREFLIGHT_OPERATION: price_correction
+      QNSA_CANARY_ROWS: '100'
+      QNSA_CANARY_INPUT: ephemeral-qnsa-raw.json
+      QNSA_CANARY_OUTPUT: ephemeral-correction-records.json
+      MARIADB_FX_SNAPSHOT_OUTPUT: ephemeral-fx-snapshot.json
+      MARIADB_NORMALIZE_FX_SNAPSHOT: ephemeral-fx-snapshot.json
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install locked runtime dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Validate authorization and pinned target
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          if ($env:SUPABASE_PROJECT_REF -ne $env:EXPECTED_PROJECT_REF) { throw 'Unexpected Supabase project.' }
+          if ($env:NORMALIZED_RUN_KEY -notmatch '^[A-Za-z0-9._:-]{1,100}$') { throw 'Invalid normalized run key.' }
+          if ([double]$env:DATABASE_LIMIT_GIB -le 0 -or [double]$env:MINIMUM_HEADROOM_GIB -lt 0) {
+            throw 'Capacity limits are invalid.'
+          }
+
+      - name: Collect read-only capacity and checkpoint preflight
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $escapedRunKey = $env:NORMALIZED_RUN_KEY.Replace("'", "''")
+          $sql = @"
+          SELECT jsonb_build_object(
+            'project_ref', '$($env:SUPABASE_PROJECT_REF)',
+            'database_gib', round(pg_database_size(current_database())::numeric / 1073741824, 3),
+            'raw_checkpoint', (
+              SELECT jsonb_build_object('status', status, 'input_rows', input_rows, 'error_rows', error_rows)
+              FROM public.mariadb_raw_import_checkpoints ORDER BY updated_at DESC LIMIT 1
+            ),
+            'job_statuses', COALESCE((
+              SELECT jsonb_agg(jsonb_build_object('status', status::text, 'row_count', row_count))
+              FROM (SELECT status, count(*) AS row_count FROM jobs.processing_jobs GROUP BY status) AS counts
+            ), '[]'::jsonb),
+            'active_normalization_runs', COALESCE((
+              SELECT jsonb_agg(jsonb_build_object('run_key', run_key, 'status', status, 'error_rows', error_rows))
+              FROM staging.mariadb_normalization_import_checkpoints
+              WHERE status = 'STAGING_NORMALIZATION'
+            ), '[]'::jsonb),
+            'target_checkpoint', (
+              SELECT jsonb_build_object('run_key', run_key, 'status', status, 'input_rows', input_rows, 'error_rows', error_rows)
+              FROM staging.mariadb_normalization_import_checkpoints WHERE run_key = '$escapedRunKey'
+            )
+          ) AS snapshot;
+          "@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $result[0].snapshot | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 preflight-snapshot.json
+          node tools/mariadb-live/evaluate-replay-preflight.cjs preflight-snapshot.json | Tee-Object -FilePath preflight-result.json
+          if ($LASTEXITCODE -ne 0) { throw 'Price correction preflight failed closed.' }
+
+      - name: Install forward-only correction contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260812010000_dated_fx_normalized_staging_transport.sql'
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260812013000_qnsa_correction_reader_grant.sql')
+          if ($sql -match '(?i)INSERT\s+INTO\s+(?:public\.)?watch_records') { throw 'Migration attempts a legacy publication write.' }
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Fetch one dated FX snapshot
+        run: node tools/mariadb-live/fetch-fx-snapshot.cjs
+
+      - name: Fetch a bounded ephemeral immutable candidate window
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $escapedRunKey = $env:NORMALIZED_RUN_KEY.Replace("'", "''")
+          $sql = @"
+          SELECT jsonb_build_object(
+            'staging_rows_before', (SELECT count(*) FROM staging.listings),
+            'records', COALESCE((
+              SELECT jsonb_agg(candidate.payload ORDER BY candidate.brand_rank, candidate.listing_id)
+              FROM (
+                WITH bounded_ids AS MATERIALIZED (
+                  (SELECT (page.row_data->>'id')::uuid AS id
+                   FROM public.qnsa_trading_floor_page_rows('Rolex', 101, 0) AS page)
+                  UNION ALL
+                  (SELECT (page.row_data->>'id')::uuid AS id
+                   FROM public.qnsa_trading_floor_page_rows('Patek Philippe', 101, 0) AS page)
+                )
+                SELECT
+                  listing.id AS listing_id,
+                  CASE WHEN listing.brand_normalized = 'Rolex' THEN 0 ELSE 1 END AS brand_rank,
+                  jsonb_build_object(
+                    'source_record_id', listing.source_record_id,
+                    'source_hash', listing.source_hash,
+                    'canonical_brand', listing.brand_normalized,
+                    'normalized_reference', listing.reference_normalized,
+                    'raw_payload', version.raw_payload
+                  ) AS payload
+                FROM bounded_ids AS bounded
+                JOIN staging.listings AS listing ON listing.id = bounded.id
+                JOIN public.raw_message_versions AS version ON version.id = listing.raw_message_version_id
+                WHERE version.source_record_id = listing.source_record_id
+                  AND version.source_hash = listing.source_hash
+                  AND listing.normalization_run_key = '$escapedRunKey'
+                  AND listing.listing_type = 'WTS'
+              ) AS candidate
+            ), '[]'::jsonb)
+          ) AS evidence;
+          "@
+          # The management API's read-only session cannot execute the bounded
+          # security-definer feed. This statement remains SELECT-only, but it
+          # runs in the explicitly granted administrative session.
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          if (-not $result[0].evidence) { throw 'Bounded immutable candidate query returned no evidence.' }
+          $evidence = $result[0].evidence
+          "STAGING_ROWS_BEFORE=$($evidence.staging_rows_before)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          @($evidence.records) | ConvertTo-Json -Depth 20 -Compress | Set-Content -Encoding utf8 $env:QNSA_CANARY_INPUT
+          Write-Output 'Fetched at most 202 indexed feed candidates; raw values are intentionally not logged.'
+
+      - name: Build exactly 100 raw-free correction records
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node tools/mariadb-live/build-two-brand-price-canary.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Could not build exactly 100 exact-lineage correction records.' }
+
+      - name: Apply the exactly 100-row audited correction batch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $canary = Get-Content -Raw -LiteralPath $env:QNSA_CANARY_OUTPUT | ConvertFrom-Json
+          if ([int]$canary.input_rows -ne 100) { throw 'Correction payload is not exactly 100 rows.' }
+          $recordsJson = $canary.records | ConvertTo-Json -Depth 20 -Compress
+          $recordsBase64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($recordsJson))
+          $escapedRunKey = $env:NORMALIZED_RUN_KEY.Replace("'", "''")
+          $sql = "SELECT public.apply_mariadb_two_brand_price_policy_batch('$escapedRunKey', '$($canary.batch_token)', convert_from(decode('$recordsBase64', 'base64'), 'UTF8')::jsonb) AS result;"
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          if ([int]$result[0].result.input_rows -ne 100 -or [int]$result[0].result.corrected_rows -ne 100 -or [int]$result[0].result.duplicate_staging_rows_created -ne 0) {
+            throw 'Correction RPC did not reconcile exactly 100 rows.'
+          }
+          "CORRECTION_BATCH_TOKEN=$($canary.batch_token)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Prove exact zero-row delta and 100 durable audits
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SELECT jsonb_build_object(
+            'staging_rows_before', $env:STAGING_ROWS_BEFORE,
+            'staging_rows_after', (SELECT count(*) FROM staging.listings),
+            'staging_row_delta', (SELECT count(*) FROM staging.listings) - $env:STAGING_ROWS_BEFORE,
+            'audit_rows', (SELECT count(*) FROM staging.mariadb_price_policy_correction_audit WHERE batch_token = '$env:CORRECTION_BATCH_TOKEN'),
+            'batch_rows', (SELECT source_rows FROM staging.mariadb_price_policy_correction_batches WHERE batch_token = '$env:CORRECTION_BATCH_TOKEN'),
+            'corrected_rows', (SELECT corrected_rows FROM staging.mariadb_price_policy_correction_batches WHERE batch_token = '$env:CORRECTION_BATCH_TOKEN')
+          ) AS reconciliation;
+          "@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $reconciliation = $result[0].reconciliation
+          if ([long]$reconciliation.staging_row_delta -ne 0 -or [long]$reconciliation.audit_rows -ne 100 -or
+              [long]$reconciliation.batch_rows -ne 100 -or [long]$reconciliation.corrected_rows -ne 100) {
+            $reconciliation | ConvertTo-Json -Depth 4
+            throw 'Canary reconciliation failed.'
+          }
+          $reconciliation | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 canary-reconciliation.json
+
+      - name: Destroy ephemeral raw and private working files
+        if: always()
+        shell: pwsh
+        run: |
+          foreach ($file in @($env:QNSA_CANARY_INPUT, $env:QNSA_CANARY_OUTPUT, $env:MARIADB_FX_SNAPSHOT_OUTPUT)) {
+            if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file -Force }
+          }
+
+      - name: Upload sanitized reconciliation evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-two-brand-price-canary-${{ github.run_id }}
+          path: |
+            preflight-result.json
+            canary-reconciliation.json
+          if-no-files-found: warn
+          retention-days: 30

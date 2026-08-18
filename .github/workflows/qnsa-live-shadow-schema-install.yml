@@ -1,0 +1,56 @@
+name: QNSA Live Shadow Private Schema Install
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_QNSA_LIVE_SHADOW_PRIVATE_SCHEMA_ONLY
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qnsa-live-shadow-private-schema-install
+  cancel-in-progress: false
+
+jobs:
+  install-private-schema:
+    environment: production
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_NORMALIZED_LF_MIGRATION_SHA256: 91aeeb92ab38c3ec7a1f3a742a659c8bafd2d2258d0c08cc5466a253458e430a
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Atomically install and verify private schema
+        shell: pwsh
+        env:
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          if ($env:INPUT_CONFIRMATION -cne 'APPLY_QNSA_LIVE_SHADOW_PRIVATE_SCHEMA_ONLY') {
+            throw 'Exact private-schema confirmation is required.'
+          }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $migrationPath = 'supabase/migrations/20260818150000_live_shadow_segment_ingest.sql'
+          $migration = Get-Content -LiteralPath $migrationPath -Raw
+          $normalizedMigration = $migration.Replace("`r`n", "`n")
+          $actualSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($normalizedMigration))
+          ).ToLowerInvariant()
+          if ($actualSha -cne $env:EXPECTED_NORMALIZED_LF_MIGRATION_SHA256) { throw 'Pinned normalized-LF migration SHA-256 mismatch.' }
+          $migration = $migration -replace '(?im)^\s*BEGIN\s*;\s*$', ''
+          $migration = $migration -replace '(?im)^\s*COMMIT\s*;\s*$', ''
+          $preflight = Get-Content -LiteralPath 'supabase/tests/live_shadow_schema_install_preflight.sql' -Raw
+          $postflight = Get-Content -LiteralPath 'supabase/tests/live_shadow_schema_install_postflight.sql' -Raw
+          $sql = "BEGIN;`nSET LOCAL lock_timeout = '5s';`nSET LOCAL statement_timeout = '30s';`n$preflight`n$migration`n$postflight`nCOMMIT;"
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Method Post `
+            -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          Write-Output "{`"private_schema_installed`":true,`"migration_sha256`":`"$actualSha`",`"shadow_tables_empty`":true,`"customer_writes`":0,`"project`":`"qnsafosakvonzgfcsphh`"}"

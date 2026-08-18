@@ -1,0 +1,116 @@
+name: QNSA exact-reference contact consent
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        required: true
+        default: audit
+        type: choice
+        options: [audit, apply]
+      confirmation:
+        description: Type AUDIT_QNSA_CONTACT_CONSENT or APPLY_QNSA_CONTACT_CONSENT
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-exact-reference-contact-consent
+  cancel-in-progress: false
+
+jobs:
+  consent:
+    runs-on: windows-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      MIGRATION_FILE: supabase/migrations/20260815183000_qnsa_exact_reference_contact_consent.sql
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile forward repair and audit immutable cohorts
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $expected = if ('${{ inputs.mode }}' -eq 'apply') { 'APPLY_QNSA_CONTACT_CONSENT' } else { 'AUDIT_QNSA_CONTACT_CONSENT' }
+          if ('${{ inputs.confirmation }}' -cne $expected) { throw "Confirmation must be $expected" }
+          if ($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh' -or -not $env:SUPABASE_ACCESS_TOKEN) { throw 'Pinned QNSA credentials unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $migration = [string](Get-Content -Raw -LiteralPath $env:MIGRATION_FILE)
+          $compile = @{ query = "BEGIN;`n$migration`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $compile | Out-Null
+
+          $sql = @"
+          SET statement_timeout='15s';
+          SELECT jsonb_build_object(
+            'eligible_rows', count(*),
+            'unconsented_source_phones', count(*) FILTER (
+              WHERE COALESCE(l.contact_consent,false)=false
+                AND COALESCE(NULLIF(btrim(l.contact_number),''), NULLIF(btrim(l.from_number),''),
+                  NULLIF(btrim(rv.raw_payload#>>'{raw_data,from_number}'),'')) IS NOT NULL
+            ),
+            'invalid_lineage', count(*) FILTER (WHERE rv.id IS NULL),
+            'bundle_or_child', count(*) FILTER (WHERE l.parent_id IS NOT NULL OR COALESCE(l.is_bundle,false))
+          ) evidence
+          FROM staging.listings l
+          LEFT JOIN public.raw_message_versions rv
+            ON rv.id=l.raw_message_version_id
+           AND rv.source_record_id=l.source_record_id
+           AND rv.source_hash=l.source_hash
+          WHERE l.normalization_run_key='mariadb-normalized-20260811-codex-v1'
+            AND l.brand_normalized IN ('Rolex','Patek Philippe')
+            AND l.reference_normalized IN ('116500LN','5712/1A')
+            AND upper(COALESCE(l.category,''))='WATCH'
+            AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false;
+          "@
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $evidence = $result[0].evidence
+          $evidence | ConvertTo-Json -Depth 4 | Set-Content qnsa-contact-consent-audit.json
+          if ([long]$evidence.eligible_rows -lt 1 -or [long]$evidence.invalid_lineage -ne 0 -or [long]$evidence.bundle_or_child -ne 0) { throw 'Exact-reference cohort audit failed.' }
+
+      - name: Apply only the contact-consent function repair
+        if: ${{ inputs.mode == 'apply' }}
+        shell: powershell
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $migration = [string](Get-Content -Raw -LiteralPath $env:MIGRATION_FILE)
+          $body = @{ query = $migration; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body | Out-Null
+
+      - name: Prove row preservation, consent, and service-only execution
+        if: ${{ inputs.mode == 'apply' }}
+        shell: powershell
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SET statement_timeout='15s';
+          WITH rows AS (
+            SELECT row_data
+            FROM public.qnsa_trading_floor_reference_rows('Rolex','116500LN',false,101,0) AS row_data
+          )
+          SELECT jsonb_build_object(
+            'rows', count(*),
+            'unconsented_phone', count(*) FILTER (
+              WHERE COALESCE((row_data->>'contact_publication_approved')::boolean,false)=false
+                AND NULLIF(row_data->>'seller_phone','') IS NOT NULL
+            ),
+            'source_timestamp_field', count(*) FILTER (WHERE row_data ? 'source_posted_at_text'),
+            'anon_execute', has_function_privilege('anon','public.qnsa_trading_floor_reference_rows(text,text,boolean,integer,integer)','EXECUTE'),
+            'authenticated_execute', has_function_privilege('authenticated','public.qnsa_trading_floor_reference_rows(text,text,boolean,integer,integer)','EXECUTE')
+          ) evidence FROM rows;
+          "@
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $evidence = $result[0].evidence
+          $evidence | ConvertTo-Json -Depth 4 | Set-Content qnsa-contact-consent-smoke.json
+          if ([long]$evidence.rows -lt 1 -or [long]$evidence.unconsented_phone -ne 0 -or [bool]$evidence.anon_execute -or [bool]$evidence.authenticated_execute) { throw 'Contact-consent post-apply smoke failed.' }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-contact-consent-${{ inputs.mode }}-${{ github.run_id }}
+          path: qnsa-contact-consent-*.json
+          if-no-files-found: error

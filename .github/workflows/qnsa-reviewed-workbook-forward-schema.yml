@@ -1,0 +1,180 @@
+name: QNSA reviewed workbook forward schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Compile/audit only, or compile then atomically apply
+        required: true
+        default: audit
+        type: choice
+        options: [audit, apply]
+      confirmation:
+        description: Type the exact audit or apply confirmation phrase
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-reviewed-workbook-forward-schema-production
+  cancel-in-progress: false
+
+jobs:
+  forward-schema:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      MODE: ${{ inputs.mode }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile, optionally apply, and verify forward schema
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Set-StrictMode -Version Latest
+
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN unavailable' }
+          if ($env:SUPABASE_PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Wrong Supabase project' }
+          $expectedConfirmation = switch ($env:MODE) {
+            'audit' { 'AUDIT_QNSA_REVIEWED_WORKBOOK_FORWARD_SCHEMA' }
+            'apply' { 'APPLY_QNSA_REVIEWED_WORKBOOK_FORWARD_SCHEMA' }
+            default { throw 'Invalid mode' }
+          }
+          if ($env:CONFIRMATION -cne $expectedConfirmation) { throw 'Confirmation mismatch' }
+
+          $migrationPaths = @(
+            'supabase/migrations/20260817013000_reviewed_workbook_multi_parent_type.sql',
+            'supabase/migrations/20260817020000_reviewed_workbook_dealer_links.sql'
+          )
+          foreach ($migrationPath in $migrationPaths) {
+            if (-not (Test-Path -LiteralPath $migrationPath -PathType Leaf)) {
+              throw "Required migration missing: $migrationPath"
+            }
+          }
+
+          function Invoke-QnsaQuery([string]$Sql, [bool]$ReadOnly) {
+            $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+            $body = @{ query = $Sql; read_only = $ReadOnly } | ConvertTo-Json -Depth 3 -Compress
+            Invoke-RestMethod `
+              -Method Post `
+              -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+              -Headers $headers `
+              -ContentType 'application/json' `
+              -Body $body
+          }
+
+          function Get-ForwardBody([string]$MigrationPath) {
+            $sql = Get-Content -Raw -LiteralPath $MigrationPath
+            $withoutComments = [regex]::Replace($sql, '(?m)^\s*--.*$', '')
+            if ($withoutComments -match '(?is)\b(?:INSERT\s+INTO|UPDATE\s+[^;]+\s+SET|DELETE\s+FROM|TRUNCATE|COPY)\b') {
+              throw "Inventory DML is forbidden in forward schema migration: $MigrationPath"
+            }
+            $body = [regex]::Replace($sql, '(?im)^\s*BEGIN\s*;\s*$', '')
+            $body = [regex]::Replace($body, '(?im)^\s*COMMIT\s*;\s*$', '')
+            if ($body -match '(?im)^\s*(?:BEGIN|COMMIT|ROLLBACK)\s*;\s*$') {
+              throw "Nested transaction control remains in $MigrationPath"
+            }
+            return $body.Trim()
+          }
+
+          $forwardBody = ($migrationPaths | ForEach-Object { Get-ForwardBody $_ }) -join "`n`n"
+          $beforeSql = @'
+          SELECT
+            to_regclass('public.reviewed_workbook_inventory')::text AS inventory_table,
+            to_regclass('public.dealers')::text AS dealers_table,
+            (SELECT count(*)::bigint FROM public.reviewed_workbook_inventory) AS inventory_rows;
+          '@
+          $before = Invoke-QnsaQuery $beforeSql $true
+          if (-not $before[0].inventory_table -or -not $before[0].dealers_table) {
+            throw 'Required reviewed inventory/dealer dependencies are missing'
+          }
+
+          $compileSql = "BEGIN;`n$forwardBody`nROLLBACK;"
+          Invoke-QnsaQuery $compileSql $false | Out-Null
+
+          if ($env:MODE -eq 'apply') {
+            $applySql = "BEGIN;`n$forwardBody`nCOMMIT;"
+            Invoke-QnsaQuery $applySql $false | Out-Null
+          }
+
+          $verificationSql = @'
+          SELECT
+            (SELECT count(*)::bigint FROM public.reviewed_workbook_inventory) AS inventory_rows,
+            to_regclass('public.reviewed_workbook_dealer_links')::text AS dealer_link_table,
+            COALESCE((
+              SELECT convalidated
+              FROM pg_constraint
+              WHERE conrelid = 'public.reviewed_workbook_inventory'::regclass
+                AND conname = 'reviewed_workbook_inventory_listing_type_check'
+            ), false) AS listing_type_constraint_valid,
+            COALESCE((
+              SELECT pg_get_constraintdef(oid) ~ $$'MULTI'$$
+              FROM pg_constraint
+              WHERE conrelid = 'public.reviewed_workbook_inventory'::regclass
+                AND conname = 'reviewed_workbook_inventory_listing_type_check'
+            ), false) AS listing_type_allows_multi,
+            COALESCE((
+              SELECT relrowsecurity
+              FROM pg_class
+              WHERE oid = to_regclass('public.reviewed_workbook_dealer_links')
+            ), false) AS dealer_link_rls,
+            COALESCE(
+              NOT has_table_privilege('anon', to_regclass('public.reviewed_workbook_dealer_links'), 'SELECT')
+                AND NOT has_table_privilege('authenticated', to_regclass('public.reviewed_workbook_dealer_links'), 'SELECT')
+                AND has_table_privilege('service_role', to_regclass('public.reviewed_workbook_dealer_links'), 'SELECT')
+                AND has_table_privilege('service_role', to_regclass('public.reviewed_workbook_dealer_links'), 'INSERT')
+                AND has_table_privilege('service_role', to_regclass('public.reviewed_workbook_dealer_links'), 'UPDATE')
+                AND has_table_privilege('service_role', to_regclass('public.reviewed_workbook_dealer_links'), 'DELETE'),
+              false
+            ) AS dealer_link_acl_safe,
+            COALESCE((
+              SELECT convalidated
+              FROM pg_constraint
+              WHERE conrelid = to_regclass('public.reviewed_workbook_dealer_links')
+                AND conname = 'reviewed_workbook_dealer_link_evidence_no_contact'
+            ), false) AS no_contact_constraint_valid,
+            COALESCE((
+              SELECT count(*) = 2
+              FROM pg_constraint
+              WHERE conrelid = to_regclass('public.reviewed_workbook_dealer_links')
+                AND contype = 'f'
+            ), false) AS dealer_link_foreign_keys_ready,
+            COALESCE((
+              SELECT index_state.indisvalid AND index_state.indisready
+              FROM pg_index AS index_state
+              WHERE index_state.indexrelid = to_regclass('public.idx_reviewed_workbook_dealer_links_profile')
+            ), false) AS dealer_link_index_ready;
+          '@
+          $verification = Invoke-QnsaQuery $verificationSql $true
+
+          $verification | ConvertTo-Json -Depth 5
+          if ([int64]$verification[0].inventory_rows -ne [int64]$before[0].inventory_rows) {
+            throw 'Inventory row count changed during schema workflow'
+          }
+          if ($env:MODE -eq 'apply') {
+            $required = @(
+              'dealer_link_table', 'listing_type_constraint_valid', 'listing_type_allows_multi',
+              'dealer_link_rls', 'dealer_link_acl_safe', 'no_contact_constraint_valid',
+              'dealer_link_foreign_keys_ready', 'dealer_link_index_ready'
+            )
+            foreach ($field in $required) {
+              if (-not $verification[0].$field) { throw "Post-apply verification failed: $field" }
+            }
+          }
+
+          @"
+          ## QNSA reviewed workbook forward schema
+
+          - Mode: $env:MODE
+          - Project: qnsafosakvonzgfcsphh
+          - Rollback compilation: passed
+          - Atomic apply requested: $($env:MODE -eq 'apply')
+          - Inventory row delta: 0
+          - Workbook import: not run
+          "@ >> $env:GITHUB_STEP_SUMMARY

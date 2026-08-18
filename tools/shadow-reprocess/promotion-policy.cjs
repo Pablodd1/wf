@@ -38,7 +38,8 @@ function buildPromotionDecision(shadowRow, catalogConfirmation = null) {
   }
 
   const primaryPrice = candidate.prices?.find(price => price.is_primary) || candidate.prices?.[0] || null;
-  if (shadowRow.source_listing_type !== 'WTB') {
+  const candidateIntent = String(candidate.listing_type || shadowRow.source_listing_type || '').toUpperCase();
+  if (candidateIntent !== 'WTB') {
     if (!primaryPrice?.amount_original || !primaryPrice.currency_original) {
       return {
         disposition: 'HUMAN_REVIEW',

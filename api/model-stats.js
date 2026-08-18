@@ -14,6 +14,11 @@
 const { getClient } = require('./_lib/supabase');
 const { setCorsHeaders } = require('./_lib/cors');
 const { listCatalogReferences } = require('./_lib/catalog');
+const {
+  isReviewedWorkbookBrowseBrand,
+  loadReviewedWorkbookBrandRows,
+  rowModel,
+} = require('./_lib/reviewed-workbook-browse.cjs');
 
 const MIN_BUCKET = 2;
 const SANITY_FLOOR = 500;
@@ -40,6 +45,45 @@ function iqrFilter(prices) {
   return sorted.filter(p => p >= lo && p <= hi);
 }
 
+function workbookModelStats(rows, model) {
+  const modelRows = rows.filter(row => rowModel(row) === model);
+  let wts = 0;
+  let wtb = 0;
+  const priced = [];
+  for (const row of modelRows) {
+    const listingType = String(row.listing_type || '').toUpperCase();
+    if (listingType === 'WTB') {
+      wtb += 1;
+      continue;
+    }
+    if (listingType !== 'WTS') continue;
+    wts += 1;
+    const price = Number(row.verified_price_usd);
+    const verified = row.has_verified_usd_price === true
+      || ['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(row.price_evidence_status);
+    if (verified && Number.isFinite(price) && price > 0) priced.push(price);
+  }
+  const cleaned = iqrFilter(priced);
+  const dates = modelRows.map(row => row.posting_date).filter(Boolean).sort();
+  return {
+    success: true,
+    total: modelRows.length,
+    wts,
+    wtb,
+    priced_count: priced.length,
+    stats: cleaned.length >= MIN_BUCKET ? stats(cleaned) : null,
+    first_seen: dates[0] || null,
+    last_seen: dates[dates.length - 1] || null,
+    references: [],
+    meta: {
+      min_bucket: MIN_BUCKET,
+      iqr_filter: true,
+      iqr_multiplier: 3,
+      identity_source: 'OWNER_REVIEWED_WORKBOOK',
+    },
+  };
+}
+
 module.exports = async function handler(req, res) {
   if (setCorsHeaders(res, req)) return;
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -48,6 +92,13 @@ module.exports = async function handler(req, res) {
   if (!brand || !model) return res.status(400).json({ error: 'brand and model required' });
 
   try {
+    const client = getClient();
+    if (isReviewedWorkbookBrowseBrand(brand)) {
+      const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
+      if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe model statistics' });
+      return res.status(200).json({ brand, model, ...workbookModelStats(rows, model) });
+    }
+
     // ponytail: was fs.readFileSync(process.cwd()/public/catalog.json) —
     // crashed in the Vercel lambda (FUNCTION_INVOCATION_FAILED) because the
     // asset isn't reliably traced per-function. Route through _lib/catalog,
@@ -60,8 +111,6 @@ module.exports = async function handler(req, res) {
     if (refs.length === 0) {
       return res.status(200).json({ success: true, brand, model, total: 0, references: [] });
     }
-
-    const client = getClient();
 
     // Pull priced rows for these refs in chunks (.in() has URL length limits)
     const CHUNK = 50;
@@ -147,3 +196,5 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: err.message });
   }
 };
+
+module.exports.workbookModelStats = workbookModelStats;

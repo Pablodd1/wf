@@ -1,0 +1,80 @@
+name: QNSA Zenith dated-FX price correction
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_QNSA_ZENITH_PRICE
+        required: true
+        type: string
+      normalization_run_key:
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+      correction_run_key:
+        required: true
+        default: zenith-dated-fx-20260814-v1
+        type: string
+
+concurrency:
+  group: qnsa-zenith-price-correction
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      NORMALIZED_RUN_KEY: ${{ inputs.normalization_run_key }}
+      CORRECTION_RUN_KEY: ${{ inputs.correction_run_key }}
+      MARIADB_FX_SNAPSHOT_OUTPUT: zenith-fx-snapshot.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Validate authorization
+        shell: pwsh
+        run: |
+          if ('${{ inputs.confirmation }}' -cne 'APPLY_QNSA_ZENITH_PRICE') { throw 'Exact confirmation required' }
+          if ($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh' -or -not $env:SUPABASE_ACCESS_TOKEN) { throw 'Pinned QNSA credentials unavailable' }
+          foreach($key in @($env:NORMALIZED_RUN_KEY,$env:CORRECTION_RUN_KEY)){if($key -notmatch '^[A-Za-z0-9._:-]{1,100}$'){throw 'Invalid run key'}}
+      - name: Install locked parser dependencies
+        run: npm ci --ignore-scripts
+      - name: Fetch immutable dated ECB snapshot
+        run: node tools/mariadb-live/fetch-fx-snapshot.cjs
+      - name: Apply forward correction contract
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
+          $sql=@(
+            Get-Content -Raw supabase/migrations/20260814183000_qnsa_zenith_price_correction.sql
+            Get-Content -Raw supabase/migrations/20260814183500_qnsa_zenith_price_correction_schema_compatibility.sql
+          ) -join "`n"
+          if($sql -match '(?i)(UPDATE|DELETE|INSERT\s+INTO)\s+(public\.)?(raw_messages|raw_message_versions)'){throw 'Immutable raw write detected'}
+          if($sql -match '(?i)(INSERT\s+INTO|DELETE\s+FROM)\s+staging\.listings'){throw 'Listing cardinality mutation detected'}
+          $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body | Out-Null
+      - name: Apply exact-lineage correction and reconcile
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
+          $snapshot=(Get-Content -Raw $env:MARIADB_FX_SNAPSHOT_OUTPUT).Replace("'","''")
+          $sql="SELECT public.apply_qnsa_zenith_price_correction('$env:NORMALIZED_RUN_KEY','$env:CORRECTION_RUN_KEY','$snapshot'::jsonb) evidence;"
+          $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
+          $result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $e=$result[0].evidence; $e|ConvertTo-Json -Depth 5|Set-Content zenith-price-correction-evidence.json; $e|ConvertTo-Json -Depth 5
+          if([long]$e.target_rows -ne 237 -or [long]$e.verified_rows -ne 237){throw 'Expected Zenith price census did not reconcile'}
+          if([long]$e.staging_row_delta -ne 0 -or [long]$e.raw_rows_mutated -ne 0){throw 'Immutable/cardinality gate failed'}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-zenith-price-correction-evidence
+          path: |
+            zenith-price-correction-evidence.json
+            zenith-fx-snapshot.json
+          if-no-files-found: error

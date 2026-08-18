@@ -1,0 +1,430 @@
+name: Supabase verified reference index gate
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-verified-reference-index-gate
+  cancel-in-progress: false
+
+jobs:
+  apply-index:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      MIGRATION_COMMIT: b8260f8be09ec4141345b9383caaf5d705753c69
+      MIGRATION_FILE: supabase/migrations/20260810045000_reviewed_workbook_verified_reference_analytics.sql
+      MIGRATION_SHA256: 80c17271693eaba0647595059eeda29c0c8e5aa7f1d9c85ea21134daea637dc7
+      DEMAND_MIGRATION_FILE: supabase/migrations/20260810054000_watch_records_wtb_reference_lookup.sql
+      DEMAND_MIGRATION_SHA256: 3069c35ce5797b5ffcde04a4c63aec793333bd453b30456394d7aa7580864283
+      IDENTITY_MIGRATION_FILE: supabase/migrations/20260810060000_listing_identity_wtb_reference_lookup.sql
+      IDENTITY_MIGRATION_SHA256: 439cbe5c6a5ee4a5a45033f0f9b3b7e0f37093b47e5579f03dfd84e42d6db3d1
+      IDENTITY_RECOVERY_MIGRATION_FILE: supabase/migrations/20260810062000_listing_identity_wtb_reference_lookup_recovery.sql
+      IDENTITY_RECOVERY_MIGRATION_SHA256: 7c0f0413e48335db65cb9e1ec95e42bfb372aba690aeec8861760a57c8836d68
+    steps:
+      - name: Check out the reviewed migration commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.MIGRATION_COMMIT }}
+
+      - name: Validate required secrets and exact migration scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+          test -f "$MIGRATION_FILE"
+          test -f "$DEMAND_MIGRATION_FILE"
+          test -f "$IDENTITY_MIGRATION_FILE"
+          test -f "$IDENTITY_RECOVERY_MIGRATION_FILE"
+          test "$(sha256sum "$MIGRATION_FILE" | awk '{print $1}')" = "$MIGRATION_SHA256"
+          test "$(sha256sum "$DEMAND_MIGRATION_FILE" | awk '{print $1}')" = "$DEMAND_MIGRATION_SHA256"
+          test "$(sha256sum "$IDENTITY_MIGRATION_FILE" | awk '{print $1}')" = "$IDENTITY_MIGRATION_SHA256"
+          test "$(sha256sum "$IDENTITY_RECOVERY_MIGRATION_FILE" | awk '{print $1}')" = "$IDENTITY_RECOVERY_MIGRATION_SHA256"
+          test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$MIGRATION_FILE")" = "1"
+          test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$DEMAND_MIGRATION_FILE")" = "1"
+          test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$IDENTITY_MIGRATION_FILE")" = "1"
+          test "$(grep -Eic 'CREATE[[:space:]]+INDEX[[:space:]]+CONCURRENTLY[[:space:]]+IF[[:space:]]+NOT[[:space:]]+EXISTS' "$IDENTITY_RECOVERY_MIGRATION_FILE")" = "1"
+          ! grep -Eiq '(DROP|TRUNCATE|DELETE|UPDATE|INSERT|ALTER[[:space:]]+TABLE|CREATE[[:space:]]+TABLE|CREATE[[:space:]]+(OR[[:space:]]+REPLACE[[:space:]]+)?VIEW|staging\.listings)' "$MIGRATION_FILE" "$DEMAND_MIGRATION_FILE" "$IDENTITY_MIGRATION_FILE" "$IDENTITY_RECOVERY_MIGRATION_FILE"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve the production session pooler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/config/database/pooler" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -o "$RUNNER_TEMP/pooler.json"
+
+          jq -e 'type == "array" and length > 0' "$RUNNER_TEMP/pooler.json" >/dev/null
+          jq -c '[.[] | select(.database_type == "PRIMARY" and .pool_mode == "session")][0] // [.[] | select(.database_type == "PRIMARY")][0]' \
+            "$RUNNER_TEMP/pooler.json" > "$RUNNER_TEMP/primary-pooler.json"
+          jq -e '.db_host and .db_port and .db_user and .db_name' "$RUNNER_TEMP/primary-pooler.json" >/dev/null
+
+          echo "PGHOST=$(jq -r '.db_host' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGPORT=$(jq -r '.db_port' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGUSER=$(jq -r '.db_user' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGDATABASE=$(jq -r '.db_name' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+
+      - name: Preflight reviewed-workbook architecture and index state
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          architecture="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT
+              (to_regclass('public.reviewed_workbook_inventory') IS NOT NULL)::int || '|' ||
+              (COUNT(*) FILTER (WHERE column_name IN (
+                'id', 'brand_scope', 'normalized_reference', 'posting_date',
+                'listing_type', 'price_evidence_status', 'workbook_price_usd'
+              )))::text
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'reviewed_workbook_inventory';
+          ")"
+          test "$architecture" = "1|7"
+
+          demand_architecture="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT
+              (to_regclass('public.watch_records') IS NOT NULL)::int || '|' ||
+              (COUNT(*) FILTER (WHERE column_name IN (
+                'id', 'brand', 'reference', 'listing_type', 'listing_status'
+              )))::text
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'watch_records';
+          ")"
+          test "$demand_architecture" = "1|5"
+
+          identity_architecture="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT
+              (to_regclass('public.listing_identity_reviews') IS NOT NULL)::int || '|' ||
+              (COUNT(*) FILTER (WHERE column_name IN (
+                'record_id', 'canonical_brand', 'canonical_model',
+                'canonical_reference', 'canonical_dial_color', 'status'
+              )))::text
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'listing_identity_reviews';
+          ")"
+          test "$identity_architecture" = "1|6"
+
+          invalid_protected_index="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname IN (
+                'idx_reviewed_workbook_verified_reference_wts',
+                'idx_watch_records_wtb_reference_lookup'
+              )
+              AND (NOT i.indisvalid OR NOT i.indisready);
+          ")"
+          test "$invalid_protected_index" = "0"
+
+          identity_index_target="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_listing_identity_wtb_reference_lookup'
+              AND i.indrelid = 'public.listing_identity_reviews'::regclass;
+          ")"
+          identity_index_named="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_listing_identity_wtb_reference_lookup';
+          ")"
+          test "$identity_index_target" = "$identity_index_named"
+
+      - name: Remove only the failed identity index stub
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          identity_state="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COALESCE(
+              (
+                SELECT i.indisvalid::int || '|' || i.indisready::int
+                FROM pg_class c
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                JOIN pg_index i ON i.indexrelid = c.oid
+                WHERE n.nspname = 'public'
+                  AND c.relname = 'idx_listing_identity_wtb_reference_lookup'
+                  AND i.indrelid = 'public.listing_identity_reviews'::regclass
+              ),
+              'missing'
+            );
+          ")"
+
+          case "$identity_state" in
+            '1|1')
+              echo "WTB identity index is already valid; no recovery cleanup required."
+              ;;
+            '0|0'|'0|1'|'1|0')
+              echo "Removing only the invalid WTB identity index stub before forward recovery."
+              psql -X -v ON_ERROR_STOP=1 -c \
+                'DROP INDEX CONCURRENTLY public.idx_listing_identity_wtb_reference_lookup;'
+              ;;
+            'missing')
+              echo "WTB identity index is absent; forward recovery will create it."
+              ;;
+            *)
+              echo "Refusing unexpected WTB identity index state: $identity_state" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Apply the exact forward index migration
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          existing_valid="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_reviewed_workbook_verified_reference_wts'
+              AND i.indisvalid
+              AND i.indisready;
+          ")"
+          if [ "$existing_valid" = "1" ]; then
+            echo "Verified reference index already exists and is valid; skipping migration replay."
+          else
+            psql -X -v ON_ERROR_STOP=1 -f "$MIGRATION_FILE"
+          fi
+
+          demand_existing_valid="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_watch_records_wtb_reference_lookup'
+              AND i.indisvalid
+              AND i.indisready;
+          ")"
+          if [ "$demand_existing_valid" = "1" ]; then
+            echo "WTB reference index already exists and is valid; skipping migration replay."
+          else
+            psql -X -v ON_ERROR_STOP=1 -f "$DEMAND_MIGRATION_FILE"
+          fi
+
+          identity_existing_valid="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT COUNT(*)
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_listing_identity_wtb_reference_lookup'
+              AND i.indisvalid
+              AND i.indisready;
+          ")"
+          if [ "$identity_existing_valid" = "1" ]; then
+            echo "WTB identity index already exists and is valid; skipping migration replay."
+          else
+            psql -X -v ON_ERROR_STOP=1 -f "$IDENTITY_RECOVERY_MIGRATION_FILE"
+          fi
+
+      - name: Verify index validity and exact-reference query plans
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          validity="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT i.indisvalid::int || '|' || i.indisready::int
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_reviewed_workbook_verified_reference_wts';
+          ")"
+          test "$validity" = "1|1"
+
+          demand_validity="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT i.indisvalid::int || '|' || i.indisready::int
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_watch_records_wtb_reference_lookup';
+          ")"
+          test "$demand_validity" = "1|1"
+
+          identity_validity="$(psql -X -A -t -v ON_ERROR_STOP=1 -c "
+            SELECT i.indisvalid::int || '|' || i.indisready::int
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            JOIN pg_index i ON i.indexrelid = c.oid
+            WHERE n.nspname = 'public'
+              AND c.relname = 'idx_listing_identity_wtb_reference_lookup';
+          ")"
+          test "$identity_validity" = "1|1"
+
+          for target in 'Patek Philippe|5712' 'Rolex|116500LN' 'Rolex|126500LN'; do
+            brand="${target%%|*}"
+            reference="${target#*|}"
+            safe_name="$(printf '%s_%s' "$brand" "$reference" | tr -cd '[:alnum:]_')"
+            psql -X -v ON_ERROR_STOP=1 -v brand="$brand" -v reference="$reference" <<'SQL' | tee "$RUNNER_TEMP/${safe_name}.plan.txt"
+              EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+              SELECT id, workbook_price_usd, posting_date
+              FROM public.reviewed_workbook_inventory
+              WHERE brand_scope = :'brand'
+                AND regexp_replace(
+                  upper(COALESCE(normalized_reference, '')),
+                  '[^A-Z0-9]',
+                  '',
+                  'g'
+                ) = :'reference'
+                AND listing_type = 'WTS'
+                AND COALESCE(
+                  price_evidence_status = 'SOURCE_EXPLICIT_USD_MATCH'
+                    AND workbook_price_usd > 0,
+                  false
+                )
+              ORDER BY posting_date DESC NULLS LAST, id
+              LIMIT 200;
+          SQL
+            grep -q 'idx_reviewed_workbook_verified_reference_wts' "$RUNNER_TEMP/${safe_name}.plan.txt"
+          done
+
+          for target in 'Patek Philippe|5712' 'Rolex|116500LN' 'Rolex|126500LN'; do
+            brand="${target%%|*}"
+            reference="${target#*|}"
+            lowercase_reference="$(printf '%s' "$reference" | tr '[:upper:]' '[:lower:]')"
+            safe_name="$(printf 'wtb_identity_%s_%s' "$brand" "$reference" | tr -cd '[:alnum:]_')"
+            psql -X -v ON_ERROR_STOP=1 \
+              -v brand="$brand" \
+              -v reference="$reference" \
+              -v lowercase_reference="$lowercase_reference" <<'SQL' | tee "$RUNNER_TEMP/${safe_name}.plan.txt"
+              EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+              SELECT record_id
+              FROM public.listing_identity_reviews
+              WHERE canonical_brand = :'brand'
+                AND canonical_reference IN (:'reference', :'lowercase_reference')
+                AND status IN ('CATALOG_CONFIRMED', 'HUMAN_APPROVED')
+              ORDER BY record_id DESC
+              LIMIT 501;
+          SQL
+            grep -q 'idx_listing_identity_wtb_reference_lookup' "$RUNNER_TEMP/${safe_name}.plan.txt"
+          done
+
+          for target in 'Patek Philippe|5712' 'Rolex|116500LN' 'Rolex|126500LN'; do
+            brand="${target%%|*}"
+            reference="${target#*|}"
+            lowercase_reference="$(printf '%s' "$reference" | tr '[:upper:]' '[:lower:]')"
+            safe_name="$(printf 'wtb_%s_%s' "$brand" "$reference" | tr -cd '[:alnum:]_')"
+            psql -X -v ON_ERROR_STOP=1 \
+              -v brand="$brand" \
+              -v reference="$reference" \
+              -v lowercase_reference="$lowercase_reference" <<'SQL' | tee "$RUNNER_TEMP/${safe_name}.plan.txt"
+              EXPLAIN (ANALYZE, BUFFERS, VERBOSE)
+              SELECT id
+              FROM public.watch_records
+              WHERE brand = :'brand'
+                AND reference IN (:'reference', :'lowercase_reference')
+                AND listing_type IN ('WTB', 'NTQ')
+                AND (
+                  listing_status IS NULL
+                  OR listing_status NOT IN ('HIDDEN', 'REJECTED', 'DELETED')
+                )
+              ORDER BY id DESC
+              LIMIT 501;
+          SQL
+            grep -q 'idx_watch_records_wtb_reference_lookup' "$RUNNER_TEMP/${safe_name}.plan.txt"
+          done
+
+      - name: Audit priority-reference WTB release gates
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          for target in 'Patek Philippe|5712' 'Rolex|116500LN' 'Rolex|126500LN'; do
+            brand="${target%%|*}"
+            reference="${target#*|}"
+            lowercase_reference="$(printf '%s' "$reference" | tr '[:upper:]' '[:lower:]')"
+            psql -X -A -t -v ON_ERROR_STOP=1 \
+              -v brand="$brand" \
+              -v reference="$reference" \
+              -v lowercase_reference="$lowercase_reference" <<'SQL'
+              WITH candidates AS (
+                SELECT
+                  w.id,
+                  w.verdict,
+                  CASE
+                    WHEN w.confidence BETWEEN 0 AND 1 THEN w.confidence * 100
+                    ELSE w.confidence
+                  END AS confidence_percent,
+                  w.listing_status,
+                  w.model,
+                  w.dial_color
+                FROM public.watch_records w
+                WHERE w.brand = :'brand'
+                  AND w.reference IN (:'reference', :'lowercase_reference')
+                  AND w.listing_type IN ('WTB', 'NTQ')
+                  AND (
+                    w.listing_status IS NULL
+                    OR w.listing_status NOT IN ('HIDDEN', 'REJECTED', 'DELETED')
+                  )
+              ), reviewed AS (
+                SELECT
+                  c.*,
+                  r.status AS identity_review_status,
+                  COALESCE(NULLIF(trim(r.canonical_model), ''), NULLIF(trim(c.model), '')) AS released_model,
+                  COALESCE(NULLIF(trim(r.canonical_dial_color), ''), NULLIF(trim(c.dial_color), '')) AS released_dial
+                FROM candidates c
+                LEFT JOIN public.listing_identity_reviews r
+                  ON r.record_id = c.id
+                 AND r.status IN ('CATALOG_CONFIRMED', 'HUMAN_APPROVED')
+              )
+              SELECT json_build_object(
+                'brand', :'brand',
+                'reference', :'reference',
+                'candidate_count', COUNT(*),
+                'identity_reviewed_count', COUNT(*) FILTER (
+                  WHERE identity_review_status IS NOT NULL
+                ),
+                'approved_high_confidence_count', COUNT(*) FILTER (
+                  WHERE upper(trim(COALESCE(verdict, ''))) = 'APPROVED'
+                    AND confidence_percent >= 90
+                ),
+                'current_api_release_count', COUNT(*) FILTER (
+                  WHERE identity_review_status IS NOT NULL
+                    AND upper(trim(COALESCE(verdict, ''))) = 'APPROVED'
+                    AND confidence_percent >= 90
+                    AND released_model IS NOT NULL
+                    AND released_dial IS NOT NULL
+                )
+              )
+              FROM reviewed;
+          SQL
+          done

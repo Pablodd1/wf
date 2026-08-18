@@ -32,7 +32,7 @@ test('requires exact reviewed IDs and phone evidence', () => {
   assert.equal(api.approvedPhone({
     contact_publication_approved: false,
     phone_number: '+1 555 0100',
-  }), '+1 555 0100');
+  }), null);
   assert.equal(api.approvedPhone({
     contact_publication_approved: true,
     phone_number: '   ',

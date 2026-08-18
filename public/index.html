@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WatchFacts Extractor</title>
+<title>Curated Luxury Extractor</title>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
@@ -76,7 +76,7 @@ textarea:focus{border-color:#818cf8}
 <div class="container">
 <div class="header">
 <div class="logo">WF</div>
-<h1>WatchFacts Extractor</h1>
+<h1>Curated Luxury Extractor</h1>
 <span class="tag">demo v2</span>
 </div>
 
@@ -113,7 +113,7 @@ Patek Philippe 5930G-001 Blue World Time Chrono With papers $49,000
 <div id="summaryBody" style="font-size:13px;color:#7a7f94;line-height:1.7"></div>
 </div>
 </div>
-<div class="footer">WatchFacts Extractor v2 — inline edit &middot; auto re-score &middot; colored Excel with legend</div>
+<div class="footer">Curated Luxury Extractor v2 — inline edit &middot; auto re-score &middot; colored Excel with legend</div>
 
 <script>
 // ===== REFERENCE CATALOG =====
@@ -434,7 +434,7 @@ function downloadExcel(){
   var partialCount=data.filter(function(x){return getLabel(x)==='PARTIAL'}).length;
   var issuesCount=data.filter(function(x){return getLabel(x)==='ISSUES'}).length;
   
-  var ld=[['WatchFacts Extractor - Color Legend'],[''],['Status','Color','Description','Confidence Range'],
+  var ld=[['Curated Luxury Extractor - Color Legend'],[''],['Status','Color','Description','Confidence Range'],
     ['CLEAN','GREEN','All fields parsed correctly, no missing data','85-100%'],
     ['PARTIAL','YELLOW','Missing 1-2 fields - review suggested','55-84%'],
     ['ISSUES','RED','Multiple fields missing - needs manual lookup','0-54%'],

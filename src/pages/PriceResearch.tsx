@@ -6,10 +6,26 @@ import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer as CommunityFooter } from '../components/Footer';
 import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
+import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
+import { DealerRatingBadge, ListingDealerEvidence, type DealerRatingEvidenceStatus } from '../components/ListingDealerEvidence';
+import { loadPriceResearchBatchSummaries } from '../utils/priceResearchBatchSummary';
+
+function referenceEvidenceKey(brand: string, reference: string) {
+  return `${brand.trim().toLowerCase()}|${reference.trim().toUpperCase()}`;
+}
+
+function exactSourceImageUrl(record: ReviewedMarketRecord) {
+  if (record.has_images !== true || record.multi_listing === true || record.is_unbundled_child === true) return '';
+  if (!['SELLER_LISTING_IMAGE', 'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(String(record.image_evidence_type || '').toUpperCase())) return '';
+  const candidate = record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
+  return /^https?:\/\/[^\s]+$/i.test(candidate) ? candidate : '';
+}
 
 // ── Types ──────────────────────────────────────────────────────
 interface RowData {
   id: string;
+  brand?: string | null;
+  reference?: string | null;
   price_usd: number | null;
   created_at: string;
   listing_date?: string | null;
@@ -38,9 +54,21 @@ interface RowData {
   thumbnail_url?: string | null;
   image_urls?: string[] | null;
   has_images?: boolean;
-  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
   whatsapp_url?: string | null;
+  verdict?: string | null;
+  confidence?: number | null;
+  listing_status?: string | null;
+  listing_type?: string | null;
+  intent?: string | null;
+  contact_publication_approved?: boolean;
+  dealer_id?: string | null;
+  dealer_profile_path?: string | null;
+  seller_rating?: number | null;
+  seller_review_count?: number | null;
+  seller_rating_evidence_status?: DealerRatingEvidenceStatus | null;
+  seller_group_count?: number | null;
 }
 
 interface WtbListingData {
@@ -55,6 +83,13 @@ interface WtbListingData {
   seller_name?: string | null;
   seller_phone?: string | null;
   whatsapp_url?: string | null;
+  contact_publication_approved?: boolean;
+  dealer_id?: string | null;
+  dealer_profile_path?: string | null;
+  seller_rating?: number | null;
+  seller_review_count?: number | null;
+  seller_rating_evidence_status?: DealerRatingEvidenceStatus | null;
+  seller_group_count?: number | null;
   image_url?: string | null;
   image_urls?: string[] | null;
   has_images?: boolean;
@@ -69,8 +104,22 @@ interface MonthlyPoint {
   month: string; count: number; avg_price: number; min_price: number; max_price: number;
 }
 
+interface CatalogSuggestion {
+  brand: string;
+  model: string | null;
+  reference: string;
+  dial_colors: string[];
+  match_type: 'exact_reference' | 'reference_prefix' | 'reference_contains' | 'catalog_text_prefix' | 'catalog_text_contains' | 'reference_typo_candidate';
+}
+
+interface CatalogSuggestionsResponse {
+  success: boolean;
+  suggestions?: CatalogSuggestion[];
+}
+
 interface ForecastData {
   ready: boolean;
+  provisional?: boolean;
   reasons: string[];
   offer_count?: number;
   verified_dealer_count?: number;
@@ -80,6 +129,13 @@ interface ForecastData {
   backtest?: { points: number; model_mae: number; naive_mae: number };
   uncertainty_method?: string;
   release_candidate?: boolean;
+}
+
+interface DialTrendData {
+  dial_color: string;
+  count: number;
+  monthly: MonthlyPoint[];
+  forecast: ForecastData;
 }
 
 interface DialPoint {
@@ -109,7 +165,7 @@ interface ListingDetailData {
   accessories: string[];
   image_urls: string[];
   has_images: boolean;
-  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
   image_evidence_notice?: string | null;
   region: string | null;
@@ -138,9 +194,8 @@ interface ListingSellerData {
     last_post_at: string | null;
     posting_years?: number;
   } | null;
-  phone_display?: string;
   contact_source?: string;
-  whatsapp_url?: string;
+  contact_channels?: { whatsapp?: string; telegram?: string };
   reason?: string;
 }
 
@@ -173,6 +228,13 @@ interface ReviewedMarketRecord {
   seller_name?: string | null;
   phone_number?: string | null;
   seller_phone?: string | null;
+  contact_publication_approved?: boolean;
+  dealer_id?: string | null;
+  dealer_profile_path?: string | null;
+  seller_rating?: number | null;
+  seller_review_count?: number | null;
+  seller_rating_evidence_status?: DealerRatingEvidenceStatus | null;
+  seller_group_count?: number | null;
   raw_message?: string | null;
   raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
   raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
@@ -202,7 +264,10 @@ interface ReviewedMarketRecord {
   thumbnail_url?: string | null;
   image_url?: string | null;
   image_urls?: string[] | null;
+  has_images?: boolean;
   multi_listing?: boolean;
+  is_unbundled_child?: boolean;
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   review_reasons?: string[] | null;
   seller_analytics?: {
     total_posts?: number | null;
@@ -272,6 +337,14 @@ interface LiquidityData {
   demand_count?: number;
   demand_cohorts?: { dial_color: string; count: number }[];
   demand_rows?: WtbListingData[];
+  demand_evidence?: {
+    returned: number;
+    total: number;
+    page: number;
+    page_size: number;
+    pages: number;
+    sample_capped: boolean;
+  };
   demand_sample_capped?: boolean;
 }
 
@@ -284,6 +357,7 @@ interface PriceData {
   collection: string | null;
   dialColors: string[] | null;
   dial_analysis: DialPoint[];
+  dial_trends?: DialTrendData[];
   dial_data_quality?: {
     known_count: number;
     unknown_count: number;
@@ -302,6 +376,14 @@ interface PriceData {
   wts_eligible_analytics_count?: number;
   wtb_demand_count?: number;
   demand_rows?: WtbListingData[];
+  demand_evidence?: {
+    returned: number;
+    total: number;
+    page: number;
+    page_size: number;
+    pages: number;
+    sample_capped: boolean;
+  };
   excluded_count?: number;
   excluded_breakdown?: {
     unpriced: number;
@@ -313,6 +395,7 @@ interface PriceData {
     wts_eligible_analytics_count: number;
     wtb_demand_count: number;
     excluded_count: number;
+    wts_loaded_count?: number;
     excluded_breakdown: {
       unpriced: number;
       outliers: number;
@@ -320,6 +403,7 @@ interface PriceData {
     };
   };
   totalListings: number;
+  reference_listing_count?: number;
   eligible_observation_count?: number;
   unique_offer_count?: number;
   repost_count?: number;
@@ -338,6 +422,7 @@ interface PriceData {
   stats: {
     avg: number; median: number; min: number; max: number; range: number;
     q1: number; q3: number; iqr: number; lower_fence: number | null; upper_fence: number | null;
+    iqr_multiplier?: number;
   } | null;
   liquidity: LiquidityData | null;
   monthly: MonthlyPoint[];
@@ -352,12 +437,20 @@ interface PriceData {
     comparable_page?: number;
     comparable_page_size?: number;
     comparable_pages?: number;
+    retained_returned?: number;
+    retained_total?: number;
+    retained_pages?: number;
     outliers_returned: number;
     outliers_total: number;
+    outlier_pages?: number;
+    sale_page?: number;
+    sale_pages?: number;
     truncated: boolean;
   };
   methodology: {
     method: 'IQR_3_0' | 'PLAUSIBILITY_FLOOR_THEN_IQR_3_0'; minimum_sample: number; included_count: number; excluded_count: number;
+    formula?: string; iqr_multiplier?: number;
+    priced_wts_before_plausibility_count?: number; priced_wts_after_plausibility_count?: number;
     plausibility_floor_usd?: number; plausibility_excluded_count?: number; required_field_excluded_count?: number;
     statistical_outlier_count?: number;
     repost_excluded_count?: number;
@@ -365,8 +458,11 @@ interface PriceData {
     lower_fence?: number | null; upper_fence?: number | null;
   };
   admission_policy?: {
-    verdict: 'APPROVED';
-    minimum_confidence: number;
+    verdicts?: string[];
+    human_review_scope?: string[];
+    human_review_is_analytics_eligible_only_after_all_evidence_gates?: boolean;
+    approved_minimum_confidence?: number;
+    human_review_minimum_confidence?: null;
     confidence_is_probability: false;
     exact_release_reference_required: true;
     canonical_identity_review_required: true;
@@ -380,6 +476,7 @@ interface PriceData {
 
 const NAVY = '#1a2744';
 const GOLD = '#c9a03a';
+const REFERENCE_PICKER_PAGE_SIZE = 6;
 const WHITE = '#ffffff';
 const LIGHT_GRAY = '#f8f9fa';
 const BORDER = '#e9ecef';
@@ -388,9 +485,11 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
-const COMPARABLE_LISTING_PREVIEW_LIMIT = 12;
+const WTB_LISTING_PAGE_SIZE = 24;
 const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
-const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
+const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
+const REFERENCE_ONLY_MODEL = 'Reference-only listings';
+const displayCatalogModel = (model: string) => model === REFERENCE_ONLY_MODEL ? 'Other exact references' : model;
 
 const DIAL_SWATCHES: Record<string, string> = {
   black: '#161616', blue: '#315f9c', 'blue dial': '#315f9c', 'navy blue': '#17365f',
@@ -483,22 +582,41 @@ export default function PriceResearch() {
   const [listingSeller, setListingSeller] = useState<ListingSellerData | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [saleEvidencePage, setSaleEvidencePage] = useState(1);
+  const [demandEvidencePage, setDemandEvidencePage] = useState(1);
   const listingRequestRef = useRef<{ sequence: number; controller: AbortController | null }>({
     sequence: 0,
     controller: null,
   });
   const [showAllBrands, setShowAllBrands] = useState(false);
   const [analyticsNotice, setAnalyticsNotice] = useState('');
+  const [referenceSuggestions, setReferenceSuggestions] = useState<CatalogSuggestion[]>([]);
+  const [referenceSuggestionsOpen, setReferenceSuggestionsOpen] = useState(false);
+  const [referenceSuggestionsLoading, setReferenceSuggestionsLoading] = useState(false);
+  const [activeReferenceSuggestion, setActiveReferenceSuggestion] = useState(-1);
+  const [selectedCatalogReference, setSelectedCatalogReference] = useState<CatalogSuggestion | null>(null);
+  const referenceSearchBoxRef = useRef<HTMLDivElement | null>(null);
+  const loadedDeepLinkRef = useRef('');
 
   // ── Drill-down picker state (brand → model → reference) ──
   const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
   const [pBrand, setPBrand] = useState(initialBrand);
-  const [pModels, setPModels] = useState<{ model: string; reference_count: number }[]>([]);
+  const [pModels, setPModels] = useState<{ model: string; reference_count: number; listing_count?: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
   const [pModel, setPModel] = useState('');
-  const [pRefs, setPRefs] = useState<{ reference: string; listing_count: number; analytics_ready?: boolean; sample_capped?: boolean; avg_price: number | null }[]>([]);
+  const [pRefs, setPRefs] = useState<{
+    reference: string;
+    listing_count: number;
+    analytics_ready?: boolean;
+    sample_capped?: boolean;
+    avg_price: number | null;
+    evidence_resolution?: 'EXACT_REFERENCE_ON_SELECTION' | string;
+  }[]>([]);
+  const [referenceQuery, setReferenceQuery] = useState('');
   const [modelImages, setModelImages] = useState<Record<string, string>>({});
   const [referenceImages, setReferenceImages] = useState<Record<string, string>>({});
+  const [referenceEvidence, setReferenceEvidence] = useState<Record<string, { count: number; wtsCount?: number; wtbCount?: number; hasMore: boolean; image?: string; analyticsReady?: boolean; qualifiedCount?: number }>>({});
+  const [referencePage, setReferencePage] = useState(1);
   const [pLoading, setPLoading] = useState<'' | 'models' | 'refs'>('');
   const [pickerError, setPickerError] = useState('');
 
@@ -511,7 +629,7 @@ export default function PriceResearch() {
   const [mStats, setMStats] = useState<ModelStats | null>(null);
 
   const loadModels = useCallback(async (brand: string) => {
-setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelImages({}); setReferenceImages({}); setModelQuery(''); setPickerError(''); setMStats(null);
+setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs([]); setModelImages({}); setReferenceImages({}); setReferenceEvidence({}); setReferencePage(1); setModelQuery(''); setReferenceQuery(''); setPickerError(''); setMStats(null);
     if (!brand) return;
     setPLoading('models');
     try {
@@ -530,8 +648,8 @@ setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs(
         const nextImages: Record<string, string> = {};
         for (const record of imagePayload?.records || []) {
           const model = String(record.model || '').trim();
-          const image = record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
-          if (model && image && !record.multi_listing && !nextImages[model]) nextImages[model] = image;
+          const image = exactSourceImageUrl(record);
+          if (model && image && !nextImages[model]) nextImages[model] = image;
         }
         setModelImages(nextImages);
       }
@@ -540,7 +658,7 @@ setPBrand(brand); setQueryBrand(brand); setPModel(''); setPModels([]); setPRefs(
   }, []);
 
   const loadRefs = useCallback(async (brand: string, model: string) => {
-setPModel(model); setPRefs([]); setReferenceImages({}); setPickerError(''); setMStats(null);
+setPModel(model); setPRefs([]); setReferenceQuery(''); setReferenceImages({}); setReferenceEvidence({}); setReferencePage(1); setPickerError(''); setMStats(null);
     if (!brand || !model) return;
     setPLoading('refs');
     try {
@@ -557,8 +675,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         const nextImages: Record<string, string> = {};
         for (const record of imagePayload?.records || []) {
           const reference = String(record.reference || '').trim().toUpperCase();
-          const image = record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
-          if (reference && image && !record.multi_listing && !nextImages[reference]) nextImages[reference] = image;
+          const image = exactSourceImageUrl(record);
+          if (reference && image && !nextImages[reference]) nextImages[reference] = image;
         }
         setReferenceImages(nextImages);
       }
@@ -572,7 +690,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     finally { setPLoading(''); }
   }, []);
 
-  const fetchData = useCallback(async (ref: string, dial = '', brand = '', evidencePage = 1) => {
+  const fetchData = useCallback(async (ref: string, dial = '', brand = '', evidencePage = 1, demandPage = 1) => {
     const normalizedReference = ref.trim();
     if (!normalizedReference) {
       setError('Enter a reference to search');
@@ -585,11 +703,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     setSelectedRow(null);
     setListingDetail(null);
     setListingSeller(null);
+    setSaleEvidencePage(evidencePage);
+    setDemandEvidencePage(demandPage);
     try {
       const params = new URLSearchParams({ reference: normalizedReference });
       if (brand) params.set('brand', brand);
       if (dial) params.set('dial', dial);
       params.set('evidencePage', String(evidencePage));
+      params.set('evidencePageSize', '100');
+      params.set('demandPage', String(demandPage));
+      params.set('demandPageSize', String(WTB_LISTING_PAGE_SIZE));
       const r = await fetch(`/api/price-research?${params.toString()}`, { credentials: 'include' });
       const d = await r.json();
       if (d.success) {
@@ -597,6 +720,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         const resolvedReference = d.resolvedRef || d.reference || normalizedReference;
         setQuery(resolvedReference);
         if (d.brand) setQueryBrand(d.brand);
+        setSaleEvidencePage(d.evidence?.sale_page || evidencePage);
+        setDemandEvidencePage(d.demand_evidence?.page || demandPage);
       }
       else if (d.requires_resolution) {
         const candidates = Array.isArray(d.candidates)
@@ -615,11 +740,65 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     finally { setLoading(false); }
   }, []);
 
+  const selectReferenceSuggestion = useCallback((suggestion: CatalogSuggestion) => {
+    setSelectedCatalogReference(suggestion);
+    setQuery(suggestion.reference);
+    setQueryBrand(suggestion.brand);
+    setPBrand(suggestion.brand);
+    setReferenceSuggestionsOpen(false);
+    setReferenceSuggestions([]);
+    void fetchData(suggestion.reference, '', suggestion.brand);
+  }, [fetchData]);
+
+  useEffect(() => {
+    const referenceQuery = query.trim();
+    if (referenceQuery.length < 2 || selectedCatalogReference) {
+      setReferenceSuggestions([]);
+      setReferenceSuggestionsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setReferenceSuggestionsLoading(true);
+      try {
+        const params = new URLSearchParams({ q: referenceQuery, limit: '10' });
+        if (queryBrand) params.set('brand', queryBrand);
+        const response = await fetch(`/api/catalog-suggestions?${params.toString()}`, { signal: controller.signal });
+        if (!response.ok) throw new Error('Catalog suggestions unavailable');
+        const payload = await response.json() as CatalogSuggestionsResponse;
+        const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+        setReferenceSuggestions(suggestions);
+        setActiveReferenceSuggestion(suggestions.length ? 0 : -1);
+        setReferenceSuggestionsOpen(suggestions.length > 0);
+      } catch (caught) {
+        if ((caught as Error).name !== 'AbortError') setReferenceSuggestions([]);
+      } finally {
+        if (!controller.signal.aborted) setReferenceSuggestionsLoading(false);
+      }
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query, queryBrand, selectedCatalogReference]);
+
+  useEffect(() => {
+    const closeSuggestions = (event: MouseEvent) => {
+      if (!referenceSearchBoxRef.current?.contains(event.target as Node)) setReferenceSuggestionsOpen(false);
+    };
+    document.addEventListener('mousedown', closeSuggestions);
+    return () => document.removeEventListener('mousedown', closeSuggestions);
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/api/reviewed-market-inventory?page=1&pageSize=12', { signal: controller.signal })
-      .then(response => response.json())
-      .then(payload => {
+    Promise.all([
+      fetch('/api/reviewed-market-inventory?page=1&pageSize=12', { signal: controller.signal }).then(response => response.json()),
+      fetch('/api/live-release-summary', { signal: controller.signal }).then(response => response.ok ? response.json() : null).catch(() => null),
+    ])
+      .then(([payload, releaseSummary]) => {
         // The checkpoint summary includes pre-publication rows, so its per-brand
         // totals are not customer-safe after the strict identity gate. Use only
         // the API's publication brand names here; exact counts are shown after
@@ -632,7 +811,22 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           if (typeof raw === 'object' && 'brand' in raw) return cleanBrandStr((raw as { brand?: unknown }).brand);
           return String(raw).replace(/^[({"'`\s]+|[)}"'`\s]+$/g, '').trim();
         };
-        const brands = payload.publicationBrands || payload.summary?.publicationBrands || [];
+        const inventoryBrands = payload.publicationBrands || payload.summary?.publicationBrands || [];
+        const releaseBrands = Array.isArray(releaseSummary?.brands) ? releaseSummary.brands : [];
+        const brandsByName = new Map<string, unknown>();
+        for (const item of [...inventoryBrands, ...releaseBrands]) {
+          const name = cleanBrandStr(item);
+          if (!name) continue;
+          const existing = brandsByName.get(name);
+          const nextCount = typeof item === 'object' && item
+            ? Number((item as Record<string, unknown>).listing_count ?? 0)
+            : 0;
+          const existingCount = typeof existing === 'object' && existing
+            ? Number((existing as Record<string, unknown>).listing_count ?? 0)
+            : 0;
+          if (!existing || nextCount > existingCount) brandsByName.set(name, item);
+        }
+        const brands = [...brandsByName.values()];
         if (Array.isArray(brands) && brands.length) {
           setPBrands(brands.map((item: unknown) => {
             if (typeof item === 'string') return { brand: cleanBrandStr(item) };
@@ -654,6 +848,21 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     if (initialBrand && !initialReference) void loadModels(initialBrand);
   }, [initialBrand, initialReference, loadModels]);
 
+  useEffect(() => {
+    const deepLinkReference = initialReference.trim();
+    const deepLinkBrand = initialBrand.trim();
+    const deepLinkKey = `${deepLinkBrand}\u0000${deepLinkReference}`;
+    if (!deepLinkReference || !deepLinkBrand || loadedDeepLinkRef.current === deepLinkKey) return;
+    loadedDeepLinkRef.current = deepLinkKey;
+    setSelectedCatalogReference(null);
+    setQuery(deepLinkReference);
+    setQueryBrand(deepLinkBrand);
+    setPBrand(deepLinkBrand);
+    setReferenceSuggestionsOpen(false);
+    setReferenceSuggestions([]);
+    void fetchData(deepLinkReference, '', deepLinkBrand);
+  }, [fetchData, initialBrand, initialReference]);
+
   const openListing = useCallback(async (row: RowData) => {
     listingRequestRef.current.controller?.abort();
     const controller = new AbortController();
@@ -668,7 +877,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       const workbookListing = REVIEWED_WORKBOOK_ID.test(row.id);
       const contactEndpoint = workbookListing
         ? `/api/reviewed-seller-summary?id=${encodeURIComponent(row.id)}`
-        : `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research`;
+        : `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research&brand=${encodeURIComponent(String(row.brand || queryBrand || data?.brand || ''))}&reference=${encodeURIComponent(String(row.reference || data?.reference || query || ''))}`;
       void fetch(contactEndpoint, { signal: controller.signal })
         .then(async contactResponse => contactResponse.ok ? contactResponse.json().catch(() => null) : null)
         .then(contactPayload => {
@@ -679,7 +888,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             setListingSeller({
               contact_available: Boolean(contactPayload.contact_available),
               dealer_name: contactPayload.seller?.name || undefined,
-              phone_display: contactPayload.seller?.phone || undefined,
+              contact_channels: contactPayload.contact_available
+                ? { whatsapp: `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research&brand=${encodeURIComponent(String(row.brand || queryBrand || data?.brand || ''))}&reference=${encodeURIComponent(String(row.reference || data?.reference || query || ''))}&channel=whatsapp` }
+                : {},
               contact_source: 'OWNER_APPROVED_WORKBOOK',
               dealer_country: reputation?.country || null,
               dealer_city: reputation?.city || null,
@@ -701,6 +912,43 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           }
         })
         .catch(() => undefined);
+      if (String(row.source || '').toUpperCase() === 'MARIADB_IMMUTABLE_RAW') {
+        const imageCandidate = row.thumbnail_url || row.display_image_url || row.image_url
+          || row.image_urls?.find(Boolean) || '';
+        const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
+        setListingDetail({
+          id: row.id,
+          brand: queryBrand || data?.brand || 'Watch',
+          model: data?.model || null,
+          reference: data?.reference || query,
+          price_raw: row.source_price_amount ?? row.price_usd,
+          price_usd: row.price_usd,
+          price_evidence_status: Number(row.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED',
+          currency: row.source_currency || (Number(row.price_usd) > 0 ? 'USD' : null),
+          raw_message: rawMessage || null,
+          raw_message_scope: rawMessage ? 'original_post' : 'unavailable',
+          raw_message_truncated: false,
+          created_at: row.created_at,
+          listing_date: row.listing_date || row.created_at,
+          condition: row.condition,
+          source: row.source,
+          dial_color: row.dial_color,
+          year: row.year,
+          listing_type: row.listing_type || 'WTS',
+          accessories: [],
+          image_urls: imageCandidate ? [imageCandidate] : [],
+          has_images: Boolean(imageCandidate),
+          image_evidence_type: imageCandidate ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
+          image_evidence_label: imageCandidate ? 'Source-supplied listing image' : null,
+          image_evidence_notice: imageCandidate ? 'Exact image retained with this immutable source listing.' : null,
+          region: null,
+          source_type: 'qnsa_reviewed_release',
+          listing_status: row.listing_status || null,
+          confidence: row.confidence == null ? null : Number(row.confidence),
+        });
+        setDetailLoading(false);
+        return;
+      }
       const response = await fetch(`/api/price-research-listing?id=${encodeURIComponent(row.id)}`, { signal: controller.signal });
       const payload = await response.json();
       if (!response.ok || !payload.success) throw new Error(payload.error || 'Listing detail is unavailable');
@@ -714,7 +962,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     } finally {
       if (listingRequestRef.current.sequence === sequence) setDetailLoading(false);
     }
-  }, []);
+  }, [data?.brand, data?.model, data?.reference, query, queryBrand]);
 
   const closeListing = useCallback(() => {
     listingRequestRef.current.controller?.abort();
@@ -744,13 +992,6 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     };
   }, [closeListing, selectedRow]);
 
-  // Load the URL/default reference once. Typing must not start a request: the
-  // former query dependency replaced this page with the loading spinner after
-  // every character, which unmounted the input and dropped keyboard focus.
-  useEffect(() => {
-    if (initialReference) void fetchData(initialReference, '', initialBrand);
-  }, [fetchData, initialBrand, initialReference]);
-
   // ── Derived stats ─────────────────────────────────────────
   const stats = data?.stats
     ? {
@@ -764,6 +1005,27 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   const activeDial = data?.selected_cohort.dial_color || '';
   const selectedDialLine = activeDial ? dialChartColor(activeDial) : BLUE;
+  const qualifiedWtsCount = data?.reconciliation?.wts_eligible_analytics_count
+    ?? data?.wts_eligible_analytics_count
+    ?? data?.count
+    ?? 0;
+  const wtbDemandCount = data?.reconciliation?.wtb_demand_count
+    ?? data?.wtb_demand_count
+    ?? data?.liquidity?.demand_count
+    ?? 0;
+  const liveWtbWtsRatio = qualifiedWtsCount > 0 ? wtbDemandCount / qualifiedWtsCount : null;
+  const displayedWtbWtsRatio = data?.liquidity?.wtb_fs_ratio ?? liveWtbWtsRatio;
+  const displayDialAnalysis: DialPoint[] = data?.dial_analysis?.length
+    ? data.dial_analysis
+    : data?.stats
+      ? [{
+          dial_color: activeDial || 'Unspecified',
+          count: data.count,
+          avg_price: data.stats.avg,
+          min_price: data.stats.min,
+          max_price: data.stats.max,
+        }]
+      : [];
   const datedHistory = (data?.monthly || []).length > 0;
   const priceHistoryTitle = `${activeDial || 'Selected'} Dial ${datedHistory ? 'Price History' : 'Current Comparable Range'} - All Conditions`;
   const chartData: Array<Record<string, number | string | null>> = (data?.monthly || []).map(m => ({
@@ -798,28 +1060,92 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       });
     }
   }
+  const dialTrendMonths = [...new Set((data?.dial_trends || []).flatMap(trend => [
+    ...trend.monthly.map(point => point.month),
+    ...(trend.forecast.ready ? (trend.forecast.points || []).map(point => point.month) : []),
+  ]))].sort();
+  const dialTrendChartData = dialTrendMonths.map(month => {
+    const point: Record<string, string | number | null> = { month };
+    for (const trend of data?.dial_trends || []) {
+      const observed = trend.monthly.find(value => value.month === month);
+      const projected = trend.forecast.points?.find(value => value.month === month);
+      point[`history:${trend.dial_color}`] = observed?.avg_price ?? null;
+      point[`forecast:${trend.dial_color}`] = projected?.expected_price ?? null;
+      if (observed && trend.forecast.ready && trend.monthly.at(-1)?.month === month) {
+        point[`forecast:${trend.dial_color}`] = observed.avg_price;
+      }
+    }
+    return point;
+  });
 
   const displayRef = data?.resolvedRef || data?.reference || query;
+  const listingEvidence = data
+    ? [...data.rows, ...(data.outlier_rows || [])]
+    : [];
   const selectedWatchImage = data
     ? referenceImages[displayRef.toUpperCase()]
-      || data.rows.find(row => row.thumbnail_url || row.image_url || row.image_urls?.find(Boolean))?.thumbnail_url
-      || data.rows.find(row => row.image_url)?.image_url
-      || data.rows.flatMap(row => row.image_urls || []).find(Boolean)
+      || listingEvidence.find(row => row.thumbnail_url || row.image_url || row.image_urls?.find(Boolean))?.thumbnail_url
+      || listingEvidence.find(row => row.image_url)?.image_url
+      || listingEvidence.flatMap(row => row.image_urls || []).find(Boolean)
       || data.demand_rows?.find(row => row.image_url || row.image_urls?.find(Boolean))?.image_url
       || data.demand_rows?.flatMap(row => row.image_urls || []).find(Boolean)
       || null
     : null;
 
-  const listings = [...(data?.rows || [])]
-    .filter(row => !row.is_outlier)
+  const listings = [...new Map(listingEvidence.map(row => [row.id, row])).values()]
+    .filter(row => !['WTB', 'BUY'].includes(String(row.listing_type || row.intent || '').toUpperCase()))
+    .filter(row => Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0)
     .sort((left, right) => {
+      const eligibilityDifference = Number(right.price_usd != null && !right.is_outlier) - Number(left.price_usd != null && !left.is_outlier);
+      if (eligibilityDifference !== 0) return eligibilityDifference;
       const priceDifference = Number(left.price_usd) - Number(right.price_usd);
       if (Number.isFinite(priceDifference) && priceDifference !== 0) return priceDifference;
       return String(left.listing_date || left.created_at || '').localeCompare(String(right.listing_date || right.created_at || ''))
         || left.id.localeCompare(right.id);
-    })
-    .slice(0, COMPARABLE_LISTING_PREVIEW_LIMIT);
-  const visibleModels = pModels.filter(item => item.model.toLowerCase().includes(modelQuery.trim().toLowerCase()));
+    });
+  const saleEvidencePages = Math.max(1, data?.evidence?.sale_pages || data?.evidence?.comparable_pages || 1);
+  const visibleModels = pModels.filter(item => displayCatalogModel(item.model).toLowerCase().includes(modelQuery.trim().toLowerCase()));
+  const normalizedReferenceQuery = referenceQuery.trim().toUpperCase();
+  const filteredRefs = pRefs.filter(item => !normalizedReferenceQuery || item.reference.toUpperCase().includes(normalizedReferenceQuery));
+  const referencePageCount = Math.max(1, Math.ceil(filteredRefs.length / REFERENCE_PICKER_PAGE_SIZE));
+  const visibleReferencePage = Math.min(referencePage, referencePageCount);
+  const visibleRefs = filteredRefs.slice(
+    (visibleReferencePage - 1) * REFERENCE_PICKER_PAGE_SIZE,
+    visibleReferencePage * REFERENCE_PICKER_PAGE_SIZE,
+  );
+  const visibleReferenceKey = visibleRefs.map(item => item.reference).join('\u001e');
+
+  useEffect(() => {
+    if (referencePage > referencePageCount) setReferencePage(referencePageCount);
+  }, [referencePage, referencePageCount]);
+
+  useEffect(() => {
+    if (!pBrand || !visibleRefs.length) return;
+    const pending = visibleRefs.filter(item => !referenceEvidence[referenceEvidenceKey(pBrand, item.reference)]);
+    if (!pending.length) return;
+    let active = true;
+    void loadPriceResearchBatchSummaries(pending.map(item => ({ brand: pBrand, reference: item.reference }))).then(summaries => {
+      if (!active) return;
+      setReferenceEvidence(current => {
+        const next = { ...current };
+        for (const summary of summaries) {
+          next[referenceEvidenceKey(summary.brand, summary.reference)] = {
+            count: Number(summary.source_observation_count || 0),
+            wtsCount: Number(summary.wts_observation_count || 0),
+            wtbCount: Number(summary.wtb_observation_count || 0),
+            qualifiedCount: Number(summary.reference_qualified_wts_count || 0),
+            analyticsReady: summary.reference_analytics_ready === true,
+            hasMore: summary.sample_capped === true,
+            image: summary.representative_image_url || '',
+          };
+        }
+        return next;
+      });
+    }).catch(() => undefined);
+    return () => { active = false; };
+  // The serialized page key keeps this bounded effect stable across evidence updates.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pBrand, visibleReferenceKey]);
   const visibleBrands = showAllBrands
     ? pBrands
     : pBrands.filter(item => POPULAR_BRANDS.includes(item.brand));
@@ -830,7 +1156,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     if (reason === 'ABOVE_IQR_FENCE') return 'Above upper IQR fence';
     if (reason === 'MISSING_BRAND') return 'Missing required brand';
     if (reason === 'MISSING_REFERENCE') return 'Missing required reference';
-    if (reason === 'CATALOG_MODEL_UNCONFIRMED') return 'Model/reference not confirmed by catalog';
+    if (reason === 'CATALOG_MODEL_UNCONFIRMED') return 'Catalog model/reference unavailable';
     if (reason === 'MISSING_PRICE') return 'Missing required WTS price';
     if (reason === 'MISSING_DIAL') return 'Missing required dial color';
     if (reason === 'CATALOG_DIAL_UNCONFIRMED') return 'Dial configuration unavailable in catalog';
@@ -839,7 +1165,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     if (reason === 'BUNDLE_SOURCE_UNSPLIT') return 'Unsplit multi-listing source';
     if (reason === 'REFERENCE_TOKEN_AS_PRICE') return 'Reference token copied as price';
     if (reason === 'YEAR_TOKEN_AS_PRICE') return 'Year token copied as price';
-    if (reason === 'CURRENCY_UNVERIFIED') return 'Price exists but source currency is not verified';
+    if (reason === 'CURRENCY_UNVERIFIED') return 'Price exists but currency evidence is unavailable for analytics';
     if (reason === 'CURRENCY_AMBIGUOUS') return 'Bare dollar sign requires currency review';
     if (reason === 'CURRENCY_RATE_UNVERIFIED') return 'Currency conversion rate is not verified';
     return 'Invalid price';
@@ -851,11 +1177,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       <div style={{ paddingTop: 12 }}><CurrencyConverter /></div>
 
       <header style={{ backgroundColor: '#09090d', color: WHITE, padding: '22px 0 24px' }}>
-        <div className="mx-auto max-w-6xl px-4">
+        <div className="mx-auto w-full max-w-[1440px] px-4 sm:px-6 lg:px-8">
           <div className="grid gap-4 md:grid-cols-[minmax(0,0.75fr)_minmax(360px,1.25fr)] md:items-end">
             <div>
               <h1 className="text-2xl font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>Price Research</h1>
               <p className="mt-1 max-w-xl text-sm text-white/60">Search catalog-backed market evidence by watch reference.</p>
+              {queryBrand === 'Rolex' && <p className="mt-2 text-xs text-[#d8be7a]">All available Rolex references are searchable. Select an autocomplete result to load that reference’s WTS prices, WTB demand, users, raw listings, and charts.</p>}
             </div>
             <div className="grid gap-2 sm:grid-cols-[160px_minmax(0,1fr)_auto]">
               <label className="block">
@@ -867,45 +1194,130 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   className="h-11 w-full rounded-md border border-white/20 bg-[#1a1a20] px-3 text-sm text-white outline-none focus:border-[#c9a03a]"
                 >
                   <option value="">Select brand</option>
+                  {queryBrand && !pBrands.some(item => item.brand === queryBrand) && (
+                    <option value={queryBrand}>{queryBrand}</option>
+                  )}
                   {pBrands.map(item => <option key={item.brand} value={item.brand}>{item.brand}</option>)}
                 </select>
               </label>
-              <label className="relative block">
-                <span className="sr-only">Watch reference</span>
+              <div ref={referenceSearchBoxRef} className="relative block">
+                <label htmlFor="price-reference-input" className="sr-only">Watch reference</label>
                 <Search aria-hidden="true" size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-white/45" />
                 <input
+                  id="price-reference-input"
                   data-testid="price-reference-input"
                   aria-label="Watch reference"
-                  type="text"
-                  list="price-reference-suggestions"
+                  type="search"
                   value={query}
-                  onChange={event => setQuery(event.target.value)}
-                  onKeyDown={event => { if (event.key === 'Enter' && !loading) void fetchData(query, '', queryBrand); }}
+                  onChange={event => {
+                    setSelectedCatalogReference(null);
+                    setQuery(event.target.value);
+                    setReferenceSuggestionsOpen(true);
+                  }}
+                  onFocus={() => setReferenceSuggestionsOpen(referenceSuggestions.length > 0)}
+                  onKeyDown={event => {
+                    if (event.key === 'Escape') {
+                      setReferenceSuggestionsOpen(false);
+                      return;
+                    }
+                    if (referenceSuggestionsOpen && referenceSuggestions.length > 0) {
+                      if (event.key === 'ArrowDown') {
+                        event.preventDefault();
+                        setActiveReferenceSuggestion(index => (index + 1) % referenceSuggestions.length);
+                        return;
+                      }
+                      if (event.key === 'ArrowUp') {
+                        event.preventDefault();
+                        setActiveReferenceSuggestion(index => (index <= 0 ? referenceSuggestions.length - 1 : index - 1));
+                        return;
+                      }
+                      if (event.key === 'Enter' && activeReferenceSuggestion >= 0) {
+                        event.preventDefault();
+                        selectReferenceSuggestion(referenceSuggestions[activeReferenceSuggestion]);
+                        return;
+                      }
+                    }
+                    if (event.key === 'Enter' && !loading) void fetchData(query, '', queryBrand);
+                  }}
                   placeholder="Enter a watch reference"
                   className="h-11 w-full rounded-md border border-white/20 bg-white/10 pl-10 pr-4 text-sm text-white outline-none placeholder:text-white/40 focus:border-[#c9a03a]"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-controls="price-reference-suggestions"
+                  aria-expanded={referenceSuggestionsOpen}
+                  aria-activedescendant={activeReferenceSuggestion >= 0 ? `price-reference-option-${activeReferenceSuggestion}` : undefined}
                 />
-                <datalist id="price-reference-suggestions">
-                  {pRefs.map(item => <option key={item.reference} value={item.reference}>{pBrand} {pModel}</option>)}
-                </datalist>
-              </label>
+                {referenceSuggestionsOpen && (
+                  <div
+                    id="price-reference-suggestions"
+                    role="listbox"
+                    aria-label="Catalog reference suggestions"
+                    className="absolute inset-x-0 top-12 z-50 max-h-[360px] overflow-y-auto rounded-md border border-stone-200 bg-white p-1 text-left shadow-2xl"
+                  >
+                    {referenceSuggestions.map((suggestion, index) => (
+                      <button
+                        id={`price-reference-option-${index}`}
+                        key={`${suggestion.brand}-${suggestion.reference}`}
+                        type="button"
+                        role="option"
+                        aria-selected={index === activeReferenceSuggestion}
+                        onMouseEnter={() => setActiveReferenceSuggestion(index)}
+                        onMouseDown={event => event.preventDefault()}
+                        onClick={() => selectReferenceSuggestion(suggestion)}
+                        className="flex min-h-14 w-full items-center justify-between gap-3 rounded px-3 py-2 text-left"
+                        style={{ background: index === activeReferenceSuggestion ? '#f5f1e8' : WHITE, color: NAVY }}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold">{suggestion.brand} {suggestion.reference}</span>
+                          <span className="mt-0.5 block truncate text-xs" style={{ color: MUTED }}>
+                            {suggestion.model || 'Catalog reference'}
+                            {suggestion.dial_colors.length ? ` · ${suggestion.dial_colors.join(', ')} dial` : ''}
+                          </span>
+                        </span>
+                        <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD }}>
+                          {suggestion.match_type === 'reference_typo_candidate' ? 'Did you mean?' : 'Select'}
+                        </span>
+                      </button>
+                    ))}
+                    {referenceSuggestionsLoading && <div className="px-3 py-2 text-xs" style={{ color: MUTED }}>Checking catalog…</div>}
+                    <div className="border-t px-3 py-2 text-[11px] leading-4" style={{ borderColor: BORDER, color: MUTED }}>
+                      Select an exact catalog reference to load its market analytics.
+                    </div>
+                  </div>
+                )}
+              </div>
               <button type="button" onClick={() => void fetchData(query, '', queryBrand)} disabled={loading} className="h-11 min-w-28 rounded-md bg-[#c9a03a] px-5 text-sm font-semibold text-[#09090d] disabled:cursor-wait disabled:opacity-70">
                 {loading ? 'Searching...' : 'Search'}
               </button>
             </div>
           </div>
+          <PriorityReferenceShortcuts
+            mode="research"
+            activeBrand={queryBrand}
+            activeReference={query}
+            onSelect={cohort => {
+              setSelectedCatalogReference(null);
+              setQuery(cohort.reference);
+              setQueryBrand(cohort.brand);
+              setPBrand(cohort.brand);
+              setReferenceSuggestionsOpen(false);
+              setReferenceSuggestions([]);
+              void fetchData(cohort.reference, '', cohort.brand);
+            }}
+          />
         </div>
       </header>
 
-      <div className="mx-auto max-w-6xl overflow-x-hidden px-4 py-6 sm:py-8">
+      <div className="mx-auto w-full max-w-[1440px] overflow-x-hidden px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
         {/* ── Drill-down: Browse by Model (real listings only) ─────── */}
         <div className="mb-6 border-y py-5" style={{ borderColor: BORDER, display: data ? 'none' : undefined }}>
           {(pBrand || pModel) && (
             <nav aria-label="Catalog selection" className="mb-4 flex flex-wrap items-center gap-2 text-xs" style={{ color: MUTED }}>
-              <button type="button" onClick={() => { setPBrand(''); setPModel(''); setPModels([]); setPRefs([]); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Brands</button>
+              <button type="button" onClick={() => { setPBrand(''); setPModel(''); setPModels([]); setPRefs([]); setModelQuery(''); setReferenceQuery(''); }} className="inline-flex min-h-11 items-center gap-1 font-semibold" style={{ color: NAVY }}><ChevronLeft size={15} /> Brands</button>
               {pBrand && <span aria-hidden="true">/</span>}
-              {pBrand && <button type="button" onClick={() => { setPModel(''); setPRefs([]); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{pBrand}</button>}
+              {pBrand && <button type="button" onClick={() => { setPModel(''); setPRefs([]); setReferenceQuery(''); }} className="min-h-11 font-semibold" style={{ color: NAVY }}>{pBrand}</button>}
               {pModel && <span aria-hidden="true">/</span>}
-              {pModel && <span>{pModel}</span>}
+              {pModel && <span>{displayCatalogModel(pModel)}</span>}
             </nav>
           )}
           <h3 style={{ fontSize: 17, fontWeight: 700, color: NAVY, marginBottom: 4 }}>{pModel ? 'Choose a reference' : pBrand ? `Choose a ${pBrand} model` : 'Choose a brand'}</h3>
@@ -958,8 +1370,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   }}>
                   {modelImages[m.model] && <img src={modelImages[m.model]} alt="" loading="lazy" style={{ width: 48, height: 48, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
                   <span style={{ minWidth: 0 }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{m.model}</span>
-                    <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>{m.reference_count} catalog refs</span>
+                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{displayCatalogModel(m.model)}</span>
+                    <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>
+                      {m.reference_count} {m.model === REFERENCE_ONLY_MODEL ? 'exact references' : 'references'}
+                      {m.listing_count != null ? ` · ${m.listing_count.toLocaleString()} observed listings` : ''}
+                      {m.model === REFERENCE_ONLY_MODEL ? ' · click to browse individually' : ''}
+                    </span>
                   </span>
                 </button>
               ))}
@@ -980,7 +1396,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                 <div className="flex items-center gap-3">
                   {modelImages[pModel] && <img src={modelImages[pModel]} alt={`${pBrand} ${pModel}`} style={{ width: 72, height: 72, borderRadius: 8, objectFit: 'cover', border: `1px solid ${BORDER}` }} />}
                   <div style={{ fontSize: 14, fontWeight: 700, color: NAVY }}>
-                    {pBrand} {pModel} — Market Overview
+                    {pBrand} {displayCatalogModel(pModel)} — Market Overview
                   </div>
                 </div>
                 <div style={{ fontSize: 11, color: MUTED }}>
@@ -1027,23 +1443,64 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
           {/* Reference cards */}
           {pBrand && pModel && pRefs.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-              {pRefs.map(r => (
-                <button key={r.reference} onClick={() => { setQuery(r.reference); setQueryBrand(pBrand); void fetchData(r.reference, '', pBrand); }}
+            <>
+              <label style={{ display: 'block', marginBottom: 10 }}>
+                <span className="sr-only">Search references for {pBrand} {displayCatalogModel(pModel)}</span>
+                <input
+                  type="search"
+                  value={referenceQuery}
+                  onChange={event => { setReferenceQuery(event.target.value); setReferencePage(1); }}
+                  placeholder={`Search all ${pRefs.length} exact references`}
+                  style={{ width: 'min(100%, 420px)', height: 38, border: `1px solid ${BORDER}`, borderRadius: 7, background: WHITE, color: TEXT, padding: '0 12px', fontSize: 13 }}
+                />
+              </label>
+              <div style={{ fontSize: 11, color: MUTED, marginBottom: 8 }}>
+                {filteredRefs.length} matching exact references · page {visibleReferencePage} of {referencePageCount} · select one to load full WTS, WTB, no-price, and outlier accounting
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {visibleRefs.map(r => (
+                <button key={r.reference} onClick={() => {
+                  setSelectedCatalogReference({
+                    brand: pBrand,
+                    model: pModel,
+                    reference: r.reference,
+                    dial_colors: [],
+                    match_type: 'exact_reference',
+                  });
+                  setReferenceSuggestionsOpen(false);
+                  setReferenceSuggestions([]);
+                  setQuery(r.reference);
+                  setQueryBrand(pBrand);
+                  void fetchData(r.reference, '', pBrand);
+                }}
                   style={{
                     textAlign: 'left', padding: '10px 12px', borderRadius: 8, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 10,
                     border: `1px solid ${GOLD}`, backgroundColor: WHITE,
                   }}>
-                  {referenceImages[r.reference.toUpperCase()] && <img src={referenceImages[r.reference.toUpperCase()]} alt="" loading="lazy" style={{ width: 52, height: 52, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
+                  {(referenceEvidence[referenceEvidenceKey(pBrand, r.reference)]?.image || referenceImages[r.reference.toUpperCase()]) && <img src={referenceEvidence[referenceEvidenceKey(pBrand, r.reference)]?.image || referenceImages[r.reference.toUpperCase()]} alt={`${pBrand} ${pModel} ${r.reference} source listing`} loading="lazy" style={{ width: 52, height: 52, borderRadius: 6, objectFit: 'cover', flex: '0 0 auto', border: `1px solid ${BORDER}` }} />}
                   <span style={{ minWidth: 0 }}>
+                    <span style={{ display: 'block', fontSize: 10, color: MUTED, marginBottom: 2 }}>{displayCatalogModel(pModel)}</span>
                     <span style={{ display: 'block', fontSize: 13, fontWeight: 700, color: NAVY, fontFamily: 'monospace' }}>{r.reference}</span>
                     <span style={{ display: 'block', fontSize: 11, color: MUTED, marginTop: 2 }}>
-                      {r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} observations · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}
+                      {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)]
+                        ? <>{referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].count.toLocaleString()}{referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].hasMore ? '+' : ''} observed · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].wtsCount?.toLocaleString() || 0} WTS · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].wtbCount?.toLocaleString() || 0} WTB · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].qualifiedCount?.toLocaleString() || 0} qualified WTS · {referenceEvidence[referenceEvidenceKey(pBrand, r.reference)].analyticsReady ? 'graphics available after dial selection' : 'listings available; graphics require 2 qualified WTS in one dial cohort'}</>
+                        : r.evidence_resolution === 'EXACT_REFERENCE_ON_SELECTION' || r.listing_count <= 0
+                        ? 'Open to load exact market data'
+                        : <>{r.listing_count.toLocaleString()}{r.sample_capped ? '+' : ''} source {r.listing_count === 1 ? 'listing' : 'listings'} · {r.avg_price == null ? 'analytics pending (minimum 2)' : `avg $${r.avg_price.toLocaleString()}`}</>}
                     </span>
                   </span>
                 </button>
               ))}
-            </div>
+              </div>
+              {referencePageCount > 1 && (
+                <nav aria-label="Reference pages" className="mt-4 flex items-center justify-center gap-3">
+                  <button type="button" disabled={visibleReferencePage <= 1} onClick={() => setReferencePage(page => Math.max(1, page - 1))} className="min-h-11 rounded-md border px-4 text-xs font-bold disabled:opacity-40" style={{ borderColor: BORDER, color: NAVY, background: WHITE }}>Previous references</button>
+                  <span style={{ fontSize: 11, color: MUTED }}>Page {visibleReferencePage} of {referencePageCount}</span>
+                  <button type="button" disabled={visibleReferencePage >= referencePageCount} onClick={() => setReferencePage(page => Math.min(referencePageCount, page + 1))} className="min-h-11 rounded-md border px-4 text-xs font-bold disabled:opacity-40" style={{ borderColor: GOLD, color: NAVY, background: WHITE }}>Next references</button>
+                </nav>
+              )}
+              {visibleRefs.length === 0 && <div style={{ fontSize: 12, color: MUTED, marginTop: 12 }}>No exact reference matches “{referenceQuery}”.</div>}
+            </>
           )}
         </div>
 
@@ -1085,7 +1542,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   {data.collection && <span style={{ fontSize: 13, color: MUTED }}>{data.collection}</span>}
                 </div>
                 <Link
-                  to={`/trading?brand=${encodeURIComponent(data.brand)}&q=${encodeURIComponent(data.reference)}`}
+                  to={`/trading?brand=${encodeURIComponent(data.brand)}&reference=${encodeURIComponent(data.reference)}`}
                   className="inline-flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition hover:opacity-90 shadow-sm"
                   style={{ color: '#C9A96E', border: '1px solid #C9A96E', background: 'transparent' }}
                 >
@@ -1096,14 +1553,18 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             </div>
 
-            {(data.dial_analysis || []).length > 0 && (
+            <aside aria-label="Graphic analytics explanation" className="mb-6 rounded-lg border bg-[#fffaf0] px-4 py-3 text-xs leading-5" style={{ borderColor: '#ead9a2', color: MUTED }}>
+              The dial comparison table and graphic analytics are shown below for this reference. Solid dial-colored lines are observed WTS averages. Dotted points are estimates and are labeled indicative unless the trend passes validation.
+            </aside>
+
+            {displayDialAnalysis.length > 0 && (
               <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
                   Each dial appears once. New, Used, and Unspecified listings are combined for analytics; condition remains visible in each listing description.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {(data.dial_analysis || []).map(group => {
+                  {displayDialAnalysis.map(group => {
                     const selected = data.selected_cohort.dial_color === group.dial_color;
                     return (
                       <button
@@ -1132,142 +1593,84 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             )}
 
-            {/* ── Stats Cards ──────────────────────────────────── */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              {/* Current WTS and WTB activity — real source data only */}
-              <div className="order-2" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Featured listings for sale</h3>
-                  {data.liquidity && (
-                    <span style={{ fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, padding: '2px 8px', borderRadius: 10,
-                      backgroundColor: data.liquidity.source === 'indicators' ? '#e7f5ec' : '#fff4e5',
-                      color: data.liquidity.source === 'indicators' ? GREEN : '#b8860b' }}>
-                      {data.liquidity.source === 'indicators' ? 'Market Indicators' : 'Live Count'}
-                    </span>
-                  )}
+            {/* ── Demand and pricing summary ───────────────────── */}
+            <div className="grid grid-cols-1 gap-6 mb-8">
+              <div data-testid="wts-supply-summary" style={{ backgroundColor: '#f7f3e8', border: '1px solid #dfca91', borderRadius: 8, padding: 20 }}>
+                <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>WTS listings for sale</div>
+                <div style={{ color: NAVY, fontSize: 28, fontWeight: 800, marginTop: 5 }}>{(data.reconciliation?.wts_loaded_count ?? data.reference_listing_count ?? data.totalListings).toLocaleString()}</div>
+                <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
+                  All source-backed sale offers for this reference remain available below. Only qualified priced WTS observations enter averages, graphics, and predictions.
                 </div>
-                {data.liquidity && (
-                  <>
-                    {data.liquidity.source === 'indicators' ? (
-                      <>
-                        {data.liquidity.liquidity_score != null && (
-                          <div className="flex items-center justify-between mb-2">
-                            <span style={{ fontSize: 13, color: MUTED }}>Liquidity Score</span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>{data.liquidity.liquidity_score}</span>
-                          </div>
-                        )}
-                        {data.liquidity.sale_count != null && (
-                          <div className="flex items-center justify-between mb-2">
-                            <span style={{ fontSize: 13, color: MUTED }}>Sales (window)</span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: GREEN }}>{data.liquidity.sale_count}</span>
-                          </div>
-                        )}
-                        {data.liquidity.demand_score != null && (
-                          <div className="flex items-center justify-between mb-2">
-                            <span style={{ fontSize: 13, color: MUTED }}>Demand</span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: BLUE }}>{data.liquidity.demand_score}</span>
-                          </div>
-                        )}
-                        {data.liquidity.supply_score != null && (
-                          <div className="flex items-center justify-between mb-2">
-                            <span style={{ fontSize: 13, color: MUTED }}>Supply</span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: RED }}>{data.liquidity.supply_score}</span>
-                          </div>
-                        )}
-                        {data.liquidity.wtb_fs_ratio != null && (
-                          <div className="flex items-center justify-between">
-                            <span style={{ fontSize: 13, color: MUTED }}>WTB/FS Ratio</span>
-                            <span style={{ fontSize: 16, fontWeight: 700, color: data.liquidity.wtb_fs_ratio > 1 ? RED : GREEN }}>
-                              {Number(data.liquidity.wtb_fs_ratio).toFixed(2)}
-                            </span>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <div>
-                        <div style={{ fontSize: 13, color: MUTED }}>Real listings for sale</div>
-                        <div style={{ fontSize: 36, fontWeight: 700, color: NAVY, marginTop: 4 }}>
-                          {data.liquidity.listing_count.toLocaleString()}
-                        </div>
-                        <div style={{ fontSize: 11, color: MUTED, marginTop: 8, fontStyle: 'italic' }}>
-                          No precomputed indicators for this reference — showing live count only.
-                        </div>
-                      </div>
-                    )}
-                    <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${BORDER}` }}>
-                      <div className="flex items-center justify-between">
-                        <span style={{ fontSize: 13, color: MUTED }}>Qualified WTB / looking-for demand</span>
-                        <span style={{ fontSize: 18, fontWeight: 700, color: BLUE }}>{(data.liquidity.demand_count || 0).toLocaleString()}</span>
-                      </div>
-                      <div style={{ fontSize: 11, color: MUTED, marginTop: 5 }}>
-                        All catalog-valid WTB/NTQ buyer demand cohorts are tracked.
-                      </div>
-                      {(data.liquidity.demand_cohorts || []).slice(0, 4).map(cohort => (
-                        <div key={cohort.dial_color} className="mt-2 flex items-center justify-between" style={{ fontSize: 12 }}>
-                          <span style={{ color: MUTED }}>{cohort.dial_color}</span>
-                          <span style={{ color: NAVY, fontWeight: 600 }}>{cohort.count.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
               </div>
-
               {/* Pricing Summary */}
-              <div className="order-1" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
+              <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 8, padding: 20 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 16 }}>Pricing</h3>
                 {stats ? (
                   <>
-                    <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
-                      Average price:{' '}
-                      <span style={{ color: GREEN, fontWeight: 700, fontSize: 20 }}>
-                        ${stats.avg.toLocaleString()}
-                      </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3" aria-label="Qualified WTS price range">
+                      {[
+                        ['Minimum', stats.min, NAVY],
+                        ['Average', stats.avg, GREEN],
+                        ['Maximum', stats.max, NAVY],
+                      ].map(([label, value, color]) => (
+                        <div key={String(label)} style={{ background: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: '12px 14px' }}>
+                          <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</div>
+                          <div style={{ color: String(color), fontSize: 20, fontWeight: 800, marginTop: 3 }}>${Number(value).toLocaleString()}</div>
+                        </div>
+                      ))}
                     </div>
-                    <div style={{ fontSize: 14, color: MUTED, marginBottom: 8 }}>
-                      Median price:{' '}
-                      <span style={{ color: NAVY, fontWeight: 600 }}>
-                        ${stats.median.toLocaleString()}
-                      </span>
-                    </div>
-                    <div className="flex justify-between mt-3" style={{ fontSize: 12, color: MUTED }}>
-                      <span>Minimum price: ${stats.min.toLocaleString()}</span>
-                      <span>Maximum price: ${stats.max.toLocaleString()}</span>
+                    <div style={{ fontSize: 12, color: MUTED, marginTop: 10 }}>
+                      Median price: <strong style={{ color: NAVY }}>${stats.median.toLocaleString()}</strong>
                     </div>
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
-                      {data.sample_quality === 'robust' ? 'Robust' : data.sample_quality === 'provisional' ? 'Provisional' : 'Observational'} evidence · {stats.count} listings
+                      {data.sample_quality === 'robust' ? 'Strong' : data.sample_quality === 'provisional' ? 'Developing' : 'Observed'} evidence · {stats.count} listings
                     </div>
                   </>
                 ) : (
                   <div style={{ fontSize: 12, color: RED, lineHeight: 1.5 }}>
-                    Analytics are withheld until at least two catalog-consistent observations exist for the same reference and dial across all listing conditions.
+                    Analytics are withheld until at least two identity- and dial-qualified observations exist for the same reference across all listing conditions.
                   </div>
                 )}
               </div>
             </div>
 
             {/* ── Dedicated Demand Signals Section (WTB Buyer Demand) ── */}
-            <DemandSignalsSection data={data} onOpenListing={openListing} />
+            <section aria-label="Liquidity and demand summary" className="grid grid-cols-1 gap-4 lg:grid-cols-2 mb-8">
+              <div style={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: 18 }}>
+                <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>Featured listings for sale</div>
+                <div style={{ color: NAVY, fontSize: 26, fontWeight: 800, marginTop: 5 }}>{qualifiedWtsCount.toLocaleString()}</div>
+                <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>Qualified priced WTS offers used in the market analysis.</div>
+              </div>
+              <div data-testid="wtb-demand-summary" style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 18 }}>
+                <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>WTB / WTS ratio</div>
+                <div style={{ color: BLUE, fontSize: 26, fontWeight: 800, marginTop: 5 }}>
+                  {displayedWtbWtsRatio == null ? 'Not available' : displayedWtbWtsRatio.toFixed(2)}
+                </div>
+                <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>
+                  {wtbDemandCount.toLocaleString()} buyer signals versus {qualifiedWtsCount.toLocaleString()} qualified sale offers.
+                </div>
+              </div>
+            </section>
 
-            {/* Dial cohorts that satisfy catalog and minimum-sample policy. */}
-            {data.dial_analysis && data.dial_analysis.length > 0 && (
+            {/* Dial cohorts that satisfy identity review and minimum-sample policy. */}
+            {displayDialAnalysis.length > 0 && (
               <div style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
                 <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY, marginBottom: 4 }}>Dial Color Analysis</h3>
                 <div style={{ fontSize: 12, color: MUTED, marginBottom: 16 }}>
-                  Catalog-valid dial cohorts with at least two comparable observations for {displayRef}.
+                  Source- and review-supported dial cohorts with at least two comparable observations for {displayRef}.
                 </div>
                 <div role="img" aria-label={`Average comparable price by dial color for ${displayRef}`} style={{ height: 210, marginBottom: 18 }}>
                   <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={data.dial_analysis} margin={{ top: 8, right: 12, bottom: 12, left: 4 }}>
+                    <ComposedChart data={displayDialAnalysis} margin={{ top: 8, right: 12, bottom: 12, left: 4 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
-                      <XAxis dataKey="dial_color" stroke={MUTED} fontSize={11} interval={0} angle={data.dial_analysis.length > 5 ? -25 : 0} textAnchor={data.dial_analysis.length > 5 ? 'end' : 'middle'} height={data.dial_analysis.length > 5 ? 58 : 32} />
+                      <XAxis dataKey="dial_color" stroke={MUTED} fontSize={11} interval={0} angle={displayDialAnalysis.length > 5 ? -25 : 0} textAnchor={displayDialAnalysis.length > 5 ? 'end' : 'middle'} height={displayDialAnalysis.length > 5 ? 58 : 32} />
                       <YAxis stroke={MUTED} fontSize={11} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} />
                       <Tooltip
                         contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8 }}
                         formatter={(value: number, name: string) => [name === 'avg_price' ? `$${value.toLocaleString()}` : value.toLocaleString(), name === 'avg_price' ? 'Average price' : 'Listings']}
                       />
                       <Bar dataKey="avg_price" name="Average price" radius={[4, 4, 0, 0]}>
-                        {data.dial_analysis.map(dial => (
+                        {displayDialAnalysis.map(dial => (
                           <Cell
                             key={dial.dial_color}
                             fill={dialChartColor(dial.dial_color)}
@@ -1291,7 +1694,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                       </tr>
                     </thead>
                     <tbody>
-                      {data.dial_analysis.map((d, i) => (
+                      {displayDialAnalysis.map((d, i) => (
                         <tr key={i} style={{ borderBottom: `1px solid ${BORDER}` }}>
                           <td style={{ padding: '10px 12px', color: TEXT, fontWeight: 500 }}>
                             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
@@ -1309,6 +1712,30 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   </table>
                 </div>
               </div>
+            )}
+
+            {data.dial_trends && data.dial_trends.length > 0 && dialTrendChartData.length > 0 && (
+              <section data-testid="dial-price-outlook" style={{ backgroundColor: LIGHT_GRAY, borderRadius: 12, padding: 24, marginBottom: 24 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Dial Price History &amp; 3-Month Outlook</h3>
+                <p style={{ fontSize: 12, color: MUTED, marginTop: 4, marginBottom: 14 }}>
+                  Monthly average qualified WTS price by dial for {displayRef}. Solid points are observed; dotted points are estimates. When dated history is insufficient for a validated trend, the outlook holds the current cohort median flat and is labeled indicative.
+                </p>
+                <div role="img" aria-label={`Monthly average price and three-month dial outlook for ${displayRef}`} style={{ height: 300 }}>
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ComposedChart data={dialTrendChartData} margin={{ top: 10, right: 18, bottom: 8, left: 4 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                      <XAxis dataKey="month" stroke={MUTED} fontSize={11} />
+                      <YAxis stroke={MUTED} fontSize={11} tickFormatter={value => `$${Math.round(Number(value) / 1000)}k`} />
+                      <Tooltip contentStyle={{ backgroundColor: WHITE, border: `1px solid ${BORDER}`, borderRadius: 8 }} formatter={(value: number, name: string) => [`$${Math.round(Number(value)).toLocaleString()}`, name.startsWith('forecast:') ? `${name.slice(9)} dial outlook` : `${name.slice(8)} dial observed average`]} />
+                      {data.dial_trends.map(trend => <Line key={`history-${trend.dial_color}`} type="monotone" dataKey={`history:${trend.dial_color}`} name={`history:${trend.dial_color}`} stroke={dialChartColor(trend.dial_color)} strokeWidth={3} dot={{ r: 4, fill: dialChartColor(trend.dial_color), stroke: WHITE, strokeWidth: 2 }} connectNulls />)}
+                      {data.dial_trends.filter(trend => trend.forecast.ready).map(trend => <Line key={`forecast-${trend.dial_color}`} type="monotone" dataKey={`forecast:${trend.dial_color}`} name={`forecast:${trend.dial_color}`} stroke={dialChartColor(trend.dial_color)} strokeWidth={2} strokeDasharray="3 6" dot={{ r: 5, fill: WHITE, stroke: dialChartColor(trend.dial_color), strokeWidth: 2 }} connectNulls />)}
+                    </ComposedChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs" style={{ color: MUTED }}>
+                  {data.dial_trends.map(trend => <span key={`legend-${trend.dial_color}`} className="inline-flex items-center gap-2"><span aria-hidden="true" style={{ width: 18, borderTop: `3px solid ${dialChartColor(trend.dial_color)}` }} />{trend.dial_color} · {trend.count.toLocaleString()} offers{trend.forecast.provisional && ' · indicative baseline'}</span>)}
+                </div>
+              </section>
             )}
 
             {/* ── Price Chart ───────────────────────────────── */}
@@ -1362,9 +1789,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     Based on {data.count} comparable WTS listings | standard 3.0 x IQR fences applied.
                     {!datedHistory && ' Original posting dates are unavailable for a reliable time series, so this is a current range only.'}
                   </div>
-                  {data.forecast?.ready ? (
+                  {data.forecast?.ready && !data.forecast.provisional ? (
                     <div className="mt-4 border-l-2 border-[#c9a03a] bg-[#c9a03a]/10 px-4 py-3 text-xs leading-6" style={{ color: NAVY }}>
                       Three-month projection passed {data.forecast.backtest?.points || 0} rolling backtests. Model MAE ${data.forecast.backtest?.model_mae.toLocaleString()} versus naive MAE ${data.forecast.backtest?.naive_mae.toLocaleString()}. Dashed values are estimates, not offers or guarantees.
+                    </div>
+                  ) : data.forecast?.ready && data.forecast.provisional ? (
+                    <div className="mt-4 border-l-2 border-[#c9a03a] bg-[#c9a03a]/10 px-4 py-3 text-xs leading-6" style={{ color: NAVY }}>
+                      Indicative three-month baseline: dated history is not yet sufficient to validate a directional trend, so the dotted points hold the current outlier-clean cohort median flat. This is an evidence-based benchmark, not a prediction of appreciation or decline.
                     </div>
                   ) : (
                     <div className="mt-4 border-l-2 border-[#adb5bd] bg-white px-4 py-3 text-xs leading-6" style={{ color: MUTED }}>
@@ -1393,11 +1824,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    The release starts with canonical-identity-reviewed records that are APPROVED at confidence 90 or higher. Confidence is a parser score, not a probability. Explicit source currency, verified FX provenance when conversion is required, catalog model and dial, bundle, and duplicate checks run before a cohort with two or more observations uses the market plausibility floor and standard 3.0 x IQR method.
+                    Every included observation has a positive source-backed price, source-stated currency, usable model/reference and dial evidence, and passes bundle, duplicate, repost, plausibility, and outlier checks. WTB demand is calculated separately. The qualified WTS cohort then uses the market plausibility floor and the 3.0 x IQR formula.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
                       ['Selected cohort with usable price', data.rawCount],
+                      ['Priced WTS before plausibility', data.methodology.priced_wts_before_plausibility_count ?? data.rawCount],
+                      ['Priced WTS after plausibility', data.methodology.priced_wts_after_plausibility_count ?? data.rawCount],
                       ['Passed WTS/catalog gate', data.eligible_observation_count ?? 0],
                       ['Included', data.methodology.included_count],
                       ['Total exclusions', data.methodology.excluded_count],
@@ -1424,11 +1857,14 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <AlertTriangle size={17} /> {data.outliersRemoved} statistical price outlier{data.outliersRemoved === 1 ? '' : 's'}
                   </div>
                   <div style={{ fontSize: 12, color: MUTED, marginTop: 8 }}>
-                    Exclusions remain preserved for authorized audit and human review. They are not deleted from the database.
+                    Exclusions remain preserved for authorized audit and analysis. They are not deleted from the database.
+                  </div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
+                    Formula: {data.methodology.formula || 'Q1 - 3.0 * IQR <= price <= Q3 + 3.0 * IQR'}
                   </div>
                   {data.evidence?.truncated && (
                     <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
-                      Showing the newest {data.evidence.outliers_returned.toLocaleString()} excluded observations for responsive review. This evidence includes required-field failures, reposts, plausibility failures, and IQR outliers. Aggregate statistics use all {data.evidence.outliers_total.toLocaleString()} exclusions in the sampled cohort.
+                      Excluded evidence is paginated with the WTS listings below. It includes required-field failures, reposts, plausibility failures, and IQR outliers. Aggregate statistics use all {data.evidence.outliers_total.toLocaleString()} exclusions in the loaded cohort.
                     </div>
                   )}
                 </div>
@@ -1442,7 +1878,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   <div>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Insufficient qualified market evidence</h3>
                     <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginTop: 5 }}>
-                      Price statistics and charts require at least two approved WTS observations with a catalog-confirmed model, valid dial color, and usable price in the same comparable cohort.
+                      Price statistics and charts require at least two qualified WTS observations with usable model/reference and dial evidence, a positive source-backed price, and source-stated currency in the same comparable cohort. WTB requests remain visible as separate demand signals.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
                       {data.sampledListings.toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · {data.count.toLocaleString()} qualified comparable{data.count === 1 ? '' : 's'}
@@ -1454,11 +1890,16 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
             <div style={{ backgroundColor: WHITE, borderRadius: 12, border: `1px solid ${BORDER}`, overflow: 'hidden', marginBottom: 32 }}>
               <div style={{ padding: '16px 24px', borderBottom: `1px solid ${BORDER}`, fontWeight: 600, fontSize: 15, color: NAVY }}>
-                Qualified comparable listings ({listings.length} shown of {data.count.toLocaleString()} included)
+                WTS listings for sale · page {saleEvidencePage.toLocaleString()} of {saleEvidencePages.toLocaleString()}
               </div>
               {listings.length === 0 && (
                 <div style={{ padding: '32px 24px', textAlign: 'center', color: MUTED, fontSize: 14 }}>
-                  No qualified comparable listings are available for this cohort.
+                  No source listings are available for this reference yet.
+                </div>
+              )}
+              {listings.length > 0 && (
+                <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
+                  Priced WTS evidence is accessible page by page, with exact source images when present. Qualified observations power the chart and statistics; priced exclusions remain visible with their reason and never alter the averages. Unpriced WTS stays on the Trading Floor, and WTB requests follow in their own section.
                 </div>
               )}
               {listings.map(row => (
@@ -1466,15 +1907,41 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   key={row.id}
                   row={row}
                   title={`${data?.brand || ''} ${displayRef}`.trim()}
+                  exclusionLabel={outlierReason(row.outlier_reason)}
                   onOpen={() => void openListing(row)}
                 />
               ))}
-              {data.count > COMPARABLE_LISTING_PREVIEW_LIMIT && (
-                <div style={{ padding: '12px 24px', borderTop: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
-                  Showing a compact source-evidence sample for speed. Outliers and other exclusions are summarized above and are not displayed as watch listings.
+              {saleEvidencePages > 1 && (
+                <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${BORDER}` }}>
+                  <button
+                    type="button"
+                    disabled={loading || saleEvidencePage <= 1}
+                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage - 1, demandEvidencePage)}
+                    className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    <ChevronLeft size={15} /> Previous WTS
+                  </button>
+                  <div style={{ color: MUTED, fontSize: 12 }}>
+                    Page {saleEvidencePage.toLocaleString()} of {saleEvidencePages.toLocaleString()} · up to {(data.evidence?.comparable_page_size || 100).toLocaleString()} rows in each evidence category per page
+                  </div>
+                  <button
+                    type="button"
+                    disabled={loading || saleEvidencePage >= saleEvidencePages}
+                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage + 1, demandEvidencePage)}
+                    className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    Next WTS <ChevronLeft size={15} style={{ transform: 'rotate(180deg)' }} />
+                  </button>
                 </div>
               )}
             </div>
+
+            <DemandSignalsSection
+              data={data}
+              page={demandEvidencePage}
+              onPageChange={nextPage => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage, nextPage)}
+              onOpenListing={row => void openListing(row)}
+            />
           </>
         )}
 
@@ -1675,7 +2142,8 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
   const title = [brand, record.model, reference].filter((value, index, values) => value && values.indexOf(value) === index).join(' ');
   const imageUrl = record.display_image_url || record.thumbnail_url || record.image_url || record.image_urls?.find(Boolean) || '';
   const poster = sellerSummary?.seller?.name || record.posted_by || record.seller_name || '';
-  const phone = sellerSummary?.seller?.phone || record.phone_number || record.seller_phone || '';
+  const phone = sellerSummary?.seller?.phone
+    || (record.contact_publication_approved === true ? (record.phone_number || record.seller_phone || '') : '');
   const price = reviewedPriceLabel(record);
   const sellerAnalytics = sellerSummary?.analytics;
   const sellerMetrics: Array<[string, number]> = [
@@ -1714,14 +2182,8 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
 
   return (
     <article style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 18, background: WHITE, minWidth: 0 }}>
-      {/* ponytail: multi-listing children show a badge, not the parent's multi-watch image */}
-      {record.multi_listing ? (
-        <div style={{ height: 270, background: '#f1f3f5', borderRadius: 8, marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase', color: '#C9A96E' }}>Multi-Listing</span>
-        </div>
-      ) : (
-        <ReviewedEvidenceImage src={imageUrl} alt={`${title} original listing image`} />
-      )}
+      {/* Multi-listing media is never reused. Missing media leaves no empty frame. */}
+      {!record.multi_listing && <ReviewedEvidenceImage src={imageUrl} alt={`${title} original listing image`} />}
       <div style={{ color: GOLD, fontSize: 10, fontWeight: 800, letterSpacing: '.08em', textTransform: 'uppercase' }}>
         {record.listing_type || 'Listing'}{record.condition ? ` · ${record.condition}` : ''}
       </div>
@@ -1733,10 +2195,18 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
       </div>
       <ReviewedPriceContext record={record} analytics={analytics} />
 
-      {(poster || phone || record.listing_date || record.posting_date) && (
+      {(poster || phone || record.listing_date || record.posting_date || record.dealer_profile_path) && (
         <div style={{ marginTop: 14, padding: 12, background: LIGHT_GRAY, borderRadius: 7, fontSize: 12, color: TEXT }}>
-          {poster && <div><strong>Posted by:</strong> {poster}</div>}
-          {phone && <div style={{ marginTop: 3 }}><strong>Contact:</strong> {phone}</div>}
+          <ListingDealerEvidence
+            sellerName={poster || null}
+            sellerPhone={phone || null}
+            contactPublicationApproved={record.contact_publication_approved === true}
+            rating={record.seller_rating}
+            reviewCount={record.seller_review_count}
+            ratingEvidenceStatus={record.seller_rating_evidence_status}
+            groupCount={record.seller_group_count}
+            profilePath={record.dealer_profile_path}
+          />
           {(record.listing_date || record.posting_date) && <div style={{ marginTop: 3, color: MUTED }}>{String(record.listing_date || record.posting_date).split('T')[0]}</div>}
           <button type="button" onClick={() => void toggleSeller()} style={{ marginTop: 10, border: `1px solid ${BORDER}`, background: WHITE, color: NAVY, borderRadius: 6, minHeight: 38, padding: '7px 10px', fontSize: 11, fontWeight: 800 }}>
             {sellerOpen ? 'Hide seller activity' : 'View seller activity'}
@@ -1774,9 +2244,17 @@ function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRec
   );
 }
 
-function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpen: () => void }) {
+function ListingRow({ row, title, exclusionLabel, onOpen }: {
+  row: RowData;
+  title: string;
+  exclusionLabel: string;
+  onOpen: () => void;
+}) {
+  const [imageFailed, setImageFailed] = useState(false);
   const date = row.listing_date || row.created_at;
-  const imageUrl = row.thumbnail_url || row.display_image_url || row.image_url || row.image_urls?.find(Boolean) || '';
+  const imageCandidate = row.thumbnail_url || row.display_image_url || row.image_url || row.image_urls?.find(Boolean) || '';
+  const imageUrl = row.has_images === false ? '' : imageCandidate;
+  const showImage = Boolean(imageUrl) && !imageFailed;
   const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
   const hasUsdPrice = Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0;
   const hasSourcePrice = Boolean(
@@ -1790,16 +2268,35 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
     : hasSourcePrice
       ? `${row.source_currency} ${Number(row.source_price_amount).toLocaleString()}`
       : 'Price not available';
+  const excludedFromAverages = row.is_outlier === true || !hasUsdPrice;
+  const sellerName = row.seller_name || row.posted_by || row['Posted By'] || '';
+  const sellerPhone = row.contact_publication_approved === true
+    ? (row.seller_phone || row.phone_number || row['Phone Number'] || '')
+    : '';
+  const evidenceStatus = excludedFromAverages
+    ? `Excluded from averages · ${exclusionLabel}`
+    : 'Included in qualified comparable average';
   return (
-    <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}`}
-      className="min-h-24"
-      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
+    <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}, ${evidenceStatus}`}
+      className={showImage ? '!grid min-h-20 grid-cols-[60px_minmax(0,1fr)] sm:!flex' : '!grid min-h-20 grid-cols-1 sm:!flex'}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
-      <ComparableThumbnail src={imageUrl} alt={`${title} listing image`} />
+      {showImage && (
+        <div style={{ width: 60, height: 60, flex: '0 0 60px', borderRadius: 8, overflow: 'hidden' }}>
+          <img
+            src={imageUrl}
+            alt={`${title} listing image`}
+            loading="lazy"
+            onError={() => setImageFailed(true)}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+          />
+        </div>
+      )}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="flex items-center gap-2">
           <div style={{ fontSize: 13, color: TEXT, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{title}</div>
+          <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#eef2ff', color: '#3730a3', whiteSpace: 'nowrap', fontWeight: 800 }}>WTS</span>
           {row.source === 'MYSQL_RAW' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#f1f5f9', color: '#475569', whiteSpace: 'nowrap' }}>🗄️ Auction DB</span>}
           {row.source === 'REVIEWED_WORKBOOK' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#fef3c7', color: '#92400e', whiteSpace: 'nowrap' }}>📋 Workbook</span>}
           {row.source === 'REVIEWED_WORKBOOK_INVENTORY' && <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: '#e0e7ff', color: '#3730a3', whiteSpace: 'nowrap' }}>💬 Direct Listing</span>}
@@ -1809,29 +2306,50 @@ function ListingRow({ row, title, onOpen }: { row: RowData; title: string; onOpe
           <span className="mr-2">· {row.condition || 'Unspecified'}</span>
           {date && <span>· {date.split('T')[0]}</span>}
         </div>
+        <div className="mt-1 flex items-center justify-between gap-2 sm:hidden">
+          <span style={{ fontSize: 13, fontWeight: 700, color: excludedFromAverages ? '#8a6500' : GOLD }}>{priceLabel}</span>
+          <span style={{ color: MUTED, fontSize: 9 }}>{excludedFromAverages ? 'Not used in analytics' : 'Used in analytics'}</span>
+        </div>
+        <div
+          style={{
+            display: 'inline-flex', marginTop: 7, borderRadius: 999, padding: '4px 8px',
+            background: excludedFromAverages ? '#fff4d6' : '#eaf7ef',
+            color: excludedFromAverages ? '#7a5900' : '#166534',
+            fontSize: 10, fontWeight: 800,
+          }}
+        >
+          {evidenceStatus}
+        </div>
         {rawMessage && (
-          <div className="line-clamp-2" style={{ color: MUTED, fontSize: 11, lineHeight: 1.45, marginTop: 7, whiteSpace: 'pre-wrap' }}>
+          <div className="line-clamp-1 sm:line-clamp-2" style={{ color: MUTED, fontSize: 11, lineHeight: 1.45, marginTop: 7, whiteSpace: 'pre-wrap' }}>
             {rawMessage}
           </div>
         )}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1" style={{ color: MUTED, fontSize: 11, marginTop: 7 }}>
+          {(sellerName || sellerPhone) && (
+            <>
+            {sellerName && <span>Posted by: <strong style={{ color: TEXT }}>{sellerName}</strong></span>}
+            {sellerPhone && <span>Contact: <strong style={{ color: NAVY }}>{sellerPhone}</strong></span>}
+            </>
+          )}
+          <DealerRatingBadge
+            rating={row.seller_rating}
+            reviewCount={row.seller_review_count}
+            ratingEvidenceStatus={row.seller_rating_evidence_status}
+          />
+          <span style={{ fontSize: 10 }}>
+            {row.dealer_profile_path ? 'Reference Check linked' : 'Reference Check unlinked'}
+          </span>
+        </div>
       </div>
-      <div style={{ textAlign: 'right', flexShrink: 0 }}>
-        <div style={{ fontSize: 14, fontWeight: 600, color: hasUsdPrice ? GOLD : '#8a6500' }}>{priceLabel}</div>
-        {!hasUsdPrice && <div style={{ color: MUTED, fontSize: 10, marginTop: 2 }}>Excluded from averages</div>}
+      <div className="hidden sm:block" style={{ textAlign: 'right', flexShrink: 0 }}>
+        <div style={{ fontSize: 14, fontWeight: 600, color: excludedFromAverages ? '#8a6500' : GOLD }}>{priceLabel}</div>
+        <div style={{ color: MUTED, fontSize: 10, marginTop: 2 }}>
+          {excludedFromAverages ? 'Not used in chart or statistics' : 'Used in chart and statistics'}
+        </div>
       </div>
-      <Eye className="w-3.5 h-3.5" style={{ color: MUTED, flexShrink: 0 }} />
+      <Eye className="hidden h-3.5 w-3.5 sm:block" style={{ color: MUTED, flexShrink: 0 }} />
     </button>
-  );
-}
-
-function ComparableThumbnail({ src, alt }: { src: string; alt: string }) {
-  const [failed, setFailed] = useState(false);
-  return (
-    <div aria-hidden={!src || failed} style={{ width: 76, height: 76, flex: '0 0 76px', borderRadius: 8, overflow: 'hidden', display: 'grid', placeItems: 'center', background: '#f1f3f5', color: MUTED, fontSize: 10 }}>
-      {src && !failed
-        ? <img src={src} alt={alt} loading="lazy" onError={() => setFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-        : <span>No image</span>}
-    </div>
   );
 }
 
@@ -1852,7 +2370,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
   const [activeImage, setActiveImage] = useState(0);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const [copied, setCopied] = useState(false);
-  const sourceImageEvidence = ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
+  const sourceImageEvidence = ['SELLER_LISTING_IMAGE', 'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
     .includes(String(detail?.image_evidence_type || ''));
   const detailImages = sourceImageEvidence ? (detail?.image_urls || []) : [];
   const summaryImages = [summary.thumbnail_url, summary.display_image_url, summary.image_url, ...(summary.image_urls || [])];
@@ -1866,6 +2384,14 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
     .map(value => String(value || '').trim())
     .filter(value => value && !/^unknown$/i.test(value))
     .join(', ');
+  const summaryPosterName = summary.seller_name || summary.posted_by || summary['Posted By'] || '';
+  const dealerEvidenceReviewCount = summary.seller_review_count ?? seller?.dealer_review_count ?? null;
+  const dealerEvidenceRating = summary.seller_rating ?? seller?.dealer_rating ?? null;
+  const dealerEvidenceStatus = summary.seller_rating_evidence_status
+    || (Number(dealerEvidenceRating) > 0 && Number(dealerEvidenceReviewCount) > 0
+      ? 'SOURCE_SUPPLIED'
+      : Number(dealerEvidenceReviewCount) > 0 ? 'SOURCE_FEEDBACK_COUNT' : 'UNAVAILABLE');
+  const dealerEvidenceProfile = summary.dealer_profile_path || seller?.dealer_profile_url || null;
   // The summary price is the exact value used by the comparable-set and
   // outlier calculations. A legacy detail row may still contain an older
   // currency conversion, so it must never replace the analytics value here.
@@ -1935,17 +2461,12 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
         {!loading && error && <div style={{ margin: 28, padding: 20, border: '1px solid #ead9a2', background: '#fffaf0', color: '#7a5900' }}><strong>Some source details are unavailable.</strong> The verified comparable summary is shown below.</div>}
 
         {!loading && !detail && error && (
-          <div className="grid md:grid-cols-[minmax(220px,0.65fr)_minmax(0,1.35fr)]" style={{ padding: 28, gap: 24 }}>
-            <section style={{ minHeight: 300, borderRadius: 10, background: LIGHT_GRAY, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
-              {images.length > 0 ? (
+          <div className={images.length > 0 ? 'grid md:grid-cols-[minmax(220px,0.65fr)_minmax(0,1.35fr)]' : ''} style={{ padding: 28, gap: 24 }}>
+            {images.length > 0 && (
+              <section style={{ minHeight: 300, borderRadius: 10, background: LIGHT_GRAY, display: 'grid', placeItems: 'center', overflow: 'hidden' }}>
                 <img src={images[0]} alt={`${title} source listing image`} onError={() => setFailedImages(current => new Set(current).add(images[0]))} style={{ width: '100%', height: '100%', maxHeight: 460, objectFit: 'contain', background: WHITE }} />
-              ) : (
-                <div style={{ padding: 24, color: MUTED, fontSize: 13, textAlign: 'center' }}>
-                  <Store size={28} style={{ margin: '0 auto 10px' }} />
-                  Source listing image unavailable
-                </div>
-              )}
-            </section>
+              </section>
+            )}
             <section>
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 28, lineHeight: 1.15 }}>{title}</h1>
               <div style={{ color: GOLD, fontSize: 22, fontWeight: 800, marginTop: 10 }}>
@@ -1964,16 +2485,17 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                 </DetailCard>
 
                 <DetailCard title="Posted by">
-                  <div style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{seller?.dealer_name || summary.seller_name || summary.posted_by || 'Poster not supplied'}</div>
-                  {(seller?.phone_display || summary.seller_phone || summary.phone_number) && <div style={{ color: NAVY, fontSize: 13, fontWeight: 700, marginTop: 8 }}>{seller?.phone_display || summary.seller_phone || summary.phone_number}</div>}
+                  <ListingDealerEvidence
+                    sellerName={seller?.dealer_name || summary.seller_name || summary.posted_by || null}
+                    sellerPhone={null}
+                    contactPublicationApproved={false}
+                    rating={dealerEvidenceRating}
+                    reviewCount={dealerEvidenceReviewCount}
+                    ratingEvidenceStatus={dealerEvidenceStatus}
+                    groupCount={summary.seller_group_count ?? seller?.dealer_group_count ?? null}
+                    profilePath={dealerEvidenceProfile}
+                  />
                   {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
-                  {(seller?.dealer_rating != null || seller?.dealer_review_count != null || seller?.dealer_group_count != null) && (
-                    <div className="grid grid-cols-3 gap-3" style={{ marginTop: 16 }}>
-                      <Metric label="Rating" value={seller?.dealer_rating == null ? '—' : seller.dealer_rating.toFixed(1)} />
-                      <Metric label="Reviews" value={Number(seller?.dealer_review_count || 0).toLocaleString()} />
-                      <Metric label="Groups" value={Number(seller?.dealer_group_count || 0).toLocaleString()} />
-                    </div>
-                  )}
                 </DetailCard>
               </div>
             </section>
@@ -2076,20 +2598,20 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
               )}
 
               <DetailCard title="Posted by">
-                {seller?.dealer_name || seller?.phone_display || summary.posted_by || summary.phone_number || summary['Posted By'] || summary['Phone Number'] ? (
+                {seller?.dealer_name || summaryPosterName || dealerEvidenceProfile ? (
                   <>
-                    {(seller?.dealer_name || summary.posted_by || summary['Posted By']) && (
-                      <div style={{ color: NAVY, fontSize: 17, fontWeight: 800 }}>
-                        {seller?.dealer_name || summary.posted_by || summary['Posted By']}
-                      </div>
-                    )}
+                    <ListingDealerEvidence
+                      sellerName={seller?.dealer_name || summaryPosterName || null}
+                      sellerPhone={null}
+                      contactPublicationApproved={false}
+                      rating={dealerEvidenceRating}
+                      reviewCount={dealerEvidenceReviewCount}
+                      ratingEvidenceStatus={dealerEvidenceStatus}
+                      groupCount={summary.seller_group_count ?? seller?.dealer_group_count ?? null}
+                      profilePath={dealerEvidenceProfile}
+                    />
                     {seller?.dealer_company && <div style={{ color: MUTED, fontSize: 13, marginTop: 3 }}>{seller.dealer_company}</div>}
                     {sellerLocation && <div style={{ color: MUTED, fontSize: 12, marginTop: 8 }}>{sellerLocation}</div>}
-                    {(seller?.phone_display || summary.phone_number || summary['Phone Number']) && (
-                      <div style={{ color: NAVY, fontSize: 13, fontWeight: 800, marginTop: 8 }}>
-                        {seller?.phone_display || summary.phone_number || summary['Phone Number']}
-                      </div>
-                    )}
                     {seller?.dealer_stats ? (
                       <>
                         <div className="grid grid-cols-2 gap-3" style={{ marginTop: 16 }} aria-label="Source poster activity">
@@ -2104,21 +2626,10 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                         )}
                       </>
                     ) : null}
-                    {(seller?.dealer_rating != null || seller?.dealer_review_count != null || seller?.dealer_group_count != null) && (
-                      <div className="grid grid-cols-3 gap-3" style={{ marginTop: 16 }} aria-label="Verified seller reputation">
-                        <Metric label="Rating" value={seller.dealer_rating == null ? '—' : seller.dealer_rating.toFixed(1)} />
-                        <Metric label="Reviews" value={Number(seller.dealer_review_count || 0).toLocaleString()} />
-                        <Metric label="Groups" value={Number(seller.dealer_group_count || 0).toLocaleString()} />
-                      </div>
-                    )}
                     <div className="flex flex-wrap gap-3" style={{ marginTop: 18 }}>
                       {seller?.dealer_profile_url && <Link to={seller.dealer_profile_url} style={{ color: NAVY, border: `1px solid ${BORDER}`, padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>View profile</Link>}
                       {(() => {
-                        const waUrl = seller?.whatsapp_url || (() => {
-                          const rawPhone = seller?.phone_display || summary.phone_number || summary['Phone Number'];
-                          const digits = String(rawPhone || '').replace(/\D/g, '');
-                          return digits.length >= 7 ? `https://wa.me/${digits}` : null;
-                        })();
+                        const waUrl = seller?.contact_channels?.whatsapp;
                         return waUrl ? (
                           <a href={waUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2" style={{ color: '#07140b', background: '#25D366', padding: '9px 13px', borderRadius: 6, fontSize: 12, fontWeight: 800 }}>
                             <MessageCircle size={15} /> Contact on WhatsApp
@@ -2150,19 +2661,6 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                 )}
               </DetailCard>
 
-              <DetailCard title="Watch details">
-                <div className="grid sm:grid-cols-2 gap-x-8 gap-y-4">
-                  {observedDate && <DetailField label="Observed" value={observedDate} />}
-                  <DetailField label="Asking price as posted" value={detail?.price_raw != null && detail?.currency ? `${detail.price_raw} ${detail.currency}` : null} />
-                  <DetailField label="Condition" value={detail?.condition} />
-                  <DetailField label="Model" value={detail?.model || null} />
-                  <DetailField label="Dial" value={detail?.dial_color || summary.dial_color} />
-                  <DetailField label="Year" value={detail?.year || summary.year} />
-                  {detail?.region && !/^unknown$/i.test(detail.region) && <DetailField label="Region" value={detail.region} />}
-                </div>
-                {detail?.accessories && detail.accessories.length > 0 && <div style={{ marginTop: 20 }}><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Accessories stated in source</div><div className="flex flex-wrap gap-2">{detail.accessories.map(item => <span key={item} style={{ background: LIGHT_GRAY, border: `1px solid ${BORDER}`, padding: '5px 9px', borderRadius: 5, fontSize: 12 }}>{item}</span>)}</div></div>}
-              </DetailCard>
-
             </section>
           </div>
         )}
@@ -2179,11 +2677,6 @@ function DetailCard({ title, action, children }: { title: string; action?: React
   return <div style={{ border: `1px solid ${BORDER}`, borderRadius: 10, padding: 20, marginBottom: 20 }}><div className="flex items-center justify-between gap-3" style={{ marginBottom: 18 }}><h2 style={{ color: NAVY, fontSize: 16, fontWeight: 800 }}>{title}</h2>{action}</div>{children}</div>;
 }
 
-function DetailField({ label, value }: { label: string; value: string | number | null | undefined }) {
-  const missing = value == null || value === '';
-  return <div><div style={{ fontSize: 11, color: MUTED, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 3 }}>{label}</div><div style={{ color: missing ? MUTED : TEXT, fontSize: 13, overflowWrap: 'anywhere' }}>{missing ? 'Not provided' : value}</div></div>;
-}
-
 function forecastReason(reason?: string) {
   const messages: Record<string, string> = {
     MINIMUM_OFFERS_NOT_MET: 'fewer than 30 clean comparable offers are available',
@@ -2198,11 +2691,19 @@ function forecastReason(reason?: string) {
   return messages[reason || ''] || 'the forecast release gate was not satisfied';
 }
 
-function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpenListing: (row: RowData) => void }) {
+function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
+  data: PriceData;
+  page: number;
+  onPageChange: (page: number) => void;
+  onOpenListing: (row: RowData) => void;
+}) {
   const displayRef = data.resolvedRef || data.reference || '';
   const demandCount = data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? data.liquidity?.demand_count ?? 0;
+  const qualifiedWtsCount = data.reconciliation?.wts_eligible_analytics_count ?? data.wts_eligible_analytics_count ?? data.count ?? 0;
+  const demandSupplyRatio = data.liquidity?.wtb_fs_ratio ?? (qualifiedWtsCount > 0 ? demandCount / qualifiedWtsCount : null);
   const demandCohorts = data.liquidity?.demand_cohorts || [];
   const demandRows = data.demand_rows || data.liquidity?.demand_rows || [];
+  const demandPages = Math.max(1, data.demand_evidence?.pages || 1);
 
   return (
     <div style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 24, marginBottom: 24 }}>
@@ -2228,10 +2729,10 @@ function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpen
               {demandCount.toLocaleString()} <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>buyers</span>
             </div>
           </div>
-          {data.liquidity?.wtb_fs_ratio != null && (
+          {demandSupplyRatio != null && (
             <div style={{ borderLeft: `1px solid ${BORDER}`, paddingLeft: 16 }}>
               <div style={{ fontSize: 11, color: MUTED, fontWeight: 500 }}>WTB / WTS Ratio</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{Number(data.liquidity.wtb_fs_ratio).toFixed(2)}</div>
+              <div style={{ fontSize: 20, fontWeight: 800, color: NAVY }}>{demandSupplyRatio.toFixed(2)}</div>
             </div>
           )}
         </div>
@@ -2260,10 +2761,10 @@ function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpen
         <div>
           <div className="flex items-center justify-between mb-3">
             <h4 style={{ fontSize: 14, fontWeight: 700, color: NAVY, margin: 0 }}>
-              WTB Demand Listings ({demandRows.length})
+              WTB demand listings · page {page.toLocaleString()} of {demandPages.toLocaleString()}
             </h4>
             <span style={{ fontSize: 11, color: MUTED }}>
-              Seller/Buyer contacts, WhatsApp links, unredacted raw source messages, and image flow-through
+              Exact images and consent-approved contact links are shown when source evidence permits.
             </span>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2271,6 +2772,29 @@ function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpen
               <WtbDemandCard key={row.id} row={row} onOpen={() => onOpenListing(mapWtbToRowData(row))} />
             ))}
           </div>
+          {demandPages > 1 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                disabled={page <= 1}
+                onClick={() => onPageChange(page - 1)}
+                className="inline-flex items-center gap-1 rounded-md border bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft size={15} /> Previous WTB
+              </button>
+              <div style={{ color: MUTED, fontSize: 12 }}>
+                {data.demand_evidence?.total.toLocaleString() || demandCount.toLocaleString()} total buyer signals · {demandRows.length.toLocaleString()} shown on this page
+              </div>
+              <button
+                type="button"
+                disabled={page >= demandPages}
+                onClick={() => onPageChange(page + 1)}
+                className="inline-flex items-center gap-1 rounded-md border bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next WTB <ChevronLeft size={15} style={{ transform: 'rotate(180deg)' }} />
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div style={{ backgroundColor: WHITE, borderRadius: 8, border: `1px dashed #bfdbfe`, padding: 20, textAlign: 'center', fontSize: 12, color: MUTED }}>
@@ -2282,12 +2806,17 @@ function DemandSignalsSection({ data, onOpenListing }: { data: PriceData; onOpen
 }
 
 function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => void }) {
+  const [imageFailed, setImageFailed] = useState(false);
   const brandRef = [row.brand, row.reference].filter(Boolean).join(' ');
   const title = row.model ? `${brandRef} (${row.model})` : brandRef;
-  const phone = row.seller_phone;
-  const whatsappUrl = row.whatsapp_url || (phone ? `https://wa.me/${phone.replace(/[^0-9]/g, '')}` : null);
+  const phone = row.contact_publication_approved === true ? row.seller_phone : null;
+  const whatsappUrl = row.contact_publication_approved === true
+    ? row.whatsapp_url || (phone ? `https://wa.me/${phone.replace(/[^0-9]/g, '')}` : null)
+    : null;
   const sellerName = row.seller_name || 'Buyer / Dealer';
-  const imgUrl = row.image_url || (row.image_urls && row.image_urls[0]) || null;
+  const imgUrl = row.has_images === false
+    ? null
+    : row.image_url || (row.image_urls && row.image_urls[0]) || null;
   const priceDisplay = row.price_usd && row.price_usd > 0
     ? `$${row.price_usd.toLocaleString()} USD`
     : row.price_raw
@@ -2309,9 +2838,9 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
 
         {/* Content & Image */}
         <div className="flex gap-3 mb-3">
-          {imgUrl && (
+          {imgUrl && !imageFailed && (
             <div style={{ width: 72, height: 72, flexShrink: 0, borderRadius: 6, background: LIGHT_GRAY, overflow: 'hidden', border: `1px solid ${BORDER}` }}>
-              <img src={imgUrl} alt={title} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
+              <img src={imgUrl} alt={title} onError={() => setImageFailed(true)} style={{ width: '100%', height: '100%', objectFit: 'contain', background: WHITE }} />
             </div>
           )}
           <div style={{ minWidth: 0, flex: 1 }}>
@@ -2328,10 +2857,17 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
 
         {/* Seller / Buyer Contact Box */}
         <div style={{ backgroundColor: LIGHT_GRAY, padding: 10, borderRadius: 6, marginBottom: 10, fontSize: 12, border: `1px solid ${BORDER}` }}>
-          <div className="flex items-center justify-between flex-wrap gap-1">
-            <span style={{ color: MUTED }}>Posted by / Contact:</span>
-            <span style={{ fontWeight: 700, color: TEXT }}>{sellerName}</span>
-          </div>
+          <div style={{ color: MUTED, marginBottom: 4 }}>Posted by / Contact:</div>
+          <ListingDealerEvidence
+            sellerName={sellerName}
+            sellerPhone={phone}
+            contactPublicationApproved={row.contact_publication_approved === true}
+            rating={row.seller_rating}
+            reviewCount={row.seller_review_count}
+            ratingEvidenceStatus={row.seller_rating_evidence_status}
+            groupCount={row.seller_group_count}
+            profilePath={row.dealer_profile_path}
+          />
           {phone && (
             <div className="flex items-center justify-between flex-wrap gap-1 mt-1">
               <span style={{ color: MUTED }}>Phone:</span>
@@ -2353,15 +2889,9 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
           )}
         </div>
 
-        {/* Unredacted Raw Source Message */}
         {row.raw_message && (
-          <div style={{ marginTop: 6 }}>
-            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: MUTED, marginBottom: 4 }}>
-              Unredacted Raw Source Message
-            </div>
-            <pre style={{ margin: 0, padding: 10, background: '#111827', color: '#e5e7eb', borderRadius: 6, fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', maxHeight: 130, overflowY: 'auto' }}>
-              {row.raw_message}
-            </pre>
+          <div className="line-clamp-3" style={{ marginTop: 6, color: MUTED, fontSize: 11, lineHeight: 1.5 }}>
+            Source listing details are available in the full listing view. Public contact remains consent-gated.
           </div>
         )}
       </div>
@@ -2395,14 +2925,21 @@ function mapWtbToRowData(row: WtbListingData): RowData {
     source_price_amount: row.price_raw ? Number(row.price_raw) : null,
     source_currency: row.currency || null,
     posted_by: row.seller_name || null,
-    phone_number: row.seller_phone || null,
+    phone_number: row.contact_publication_approved === true ? row.seller_phone || null : null,
     seller_name: row.seller_name || null,
-    seller_phone: row.seller_phone || null,
+    seller_phone: row.contact_publication_approved === true ? row.seller_phone || null : null,
     raw_message: row.raw_message || null,
     image_url: row.image_url || null,
     thumbnail_url: row.image_url || null,
     image_urls: row.image_urls || (row.image_url ? [row.image_url] : []),
     has_images: Boolean(row.has_images || row.image_url),
-    whatsapp_url: row.whatsapp_url || null,
+    whatsapp_url: row.contact_publication_approved === true ? row.whatsapp_url || null : null,
+    contact_publication_approved: row.contact_publication_approved === true,
+    dealer_id: row.dealer_id || null,
+    dealer_profile_path: row.dealer_profile_path || null,
+    seller_rating: row.seller_rating ?? null,
+    seller_review_count: row.seller_review_count ?? null,
+    seller_rating_evidence_status: row.seller_rating_evidence_status || null,
+    seller_group_count: row.seller_group_count ?? null,
   };
 }

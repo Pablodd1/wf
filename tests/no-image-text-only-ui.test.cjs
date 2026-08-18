@@ -19,6 +19,9 @@ test('confirmed image-less Trading Floor listings render as text-only cards and 
   assert.match(detail, /\{images\.length > 0 && \(/);
   assert.match(detail, /images\.length > 0 \? 'lg:grid-cols/);
   assert.doesNotMatch(trading, /linear-gradient\(145deg, #181820, #0E0E14\)/);
+  assert.match(trading, /return listingImageUrl\(listing\) !== null/);
+  assert.doesNotMatch(trading, />Multi-Listing</);
+  assert.doesNotMatch(trading, /if \(listing\.has_images\) return true/);
 });
 
 test('confirmed image-less Price Research details omit the entire media frame', () => {

@@ -12,7 +12,9 @@ function dealerIdentity(rawMessage) {
 
 function structuredDealerIdentity(row) {
   const dealerId = String(row?.dealer_id || '').trim();
-  return dealerId ? compact(dealerId) : '';
+  if (dealerId) return compact(dealerId);
+  const phone = String(row?.seller_phone || row?.phone_number || '').replace(/\D/g, '');
+  return phone.length >= 7 ? phone : '';
 }
 
 function stripUnicodeControls(text) {
@@ -32,7 +34,6 @@ function normalizedMessage(rawMessage) {
 function repostSignature(row) {
   const verifiedDealer = structuredDealerIdentity(row);
   const observedDealer = dealerIdentity(row.raw_message);
-  const message = normalizedMessage(row.raw_message);
   const identity = [
     compact(row.brand),
     compact(row.reference),
@@ -43,7 +44,11 @@ function repostSignature(row) {
 
   if (verifiedDealer) return `VERIFIED_DEALER:${verifiedDealer}|${identity}`;
   if (observedDealer) return `OBSERVED_PHONE:${observedDealer}|${identity}`;
-  if (message) return `MESSAGE:${message}|${identity}`;
+  const message = normalizedMessage(row.raw_message);
+  // When seller identity is unavailable, exact repeated evidence must not gain
+  // statistical weight merely because it was imported more than once. Known
+  // different sellers remain distinct through the identity branches above.
+  if (message) return `UNATTRIBUTED_EXACT_EVIDENCE:${message}|${identity}`;
   return `RECORD:${row.id}`;
 }
 

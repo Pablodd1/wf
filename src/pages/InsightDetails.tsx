@@ -129,7 +129,7 @@ export default function InsightDetails() {
             <Breadcrumb
               dark
               items={[
-                { label: 'Home', to: '/' },
+                { label: 'Trading Floor', to: '/trading' },
                 { label: 'Price Research', to: '/price-research' },
                 { label: `Insight: ${displayRef}` },
               ]}
@@ -374,7 +374,7 @@ function ListingModal({ listing, reference, onClose }: {
 function Footer() {
   return (
     <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 48, paddingTop: 32, paddingBottom: 32, textAlign: 'center', fontSize: 12, color: MUTED }}>
-      © 2026 Watchfacts Inc. All Rights Reserved.
+      © 2026 Curated Luxury. All Rights Reserved.
     </div>
   );
 }

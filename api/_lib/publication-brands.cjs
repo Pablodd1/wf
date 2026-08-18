@@ -6,6 +6,7 @@ const CONTROLLED_FILE_RELEASE_BRANDS = [
   'Bell & Ross',
   'Blancpain',
   'Breguet',
+  'Bulgari',
   'Breitling',
   'Bvlgari',
   'Cartier',

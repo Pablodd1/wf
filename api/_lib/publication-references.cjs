@@ -3,9 +3,17 @@
 const THREE_WATCH_RELEASE_REFERENCES = [
   'Rolex::116610LN',
   'Rolex::116500LN',
+  'Rolex::126500LN',
   'Rolex::52506',
   'Patek Philippe::5712/1A',
   'Patek Philippe::5712/1A-001',
+  'Patek Philippe::5712',
+  'Patek Philippe::5712G',
+  'Patek Philippe::5712G-001',
+  'Patek Philippe::5712R',
+  'Patek Philippe::5712R-001',
+  'Patek Philippe::5712/1R',
+  'Patek Philippe::5712/1R-001',
   'Patek Philippe::3712/1A',
   'Rolex::126710BLNR',
   'Audemars Piguet::16202ST',
@@ -14,7 +22,7 @@ const THREE_WATCH_RELEASE_REFERENCES = [
   'Audemars Piguet::15400'
 ].join('|');
 const FULL_REVIEWED_BRAND_RELEASE = 'ALL_REVIEWED';
-const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe', 'audemars piguet']);
+const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith']);
 const MIN_RELEASE_CONFIDENCE = 90;
 const REVIEWED_PANERAI_RECORD_PREFIX = 'reviewed_panerai_';
 const REVIEWED_PANERAI_SOURCE = 'PANERAI_REVIEWED_XLSX_20260729';
@@ -93,6 +101,16 @@ function parsedReferences(value) {
 
 const REVIEWED_RELEASE_REFERENCES = parsedReferences(THREE_WATCH_RELEASE_REFERENCES);
 
+function isReviewedReleaseReference(brand, reference) {
+  const normalizedBrand = String(brand || '').trim().toLowerCase();
+  const exactReference = String(reference || '').trim().toUpperCase();
+  if (!normalizedBrand || !exactReference) return false;
+  return REVIEWED_RELEASE_REFERENCES.some(entry => (
+    entry.brand.toLowerCase() === normalizedBrand
+    && entry.reference.toUpperCase() === exactReference
+  ));
+}
+
 function isReviewedPaneraiReference(brand, reference) {
   return String(brand || '').trim().toLowerCase() === 'panerai'
     && REVIEWED_PANERAI_REFERENCE_SET.has(String(reference || '').trim().toUpperCase());
@@ -167,13 +185,49 @@ function publicationReferences(value = process.env.PUBLICATION_REFERENCES) {
 function isPublicationReferenceAllowed(brand, reference, value = process.env.PUBLICATION_REFERENCES) {
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   const exactReference = String(reference || '').trim().toUpperCase();
-  return Boolean(normalizedBrand && exactReference);
+  if (!normalizedBrand || !exactReference) return false;
+  if (normalizedBrand === 'panerai') return isReviewedPaneraiReference(brand, reference);
+  if (normalizedBrand === 'zenith') return true;
+  if (isFullReviewedBrandRelease(value)) return FULL_REVIEWED_BRANDS.has(normalizedBrand);
+  return publicationReferences(value).some(entry => (
+    entry.brand.toLowerCase() === normalizedBrand
+    && entry.reference.toUpperCase() === exactReference
+  ));
 }
 
 function isReleaseListingEligible(record, value = process.env.PUBLICATION_REFERENCES) {
-  if (!record) return false;
-  const status = String(record?.listing_status || 'ACTIVE').trim().toUpperCase();
-  return !['HIDDEN', 'REJECTED', 'DELETED'].includes(status);
+  if (isReviewedZenithIdentityCorrectionRecord(record)) return true;
+  if (String(record?.brand || '').trim().toLowerCase() === 'panerai') {
+    return isReviewedPaneraiReleaseRecord(record);
+  }
+  if (String(record?.brand || '').trim().toLowerCase() === 'zenith') {
+    return isReviewedZenithReleaseRecord(record);
+  }
+  const storedConfidence = Number(record?.confidence);
+  const confidence = storedConfidence >= 0 && storedConfidence <= 1
+    ? storedConfidence * 100
+    : storedConfidence;
+  const statuses = [
+    record?.listing_status,
+    record?.trading_floor_status,
+    record?.normalization_status,
+  ].filter(Boolean).map(status => String(status).trim().toUpperCase());
+  const blockedStatuses = new Set([
+    'HIDDEN',
+    'REJECTED',
+    'DELETED',
+    'BUNDLE_CHILD_PENDING_REVIEW',
+    'BUNDLE_PENDING_SEPARATION',
+    'SUPPRESSED_EXACT_DUPLICATE',
+  ]);
+  return Boolean(
+    record
+    && isPublicationReferenceAllowed(record.brand, record.reference, value)
+    && String(record.verdict || '').trim().toUpperCase() === 'APPROVED'
+    && Number.isFinite(confidence)
+    && confidence >= MIN_RELEASE_CONFIDENCE
+    && !statuses.some(status => blockedStatuses.has(status))
+  );
 }
 
 function publicationReferencesForBrand(brand, value = process.env.PUBLICATION_REFERENCES) {
@@ -208,6 +262,7 @@ module.exports = {
   isFullReviewedBrandRelease,
   isPublicationReferenceAllowed,
   isReleaseListingEligible,
+  isReviewedReleaseReference,
   isReviewedPaneraiReference,
   isReviewedPaneraiReleaseRecord,
   isReviewedZenithIdentityCorrectionRecord,

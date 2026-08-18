@@ -29,7 +29,7 @@ DIALS = [
     ('mother of pearl', 'Mother of Pearl'), ('mop', 'Mother of Pearl'),
     ('ice blue', 'Ice Blue'), ('tiffany blue', 'Tiffany Blue'), ('tiffany', 'Tiffany Blue'),
     ('olive green', 'Olive Green'), ('olive', 'Olive Green'),
-    ('mint green', 'Mint Green'), ('navy blue', 'Navy Blue'), ('wimbledon', 'Wimbledon'),
+    ('navy blue', 'Navy Blue'), ('wimbledon', 'Wimbledon'),
     ('rhodium', 'Rhodium'), ('meteorite', 'Meteorite'), ('skeleton', 'Skeleton'),
     ('champagne', 'Champagne'), ('champ', 'Champagne'),
     ('chocolate', 'Chocolate'), ('choc', 'Chocolate'), ('salmon', 'Salmon'),
@@ -71,8 +71,12 @@ def process_single_file(fpath):
             df[col] = ''
         df[col] = df[col].fillna('').astype(str)
 
-    raw_lines = df['raw_line'].str.lower()
-    stored_dials = df['Dial Color']
+    raw_lines = df['raw_line'].str.lower().str.replace(
+        r'\bmint\s+green\b(?!\s+dial\b)', 'mint', regex=True
+    )
+    stored_dials = df['Dial Color'].mask(
+        df['Dial Color'].str.lower().isin(['mint', 'mint condition', 'mint green']), ''
+    )
 
     # Extract text-derived dial
     extracted_dials = pd.Series('', index=df.index, dtype=object)

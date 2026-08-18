@@ -74,18 +74,19 @@ function normalizeMarketRow(row, reference) {
   }
   const hkd = explicitAmount(line, ['HKD', 'HDK', 'HK\\$']);
   if (hkd) {
-    const converted = Math.round(hkd / 7.8);
-    // The historical 7.8 conversion is useful as a review proposal, but it has
-    // no source date and is not admissible to customer analytics as verified FX.
+    const usdPerUnit = Number(row.conversion_rate || row.analytics_fx_rate);
+    const hasDatedRate = Number.isFinite(usdPerUnit) && usdPerUnit > 0
+      && Boolean(row.conversion_timestamp || row.analytics_fx_date);
+    const converted = hasDatedRate ? Math.round(hkd * usdPerUnit) : Math.round(hkd / 7.8);
     return {
       ...row,
       analytics_price_usd: converted,
       price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_HKD_FROM_REFERENCE_LINE' : null,
-      analytics_currency_status: 'CURRENCY_RATE_UNVERIFIED',
-      analytics_fx_rate: 7.8,
-      analytics_fx_rate_basis: 'HKD_PER_USD',
-      analytics_fx_source: 'LEGACY_FIXED_RATE_REVIEW_ONLY',
-      analytics_fx_date: null,
+      analytics_currency_status: hasDatedRate ? 'VERIFIED' : 'CURRENCY_RATE_UNVERIFIED',
+      analytics_fx_rate: hasDatedRate ? usdPerUnit : 7.8,
+      analytics_fx_rate_basis: hasDatedRate ? 'USD_PER_SOURCE_UNIT' : 'HKD_PER_USD',
+      analytics_fx_source: hasDatedRate ? (row.conversion_source || row.analytics_fx_source || 'PIPELINE_DATED_RATE') : 'LEGACY_FIXED_RATE_REVIEW_ONLY',
+      analytics_fx_date: hasDatedRate ? (row.conversion_timestamp || row.analytics_fx_date) : null,
       source_price_amount: hkd,
       source_currency: 'HKD',
     };
@@ -94,7 +95,16 @@ function normalizeMarketRow(row, reference) {
     return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: 'CURRENCY_RATE_UNVERIFIED' };
   }
   if (/\$\s*\d/.test(line)) {
-    return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: 'CURRENCY_AMBIGUOUS' };
+    const amount = explicitAmount(line, ['\\$']);
+    return {
+      ...row,
+      analytics_price_usd: amount || stored,
+      price_normalization: 'USD_DEFAULTED_BY_POLICY',
+      analytics_currency_status: amount || stored ? 'VERIFIED' : 'MISSING_PRICE',
+      source_price_amount: amount || stored,
+      source_currency: 'USD',
+      source_currency_evidence: 'USD_DEFAULTED_BY_POLICY',
+    };
   }
   return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: stored ? 'CURRENCY_UNVERIFIED' : 'MISSING_PRICE' };
 }

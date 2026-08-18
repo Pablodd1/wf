@@ -15,7 +15,7 @@ function requiredRolesFor(path?: string): DealerRole[] | null {
   if (route === '/dashboard' || route === '/admin' || route === '/multi-listings') return ['admin'];
   if (route === '/review' || route === '/review-queue' || route === '/reprocess') return ['reviewer', 'admin'];
   if (route === '/demo' || route === '/demo-mode') return ['admin'];
-  if (route.startsWith('/dealer') || route === '/analytics' || route === '/clean' || route === '/dealers') {
+  if (route.startsWith('/dealer') || route.startsWith('/reference-check') || route === '/analytics' || route === '/clean' || route === '/dealers') {
     return ['dealer', 'reviewer', 'admin'];
   }
   return null;
@@ -42,6 +42,13 @@ export default function DealerLogin() {
   const [entryMode, setEntryMode] = useState<'login' | 'apply'>('login');
   const [applicationNotice, setApplicationNotice] = useState('');
 
+  function continueAsGuest() {
+    const guestSession = { isCredentialed: false, isGuestDealer: true, startedAt: new Date().toISOString() };
+    sessionStorage.setItem('wf_beta_skip', '1');
+    sessionStorage.setItem('cl_dealer_session', JSON.stringify(guestSession));
+    navigate('/dealer/workspace', { replace: true, state: { guest: true } });
+  }
+
   const accessMessage = destination === '/price-research'
     ? 'Sign in is required to access Price Research.'
     : destination === '/admin' || destination === '/dashboard' || destination === '/multi-listings'
@@ -58,6 +65,7 @@ export default function DealerLogin() {
           : null;
         if (!response.ok || result?.authenticated !== true) return;
         sessionStorage.removeItem('wf_beta_skip');
+        sessionStorage.removeItem('cl_dealer_session');
         const role = result?.user?.role as DealerRole | undefined;
         setCurrentRole(role || null);
         if (requestedDestination && !canOpenRequestedDestination(role, requestedDestination)) {
@@ -90,6 +98,7 @@ export default function DealerLogin() {
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to sign in.');
       sessionStorage.removeItem('wf_beta_skip');
+      sessionStorage.removeItem('cl_dealer_session');
       const role = result?.user?.role as DealerRole | undefined;
       setCurrentRole(role || null);
       if (requestedDestination && !canOpenRequestedDestination(role, requestedDestination)) {
@@ -114,7 +123,7 @@ export default function DealerLogin() {
       });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Unable to submit your application.');
-      setApplicationNotice(`Application ${result.application_id} received. WatchFacts will verify the profile before Workspace credentials are provisioned.`);
+      setApplicationNotice(`Application ${result.application_id} received. Curated Luxury will verify the profile before Workspace credentials are provisioned.`);
       form.reset();
     } catch (applicationError) {
       setError(applicationError instanceof Error ? applicationError.message : 'Unable to submit your application.');
@@ -126,7 +135,7 @@ export default function DealerLogin() {
       <MarketNav />
       <div className="px-5 py-8">
         <div className="mx-auto flex min-h-[calc(100vh-8rem)] max-w-5xl flex-col">
-        <Link to="/" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> Curated Luxury</Link>
+        <Link to="/trading" className="flex w-fit items-center gap-2 text-sm text-white/65 transition-colors hover:text-white"><ArrowLeft size={16} /> Trading Floor</Link>
         <div className="flex flex-1 items-center justify-center py-10">
           <section className={`w-full ${entryMode === 'apply' && !adminEntry ? 'max-w-[720px]' : 'max-w-[420px]'} border border-white/12 bg-[#111118] p-6 sm:p-8`}>
             <div className="mb-6 flex items-center gap-3"><LockKeyhole size={20} className="text-[#c9a96e]" /><h2 className="text-lg font-semibold">{adminEntry ? 'CL Login' : entryMode === 'login' ? 'Workspace Login' : 'Dealer access application'}</h2></div>
@@ -149,9 +158,11 @@ export default function DealerLogin() {
                 </div>
               )}
               <button type="submit" disabled={loading || checkingSession} className="h-11 w-full bg-[#c9a96e] text-sm font-semibold text-[#09090d] transition-colors hover:bg-[#d4b87a] disabled:opacity-60">{checkingSession ? 'Checking existing access...' : loading ? 'Signing in...' : 'Sign in securely'}</button>
+              {!adminEntry && <button type="button" onClick={continueAsGuest} className="h-11 w-full border border-white/20 bg-transparent text-sm font-semibold text-white/75 transition-colors hover:border-[#c9a96e] hover:text-white">Skip for Now</button>}
+              {!adminEntry && <p className="text-center text-[11px] leading-5 text-white/40">Explore the public Workspace now. Posting, profile editing, saved activity, and transaction history remain unavailable until you sign in.</p>}
             </form>
             </> : <form onSubmit={applyForAccess} className="space-y-4">
-              <div className="border-l-2 border-[#c9a96e] bg-[#c9a96e]/10 px-3 py-2 text-xs leading-5 text-[#ead7ae]">Apply once with the identity that should be stamped on future posts. Submission does not grant access automatically; WatchFacts verifies the profile and phone before provisioning credentials.</div>
+              <div className="border-l-2 border-[#c9a96e] bg-[#c9a96e]/10 px-3 py-2 text-xs leading-5 text-[#ead7ae]">Apply once with the identity that should be stamped on future posts. Submission does not grant access automatically; Curated Luxury verifies the profile and phone before provisioning credentials.</div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <RegistrationInput name="display_name" label="Public display name" required />
                 <RegistrationInput name="company_name" label="Company or dealer name" />
