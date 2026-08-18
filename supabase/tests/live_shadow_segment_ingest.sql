@@ -19,15 +19,15 @@ DECLARE
   v_candidate_hash TEXT;
   v_raw JSONB;
   v_stage JSONB;
-  v_raw_file_hash TEXT := encode(digest(convert_to('shadow-raw-file-1', 'UTF8'), 'sha256'), 'hex');
-  v_proposal_file_hash TEXT := encode(digest(convert_to('shadow-proposal-file-1', 'UTF8'), 'sha256'), 'hex');
+  v_raw_file_hash TEXT := encode(extensions.digest(convert_to('shadow-raw-file-1', 'UTF8'), 'sha256'), 'hex');
+  v_proposal_file_hash TEXT := encode(extensions.digest(convert_to('shadow-proposal-file-1', 'UTF8'), 'sha256'), 'hex');
   v_batch_token TEXT;
   v_next_chain TEXT;
   v_result JSONB;
   v_status TEXT;
   v_failed BOOLEAN := false;
 BEGIN
-  v_raw_hash := encode(digest(convert_to(staging.live_shadow_stable_jsonb(v_raw_data), 'UTF8'), 'sha256'), 'hex');
+  v_raw_hash := encode(extensions.digest(convert_to(staging.live_shadow_stable_jsonb(v_raw_data), 'UTF8'), 'sha256'), 'hex');
   IF v_raw_hash <> '2f3456391f1ea48381b13e8de1aa0d8009a990a967feca8a5f5b1c2f9e9028c9' THEN
     RAISE EXCEPTION 'database stable JSON does not match the Node raw payload contract';
   END IF;
@@ -40,7 +40,7 @@ BEGIN
     'review_reasons', jsonb_build_array('UNICODE_審核', null),
     'price_research_status', 'PRIVATE_SHADOW_ONLY'
   );
-  v_candidate_hash := encode(digest(convert_to(staging.live_shadow_stable_jsonb(v_stable_candidate), 'UTF8'), 'sha256'), 'hex');
+  v_candidate_hash := encode(extensions.digest(convert_to(staging.live_shadow_stable_jsonb(v_stable_candidate), 'UTF8'), 'sha256'), 'hex');
   IF v_candidate_hash <> 'cbe8a26566fc555c22d6a7a0b7db75bef97905d333d1f4f55ce2a3b61ff73940' THEN
     RAISE EXCEPTION 'database stable JSON does not match the Node candidate contract';
   END IF;
@@ -70,7 +70,7 @@ BEGIN
     'public_image_eligible', false,
     'contact_publication_approved', false
   );
-  v_batch_token := encode(digest(convert_to(staging.live_shadow_stable_jsonb(jsonb_build_object(
+  v_batch_token := encode(extensions.digest(convert_to(staging.live_shadow_stable_jsonb(jsonb_build_object(
     'contract', 'wf-mariadb-live-segment-bridge-v1',
     'sequence', 1,
     'raw_sha256', v_raw_file_hash,
@@ -79,7 +79,7 @@ BEGIN
   IF v_batch_token <> 'c93f6229a6e13a6dfdef9ef49fe2a5e82c7ccec22d2785a85c4c8348b6ab0c28' THEN
     RAISE EXCEPTION 'database stable JSON does not match the Node segment-token contract';
   END IF;
-  v_next_chain := encode(digest(convert_to(repeat('0', 64) || E'\n' || v_batch_token, 'UTF8'), 'sha256'), 'hex');
+  v_next_chain := encode(extensions.digest(convert_to(repeat('0', 64) || E'\n' || v_batch_token, 'UTF8'), 'sha256'), 'hex');
 
   v_result := public.ingest_live_shadow_segment(
     'wf-mariadb-live-segment-bridge-v1', v_batch_token, 1,

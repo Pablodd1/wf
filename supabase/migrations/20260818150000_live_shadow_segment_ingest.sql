@@ -132,7 +132,7 @@ BEGIN
     RAISE EXCEPTION 'segment row count must be matched and between 1 and 500';
   END IF;
 
-  v_expected_batch_token := encode(digest(convert_to(staging.live_shadow_stable_jsonb(jsonb_build_object(
+  v_expected_batch_token := encode(extensions.digest(convert_to(staging.live_shadow_stable_jsonb(jsonb_build_object(
     'contract', p_contract,
     'sequence', p_sequence,
     'raw_sha256', p_raw_file_sha256,
@@ -141,13 +141,13 @@ BEGIN
   IF p_batch_token <> v_expected_batch_token THEN
     RAISE EXCEPTION 'batch token does not match the immutable segment file digests';
   END IF;
-  v_expected_next_chain_sha256 := encode(digest(convert_to(
+  v_expected_next_chain_sha256 := encode(extensions.digest(convert_to(
     p_expected_previous_chain_sha256 || E'\n' || p_batch_token, 'UTF8'
   ), 'sha256'), 'hex');
   IF p_next_chain_sha256 <> v_expected_next_chain_sha256 THEN
     RAISE EXCEPTION 'next segment chain digest is invalid';
   END IF;
-  v_request_sha256 := encode(digest(convert_to(staging.live_shadow_stable_jsonb(jsonb_build_object(
+  v_request_sha256 := encode(extensions.digest(convert_to(staging.live_shadow_stable_jsonb(jsonb_build_object(
     'contract', p_contract,
     'batch_token', p_batch_token,
     'sequence', p_sequence,
@@ -214,7 +214,7 @@ BEGIN
          AND v_stage->'candidate'->>'listing_type' NOT IN ('WTS','WTB') THEN
       RAISE EXCEPTION 'unsafe or mismatched shadow transport row';
     END IF;
-    v_computed_sha256 := encode(digest(convert_to(staging.live_shadow_stable_jsonb(v_raw->'raw_data'), 'UTF8'), 'sha256'), 'hex');
+    v_computed_sha256 := encode(extensions.digest(convert_to(staging.live_shadow_stable_jsonb(v_raw->'raw_data'), 'UTF8'), 'sha256'), 'hex');
     IF v_computed_sha256 <> v_raw->>'raw_sha256' THEN
       RAISE EXCEPTION 'raw source digest does not match the immutable payload';
     END IF;
@@ -227,7 +227,7 @@ BEGIN
       'review_reasons', v_stage->'review_reasons',
       'price_research_status', v_stage->'price_research_status'
     );
-    v_computed_candidate_sha256 := encode(digest(convert_to(staging.live_shadow_stable_jsonb(v_stable_candidate), 'UTF8'), 'sha256'), 'hex');
+    v_computed_candidate_sha256 := encode(extensions.digest(convert_to(staging.live_shadow_stable_jsonb(v_stable_candidate), 'UTF8'), 'sha256'), 'hex');
     IF v_computed_candidate_sha256 <> v_stage->>'source_candidate_hash' THEN
       RAISE EXCEPTION 'candidate digest does not match the reviewed shadow payload';
     END IF;

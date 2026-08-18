@@ -61,7 +61,8 @@ test('migration is private, transactional, idempotent and has no publication tar
   assert.match(sql, /WHERE batch_token = p_batch_token/);
   assert.match(sql, /request_sha256 <> v_request_sha256/);
   assert.match(sql, /p_expected_previous_chain_sha256 \|\| E'\\n' \|\| p_batch_token/);
-  assert.match(sql, /v_expected_batch_token := encode\(digest/);
+  assert.match(sql, /v_expected_batch_token := encode\(extensions\.digest/);
+  assert.doesNotMatch(sql, /(?<!extensions\.)digest\(/);
   assert.match(sql, /ORDER BY entry\.key COLLATE "C"/);
   assert.match(sql, /v_computed_sha256 <> v_raw->>'raw_sha256'/);
   assert.match(sql, /v_computed_candidate_sha256 <> v_stage->>'source_candidate_hash'/);
