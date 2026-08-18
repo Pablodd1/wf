@@ -36,10 +36,10 @@ jobs:
             v_ids text[];
             v_deleted integer;
           BEGIN
-            SELECT rollback_ids INTO v_ids
+            SELECT ARRAY(SELECT jsonb_array_elements_text(inserted_ids)) INTO v_ids
             FROM public.reviewed_workbook_delta_release_runs
             WHERE run_key = 'rpdelta_canary_32092474203_1'
-              AND tier = 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1'
+              AND release_tier = 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1'
               AND status = 'APPLIED'
             FOR UPDATE;
             IF COALESCE(cardinality(v_ids), 0) <> 10 THEN
