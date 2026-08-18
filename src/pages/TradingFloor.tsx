@@ -152,7 +152,15 @@ type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
-function hasListingImage(listing: ListingRecord) {
+function hasConfirmedSourceImage(listing: ListingRecord): boolean {
+  if (isBundleListing(listing) || listing.multi_listing) return false;
+  if (listing.thumbnail_url && String(listing.thumbnail_url).trim().length > 0) return true;
+  if (Array.isArray(listing.image_urls) && listing.image_urls.some(url => Boolean(url && String(url).trim().length > 0))) return true;
+  if (listing.has_images) return true;
+  return false;
+}
+
+function hasListingImage(listing: ListingRecord): boolean {
   return true;
 }
 
@@ -481,20 +489,20 @@ export default function TradingFloor() {
         }
 
         // Client-side multi-tier partition:
-        // Tier 1: Normal listings with images (best experience)
-        // Tier 2: Normal listings without images
-        // Tier 3: Unbundled/summary listings with images
-        // Tier 4: Unbundled/summary listings without images
+        // Tier 1: Normal listings with confirmed images (show first)
+        // Tier 2: Unbundled listings with confirmed images
+        // Tier 3: Normal listings without confirmed images (sent to end of line)
+        // Tier 4: Unbundled listings without confirmed images (sent to end of line)
         const tier1: ListingRecord[] = [];
         const tier2: ListingRecord[] = [];
         const tier3: ListingRecord[] = [];
         const tier4: ListingRecord[] = [];
         for (const listing of nextListings) {
           const isBundle = isBundleListing(listing);
-          const hasImg = hasListingImage(listing);
+          const hasImg = hasConfirmedSourceImage(listing);
           if (!isBundle && hasImg) tier1.push(listing);
-          else if (!isBundle && !hasImg) tier2.push(listing);
-          else if (isBundle && hasImg) tier3.push(listing);
+          else if (isBundle && hasImg) tier2.push(listing);
+          else if (!isBundle && !hasImg) tier3.push(listing);
           else tier4.push(listing);
         }
         setListings([...tier1, ...tier2, ...tier3, ...tier4]);

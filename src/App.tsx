@@ -37,14 +37,14 @@ export default function App() {
         <Route path="/dealer-login" element={<Navigate to="/dealer" replace />} />
         <Route path="/cl-login" element={<DealerLogin />} />
         <Route path="/admin-login" element={<Navigate to="/cl-login" replace />} />
-        <Route path="/dealer/workspace" element={<DealerGate><DealerPortal /></DealerGate>} />
-        <Route path="/dealer/post" element={<DealerGate><DealerSubmitListing /></DealerGate>} />
-        <Route path="/dealer/account/:section" element={<DealerGate><DealerAccount /></DealerGate>} />
+        <Route path="/dealer/workspace" element={<DealerPortal />} />
+        <Route path="/dealer/post" element={<DealerSubmitListing />} />
+        <Route path="/dealer/account/:section" element={<DealerAccount />} />
         <Route path="/dashboard" element={<DealerGate allowedRoles={['admin']}><OperationsDashboard /></DealerGate>} />
         <Route path="/dashboard/legacy" element={<Navigate to="/dashboard" replace />} />
         <Route path="/trading" element={<TradingFloor />} />
         <Route path="/telegram-test" element={<TelegramTest />} />
-        <Route path="/analytics" element={<DealerGate><SourceAnalytics /></DealerGate>} />
+        <Route path="/analytics" element={<SourceAnalytics />} />
         <Route path="/analytics/legacy" element={<Navigate to="/analytics" replace />} />
         <Route path="/analytics-dashboard" element={<Navigate to="/analytics" replace />} />
         <Route path="/review" element={<Navigate to="/review-queue" replace />} />
@@ -56,7 +56,7 @@ export default function App() {
         <Route path="/demo-mode" element={<DealerGate allowedRoles={['admin']}><DemoMode /></DealerGate>} />
         <Route path="/admin" element={<DealerGate allowedRoles={['admin']}><AdminPage /></DealerGate>} />
         <Route path="/multi-listings" element={<DealerGate allowedRoles={['admin']}><MultiListings /></DealerGate>} />
-        <Route path="/dealers" element={<DealerGate><DealerDirectory /></DealerGate>} />
+        <Route path="/dealers" element={<DealerDirectory />} />
         <Route path="/dealers/:dealerId" element={<DealerProfile />} />
         {/* ponytail: Price Research is public (adaa4e9, 0b92aa3, 0e51450 —
             2026-08-01 "remove DealerGate ... now public/free access, no

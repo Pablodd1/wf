@@ -1,6 +1,6 @@
 'use strict';
 
-const { authorizeDealer } = require('./_lib/dealer-auth.cjs');
+const { getClient } = require('./_lib/supabase');
 
 function boundedInteger(value, fallback, minimum, maximum) {
   const parsed = Number.parseInt(String(value || ''), 10);
@@ -8,11 +8,11 @@ function boundedInteger(value, fallback, minimum, maximum) {
 }
 
 module.exports = async function handler(req, res) {
-  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Cache-Control', 's-maxage=60, stale-while-revalidate=120');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const authorization = await authorizeDealer(req, res);
-  if (authorization.error) return res.status(authorization.status).json({ error: authorization.error });
+  const client = getClient();
 
   const page = boundedInteger(req.query?.page, 1, 1, 100000);
   const pageSize = boundedInteger(req.query?.pageSize, 24, 1, 100);
@@ -21,7 +21,7 @@ module.exports = async function handler(req, res) {
   const to = from + pageSize - 1;
 
   try {
-    let query = authorization.client
+    let query = client
       .from('dealers')
       .select('id,slug,display_name,company_name,country_code,city,rating,review_count,whatsapp_group_count,avatar_url,profile_summary,verified_at', { count: 'exact' })
       .eq('status', 'VERIFIED')
@@ -38,7 +38,7 @@ module.exports = async function handler(req, res) {
     if (error) throw error;
     const ids = (dealers || []).map(item => item.id);
     const { data: stats, error: statsError } = ids.length
-      ? await authorization.client.from('dealer_profile_stats').select('*').in('dealer_id', ids)
+      ? await client.from('dealer_profile_stats').select('*').in('dealer_id', ids)
       : { data: [], error: null };
     if (statsError) throw statsError;
     const statsById = new Map((stats || []).map(item => [item.dealer_id, item]));
