@@ -22,6 +22,10 @@ function safeUuid(value) {
   return text;
 }
 
+function isTransientManagementFailure(error) {
+  return /Supabase management query failed \((?:502|503|504)\)/i.test(String(error?.message || error));
+}
+
 async function reconciliation(config, fetchImpl) {
   const rows = await managementQuery(config,
     // The function is intentionally service-only. The Management API's
@@ -153,15 +157,43 @@ async function run(options = {}) {
   let cursorExhausted = false;
   while (!cursorExhausted) {
     if (totals.pages >= maxPages) throw new Error('LINKAGE_MAX_PAGES reached before global raw scan completed');
-    const remainingCanary = mode === 'canary' ? canaryLimit - totals.applied : null;
+    let remainingCanary = mode === 'canary' ? canaryLimit - totals.applied : null;
     if (mode === 'canary' && remainingCanary <= 0) break;
     const apply = mode !== 'audit';
-    const resultRows = await managementQuery(config, `
+    let resultRows;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        resultRows = await managementQuery(config, `
         SELECT public.qnsa_dealer_global_raw_phone_link_page(
           ${cursor ? `${sqlLiteral(cursor)}::uuid` : 'NULL::uuid'},
           ${pageSize}, ${apply ? 'true' : 'false'},
           ${mode === 'canary' ? remainingCanary : 'NULL::integer'}
         ) AS result`, false, fetchImpl);
+        break;
+      } catch (error) {
+        if (!isTransientManagementFailure(error) || attempt === 2) throw error;
+
+        // A gateway may lose the response after PostgreSQL committed the
+        // idempotent page. Reconcile before replaying it so a canary can never
+        // exceed its global write cap. Full mode can safely replay the same
+        // immutable cursor page because listing_id is conflict-protected.
+        const uncertain = await reconciliation(config, fetchImpl);
+        if (Number(uncertain.duplicate_verified_phones) !== 0 || Number(uncertain.orphan_links) !== 0) {
+          throw new Error('Transient page recovery found duplicate verified phones or orphan links');
+        }
+        const observedApplied = Number(uncertain.applied_links) - Number(before.applied_links);
+        if (!Number.isSafeInteger(observedApplied) || observedApplied < 0) {
+          throw new Error('Transient page recovery returned an invalid applied-link delta');
+        }
+        if (mode === 'canary') {
+          totals.applied = observedApplied;
+          remainingCanary = canaryLimit - observedApplied;
+          if (remainingCanary <= 0) break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
+      }
+    }
+    if (!resultRows && mode === 'canary' && remainingCanary <= 0) break;
     const result = resultRows?.[0]?.result;
     if (!result) throw new Error('Global raw linkage page returned no reconciliation');
     totals.pages += 1;
@@ -250,8 +282,17 @@ async function run(options = {}) {
   if (mode === 'audit' && Number(after.applied_links) !== Number(before.applied_links)) {
     throw new Error('Audit mode changed applied linkage state');
   }
+  if (mode !== 'audit') {
+    const observedApplied = Number(after.applied_links) - Number(before.applied_links);
+    if (!Number.isSafeInteger(observedApplied) || observedApplied < 0) {
+      throw new Error('Postflight returned an invalid applied-link delta');
+    }
+    totals.applied = observedApplied;
+  }
   if (mode === 'canary' && totals.applied > canaryLimit) throw new Error('Canary write cap was exceeded');
-  if (totals.scanned === 0) throw new Error('Global raw-version scan returned no evidence rows');
+  if (totals.scanned === 0 && totals.applied === 0) {
+    throw new Error('Global raw-version scan returned no evidence rows');
+  }
 
   return {
     mode,
@@ -282,4 +323,6 @@ if (require.main === module) {
   });
 }
 
-module.exports = { EXPECTED_PROJECT, LINKAGE_RUN_KEY, boundedInteger, run, safeUuid };
+module.exports = {
+  EXPECTED_PROJECT, LINKAGE_RUN_KEY, boundedInteger, isTransientManagementFailure, run, safeUuid,
+};

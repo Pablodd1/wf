@@ -184,9 +184,62 @@ function jsonResponse(payload) {
   return { ok: true, status: 200, json: async () => payload, text: async () => JSON.stringify(payload) };
 }
 
+function errorResponse(status) {
+  return {
+    ok: false,
+    status,
+    json: async () => ({ message: 'database request rejected' }),
+    text: async () => JSON.stringify({ message: 'database request rejected' }),
+  };
+}
+
+test('lost canary page response reconciles before replay and cannot exceed the global cap', async () => {
+  const { run } = require('../tools/dealer-directory/run-exact-phone-linkage.cjs');
+  let reconciliationCalls = 0;
+  let pageCalls = 0;
+  const fetchImpl = async (_url, options) => {
+    const sql = JSON.parse(options.body).query;
+    if (/raw_version_primary_key_valid/.test(sql)) return jsonResponse([{ capacity: {
+      database_gib: 7.898, raw_version_primary_key_valid: true, raw_version_lineage_index: true,
+      raw_versions_count: 2000,
+    } }]);
+    if (/EXPLAIN[\s\S]*WITH raw_page[\s\S]*JOIN LATERAL/.test(sql)) {
+      return jsonResponse([{ 'QUERY PLAN': 'Nested Loop raw_message_versions_pkey idx_staging_mariadb_raw_version' }]);
+    }
+    if (/EXPLAIN[\s\S]*ORDER BY raw_version\.id/.test(sql)) {
+      return jsonResponse([{ 'QUERY PLAN': 'Index Only Scan using raw_message_versions_pkey' }]);
+    }
+    if (/EXPLAIN[\s\S]*staging\.listings/.test(sql)) {
+      return jsonResponse([{ 'QUERY PLAN': 'Index Scan using idx_staging_mariadb_raw_version' }]);
+    }
+    if (/qnsa_dealer_linkage_reconciliation/.test(sql)) {
+      reconciliationCalls += 1;
+      return jsonResponse([{ result: {
+        duplicate_verified_phones: 0, orphan_links: 0, dealers_with_verified_phone: 54,
+        applied_links: reconciliationCalls === 1 ? 100 : 110,
+      } }]);
+    }
+    if (/qnsa_dealer_global_raw_phone_link_page/.test(sql)) {
+      pageCalls += 1;
+      return errorResponse(502);
+    }
+    throw new Error(`Unexpected SQL: ${sql.slice(0, 80)}`);
+  };
+
+  const result = await run({ env: {
+    SUPABASE_PROJECT_REF: 'qnsafosakvonzgfcsphh', SUPABASE_ACCESS_TOKEN: 'test',
+    LINKAGE_MODE: 'canary', LINKAGE_PAGE_SIZE: '1000', LINKAGE_CANARY_LIMIT: '10',
+    LINKAGE_MAX_PAGES: '5000', LINKAGE_DELAY_MS: '0',
+  }, fetchImpl });
+  assert.equal(pageCalls, 1, 'a committed canary page is not replayed after the cap is observed');
+  assert.equal(result.totals.applied, 10);
+  assert.equal(result.cursor_exhausted, false);
+});
+
 test('management-only canary globally scans and cannot exceed ten writes or complete checkpoints', async () => {
   const { run } = require('../tools/dealer-directory/run-exact-phone-linkage.cjs');
   const queries = [];
+  let reconciliationCalls = 0;
   const fetchImpl = async (_url, options) => {
     const request = JSON.parse(options.body);
     queries.push(request);
@@ -204,10 +257,13 @@ test('management-only canary globally scans and cannot exceed ten writes or comp
     if (/EXPLAIN[\s\S]*staging\.listings/.test(sql)) {
       return jsonResponse([{ 'QUERY PLAN': 'Index Scan using idx_staging_mariadb_raw_version' }]);
     }
-    if (/qnsa_dealer_linkage_reconciliation/.test(sql)) return jsonResponse([{ result: {
-      duplicate_verified_phones: 0, orphan_links: 0, dealers_with_verified_phone: 54,
-      applied_links: 0,
-    } }]);
+    if (/qnsa_dealer_linkage_reconciliation/.test(sql)) {
+      reconciliationCalls += 1;
+      return jsonResponse([{ result: {
+        duplicate_verified_phones: 0, orphan_links: 0, dealers_with_verified_phone: 54,
+        applied_links: reconciliationCalls === 1 ? 0 : 10,
+      } }]);
+    }
     if (/qnsa_dealer_global_raw_phone_link_page/.test(sql)) return jsonResponse([{ result: {
       scanned: 1000, eligible: 14, applied: 10, already_linked: 0,
       conflicting_links: 0, dealers_matched: 2,
