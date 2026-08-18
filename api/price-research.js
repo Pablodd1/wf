@@ -6,7 +6,7 @@
  */
 const { getClient } = require('./_lib/supabase');
 const { normRef, inferBrand: sharedInferBrand } = require('./_lib/resolve');
-const { listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
+const { listEquivalentReferences, lookupCatalog, listCatalogReferences } = require('./_lib/catalog');
 const {
   buildComparableCohorts,
   buildDialGroups,

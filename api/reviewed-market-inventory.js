@@ -249,7 +249,7 @@ function directSubmissionMatches(record, filters) {
 }
 
 function mapReviewedRecord(row) {
-  // Prefer user_image_url (direct source upload) then fall back to display_image_url
+  // Prefer user_image_url (direct source upload) then fall back to thumbnail
   // (platform-curated or reference CDN image already stored in the workbook).
   const candidateImageUrl = row.user_image_url || null;
   const hasExactSourceImage = row.has_exact_source_image === true
@@ -285,11 +285,11 @@ function mapReviewedRecord(row) {
     ? row.raw_reference
     : approvedReference;
   const dialColor = row.dial_color || row.catalog_dial || null;
-  const sellerName = evidenceValuePresent(row.posted_by)
-    ? row.posted_by
+  const sellerName = evidenceValuePresent(row.seller_name)
+    ? row.seller_name
     : null;
-  const sellerPhone = evidenceValuePresent(row.phone_number)
-    ? row.phone_number
+  const sellerPhone = evidenceValuePresent(row.seller_phone)
+    ? row.seller_phone
     : null;
   const referenceSearchKey = row.reference_search_key
     || referenceComparisonKey(reference)
@@ -346,7 +346,7 @@ function mapReviewedRecord(row) {
     workbook_price_usd: workbookUsd,
     workbook_price_review_reason: workbookPriceReview,
     source_price_amount: sourceAmount,
-    source_price_text: row.source_price_text || null,
+    source_price_text: row.source_price_amount != null ? String(row.source_price_amount) : null,
     source_currency: row.source_currency || null,
     price_evidence_status: row.price_evidence_status,
     price_research_eligible: priceEligible,
@@ -492,11 +492,11 @@ module.exports = async function handler(req, res) {
     }
 
     const columns = [
-      'id,source_file,source_row_number,source_record_id,posting_date,posted_by',
-      'phone_number,contact_publication_approved,raw_message,listing_type,brand_scope',
+      'id,source_file,source_row_number,source_record_id,posting_date,seller_name',
+      'seller_phone,contact_publication_approved,raw_message,listing_type,brand_scope',
       'supplied_brand,canonical_brand,model,catalog_model,raw_reference',
       'normalized_reference,catalog_reference,dial_color,catalog_dial,condition',
-      'workbook_price_usd,source_price_amount,source_price_text,source_currency',
+      'workbook_price_usd,source_price_amount,source_currency',
       'price_evidence_status,confidence,verification_status,user_image_url,imported_at',
       'has_exact_source_image,verified_price_usd,has_verified_usd_price,has_complete_identity',
     ].join(',');
@@ -522,7 +522,7 @@ module.exports = async function handler(req, res) {
         `raw_reference.ilike.${pattern}`,
         `normalized_reference.ilike.${pattern}`,
         `catalog_reference.ilike.${pattern}`,
-        `posted_by.ilike.${pattern}`,
+        `seller_name.ilike.${pattern}`,
         `raw_message.ilike.${pattern}`,
       ].join(','));
     }
@@ -531,11 +531,13 @@ module.exports = async function handler(req, res) {
     queryParams.set('limit', String(pageSize + 1));
     if (pageWindow.start > 0) queryParams.set('offset', String(pageWindow.start));
     
-    const restUrl = `${process.env.SUPABASE_URL}/rest/v1/reviewed_workbook_market_source_v2?${queryParams.toString()}`;
+    const baseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://qnsafosakvonzgfcsphh.supabase.co';
+    const apiKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY;
+    const restUrl = `${baseUrl}/rest/v1/reviewed_workbook_market_source_v2?${queryParams.toString()}`;
     const restRes = await fetch(restUrl, {
       headers: {
-        'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
-        'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY}`,
+        'apikey': apiKey,
+        'Authorization': `Bearer ${apiKey}`,
       },
     });
     if (!restRes.ok) {
