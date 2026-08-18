@@ -5,6 +5,7 @@ DECLARE
   v_target_oids OID[];
   v_role TEXT;
   v_table TEXT;
+  v_dml_deltas TEXT;
 BEGIN
   IF v_rpc IS NULL OR v_helper IS NULL THEN RAISE EXCEPTION 'required live shadow functions are missing'; END IF;
   IF (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
@@ -89,17 +90,22 @@ BEGIN
       AND pg_get_constraintdef(oid) LIKE '%publication_writes = 0%'
   ) THEN RAISE EXCEPTION 'zero-publication table constraint is missing'; END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM pg_stat_xact_all_tables stats
-    LEFT JOIN live_shadow_install_xact_baseline baseline USING(relid)
-    WHERE stats.schemaname NOT IN ('pg_catalog','information_schema','extensions')
-      AND NOT (stats.schemaname='staging' AND stats.relname LIKE 'live_shadow_%')
-      AND stats.relid <> 'pg_temp.live_shadow_install_xact_baseline'::regclass
-      AND (
-        stats.n_tup_ins <> COALESCE(baseline.n_tup_ins,0)
-        OR stats.n_tup_upd <> COALESCE(baseline.n_tup_upd,0)
-        OR stats.n_tup_del <> COALESCE(baseline.n_tup_del,0)
-      )
-  ) THEN RAISE EXCEPTION 'schema install changed an existing application table'; END IF;
+  SELECT string_agg(format('%I.%I:+%s/~%s/-%s',stats.schemaname,stats.relname,
+    stats.n_tup_ins-COALESCE(baseline.n_tup_ins,0),
+    stats.n_tup_upd-COALESCE(baseline.n_tup_upd,0),
+    stats.n_tup_del-COALESCE(baseline.n_tup_del,0)), ',' ORDER BY stats.schemaname,stats.relname)
+  INTO v_dml_deltas
+  FROM pg_stat_xact_all_tables stats
+  LEFT JOIN live_shadow_install_xact_baseline baseline USING(relid)
+  WHERE stats.schemaname NOT IN ('pg_catalog','information_schema','extensions')
+    AND NOT (stats.schemaname='staging' AND stats.relname LIKE 'live_shadow_%')
+    AND stats.relid <> 'pg_temp.live_shadow_install_xact_baseline'::regclass
+    AND (
+      stats.n_tup_ins <> COALESCE(baseline.n_tup_ins,0)
+      OR stats.n_tup_upd <> COALESCE(baseline.n_tup_upd,0)
+      OR stats.n_tup_del <> COALESCE(baseline.n_tup_del,0)
+    );
+  IF v_dml_deltas IS NOT NULL THEN
+    RAISE EXCEPTION 'schema install changed application table counters: %', v_dml_deltas;
+  END IF;
 END $postflight$;

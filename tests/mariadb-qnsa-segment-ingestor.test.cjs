@@ -113,6 +113,7 @@ test('private schema install is checksum pinned, atomic, empty and customer-writ
   assert.match(postflight, /pg_stat_xact_all_tables/);
   assert.match(postflight, /LEFT JOIN live_shadow_install_xact_baseline baseline USING\(relid\)/);
   assert.match(postflight, /stats\.relid <> 'pg_temp\.live_shadow_install_xact_baseline'::regclass/);
+  assert.match(postflight, /schema install changed application table counters/);
   assert.match(postflight, /new private live shadow tables are not empty/);
   assert.match(postflight, /aclexplode/);
   assert.match(postflight, /TRUNCATE'[\s\S]*REFERENCES'[\s\S]*TRIGGER'/);
