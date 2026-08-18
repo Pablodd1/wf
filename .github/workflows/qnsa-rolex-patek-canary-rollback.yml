@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: Type ROLLBACK_QNSA_ROLEX_PATEK_CANARY_32092474203
+        description: Type ROLLBACK_QNSA_ROLEX_PATEK_CANARY_32093306372
         required: true
         type: string
 
@@ -28,7 +28,7 @@ jobs:
           PROJECT_REF: qnsafosakvonzgfcsphh
         run: |
           $ErrorActionPreference = 'Stop'
-          if ($env:INPUT_CONFIRMATION -ne 'ROLLBACK_QNSA_ROLEX_PATEK_CANARY_32092474203') { throw 'Exact rollback confirmation is required.' }
+          if ($env:INPUT_CONFIRMATION -ne 'ROLLBACK_QNSA_ROLEX_PATEK_CANARY_32093306372') { throw 'Exact rollback confirmation is required.' }
           if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
           $sql = @"
           DO `$rollback`$
@@ -38,14 +38,14 @@ jobs:
           BEGIN
             SELECT ARRAY(SELECT jsonb_array_elements_text(inserted_ids)) INTO v_ids
             FROM public.reviewed_workbook_delta_release_runs
-            WHERE run_key = 'rpdelta_canary_32092474203_1'
+            WHERE run_key = 'rpdelta_canary_32093306372_1'
               AND release_tier = 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1'
               AND status = 'APPLIED'
             FOR UPDATE;
             IF COALESCE(cardinality(v_ids), 0) <> 10 THEN
               RAISE EXCEPTION 'Expected exactly 10 rollback ids';
             END IF;
-            SELECT public.rollback_qnsa_rolex_patek_delta('rpdelta_canary_32092474203_1', v_ids)
+            SELECT public.rollback_qnsa_rolex_patek_delta('rpdelta_canary_32093306372_1', v_ids)
               INTO v_deleted;
             IF v_deleted <> 10 THEN
               RAISE EXCEPTION 'Expected 10 deleted rows, got %', v_deleted;
