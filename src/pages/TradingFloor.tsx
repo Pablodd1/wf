@@ -405,7 +405,7 @@ export default function TradingFloor() {
         if (search) params.set('q', search);
         if (imagesOnly) params.set('images', 'true');
         if (pricedOnly) params.set('priced', 'true');
-        if (locationFilter) params.set('region', locationFilter);
+        if (locationFilters.length > 0) params.set('region', locationFilters.join(','));
 
         const usesReviewedWatchInventory = ['all', 'watches'].includes(categoryFilter);
         if (!usesReviewedWatchInventory) {
@@ -588,7 +588,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, search]);
+  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, locationFilters, pageSize, pricedOnly, search]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
