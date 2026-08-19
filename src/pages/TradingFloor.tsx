@@ -256,16 +256,21 @@ type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
+function getListingImageSrc(listing: ListingRecord): string | null {
+  const direct = listing.thumbnail_url || listing.image_url || (Array.isArray(listing.image_urls) ? listing.image_urls.find(Boolean) : null);
+  if (direct && typeof direct === 'string' && direct.trim().startsWith('http')) {
+    return direct.trim();
+  }
+  return null;
+}
+
 function hasConfirmedSourceImage(listing: ListingRecord): boolean {
   if (isBundleListing(listing) || listing.multi_listing) return false;
-  if (listing.thumbnail_url && String(listing.thumbnail_url).trim().length > 0) return true;
-  if (Array.isArray(listing.image_urls) && listing.image_urls.some(url => Boolean(url && String(url).trim().length > 0))) return true;
-  if (listing.has_images) return true;
-  return false;
+  return Boolean(getListingImageSrc(listing));
 }
 
 function hasListingImage(listing: ListingRecord): boolean {
-  return true;
+  return Boolean(getListingImageSrc(listing));
 }
 
 /** Detects bundle/multi-watch listings */
@@ -350,25 +355,8 @@ export default function TradingFloor() {
   const globalInventoryTotal = 3527754;
 
   const visibleListings = useMemo(() => {
-    const filtered = listings.filter(listing => {
-      if (imagesOnly && !hasListingImage(listing)) return false;
-      if (pricedOnly && getListingMeta(listing).priceLabel.includes('not supplied')) return false;
-      if (locationFilters.length > 0) {
-        const location = cleanValue(listing.location || listing.seller_country || listing.region);
-        if (!locationFilters.some(lf => location.toLowerCase() === lf.toLowerCase())) return false;
-      }
-      return true;
-    });
-
-    // Sort to show listings with confirmed images first
-    return filtered.sort((a, b) => {
-      const aHasImage = hasConfirmedSourceImage(a);
-      const bHasImage = hasConfirmedSourceImage(b);
-      if (aHasImage && !bHasImage) return -1;
-      if (!aHasImage && bHasImage) return 1;
-      return 0;
-    });
-  }, [imagesOnly, listings, locationFilters, pricedOnly]);
+    return listings;
+  }, [listings]);
 
   const resetResults = useCallback(() => {
     setCursor(null);
@@ -488,67 +476,19 @@ export default function TradingFloor() {
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
-
+  // Load comprehensive price comp benchmarks for all reference models
   useEffect(() => {
-    if (!visibleListings.length) return;
-    const missingPairs: Array<{ brand: string; reference: string; dial: string }> = [];
-    const seen = new Set<string>();
-
-    for (const listing of visibleListings) {
-      if (!listing.brand || !listing.reference) continue;
-      const key = `${listing.brand.toLowerCase()}|${listing.reference.toLowerCase()}|${(listing.dial_color || '').toLowerCase()}`;
-      if (seen.has(key) || ratingsCache[key]) continue;
-      seen.add(key);
-      missingPairs.push({
-        brand: listing.brand,
-        reference: listing.reference,
-        dial: listing.dial_color || '',
-      });
-    }
-
-    if (!missingPairs.length) return;
-
     const controller = new AbortController();
-    const chunks: typeof missingPairs[] = [];
-    for (let i = 0; i < missingPairs.length; i += 24) {
-      chunks.push(missingPairs.slice(i, i + 24));
-    }
-
-    Promise.all(
-      chunks.map(chunk =>
-        fetch('/api/price-research-batch-summary', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pairs: chunk }),
-          signal: controller.signal,
-        })
-          .then(res => (res.ok ? res.json() : null))
-          .catch(() => null)
-      )
-    ).then(results => {
-      const updates: Record<string, ListingBenchmarkData> = {};
-      for (const res of results) {
-        if (!res || !Array.isArray(res.summaries)) continue;
-        for (const s of res.summaries) {
-          const k = `${String(s.brand || '').toLowerCase()}|${String(s.reference || '').toLowerCase()}|${String(s.selected_dial || '').toLowerCase()}`;
-          updates[k] = {
-            stats: s.stats || null,
-            count: Number(s.selected_dial_qualified_count || s.reference_qualified_wts_count || s.source_observation_count || 0),
-            analytics_ready: s.analytics_ready,
-          };
-          const fallbackK = `${String(s.brand || '').toLowerCase()}|${String(s.reference || '').toLowerCase()}|`;
-          if (!updates[fallbackK]) {
-            updates[fallbackK] = updates[k];
-          }
+    fetch('/price_benchmarks.json', { signal: controller.signal })
+      .then(res => res.ok ? res.json() : null)
+      .then(data => {
+        if (data && typeof data === 'object') {
+          setRatingsCache(data);
         }
-      }
-      if (Object.keys(updates).length > 0) {
-        setRatingsCache(prev => ({ ...prev, ...updates }));
-      }
-    });
-
+      })
+      .catch(() => {});
     return () => controller.abort();
-  }, [visibleListings, ratingsCache]);
+  }, []);
 
   useEffect(() => {
     if (previousViewKeyRef.current === viewKey) return;
@@ -651,53 +591,7 @@ export default function TradingFloor() {
               }
             } catch {}
 
-            let liveStreamListings: any[] = [];
-            try {
-              const liveStreamRes = await fetch('/live_stream.json', { signal: controller.signal });
-              if (liveStreamRes.ok) {
-                const liveItems = await liveStreamRes.json();
-                if (Array.isArray(liveItems) && liveItems.length > 0) {
-                  liveStreamListings = liveItems.map(item => ({
-                    id: item.id,
-                    brand: item.brand,
-                    model: item.model,
-                    reference: item.reference,
-                    price_usd: item.price_usd,
-                    price_raw: item.price_raw,
-                    currency: item.currency,
-                    source_price_amount: item.price_raw,
-                    source_currency: item.currency,
-                    price_evidence_status: item.price_usd ? 'SOURCE_EXPLICIT_USD_MATCH' : null,
-                    price_research_eligible: Boolean(item.price_usd && item.price_usd > 0),
-                    dial_color: null,
-                    condition: 'Pre-owned',
-                    year: null,
-                    intent: (item.raw_message || '').toUpperCase().includes('WTB') ? 'WTB' : 'WTS',
-                    listing_type: (item.raw_message || '').toUpperCase().includes('WTB') ? 'WTB' : 'WTS',
-                    verdict: 'APPROVED',
-                    source: 'MARIADB_LIVE_BROADCAST',
-                    source_type: 'LIVE_FEED',
-                    item_category: 'WATCH' as const,
-                    listing_date: item.created_on ? String(item.created_on).slice(0, 10) : '2026-08-19',
-                    listing_status: 'ACTIVE',
-                    created_at: item.created_on || '2026-08-19',
-                    confidence: 98,
-                    has_images: Boolean(item.image_url),
-                    thumbnail_url: item.image_url,
-                    image_url: item.image_url,
-                    image_urls: item.image_url ? [item.image_url] : [],
-                    region: item.region || 'GLOBAL',
-                    raw_message: item.raw_message,
-                    seller_name: item.from_name || 'Verified Dealer',
-                    from_number: item.from_number,
-                    seller_rating: item.dealer_rating || 5.0,
-                    seller_review_count: 24,
-                    data_quality_issues: [],
-                    data_quality_review_required: false,
-                  }));
-                }
-              }
-            } catch {}
+
 
             const staticRes = await fetch('/parsedWatches.json', { signal: controller.signal });
             if (staticRes.ok) {
@@ -778,18 +672,21 @@ export default function TradingFloor() {
                 };
               });
 
-              let combined = [...liveStreamListings, ...textListings];
+              let combined = [...textListings];
 
               if (brandFilter) {
-                const bLower = brandFilter.toLowerCase();
-                combined = combined.filter(r => (r.brand || '').toLowerCase() === bLower);
+                const bNorm = brandFilter.toLowerCase().replace(/[\s\.\-\_]/g, '');
+                combined = combined.filter(r => {
+                  const rbNorm = (r.brand || '').toLowerCase().replace(/[\s\.\-\_]/g, '');
+                  return rbNorm.includes(bNorm) || bNorm.includes(rbNorm);
+                });
               }
               if (intentFilter) {
-                const iUpper = intentFilter.toUpperCase();
-                combined = combined.filter(r => (r.listing_type || '').toUpperCase() === iUpper);
+                const iUpper = intentFilter.toUpperCase().trim();
+                combined = combined.filter(r => (r.listing_type || '').toUpperCase().trim() === iUpper);
               }
               if (search) {
-                const qLower = search.toLowerCase();
+                const qLower = search.toLowerCase().trim();
                 combined = combined.filter(r => 
                   (r.brand || '').toLowerCase().includes(qLower) ||
                   (r.reference || '').toLowerCase().includes(qLower) ||
@@ -802,6 +699,15 @@ export default function TradingFloor() {
               }
               if (pricedOnly) {
                 combined = combined.filter(r => r.price_usd != null && Number(r.price_usd) > 0);
+              }
+              if (locationFilters.length > 0) {
+                combined = combined.filter(r => {
+                  const loc = (r.region || r.location || '').toLowerCase().trim();
+                  return locationFilters.some(lf => {
+                    const lfLower = lf.toLowerCase().trim();
+                    return loc === lfLower || loc.includes(lfLower) || lfLower.includes(loc);
+                  });
+                });
               }
 
               // Prioritize listings with images first
@@ -827,24 +733,7 @@ export default function TradingFloor() {
           }
         }
 
-        // Client-side multi-tier partition:
-        // Tier 1: Normal listings with confirmed images (show first)
-        // Tier 2: Unbundled listings with confirmed images
-        // Tier 3: Normal listings without confirmed images (sent to end of line)
-        // Tier 4: Unbundled listings without confirmed images (sent to end of line)
-        const tier1: ListingRecord[] = [];
-        const tier2: ListingRecord[] = [];
-        const tier3: ListingRecord[] = [];
-        const tier4: ListingRecord[] = [];
-        for (const listing of nextListings) {
-          const isBundle = isBundleListing(listing);
-          const hasImg = hasConfirmedSourceImage(listing);
-          if (!isBundle && hasImg) tier1.push(listing);
-          else if (isBundle && hasImg) tier2.push(listing);
-          else if (!isBundle && !hasImg) tier3.push(listing);
-          else tier4.push(listing);
-        }
-        setListings([...tier1, ...tier2, ...tier3, ...tier4]);
+        setListings(nextListings);
         setTotal(totalCount !== null && Number.isFinite(totalCount) ? totalCount : null);
         if (!cursor) setSelectedListing(null);
       } catch (caught) {
@@ -1060,7 +949,15 @@ export default function TradingFloor() {
         </div>
 
         {selectedListing ? (
-          <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={closeListing} />
+          <ListingDetails
+            key={selectedListing.id}
+            listing={selectedListing}
+            benchmark={
+              ratingsCache[`${(selectedListing.brand || '').toLowerCase().trim()}|${(selectedListing.reference || '').toLowerCase().trim()}`] ||
+              ratingsCache[(selectedListing.reference || '').toLowerCase().trim()]
+            }
+            onClose={closeListing}
+          />
         ) : (
           <div className="grid gap-6 md:grid-cols-[250px_minmax(0,1fr)]">
             <aside className="hidden self-start rounded-md border bg-white p-5 md:sticky md:top-4 md:block shadow-xs" style={{ borderColor: BORDER }} aria-label="Marketplace filters">
@@ -1093,9 +990,11 @@ export default function TradingFloor() {
                 : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}
               >
                 {visibleListings.map(listing => {
-                  const ratingKey = `${(listing.brand || '').toLowerCase()}|${(listing.reference || '').toLowerCase()}|${(listing.dial_color || '').toLowerCase()}`;
-                  const fallbackKey = `${(listing.brand || '').toLowerCase()}|${(listing.reference || '').toLowerCase()}|`;
-                  const benchmark = ratingsCache[ratingKey] || ratingsCache[fallbackKey];
+                  const bClean = (listing.brand || '').toLowerCase().trim();
+                  const rClean = (listing.reference || '').toLowerCase().trim();
+                  const ratingKey = `${bClean}|${rClean}`;
+                  const fallbackKey = rClean;
+                  const benchmark = ratingsCache[ratingKey] || (rClean ? ratingsCache[fallbackKey] : undefined);
                   return (
                     <ListingCard
                       key={listing.id}
@@ -1505,13 +1404,8 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
   );
 }
 
-function getListingImageSrc(listing: ListingRecord): string | null {
-  const direct = listing.thumbnail_url || listing.image_url || (Array.isArray(listing.image_urls) ? listing.image_urls.find(Boolean) : null);
-  if (direct && typeof direct === 'string' && direct.trim().startsWith('http')) {
-    return direct.trim();
-  }
-  return null;
-}
+
+
 
 function ListingCard({ listing, selected, onSelect, benchmark }: { listing: ListingRecord; selected: boolean; onSelect: () => void; benchmark?: ListingBenchmarkData }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
@@ -1610,9 +1504,6 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
           )}
         </div>
       </div>
-      <div className="text-xs text-[#7A8699] mt-0.5">
-        Dealer: <span className="text-[#8A5826] font-medium">{ratingDisplay}</span>
-      </div>
 
       {/* 6. Badges (Location & Date) */}
       <div className="mt-3.5 flex flex-wrap gap-2">
@@ -1653,14 +1544,14 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
           onClick={onSelect}
           className="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#F6F0E7] py-2 text-[11px] font-bold uppercase tracking-wider text-[#653E23] transition hover:bg-[#EFE5D8]"
         >
-          {isBuyerIntent(listing.listing_type) ? 'VIEW BUYER REQUEST' : 'VIEW DETAILS & COMPS'}
+          CHECK AVAILABILITY
         </button>
       </div>
     </article>
   );
 }
 
-function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
+function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { listing: ListingRecord; onClose: () => void; benchmark?: ListingBenchmarkData }) {
   const detailListing = listing;
   const [contact, setContact] = useState<ListingContact | null>(() => sourcePosterContact(listing));
   const [sellerAnalytics, setSellerAnalytics] = useState<ReviewedSellerAnalytics | null>(null);
@@ -1686,11 +1577,21 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
     count: number;
     stats: any | null;
     rating: any;
-  }>({
-    loading: canLoadBenchmark,
-    count: 0,
-    stats: null,
-    rating: rateMarketPrice(listing.price_usd, null, 0),
+  }>(() => {
+    if (initialBenchmark && initialBenchmark.stats && initialBenchmark.count >= 2) {
+      return {
+        loading: false,
+        count: initialBenchmark.count,
+        stats: initialBenchmark.stats,
+        rating: rateMarketPrice(listing.price_usd, initialBenchmark.stats, initialBenchmark.count),
+      };
+    }
+    return {
+      loading: canLoadBenchmark,
+      count: 0,
+      stats: null,
+      rating: rateMarketPrice(listing.price_usd, null, 0),
+    };
   });
 
   useEffect(() => {
@@ -1716,12 +1617,14 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
     // Fetch price rating benchmark
     if (canLoadBenchmark) {
-      setBenchmark({
-        loading: true,
-        count: 0,
-        stats: null,
-        rating: rateMarketPrice(listing.price_usd, null, 0),
-      });
+      if (!initialBenchmark?.stats) {
+        setBenchmark({
+          loading: true,
+          count: 0,
+          stats: null,
+          rating: rateMarketPrice(listing.price_usd, null, 0),
+        });
+      }
 
       const reference = listing.reference as string;
       const params = new URLSearchParams({ reference, brand: listing.brand });
@@ -1731,7 +1634,17 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
       fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })
         .then(async response => response.ok ? response.json() : null)
         .then(payload => {
-          if (!payload) return;
+          if (!payload) {
+            if (initialBenchmark && initialBenchmark.stats && initialBenchmark.count >= 2) {
+              setBenchmark({
+                loading: false,
+                count: initialBenchmark.count,
+                stats: initialBenchmark.stats,
+                rating: rateMarketPrice(listing.price_usd, initialBenchmark.stats, initialBenchmark.count),
+              });
+            }
+            return;
+          }
           const count = Number(payload.count || 0);
           const stats = payload.analytics_ready && payload.stats ? payload.stats : null;
           setBenchmark({
@@ -1743,12 +1656,21 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         })
         .catch(error => {
           if (error?.name !== 'AbortError') {
-            setBenchmark({
-              loading: false,
-              count: 0,
-              stats: null,
-              rating: rateMarketPrice(listing.price_usd, null, 0),
-            });
+            if (initialBenchmark && initialBenchmark.stats && initialBenchmark.count >= 2) {
+              setBenchmark({
+                loading: false,
+                count: initialBenchmark.count,
+                stats: initialBenchmark.stats,
+                rating: rateMarketPrice(listing.price_usd, initialBenchmark.stats, initialBenchmark.count),
+              });
+            } else {
+              setBenchmark({
+                loading: false,
+                count: 0,
+                stats: null,
+                rating: rateMarketPrice(listing.price_usd, null, 0),
+              });
+            }
           }
         });
     } else {
@@ -1761,7 +1683,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
     }
 
     return () => controller.abort();
-  }, [canLoadBenchmark, listing]);
+  }, [canLoadBenchmark, initialBenchmark, listing]);
 
   return (
     <section className="mb-8 flex flex-col gap-3.5" aria-label="Selected listing">
