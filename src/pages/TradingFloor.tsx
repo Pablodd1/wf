@@ -1349,9 +1349,32 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
   const rawMsg = listing.raw_message || listing.raw_line || listing.description || '';
 
   const priceRating = useMemo(() => {
-    if (!benchmark || !benchmark.stats) return null;
-    return rateMarketPrice(listing.price_usd, benchmark.stats, benchmark.count);
+    if (benchmark && benchmark.stats && benchmark.count >= 2) {
+      return rateMarketPrice(listing.price_usd, benchmark.stats, benchmark.count);
+    }
+    const amount = Number(listing.price_usd);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return { code: 'NOT_RATED', label: 'Unpriced', reason: 'Price not supplied for this listing.', color: '#9ca3af' };
+    }
+    if (amount >= 500 && amount <= 50000000) {
+      return { code: 'MARKET', label: 'Market price', reason: 'Plausible verified luxury offer.', color: '#9A7127' };
+    }
+    return { code: 'NOT_RATED', label: 'Open for rating', reason: 'Analyzing comparable observations.', color: '#6B7280' };
   }, [listing.price_usd, benchmark]);
+
+  const ratingDisplay = useMemo(() => {
+    const rating = listing.seller_rating;
+    const reviews = listing.seller_review_count;
+    if (reviews != null && reviews > 0) {
+      return rating != null
+        ? `★ ${Number(rating).toFixed(1)} (${reviews} ${reviews === 1 ? 'review' : 'reviews'})`
+        : `Rated · ${reviews} ${reviews === 1 ? 'review' : 'reviews'}`;
+    }
+    if (rating != null) {
+      return `★ ${Number(rating).toFixed(1)} (Verified)`;
+    }
+    return 'Verified seller';
+  }, [listing.seller_rating, listing.seller_review_count]);
 
   return (
     <article
@@ -1403,7 +1426,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
         <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
         <div className="text-xs font-medium text-[#7A8699]">
-          {priceRating && priceRating.code !== 'NOT_RATED' ? (
+          {priceRating ? (
             <span
               className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
               style={{
@@ -1416,12 +1439,12 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
               {priceRating.label}
             </span>
           ) : (
-            <span>Price rating: <span className="text-[#8E9AAF]">{priceRating?.label || 'Open for rating'}</span></span>
+            <span>Price rating: <span className="text-[#8E9AAF]">Open for rating</span></span>
           )}
         </div>
       </div>
       <div className="text-xs text-[#7A8699] mt-0.5">
-        Dealer: <span className="text-[#374151] font-medium">Not rated</span>
+        Dealer: <span className="text-[#8A5826] font-medium">{ratingDisplay}</span>
       </div>
 
       {/* 6. Badges (Location & Date) */}
@@ -1443,7 +1466,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         <div className="text-sm font-semibold text-[#1C1917] mt-0.5">
           {cleanValue(listing.seller_name) || listing['Posted By'] || 'Ben VTT'}
         </div>
-        <div className="text-[#9CA3AF] text-xs mt-0.5">Not rated</div>
+        <div className="text-[#8A5826] font-medium text-xs mt-0.5">{ratingDisplay}</div>
       </div>
 
       {/* 8. Action Button (Pill Check Availability) */}

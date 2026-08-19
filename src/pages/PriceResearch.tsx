@@ -1098,6 +1098,10 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     .filter(row => !['WTB', 'BUY'].includes(String(row.listing_type || row.intent || '').toUpperCase()))
     .filter(row => Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0)
     .sort((left, right) => {
+      const leftHasImage = Boolean(exactSourceImageUrl(left) || left.thumbnail_url || left.image_url || (Array.isArray(left.image_urls) && left.image_urls.length > 0));
+      const rightHasImage = Boolean(exactSourceImageUrl(right) || right.thumbnail_url || right.image_url || (Array.isArray(right.image_urls) && right.image_urls.length > 0));
+      if (leftHasImage && !rightHasImage) return -1;
+      if (!leftHasImage && rightHasImage) return 1;
       const eligibilityDifference = Number(right.price_usd != null && !right.is_outlier) - Number(left.price_usd != null && !left.is_outlier);
       if (eligibilityDifference !== 0) return eligibilityDifference;
       const priceDifference = Number(left.price_usd) - Number(right.price_usd);
