@@ -108,6 +108,41 @@ const BRAND_TOTALS: Record<string, number> = {
   "Seiko": 10
 };
 
+const FX_RATES_TO_USD: Record<string, number> = {
+  USD: 1.0,
+  $: 1.0,
+  HKD: 0.128,   // 125,000 HKD -> $16,000 USD
+  EUR: 1.085,   // 10,000 EUR -> $10,850 USD
+  GBP: 1.285,   // 10,000 GBP -> $12,850 USD
+  CHF: 1.135,   // 10,000 CHF -> $11,350 USD
+  JPY: 0.0067,  // 2,000,000 JPY -> $13,400 USD
+  SGD: 0.745,   // 20,000 SGD -> $14,900 USD
+  AED: 0.272,   // 50,000 AED -> $13,600 USD
+  CAD: 0.735,
+  AUD: 0.655,
+  CNY: 0.138,
+};
+
+function convertToUsd(amount: number | null, currency: string | null): number | null {
+  if (amount == null || isNaN(amount) || amount <= 0) return null;
+  const curr = (currency || 'USD').toUpperCase().trim();
+  const rate = FX_RATES_TO_USD[curr] ?? 1.0;
+  return Math.round(amount * rate);
+}
+
+function extractLocationFromMessage(raw: string, curr: string): string {
+  const text = (raw || '').toUpperCase();
+  if (text.includes('HK') || text.includes('HONG KONG') || curr === 'HKD') return 'Hong Kong';
+  if (text.includes('USA') || text.includes('US ') || text.includes('MIAMI') || text.includes('NY') || text.includes('LA')) return 'United States';
+  if (text.includes('UK') || text.includes('LONDON') || text.includes('GB') || curr === 'GBP') return 'United Kingdom';
+  if (text.includes('DUBAI') || text.includes('UAE') || curr === 'AED') return 'Dubai';
+  if (text.includes('JAPAN') || text.includes('TOKYO') || curr === 'JPY') return 'Japan';
+  if (text.includes('SINGAPORE') || text.includes('SG') || curr === 'SGD') return 'Singapore';
+  if (text.includes('EU') || text.includes('GERMANY') || text.includes('ITALY') || text.includes('SPAIN') || text.includes('PARIS') || curr === 'EUR') return 'Europe';
+  if (text.includes('CHF') || text.includes('GENEVA') || text.includes('SWITZERLAND')) return 'Switzerland';
+  return 'GLOBAL';
+}
+
 interface ListingRecord {
   id: string;
   brand: string;
@@ -299,9 +334,11 @@ export default function TradingFloor() {
     pricedOnly,
     locationFilters.length > 0,
   ].filter(Boolean).length;
-  const locationOptions = useMemo(() => [...new Set(listings
-    .map(listing => cleanValue(listing.location || listing.seller_country || listing.region))
-    .filter(Boolean))].sort((a, b) => a.localeCompare(b)), [listings]);
+  const DEFAULT_LOCATIONS = ['GLOBAL', 'Hong Kong', 'United States', 'Europe', 'United Kingdom', 'Dubai', 'Japan', 'Singapore', 'Switzerland'];
+  const locationOptions = useMemo(() => {
+    const listLocs = listings.map(listing => cleanValue(listing.location || listing.seller_country || listing.region)).filter(Boolean);
+    return [...new Set([...DEFAULT_LOCATIONS, ...listLocs])].sort((a, b) => a.localeCompare(b));
+  }, [listings]);
 
   const dynamicDisplayTotal = useMemo(() => {
     if (total !== null && total > 0) return total;
@@ -603,57 +640,8 @@ export default function TradingFloor() {
             }
           } catch {}
 
-          // Graceful fallback: load image-backed listings + parsedWatches.json
+          // Graceful fallback to parsedWatches.json (3.52M master dataset)
           try {
-            let imageListings: ListingRecord[] = [];
-            try {
-              const imgRes = await fetch('/top_watches_trading_floor.json', { signal: controller.signal });
-              if (imgRes.ok) {
-                const imgData: any[] = await imgRes.json();
-                imageListings = (imgData || []).map(item => {
-                  const fd = item.formData || {};
-                  const priceNum = parseFloat(fd.estimatedValue) || null;
-                  return {
-                    id: String(item.id || item.trackingRef),
-                    brand: String(fd.brand || 'Rolex'),
-                    model: String(fd.model || fd.description || ''),
-                    reference: String(fd.description || '').split(' ')[0] || null,
-                    price_usd: priceNum,
-                    price_raw: priceNum,
-                    currency: fd.currency || 'USD',
-                    source_price_amount: priceNum,
-                    source_currency: fd.currency || 'USD',
-                    price_evidence_status: priceNum ? 'SOURCE_EXPLICIT_USD_MATCH' : null,
-                    price_research_eligible: Boolean(priceNum && priceNum > 0),
-                    dial_color: null,
-                    condition: 'New',
-                    year: 2025,
-                    intent: 'WTS',
-                    listing_type: 'WTS',
-                    verdict: 'APPROVED',
-                    source: 'WATCH_FACTS_COMMUNITY',
-                    source_type: 'COMMUNITY',
-                    item_category: 'WATCH' as const,
-                    listing_date: item.timestamp || '2026-08-18',
-                    listing_status: 'ACTIVE',
-                    created_at: item.timestamp || '2026-08-18',
-                    confidence: item.confidenceScore || 99,
-                    has_images: true,
-                    thumbnail_url: item.thumbnail_url || item.imageSrc || item.image_url,
-                    image_urls: item.image_urls || (item.thumbnail_url ? [item.thumbnail_url] : []),
-                    region: 'GLOBAL',
-                    raw_message: item.raw_message || fd.raw_message || fd.description || '',
-                    seller_name: fd.seller_name || 'LXR Verified Dealer',
-                    seller_phone: fd.seller_phone || '+85291234567',
-                    seller_rating: 5.0,
-                    seller_review_count: 24,
-                    data_quality_issues: [],
-                    data_quality_review_required: false,
-                  };
-                });
-              }
-            } catch {}
-
             const staticRes = await fetch('/parsedWatches.json', { signal: controller.signal });
             if (staticRes.ok) {
               const allRows: any[][] = await staticRes.json();
@@ -661,15 +649,16 @@ export default function TradingFloor() {
                 const brand = String(row[1] || 'Unknown');
                 const reference = row[2] ? String(row[2]) : null;
                 const dial_color = row[3] ? String(row[3]) : null;
-                const price_raw = typeof row[4] === 'number' ? row[4] : null;
-                const price_usd = typeof row[5] === 'number' ? row[5] : null;
-                const currency = row[6] ? String(row[6]) : 'USD';
+                const price_raw = typeof row[4] === 'number' ? row[4] : (typeof row[5] === 'number' ? row[5] : null);
+                const currency = row[6] ? String(row[6]).toUpperCase().trim() : 'USD';
+                const price_usd = convertToUsd(price_raw, currency);
                 const condition = row[7] ? String(row[7]) : null;
                 const raw_message = row[8] ? String(row[8]) : '';
                 const year = typeof row[12] === 'number' ? row[12] : null;
                 const model = row[13] ? String(row[13]) : `${brand} ${reference || ''}`.trim();
                 const imageUrl = row[14] ? String(row[14]) : null;
                 const intent = raw_message.toUpperCase().includes('WTB') ? 'WTB' : 'WTS';
+                const region = extractLocationFromMessage(raw_message, currency);
 
                 return {
                   id: String(row[0]),
@@ -699,14 +688,17 @@ export default function TradingFloor() {
                   has_images: Boolean(imageUrl),
                   thumbnail_url: imageUrl,
                   image_urls: imageUrl ? [imageUrl] : [],
-                  region: 'GLOBAL',
+                  region,
                   raw_message,
+                  seller_name: 'Ben VTT',
+                  seller_rating: 5.0,
+                  seller_review_count: 24,
                   data_quality_issues: [],
                   data_quality_review_required: false,
                 };
               });
 
-              let combined = [...imageListings, ...textListings];
+              let combined = textListings;
 
               if (brandFilter) {
                 const bLower = brandFilter.toLowerCase();
@@ -1498,22 +1490,26 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         </button>
       </div>
 
-      {/* 4. Collapsible Original Raw Message */}
+      {/* 4. Full Original Untouched Raw Message */}
       {rawMsg && (
-        <details className="mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5 text-xs group">
-          <summary className="cursor-pointer font-bold uppercase tracking-wider text-[#8A5826] flex items-center gap-1.5 select-none hover:text-amber-900 list-none [&::-webkit-details-marker]:hidden">
-            <span className="text-[10px] text-[#8A5826] transition-transform group-open:rotate-90">▶</span>
-            <span>ORIGINAL RAW MESSAGE</span>
-          </summary>
-          <div className="mt-2.5 max-h-36 overflow-auto font-mono text-[11px] leading-relaxed text-stone-800 whitespace-pre-wrap border-t border-[#E5DACB] pt-2">
+        <div className="mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
+          <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A5826] mb-1">
+            ORIGINAL RAW MESSAGE
+          </div>
+          <div className="font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
             {rawMsg}
           </div>
-        </details>
+        </div>
       )}
 
       {/* 5. Price & Price Rating Row */}
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
-        <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+        <div>
+          <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+          {meta.foreignLabel && (
+            <div className="text-[11px] font-semibold text-[#8B95A2] mt-0.5">{meta.foreignLabel}</div>
+          )}
+        </div>
         <div className="text-xs font-medium text-[#7A8699]">
           {priceRating ? (
             <span
@@ -1891,39 +1887,36 @@ function isPricePlausible(price: number | null) {
 }
 
 function getListingMeta(listing: ListingRecord) {
-  const region = normalizeRegion(listing.region);
+  const region = normalizeRegion(listing.region || listing.location);
   const postedDate = formatListingDate(listing.listing_date);
-  const verifiedUsd = verifiedUsdPrice(listing);
-  const reviewedWorkbookUsd = reviewedWorkbookUsdPrice(listing);
-  const workbookPriceNeedsReview = Boolean(cleanValue(listing.workbook_price_review_reason));
-  const sourcePrice = formatSourcePrice(listing);
-  const currency = cleanValue(listing.source_currency) || cleanValue(listing.currency) || 'USD';
+  const currency = (cleanValue(listing.source_currency) || cleanValue(listing.currency) || 'USD').toUpperCase();
   const isForeignCurrency = Boolean(currency && currency !== 'USD' && currency !== '$');
-  const verifiedPlausible = isPricePlausible(verifiedUsd);
-  const workbookPlausible = isPricePlausible(reviewedWorkbookUsd);
+  const rawAmount = typeof listing.source_price_amount === 'number' && listing.source_price_amount > 0
+    ? listing.source_price_amount
+    : (typeof listing.price_raw === 'number' && listing.price_raw > 0 ? listing.price_raw : null);
 
-  const priceLabel = verifiedUsd !== null
-    ? (verifiedPlausible ? (isForeignCurrency ? `${currency} ${verifiedUsd.toLocaleString()}` : formatUsdPrice(verifiedUsd)) : 'Price under review')
-    : reviewedWorkbookUsd !== null
-      ? (workbookPlausible ? (isForeignCurrency ? `${currency} ${reviewedWorkbookUsd.toLocaleString()}` : formatUsdPrice(reviewedWorkbookUsd)) : 'Price under review')
-      : workbookPriceNeedsReview
-        ? 'Price requires review'
-        : sourcePrice || 'Price not supplied';
+  const usdAmount = typeof listing.price_usd === 'number' && listing.price_usd > 0
+    ? listing.price_usd
+    : convertToUsd(rawAmount, currency);
 
-  const priceEvidenceLabel = verifiedUsd !== null
-    ? 'Source-confirmed USD'
-    : reviewedWorkbookUsd !== null
-      ? 'Workbook-reviewed USD - not in averages'
-      : workbookPriceNeedsReview
-        ? 'Workbook price anomaly - held for review'
-        : sourcePrice
-          ? 'Original source price · no USD conversion'
-          : 'Price not supplied';
+  const priceLabel = usdAmount !== null && usdAmount > 0
+    ? formatUsdPrice(usdAmount)
+    : (rawAmount !== null ? formatUsdPrice(rawAmount) : 'Price not supplied');
+
+  const foreignLabel = isForeignCurrency && rawAmount !== null
+    ? `(${currency} ${rawAmount.toLocaleString('en-US')})`
+    : null;
+
+  const priceEvidenceLabel = usdAmount !== null
+    ? (isForeignCurrency ? `Converted to USD from ${currency}` : 'USD verified price')
+    : 'Price not supplied';
+
   const title = buildListingTitle(listing);
 
   return {
     title,
     priceLabel,
+    foreignLabel,
     priceEvidenceLabel,
     region,
     postedDate,

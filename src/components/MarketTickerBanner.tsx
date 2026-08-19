@@ -24,7 +24,7 @@ export function MarketTickerBanner() {
         .ticker-marquee-track {
           display: flex;
           width: max-content;
-          animation: ticker-marquee-loop 35s linear infinite;
+          animation: ticker-marquee-loop 75s linear infinite;
         }
         .ticker-marquee-track:hover {
           animation-play-state: paused;
