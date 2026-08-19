@@ -50,7 +50,10 @@ test('Price Research customer sale evidence requires a positive normalized USD p
   assert.equal(researchApi.isCustomerPricedSaleEvidence({ price_usd: null }), false);
   assert.equal(researchApi.isCustomerPricedSaleEvidence({ price_usd: 0 }), false);
   assert.equal(researchApi.isCustomerPricedSaleEvidence({ price_usd: 'not-a-price' }), false);
-  assert.equal(researchApi.isCustomerPricedSaleEvidence({ price_usd: 12_500 }), true);
+  assert.equal(researchApi.isCustomerPricedSaleEvidence({
+    listing_type: 'WTS', brand: 'Rolex', reference: '126500LN', dial_color: 'White',
+    price_usd: 12_500, source_currency: 'USD', analytics_currency_status: 'VERIFIED',
+  }), true);
 });
 
 test('both pages retain compact/raw evidence behavior without fake image frames', () => {

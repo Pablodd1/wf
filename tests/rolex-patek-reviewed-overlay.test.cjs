@@ -146,18 +146,18 @@ test('Trading Floor and Price Research keep the reviewed delta additive', () => 
   const priceApi = fs.readFileSync(path.join(repo, 'api', 'price-research.js'), 'utf8');
   assert.match(tradingApi, /reviewedOverlayRecords/);
   assert.match(tradingApi, /includeMultiParents: true/);
-  assert.match(tradingApi, /listingTypes: listingType\s*\? \[listingType\]\s*: \['WTS', 'WTB', 'MULTI'\]/);
+  assert.match(tradingApi, /listingTypes: listingType === 'MULTI'/);
   assert.match(tradingApi, /!listingType \|\| String\(record\.listing_type \|\| ''\)\.toUpperCase\(\) === listingType/);
   assert.match(tradingApi, /boundReviewedOverlayPage/);
   assert.match(tradingApi, /mergeByExactLineage\(records, filteredOverlay\)/);
-  assert.match(tradingUi, /\.\.\.\(data\.records \|\| \[\]\), \.\.\.\(data\.reviewedOverlayRecords \|\| \[\]\)/);
+  assert.match(tradingUi, /\[\.\.\.data\.records, \.\.\.overlay\]/);
   assert.match(priceApi, /mergeByExactLineage\(rows \|\| \[\], overlayWtsRows\)/);
   assert.match(priceApi, /SOURCE_EXPLICIT_USD_MATCH|loadRolexPatekOverlayEvidenceRows/);
   const analyticsLib = fs.readFileSync(path.join(repo, 'api', '_lib', 'reviewed-workbook-analytics.cjs'), 'utf8');
   assert.doesNotMatch(analyticsLib, /includeMultiParents:\s*true/);
 });
 
-test('combined Trading Floor pages are bounded and totals label singles versus parent', () => {
+test('combined Trading Floor pages are bounded, overlay-first, and totals label singles versus parent', () => {
   const base = Array.from({ length: 20 }, (_, index) => ({ id: `base-${index}` }));
   const overlay = Array.from({ length: 10 }, (_, index) => ({ id: `overlay-${index}` }));
   const bounded = tradingFloorApi.boundReviewedOverlayPage(base, overlay, 24);
@@ -166,8 +166,11 @@ test('combined Trading Floor pages are bounded and totals label singles versus p
   assert.equal(tradingFloorApi.combineInventoryTotal(562092, 813, false), 562905);
   assert.equal(tradingFloorApi.combineInventoryTotal(null, 813, false), null);
   const tradingUi = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
-  assert.match(tradingUi, /data\.records\.length > 0 \|\| \(data\.reviewedOverlayRecords \|\| \[\]\)\.length > 0/);
+  assert.match(tradingUi, /data\.status === 'ok' && Array\.isArray\(data\.records\)/);
   const tradingApiSource = fs.readFileSync(path.join(__dirname, '..', 'api', 'reviewed-market-inventory.js'), 'utf8');
+  assert.match(tradingApiSource, /const overlayCapacity = requestedDeltaOffset < reviewedOverlayTotal \? pageSize : 0/);
+  assert.match(tradingApiSource, /offset: servingReviewedOverlayPage \? requestedOffset : nextOffset/);
+  assert.match(tradingApiSource, /const publicBaseRecords = servingReviewedOverlayPage \? \[\] : records/);
   assert.match(tradingApiSource, /reviewed_single_total/);
   assert.match(tradingApiSource, /structured_multi_parent_total/);
 });

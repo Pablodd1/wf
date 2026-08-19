@@ -114,6 +114,7 @@ async function loadRolexPatekOverlayRows(client, {
   brand,
   references = [],
   listingTypes = ['WTS', 'WTB'],
+  includeMissingIntent = false,
   limit = 1000,
   offset = 0,
   count = false,
@@ -129,8 +130,15 @@ async function loadRolexPatekOverlayRows(client, {
     .eq('verification_tier', ROLEX_PATEK_DELTA_TIER)
     .eq('verification_status', 'APPROVED_SINGLE_CANDIDATE')
     .eq('confidence', 100)
-    .not('source_message_id', 'is', null)
-    .in('listing_type', listingTypes);
+    .not('source_message_id', 'is', null);
+  const normalizedListingTypes = [...new Set((listingTypes || [])
+    .map(value => clean(value).toUpperCase())
+    .filter(Boolean))];
+  if (includeMissingIntent) {
+    query = query.or(`listing_type.in.(${normalizedListingTypes.join(',')}),listing_type.is.null`);
+  } else {
+    query = query.in('listing_type', normalizedListingTypes);
+  }
   const exactReferences = [...new Set((references || []).map(clean).filter(Boolean))];
   if (exactReferences.length) query = query.in('normalized_reference', exactReferences);
   const boundedLimit = Math.min(10000, Math.max(1, Number(limit) || 1000));

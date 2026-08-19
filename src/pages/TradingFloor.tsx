@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft,
   Check,
   Filter,
   Globe2,
@@ -11,10 +10,12 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { rateMarketPrice } from '../lib/marketPriceRating';
+import { rateMarketPrice, type MarketBenchmark, type MarketPriceRating } from '../lib/marketPriceRating';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
+import { DealerRatingBadge, ListingDealerEvidence, sourceBackedDealerRating } from '../components/ListingDealerEvidence';
+import { loadPriceResearchBatchSummaries, priceResearchSummaryKey, type PriceResearchBatchSummary } from '../utils/priceResearchBatchSummary';
 
 const GOLD = '#9A7127';
 const GOLD_BRIGHT = '#7B5719';
@@ -79,6 +80,7 @@ interface ListingRecord {
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
   multi_listing?: boolean;
+  is_unbundled_child?: boolean;
   raw_message?: string | null;
   raw_line?: string | null;
   description?: string | null;
@@ -87,11 +89,14 @@ interface ListingRecord {
   raw_message_truncated?: boolean;
   seller_name?: string | null;
   seller_phone?: string | null;
+  contact_publication_approved?: boolean;
   seller_avatar_url?: string | null;
   seller_rating?: number | null;
   seller_review_count?: number | null;
+  seller_rating_evidence_status?: 'SOURCE_SUPPLIED' | 'SOURCE_FEEDBACK_COUNT' | 'UNAVAILABLE';
   seller_group_count?: number | null;
   seller_credential_status?: string | null;
+  dealer_profile_path?: string | null;
   location?: string | null;
   seller_country?: string | null;
   posted_by?: string | null;
@@ -107,6 +112,7 @@ interface TradingFloorResponse {
   status: string;
   error?: string;
   records?: ListingRecord[];
+  reviewedOverlayRecords?: ListingRecord[];
   total?: number | null;
   totalIsEstimate?: boolean;
   nextCursor?: string | null;
@@ -120,6 +126,7 @@ interface ListingContact {
   phone_display?: string;
   contact_source?: string;
   whatsapp_url?: string;
+  contact_channels?: { whatsapp?: string; telegram?: string };
   reason?: string;
 }
 
@@ -152,21 +159,14 @@ type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
-function hasConfirmedSourceImage(listing: ListingRecord): boolean {
-  if (isBundleListing(listing) || listing.multi_listing) return false;
-  if (listing.thumbnail_url && String(listing.thumbnail_url).trim().length > 0) return true;
-  if (Array.isArray(listing.image_urls) && listing.image_urls.some(url => Boolean(url && String(url).trim().length > 0))) return true;
-  if (listing.has_images) return true;
-  return false;
-}
-
 function hasListingImage(listing: ListingRecord): boolean {
-  return true;
+  return getListingImageSrc(listing) !== null;
 }
 
 /** Detects bundle/multi-watch listings */
 function isBundleListing(listing: ListingRecord) {
   if (listing.multi_listing) return true;
+  if (['MULTI', 'MULTI_LISTING', 'BUNDLE'].includes(cleanValue(listing.listing_type).toUpperCase())) return true;
   if (listing.model && /multiple|multi|mixed/i.test(listing.model)) return true;
   if (listing.dial_color && /multiple|multi|mixed/i.test(listing.dial_color)) return true;
   return false;
@@ -208,6 +208,7 @@ export default function TradingFloor() {
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 50);
+  const [priceSummaries, setPriceSummaries] = useState<Record<string, PriceResearchBatchSummary>>({});
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
   const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter].join('\u001f');
@@ -232,6 +233,39 @@ export default function TradingFloor() {
     }
     return true;
   }), [imagesOnly, listings, locationFilter, pricedOnly]);
+  const visiblePricePairs = useMemo(() => {
+    const seen = new Set<string>();
+    return visibleListings.flatMap(listing => {
+      if (listing.item_category !== 'WATCH' || !listing.brand || !listing.reference || !listing.dial_color) return [];
+      const pair = { brand: listing.brand, reference: listing.reference, dial: listing.dial_color };
+      const key = priceResearchSummaryKey(pair);
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [pair];
+    });
+  }, [visibleListings]);
+  const visiblePricePairKey = useMemo(
+    () => visiblePricePairs.map(priceResearchSummaryKey).sort().join('\u001e'),
+    [visiblePricePairs],
+  );
+
+  useEffect(() => {
+    if (!visiblePricePairs.length) {
+      setPriceSummaries({});
+      return;
+    }
+    let active = true;
+    void loadPriceResearchBatchSummaries(visiblePricePairs)
+      .then(summaries => {
+        if (active) setPriceSummaries(Object.fromEntries(summaries.map(summary => [summary.key, summary])));
+      })
+      .catch(error => {
+        if (active && error?.name !== 'AbortError') setPriceSummaries({});
+      });
+    return () => { active = false; };
+  // The serialized exact identities change only when the visible page changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visiblePricePairKey]);
 
   const resetResults = useCallback(() => {
     setCursor(null);
@@ -362,150 +396,30 @@ export default function TradingFloor() {
         let nextListings: ListingRecord[] = [];
         let totalCount: number | null = null;
 
-        if (data.status === 'ok' && Array.isArray(data.records) && data.records.length > 0) {
+        if (data.status === 'ok' && Array.isArray(data.records)) {
           if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
             setReleaseBrands(data.publicationBrands);
           }
-          nextListings = data.records;
+          const overlay = Array.isArray(data.reviewedOverlayRecords) ? data.reviewedOverlayRecords : [];
+          const seen = new Set<string>();
+          nextListings = [...data.records, ...overlay].filter(listing => {
+            const key = String(listing.id || '').trim();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          }).slice(0, pageSize);
           totalCount = data.total == null ? null : Number(data.total);
           setTotalIsEstimate(Boolean(data.totalIsEstimate));
           setNextCursor(data.nextCursor || null);
           setHasMore(Boolean(data.hasMore && data.nextCursor));
         } else {
-          // Fast manifest check for immediate instant counter display
-          try {
-            const manifestRes = await fetch('/inventory_manifest.json', { signal: controller.signal });
-            if (manifestRes.ok) {
-              const manifest = await manifestRes.json();
-              if (manifest) {
-                if (brandFilter && manifest.brands && manifest.brands[brandFilter]) {
-                  totalCount = Number(manifest.brands[brandFilter]);
-                } else if (!brandFilter) {
-                  totalCount = Number(manifest.total_listings || 3527754);
-                }
-                if (Array.isArray(manifest.brand_list) && manifest.brand_list.length > 0) {
-                  setReleaseBrands(manifest.brand_list);
-                }
-              }
-            }
-          } catch {}
-
-          // Graceful fallback to parsedWatches.json (3.52M master dataset)
-          try {
-            const staticRes = await fetch('/parsedWatches.json', { signal: controller.signal });
-            if (staticRes.ok) {
-              const allRows: any[][] = await staticRes.json();
-              let filtered = allRows;
-
-              if (brandFilter) {
-                const bLower = brandFilter.toLowerCase();
-                filtered = filtered.filter(r => String(r[1] || '').toLowerCase() === bLower);
-              }
-              if (intentFilter) {
-                const iUpper = intentFilter.toUpperCase();
-                filtered = filtered.filter(r => {
-                  const msg = String(r[8] || '').toUpperCase();
-                  return iUpper === 'WTB' ? msg.includes('WTB') : !msg.includes('WTB');
-                });
-              }
-              if (search) {
-                const qLower = search.toLowerCase();
-                filtered = filtered.filter(r => 
-                  String(r[1] || '').toLowerCase().includes(qLower) ||
-                  String(r[2] || '').toLowerCase().includes(qLower) ||
-                  String(r[8] || '').toLowerCase().includes(qLower) ||
-                  String(r[13] || '').toLowerCase().includes(qLower)
-                );
-              }
-              if (imagesOnly) {
-                filtered = filtered.filter(r => Boolean(r[14]));
-              }
-              if (pricedOnly) {
-                filtered = filtered.filter(r => r[5] != null && Number(r[5]) > 0);
-              }
-
-              totalCount = filtered.length;
-              const pageIdx = cursor ? parseInt(cursor, 10) || 1 : 1;
-              const startIdx = (pageIdx - 1) * pageSize;
-              const pageRows = filtered.slice(startIdx, startIdx + pageSize);
-
-              nextListings = pageRows.map(row => {
-                const brand = String(row[1] || 'Unknown');
-                const reference = row[2] ? String(row[2]) : null;
-                const dial_color = row[3] ? String(row[3]) : null;
-                const price_raw = typeof row[4] === 'number' ? row[4] : null;
-                const price_usd = typeof row[5] === 'number' ? row[5] : null;
-                const currency = row[6] ? String(row[6]) : 'USD';
-                const condition = row[7] ? String(row[7]) : null;
-                const raw_message = row[8] ? String(row[8]) : '';
-                const year = typeof row[12] === 'number' ? row[12] : null;
-                const model = row[13] ? String(row[13]) : `${brand} ${reference || ''}`.trim();
-                const imageUrl = row[14] ? String(row[14]) : null;
-                const intent = raw_message.toUpperCase().includes('WTB') ? 'WTB' : 'WTS';
-
-                return {
-                  id: String(row[0]),
-                  brand,
-                  model,
-                  reference,
-                  price_usd,
-                  price_raw,
-                  currency,
-                  source_price_amount: price_raw,
-                  source_currency: currency,
-                  price_evidence_status: price_usd ? 'SOURCE_EXPLICIT_USD_MATCH' : null,
-                  price_research_eligible: Boolean(price_usd && price_usd > 0),
-                  dial_color,
-                  condition,
-                  year,
-                  intent,
-                  listing_type: intent,
-                  verdict: 'APPROVED',
-                  source: 'WATCH_FACTS_COMMUNITY',
-                  source_type: 'COMMUNITY',
-                  item_category: 'WATCH' as const,
-                  listing_date: '2026-08-18',
-                  listing_status: 'ACTIVE',
-                  created_at: '2026-08-18',
-                  confidence: typeof row[9] === 'number' ? row[9] : 95,
-                  has_images: Boolean(imageUrl),
-                  thumbnail_url: imageUrl,
-                  image_urls: imageUrl ? [imageUrl] : [],
-                  region: 'GLOBAL',
-                  raw_message,
-                  data_quality_issues: [],
-                  data_quality_review_required: false,
-                };
-              });
-
-              setTotalIsEstimate(false);
-              const hasNext = startIdx + pageSize < filtered.length;
-              setNextCursor(hasNext ? String(pageIdx + 1) : null);
-              setHasMore(hasNext);
-            }
-          } catch (e) {
-            console.error('Static fallback load failed:', e);
-          }
+          throw new Error(data.error || 'The live inventory service is temporarily unavailable');
         }
 
-        // Client-side multi-tier partition:
-        // Tier 1: Normal listings with confirmed images (show first)
-        // Tier 2: Unbundled listings with confirmed images
-        // Tier 3: Normal listings without confirmed images (sent to end of line)
-        // Tier 4: Unbundled listings without confirmed images (sent to end of line)
-        const tier1: ListingRecord[] = [];
-        const tier2: ListingRecord[] = [];
-        const tier3: ListingRecord[] = [];
-        const tier4: ListingRecord[] = [];
-        for (const listing of nextListings) {
-          const isBundle = isBundleListing(listing);
-          const hasImg = hasConfirmedSourceImage(listing);
-          if (!isBundle && hasImg) tier1.push(listing);
-          else if (isBundle && hasImg) tier2.push(listing);
-          else if (!isBundle && !hasImg) tier3.push(listing);
-          else tier4.push(listing);
-        }
-        setListings([...tier1, ...tier2, ...tier3, ...tier4]);
+        // Ordering belongs to the API cursor contract: exact images first, then
+        // compact no-image rows. Reordering a cursor page here can create
+        // apparent skips at page boundaries.
+        setListings(nextListings);
         setTotal(totalCount !== null && Number.isFinite(totalCount) ? totalCount : null);
         if (!cursor) setSelectedListing(null);
       } catch (caught) {
@@ -694,6 +608,9 @@ export default function TradingFloor() {
                   <ListingCard
                     key={listing.id}
                     listing={listing}
+                    priceSummary={listing.brand && listing.reference && listing.dial_color
+                      ? priceSummaries[priceResearchSummaryKey({ brand: listing.brand, reference: listing.reference, dial: listing.dial_color })]
+                      : undefined}
                     selected={false}
                     onSelect={() => openListing(listing)}
                   />
@@ -978,56 +895,65 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
   );
 }
 
-const BRAND_FALLBACK_IMAGES: Record<string, string> = {
-  'rolex': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80',
-  'patek philippe': 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?auto=format&fit=crop&w=600&q=80',
-  'audemars piguet': 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=600&q=80',
-  'richard mille': 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=600&q=80',
-  'cartier': 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=600&q=80',
-  'omega': 'https://images.unsplash.com/photo-1533139502658-0198f920d8e8?auto=format&fit=crop&w=600&q=80',
-  'tudor': 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?auto=format&fit=crop&w=600&q=80',
-  'tag heuer': 'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?auto=format&fit=crop&w=600&q=80',
-  'vacheron constantin': 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=600&q=80',
-  'breguet': 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=600&q=80',
-  'iwc': 'https://images.unsplash.com/photo-1548169874-53e85f753f1e?auto=format&fit=crop&w=600&q=80',
-  'breitling': 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?auto=format&fit=crop&w=600&q=80',
-  'panerai': 'https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&w=600&q=80',
-  'hublot': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80',
-  'zenith': 'https://images.unsplash.com/photo-1533139502658-0198f920d8e8?auto=format&fit=crop&w=600&q=80',
-  'grand seiko': 'https://images.unsplash.com/photo-1614164185128-e4ec99c436d7?auto=format&fit=crop&w=600&q=80',
-  'a. lange & söhne': 'https://images.unsplash.com/photo-1548036328-c9fa89d128fa?auto=format&fit=crop&w=600&q=80',
-  'f.p. journe': 'https://images.unsplash.com/photo-1547996160-81dfa63595aa?auto=format&fit=crop&w=600&q=80',
-  'blancpain': 'https://images.unsplash.com/photo-1524805444758-089113d48a6d?auto=format&fit=crop&w=600&q=80',
-  'bulgari': 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?auto=format&fit=crop&w=600&q=80',
-  'default': 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'
-};
-
 function getListingImageSrc(listing: ListingRecord): string | null {
-  const direct = listing.thumbnail_url || listing.image_urls?.find(Boolean);
-  if (direct && direct.trim().length > 0) return direct.trim();
-  const bKey = String(listing.brand || '').toLowerCase().trim();
-  return BRAND_FALLBACK_IMAGES[bKey] || BRAND_FALLBACK_IMAGES['default'];
+  if (isBundleListing(listing) || listing.is_unbundled_child === true) return null;
+  const direct = [listing.thumbnail_url, ...(listing.image_urls || [])]
+    .find(value => typeof value === 'string' && /^https:\/\/[^\s]+$/i.test(value.trim()));
+  return direct ? direct.trim() : null;
 }
 
-function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
+function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: ListingRecord; priceSummary?: PriceResearchBatchSummary; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const imageUrl = getListingImageSrc(listing);
+  const [imageAvailable, setImageAvailable] = useState(Boolean(imageUrl));
+  const cardHasImage = Boolean(imageUrl && imageAvailable);
   const rawMsg = listing.raw_message || listing.raw_line || listing.description || '';
+  const dealerRating = sourceBackedDealerRating({
+    rating: listing.seller_rating,
+    reviewCount: listing.seller_review_count,
+    ratingEvidenceStatus: listing.seller_rating_evidence_status,
+  });
+  const listingIntent = cleanValue(listing.intent || listing.listing_type).toUpperCase();
+  const canRatePrice = listing.item_category === 'WATCH'
+    && listingIntent === 'WTS'
+    && Boolean(listing.brand && listing.reference && listing.dial_color)
+    && Number.isFinite(Number(listing.price_usd))
+    && Number(listing.price_usd) > 0;
+  const comparableCount = canRatePrice && priceSummary?.analytics_ready === true
+    ? Number(priceSummary.selected_dial_qualified_count || 0)
+    : 0;
+  const displayedCardPriceRating = {
+    loading: canRatePrice && priceSummary === undefined,
+    count: comparableCount,
+    rating: rateMarketPrice(
+      listing.price_usd,
+      comparableCount >= 2 ? priceSummary?.stats || null : null,
+      comparableCount,
+    ),
+  };
+  const cardPriceRatingLabel = displayedCardPriceRating.loading
+    ? 'Loading…'
+    : displayedCardPriceRating.rating.code === 'NOT_RATED'
+      ? 'Not rated'
+      : displayedCardPriceRating.rating.label;
 
   return (
     <article
-      className="flex flex-col rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      className={`flex flex-col rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${cardHasImage ? 'min-h-[620px]' : 'min-h-[320px]'}`}
       style={{ borderColor: selected ? GOLD : '#EBE3D5' }}
     >
-      {/* 1. Watch Image */}
-      <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
-        <img
-          src={imageUrl || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'}
-          alt={meta.title}
-          className="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]"
-          loading="lazy"
-        />
-      </button>
+      {/* 1. Exact source image only. No frame is rendered for unbundled/no-image rows. */}
+      {cardHasImage && (
+        <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
+          <img
+            src={imageUrl || ''}
+            alt={meta.title}
+            className="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]"
+            loading="lazy"
+            onError={() => setImageAvailable(false)}
+          />
+        </button>
+      )}
 
       {/* 2. Category & Intent (e.g. WATCH · FOR SALE) */}
       <div className="mt-4">
@@ -1050,7 +976,7 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
         <details className="mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5 text-xs group">
           <summary className="cursor-pointer font-bold uppercase tracking-wider text-[#8A5826] flex items-center gap-1.5 select-none hover:text-amber-900 list-none [&::-webkit-details-marker]:hidden">
             <span className="text-[10px] text-[#8A5826] transition-transform group-open:rotate-90">▶</span>
-            <span>ORIGINAL RAW MESSAGE</span>
+            <span>Original raw message</span>
           </summary>
           <div className="mt-2.5 max-h-36 overflow-auto font-mono text-[11px] leading-relaxed text-stone-800 whitespace-pre-wrap border-t border-[#E5DACB] pt-2">
             {rawMsg}
@@ -1061,20 +987,27 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       {/* 5. Price & Price Rating Row */}
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
         <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
-        <div className="text-xs font-medium text-[#7A8699]">
-          Price rating: <span className="text-[#8E9AAF]">Calculating...</span>
+        <div className="text-xs font-medium" style={{ color: displayedCardPriceRating.rating.color }} title={displayedCardPriceRating.rating.reason}>
+          Price rating: {cardPriceRatingLabel}
         </div>
       </div>
-      <div className="text-xs text-[#7A8699] mt-0.5">
-        Dealer: <span className="text-[#374151] font-medium">Not rated</span>
+      <div className="text-xs text-[#7A8699] mt-0.5 flex items-center gap-1">
+        Dealer:
+        <DealerRatingBadge
+          rating={listing.seller_rating}
+          reviewCount={listing.seller_review_count}
+          ratingEvidenceStatus={listing.seller_rating_evidence_status}
+        />
       </div>
 
       {/* 6. Badges (Location & Date) */}
       <div className="mt-3.5 flex flex-wrap gap-2">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
-          <Globe2 size={12} className="text-[#6B7280]" />
-          {listing.region || listing.location || listing.seller_country || 'North America'}
-        </span>
+        {(listing.region || listing.location || listing.seller_country) && (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
+            <Globe2 size={12} className="text-[#6B7280]" />
+            {listing.region || listing.location || listing.seller_country}
+          </span>
+        )}
         {meta.postedDate && (
           <span className="inline-flex items-center rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
             Posted {meta.postedDate}
@@ -1083,13 +1016,21 @@ function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; 
       </div>
 
       {/* 7. Posted by Section */}
-      <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
-        <div className="text-[#6B7280]">Posted by</div>
-        <div className="text-sm font-semibold text-[#1C1917] mt-0.5">
-          {cleanValue(listing.seller_name) || listing['Posted By'] || 'Ben VTT'}
+      {(cleanValue(listing.seller_name) || listing['Posted By'] || dealerRating) && (
+        <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
+          <div className="text-[#6B7280]">Posted by</div>
+          <ListingDealerEvidence
+            sellerName={cleanValue(listing.seller_name) || listing['Posted By'] || 'Seller not supplied'}
+            sellerPhone={listing.seller_phone}
+            contactPublicationApproved={listing.contact_publication_approved === true}
+            rating={listing.seller_rating}
+            reviewCount={listing.seller_review_count}
+            ratingEvidenceStatus={listing.seller_rating_evidence_status}
+            groupCount={listing.seller_group_count}
+            profilePath={listing.dealer_profile_path}
+          />
         </div>
-        <div className="text-[#9CA3AF] text-xs mt-0.5">Not rated</div>
-      </div>
+      )}
 
       {/* 8. Action Button (Pill Check Availability) */}
       <div className="mt-auto pt-4">
@@ -1116,11 +1057,11 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const mainImage = getListingImageSrc(listing);
   const images = useMemo(() => {
-    const directImages = (listing.image_urls || []).filter(Boolean);
+    const directImages = (listing.image_urls || []).filter(url => Boolean(url && !failedImages.has(url)));
     if (directImages.length > 0) return directImages;
-    if (mainImage) return [mainImage];
-    return ['https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'];
-  }, [listing, mainImage]);
+    if (mainImage && !failedImages.has(mainImage)) return [mainImage];
+    return [];
+  }, [failedImages, listing, mainImage]);
 
   const visibleImageIndex = activeImage < images.length ? activeImage : 0;
   const rawSourceMessage = listing.raw_message ?? listing.raw_line ?? listing.description ?? '';
@@ -1130,8 +1071,8 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   const [benchmark, setBenchmark] = useState<{
     loading: boolean;
     count: number;
-    stats: any | null;
-    rating: any;
+    stats: MarketBenchmark | null;
+    rating: MarketPriceRating;
   }>({
     loading: canLoadBenchmark,
     count: 0,
@@ -1141,6 +1082,17 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
   useEffect(() => {
     const controller = new AbortController();
+
+    const contactParams = new URLSearchParams({
+      id: String(listing.id),
+      surface: 'trading-floor',
+      brand: String(listing.brand || ''),
+      reference: String(listing.reference || ''),
+    });
+    fetch(`/api/listing-contact?${contactParams.toString()}`, { signal: controller.signal })
+      .then(async response => response.ok ? response.json() as Promise<ListingContact> : null)
+      .then(payload => { if (payload) setContact(payload); })
+      .catch(error => { if (error?.name !== 'AbortError') setContact(sourcePosterContact(listing)); });
     
     // Fetch seller analytics
     fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
@@ -1162,13 +1114,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
 
     // Fetch price rating benchmark
     if (canLoadBenchmark) {
-      setBenchmark({
-        loading: true,
-        count: 0,
-        stats: null,
-        rating: rateMarketPrice(listing.price_usd, null, 0),
-      });
-
       const reference = listing.reference as string;
       const params = new URLSearchParams({ reference, brand: listing.brand });
       if (listing.condition) params.set('condition', listing.condition);
@@ -1197,13 +1142,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             });
           }
         });
-    } else {
-      setBenchmark({
-        loading: false,
-        count: 0,
-        stats: null,
-        rating: rateMarketPrice(null, null, 0),
-      });
     }
 
     return () => controller.abort();
@@ -1219,11 +1157,11 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
         Open full price research
       </a>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(320px,460px)_1fr]">
+      <div className={`grid gap-6 ${images.length ? 'lg:grid-cols-[minmax(320px,460px)_1fr]' : 'grid-cols-1'}`}>
         {/* Left Column: Watch Image */}
-        <div className="rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-3 shadow-xs">
+        {images.length > 0 && <div className="rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-3 shadow-xs">
           <img
-            src={images[visibleImageIndex] || mainImage || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?auto=format&fit=crop&w=600&q=80'}
+            src={images[visibleImageIndex]}
             alt={`${meta.title} source listing image`}
             className="h-[520px] w-full rounded-md object-contain lg:h-[620px]"
             onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
@@ -1243,7 +1181,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
               ))}
             </div>
           )}
-        </div>
+        </div>}
 
         {/* Right Column: 3 Cards */}
         <div className="flex flex-col gap-4">
@@ -1264,7 +1202,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
 
             <div className="mt-5 border-t border-stone-100 pt-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5826]">ORIGINAL RAW MESSAGE</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5826]">Original raw message</div>
               <div className="mt-2.5 rounded bg-[#FBF9F6] p-3 font-mono text-xs leading-relaxed text-stone-800 whitespace-pre-wrap">
                 {rawSourceMessage || 'Original source text is unavailable.'}
               </div>
@@ -1287,26 +1225,42 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
             <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">PRICE RATING</div>
             <div className="mt-2 text-lg font-bold text-[#1C1917]">
-              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.label || 'Calculating...')}
+              {benchmark.loading ? 'Loading market evidence…' : (benchmark.rating?.code === 'NOT_RATED' ? 'Not rated' : benchmark.rating?.label)}
             </div>
             <div className="mt-1 text-xs text-[#8B95A2]">
-              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.description || 'Comparing against verified dealer observations.')}
+              {benchmark.loading ? 'Loading the exact reference and dial cohort.' : (benchmark.rating?.reason || 'Insufficient exact market evidence.')}
             </div>
+            {benchmark.stats && benchmark.count >= 2 && (
+              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-stone-100 pt-4 sm:grid-cols-4">
+                <MarketStat label="Average" value={benchmark.stats.avg} />
+                <MarketStat label="Median" value={benchmark.stats.median || benchmark.stats.avg} />
+                <MarketStat label="Low" value={benchmark.stats.min} />
+                <MarketStat label="High" value={benchmark.stats.max} />
+              </div>
+            )}
           </div>
 
           {/* Card 3: Posted by & WhatsApp */}
           <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
             <h3 className="text-base font-bold text-[#1C1917]">Posted by</h3>
             <div className="mt-4 border-t border-stone-100 pt-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">SOURCE-SUPPLIED CONTACT</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source-supplied contact</div>
               <div className="mt-2 text-base font-bold text-[#1C1917]">
-                {contact?.dealer_name || listing['Posted By'] || listing.seller_name || 'Ben VTT'}
+                {contact?.dealer_name || listing['Posted By'] || listing.seller_name || 'Seller not supplied'}
               </div>
-              <div className="text-xs text-[#8B95A2] mt-0.5">Not rated</div>
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-600">
+              <DealerRatingBadge rating={listing.seller_rating} reviewCount={listing.seller_review_count} ratingEvidenceStatus={listing.seller_rating_evidence_status} />
+              {(listing.location || listing.seller_country || listing.region) && <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-600">
                 <Globe2 size={13} className="text-[#8A5826]" />
-                <span>{listing.location || listing.seller_country || listing.region || 'North America'}</span>
-              </div>
+                <span>{listing.location || listing.seller_country || listing.region}</span>
+              </div>}
+              {(sellerAnalytics || sellerReputation) && (
+                <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  <ContactMetric label="Posts" value={sellerAnalytics?.total_posts || 0} />
+                  <ContactMetric label="For sale" value={sellerAnalytics?.wts_posts || 0} />
+                  <ContactMetric label="Want to buy" value={sellerAnalytics?.wtb_posts || 0} />
+                  <ContactMetric label="Feedback" value={sellerReputation?.review_count || 0} />
+                </div>
+              )}
             </div>
 
             <p className="mt-5 text-xs leading-relaxed text-[#6B7280]">
@@ -1346,6 +1300,7 @@ function MarketStat({ label, value }: { label: string; value: number }) {
 }
 
 function sourcePosterContact(listing: ListingRecord): ListingContact | null {
+  if (listing.contact_publication_approved !== true) return null;
   const phone = String(listing.seller_phone || listing['Phone Number'] || listing.phone_number || '').trim();
   const name = cleanValue(listing.seller_name || listing['Posted By'] || listing.posted_by);
   if (!phone && !name) return null;
@@ -1358,59 +1313,6 @@ function sourcePosterContact(listing: ListingRecord): ListingContact | null {
     whatsapp_url: digits.length >= 7 ? `https://wa.me/${digits}` : undefined,
     reason: undefined,
   };
-}
-
-function ListingImage({ listing, className, onUnavailable }: { listing: ListingRecord; className: string; onUnavailable: () => void }) {
-  const meta = getListingMeta(listing);
-  const imageUrl = listing.thumbnail_url || listing.image_urls?.find(Boolean);
-
-  // ponytail: multi-listing children show a badge, not the parent's multi-watch image
-  if (listing.multi_listing) {
-    return (
-      <div className={`${className} rounded-sm flex items-center justify-center bg-bg-elevated`}>
-        <span className="text-[10px] font-bold uppercase tracking-wider text-gold-primary">Multi-Listing</span>
-      </div>
-    );
-  }
-
-  return imageUrl ? (
-    <img
-      src={imageUrl}
-      alt={meta.title}
-      className={`${className} rounded-sm object-cover`}
-      loading="lazy"
-      onError={onUnavailable}
-    />
-  ) : null;
-}
-
-function ActionButton({ label, muted = false, onClick }: { label: string; muted?: boolean; onClick?: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={!onClick}
-      className="flex h-[47px] w-full items-center justify-center gap-1.5 rounded-full border-2 text-[13px] font-semibold disabled:cursor-default"
-      style={{
-        borderColor: muted ? 'rgba(156,163,175,0.42)' : GOLD,
-        color: muted ? MUTED : GOLD_BRIGHT,
-        background: muted ? 'rgba(156,163,175,0.05)' : 'rgba(201,169,110,0.06)',
-        opacity: onClick ? 1 : 0.72,
-      }}
-    >
-      <MessageCircle size={15} />
-      {label}
-    </button>
-  );
-}
-
-function RegionLabel({ region }: { region: string }) {
-  return (
-    <div className="flex items-center gap-1 text-[13px] font-semibold uppercase" style={{ color: MUTED }}>
-      <Globe2 size={16} fill={GOLD} color={GOLD} />
-      <span>{region}</span>
-    </div>
-  );
 }
 
 function isPricePlausible(price: number | null) {

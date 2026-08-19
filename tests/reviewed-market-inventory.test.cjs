@@ -136,11 +136,11 @@ test('reviewed-workbook multi parent requires its exact status and source-lineag
   assert.equal(api.isTradingFloorSourceRow({ ...base, publication_lane: 'LEGACY_BUNDLE' }), false);
 });
 
-test('admission query includes only singles and the exact multi-parent status and orders parents last', () => {
+test('admission query keeps missing-intent singles for post-map resolution and orders parents last', () => {
   const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand))");
   const branch = source.slice(branchStart, source.indexOf('if (admissionError) throw admissionError;', branchStart));
   assert.match(branch, /'APPROVED_SINGLE_CANDIDATE',[\s\S]*MULTI_PARENT_VERIFICATION_STATUS/);
-  assert.match(branch, /\.in\('listing_type', \['WTS', 'WTB', 'MULTI'\]\)/);
+  assert.match(branch, /listing_type\.in\.\(WTS,WTB,MULTI,OTHER,UNKNOWN\),listing_type\.is\.null/);
   const statusOrder = branch.indexOf(".order('verification_status', { ascending: false })");
   const typeOrder = branch.indexOf(".order('listing_type', { ascending: false })");
   assert.ok(statusOrder > 0 && statusOrder < typeOrder);
@@ -1148,7 +1148,8 @@ test('obvious immutable-raw cross-brand conflicts never reach customer cards', (
 });
 
 test('bounded QNSA RPC rows reapply every customer filter before publication', () => {
-  assert.match(source, /p_listing_type: listingType \|\| null/);
+  assert.match(source, /p_listing_type: databaseListingType/);
+  assert.match(source, /databaseTradingIntentFilter\(listingType\)/);
   assert.match(source, /!listingType \|\| String\(record\.listing_type/);
   assert.match(source, /!imagesOnly \|\| record\.has_images === true/);
   assert.match(source, /!pricedOnly \|\| hasUsableSourcePrice\(record\)/);

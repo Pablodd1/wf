@@ -54,8 +54,8 @@ function classifyResearchEligibility(row, catalog) {
   if (!row?.brand || String(row.brand).trim().toUpperCase() === 'UNKNOWN') return 'MISSING_BRAND';
   if (!row?.reference) return 'MISSING_REFERENCE';
   if ((!catalog?.found || !catalog.model) && !ownerReviewedIdentity) return 'CATALOG_MODEL_UNCONFIRMED';
-  if (!Number.isFinite(price) || price <= 0) return 'MISSING_PRICE';
   if (row?.listing_type && normalizedStatus(row.listing_type) !== 'WTS') return 'NOT_WTS_SALE';
+  if (!Number.isFinite(price) || price <= 0) return 'MISSING_PRICE';
   if (row?.analytics_currency_status !== 'VERIFIED') {
     return row?.analytics_currency_status || 'CURRENCY_UNVERIFIED';
   }
@@ -70,6 +70,29 @@ function classifyResearchEligibility(row, catalog) {
   if (catalogDials.length && !catalogDials.some(value => dialKey === comparisonKey(value)) && !ownerReviewedIdentity) {
     return 'CATALOG_DIAL_MISMATCH';
   }
+  return null;
+}
+
+// Customer offer evidence and market-comparable evidence are deliberately
+// separate contracts. A source-backed WTS offer can remain visible when a
+// catalog/cohort gate excludes it from averages (including statistical
+// outliers), but a positive stored number is never enough by itself.
+function classifySaleEvidenceEligibility(row) {
+  if (normalizedStatus(row?.listing_type) !== 'WTS') return 'NOT_WTS_SALE';
+  if (!row?.brand || normalizedStatus(row.brand) === 'UNKNOWN') return 'MISSING_BRAND';
+  if (!row?.reference) return 'MISSING_REFERENCE';
+  if (!normalizeDialValue(row?.dial_color).known) return 'MISSING_DIAL';
+  const price = Number(row?.price_usd);
+  if (!Number.isFinite(price) || price <= 0) return 'MISSING_PRICE';
+  if (normalizedStatus(row?.analytics_currency_status) !== 'VERIFIED') {
+    return normalizedStatus(row?.analytics_currency_status) || 'CURRENCY_UNVERIFIED';
+  }
+  const sourceCurrency = normalizedStatus(row?.source_currency || row?.currency);
+  const directUsd = sourceCurrency === 'USD' || sourceCurrency === 'USDT';
+  const hasDatedFx = Number(row?.analytics_fx_rate) > 0
+    && Boolean(row?.analytics_fx_date)
+    && Boolean(row?.analytics_fx_source);
+  if (!directUsd && !hasDatedFx) return 'FX_PROVENANCE_MISSING';
   return null;
 }
 
@@ -112,6 +135,7 @@ module.exports = {
   classifyDemandItemEligibility,
   classifyDemandEligibility,
   classifyResearchEligibility,
+  classifySaleEvidenceEligibility,
   isHumanReviewAnalyticsCandidate,
   isMultiListingSentinel,
 };

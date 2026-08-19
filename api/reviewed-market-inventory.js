@@ -13,6 +13,11 @@ const { classifyWatchPartListing } = require('./_lib/watch-item-classification.c
 const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
+  databaseTradingIntentFilter,
+  isPublicTradingIntent,
+  resolveTradingIntent,
+} = require('./_lib/trading-intent.cjs');
+const {
   isRolexPatekOverlayBrand,
   loadRolexPatekOverlayRows,
   mergeByExactLineage,
@@ -121,7 +126,8 @@ function unavailableQnsaReleaseSummary() {
 function snapshotInventoryTotal(summary, filters) {
   if (summary?.count_snapshot_available === false) return null;
   const unsupported = filters.search || filters.reference || filters.dial || filters.imagesOnly
-    || filters.condition || filters.region || filters.rating || filters.postedAfter;
+    || filters.condition || filters.region || filters.rating || filters.postedAfter
+    || ['WTS', 'WTB'].includes(filters.listingType);
   if (unsupported || !Array.isArray(summary?.market_counts)) return null;
   return summary.market_counts
     .filter(row => filters.itemCategory === 'ALL'
@@ -622,14 +628,39 @@ function hasObviousCrossBrandConflict(row) {
 
 function isTradingFloorSourceRow(row) {
   const itemCategory = effectiveItemCategory(row);
-  const listingType = cleanExactText(row?.listing_type, 30).toUpperCase();
   const status = cleanExactText(row?.trading_floor_status || row?.listing_status, 60).toUpperCase();
+  const decision = cleanExactText(row?.verdict || row?.verification_status, 80).toUpperCase();
   if (!['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY'].includes(itemCategory)) return false;
+  if (['REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED'].includes(decision)) return false;
   const explicitlyReleasedMultiListing = isExplicitlyReleasedMultiListing(row);
   if (explicitlyReleasedMultiListing) return true;
-  if (!['WTS', 'WTB'].includes(listingType)) return false;
+  const multiListing = isMultiListing(row);
+  if (multiListing) return false;
+  const sourceAmount = positiveNumber(row?.source_price_amount)
+    ?? positiveNumber(row?.price_raw);
+  const resolvedIntent = resolveTradingIntent({
+    rawMessage: row?.raw_message,
+    structuredIntent: row?.listing_type,
+    hasSourcePrice: sourceAmount !== null,
+    eligibleSingleWatch: itemCategory === 'WATCH',
+  });
+  if (!isPublicTradingIntent(resolvedIntent.intent)) return false;
   if (hasObviousCrossBrandConflict(row)) return false;
-  if ((row?.parent_id || row?.is_bundle === true) && !explicitlyReleasedMultiListing) return false;
+  const isUnbundledChild = evidenceValuePresent(row?.parent_id)
+    || evidenceValuePresent(row?.parent_source_message_id)
+    || cleanExactText(row?.verification_tier, 80).toUpperCase() === 'OWNER_UNBUNDLED_ADMISSION_LEDGER';
+  const storedConfidence = Number(row?.confidence);
+  const confidencePercent = storedConfidence >= 0 && storedConfidence <= 1
+    ? storedConfidence * 100
+    : storedConfidence;
+  const exactReviewedChild = isUnbundledChild
+    && row?.is_bundle !== true
+    && row?.raw_lineage_verified === true
+    && row?.normalization_run_complete === true
+    && Number.isFinite(confidencePercent)
+    && confidencePercent >= 90;
+  if ((row?.is_bundle === true || (isUnbundledChild && !exactReviewedChild))
+    && !explicitlyReleasedMultiListing) return false;
   if (['BUNDLE_CHILD_PENDING_REVIEW', 'BUNDLE_PENDING_SEPARATION', 'SUPPRESSED_EXACT_DUPLICATE', 'HIDDEN', 'REJECTED', 'DELETED', 'ARCHIVED'].includes(status)) {
     return false;
   }
@@ -981,6 +1012,12 @@ function mapReviewedRecord(row) {
     || evidenceValuePresent(row.parent_source_message_id)
     || String(row.verification_tier || '').toUpperCase() === 'OWNER_UNBUNDLED_ADMISSION_LEDGER';
   const publicImageUrl = multiListing || isUnbundledChild ? null : exactImageUrl;
+  const tradingIntent = resolveTradingIntent({
+    rawMessage: row.raw_message,
+    structuredIntent: row.listing_type,
+    hasSourcePrice: sourceAmount !== null,
+    eligibleSingleWatch: itemCategory === 'WATCH' && !multiListing,
+  });
   const publicImageEvidenceType = publicImageUrl
     ? (String(row.image_evidence_type || '').toUpperCase() === 'SELLER_LISTING_IMAGE'
       ? 'SELLER_LISTING_IMAGE'
@@ -1051,7 +1088,11 @@ function mapReviewedRecord(row) {
     has_complete_identity: hasCompleteIdentity,
     dial_color: dialColor,
     condition: correctedWatchFields.condition,
-    listing_type: row.listing_type || 'OTHER',
+    listing_type: tradingIntent.intent,
+    listing_type_original: tradingIntent.original_intent,
+    listing_type_provenance: tradingIntent.provenance,
+    listing_type_inferred: tradingIntent.inferred,
+    listing_type_review_reason: tradingIntent.review_reason,
     listing_date: row.posting_date || null,
     source_posted_at_text: evidenceValuePresent(row.source_posted_at_text)
       ? row.source_posted_at_text
@@ -1068,7 +1109,9 @@ function mapReviewedRecord(row) {
       : publicRatedEvidence?.review_count || 0,
     seller_rating_evidence_status: ratingEvidenceStatus,
     seller_trust_status: publicRatedEvidence?.trust_status || null,
-    seller_rating_source_url: publicRatedEvidence?.source_url || null,
+    // Legacy crawl provenance remains private; the public payload carries only
+    // the source-backed rating/feedback result and canonical profile path.
+    seller_rating_source_url: null,
     contact_publication_approved: contactApproved,
     price_usd: publicVerifiedUsd,
     effective_price_source: row.effective_price_source || null,
@@ -1625,6 +1668,11 @@ module.exports = async function handler(req, res) {
     if (listingType && !['WTS', 'WTB', 'OTHER', 'MULTI'].includes(listingType)) {
       return res.status(400).json({ status: 'error', error: 'Invalid listing type' });
     }
+    // WTS/WTB can be an owner fallback for an otherwise approved single-watch
+    // row whose stored intent is missing. Fetch the bounded unresolved source
+    // window and apply that policy after mapping; exact MULTI/OTHER filters can
+    // still be pushed into PostgreSQL/RPCs.
+    const databaseListingType = databaseTradingIntentFilter(listingType);
     if (rating && !['rated', 'unrated'].includes(rating)) {
       return res.status(400).json({ status: 'error', error: 'Invalid dealer rating filter' });
     }
@@ -1742,9 +1790,12 @@ module.exports = async function handler(req, res) {
           'APPROVED_SINGLE_CANDIDATE',
           MULTI_PARENT_VERIFICATION_STATUS,
         ])
-        .eq('confidence', 100)
-        .in('listing_type', ['WTS', 'WTB', 'MULTI']);
-      if (listingType) admissionQuery = admissionQuery.eq('listing_type', listingType);
+        .eq('confidence', 100);
+      if (databaseListingType) {
+        admissionQuery = admissionQuery.eq('listing_type', databaseListingType);
+      } else {
+        admissionQuery = admissionQuery.or('listing_type.in.(WTS,WTB,MULTI,OTHER,UNKNOWN),listing_type.is.null');
+      }
       if (requestedReference) {
         admissionQuery = admissionQuery.in('normalized_reference', listEquivalentReferences(requestedReference, brand));
       }
@@ -1808,6 +1859,10 @@ module.exports = async function handler(req, res) {
       });
       const records = (await enrichRecordsWithDealerDirectory(client, mappedAdmissionRows))
         .filter(record => !record.multi_listing || record.multi_listing_release_approved === true)
+        .filter(record => isPublicTradingIntent(record.listing_type)
+          || record.multi_listing_release_approved === true)
+        .filter(record => !listingType
+          || cleanExactText(record.listing_type, 30).toUpperCase() === listingType)
         .filter(record => !condition || cleanExactText(record.condition, 80).toLowerCase() === condition.toLowerCase())
         .filter(record => !region || locationMatches(record.location, region))
         .filter(record => ratingMatches(record, rating))
@@ -1817,11 +1872,13 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({
         status: 'ok',
         count: records.length,
-        total: Number(admissionCount || 0),
+        total: ['WTS', 'WTB'].includes(listingType) ? null : Number(admissionCount || 0),
         page,
         pageSize,
         totalIsEstimate: false,
-        totalStatus: 'available_from_approved_admission_inventory',
+        totalStatus: ['WTS', 'WTB'].includes(listingType)
+          ? 'withheld_for_owner_intent_fallback_filter'
+          : 'available_from_approved_admission_inventory',
         hasMore,
         nextCursor: hasMore ? encodeInventoryCursor({ lane: 'images', offset: nextOffset, page: page + 1 }) : null,
         records,
@@ -1890,7 +1947,7 @@ module.exports = async function handler(req, res) {
       }
     }
     if (exactDialVariants.length) queryParams.set('dial_color', `in.(${exactDialVariants.join(',')})`);
-    if (listingType) queryParams.set('listing_type', `eq.${listingType}`);
+    if (databaseListingType) queryParams.set('listing_type', `eq.${databaseListingType}`);
     if (itemCategory === 'WATCH') {
       // Include legacy OTHER rows only so the fail-closed brand/reference rule
       // above can recover real watches. The mapped category filter removes
@@ -2009,7 +2066,7 @@ module.exports = async function handler(req, res) {
       ? buildLegacyMarketQueryParams({
           pageSize, offset: requestedOffset, imageLane: requestedLane,
           brand, requestedReference, exactDialVariants,
-          listingType, imagesOnly, pricedOnly, search, postedAfter,
+          listingType: databaseListingType, imagesOnly, pricedOnly, search, postedAfter,
         })
       : queryParams;
     let usedLegacyViewContract = legacyMarketViewContractDetected;
@@ -2043,7 +2100,7 @@ module.exports = async function handler(req, res) {
                   p_after_created_at: windowCursor?.createdAt ?? null,
                   p_after_id: windowCursor?.id ?? null,
                   p_limit: pageSize,
-                  p_listing_type: listingType || null,
+                  p_listing_type: databaseListingType,
                   p_scan_limit: 500,
                 }),
               });
@@ -2084,14 +2141,14 @@ module.exports = async function handler(req, res) {
         body: JSON.stringify(watchFeed
           ? (laterReviewedBrand
             ? { p_brand: brand || null, p_limit: pageSize,
-                p_offset: requestedOffset, p_listing_type: listingType || null }
+                p_offset: requestedOffset, p_listing_type: databaseListingType }
             : { p_brand: brand || null, p_limit: qnsaBrandScanLimit,
-                p_offset: requestedOffset, p_listing_type: listingType || null })
+                p_offset: requestedOffset, p_listing_type: databaseListingType })
           : {
               p_category: itemCategory,
               p_limit: qnsaBrandScanLimit,
               p_offset: requestedOffset,
-              p_listing_type: listingType || null,
+              p_listing_type: databaseListingType,
               p_images_only: imagesOnly,
               p_location: region || null,
               p_posted_after: postedAfter,
@@ -2107,7 +2164,7 @@ module.exports = async function handler(req, res) {
             p_category: itemCategory,
             p_limit: qnsaBrandScanLimit,
             p_offset: requestedOffset,
-            p_listing_type: listingType || null,
+            p_listing_type: databaseListingType,
             p_images_only: imagesOnly,
             p_location: region || null,
             p_posted_after: postedAfter,
@@ -2123,7 +2180,7 @@ module.exports = async function handler(req, res) {
         pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows_strict`, {
           method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
-            p_offset: requestedOffset, p_listing_type: listingType || null }),
+            p_offset: requestedOffset, p_listing_type: databaseListingType }),
         });
       }
       if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
@@ -2134,7 +2191,7 @@ module.exports = async function handler(req, res) {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
-            p_offset: requestedOffset, p_listing_type: listingType || null }),
+            p_offset: requestedOffset, p_listing_type: databaseListingType }),
         });
       }
       if (!pageRowsRes.ok) {
@@ -2166,7 +2223,7 @@ module.exports = async function handler(req, res) {
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ p_brand: brand || null, p_limit: 51,
             p_offset: brand === 'Cartier' ? requestedOffset + 2650 : requestedOffset,
-            p_listing_type: listingType || null }),
+            p_listing_type: databaseListingType }),
         });
         if (fallbackRes.ok) {
           pageRows = (await fallbackRes.json())
@@ -2286,7 +2343,7 @@ module.exports = async function handler(req, res) {
             p_reference: request.reference,
             p_limit: qnsaBrandScanLimit,
             p_offset: requestedOffset,
-            p_listing_type: listingType || null,
+            p_listing_type: databaseListingType,
           } : {
             p_brand: brand,
             p_reference: request.reference,
@@ -2337,7 +2394,7 @@ module.exports = async function handler(req, res) {
       activeQueryParams = buildLegacyMarketQueryParams({
         pageSize, offset: requestedOffset, imageLane: requestedLane,
         brand, requestedReference, exactDialVariants,
-        listingType, imagesOnly, pricedOnly, search, postedAfter,
+        listingType: databaseListingType, imagesOnly, pricedOnly, search, postedAfter,
       });
       restUrl = `${process.env.SUPABASE_URL}/rest/v1/${activeMarketSourceView}?${activeQueryParams.toString()}`;
       restRes = await fetch(restUrl, { headers });
@@ -2415,6 +2472,8 @@ module.exports = async function handler(req, res) {
     let records = recoveredMarketRecords
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true)
         && (!record.multi_listing || record.multi_listing_release_approved === true))
+      .filter(record => isPublicTradingIntent(record.listing_type)
+        || record.multi_listing_release_approved === true)
       .filter(record => record.item_category === 'WATCH' || record.luxury_identity_eligible === true)
       .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
       .filter(record => !imagesOnly || record.has_images === true)
@@ -2435,6 +2494,8 @@ module.exports = async function handler(req, res) {
       records = (await recoverRecordPrices(sourceRows.map(mapReviewedRecord)))
         .map(suppressPublicReferenceTokenPrice)
         .filter(record => !record.multi_listing || record.multi_listing_release_approved === true)
+        .filter(record => isPublicTradingIntent(record.listing_type)
+          || record.multi_listing_release_approved === true)
         .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
         .filter(record => !imagesOnly || record.has_images === true)
         .filter(record => !pricedOnly || hasUsableSourcePrice(record))
@@ -2503,6 +2564,7 @@ module.exports = async function handler(req, res) {
     let reviewedOverlayDuplicateCount = 0;
     let reviewedOverlayConsumed = 0;
     let reviewedOverlayHasMore = false;
+    let servingReviewedOverlayPage = false;
     const reviewedOverlayBrands = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       ? (isRolexPatekOverlayBrand(brand)
         ? [brand]
@@ -2516,9 +2578,10 @@ module.exports = async function handler(req, res) {
           loadRolexPatekOverlayRows(client, {
             brand: overlayBrand,
             references: requestedReference ? listEquivalentReferences(requestedReference, overlayBrand) : [],
-            listingTypes: listingType
-              ? [listingType]
-              : ['WTS', 'WTB', 'MULTI'],
+            listingTypes: listingType === 'MULTI'
+              ? ['MULTI']
+              : ['WTS', 'WTB', 'OTHER', 'UNKNOWN', ...(listingType ? [] : ['MULTI'])],
+            includeMissingIntent: listingType !== 'MULTI',
             includeMultiParents: true,
             limit, offset, count,
           });
@@ -2531,7 +2594,12 @@ module.exports = async function handler(req, res) {
         reviewedOverlayTotal = overlayCounts.reduce((sum, result) => sum + Number(result.count || 0), 0);
         reviewedOverlaySingleTotal = overlayCounts.reduce((sum, result) => sum + Number(result.singleCount || 0), 0);
         reviewedOverlayMultiParentTotal = overlayCounts.reduce((sum, result) => sum + Number(result.multiParentCount || 0), 0);
-        const overlayCapacity = Math.max(0, pageSize - records.length);
+        // The reviewed delta is its own deterministic cursor lane. Serve it
+        // first so a large canonical base feed cannot make the additions
+        // practically unreachable or cause them to be skipped while advancing
+        // the base cursor. The canonical base cursor remains frozen until the
+        // reviewed lane is exhausted.
+        const overlayCapacity = requestedDeltaOffset < reviewedOverlayTotal ? pageSize : 0;
         let remainingGlobalOffset = requestedDeltaOffset;
         let remainingCapacity = overlayCapacity;
         const overlayPlans = [];
@@ -2556,6 +2624,8 @@ module.exports = async function handler(req, res) {
           overlaySourceRows.map(mapReviewedRecord),
         );
         const filteredOverlay = mappedOverlay
+          .filter(record => isPublicTradingIntent(record.listing_type)
+            || record.multi_listing_release_approved === true)
           .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
           .filter(record => !imagesOnly || record.has_images === true)
           .filter(record => !pricedOnly || hasUsableSourcePrice(record))
@@ -2570,10 +2640,11 @@ module.exports = async function handler(req, res) {
         reviewedOverlayDuplicateCount = overlayMerge.overlay_duplicate_count;
         const baseIds = new Set(records.map(record => String(record.id)));
         reviewedOverlayRecords = boundReviewedOverlayPage(
-          records,
+          [],
           overlayMerge.rows.filter(record => !baseIds.has(String(record.id))),
           pageSize,
         );
+        servingReviewedOverlayPage = reviewedOverlayRecords.length > 0;
         reviewedOverlayHasMore = requestedDeltaOffset + reviewedOverlayConsumed < reviewedOverlayTotal;
       } catch (overlayError) {
         // Overlay failure must never take the established QNSA feed offline.
@@ -2586,12 +2657,14 @@ module.exports = async function handler(req, res) {
     );
     const nextCursor = hasMore
       ? encodeInventoryCursor({
-          lane: nextLane,
-          offset: nextOffset,
+          lane: servingReviewedOverlayPage ? requestedLane : nextLane,
+          offset: servingReviewedOverlayPage ? requestedOffset : nextOffset,
           deltaOffset: requestedDeltaOffset + reviewedOverlayConsumed,
           page: page + 1,
           brandKeysets: sixBrandBroadScope
-            ? qnsaCandidateCursorMeta?.nextBrandKeysets || {}
+            ? servingReviewedOverlayPage
+              ? inventoryCursor?.brandKeysets || {}
+              : qnsaCandidateCursorMeta?.nextBrandKeysets || {}
             : null,
           brandScope: sixBrandBroadScope ? sixBrandScope : null,
         })
@@ -2602,11 +2675,12 @@ module.exports = async function handler(req, res) {
       reviewedOverlayTotal,
       reviewedOverlayCountHasUnsupportedFilter,
     );
-    const combinedPageRecords = [...records, ...reviewedOverlayRecords];
+    const publicBaseRecords = servingReviewedOverlayPage ? [] : records;
+    const combinedPageRecords = [...publicBaseRecords, ...reviewedOverlayRecords];
 
     return res.status(200).json({
       status: 'ok',
-      count: records.length + reviewedOverlayRecords.length,
+      count: combinedPageRecords.length,
       total: combinedInventoryTotal,
       page,
       pageSize,
@@ -2614,7 +2688,7 @@ module.exports = async function handler(req, res) {
       totalStatus: combinedInventoryTotal === null ? 'withheld_for_unsupported_filter' : 'available_from_market_feed_plus_reviewed_overlay_counts',
       hasMore,
       nextCursor,
-      records,
+      records: publicBaseRecords,
       reviewedOverlayRecords,
       reviewedOverlay: {
         source: 'reviewed_workbook_inventory',
