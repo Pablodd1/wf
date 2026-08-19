@@ -904,20 +904,22 @@ function mapReviewedRecord(row) {
     row.source_currency,
     row.raw_message,
   );
-  // Publish only user_image_url, the exact source upload retained by the view.
-  const candidateImageUrl = row.user_image_url || null;
-  const hasExactSourceImage = row.has_exact_source_image === true
-    && candidateImageUrl
+  // Inspect all candidate image URL fields from source/view data
+  const candidateImageUrl = row.user_image_url
+    || row.final_image_url
+    || row.display_image_url
+    || row.image_url
+    || row.thumbnail_url
+    || (Array.isArray(row.image_urls) ? row.image_urls.find(u => Boolean(u && /^https?:\/\/[^\s]+$/i.test(String(u).trim()))) : null)
+    || null;
+  const hasExactSourceImage = Boolean(candidateImageUrl)
     && String(candidateImageUrl).trim().length > 0
     && /^https?:\/\/[^\s]+$/i.test(String(candidateImageUrl).trim());
   const hasVerifiedUsdPrice = !rmMyrPriceArtifact && row.has_verified_usd_price === true
     && row.verified_price_usd > 0;
   const verifiedPriceUsd = hasVerifiedUsdPrice ? row.verified_price_usd : null;
 
-  // The production workbook index and view already enforce an exact supplied
-  // HTTP(S) token with no whitespace. Preserve that source token verbatim;
-  // URL() is unnecessarily stricter for legacy object names and can move a
-  // database-qualified source image into the wrong pagination lane.
+  // Preserve valid HTTP(S) source image URL
   const exactImageUrl = hasExactSourceImage
     ? String(candidateImageUrl).trim()
     : null;

@@ -41,7 +41,13 @@ function withoutPrivateProvenance(profile) {
 }
 
 function ratedProfileSummary(profile, rank) {
-  const existing = (crawl.profiles || []).find(row => String(row.id) === String(profile.profile_id));
+  const profilePhone = phoneDigits(profile.phone);
+  const profileName = String(profile.name || '').trim().toLowerCase();
+  const existing = (crawl.profiles || []).find(row =>
+    String(row.id) === String(profile.profile_id)
+    || (profilePhone && phoneDigits(row.whatsapp_url || row.chat_url).includes(profilePhone))
+    || (profileName && String(row.name || '').trim().toLowerCase() === profileName)
+  );
   const summary = profileSummary(existing || {
     id: profile.profile_id,
     name: profile.name,
@@ -52,6 +58,9 @@ function ratedProfileSummary(profile, rank) {
     trust_status: profile.trust_status,
     whatsapp_url: `https://wa.me/${profile.phone}`,
     profile_url: profile.profile_url,
+    wts: profile.wts ?? 0,
+    wtb: profile.wtb ?? 0,
+    listing_total: profile.listing_total ?? 0,
   }, rank);
   return {
     ...summary,
@@ -69,13 +78,8 @@ function ratedProfileSummary(profile, rank) {
     rating_evidence_status: 'SOURCE_FEEDBACK_COUNT',
     positive_feedback_count: nonNegativeInteger(profile.positive_feedback_count) || 0,
     negative_feedback_count: nonNegativeInteger(profile.negative_feedback_count) || 0,
-    stats: existing ? summary.stats : {
-      wts_posts: null,
-      wtb_posts: null,
-      first_post_at: null,
-      last_post_at: null,
-    },
-    whatsapp_group_count: existing ? summary.whatsapp_group_count : null,
+    stats: summary.stats,
+    whatsapp_group_count: existing ? summary.whatsapp_group_count : (nonNegativeInteger(profile.common_groups) ?? null),
   };
 }
 
@@ -110,6 +114,9 @@ function ratedDealerEvidence({ dealerId, phone } = {}) {
 }
 
 function profileSummary(profile, rank) {
+  const wts = nonNegativeInteger(profile.wts) || 0;
+  const wtb = nonNegativeInteger(profile.wtb) || 0;
+  const total = nonNegativeInteger(profile.listing_total) || (wts + wtb);
   return {
     id: sourceSlug(profile.id),
     slug: sourceSlug(profile.id),
@@ -133,8 +140,9 @@ function profileSummary(profile, rank) {
     // helpers, but never copy them into a public snapshot profile.
     verified_phone: null,
     stats: {
-      wts_posts: nonNegativeInteger(profile.wts) || 0,
-      wtb_posts: nonNegativeInteger(profile.wtb) || 0,
+      total_posts: total,
+      wts_posts: wts,
+      wtb_posts: wtb,
       first_post_at: null,
       last_post_at: null,
     },

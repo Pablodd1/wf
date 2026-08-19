@@ -146,9 +146,9 @@ export default function DealerDirectory() {
                   <span className="flex items-center gap-1"><CalendarDays size={13} /> {dealer.member_since || (dealer.verified_at ? `Verified ${new Date(dealer.verified_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : 'Member date unavailable')}</span>
                 </div>
                 <div className="mt-7 grid grid-cols-3 border-t border-white/10 pt-5 text-center">
+                  <Metric label="Total Posted" value={stats?.total_posts ?? ((stats?.wts_posts != null || stats?.wtb_posts != null) ? (stats?.wts_posts || 0) + (stats?.wtb_posts || 0) : null)} pending={linkagePending} />
                   <Metric label="For sale" value={stats?.wts_posts ?? null} pending={linkagePending} />
                   <Metric label="Looking for" value={stats?.wtb_posts ?? null} pending={linkagePending} />
-                  <Metric label="Groups" value={dealer.whatsapp_group_count ?? null} />
                 </div>
                 {view === 'all' && linkagePending && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Listing activity is awaiting exact verified seller linkage; zero is not inferred.</p>}
                 <div className="mt-5 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
