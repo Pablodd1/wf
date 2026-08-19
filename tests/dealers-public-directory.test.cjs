@@ -5,8 +5,18 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { publicDealer } = require('../api/dealers.js');
-const { parsedSourceDate, ratedDealerEvidence, ratedProfilePayload, ratedProfiles, sourcePhone, topRatedProfiles, sourceProfilePayload } = require('../api/_lib/dealer-directory-source.cjs');
+const { loadCanonicalDealerRows, publicDealer, unifiedDealerPage } = require('../api/dealers.js');
+const {
+  mariadbProfilePayload,
+  mariadbProfiles,
+  parsedSourceDate,
+  ratedDealerEvidence,
+  ratedProfilePayload,
+  ratedProfiles,
+  sourcePhone,
+  topRatedProfiles,
+  sourceProfilePayload,
+} = require('../api/_lib/dealer-directory-source.cjs');
 const dealersHandler = require('../api/dealers.js');
 const dealerProfileHandler = require('../api/dealer-profile.js');
 
@@ -81,7 +91,7 @@ test('Top Rated and source profile API handlers return the complete source-backe
   const directory = await invoke(dealersHandler, { mode: 'top-rated', pageSize: '25' });
   assert.equal(directory.statusCode, 200);
   assert.equal(directory.payload.total, 25);
-  assert.equal(directory.payload.source, 'public-source-snapshot');
+  assert.equal(directory.payload.source, 'unified-static-reconciliation-fallback');
 
   const profile = await invoke(dealerProfileHandler, { id: 'watchfacts-source-3435' });
   assert.equal(profile.statusCode, 200);
@@ -90,6 +100,76 @@ test('Top Rated and source profile API handlers return the complete source-backe
   assert.ok(profile.payload.reviews.length > 0);
   assert.ok(profile.payload.listings.every(row => row.price_usd === null));
   assert.ok(profile.payload.listings.every(row => row.raw_message === null || typeof row.raw_message === 'string'));
+});
+
+test('All, Rated, and Top Rated are filtered views of one reconciled population', () => {
+  const canonical = ratedProfiles();
+  const candidates = mariadbProfiles();
+  assert.equal(candidates.length, 270);
+  const all = unifiedDealerPage({
+    canonicalDealers: canonical, sourceCandidates: candidates,
+    mode: 'all', search: '', page: 1, pageSize: 1000,
+  });
+  const rated = unifiedDealerPage({
+    canonicalDealers: canonical, sourceCandidates: candidates,
+    mode: 'rated', search: '', page: 1, pageSize: 1000,
+  });
+  const top = unifiedDealerPage({
+    canonicalDealers: canonical, sourceCandidates: candidates,
+    mode: 'top-rated', search: '', page: 1, pageSize: 25,
+  });
+  assert.equal(all.total, 323);
+  assert.equal(rated.total, 56);
+  assert.equal(top.total, 25);
+  assert.deepEqual(
+    top.dealers.map(dealer => dealer.id),
+    rated.dealers.slice(0, 25).map(dealer => dealer.id),
+  );
+  assert.ok(rated.dealers.every(dealer => Number(dealer.review_count || 0) > 0));
+});
+
+test('canonical directory pagination reads every database profile before unified pagination', async () => {
+  const source = Array.from({ length: 205 }, (_, index) => ({ id: `dealer-${index}` }));
+  const offsets = [];
+  const client = {
+    async rpc(_name, args) {
+      offsets.push(args.p_offset);
+      return {
+        data: {
+          total: source.length,
+          dealers: source.slice(args.p_offset, args.p_offset + args.p_limit),
+        },
+        error: null,
+      };
+    },
+  };
+  const result = await loadCanonicalDealerRows(client, null);
+  assert.equal(result.error, null);
+  assert.equal(result.data.dealers.length, 205);
+  assert.deepEqual(offsets, [0, 100, 200]);
+});
+
+test('MariaDB dealer candidates publish sanitized business evidence and internal profiles', () => {
+  const snapshot = require('../data/dealer-directory/mariadb-public-dealers-2026-08-19.json');
+  assert.equal(snapshot.source_candidate_rows, 325);
+  assert.equal(snapshot.exact_identity_components, 300);
+  assert.equal(snapshot.exact_existing_canonical_matches, 1);
+  assert.equal(snapshot.published_source_profiles, 270);
+  assert.equal(snapshot.held_profiles, 29);
+  assert.equal(snapshot.rated_source_profiles, 3);
+  assert.equal(snapshot.held_reason_counts.ALL_SOURCE_ACCOUNTS_DELETED, 28);
+  assert.equal(snapshot.held_reason_counts.INTERNAL_OR_TEST_PROFILE, 1);
+  const serialized = JSON.stringify(snapshot);
+  assert.doesNotMatch(serialized, /@[a-z0-9.-]+\.[a-z]{2,}/i);
+  assert.doesNotMatch(serialized, /\b\d{10,15}\b/);
+  assert.ok(snapshot.profiles.every(profile => profile.verified_phone == null));
+  assert.ok(snapshot.profiles.every(profile => profile.contact_publication_approved === false));
+  const payload = mariadbProfilePayload(snapshot.profiles[0].id);
+  assert.equal(payload.success, true);
+  assert.equal(payload.dealer.id, snapshot.profiles[0].id);
+  assert.equal(payload.stats.verified_contact_info, null);
+  assert.equal(payload.listing_linkage_status, 'SOURCE_CANDIDATE_UNLINKED');
+  assert.deepEqual(payload.listings, []);
 });
 
 test('source snapshot accounts for every crawled listing and review once', () => {

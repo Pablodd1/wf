@@ -90,6 +90,7 @@
     "admin:provision": "node tools/admin/provision-auth-user.cjs",
     "dealers:stage-sources": "node tools/dealer-lineage/stage-source-candidates.cjs",
     "dealers:stage-directory": "node tools/dealer-lineage/stage-rated-dealers-export.cjs",
+    "dealers:build-public-directory": "node tools/dealer-directory/build-mariadb-public-directory.cjs",
     "audit:dealer-reconciliation": "node tools/dealer-lineage/audit-reconciliation.cjs",
     "build:seller-lineage": "node tools/dealer-lineage/build-seller-lineage-manifest.cjs",
     "stage:seller-lineage": "node tools/dealer-lineage/stage-seller-lineage-manifest.cjs",

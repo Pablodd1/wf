@@ -4,7 +4,12 @@ const { getClient } = require('./_lib/supabase');
 const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
-const { legacyProfilePayload, ratedProfilePayload, sourceProfilePayload } = require('./_lib/dealer-directory-source.cjs');
+const {
+  legacyProfilePayload,
+  mariadbProfilePayload,
+  ratedProfilePayload,
+  sourceProfilePayload,
+} = require('./_lib/dealer-directory-source.cjs');
 const { loadCompletedDealerIds, profileWithLinkageState } = require('./_lib/dealer-linkage-state.cjs');
 
 const PATEK_RAW_EVIDENCE = /\b(?:patek(?:\s+philippe)?|nautilus|aquanaut|calatrava)\b/i;
@@ -169,6 +174,8 @@ module.exports = async function handler(req, res) {
   if (sourceProfile) return res.status(200).json(sanitizeDealerProfile(sourceProfile));
   const ratedProfile = ratedProfilePayload(identity);
   if (ratedProfile) return res.status(200).json(sanitizeDealerProfile(ratedProfile));
+  const mariadbProfile = mariadbProfilePayload(identity);
+  if (mariadbProfile) return res.status(200).json(sanitizeDealerProfile(mariadbProfile));
   const legacyProfile = legacyProfilePayload(identity);
   if (legacyProfile) {
     try {

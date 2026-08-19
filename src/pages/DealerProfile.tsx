@@ -42,9 +42,11 @@ export default function DealerProfile() {
   const { dealer, stats, listings } = payload;
   const isPublicSourceProfile = dealer.source_system === 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT';
   const isLegacyProfile = dealer.source_system === 'WATCHFACTS_LEGACY_PROFILE_AUDIT_20260811';
+  const isMariaDbCandidate = dealer.source_system === 'MARIADB_DEALER_CANDIDATE_RECONCILIATION_20260819';
   const linkagePending = payload.listing_linkage_status === 'PENDING_EXACT_LISTING_LINKAGE';
+  const sourceCandidateUnlinked = payload.listing_linkage_status === 'SOURCE_CANDIDATE_UNLINKED';
   const groupsAreCountOnly = payload.group_details_status === 'COUNT_ONLY' && (!payload.groups || payload.groups.length === 0);
-  const name = dealer.display_name || dealer.company_name || 'Verified dealer';
+  const name = dealer.display_name || dealer.company_name || 'Dealer profile';
   const count = (value: number | null | undefined) => value == null ? 'Not available' : Number(value).toLocaleString();
   const date = (value: string | null | undefined) => {
     if (!value) return 'Original date unavailable';
@@ -75,7 +77,7 @@ export default function DealerProfile() {
                 {dealer.avatar_url ? <img src={dealer.avatar_url} alt="" className="h-full w-full object-cover" /> : name.slice(0, 2).toUpperCase()}
               </div>
               <div>
-                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-[#c9a96e]"><BadgeCheck size={15} /> {isPublicSourceProfile ? `Top Rated dealer evidence${dealer.source_rank ? ` #${dealer.source_rank}` : ''}` : isLegacyProfile ? 'Imported dealer evidence' : 'Verified dealer'}</div>
+                <div className="flex items-center gap-2 text-xs uppercase tracking-[0.15em] text-[#c9a96e]"><BadgeCheck size={15} /> {isPublicSourceProfile ? `Top Rated dealer evidence${dealer.source_rank ? ` #${dealer.source_rank}` : ''}` : isLegacyProfile ? 'Imported dealer evidence' : isMariaDbCandidate ? 'Reconciled source dealer candidate' : 'Verified dealer'}</div>
                 <h1 className="mt-3 font-serif text-4xl sm:text-5xl">{name}</h1>
                 <p className="mt-2 text-sm text-white/45">{[dealer.city, dealer.country_code].filter(Boolean).join(', ') || 'Location not published'}</p>
               </div>
@@ -98,6 +100,7 @@ export default function DealerProfile() {
         {groupsAreCountOnly && <p className="mt-3 text-xs leading-5 text-white/40">Aggregate group count only. Individual community names are not published, and none are inferred.</p>}
         <p className="mt-5 text-xs text-white/40">First post shown: {date(stats?.first_post)} · Latest post shown: {date(stats?.latest_post)}. Import timestamps are never substituted for missing source dates.</p>
         {linkagePending && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">WTS, WTB, listing totals, and first/latest post dates are awaiting exact verified seller-to-listing linkage. Missing linkage is not displayed as zero activity.</p>}
+        {sourceCandidateUnlinked && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">Counts shown are exact MariaDB source activity for this reconciled identity. Linking that identity to current Trading Floor cards remains pending and is not inferred by name.</p>}
         {isLegacyProfile && <p className="mt-3 border border-amber-300/20 bg-amber-300/[0.06] px-4 py-3 text-xs leading-5 text-amber-100/65">{stats?.current_counts_are_dynamic ? 'WTS/WTB totals and the listing cards below are calculated dynamically from the current released Rolex, Patek Philippe, and Audemars Piguet listing lineage.' : `Captured WTS/WTB values are historical source snapshots across ${stats?.snapshot_range?.snapshot_count || 0} observations. ${payload.dynamic_activity_status === 'UNLINKED_IDENTITY_NAMESPACE' ? 'This legacy ID has no exact match in the current released listing identity namespace, so no listing ownership is inferred by name.' : 'They do not replace live totals calculated from verified listing lineage.'}`}</p>}
         {stats?.verified_contact_info?.phone && (
           <a className="mt-4 inline-flex items-center gap-2 text-sm text-[#d4b87a] hover:text-white" href={`https://wa.me/${stats.verified_contact_info.phone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer">
