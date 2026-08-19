@@ -1,0 +1,174 @@
+name: QNSA Vacheron Overseas read-only census
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_VACHERON_OVERSEAS
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-vacheron-overseas-census
+  cancel-in-progress: false
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate exact authorization
+        shell: pwsh
+        env:
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:INPUT_CONFIRMATION -cne 'AUDIT_QNSA_VACHERON_OVERSEAS') {
+            throw 'Confirmation must exactly match AUDIT_QNSA_VACHERON_OVERSEAS.'
+          }
+          if ($env:SUPABASE_PROJECT_REF -cne 'qnsafosakvonzgfcsphh') {
+            throw 'Workflow is pinned to canonical QNSA.'
+          }
+
+      - name: Run count-only production census
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) {
+            throw 'SUPABASE_ACCESS_TOKEN is unavailable.'
+          }
+          New-Item -ItemType Directory -Force -Path 'audit-output/vacheron-overseas-census' | Out-Null
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @'
+          SET statement_timeout = '60s';
+          SET lock_timeout = '5s';
+          WITH control AS MATERIALIZED (
+            SELECT enabled_run_key
+            FROM public.qnsa_market_feed_control
+            WHERE singleton = true AND enabled = true
+          ), source AS MATERIALIZED (
+            SELECT l.*
+            FROM control c
+            JOIN staging.listings l ON l.normalization_run_key = c.enabled_run_key
+            WHERE upper(COALESCE(l.category, '')) = 'WATCH'
+              AND l.brand_normalized = 'Vacheron Constantin'
+              AND l.parent_id IS NULL
+              AND COALESCE(l.is_bundle, false) = false
+              AND COALESCE(l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
+              AND l.raw_message_version_id IS NOT NULL
+              AND COALESCE(l.source_record_id, '') <> ''
+              AND lower(COALESCE(l.trading_floor_status, '')) NOT IN (
+                'bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate',
+                'withdrawn','rejected','hidden','deleted','archived')
+              AND upper(COALESCE(l.verdict, '')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+          ), marked AS MATERIALIZED (
+            SELECT s.*,
+              lower(btrim(COALESCE(s.model_normalized, ''))) = 'overseas' AS normalized_model_exact,
+              lower(btrim(COALESCE(s.model_original, ''))) = 'overseas' AS original_model_exact,
+              COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])overseas([^[:alnum:]]|$)' AS raw_overseas_mention,
+              upper(COALESCE(s.listing_type, s.intent, '')) AS source_intent,
+              COALESCE(s.price_usd, s.price_normalized, 0) > 0 AS has_stored_price,
+              btrim(COALESCE(s.image_url, s.source_media_url_candidate, '')) ~* '^https://[^[:space:]]+$' AS has_https_media,
+              s.source_hash ~ '^[0-9a-f]{64}$'
+                AND s.source_candidate_hash ~ '^[0-9a-f]{64}$' AS valid_hash_lineage
+            FROM source s
+          ), cohort AS MATERIALIZED (
+            SELECT * FROM marked
+            WHERE normalized_model_exact OR original_model_exact OR raw_overseas_mention
+          ), metrics AS (
+            SELECT jsonb_build_object(
+              'project_ref', 'qnsafosakvonzgfcsphh',
+              'enabled_run_key', (SELECT enabled_run_key FROM control),
+              'expected_overseas_rows', 1493,
+              'vacheron_source_rows', (SELECT count(*) FROM marked),
+              'normalized_model_exact_rows', (SELECT count(*) FROM marked WHERE normalized_model_exact),
+              'original_model_exact_rows', (SELECT count(*) FROM marked WHERE original_model_exact),
+              'raw_overseas_mention_rows', (SELECT count(*) FROM marked WHERE raw_overseas_mention),
+              'overseas_union_rows', count(*),
+              'overseas_unique_listing_ids', count(DISTINCT id),
+              'overseas_unique_source_records', count(DISTINCT source_record_id),
+              'overseas_unique_candidate_hashes', count(DISTINCT source_candidate_hash),
+              'explicit_wts_rows', count(*) FILTER (WHERE source_intent = 'WTS'),
+              'explicit_wtb_rows', count(*) FILTER (WHERE source_intent = 'WTB'),
+              'missing_or_other_intent_rows', count(*) FILTER (WHERE source_intent NOT IN ('WTS','WTB')),
+              'priced_rows', count(*) FILTER (WHERE has_stored_price),
+              'priced_wts_rows', count(*) FILTER (WHERE source_intent = 'WTS' AND has_stored_price),
+              'unpriced_rows', count(*) FILTER (WHERE NOT has_stored_price),
+              'explicit_usd_usdt_wts_rows', count(*) FILTER (
+                WHERE source_intent = 'WTS' AND COALESCE(price_usd, 0) > 0
+                  AND upper(COALESCE(currency_normalized, '')) IN ('USD','USDT')),
+              'dated_fx_wts_rows', count(*) FILTER (
+                WHERE source_intent = 'WTS' AND COALESCE(price_usd, 0) > 0
+                  AND COALESCE(conversion_rate, 0) > 0 AND conversion_timestamp IS NOT NULL),
+              'stored_price_currency_unconfirmed_wts_rows', count(*) FILTER (
+                WHERE source_intent = 'WTS' AND COALESCE(price_normalized, 0) > 0
+                  AND upper(COALESCE(currency_normalized, '')) NOT IN ('USD','USDT')
+                  AND NOT (COALESCE(conversion_rate, 0) > 0 AND conversion_timestamp IS NOT NULL)),
+              'https_media_claim_rows', count(*) FILTER (WHERE has_https_media),
+              'valid_lineage_rows', count(*) FILTER (WHERE valid_hash_lineage),
+              'missing_reference_rows', count(*) FILTER (WHERE NULLIF(btrim(reference_normalized), '') IS NULL),
+              'missing_model_rows', count(*) FILTER (WHERE NULLIF(btrim(model_normalized), '') IS NULL),
+              'missing_dial_rows', count(*) FILTER (WHERE NULLIF(btrim(dial_color_normalized), '') IS NULL),
+              'missing_condition_rows', count(*) FILTER (WHERE NULLIF(btrim(condition_normalized), '') IS NULL),
+              'listing_ids_sha256', encode(digest(string_agg(id::text, E'\n' ORDER BY id), 'sha256'), 'hex'),
+              'source_candidate_hashes_sha256', encode(digest(string_agg(source_candidate_hash, E'\n' ORDER BY source_candidate_hash), 'sha256'), 'hex'),
+              'generated_at', now()
+            ) AS evidence
+            FROM cohort
+          ), references AS (
+            SELECT COALESCE(NULLIF(btrim(reference_normalized), ''), 'UNRESOLVED') AS reference,
+              count(*)::bigint AS row_count
+            FROM cohort
+            GROUP BY 1
+            ORDER BY row_count DESC, reference
+            LIMIT 100
+          ), models AS (
+            SELECT COALESCE(NULLIF(btrim(model_normalized), ''), 'UNRESOLVED') AS model,
+              count(*)::bigint AS row_count
+            FROM cohort
+            GROUP BY 1
+            ORDER BY row_count DESC, model
+            LIMIT 50
+          )
+          SELECT jsonb_build_object(
+            'evidence', (SELECT evidence FROM metrics),
+            'top_references', COALESCE((SELECT jsonb_agg(to_jsonb(references)) FROM references), '[]'::jsonb),
+            'models', COALESCE((SELECT jsonb_agg(to_jsonb(models)) FROM models), '[]'::jsonb)
+          ) AS report;
+          '@
+          if ($sql -match '(?im)^\s*(INSERT|UPDATE|DELETE|TRUNCATE|ALTER|DROP|CREATE|GRANT|REVOKE)\b') {
+            throw 'Census SQL is not read-only.'
+          }
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $rows = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          if (@($rows).Count -ne 1 -or -not $rows[0].report) {
+            throw 'Census did not return one aggregate report.'
+          }
+          $report = $rows[0].report
+          if ($report.evidence.project_ref -cne 'qnsafosakvonzgfcsphh') { throw 'Wrong project evidence.' }
+          if ([long]$report.evidence.vacheron_source_rows -lt 1) { throw 'No Vacheron source rows found.' }
+          if ([long]$report.evidence.overseas_unique_listing_ids -ne [long]$report.evidence.overseas_union_rows) {
+            throw 'Overseas cohort contains duplicate listing IDs.'
+          }
+          $report | ConvertTo-Json -Depth 12 | Set-Content -LiteralPath 'audit-output/vacheron-overseas-census/report.json' -Encoding utf8NoBOM
+          Write-Output "vacheron_source_rows=$($report.evidence.vacheron_source_rows)"
+          Write-Output "overseas_union_rows=$($report.evidence.overseas_union_rows)"
+          Write-Output "listing_ids_sha256=$($report.evidence.listing_ids_sha256)"
+
+      - name: Upload aggregate evidence only
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-vacheron-overseas-census-${{ github.run_id }}
+          path: audit-output/vacheron-overseas-census/report.json
+          if-no-files-found: error
+          retention-days: 14
+
