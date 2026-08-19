@@ -877,6 +877,9 @@ function normalizeAnalyticsPriceRow(row, {
     && row.canonical_qnsa_price_evidence_checked === true;
   const canonicalPrice = Number(row.price_usd);
   if (usingReviewedWorkbook || row.price_correction_applied === true || row.runtime_price_recovery_applied === true) {
+    const reviewedCurrencyStatus = usingReviewedWorkbook
+      ? (row.analytics_currency_status || 'CURRENCY_UNVERIFIED')
+      : 'VERIFIED';
     return {
       ...conditionCorrectedRow,
       analytics_price_usd: row.price_usd,
@@ -885,7 +888,7 @@ function normalizeAnalyticsPriceRow(row, {
         : row.runtime_price_recovery_applied
           ? 'DATED_RUNTIME_SOURCE_RECOVERY'
           : null,
-      analytics_currency_status: 'VERIFIED',
+      analytics_currency_status: reviewedCurrencyStatus,
     };
   }
   if (canonicalQnsaEvidence) {

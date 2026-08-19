@@ -120,7 +120,10 @@ test('overlay admits an exact image only and prices only qualified WTS USD evide
     const analyticsRow = mapWorkbookAnalyticsRow(ownerApproved);
     assert.equal(ownerApproved.has_verified_usd_price, false);
     assert.equal(ownerApproved.verified_price_usd, null);
-    assert.equal(analyticsRow.price_usd, null);
+    assert.equal(ownerApproved.display_price_usd, 31500);
+    assert.equal(ownerApproved.analytics_currency_status, 'OWNER_ASSUMED_USD');
+    assert.equal(analyticsRow.price_usd, 31500);
+    assert.equal(analyticsRow.analytics_currency_status, 'OWNER_ASSUMED_USD');
     assert.equal(analyticsRow.price_evidence_status, priceEvidenceStatus);
     assert.notEqual(analyticsRow.price_evidence_status, 'SOURCE_EXPLICIT_USD_MATCH');
   }

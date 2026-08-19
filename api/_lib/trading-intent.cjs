@@ -76,28 +76,29 @@ function resolveTradingIntent({
   }
 
   if (eligibleSingleWatch) {
+    const inferredCode = hasSourcePrice
+      ? 'INFERRED_WTS_PRICE_PRESENT'
+      : 'INFERRED_WTB_PRICE_ABSENT';
     return {
       intent: hasSourcePrice ? 'WTS' : 'WTB',
       original_intent: originalIntent,
-      provenance: 'OWNER_MISSING_INTENT_FALLBACK_V1',
+      provenance: inferredCode,
       inferred: true,
-      review_reason: hasSourcePrice
-        ? 'MISSING_INTENT_PRICE_PRESENT_ASSUMED_WTS'
-        : 'MISSING_INTENT_UNPRICED_ASSUMED_WTB',
+      review_reason: inferredCode,
     };
   }
 
   return {
     intent: originalIntent || 'OTHER',
     original_intent: originalIntent,
-    provenance: 'UNRESOLVED_INTENT',
+    provenance: 'OTHER_UNCLASSIFIED_EVIDENCE',
     inferred: false,
-    review_reason: 'NON_SINGLE_WATCH_INTENT_NOT_INFERRED',
+    review_reason: 'UNSAFE_TO_CLASSIFY_AS_INDIVIDUAL_WTS_WTB',
   };
 }
 
 function isPublicTradingIntent(value) {
-  return ['WTS', 'WTB'].includes(cleanIntent(value));
+  return ['WTS', 'WTB', 'OTHER', 'UNCLASSIFIED'].includes(cleanIntent(value));
 }
 
 // WTS/WTB filters must read unresolved source intents too, then apply the
@@ -105,7 +106,7 @@ function isPublicTradingIntent(value) {
 // otherwise permanently skip those rows. MULTI/OTHER remain exact lanes.
 function databaseTradingIntentFilter(value) {
   const intent = cleanIntent(value);
-  return ['WTS', 'WTB'].includes(intent) ? null : (intent || null);
+  return ['WTS', 'WTB', 'OTHER', 'UNCLASSIFIED'].includes(intent) ? null : (intent || null);
 }
 
 module.exports = {

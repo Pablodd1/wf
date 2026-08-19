@@ -88,7 +88,7 @@ test('Trading Floor reads admitted brands from approved inventory instead of the
   assert.match(source, /if \(brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS\.has\(brand\)\)/);
   assert.match(source, /\.from\('reviewed_workbook_inventory'\)/);
   assert.match(source, /\.in\('verification_status', \[[\s\S]*'APPROVED_SINGLE_CANDIDATE',[\s\S]*MULTI_PARENT_VERIFICATION_STATUS/);
-  assert.match(source, /totalStatus: 'available_from_approved_admission_inventory'/);
+  assert.match(source, /available_from_approved_admission_inventory/);
 });
 
 test('reviewed model calculations keep WTB separate and use only verified WTS prices', () => {

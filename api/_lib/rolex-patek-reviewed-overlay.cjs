@@ -8,6 +8,11 @@ const ROLEX_PATEK_DELTA_BRANDS = new Set(['rolex', 'patek philippe']);
 const OWNER_APPROVED_USD_STATUSES = new Set([
   'SOURCE_EXPLICIT_USD_MATCH',
 ]);
+const OWNER_ASSUMED_USD_STATUSES = new Set([
+  'OWNER_ASSUMED_USD',
+  'OWNER_DOLLAR_USD_POLICY',
+  'OWNER_K_USD_POLICY',
+]);
 const OVERLAY_LINEAGE_COLUMNS = [
   'id,source_record_id,source_message_id,source_file_sha256,source_row_number',
   'listing_type,brand_scope,normalized_reference,verification_status,verification_tier,confidence',
@@ -93,12 +98,23 @@ function prepareOverlayRow(row) {
   const approvedUsd = !exactMultiParent && OWNER_APPROVED_USD_STATUSES.has(priceEvidenceStatus)
     && clean(row?.listing_type).toUpperCase() === 'WTS'
     && Number(row?.workbook_price_usd) > 0;
+  const ownerAssumedUsd = !exactMultiParent && OWNER_ASSUMED_USD_STATUSES.has(priceEvidenceStatus)
+    && clean(row?.listing_type).toUpperCase() === 'WTS'
+    && Number(row?.workbook_price_usd) > 0;
+  const displayPriceUsd = approvedUsd || ownerAssumedUsd ? Number(row.workbook_price_usd) : null;
   return {
     ...row,
     user_image_url: imageUrl,
     has_exact_source_image: Boolean(imageUrl),
     verified_price_usd: approvedUsd ? Number(row.workbook_price_usd) : null,
     has_verified_usd_price: approvedUsd,
+    display_price_usd: displayPriceUsd,
+    owner_assumed_price_usd: ownerAssumedUsd ? displayPriceUsd : null,
+    analytics_currency_status: approvedUsd
+      ? 'VERIFIED'
+      : ownerAssumedUsd
+        ? 'OWNER_ASSUMED_USD'
+        : null,
     has_complete_identity: Boolean(clean(row?.canonical_brand || row?.supplied_brand || row?.brand_scope)
       && clean(row?.normalized_reference || row?.raw_reference)),
     verdict: exactMultiParent ? ROLEX_PATEK_MULTI_PARENT_STATUS : 'APPROVED',
@@ -235,6 +251,7 @@ async function loadRolexPatekOverlayExactKeys(client, {
 module.exports = {
   OVERLAY_COLUMNS,
   OWNER_APPROVED_USD_STATUSES,
+  OWNER_ASSUMED_USD_STATUSES,
   MULTI_PARENT_PUBLICATION_LANE,
   ROLEX_PATEK_DELTA_BRANDS,
   ROLEX_PATEK_DELTA_TIER,

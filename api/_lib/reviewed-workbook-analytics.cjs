@@ -7,6 +7,11 @@ const {
 } = require('./rolex-patek-reviewed-overlay.cjs');
 
 const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
+const OWNER_ASSUMED_USD_STATUSES = new Set([
+  'OWNER_ASSUMED_USD',
+  'OWNER_DOLLAR_USD_POLICY',
+  'OWNER_K_USD_POLICY',
+]);
 
 function clean(value) {
   const text = String(value || '').trim();
@@ -32,6 +37,13 @@ function mapWorkbookAnalyticsRow(row) {
     && Number.isFinite(verifiedUsd)
     && verifiedUsd > 0;
   const priceUsd = hasVerifiedUsd ? verifiedUsd : null;
+  const priceEvidenceStatus = clean(row.price_evidence_status);
+  const ownerAssumedUsd = String(row.listing_type || '').toUpperCase() === 'WTS'
+    && OWNER_ASSUMED_USD_STATUSES.has(String(priceEvidenceStatus || '').toUpperCase())
+    && Number(row.display_price_usd || row.owner_assumed_price_usd || row.workbook_price_usd) > 0
+    ? Number(row.display_price_usd || row.owner_assumed_price_usd || row.workbook_price_usd)
+    : null;
+  const trackedPriceUsd = priceUsd || ownerAssumedUsd;
   return {
     id: row.id,
     brand: clean(row.supplied_brand) || clean(row.canonical_brand) || clean(row.brand_scope),
@@ -41,7 +53,9 @@ function mapWorkbookAnalyticsRow(row) {
     dial_color: clean(row.dial_color) || clean(row.catalog_dial),
     condition: clean(row.condition),
     price_raw: row.effective_source_amount == null ? null : Number(row.effective_source_amount),
-    price_usd: priceUsd,
+    // This is the customer-visible/tracked observation price. Qualification
+    // remains separate through analytics_currency_status below.
+    price_usd: trackedPriceUsd,
     verified_price_usd: verifiedUsd,
     has_verified_usd_price: hasVerifiedUsd,
     effective_price_source: clean(row.effective_price_source),
@@ -62,10 +76,14 @@ function mapWorkbookAnalyticsRow(row) {
     listing_type: clean(row.listing_type) || 'WTS',
     dealer_id: null,
     owner_reviewed_identity: true,
-    analytics_currency_status: priceUsd === null ? 'CURRENCY_UNVERIFIED' : 'VERIFIED',
+    analytics_currency_status: priceUsd !== null
+      ? 'VERIFIED'
+      : ownerAssumedUsd !== null
+        ? 'OWNER_ASSUMED_USD'
+        : 'CURRENCY_UNVERIFIED',
     source_price_amount: row.effective_source_amount == null ? null : Number(row.effective_source_amount),
     source_currency: clean(row.effective_source_currency),
-    price_evidence_status: clean(row.price_evidence_status),
+    price_evidence_status: priceEvidenceStatus,
     workbook_source_file: clean(row.source_file),
     source_file_sha256: clean(row.source_file_sha256),
     workbook_source_row_number: row.source_row_number == null ? null : Number(row.source_row_number),

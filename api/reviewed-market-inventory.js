@@ -35,6 +35,11 @@ const {
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const EXPLICIT_USD_STATUS = 'SOURCE_EXPLICIT_USD_MATCH';
+const OWNER_ASSUMED_USD_STATUSES = new Set([
+  'OWNER_ASSUMED_USD',
+  'OWNER_DOLLAR_USD_POLICY',
+  'OWNER_K_USD_POLICY',
+]);
 const MULTI_PARENT_VERIFICATION_STATUS = 'APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY';
 const MULTI_PARENT_PUBLICATION_LANE = 'OWNER_MULTI_PARENT_SOURCE_LINEAGE_V1';
 const ALLOWED_MARKET_SOURCE_VIEWS = new Set([
@@ -208,10 +213,53 @@ function referenceIsPriceToken(reference, sourceAmount, sourceCurrency) {
   const currencyKey = currencyComparisonKey(sourceCurrency);
   return Boolean(
     amountKey
-    && currencyKey
-    && (referenceKey === `${amountKey}${currencyKey}`
-      || referenceKey === `${currencyKey}${amountKey}`),
+    && ((/^\d+$/.test(referenceKey) && referenceKey === amountKey)
+      || (currencyKey && (referenceKey === `${amountKey}${currencyKey}`
+        || referenceKey === `${currencyKey}${amountKey}`))),
   );
+}
+
+function ownerAssumedDisplayPrice({
+  row,
+  resolvedIntent,
+  sourceAmount,
+  workbookUsd,
+  priceEvidenceStatus,
+  invalidReference,
+  workbookPriceReview,
+  rmMyrPriceArtifact,
+}) {
+  if (resolvedIntent !== 'WTS' || !OWNER_ASSUMED_USD_STATUSES.has(priceEvidenceStatus)) return null;
+  if (invalidReference || workbookPriceReview || rmMyrPriceArtifact) return null;
+  if (/MULTIPLE|COMPETING|AMBIGUOUS_AMOUNT|YEAR_TOKEN|DIMENSION|WEIGHT|QUANTITY|SERIAL/i
+    .test(String(row?.review_reasons || ''))) return null;
+  const candidate = positiveNumber(row?.display_price_usd)
+    ?? positiveNumber(row?.owner_assumed_price_usd)
+    ?? positiveNumber(workbookUsd)
+    ?? positiveNumber(sourceAmount);
+  if (candidate === null) return null;
+  const currentYear = new Date().getUTCFullYear();
+  if (Number.isInteger(candidate) && candidate >= 1900 && candidate <= currentYear + 2) return null;
+  if (referenceIsPriceToken(
+    row?.normalized_reference || row?.raw_reference || row?.catalog_reference,
+    candidate,
+    'USD',
+  )) return null;
+  return candidate;
+}
+
+function hasValidIntentPrice(row, sourceAmount) {
+  const candidate = positiveNumber(sourceAmount);
+  if (candidate === null) return false;
+  const currentYear = new Date().getUTCFullYear();
+  if (Number.isInteger(candidate) && candidate >= 1900 && candidate <= currentYear + 2) return false;
+  if (referenceIsPriceToken(
+    row?.normalized_reference || row?.raw_reference || row?.catalog_reference || row?.reference,
+    candidate,
+    row?.source_currency || row?.currency,
+  )) return false;
+  return !/MULTIPLE|COMPETING|AMBIGUOUS_AMOUNT|DIMENSION|WEIGHT|QUANTITY|SERIAL/i
+    .test(String(row?.review_reasons || row?.data_quality_issues || ''));
 }
 
 function evidenceValuePresent(value) {
@@ -670,7 +718,7 @@ function isTradingFloorSourceRow(row) {
   const resolvedIntent = resolveTradingIntent({
     rawMessage: row?.raw_message,
     structuredIntent: row?.listing_type,
-    hasSourcePrice: sourceAmount !== null,
+    hasSourcePrice: hasValidIntentPrice(row, sourceAmount),
     eligibleSingleWatch: itemCategory === 'WATCH',
   });
   if (!isPublicTradingIntent(resolvedIntent.intent)) return false;
@@ -1034,7 +1082,6 @@ function mapReviewedRecord(row) {
   const hasCompleteIdentity = itemCategory === 'WATCH'
     ? locallyCompleteIdentity && !invalidReference
     : true;
-  const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
   const normalizedSummary = isNormalizedWorkbookSummary(row);
   const multiListing = isMultiListing(row);
   const exactReviewedMultiParent = isExactRolexPatekMultiParent(row);
@@ -1045,9 +1092,22 @@ function mapReviewedRecord(row) {
   const tradingIntent = resolveTradingIntent({
     rawMessage: row.raw_message,
     structuredIntent: row.listing_type,
-    hasSourcePrice: sourceAmount !== null,
+    hasSourcePrice: hasValidIntentPrice(row, sourceAmount),
     eligibleSingleWatch: itemCategory === 'WATCH' && !multiListing,
   });
+  const priceEvidenceStatus = cleanExactText(row.price_evidence_status, 80).toUpperCase();
+  const ownerAssumedUsd = ownerAssumedDisplayPrice({
+    row,
+    resolvedIntent: tradingIntent.intent,
+    sourceAmount,
+    workbookUsd,
+    priceEvidenceStatus,
+    invalidReference,
+    workbookPriceReview,
+    rmMyrPriceArtifact,
+  });
+  const displayPriceUsd = publicVerifiedUsd ?? ownerAssumedUsd;
+  const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
   const publicImageEvidenceType = publicImageUrl
     ? (String(row.image_evidence_type || '').toUpperCase() === 'SELLER_LISTING_IMAGE'
       ? 'SELLER_LISTING_IMAGE'
@@ -1145,8 +1205,12 @@ function mapReviewedRecord(row) {
     // the source-backed rating/feedback result and canonical profile path.
     seller_rating_source_url: null,
     contact_publication_approved: contactApproved,
-    price_usd: publicVerifiedUsd,
-    effective_price_source: row.effective_price_source || null,
+    price_usd: displayPriceUsd,
+    effective_price_source: publicVerifiedUsd !== null
+      ? (row.effective_price_source || 'VERIFIED_USD')
+      : ownerAssumedUsd !== null
+        ? 'OWNER_ASSUMED_USD'
+        : (row.effective_price_source || null),
     price_correction_applied: row.price_correction_applied === true,
     price_correction_id: row.price_correction_id || null,
     price_correction_key: row.price_correction_key || null,
@@ -1160,7 +1224,11 @@ function mapReviewedRecord(row) {
     source_price_amount: sourceAmount,
     source_price_text: rmMyrPriceArtifact ? null : (row.source_price_text || null),
     source_currency: sourceCurrency,
-    price_evidence_status: rmMyrPriceArtifact ? 'REFERENCE_TOKEN_AS_PRICE' : row.price_evidence_status,
+    price_evidence_status: rmMyrPriceArtifact
+      ? 'REFERENCE_TOKEN_AS_PRICE'
+      : ownerAssumedUsd !== null
+        ? 'OWNER_ASSUMED_USD'
+        : row.price_evidence_status,
     price_research_eligible: priceEligible,
     confidence: row.confidence == null ? null : Number(row.confidence),
     verdict: row.verdict || row.verification_status || null,

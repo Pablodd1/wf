@@ -54,7 +54,7 @@ test('only missing-intent single watches use the owner price-presence fallback',
   });
   assert.deepEqual(
     [priced.intent, priced.provenance, priced.inferred, priced.review_reason],
-    ['WTS', 'OWNER_MISSING_INTENT_FALLBACK_V1', true, 'MISSING_INTENT_PRICE_PRESENT_ASSUMED_WTS'],
+    ['WTS', 'INFERRED_WTS_PRICE_PRESENT', true, 'INFERRED_WTS_PRICE_PRESENT'],
   );
 
   const unpriced = resolveTradingIntent({
@@ -65,7 +65,7 @@ test('only missing-intent single watches use the owner price-presence fallback',
   });
   assert.deepEqual(
     [unpriced.intent, unpriced.provenance, unpriced.inferred, unpriced.review_reason],
-    ['WTB', 'OWNER_MISSING_INTENT_FALLBACK_V1', true, 'MISSING_INTENT_UNPRICED_ASSUMED_WTB'],
+    ['WTB', 'INFERRED_WTB_PRICE_ABSENT', true, 'INFERRED_WTB_PRICE_ABSENT'],
   );
 });
 
@@ -92,7 +92,8 @@ test('raw conflicts, multi-item records, and non-watch records are never owner-i
       eligibleSingleWatch,
     });
     assert.equal(unresolved.intent, 'OTHER');
-    assert.equal(unresolved.provenance, 'UNRESOLVED_INTENT');
+    assert.equal(unresolved.provenance, 'OTHER_UNCLASSIFIED_EVIDENCE');
+    assert.equal(unresolved.intent, 'OTHER');
   }
 });
 
@@ -100,7 +101,8 @@ test('WTS/WTB database predicates remain broad so post-map fallback cannot skip 
   assert.equal(databaseTradingIntentFilter('WTS'), null);
   assert.equal(databaseTradingIntentFilter('WTB'), null);
   assert.equal(databaseTradingIntentFilter('MULTI'), 'MULTI');
-  assert.equal(databaseTradingIntentFilter('OTHER'), 'OTHER');
+  assert.equal(databaseTradingIntentFilter('OTHER'), null);
+  assert.equal(databaseTradingIntentFilter('UNCLASSIFIED'), null);
 });
 
 test('reviewed overlay can include a null stored intent without relaxing its verification tier', async () => {
@@ -171,12 +173,71 @@ test('an exact reviewed unbundled child is included as a compact no-image card',
   assert.equal(isTradingFloorSourceRow(child), true);
   const record = mapReviewedRecord(child);
   assert.equal(record.listing_type, 'WTS');
-  assert.equal(record.listing_type_provenance, 'OWNER_MISSING_INTENT_FALLBACK_V1');
+  assert.equal(record.listing_type_provenance, 'INFERRED_WTS_PRICE_PRESENT');
   assert.equal(record.is_unbundled_child, true);
   assert.equal(record.has_images, false);
   assert.equal(record.thumbnail_url, null);
   assert.deepEqual(record.image_urls, []);
   assert.equal(record.seller_phone, null);
+});
+
+test('owner-assumed USD remains displayed but is not qualified for analytics', () => {
+  const record = mapReviewedRecord(approvedWatch({
+    listing_type: 'WTS',
+    raw_message: 'Rolex 126500LN white dial 31,000',
+    price_evidence_status: 'OWNER_ASSUMED_USD',
+    source_price_amount: 31000,
+    workbook_price_usd: 31000,
+    has_verified_usd_price: false,
+    verified_price_usd: null,
+  }));
+  assert.equal(record.price_usd, 31000);
+  assert.equal(record.price_evidence_status, 'OWNER_ASSUMED_USD');
+  assert.equal(record.price_research_eligible, false);
+  assert.equal(record.effective_price_source, 'OWNER_ASSUMED_USD');
+});
+
+test('missing intent does not use a reference or year token as price evidence', () => {
+  const referenceCollision = mapReviewedRecord(approvedWatch({
+    listing_type: 'OTHER',
+    raw_message: 'Rolex 31000 white dial',
+    normalized_reference: '31000',
+    source_price_amount: 31000,
+    workbook_price_usd: 31000,
+  }));
+  assert.equal(referenceCollision.listing_type, 'WTB');
+  assert.equal(referenceCollision.listing_type_provenance, 'INFERRED_WTB_PRICE_ABSENT');
+
+  const yearCollision = mapReviewedRecord(approvedWatch({
+    listing_type: 'OTHER',
+    raw_message: 'Rolex 126500LN white dial 2026',
+    source_price_amount: 2026,
+    workbook_price_usd: 2026,
+  }));
+  assert.equal(yearCollision.listing_type, 'WTB');
+  assert.equal(yearCollision.listing_type_provenance, 'INFERRED_WTB_PRICE_ABSENT');
+});
+
+test('reference, year, and competing-amount evidence cannot become owner-assumed USD', () => {
+  const base = approvedWatch({
+    listing_type: 'WTS',
+    price_evidence_status: 'OWNER_ASSUMED_USD',
+    has_verified_usd_price: false,
+    verified_price_usd: null,
+  });
+  assert.equal(mapReviewedRecord({ ...base, source_price_amount: 2026, workbook_price_usd: 2026 }).price_usd, null);
+  assert.equal(mapReviewedRecord({
+    ...base,
+    normalized_reference: '31000',
+    source_price_amount: 31000,
+    workbook_price_usd: 31000,
+  }).price_usd, null);
+  assert.equal(mapReviewedRecord({
+    ...base,
+    source_price_amount: 31000,
+    workbook_price_usd: 31000,
+    review_reasons: ['MULTIPLE_COMPETING_AMOUNTS'],
+  }).price_usd, null);
 });
 
 test('unreviewed child lineage and unseparated multi messages remain withheld', () => {
