@@ -138,6 +138,7 @@ interface ListingRecord {
   confidence: number;
   has_images: boolean;
   thumbnail_url: string | null;
+  image_url?: string | null;
   image_urls?: string[];
   image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
