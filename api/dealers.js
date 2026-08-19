@@ -214,6 +214,31 @@ module.exports = async function handler(req, res) {
     if (canonicalError && !canonicalDirectoryFallbackAllowed(canonicalError)) {
       throw canonicalError;
     }
+    if (canonicalError) {
+      const fallback = unifiedDealerPage({
+        canonicalDealers: digits(search).length >= 4 ? [] : ratedProfiles(),
+        sourceCandidates: mariadbProfiles(),
+        mode,
+        search,
+        page,
+        pageSize,
+      });
+      return res.status(200).json({
+        success: true,
+        page,
+        pageSize,
+        total: fallback.total,
+        dealers: fallback.dealers,
+        source: 'unified-static-reconciliation-fallback',
+        reconciliation: {
+          canonical_database_profiles: null,
+          rated_snapshot_profiles: ratedProfiles().length,
+          mariadb_source_profiles: mariadbProfiles().length,
+          rated_is_filtered_from_all: true,
+          top_rated_is_filtered_from_rated: true,
+        },
+      });
+    }
     const phoneIds = mode === 'top-rated' ? null : await phoneMatchedDealerIds(client, search);
     if (phoneIds !== null && !phoneIds.length) {
       return res.status(200).json({
