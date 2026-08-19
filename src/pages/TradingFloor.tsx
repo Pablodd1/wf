@@ -1887,7 +1887,7 @@ function isPricePlausible(price: number | null) {
 }
 
 function getListingMeta(listing: ListingRecord) {
-  const region = normalizeRegion(listing.region || listing.location);
+  const region = normalizeRegion(listing.region || listing.location || null);
   const postedDate = formatListingDate(listing.listing_date);
   const currency = (cleanValue(listing.source_currency) || cleanValue(listing.currency) || 'USD').toUpperCase();
   const isForeignCurrency = Boolean(currency && currency !== 'USD' && currency !== '$');
