@@ -18,6 +18,7 @@ const {
   resolveTradingIntent,
 } = require('./_lib/trading-intent.cjs');
 const {
+  isExactRolexPatekMultiParent,
   isRolexPatekOverlayBrand,
   loadRolexPatekOverlayExactKeys,
   loadRolexPatekOverlayRows,
@@ -1036,6 +1037,7 @@ function mapReviewedRecord(row) {
   const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
   const normalizedSummary = isNormalizedWorkbookSummary(row);
   const multiListing = isMultiListing(row);
+  const exactReviewedMultiParent = isExactRolexPatekMultiParent(row);
   const isUnbundledChild = evidenceValuePresent(row.parent_id)
     || evidenceValuePresent(row.parent_source_message_id)
     || String(row.verification_tier || '').toUpperCase() === 'OWNER_UNBUNDLED_ADMISSION_LEDGER';
@@ -1116,11 +1118,13 @@ function mapReviewedRecord(row) {
     has_complete_identity: hasCompleteIdentity,
     dial_color: dialColor,
     condition: correctedWatchFields.condition,
-    listing_type: tradingIntent.intent,
-    listing_type_original: tradingIntent.original_intent,
-    listing_type_provenance: tradingIntent.provenance,
-    listing_type_inferred: tradingIntent.inferred,
-    listing_type_review_reason: tradingIntent.review_reason,
+    listing_type: exactReviewedMultiParent ? 'MULTI' : tradingIntent.intent,
+    listing_type_original: exactReviewedMultiParent ? 'MULTI' : tradingIntent.original_intent,
+    listing_type_provenance: exactReviewedMultiParent ? 'REVIEWED_EXACT_MULTI_PARENT' : tradingIntent.provenance,
+    listing_type_inferred: exactReviewedMultiParent ? false : tradingIntent.inferred,
+    listing_type_review_reason: exactReviewedMultiParent
+      ? 'Exact structured multi-offer parent; singular price, identity, and media withheld.'
+      : tradingIntent.review_reason,
     listing_date: row.posting_date || null,
     source_posted_at_text: evidenceValuePresent(row.source_posted_at_text)
       ? row.source_posted_at_text

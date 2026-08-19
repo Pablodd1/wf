@@ -56,6 +56,8 @@ test('exact structured multi-offer parent is Trading-Floor-only and excluded fro
   assert.equal(parent.verified_price_usd, null);
   assert.equal(parent.has_exact_source_image, false);
   const publicParent = tradingFloorApi.mapReviewedRecord(parent);
+  assert.equal(publicParent.listing_type, 'MULTI');
+  assert.equal(publicParent.listing_type_provenance, 'REVIEWED_EXACT_MULTI_PARENT');
   assert.equal(publicParent.multi_listing, true);
   assert.equal(publicParent.multi_listing_release_approved, true);
   assert.equal(mapWorkbookAnalyticsRow(parent).price_usd, null);
