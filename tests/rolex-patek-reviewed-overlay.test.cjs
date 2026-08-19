@@ -18,6 +18,7 @@ const {
 const { redactPublicSource } = require('../api/_lib/source-redaction.cjs');
 const { mapWorkbookAnalyticsRow } = require('../api/_lib/reviewed-workbook-analytics.cjs');
 const priceResearchHandler = require('../api/price-research.js');
+const priceResearchListingHandler = require('../api/price-research-listing.js');
 const tradingFloorApi = require('../api/reviewed-market-inventory.js');
 
 test('public raw evidence redacts contact PII and labeled handles without erasing reference or price evidence', () => {
@@ -60,6 +61,8 @@ test('exact structured multi-offer parent is Trading-Floor-only and excluded fro
   assert.equal(publicParent.listing_type_provenance, 'REVIEWED_EXACT_MULTI_PARENT');
   assert.equal(publicParent.multi_listing, true);
   assert.equal(publicParent.multi_listing_release_approved, true);
+  assert.equal(priceResearchListingHandler.isTradingFloorOnlyReviewedListingId(parent.id), true);
+  assert.equal(priceResearchListingHandler.isTradingFloorOnlyReviewedListingId(`rpdelta_${'f'.repeat(64)}`), false);
   assert.equal(mapWorkbookAnalyticsRow(parent).price_usd, null);
 
   assert.equal(isExactRolexPatekMultiParent({ ...parent, id: `rpdelta_${'f'.repeat(64)}` }), false);

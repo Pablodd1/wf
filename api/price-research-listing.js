@@ -25,12 +25,17 @@ const {
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
 const { loadReviewedWorkbookListing } = require('./_lib/reviewed-workbook-analytics.cjs');
+const { ROLEX_PATEK_MULTI_PARENT_ID } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
 
 const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source';
 
 function isMissingQnsaDetailSource(error) {
   return /42P01|PGRST205|relation .* does not exist|could not find the table/i
     .test(`${error?.code || ''} ${error?.message || error || ''}`);
+}
+
+function isTradingFloorOnlyReviewedListingId(id) {
+  return String(id || '') === ROLEX_PATEK_MULTI_PARENT_ID;
 }
 
 async function loadQnsaReleaseListing(client, id) {
@@ -233,6 +238,9 @@ module.exports = async function handler(req, res) {
           },
         });
       }
+      if (isTradingFloorOnlyReviewedListingId(id)) {
+        return res.status(404).json({ error: 'Listing is Trading Floor only' });
+      }
       if (!canReview) return res.status(404).json({ error: 'Listing not found' });
     }
     const sourceTable = 'watch_records';
@@ -390,3 +398,5 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Failed to fetch listing detail' });
   }
 };
+
+module.exports.isTradingFloorOnlyReviewedListingId = isTradingFloorOnlyReviewedListingId;
