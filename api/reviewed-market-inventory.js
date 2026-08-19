@@ -988,9 +988,8 @@ function mapReviewedRecord(row) {
   const normalizedSummary = isNormalizedWorkbookSummary(row);
   const multiListing = isMultiListing(row);
   const isUnbundledChild = evidenceValuePresent(row.parent_id)
-    || evidenceValuePresent(row.parent_source_message_id)
-    || String(row.verification_tier || '').toUpperCase() === 'OWNER_UNBUNDLED_ADMISSION_LEDGER';
-  const publicImageUrl = multiListing || isUnbundledChild ? null : exactImageUrl;
+    || evidenceValuePresent(row.parent_source_message_id);
+  const publicImageUrl = multiListing ? null : exactImageUrl;
   const publicImageEvidenceType = publicImageUrl
     ? (String(row.image_evidence_type || '').toUpperCase() === 'SELLER_LISTING_IMAGE'
       ? 'SELLER_LISTING_IMAGE'
