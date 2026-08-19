@@ -1087,6 +1087,13 @@ function DesktopFilters({
   onChange: (updates: Record<string, string | null>) => void;
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [locationSearch, setLocationSearch] = useState('');
+
+  const filteredLocations = useMemo(() => {
+    const q = locationSearch.trim().toLowerCase();
+    if (!q) return locations;
+    return locations.filter(loc => loc.toLowerCase().includes(q));
+  }, [locations, locationSearch]);
 
   const toggleLocation = (loc: string) => {
     if (!loc) {
@@ -1153,7 +1160,6 @@ function DesktopFilters({
             </select>
           </fieldset>
 
-
           <fieldset>
             <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Listing type</legend>
             {INTENT_OPTIONS.map(option => (
@@ -1174,16 +1180,31 @@ function DesktopFilters({
                 <button type="button" onClick={() => toggleLocation('')} className="text-[10px] font-semibold text-[#7B5719] hover:underline">Clear</button>
               )}
             </div>
-            {locations.length === 0 ? (
+            <div className="relative mb-2">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
+              <input
+                type="text"
+                value={locationSearch}
+                onChange={e => setLocationSearch(e.target.value)}
+                placeholder="Search locations..."
+                className="h-8 w-full rounded border bg-white pl-8 pr-2.5 text-xs outline-none focus:border-[#9A7127]"
+                style={{ borderColor: BORDER, color: INK }}
+              />
+            </div>
+            {filteredLocations.length === 0 && locations.length === 0 ? (
               <p className="text-xs italic" style={{ color: MUTED }}>No location data available</p>
+            ) : filteredLocations.length === 0 ? (
+              <p className="text-xs italic py-2 text-center" style={{ color: MUTED }}>No matching locations</p>
             ) : (
               <div className="max-h-48 overflow-y-auto space-y-1 p-2 rounded border bg-stone-50/60 shadow-inner hide-scrollbar" style={{ borderColor: BORDER }}>
-                <FilterCheck
-                  checked={selectedLocations.length === 0}
-                  label="All locations"
-                  onChange={() => toggleLocation('')}
-                />
-                {locations.map(value => (
+                {!locationSearch && (
+                  <FilterCheck
+                    checked={selectedLocations.length === 0}
+                    label="All locations"
+                    onChange={() => toggleLocation('')}
+                  />
+                )}
+                {filteredLocations.map(value => (
                   <FilterCheck
                     key={value}
                     checked={selectedLocations.includes(value)}
@@ -1234,6 +1255,13 @@ function MobileFilterSheet({
   const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
   const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
   const [draftLocations, setDraftLocations] = useState<string[]>(selectedLocations);
+  const [mobileLocationSearch, setMobileLocationSearch] = useState('');
+
+  const filteredMobileLocations = useMemo(() => {
+    const q = mobileLocationSearch.trim().toLowerCase();
+    if (!q) return locations;
+    return locations.filter(loc => loc.toLowerCase().includes(q));
+  }, [locations, mobileLocationSearch]);
 
   const toggleLocation = (loc: string) => {
     if (!loc) {
@@ -1283,12 +1311,25 @@ function MobileFilterSheet({
             ))}
           </FilterGroup>
           <FilterGroup label={`Locations (${draftLocations.length || 'All'})`}>
-            <FilterCheck
-              checked={draftLocations.length === 0}
-              label="All locations"
-              onChange={() => toggleLocation('')}
-            />
-            {locations.map(value => (
+            <div className="relative mb-2 w-full">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
+              <input
+                type="text"
+                value={mobileLocationSearch}
+                onChange={e => setMobileLocationSearch(e.target.value)}
+                placeholder="Search locations..."
+                className="h-9 w-full rounded border bg-white pl-8 pr-2.5 text-xs outline-none focus:border-[#9A7127]"
+                style={{ borderColor: BORDER, color: INK }}
+              />
+            </div>
+            {!mobileLocationSearch && (
+              <FilterCheck
+                checked={draftLocations.length === 0}
+                label="All locations"
+                onChange={() => toggleLocation('')}
+              />
+            )}
+            {filteredMobileLocations.map(value => (
               <FilterCheck
                 key={value}
                 checked={draftLocations.includes(value)}
@@ -1352,14 +1393,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
     if (benchmark && benchmark.stats && benchmark.count >= 2) {
       return rateMarketPrice(listing.price_usd, benchmark.stats, benchmark.count);
     }
-    const amount = Number(listing.price_usd);
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return { code: 'NOT_RATED', label: 'Unpriced', reason: 'Price not supplied for this listing.', color: '#9ca3af' };
-    }
-    if (amount >= 500 && amount <= 50000000) {
-      return { code: 'MARKET', label: 'Market price', reason: 'Plausible verified luxury offer.', color: '#9A7127' };
-    }
-    return { code: 'NOT_RATED', label: 'Open for rating', reason: 'Analyzing comparable observations.', color: '#6B7280' };
+    return null;
   }, [listing.price_usd, benchmark]);
 
   const ratingDisplay = useMemo(() => {
@@ -1808,14 +1842,15 @@ function getListingMeta(listing: ListingRecord) {
   const reviewedWorkbookUsd = reviewedWorkbookUsdPrice(listing);
   const workbookPriceNeedsReview = Boolean(cleanValue(listing.workbook_price_review_reason));
   const sourcePrice = formatSourcePrice(listing);
-  // Price sanity check — flag implausible values
+  const currency = cleanValue(listing.source_currency) || cleanValue(listing.currency) || 'USD';
+  const isForeignCurrency = Boolean(currency && currency !== 'USD' && currency !== '$');
   const verifiedPlausible = isPricePlausible(verifiedUsd);
   const workbookPlausible = isPricePlausible(reviewedWorkbookUsd);
-  
+
   const priceLabel = verifiedUsd !== null
-    ? (verifiedPlausible ? formatUsdPrice(verifiedUsd) : 'Price under review')
+    ? (verifiedPlausible ? (isForeignCurrency ? `${currency} ${verifiedUsd.toLocaleString()}` : formatUsdPrice(verifiedUsd)) : 'Price under review')
     : reviewedWorkbookUsd !== null
-      ? (workbookPlausible ? formatUsdPrice(reviewedWorkbookUsd) : 'Price under review')
+      ? (workbookPlausible ? (isForeignCurrency ? `${currency} ${reviewedWorkbookUsd.toLocaleString()}` : formatUsdPrice(reviewedWorkbookUsd)) : 'Price under review')
       : workbookPriceNeedsReview
         ? 'Price requires review'
         : sourcePrice || 'Price not supplied';
