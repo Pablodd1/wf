@@ -73,7 +73,7 @@ interface ListingRecord {
   has_images: boolean;
   thumbnail_url: string | null;
   image_urls?: string[];
-  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
   image_evidence_notice?: string | null;
   region: string | null;
@@ -897,6 +897,9 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
 
 function getListingImageSrc(listing: ListingRecord): string | null {
   if (isBundleListing(listing) || listing.is_unbundled_child === true) return null;
+  const sourceImageEvidence = ['SELLER_LISTING_IMAGE', 'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
+    .includes(cleanValue(listing.image_evidence_type).toUpperCase());
+  if (!sourceImageEvidence) return null;
   const direct = [listing.thumbnail_url, ...(listing.image_urls || [])]
     .find(value => typeof value === 'string' && /^https:\/\/[^\s]+$/i.test(value.trim()));
   return direct ? direct.trim() : null;
@@ -1064,7 +1067,14 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
   }, [failedImages, listing, mainImage]);
 
   const visibleImageIndex = activeImage < images.length ? activeImage : 0;
-  const rawSourceMessage = listing.raw_message ?? listing.raw_line ?? listing.description ?? '';
+  const verifiedWhatsAppChannel = contact?.contact_channels?.whatsapp || contact?.whatsapp_url;
+  const verifiedTelegramChannel = contact?.contact_channels?.telegram;
+  const rawSourceMessage = listing.raw_message_scope === 'normalized_summary'
+    ? ''
+    : listing.raw_message ?? listing.raw_line ?? listing.description ?? '';
+  const rawSourceFallback = listing.raw_message_scope === 'normalized_summary'
+    ? 'Unverified workbook summary text is withheld from the customer view.'
+    : 'Original source text is unavailable.';
   const normalizedIntent = String(listing.intent || listing.listing_type || '').toUpperCase();
 
   const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS');
@@ -1196,6 +1206,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
                 className="flex h-7 w-7 items-center justify-center rounded text-stone-400 hover:text-stone-700"
               >
                 <X size={18} />
+                <span className="sr-only">Back to results</span>
               </button>
             </div>
 
@@ -1204,7 +1215,7 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             <div className="mt-5 border-t border-stone-100 pt-4">
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5826]">Original raw message</div>
               <div className="mt-2.5 rounded bg-[#FBF9F6] p-3 font-mono text-xs leading-relaxed text-stone-800 whitespace-pre-wrap">
-                {rawSourceMessage || 'Original source text is unavailable.'}
+                {rawSourceMessage || rawSourceFallback}
               </div>
             </div>
 
@@ -1264,18 +1275,38 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </div>
 
             <p className="mt-5 text-xs leading-relaxed text-[#6B7280]">
-              Direct poster contact is not published. Curated Luxury can help route this listing inquiry without displaying a private number.
+              {verifiedWhatsAppChannel || verifiedTelegramChannel
+                ? 'Use a source-verified channel without displaying the underlying contact number.'
+                : 'Curated Luxury can help route this listing inquiry without displaying a private number.'}
             </p>
 
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(`Hi, I am inquiring about the listing: ${meta.title} (${listing.id}) on Curated Luxury Trading Floor.`)}`}
+            {verifiedWhatsAppChannel && <a
+              href={verifiedWhatsAppChannel}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#00D757] py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#00c34f]"
+            >
+              <MessageCircle size={18} />
+              Continue on WhatsApp
+            </a>}
+            {verifiedTelegramChannel && <a
+              href={verifiedTelegramChannel}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-[#229ED9] py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#1b8fc5]"
+            >
+              <MessageCircle size={18} />
+              Continue on Telegram
+            </a>}
+            {!verifiedWhatsAppChannel && !verifiedTelegramChannel && <a
+              href={`https://wa.me/?text=${encodeURIComponent(`Please help connect me with the poster for ${meta.title} (${listing.id}) on Curated Luxury Trading Floor.`)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#00D757] py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#00c34f]"
             >
               <MessageCircle size={18} />
               Ask Curated Luxury on WhatsApp
-            </a>
+            </a>}
           </div>
         </div>
       </div>
@@ -1383,7 +1414,9 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function verifiedUsdPrice(listing: ListingRecord) {
-  if (listing.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH' || listing.price_research_eligible !== true) return null;
+  if (!['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(
+    cleanValue(listing.price_evidence_status).toUpperCase(),
+  )) return null;
   const value = Number(listing.price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
@@ -1392,7 +1425,10 @@ function reviewedWorkbookUsdPrice(listing: ListingRecord) {
   // Only display the workbook price if the API has NOT flagged it for review.
   // workbook_price_review_reason is set by the API when the price is out of
   // plausibility range (e.g. reference number stored as price like 79377000).
-  if (listing.workbook_price_review_reason) return null;
+  if (listing.workbook_price_review_reason
+    || !['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(
+      cleanValue(listing.price_evidence_status).toUpperCase(),
+    )) return null;
   const value = Number(listing.workbook_price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }

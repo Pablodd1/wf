@@ -167,9 +167,22 @@ module.exports = async function handler(req, res) {
       const workbookListing = await loadReviewedWorkbookListing(client, id);
       if (workbookListing) {
         const publicSource = redactPublicSource(workbookListing.raw_message).trim();
+        const workbookImageProvenance = publicImageProvenance(workbookListing);
+        const workbookHasPublicSourceImage = [
+          'SELLER_LISTING_IMAGE',
+          'SOURCE_LISTING_IMAGE',
+          'SOURCE_LINKED_IMAGE',
+        ].includes(String(workbookImageProvenance.image_evidence_type || '').toUpperCase());
+        const workbookImageUrls = workbookHasPublicSourceImage
+          ? [...new Set([
+              workbookListing.thumbnail_url,
+              ...(workbookListing.image_urls || []),
+            ].filter(Boolean))]
+          : [];
+        const workbookThumbnailUrl = workbookImageUrls[0] || null;
         let dialColor = workbookListing.dial_color;
-        if ((!dialColor || dialColor === 'UNKNOWN') && (workbookListing.has_images || workbookListing.thumbnail_url || workbookListing.image_urls?.length)) {
-          const imageUrl = workbookListing.thumbnail_url || workbookListing.image_urls?.[0];
+        if ((!dialColor || dialColor === 'UNKNOWN') && workbookHasPublicSourceImage && workbookThumbnailUrl) {
+          const imageUrl = workbookThumbnailUrl;
           try {
             const { resolveDialWithVisionFallback } = require('./_lib/dial-normalization.cjs');
             const visionResolved = await resolveDialWithVisionFallback({
@@ -209,15 +222,11 @@ module.exports = async function handler(req, res) {
             seller_name: workbookListing.seller_name || null,
             listing_status: workbookListing.listing_status,
             confidence: workbookListing.confidence,
-            image_urls: workbookListing.image_urls,
-            thumbnail_url: workbookListing.thumbnail_url,
-            has_images: workbookListing.has_images,
-            image_evidence_type: workbookListing.image_evidence_type || (workbookListing.has_images ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE'),
-            image_evidence_label: workbookListing.has_images ? 'Source-supplied listing image' : null,
-            image_evidence_notice: workbookListing.has_images
-              ? 'Exact image URL retained with this reviewed source listing.'
-              : null,
-            image_provenance: workbookListing.has_images ? 'source_supplied' : 'none',
+            image_urls: workbookImageUrls,
+            thumbnail_url: workbookThumbnailUrl,
+            has_images: workbookImageUrls.length > 0,
+            ...workbookImageProvenance,
+            image_provenance: workbookHasPublicSourceImage ? 'source_supplied' : 'none',
             data_quality_issues: [],
             data_quality_review_required: false,
             human_review_available: canReview,

@@ -37,6 +37,31 @@ function publicImageProvenance(record) {
     };
   }
 
+  const declaredEvidence = String(record?.image_evidence_type || '').toUpperCase();
+  if (declaredEvidence === IMAGE_EVIDENCE.REFERENCE) {
+    return {
+      image_evidence_type: IMAGE_EVIDENCE.REFERENCE,
+      image_evidence_label: 'Reference image',
+      image_evidence_notice: 'Online model-reference image. It is not the seller’s original listing photo.',
+    };
+  }
+
+  if (declaredEvidence === 'SELLER_LISTING_IMAGE' || declaredEvidence === IMAGE_EVIDENCE.SOURCE) {
+    return {
+      image_evidence_type: declaredEvidence,
+      image_evidence_label: 'Source listing photo',
+      image_evidence_notice: 'Image retained from the source listing evidence.',
+    };
+  }
+
+  if (declaredEvidence === IMAGE_EVIDENCE.SOURCE_LINKED) {
+    return {
+      image_evidence_type: IMAGE_EVIDENCE.SOURCE_LINKED,
+      image_evidence_label: 'Source-linked image',
+      image_evidence_notice: 'Image linked through the reviewed listing evidence.',
+    };
+  }
+
   if (
     String(record?.source || '') === REVIEWED_ZENITH_SOURCE
     && urls.some(url => {

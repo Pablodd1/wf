@@ -42,7 +42,7 @@ test('complete paginated WTS inventory appears before separate WTB demand while 
   assert.doesNotMatch(source, />Reference activity</);
   assert.match(source, /data-testid="wtb-demand-summary"/);
   assert.match(source, /WTS listings for sale/);
-  assert.match(source, /All available WTS evidence is accessible page by page/);
+  assert.match(source, /Priced WTS evidence is accessible page by page/);
   assert.match(source, /WTB requests follow in their own section/);
   assert.doesNotMatch(source, /Showing a compact source-evidence sample for speed/);
 });

@@ -1707,10 +1707,8 @@ module.exports = async function handler(req, res) {
         tier: 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1',
         accepted_usd_statuses: [
           'SOURCE_EXPLICIT_USD_MATCH',
-          'OWNER_DOLLAR_USD_POLICY',
-          'OWNER_K_USD_POLICY',
         ],
-        owner_policy_statuses_remain_distinct_from_source_explicit: true,
+        bare_currency_policy_statuses_excluded_from_usd_analytics: true,
         input_wts_count: overlayWtsRows.length,
         added_wts_count: overlayMerge.overlay_added_count,
         exact_lineage_duplicates_held: overlayMerge.overlay_duplicate_count,

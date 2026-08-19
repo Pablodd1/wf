@@ -19,8 +19,10 @@ const {
 } = require('./_lib/trading-intent.cjs');
 const {
   isRolexPatekOverlayBrand,
+  loadRolexPatekOverlayExactKeys,
   loadRolexPatekOverlayRows,
   mergeByExactLineage,
+  overlayExactKeys,
   ROLEX_PATEK_DELTA_TIER,
 } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
 const {
@@ -146,7 +148,7 @@ const EVIDENCE_CONTRACT = Object.freeze({
   identity: 'Available identity fields are published; complete valid identity is required only for price-research eligibility.',
   contact: 'Seller identity may be published when supplied; phone/contact details require source-backed publication consent.',
   image: 'Only an exact supplied HTTP(S) source URL is image-eligible.',
-  price: 'Analytics accepts explicit-source USD plus separately labeled owner-approved dollar/K USD policy evidence. Named foreign currencies remain held.',
+  price: 'Analytics accepts explicit-source USD/USDT or complete dated-FX evidence. Bare dollar/K and incomplete foreign-currency evidence remain visible only as original source evidence.',
   rating: 'Rated status requires either a source-supplied score plus review count or an exact phone/profile match to public dealer feedback. Feedback counts are never converted into a five-point score.',
   ordering: Object.freeze({
     qnsa_database: 'Global exact-source-image lane first. Dealer rating/profile is enriched after the bounded RPC and is not globally ordered.',
@@ -488,8 +490,34 @@ function dealerEvidenceRank(record) {
 function hasVerifiedExplicitPrice(record) {
   const status = cleanExactText(record?.price_evidence_status, 60).toUpperCase();
   return record?.price_research_eligible === true
-    && ['SOURCE_EXPLICIT_USD_MATCH', 'OWNER_DOLLAR_USD_POLICY', 'OWNER_K_USD_POLICY', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(status)
+    && ['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(status)
     && hasUsableSourcePrice(record) !== null;
+}
+
+function reviewedOverlayCursorState({
+  requestedDeltaOffset,
+  reviewedOverlayTotal,
+  reviewedOverlayConsumed,
+  canonicalBaseHasMore,
+  canonicalBaseRecordCount,
+}) {
+  const laneActive = Number(requestedDeltaOffset) < Number(reviewedOverlayTotal);
+  const overlayHasMore = laneActive
+    && Number(requestedDeltaOffset) + Number(reviewedOverlayConsumed) < Number(reviewedOverlayTotal);
+  return {
+    laneActive,
+    overlayHasMore,
+    hasMore: laneActive
+      ? overlayHasMore || Boolean(canonicalBaseHasMore) || Number(canonicalBaseRecordCount) > 0
+      : Boolean(canonicalBaseHasMore),
+  };
+}
+
+function excludeReviewedOverlayExactLineage(records, reviewedExactKeys, privateExactKeysById = new Map()) {
+  if (!(reviewedExactKeys instanceof Set) || reviewedExactKeys.size === 0) return records;
+  return (records || []).filter(record =>
+    !(privateExactKeysById.get(String(record?.id)) || overlayExactKeys(record))
+      .some(key => reviewedExactKeys.has(key)));
 }
 
 function listingCompletenessScore(record) {
@@ -2405,6 +2433,11 @@ module.exports = async function handler(req, res) {
     }
     const data = await restRes.json();
     const sourceRows = data || [];
+    // Retain private lineage only in memory for cross-lane deduplication. The
+    // mapped public records intentionally omit message/file lineage fields.
+    const privateExactKeysById = new Map(sourceRows
+      .filter(row => row?.id)
+      .map(row => [String(row.id), overlayExactKeys(row)]));
     const brandRows = sourceRows;
     let rawRows = brandRows.slice(0, pageSize);
     let hasMore = qnsaCandidateCursorMeta
@@ -2557,6 +2590,8 @@ module.exports = async function handler(req, res) {
         ? qnsaCandidateCursorMeta.nextOffset
         : requestedOffset + consumedSourceRecordCount;
     }
+    const canonicalBaseHasMore = hasMore;
+    const canonicalBaseRecordsAvailable = records.length > 0;
     let reviewedOverlayRecords = [];
     let reviewedOverlayTotal = 0;
     let reviewedOverlaySingleTotal = 0;
@@ -2564,7 +2599,7 @@ module.exports = async function handler(req, res) {
     let reviewedOverlayDuplicateCount = 0;
     let reviewedOverlayConsumed = 0;
     let reviewedOverlayHasMore = false;
-    let servingReviewedOverlayPage = false;
+    let reviewedOverlayLaneActive = false;
     const reviewedOverlayBrands = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       ? (isRolexPatekOverlayBrand(brand)
         ? [brand]
@@ -2574,14 +2609,19 @@ module.exports = async function handler(req, res) {
       : [];
     if (reviewedOverlayBrands.length) {
       try {
+        const overlayListingTypes = listingType === 'MULTI'
+          ? ['MULTI']
+          : ['WTS', 'WTB', 'OTHER', 'UNKNOWN', ...(listingType ? [] : ['MULTI'])];
+        const overlayReferences = requestedReference
+          ? listEquivalentReferences(requestedReference, brand || reviewedOverlayBrands[0])
+          : [];
+        const overlayIncludeMissingIntent = listingType !== 'MULTI';
         const overlayRequest = (overlayBrand, limit, offset, count) =>
           loadRolexPatekOverlayRows(client, {
             brand: overlayBrand,
-            references: requestedReference ? listEquivalentReferences(requestedReference, overlayBrand) : [],
-            listingTypes: listingType === 'MULTI'
-              ? ['MULTI']
-              : ['WTS', 'WTB', 'OTHER', 'UNKNOWN', ...(listingType ? [] : ['MULTI'])],
-            includeMissingIntent: listingType !== 'MULTI',
+            references: requestedReference ? listEquivalentReferences(requestedReference, overlayBrand) : overlayReferences,
+            listingTypes: overlayListingTypes,
+            includeMissingIntent: overlayIncludeMissingIntent,
             includeMultiParents: true,
             limit, offset, count,
           });
@@ -2594,12 +2634,13 @@ module.exports = async function handler(req, res) {
         reviewedOverlayTotal = overlayCounts.reduce((sum, result) => sum + Number(result.count || 0), 0);
         reviewedOverlaySingleTotal = overlayCounts.reduce((sum, result) => sum + Number(result.singleCount || 0), 0);
         reviewedOverlayMultiParentTotal = overlayCounts.reduce((sum, result) => sum + Number(result.multiParentCount || 0), 0);
+        reviewedOverlayLaneActive = requestedDeltaOffset < reviewedOverlayTotal;
         // The reviewed delta is its own deterministic cursor lane. Serve it
         // first so a large canonical base feed cannot make the additions
         // practically unreachable or cause them to be skipped while advancing
         // the base cursor. The canonical base cursor remains frozen until the
         // reviewed lane is exhausted.
-        const overlayCapacity = requestedDeltaOffset < reviewedOverlayTotal ? pageSize : 0;
+        const overlayCapacity = reviewedOverlayLaneActive ? pageSize : 0;
         let remainingGlobalOffset = requestedDeltaOffset;
         let remainingCapacity = overlayCapacity;
         const overlayPlans = [];
@@ -2619,6 +2660,9 @@ module.exports = async function handler(req, res) {
           overlayRequest(plan.brand, plan.limit, plan.offset, false)));
         const overlaySourceRows = overlayResults.flatMap(result => result.rows);
         reviewedOverlayConsumed = overlaySourceRows.length;
+        if (reviewedOverlayLaneActive && reviewedOverlayConsumed === 0) {
+          throw new Error('Reviewed overlay cursor did not advance.');
+        }
         const mappedOverlay = await enrichRecordsWithDealerDirectory(
           client,
           overlaySourceRows.map(mapReviewedRecord),
@@ -2636,33 +2680,65 @@ module.exports = async function handler(req, res) {
           .filter(record => ratingMatches(record, rating))
           .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory)
           .sort(compareInventoryForDisplay);
-        const overlayMerge = mergeByExactLineage(records, filteredOverlay);
+        // The reviewed lane is served first, so the hidden frozen base page
+        // must not suppress its overlay copy. Deduplicate only within the
+        // reviewed page here; matching base rows are removed later when their
+        // canonical page is actually served.
+        const overlayMerge = mergeByExactLineage([], filteredOverlay);
         reviewedOverlayDuplicateCount = overlayMerge.overlay_duplicate_count;
-        const baseIds = new Set(records.map(record => String(record.id)));
         reviewedOverlayRecords = boundReviewedOverlayPage(
           [],
-          overlayMerge.rows.filter(record => !baseIds.has(String(record.id))),
+          overlayMerge.rows,
           pageSize,
         );
-        servingReviewedOverlayPage = reviewedOverlayRecords.length > 0;
         reviewedOverlayHasMore = requestedDeltaOffset + reviewedOverlayConsumed < reviewedOverlayTotal;
+        // Once the reviewed lane is exhausted, every canonical base page is
+        // checked against the complete bounded overlay lineage set. This
+        // prevents an exact source from reappearing on a later base page.
+        if (!reviewedOverlayLaneActive && records.length > 0) {
+          const exactKeySets = await Promise.all(reviewedOverlayBrands.map(overlayBrand =>
+            loadRolexPatekOverlayExactKeys(client, {
+              brand: overlayBrand,
+              references: requestedReference ? listEquivalentReferences(requestedReference, overlayBrand) : [],
+              listingTypes: overlayListingTypes,
+              includeMissingIntent: overlayIncludeMissingIntent,
+              includeMultiParents: true,
+            })));
+          const reviewedExactKeys = new Set(exactKeySets.flatMap(keySet => [...keySet]));
+          const deduplicatedBaseRecords = excludeReviewedOverlayExactLineage(
+            records,
+            reviewedExactKeys,
+            privateExactKeysById,
+          );
+          reviewedOverlayDuplicateCount += records.length - deduplicatedBaseRecords.length;
+          records = deduplicatedBaseRecords;
+        }
       } catch (overlayError) {
         // Overlay failure must never take the established QNSA feed offline.
         console.warn('[reviewed-market-inventory] Rolex/Patek reviewed overlay unavailable:', overlayError.message);
       }
     }
-    hasMore = hasMore || reviewedOverlayHasMore;
+    const reviewedCursorState = reviewedOverlayCursorState({
+      requestedDeltaOffset,
+      reviewedOverlayTotal,
+      reviewedOverlayConsumed,
+      canonicalBaseHasMore,
+      canonicalBaseRecordCount: canonicalBaseRecordsAvailable ? 1 : 0,
+    });
+    reviewedOverlayLaneActive = reviewedCursorState.laneActive;
+    reviewedOverlayHasMore = reviewedCursorState.overlayHasMore;
+    hasMore = reviewedCursorState.hasMore;
     const reviewedOverlayCountHasUnsupportedFilter = Boolean(
       imagesOnly || pricedOnly || requestedDial || condition || search || region || rating || postedAfter,
     );
     const nextCursor = hasMore
       ? encodeInventoryCursor({
-          lane: servingReviewedOverlayPage ? requestedLane : nextLane,
-          offset: servingReviewedOverlayPage ? requestedOffset : nextOffset,
+          lane: reviewedOverlayLaneActive ? requestedLane : nextLane,
+          offset: reviewedOverlayLaneActive ? requestedOffset : nextOffset,
           deltaOffset: requestedDeltaOffset + reviewedOverlayConsumed,
           page: page + 1,
           brandKeysets: sixBrandBroadScope
-            ? servingReviewedOverlayPage
+            ? reviewedOverlayLaneActive
               ? inventoryCursor?.brandKeysets || {}
               : qnsaCandidateCursorMeta?.nextBrandKeysets || {}
             : null,
@@ -2673,9 +2749,9 @@ module.exports = async function handler(req, res) {
     const combinedInventoryTotal = combineInventoryTotal(
       publicInventoryTotal,
       reviewedOverlayTotal,
-      reviewedOverlayCountHasUnsupportedFilter,
+      reviewedOverlayCountHasUnsupportedFilter || reviewedOverlayDuplicateCount > 0,
     );
-    const publicBaseRecords = servingReviewedOverlayPage ? [] : records;
+    const publicBaseRecords = reviewedOverlayLaneActive ? [] : records;
     const combinedPageRecords = [...publicBaseRecords, ...reviewedOverlayRecords];
 
     return res.status(200).json({
@@ -2729,6 +2805,8 @@ module.exports.MULTI_PARENT_VERIFICATION_STATUS = MULTI_PARENT_VERIFICATION_STAT
 module.exports.MULTI_PARENT_PUBLICATION_LANE = MULTI_PARENT_PUBLICATION_LANE;
 module.exports.combineInventoryTotal = combineInventoryTotal;
 module.exports.boundReviewedOverlayPage = boundReviewedOverlayPage;
+module.exports.reviewedOverlayCursorState = reviewedOverlayCursorState;
+module.exports.excludeReviewedOverlayExactLineage = excludeReviewedOverlayExactLineage;
 module.exports.MARKET_SOURCE_VIEW = MARKET_SOURCE_VIEW;
 module.exports.MULTIPLE_LISTING_IDENTITY_VALUES = MULTIPLE_LISTING_IDENTITY_VALUES;
 module.exports.EVIDENCE_CONTRACT = EVIDENCE_CONTRACT;
