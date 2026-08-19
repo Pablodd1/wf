@@ -642,6 +642,14 @@ export default function TradingFloor() {
 
           // Graceful fallback to parsedWatches.json (3.52M master dataset)
           try {
+            let refImageMap: Record<string, string> = {};
+            try {
+              const imgMapRes = await fetch('/reference_images.json', { signal: controller.signal });
+              if (imgMapRes.ok) {
+                refImageMap = await imgMapRes.json();
+              }
+            } catch {}
+
             const staticRes = await fetch('/parsedWatches.json', { signal: controller.signal });
             if (staticRes.ok) {
               const allRows: any[][] = await staticRes.json();
@@ -656,9 +664,31 @@ export default function TradingFloor() {
                 const raw_message = row[8] ? String(row[8]) : '';
                 const year = typeof row[12] === 'number' ? row[12] : null;
                 const model = row[13] ? String(row[13]) : `${brand} ${reference || ''}`.trim();
-                const imageUrl = row[14] ? String(row[14]) : null;
                 const intent = raw_message.toUpperCase().includes('WTB') ? 'WTB' : 'WTS';
                 const region = extractLocationFromMessage(raw_message, currency);
+
+                // Authentic DigitalOcean Spaces reference image lookup
+                const brandLower = brand.toLowerCase();
+                const refClean = (reference || '').toLowerCase().trim();
+                const brandRefKey = `${brandLower}|${refClean}`;
+                const rawMsgLower = raw_message.toLowerCase();
+
+                let realImageUrl: string | null = row[14] ? String(row[14]) : null;
+                if (!realImageUrl && refImageMap) {
+                  realImageUrl = refImageMap[brandRefKey] || refImageMap[refClean] || null;
+                  if (!realImageUrl) {
+                    const tokens = rawMsgLower.match(/\b[0-9]{4,6}[a-z0-9\-\.\/]*\b/g);
+                    if (tokens) {
+                      for (const t of tokens) {
+                        const directMatch = refImageMap[`${brandLower}|${t}`] || refImageMap[t];
+                        if (directMatch) {
+                          realImageUrl = directMatch;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                }
 
                 return {
                   id: String(row[0]),
@@ -685,9 +715,10 @@ export default function TradingFloor() {
                   listing_status: 'ACTIVE',
                   created_at: '2026-08-18',
                   confidence: typeof row[9] === 'number' ? row[9] : 95,
-                  has_images: Boolean(imageUrl),
-                  thumbnail_url: imageUrl,
-                  image_urls: imageUrl ? [imageUrl] : [],
+                  has_images: Boolean(realImageUrl),
+                  thumbnail_url: realImageUrl,
+                  image_url: realImageUrl,
+                  image_urls: realImageUrl ? [realImageUrl] : [],
                   region,
                   raw_message,
                   seller_name: 'Ben VTT',
