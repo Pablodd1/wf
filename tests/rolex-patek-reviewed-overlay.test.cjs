@@ -70,6 +70,22 @@ test('exact structured multi-offer parent is Trading-Floor-only and excluded fro
   assert.equal(isExactRolexPatekMultiParent({ ...parent, user_image_url: 'https://example.test/ambiguous.jpg' }), false);
 });
 
+test('Price Research rejects the exact multi parent before any database lookup', async () => {
+  const response = {
+    statusCode: null,
+    payload: null,
+    setHeader() {},
+    status(code) { this.statusCode = code; return this; },
+    json(payload) { this.payload = payload; return this; },
+  };
+  await priceResearchListingHandler({
+    method: 'GET',
+    query: { id: ROLEX_PATEK_MULTI_PARENT_ID },
+  }, response);
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.payload, { error: 'Listing is Trading Floor only' });
+});
+
 test('overlay admits an exact image only and prices only qualified WTS USD evidence', () => {
   const row = prepareOverlayRow({
     id: `rpdelta_${'a'.repeat(64)}`,

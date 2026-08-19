@@ -142,6 +142,9 @@ module.exports = async function handler(req, res) {
 
   const id = String(req.query.id || '').trim();
   if (!id || id.length > 250) return res.status(400).json({ error: 'Valid listing id required' });
+  if (isTradingFloorOnlyReviewedListingId(id)) {
+    return res.status(404).json({ error: 'Listing is Trading Floor only' });
+  }
 
   try {
     const client = getClient();
@@ -237,9 +240,6 @@ module.exports = async function handler(req, res) {
             human_review_available: canReview,
           },
         });
-      }
-      if (isTradingFloorOnlyReviewedListingId(id)) {
-        return res.status(404).json({ error: 'Listing is Trading Floor only' });
       }
       if (!canReview) return res.status(404).json({ error: 'Listing not found' });
     }
