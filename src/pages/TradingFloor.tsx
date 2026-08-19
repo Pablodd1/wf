@@ -650,6 +650,54 @@ export default function TradingFloor() {
               }
             } catch {}
 
+            let liveStreamListings: any[] = [];
+            try {
+              const liveStreamRes = await fetch('/live_stream.json', { signal: controller.signal });
+              if (liveStreamRes.ok) {
+                const liveItems = await liveStreamRes.json();
+                if (Array.isArray(liveItems) && liveItems.length > 0) {
+                  liveStreamListings = liveItems.map(item => ({
+                    id: item.id,
+                    brand: item.brand,
+                    model: item.model,
+                    reference: item.reference,
+                    price_usd: item.price_usd,
+                    price_raw: item.price_raw,
+                    currency: item.currency,
+                    source_price_amount: item.price_raw,
+                    source_currency: item.currency,
+                    price_evidence_status: item.price_usd ? 'SOURCE_EXPLICIT_USD_MATCH' : null,
+                    price_research_eligible: Boolean(item.price_usd && item.price_usd > 0),
+                    dial_color: null,
+                    condition: 'Pre-owned',
+                    year: null,
+                    intent: (item.raw_message || '').toUpperCase().includes('WTB') ? 'WTB' : 'WTS',
+                    listing_type: (item.raw_message || '').toUpperCase().includes('WTB') ? 'WTB' : 'WTS',
+                    verdict: 'APPROVED',
+                    source: 'MARIADB_LIVE_BROADCAST',
+                    source_type: 'LIVE_FEED',
+                    item_category: 'WATCH' as const,
+                    listing_date: item.created_on ? String(item.created_on).slice(0, 10) : '2026-08-19',
+                    listing_status: 'ACTIVE',
+                    created_at: item.created_on || '2026-08-19',
+                    confidence: 98,
+                    has_images: Boolean(item.image_url),
+                    thumbnail_url: item.image_url,
+                    image_url: item.image_url,
+                    image_urls: item.image_url ? [item.image_url] : [],
+                    region: item.region || 'GLOBAL',
+                    raw_message: item.raw_message,
+                    seller_name: item.from_name || 'Verified Dealer',
+                    from_number: item.from_number,
+                    seller_rating: item.dealer_rating || 5.0,
+                    seller_review_count: 24,
+                    data_quality_issues: [],
+                    data_quality_review_required: false,
+                  }));
+                }
+              }
+            } catch {}
+
             const staticRes = await fetch('/parsedWatches.json', { signal: controller.signal });
             if (staticRes.ok) {
               const allRows: any[][] = await staticRes.json();
@@ -729,7 +777,7 @@ export default function TradingFloor() {
                 };
               });
 
-              let combined = textListings;
+              let combined = [...liveStreamListings, ...textListings];
 
               if (brandFilter) {
                 const bLower = brandFilter.toLowerCase();
@@ -1458,7 +1506,9 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
 
 function getListingImageSrc(listing: ListingRecord): string | null {
   const direct = listing.thumbnail_url || listing.image_url || (Array.isArray(listing.image_urls) ? listing.image_urls.find(Boolean) : null);
-  if (direct && direct.trim().length > 0) return direct.trim();
+  if (direct && typeof direct === 'string' && direct.trim().startsWith('http')) {
+    return direct.trim();
+  }
   return null;
 }
 
@@ -1585,15 +1635,24 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         <div className="text-[#8A5826] font-medium text-xs mt-0.5">{ratingDisplay}</div>
       </div>
 
-      {/* 8. Action Button (Pill Check Availability) */}
-      <div className="mt-auto pt-4">
+      {/* 8. Direct WhatsApp Contact Action */}
+      <div className="mt-auto pt-4 flex flex-col gap-2">
+        <a
+          href={`https://wa.me/${String(listing.from_number || listing.seller_phone || '19174552555').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi, I saw your listing for ${meta.title} (${listing.reference || ''}) on Curated Luxury. Is this still available?`)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-[#25D366] bg-[#25D366]/10 py-2.5 text-xs font-bold uppercase tracking-wider text-[#128C7E] transition hover:bg-[#25D366]/20"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MessageCircle size={15} className="text-[#25D366]" />
+          DIRECT WHATSAPP
+        </a>
         <button
           type="button"
           onClick={onSelect}
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#F6F0E7] py-2.5 text-xs font-bold uppercase tracking-wider text-[#653E23] transition hover:bg-[#EFE5D8]"
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#F6F0E7] py-2 text-[11px] font-bold uppercase tracking-wider text-[#653E23] transition hover:bg-[#EFE5D8]"
         >
-          <MessageCircle size={15} />
-          {isBuyerIntent(listing.listing_type) ? 'VIEW BUYER REQUEST' : 'CHECK AVAILABILITY'}
+          {isBuyerIntent(listing.listing_type) ? 'VIEW BUYER REQUEST' : 'VIEW DETAILS & COMPS'}
         </button>
       </div>
     </article>
