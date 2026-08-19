@@ -190,6 +190,7 @@ interface ListingRecord {
   raw_message_truncated?: boolean;
   seller_name?: string | null;
   seller_phone?: string | null;
+  from_number?: string | null;
   seller_avatar_url?: string | null;
   seller_rating?: number | null;
   seller_review_count?: number | null;
