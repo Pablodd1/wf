@@ -79,6 +79,7 @@ test('Trading Floor and Price Research route Tudor through exact release RPCs', 
   assert.match(inventory, /qnsa_tudor_page_rows/);
   assert.match(inventory, /qnsa_tudor_release_count/);
   assert.match(inventory, /brand === 'Tudor'/);
+  assert.match(inventory, /\['Richard Mille', 'Cartier', 'Zenith', 'Omega', 'Tudor'\]/);
   assert.match(research, /qnsa_tudor_reference_rows/);
   assert.match(research, /'vacheron constantin'/);
   assert.match(research, /canonical_qnsa_price_evidence_checked: true/);
