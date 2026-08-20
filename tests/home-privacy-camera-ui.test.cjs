@@ -17,7 +17,7 @@ test('home restores cream dealer-network landing and exposes the approved transa
   assert.match(landingLinks, /PRICE RESEARCH/);
   assert.match(landingLinks, /POST IT/);
   assert.match(landingLinks, /HIRE FI/);
-  assert.match(landingLinks, /VIRTUAL AUTHENTICATOR/);
+  assert.doesNotMatch(landingLinks, /VIRTUAL AUTHENTICATOR/);
   assert.match(landingLinks, /WORKSPACE/);
   assert.doesNotMatch(landingLinks, /MEMBERSHIP/);
   assert.match(header, /curated-luxury-logo\.png/);
