@@ -124,14 +124,14 @@ jobs:
               'generated_at', now()
             ) AS evidence
             FROM cohort
-          ), references AS (
+          ), reference_counts AS (
             SELECT COALESCE(NULLIF(btrim(reference_normalized), ''), 'UNRESOLVED') AS reference,
               count(*)::bigint AS row_count
             FROM cohort
             GROUP BY 1
             ORDER BY row_count DESC, reference
             LIMIT 100
-          ), models AS (
+          ), model_counts AS (
             SELECT COALESCE(NULLIF(btrim(model_normalized), ''), 'UNRESOLVED') AS model,
               count(*)::bigint AS row_count
             FROM cohort
@@ -141,8 +141,8 @@ jobs:
           )
           SELECT jsonb_build_object(
             'evidence', (SELECT evidence FROM metrics),
-            'top_references', COALESCE((SELECT jsonb_agg(to_jsonb(references)) FROM references), '[]'::jsonb),
-            'models', COALESCE((SELECT jsonb_agg(to_jsonb(models)) FROM models), '[]'::jsonb)
+            'top_references', COALESCE((SELECT jsonb_agg(to_jsonb(reference_counts)) FROM reference_counts), '[]'::jsonb),
+            'models', COALESCE((SELECT jsonb_agg(to_jsonb(model_counts)) FROM model_counts), '[]'::jsonb)
           ) AS report;
           '@
           if ($sql -match '(?im)^\s*(INSERT|UPDATE|DELETE|TRUNCATE|ALTER|DROP|CREATE|GRANT|REVOKE)\b') {
