@@ -69,10 +69,10 @@ function isMissingRpcError(error) {
 
 async function loadQnsaPriceRpcRows(client, args) {
   const brand = String(args?.p_brand || '').trim().toLowerCase();
-  if (brand === 'vacheron constantin') {
+  if (brand === 'vacheron constantin' || brand === 'omega') {
     const references = [...new Set(args?.p_references || [])].filter(Boolean).slice(0, 8);
     const pages = await Promise.all(references.map(reference => client.rpc(
-      'qnsa_vacheron_overseas_reference_rows', {
+      brand === 'omega' ? 'qnsa_omega_reference_rows' : 'qnsa_vacheron_overseas_reference_rows', {
         p_reference: reference,
         p_limit: Math.min(101, Math.max(1, Number(args?.p_limit) || 101)),
         p_offset: 0,
@@ -101,7 +101,7 @@ function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin'].includes(normalizedBrand)
+    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin', 'omega'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
     : null;
 }
@@ -130,12 +130,11 @@ function qnsaReferenceRowToMarketRow(row) {
     seller_name: source.seller_name,
     seller_phone: contactApproved ? (source.seller_phone || null) : null,
     price_raw: source.source_price_amount,
-    price_usd: source.has_verified_usd_price === true
-      ? (source.verified_price_usd || source.workbook_price_usd)
-      : null,
+    price_usd: source.workbook_price_usd || source.verified_price_usd || null,
     currency: source.source_currency,
     source_price_amount: source.source_price_amount,
     source_currency: source.source_currency,
+    price_evidence_status: source.price_evidence_status || null,
     created_at: source.posting_date || source.imported_at,
     listing_date: source.posting_date || source.imported_at,
     listing_status: source.trading_floor_status,
@@ -158,7 +157,7 @@ function isPendingQnsaBrandRelease(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['panerai', 'omega'].includes(normalizedBrand);
+    && ['panerai'].includes(normalizedBrand);
 }
 
 function unwrapQnsaJsonEnvelope(data, functionName) {
@@ -224,10 +223,12 @@ async function loadQnsaExactReleasedEvidence(client, { brand, referenceVariants,
       for (let page = 0; page < maximumPages; page += 1) {
         const zenith = normalizedBrand === 'zenith';
         const vacheron = normalizedBrand === 'vacheron constantin';
+        const omega = normalizedBrand === 'omega';
         const { data, error } = await client.rpc(
-          vacheron ? 'qnsa_vacheron_overseas_reference_rows'
+          omega ? 'qnsa_omega_reference_rows'
+            : vacheron ? 'qnsa_vacheron_overseas_reference_rows'
             : (zenith ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows'),
-          vacheron ? {
+          (vacheron || omega) ? {
             p_reference: reference,
             p_limit: EXACT_REFERENCE_RPC_PAGE_SIZE,
             p_offset: offset,
@@ -430,13 +431,18 @@ async function loadQnsaVerifiedTradingPrices(client, {
       console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
     }
   }
-  if (String(brand || '').trim().toLowerCase() === 'vacheron constantin') {
+  if (['vacheron constantin', 'omega'].includes(String(brand || '').trim().toLowerCase())) {
     const merged = new Map(exactReleasedRows.map(row => [String(row.id), row]));
     for (const row of rpcMarketRows) merged.set(String(row.id), row);
-    return [...merged.values()].map(row => ({
-      ...row,
-      canonical_qnsa_price_evidence_checked: true,
-    }));
+    return [...merged.values()].map(row => {
+      const canonicalVerified = ['SOURCE_EXPLICIT_USD_USDT', 'DATED_VERIFIED_FX']
+        .includes(String(row.price_evidence_status || '').toUpperCase());
+      return {
+        ...row,
+        canonical_qnsa_price_evidence_checked: canonicalVerified,
+        analytics_currency_status: canonicalVerified ? 'VERIFIED' : null,
+      };
+    });
   }
   // The dedicated research view is the primary source. This bounded fallback
   // uses the same reconciled release base when PostgREST has not refreshed that
