@@ -101,6 +101,8 @@
     "stage:seller-child-lineage": "node tools/dealer-lineage/stage-child-lineage-manifest.cjs",
     "audit:forecast-readiness": "node tools/forecast-readiness/audit-live-cohorts.cjs",
     "audit:two-brand-release": "node tools/data-quality/audit-two-brand-release.cjs",
+    "audit:tudor-omega-missing": "node tools/audit/generate-tudor-omega-missing-field-manifest.cjs",
+    "audit:cartier-zenith-missing": "node tools/audit/build-cartier-zenith-missing-field-manifest.cjs",
     "test:normalization": "node --test tests/normalization-v4.test.cjs tests/dial-normalization.test.cjs tests/market-row-normalization.test.cjs tests/market-stats.test.cjs tests/market-forecast.test.cjs tests/price-research-eligibility.test.cjs tests/repost-deduplication.test.cjs tests/shadow-reprocess.test.cjs tests/normalization-work-queue.test.cjs tests/promotion-policy.test.cjs tests/catalog-confirmation.test.cjs tests/review-decision-policy.test.cjs tests/zero-hallucination-contract.test.cjs tests/bundle-cohort.test.cjs tests/trading-record-safety.test.cjs tests/trading-cursor.test.cjs tests/fx-rates.test.cjs tests/trading-floor-contract.test.cjs",
     "test:duplicate-review": "node --test tests/duplicate-review-workflow.test.cjs tests/duplicate-signatures.test.cjs tests/duplicate-audit-bundles.test.cjs",
     "test:security": "node --test tests/service-token.test.cjs tests/security-boundaries.test.cjs tests/dealer-submissions.test.cjs tests/dealer-workspace.test.cjs tests/forecast-release-gate.test.cjs",
