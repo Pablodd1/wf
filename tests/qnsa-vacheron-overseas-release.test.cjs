@@ -122,6 +122,7 @@ test('candidate query preserves source lineage and does not infer parent or imag
   const sql = release.candidateSql(release.catalogReferenceKeys());
   assert.match(sql, /source_hash ~ '\^\[0-9a-f\]\{64\}\$'/);
   assert.match(sql, /source_candidate_hash ~ '\^\[0-9a-f\]\{64\}\$'/);
+  assert.match(sql, /btrim\(reference_normalized\)::numeric = COALESCE\(price_normalized, price_usd\)/);
   assert.match(sql, /l\.parent_id IS NULL AND COALESCE\(l\.is_bundle, false\) = false/);
   assert.match(sql, /false AS exact_image/);
   assert.match(sql, /seller_candidate_rank = 1/);
