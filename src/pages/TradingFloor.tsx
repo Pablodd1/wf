@@ -236,8 +236,12 @@ export default function TradingFloor() {
   const visiblePricePairs = useMemo(() => {
     const seen = new Set<string>();
     return visibleListings.flatMap(listing => {
-      if (listing.item_category !== 'WATCH' || !listing.brand || !listing.reference || !listing.dial_color) return [];
-      const pair = { brand: listing.brand, reference: listing.reference, dial: listing.dial_color };
+      const zenithReferenceRating = isZenithBrand(listing.brand);
+      if (listing.item_category !== 'WATCH' || !listing.brand || !listing.reference || (!listing.dial_color && !zenithReferenceRating)) return [];
+      // Zenith is rated against its qualified exact-reference average. Passing
+      // no dial also makes a missing or sparse dial cohort visible to the
+      // bounded batch endpoint without widening its reference identity.
+      const pair = { brand: listing.brand, reference: listing.reference, dial: zenithReferenceRating ? null : listing.dial_color };
       const key = priceResearchSummaryKey(pair);
       if (seen.has(key)) return [];
       seen.add(key);
@@ -608,8 +612,12 @@ export default function TradingFloor() {
                   <ListingCard
                     key={listing.id}
                     listing={listing}
-                    priceSummary={listing.brand && listing.reference && listing.dial_color
-                      ? priceSummaries[priceResearchSummaryKey({ brand: listing.brand, reference: listing.reference, dial: listing.dial_color })]
+                    priceSummary={listing.brand && listing.reference && (listing.dial_color || isZenithBrand(listing.brand))
+                      ? priceSummaries[priceResearchSummaryKey({
+                        brand: listing.brand,
+                        reference: listing.reference,
+                        dial: isZenithBrand(listing.brand) ? null : listing.dial_color,
+                      })]
                       : undefined}
                     selected={false}
                     onSelect={() => openListing(listing)}
@@ -917,20 +925,26 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
     ratingEvidenceStatus: listing.seller_rating_evidence_status,
   });
   const listingIntent = cleanValue(listing.intent || listing.listing_type).toUpperCase();
+  const zenithReferenceRating = isZenithBrand(listing.brand);
   const canRatePrice = listing.item_category === 'WATCH'
     && listingIntent === 'WTS'
-    && Boolean(listing.brand && listing.reference && listing.dial_color)
+    && Boolean(listing.brand && listing.reference && (listing.dial_color || zenithReferenceRating))
     && Number.isFinite(Number(listing.price_usd))
     && Number(listing.price_usd) > 0;
-  const comparableCount = canRatePrice && priceSummary?.analytics_ready === true
-    ? Number(priceSummary.selected_dial_qualified_count || 0)
+  const comparableCount = canRatePrice && (zenithReferenceRating
+    ? priceSummary?.reference_analytics_ready === true
+    : priceSummary?.analytics_ready === true)
+    ? Number(zenithReferenceRating
+      ? priceSummary?.reference_qualified_wts_count || 0
+      : priceSummary?.selected_dial_qualified_count || 0)
     : 0;
+  const benchmarkStats = zenithReferenceRating ? priceSummary?.reference_stats || null : priceSummary?.stats || null;
   const displayedCardPriceRating = {
     loading: canRatePrice && priceSummary === undefined,
     count: comparableCount,
     rating: rateMarketPrice(
       listing.price_usd,
-      comparableCount >= 2 ? priceSummary?.stats || null : null,
+      comparableCount >= 2 ? benchmarkStats : null,
       comparableCount,
     ),
   };
@@ -939,6 +953,9 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
     : displayedCardPriceRating.rating.code === 'NOT_RATED'
       ? 'Not rated'
       : displayedCardPriceRating.rating.label;
+  const exactReferenceAverageLabel = zenithReferenceRating && comparableCount >= 2 && benchmarkStats
+    ? ` · Ref avg ${formatUsdPrice(benchmarkStats.avg)}`
+    : '';
 
   return (
     <article
@@ -991,7 +1008,7 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
         <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
         <div className="text-xs font-medium" style={{ color: displayedCardPriceRating.rating.color }} title={displayedCardPriceRating.rating.reason}>
-          Price rating: {cardPriceRatingLabel}
+          Price rating: {cardPriceRatingLabel}{exactReferenceAverageLabel}
         </div>
       </div>
       <div className="text-xs text-[#7A8699] mt-0.5 flex items-center gap-1">
@@ -1484,6 +1501,10 @@ function cleanValue(value: string | number | null | undefined) {
   const text = String(value).trim();
   if (!text || /^unknown$/i.test(text) || /^null$/i.test(text)) return '';
   return text;
+}
+
+function isZenithBrand(value: string | null | undefined) {
+  return cleanValue(value).toLocaleLowerCase() === 'zenith';
 }
 
 function displayDial(value: string | null | undefined) {

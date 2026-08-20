@@ -37,6 +37,7 @@ test('Cartier summaries separate all-reference counts from selected-dial analyti
   assert.equal(allReference.wts_observation_count, 3);
   assert.equal(allReference.wtb_observation_count, 1);
   assert.equal(allReference.reference_qualified_wts_count, 3);
+  assert.equal(allReference.reference_stats.median, 24000);
   assert.equal(allReference.selected_dial_qualified_count, 0);
   assert.equal(allReference.analytics_ready, false);
   assert.equal(allReference.stats, null);
@@ -257,6 +258,18 @@ test('Zenith uses the canonical QNSA exact loader and not the workbook shortcut'
   assert.equal(result.rows.length, 1);
 });
 
+test('Zenith reference summaries provide an exact-reference benchmark across qualified dials', () => {
+  const [pair] = batchApi.normalizePairs([{ brand: 'Zenith', reference: '03.2522.400' }]);
+  const [summary] = batchApi.buildBatchSummaries([pair], [
+    { ...row('zenith-blue', '03.2522.400', 'Blue', 10000), brand: 'Zenith' },
+    { ...row('zenith-black', '03.2522.400', 'Black', 12000), brand: 'Zenith' },
+  ]);
+  assert.equal(summary.reference_qualified_wts_count, 2);
+  assert.equal(summary.reference_analytics_ready, true);
+  assert.equal(summary.reference_stats.avg, 11000);
+  assert.equal(summary.stats, null);
+});
+
 test('server and client use the same canonical selected-dial key', () => {
   const [pair] = batchApi.normalizePairs([{ brand: 'Cartier', reference: 'WSSA0032', dial: 'Silver Dial' }]);
   assert.equal(pair.key, 'cartier|WSSA0032|SILVER DIAL');
@@ -293,12 +306,16 @@ test('pages make one batch request and client rejects cross-reference summaries'
   assert.match(research, /qualified WTS/);
 });
 
-test('Trading Floor always renders price rating but withholds without selected-dial evidence', () => {
+test('Trading Floor uses selected-dial evidence by default and the exact reference benchmark for Zenith', () => {
   assert.match(floor, /Price rating: \{cardPriceRatingLabel\}/);
-  assert.match(floor, /Boolean\(listing\.brand && listing\.reference && listing\.dial_color\)/);
+  assert.match(floor, /Boolean\(listing\.brand && listing\.reference && \(listing\.dial_color \|\| zenithReferenceRating\)\)/);
   assert.doesNotMatch(floor, /canRatePrice[\s\S]{0,180}price_research_eligible/);
   assert.match(floor, /selected_dial_qualified_count/);
-  assert.match(floor, /comparableCount >= 2 \? priceSummary\?\.stats \|\| null : null/);
+  assert.match(floor, /isZenithBrand/);
+  assert.match(floor, /reference_qualified_wts_count/);
+  assert.match(floor, /reference_stats/);
+  assert.match(floor, /Ref avg/);
+  assert.match(floor, /comparableCount >= 2 \? benchmarkStats : null/);
   assert.match(floor, /displayedCardPriceRating\.rating\.code === 'NOT_RATED'/);
   assert.match(floor, /<ListingDealerEvidence/);
 });
