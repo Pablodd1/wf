@@ -2133,14 +2133,15 @@ module.exports = async function handler(req, res) {
     const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
     const sixBrandBroadScope = qnsaBroadPage && watchFeed
       && (!brand || SIX_REVIEWED_WATCH_BRANDS.includes(brand));
+    const sixBrandCompositeScope = sixBrandBroadScope && !controlledBrandRelease;
     const sixBrandScope = requestedBrands.length > 0 ? requestedBrands : SIX_REVIEWED_WATCH_BRANDS;
-    if (sixBrandBroadScope && pagination !== 'cursor' && page > 1) {
+    if (sixBrandCompositeScope && pagination !== 'cursor' && page > 1) {
       return res.status(400).json({
         status: 'error',
         error: 'Six-brand Trading Floor pagination requires a cursor after the first page.',
       });
     }
-    if (sixBrandBroadScope && pagination === 'cursor' && cursorProvided
+    if (sixBrandCompositeScope && pagination === 'cursor' && cursorProvided
       && page > 1 && !inventoryCursor?.brandKeysets) {
       return res.status(400).json({
         status: 'error',
@@ -2163,7 +2164,7 @@ module.exports = async function handler(req, res) {
     // A single controlled release uses a manifest offset, even though its
     // brand also belongs to the historical six-brand family. Encoding that
     // offset as a composite v2 cursor forces it to zero and repeats page one.
-    const sixBrandKeysetCursor = sixBrandBroadScope && !controlledBrandRelease;
+    const sixBrandKeysetCursor = sixBrandCompositeScope;
     const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || 'images');
     const requestedOffset = pagination === 'cursor'
       ? (inventoryCursor?.offset || 0)
