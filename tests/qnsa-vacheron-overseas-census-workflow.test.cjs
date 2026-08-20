@@ -72,6 +72,7 @@ test('Vacheron Overseas census reports the required source and cohort boundaries
   assert.match(workflow, /public\/catalog-source-v1\.json/);
   assert.match(workflow, /__OVERSEAS_KEYS__/);
   assert.match(workflow, /\^\[A-Z0-9\]\{3,50\}\$/);
+  assert.doesNotMatch(workflow, /original_timestamp/);
 });
 
 test('management credential is scoped only to the census step', () => {
