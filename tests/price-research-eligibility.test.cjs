@@ -149,9 +149,16 @@ test('rejects a year token copied into the market price', () => {
   );
 });
 
-test('WTB demand requires identity and dial but not an asking price', () => {
+test('WTB demand requires an exact watch identity but not a dial, model, catalog match, or asking price', () => {
   assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTB', price_usd: null }, catalog), null);
-  assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTB', dial_color: 'Purple', price_usd: null }, catalog), 'CATALOG_DIAL_MISMATCH');
+  assert.equal(classifyDemandEligibility({
+    brand: 'Zenith', reference: '03.2522.400', listing_type: 'WTB', price_usd: null, dial_color: null, model: null,
+  }, { found: false }), null);
+  assert.equal(classifyDemandEligibility({
+    brand: 'Omega', reference: '210.30.42.20.01.001', listing_type: 'WTB', price_usd: null, dial_color: 'Purple', model: null,
+  }, { found: false }), null);
+  assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTS' }, catalog), 'NOT_WTB_DEMAND');
+  assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTB', bundle_candidate_count: 2 }, catalog), 'BUNDLE_SOURCE_UNSPLIT');
 });
 
 test('excludes explicit watch-part requests from complete-watch WTB demand', () => {

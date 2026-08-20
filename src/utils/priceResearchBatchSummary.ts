@@ -13,6 +13,7 @@ export interface PriceResearchBatchSummary {
   wtb_observation_count: number;
   reference_qualified_wts_count: number;
   reference_analytics_ready: boolean;
+  reference_stats: { avg: number; median?: number; min: number; max: number } | null;
   selected_dial: string | null;
   selected_dial_qualified_count: number;
   analytics_ready: boolean;

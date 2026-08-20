@@ -95,13 +95,11 @@ function buildBatchSummaries(pairs, rows, sampleCapped = false) {
       values.push({ ...row, dial_color: normalized.value });
       dialGroups.set(key, values);
     }
-    let referenceQualifiedCount = 0;
-    let referenceAnalyticsReady = false;
-    for (const dialRows of dialGroups.values()) {
-      const dialSummary = summarizeDialRows(dialRows);
-      referenceQualifiedCount += dialSummary.included_count;
-      referenceAnalyticsReady ||= dialSummary.analytics_ready;
-    }
+    // A reference-level benchmark is deliberately separate from the
+    // dial-specific cohort below. Zenith cards use this exact-reference
+    // benchmark when a listing has no usable dial, or its dial cohort is too
+    // small to rate on its own. It never includes WTB or ineligible offers.
+    const referenceSummary = summarizeDialRows(uniqueRows);
 
     const selectedDialKey = pair.dial ? comparisonKey(normalizeDialValue(pair.dial).value) : '';
     const selectedDialRows = selectedDialKey ? dialGroups.get(selectedDialKey) || [] : [];
@@ -114,8 +112,9 @@ function buildBatchSummaries(pairs, rows, sampleCapped = false) {
       source_observation_count: wtsMembers.length + uniqueDemandRows.length,
       wts_observation_count: wtsMembers.length,
       wtb_observation_count: uniqueDemandRows.length,
-      reference_qualified_wts_count: referenceQualifiedCount,
-      reference_analytics_ready: referenceAnalyticsReady,
+      reference_qualified_wts_count: referenceSummary.included_count,
+      reference_analytics_ready: referenceSummary.analytics_ready,
+      reference_stats: referenceSummary.analytics_ready ? referenceSummary.stats : null,
       selected_dial: pair.dial,
       selected_dial_qualified_count: selectedSummary?.included_count || 0,
       analytics_ready: Boolean(pair.dial && selectedSummary?.analytics_ready),
@@ -132,6 +131,7 @@ function buildBatchSummaries(pairs, rows, sampleCapped = false) {
         wts_observation_count: 'Published WTS rows returned for this exact brand and reference, including rows withheld from price analytics.',
         wtb_observation_count: 'Deduplicated published WTB demand rows returned for this exact brand and reference.',
         reference_qualified_wts_count: 'Outlier-clean, deduplicated WTS rows passing identity, price, currency and dial gates across all dials.',
+        reference_stats: 'Outlier-clean exact-reference WTS statistics across all qualified dials. Zenith card ratings use this only when its selected dial cohort is unavailable.',
         selected_dial_qualified_count: 'Outlier-clean qualified WTS rows for the explicitly requested dial only.',
       },
     };

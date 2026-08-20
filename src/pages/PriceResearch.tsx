@@ -375,6 +375,8 @@ interface PriceData {
   total_tracked_listings?: number;
   wts_eligible_analytics_count?: number;
   wtb_demand_count?: number;
+  reference_qualified_wts_count?: number;
+  demand_scope?: 'EXACT_REFERENCE_ALL_DIALS';
   demand_rows?: WtbListingData[];
   demand_evidence?: {
     returned: number;
@@ -394,6 +396,8 @@ interface PriceData {
     total_tracked_listings: number;
     wts_eligible_analytics_count: number;
     wtb_demand_count: number;
+    reference_qualified_wts_count?: number;
+    demand_scope?: 'EXACT_REFERENCE_ALL_DIALS';
     excluded_count: number;
     wts_loaded_count?: number;
     excluded_breakdown: {
@@ -1013,7 +1017,10 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     ?? data?.wtb_demand_count
     ?? data?.liquidity?.demand_count
     ?? 0;
-  const liveWtbWtsRatio = qualifiedWtsCount > 0 ? wtbDemandCount / qualifiedWtsCount : null;
+  const referenceQualifiedWtsCount = data?.reconciliation?.reference_qualified_wts_count
+    ?? data?.reference_qualified_wts_count
+    ?? qualifiedWtsCount;
+  const liveWtbWtsRatio = referenceQualifiedWtsCount > 0 ? wtbDemandCount / referenceQualifiedWtsCount : null;
   const displayedWtbWtsRatio = data?.liquidity?.wtb_fs_ratio ?? liveWtbWtsRatio;
   const displayDialAnalysis: DialPoint[] = data?.dial_analysis?.length
     ? data.dial_analysis
@@ -1647,7 +1654,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   {displayedWtbWtsRatio == null ? 'Not available' : displayedWtbWtsRatio.toFixed(2)}
                 </div>
                 <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>
-                  {wtbDemandCount.toLocaleString()} buyer signals versus {qualifiedWtsCount.toLocaleString()} qualified sale offers.
+                  {wtbDemandCount.toLocaleString()} buyer signals versus {referenceQualifiedWtsCount.toLocaleString()} qualified sale offers for this exact reference.
                 </div>
               </div>
             </section>
@@ -2699,7 +2706,12 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
 }) {
   const displayRef = data.resolvedRef || data.reference || '';
   const demandCount = data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? data.liquidity?.demand_count ?? 0;
-  const qualifiedWtsCount = data.reconciliation?.wts_eligible_analytics_count ?? data.wts_eligible_analytics_count ?? data.count ?? 0;
+  const qualifiedWtsCount = data.reconciliation?.reference_qualified_wts_count
+    ?? data.reference_qualified_wts_count
+    ?? data.reconciliation?.wts_eligible_analytics_count
+    ?? data.wts_eligible_analytics_count
+    ?? data.count
+    ?? 0;
   const demandSupplyRatio = data.liquidity?.wtb_fs_ratio ?? (qualifiedWtsCount > 0 ? demandCount / qualifiedWtsCount : null);
   const demandCohorts = data.liquidity?.demand_cohorts || [];
   const demandRows = data.demand_rows || data.liquidity?.demand_rows || [];
@@ -2718,7 +2730,7 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
             </h3>
           </div>
           <p style={{ fontSize: 12, color: MUTED, margin: '4px 0 0' }}>
-            Want-To-Buy (WTB) listings representing active buyer interest for {displayRef}. Strictly separated from WTS asking-price averages.
+            Want-To-Buy (WTB) listings representing active buyer interest for {displayRef} across all dial descriptions. Strictly separated from WTS asking-price averages.
           </p>
         </div>
 

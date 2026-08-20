@@ -101,13 +101,18 @@ function classifySaleEvidenceEligibility(row) {
 function classifyDemandEligibility(row, catalog) {
   const itemReason = classifyDemandItemEligibility(row);
   if (itemReason) return itemReason;
-  return classifyResearchEligibility({
-    ...row,
-    listing_type: 'WTS',
-    price_raw: null,
-    price_usd: 1,
-    analytics_currency_status: 'VERIFIED',
-  }, catalog);
+  if (Number(row?.bundle_candidate_count || 0) > 1) return 'BUNDLE_SOURCE_UNSPLIT';
+  if ([row?.model, row?.dial_color].some(isMultiListingSentinel)) return 'BUNDLE_SOURCE_UNSPLIT';
+  const intent = normalizedStatus(row?.listing_type || row?.intent);
+  if (!['WTB', 'NTQ'].includes(intent)) return 'NOT_WTB_DEMAND';
+  if (!row?.brand || normalizedStatus(row.brand) === 'UNKNOWN') return 'MISSING_BRAND';
+  if (!row?.reference) return 'MISSING_REFERENCE';
+
+  // A buyer can ask for an exact watch without stating a dial, model or
+  // budget. Those fields are required only for comparable WTS price cohorts;
+  // applying that sale gate here made genuine exact-reference WTB demand
+  // disappear for Zenith, Omega, and every future publication lane.
+  return null;
 }
 
 // Demand analytics describe buyers seeking a complete watch. A canonical

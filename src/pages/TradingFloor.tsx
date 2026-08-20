@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  ArrowDown,
+  ArrowUp,
   Check,
   Filter,
   Globe2,
@@ -209,6 +211,7 @@ export default function TradingFloor() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 50);
   const [priceSummaries, setPriceSummaries] = useState<Record<string, PriceResearchBatchSummary>>({});
+  const [priceSummariesLoaded, setPriceSummariesLoaded] = useState(false);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
   const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter].join('\u001f');
@@ -236,8 +239,12 @@ export default function TradingFloor() {
   const visiblePricePairs = useMemo(() => {
     const seen = new Set<string>();
     return visibleListings.flatMap(listing => {
-      if (listing.item_category !== 'WATCH' || !listing.brand || !listing.reference || !listing.dial_color) return [];
-      const pair = { brand: listing.brand, reference: listing.reference, dial: listing.dial_color };
+      const exactReferenceRating = usesExactReferencePriceBenchmark(listing.brand);
+      if (listing.item_category !== 'WATCH' || !listing.brand || !listing.reference || (!listing.dial_color && !exactReferenceRating)) return [];
+      // Zenith, Cartier and Omega are rated against their qualified
+      // exact-reference average. Passing no dial makes a missing or sparse
+      // dial cohort visible without widening the reference identity.
+      const pair = { brand: listing.brand, reference: listing.reference, dial: exactReferenceRating ? null : listing.dial_color };
       const key = priceResearchSummaryKey(pair);
       if (seen.has(key)) return [];
       seen.add(key);
@@ -252,15 +259,23 @@ export default function TradingFloor() {
   useEffect(() => {
     if (!visiblePricePairs.length) {
       setPriceSummaries({});
+      setPriceSummariesLoaded(true);
       return;
     }
     let active = true;
+    setPriceSummariesLoaded(false);
     void loadPriceResearchBatchSummaries(visiblePricePairs)
       .then(summaries => {
-        if (active) setPriceSummaries(Object.fromEntries(summaries.map(summary => [summary.key, summary])));
+        if (active) {
+          setPriceSummaries(Object.fromEntries(summaries.map(summary => [summary.key, summary])));
+          setPriceSummariesLoaded(true);
+        }
       })
       .catch(error => {
-        if (active && error?.name !== 'AbortError') setPriceSummaries({});
+        if (active && error?.name !== 'AbortError') {
+          setPriceSummaries({});
+          setPriceSummariesLoaded(true);
+        }
       });
     return () => { active = false; };
   // The serialized exact identities change only when the visible page changes.
@@ -438,6 +453,7 @@ export default function TradingFloor() {
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketNav />
+      <TradingFloorQuickScroll />
       <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 10px 28px rgba(41,37,36,0.08)' }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -608,9 +624,14 @@ export default function TradingFloor() {
                   <ListingCard
                     key={listing.id}
                     listing={listing}
-                    priceSummary={listing.brand && listing.reference && listing.dial_color
-                      ? priceSummaries[priceResearchSummaryKey({ brand: listing.brand, reference: listing.reference, dial: listing.dial_color })]
+                    priceSummary={listing.brand && listing.reference && (listing.dial_color || usesExactReferencePriceBenchmark(listing.brand))
+                      ? priceSummaries[priceResearchSummaryKey({
+                        brand: listing.brand,
+                        reference: listing.reference,
+                        dial: usesExactReferencePriceBenchmark(listing.brand) ? null : listing.dial_color,
+                      })]
                       : undefined}
+                    priceSummaryLoaded={priceSummariesLoaded}
                     selected={false}
                     onSelect={() => openListing(listing)}
                   />
@@ -895,6 +916,78 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
   );
 }
 
+function TradingFloorQuickScroll() {
+  const [progress, setProgress] = useState(0);
+  const [scrollable, setScrollable] = useState(false);
+
+  useEffect(() => {
+    const readScrollState = () => {
+      const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      const maximum = Math.max(0, documentHeight - window.innerHeight);
+      setScrollable(maximum > 8);
+      setProgress(maximum > 0 ? Math.round((window.scrollY / maximum) * 100) : 0);
+    };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(readScrollState);
+    observer?.observe(document.documentElement);
+    readScrollState();
+    window.addEventListener('scroll', readScrollState, { passive: true });
+    window.addEventListener('resize', readScrollState);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('scroll', readScrollState);
+      window.removeEventListener('resize', readScrollState);
+    };
+  }, []);
+
+  const moveTo = (nextProgress: number, behavior: ScrollBehavior = 'auto') => {
+    const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    const maximum = Math.max(0, documentHeight - window.innerHeight);
+    window.scrollTo({ top: Math.round((Math.max(0, Math.min(100, nextProgress)) / 100) * maximum), behavior });
+  };
+
+  if (!scrollable) return null;
+
+  return (
+    <aside
+      className="fixed right-20 top-1/2 z-40 hidden -translate-y-1/2 rounded-lg border bg-white/95 p-1.5 shadow-lg backdrop-blur md:flex md:flex-col md:items-center md:gap-2"
+      style={{ borderColor: BORDER }}
+      aria-label="Quick Trading Floor scroll"
+    >
+      <button
+        type="button"
+        onClick={() => moveTo(0, 'smooth')}
+        className="flex h-9 w-9 items-center justify-center rounded-md transition hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ color: GOLD_BRIGHT }}
+        aria-label="Scroll to top of Trading Floor"
+        title="Top"
+      >
+        <ArrowUp size={17} />
+      </button>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={progress}
+        onChange={event => moveTo(Number(event.currentTarget.value))}
+        aria-label="Trading Floor scroll position"
+        aria-valuetext={`${progress}% through Trading Floor`}
+        className="h-40 w-3 cursor-pointer accent-[#9A7127]"
+        style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
+      />
+      <button
+        type="button"
+        onClick={() => moveTo(100, 'smooth')}
+        className="flex h-9 w-9 items-center justify-center rounded-md transition hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ color: GOLD_BRIGHT }}
+        aria-label="Scroll to bottom of Trading Floor"
+        title="Bottom"
+      >
+        <ArrowDown size={17} />
+      </button>
+    </aside>
+  );
+}
+
 function getListingImageSrc(listing: ListingRecord): string | null {
   if (isBundleListing(listing) || listing.is_unbundled_child === true) return null;
   const sourceImageEvidence = ['SELLER_LISTING_IMAGE', 'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
@@ -905,7 +998,7 @@ function getListingImageSrc(listing: ListingRecord): string | null {
   return direct ? direct.trim() : null;
 }
 
-function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: ListingRecord; priceSummary?: PriceResearchBatchSummary; selected: boolean; onSelect: () => void }) {
+function ListingCard({ listing, priceSummary, priceSummaryLoaded, selected, onSelect }: { listing: ListingRecord; priceSummary?: PriceResearchBatchSummary; priceSummaryLoaded: boolean; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const imageUrl = getListingImageSrc(listing);
   const [imageAvailable, setImageAvailable] = useState(Boolean(imageUrl));
@@ -917,28 +1010,47 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
     ratingEvidenceStatus: listing.seller_rating_evidence_status,
   });
   const listingIntent = cleanValue(listing.intent || listing.listing_type).toUpperCase();
+  const exactReferenceRating = usesExactReferencePriceBenchmark(listing.brand);
   const canRatePrice = listing.item_category === 'WATCH'
     && listingIntent === 'WTS'
-    && Boolean(listing.brand && listing.reference && listing.dial_color)
+    && Boolean(listing.brand && listing.reference && (listing.dial_color || exactReferenceRating))
     && Number.isFinite(Number(listing.price_usd))
     && Number(listing.price_usd) > 0;
-  const comparableCount = canRatePrice && priceSummary?.analytics_ready === true
-    ? Number(priceSummary.selected_dial_qualified_count || 0)
+  const availableComparableCount = Number(exactReferenceRating
+    ? priceSummary?.reference_qualified_wts_count || 0
+    : priceSummary?.selected_dial_qualified_count || 0);
+  const comparableCount = canRatePrice && (exactReferenceRating
+    ? priceSummary?.reference_analytics_ready === true
+    : priceSummary?.analytics_ready === true)
+    ? availableComparableCount
     : 0;
+  const benchmarkStats = exactReferenceRating ? priceSummary?.reference_stats || null : priceSummary?.stats || null;
   const displayedCardPriceRating = {
-    loading: canRatePrice && priceSummary === undefined,
+    loading: canRatePrice && !priceSummaryLoaded,
     count: comparableCount,
     rating: rateMarketPrice(
       listing.price_usd,
-      comparableCount >= 2 ? priceSummary?.stats || null : null,
+      comparableCount >= 2 ? benchmarkStats : null,
       comparableCount,
     ),
   };
   const cardPriceRatingLabel = displayedCardPriceRating.loading
     ? 'Loading…'
     : displayedCardPriceRating.rating.code === 'NOT_RATED'
-      ? 'Not rated'
+      ? canRatePrice && priceSummary
+        ? `Not rated · ${availableComparableCount}/2 qualified`
+        : canRatePrice
+          ? 'Not rated · evidence unavailable'
+        : 'Not rated'
       : displayedCardPriceRating.rating.label;
+  const exactReferenceAverageLabel = exactReferenceRating && comparableCount >= 2 && benchmarkStats
+    ? ` · Ref avg ${formatUsdPrice(benchmarkStats.avg)}`
+    : '';
+  const dealerStatusHint = dealerRating
+    ? null
+    : listing.dealer_profile_path
+      ? 'No source-backed feedback'
+      : 'No exact directory match';
 
   return (
     <article
@@ -991,7 +1103,7 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
         <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
         <div className="text-xs font-medium" style={{ color: displayedCardPriceRating.rating.color }} title={displayedCardPriceRating.rating.reason}>
-          Price rating: {cardPriceRatingLabel}
+          Price rating: {cardPriceRatingLabel}{exactReferenceAverageLabel}
         </div>
       </div>
       <div className="text-xs text-[#7A8699] mt-0.5 flex items-center gap-1">
@@ -1001,6 +1113,7 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
           reviewCount={listing.seller_review_count}
           ratingEvidenceStatus={listing.seller_rating_evidence_status}
         />
+        {dealerStatusHint && <span>· {dealerStatusHint}</span>}
       </div>
 
       {/* 6. Badges (Location & Date) */}
@@ -1484,6 +1597,10 @@ function cleanValue(value: string | number | null | undefined) {
   const text = String(value).trim();
   if (!text || /^unknown$/i.test(text) || /^null$/i.test(text)) return '';
   return text;
+}
+
+function usesExactReferencePriceBenchmark(value: string | null | undefined) {
+  return ['zenith', 'cartier', 'omega'].includes(cleanValue(value).toLocaleLowerCase());
 }
 
 function displayDial(value: string | null | undefined) {
