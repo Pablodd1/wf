@@ -29,3 +29,13 @@ test('Trading Floor card evidence uses bounded market summaries and source-backe
   assert.match(floor, /seller_rating_evidence_status/);
   assert.doesNotMatch(floor, /Price rating: <span[^>]*>Calculating\.\.\.<\/span>/);
 });
+
+test('Trading Floor supplies a keyboard-accessible right-side quick-scroll rail for long result pages', () => {
+  assert.match(floor, /function TradingFloorQuickScroll\(\)/);
+  assert.match(floor, /aria-label="Quick Trading Floor scroll"/);
+  assert.match(floor, /aria-label="Scroll to top of Trading Floor"/);
+  assert.match(floor, /aria-label="Trading Floor scroll position"/);
+  assert.match(floor, /aria-label="Scroll to bottom of Trading Floor"/);
+  assert.match(floor, /window\.scrollTo\(\{ top:/);
+  assert.match(floor, /fixed right-20 top-1\/2/);
+});

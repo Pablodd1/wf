@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
+  ArrowDown,
+  ArrowUp,
   Check,
   Filter,
   Globe2,
@@ -442,6 +444,7 @@ export default function TradingFloor() {
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketNav />
+      <TradingFloorQuickScroll />
       <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 10px 28px rgba(41,37,36,0.08)' }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -900,6 +903,78 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
     >
       {icon}
     </button>
+  );
+}
+
+function TradingFloorQuickScroll() {
+  const [progress, setProgress] = useState(0);
+  const [scrollable, setScrollable] = useState(false);
+
+  useEffect(() => {
+    const readScrollState = () => {
+      const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      const maximum = Math.max(0, documentHeight - window.innerHeight);
+      setScrollable(maximum > 8);
+      setProgress(maximum > 0 ? Math.round((window.scrollY / maximum) * 100) : 0);
+    };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(readScrollState);
+    observer?.observe(document.documentElement);
+    readScrollState();
+    window.addEventListener('scroll', readScrollState, { passive: true });
+    window.addEventListener('resize', readScrollState);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('scroll', readScrollState);
+      window.removeEventListener('resize', readScrollState);
+    };
+  }, []);
+
+  const moveTo = (nextProgress: number, behavior: ScrollBehavior = 'auto') => {
+    const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+    const maximum = Math.max(0, documentHeight - window.innerHeight);
+    window.scrollTo({ top: Math.round((Math.max(0, Math.min(100, nextProgress)) / 100) * maximum), behavior });
+  };
+
+  if (!scrollable) return null;
+
+  return (
+    <aside
+      className="fixed right-20 top-1/2 z-40 hidden -translate-y-1/2 rounded-lg border bg-white/95 p-1.5 shadow-lg backdrop-blur md:flex md:flex-col md:items-center md:gap-2"
+      style={{ borderColor: BORDER }}
+      aria-label="Quick Trading Floor scroll"
+    >
+      <button
+        type="button"
+        onClick={() => moveTo(0, 'smooth')}
+        className="flex h-9 w-9 items-center justify-center rounded-md transition hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ color: GOLD_BRIGHT }}
+        aria-label="Scroll to top of Trading Floor"
+        title="Top"
+      >
+        <ArrowUp size={17} />
+      </button>
+      <input
+        type="range"
+        min="0"
+        max="100"
+        value={progress}
+        onChange={event => moveTo(Number(event.currentTarget.value))}
+        aria-label="Trading Floor scroll position"
+        aria-valuetext={`${progress}% through Trading Floor`}
+        className="h-40 w-3 cursor-pointer accent-[#9A7127]"
+        style={{ writingMode: 'vertical-lr', direction: 'rtl' }}
+      />
+      <button
+        type="button"
+        onClick={() => moveTo(100, 'smooth')}
+        className="flex h-9 w-9 items-center justify-center rounded-md transition hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ color: GOLD_BRIGHT }}
+        aria-label="Scroll to bottom of Trading Floor"
+        title="Bottom"
+      >
+        <ArrowDown size={17} />
+      </button>
+    </aside>
   );
 }
 
