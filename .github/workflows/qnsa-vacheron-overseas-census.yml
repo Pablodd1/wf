@@ -105,7 +105,7 @@ jobs:
                     NULLIF(btrim(user_name), ''), NULLIF(btrim(from_name), ''),
                     'UNLINKED:' || source_record_id),
                   source_candidate_hash
-                ORDER BY COALESCE(source_created_on, created_at) DESC, id DESC
+                ORDER BY created_at DESC, id DESC
               ) AS seller_candidate_rank
             FROM cohort
           ), release_rows AS MATERIALIZED (
