@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "release:qnsa-vacheron-overseas": "node tools/intake/release-qnsa-vacheron-overseas.cjs",
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",

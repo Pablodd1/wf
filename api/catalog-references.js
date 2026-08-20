@@ -266,6 +266,31 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    if (brand.toLowerCase() === 'vacheron constantin' && model.toLowerCase() === 'overseas') {
+      const out = listCanonicalCatalogReferences('Vacheron Constantin', 'Overseas').map(entry => ({
+        reference: entry.reference,
+        listing_count: 0,
+        eligible_observation_count: 0,
+        analytics_ready: false,
+        sample_capped: false,
+        avg_price: null,
+        dial_colors: [],
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+      }));
+      const payload = {
+        success: true,
+        brand: 'Vacheron Constantin',
+        model: 'Overseas',
+        reference_count: out.length,
+        references: out,
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+        sample_capped: false,
+      };
+      _cache.set(cacheKey, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (isReviewedWorkbookBrowseBrand(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
       if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });

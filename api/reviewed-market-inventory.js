@@ -327,6 +327,13 @@ function isMultiListing(row) {
   // flags, multi intents, and multi identity sentinels above still fail closed.
   if (isAuditedRolexPatekDeltaSingle(row)) return false;
 
+  if (row.publication_lane === 'QNSA_VACHERON_OVERSEAS_RELEASE_V1'
+    && row.raw_lineage_verified === true
+    && row.normalization_run_complete === true
+    && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Vacheron Constantin'
+    && cleanExactText(row?.catalog_model || row?.model, 80) === 'Overseas'
+    && ['WTS', 'WTB'].includes(listingType)) return false;
+
   // The QNSA Zenith lane is reconciled against immutable raw text before its
   // release control is enabled. Its exact classifier understands dotted Zenith
   // references and quarantines cross-brand/Daytona/no-reference evidence. The
@@ -416,7 +423,8 @@ function isPriorityHumanReviewBrand(value) {
     || brand === 'AUDEMARS PIGUET'
     || brand === 'RICHARD MILLE'
     || brand === 'CARTIER'
-    || brand === 'ZENITH';
+    || brand === 'ZENITH'
+    || brand === 'VACHERON CONSTANTIN';
 }
 
 function searchTermsMatch(record, query) {
@@ -755,6 +763,7 @@ function isTradingFloorSourceRow(row) {
     'QNSA_REVIEWED_LATER_BRAND_V1',
     'QNSA_SIX_BRAND_IMAGE_LANE_V1',
     'QNSA_ZENITH_REVIEWED_V1',
+    'QNSA_VACHERON_OVERSEAS_RELEASE_V1',
   ]
     .includes(row?.publication_lane)
     && row?.normalization_run_complete === true
@@ -1847,12 +1856,20 @@ module.exports = async function handler(req, res) {
     }
     // The snapshot is an exact census of the enabled reconciled market-feed
     // run. Totals stay withheld for predicates the snapshot does not encode.
-    const publicInventoryTotal = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source' && !multiBrandSelection
+    let publicInventoryTotal = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source' && !multiBrandSelection
       ? snapshotInventoryTotal(summary, {
           search, reference, dial: requestedDial, imagesOnly, condition, region,
           rating, postedAfter, itemCategory, brand, listingType, pricedOnly,
         })
       : null;
+    const vacheronOverseasRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && brand === 'Vacheron Constantin' && ['ALL', 'WATCH'].includes(itemCategory);
+    if (vacheronOverseasRelease && !search && !reference && !requestedDial && !condition
+      && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
+      const { data: exactCount, error: exactCountError } = await client
+        .rpc('qnsa_vacheron_overseas_release_count', { p_listing_type: databaseListingType });
+      publicInventoryTotal = exactCountError ? null : Number(exactCount || 0);
+    }
     const pageWindow = resolvePageWindow({
       page,
       pageSize,
@@ -2179,7 +2196,26 @@ module.exports = async function handler(req, res) {
       // category feed performs additional expression sorting and immutable
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
-      if (sixBrandBroadScope) {
+      if (vacheronOverseasRelease) {
+        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_vacheron_overseas_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: databaseListingType,
+            p_reference: requestedReference || null,
+          }),
+        });
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`QNSA Vacheron Overseas page failed: ${response.status} ${body.slice(0, 200)}`);
+        }
+        preloadedQnsaResponse = new Response(JSON.stringify(await response.json()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } else if (sixBrandBroadScope) {
         const streamBrands = sixBrandScope;
         const previousBrandKeysets = inventoryCursor?.brandKeysets || {};
         const entries = await Promise.all(streamBrands.map(brandName => {
@@ -2433,13 +2469,19 @@ module.exports = async function handler(req, res) {
         ? []
         : [{ reference: rpcReference, family: Boolean(familyReference || patekBaseEquivalent) }];
       const zenithExactReference = normalizedBrand === 'zenith' && !familyReference;
+      const vacheronExactReference = normalizedBrand === 'vacheron constantin';
       const rpcResponses = await Promise.all(rpcRequests.map(request => fetch(
-        `${process.env.SUPABASE_URL}/rest/v1/rpc/${zenithExactReference
-          ? 'qnsa_zenith_reference_rows'
-          : 'qnsa_trading_floor_reference_rows'}`,
+        `${process.env.SUPABASE_URL}/rest/v1/rpc/${vacheronExactReference
+          ? 'qnsa_vacheron_overseas_reference_rows'
+          : (zenithExactReference ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows')}`,
         {
           method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(zenithExactReference ? {
+          body: JSON.stringify(vacheronExactReference ? {
+            p_reference: request.reference,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: databaseListingType,
+          } : zenithExactReference ? {
             p_reference: request.reference,
             p_limit: qnsaBrandScanLimit,
             p_offset: requestedOffset,

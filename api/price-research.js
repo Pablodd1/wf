@@ -69,6 +69,21 @@ function isMissingRpcError(error) {
 
 async function loadQnsaPriceRpcRows(client, args) {
   const brand = String(args?.p_brand || '').trim().toLowerCase();
+  if (brand === 'vacheron constantin') {
+    const references = [...new Set(args?.p_references || [])].filter(Boolean).slice(0, 8);
+    const pages = await Promise.all(references.map(reference => client.rpc(
+      'qnsa_vacheron_overseas_reference_rows', {
+        p_reference: reference,
+        p_limit: Math.min(101, Math.max(1, Number(args?.p_limit) || 101)),
+        p_offset: 0,
+        p_listing_type: args?.p_listing_type || null,
+      },
+    )));
+    const failed = pages.find(page => page.error);
+    if (failed) return failed;
+    const data = pages.flatMap(page => page.data || []).map(qnsaReferenceRowToMarketRow);
+    return { data: [...new Map(data.map(row => [String(row.id), row])).values()], error: null };
+  }
   const usesBoundedReviewedSource = ['richard mille', 'cartier', 'zenith'].includes(brand);
   // The correction sidecar is intentionally three-brand scoped. Later brands
   // use the reviewed bounded source; an empty sidecar result is not evidence
@@ -86,7 +101,7 @@ function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith'].includes(normalizedBrand)
+    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
     : null;
 }
@@ -206,8 +221,16 @@ async function loadQnsaExactReleasedEvidence(client, { brand, referenceVariants,
       const maximumPages = Math.ceil(boundedLimit / EXACT_REFERENCE_RPC_PAGE_SIZE) + 1;
       for (let page = 0; page < maximumPages; page += 1) {
         const zenith = normalizedBrand === 'zenith';
+        const vacheron = normalizedBrand === 'vacheron constantin';
         const { data, error } = await client.rpc(
-          zenith ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows',
+          vacheron ? 'qnsa_vacheron_overseas_reference_rows'
+            : (zenith ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows'),
+          vacheron ? {
+            p_reference: reference,
+            p_limit: EXACT_REFERENCE_RPC_PAGE_SIZE,
+            p_offset: offset,
+            p_listing_type: null,
+          } :
           zenith ? {
             p_reference: reference,
             p_limit: EXACT_REFERENCE_RPC_PAGE_SIZE,
@@ -404,6 +427,14 @@ async function loadQnsaVerifiedTradingPrices(client, {
     if (rpcError) {
       console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
     }
+  }
+  if (String(brand || '').trim().toLowerCase() === 'vacheron constantin') {
+    const merged = new Map(exactReleasedRows.map(row => [String(row.id), row]));
+    for (const row of rpcMarketRows) merged.set(String(row.id), row);
+    return [...merged.values()].map(row => ({
+      ...row,
+      canonical_qnsa_price_evidence_checked: true,
+    }));
   }
   // The dedicated research view is the primary source. This bounded fallback
   // uses the same reconciled release base when PostgREST has not refreshed that
