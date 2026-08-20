@@ -2,7 +2,7 @@
 
 const { getClient } = require('./_lib/supabase');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
-const { listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
+const { listCanonicalCatalogReferences, listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
@@ -37,6 +37,7 @@ const MAX_PAGE_SIZE = 100;
 const EXPLICIT_USD_STATUS = 'SOURCE_EXPLICIT_USD_MATCH';
 const OWNER_ASSUMED_USD_STATUSES = new Set([
   'OWNER_ASSUMED_USD',
+  'OWNER_ASSUMED_USD_CANDIDATE',
   'OWNER_DOLLAR_USD_POLICY',
   'OWNER_K_USD_POLICY',
 ]);
@@ -93,7 +94,8 @@ async function loadQnsaReviewedReleaseSummary(client) {
     reconciled: !error,
     count_snapshot_available: !error,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith'].map(brand => ({
+    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith',
+      'Vacheron Constantin', 'Omega'].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,
@@ -133,7 +135,7 @@ function unavailableQnsaReleaseSummary() {
 
 function snapshotInventoryTotal(summary, filters) {
   if (summary?.count_snapshot_available === false) return null;
-  const unsupported = filters.search || filters.reference || filters.dial || filters.imagesOnly
+  const unsupported = filters.search || filters.model || filters.reference || filters.dial || filters.imagesOnly
     || filters.condition || filters.region || filters.rating || filters.postedAfter
     || ['WTS', 'WTB'].includes(filters.listingType);
   if (unsupported || !Array.isArray(summary?.market_counts)) return null;
@@ -899,6 +901,7 @@ function directSubmissionMatches(record, filters) {
   if (filters.pricedOnly && record.price_raw == null) return false;
   if (filters.listingType && record.listing_type !== filters.listingType) return false;
   if (filters.brand && record.brand?.toLowerCase() !== filters.brand.toLowerCase()) return false;
+  if (filters.model && record.model?.toLowerCase() !== filters.model.toLowerCase()) return false;
   if (filters.reference && record.reference_search_key !== filters.reference) return false;
   if (filters.dial && record.dial_color?.toLowerCase() !== filters.dial.toLowerCase()) return false;
   if (filters.condition && record.condition?.toLowerCase() !== filters.condition.toLowerCase()) return false;
@@ -1216,6 +1219,9 @@ function mapReviewedRecord(row) {
     raw_message_evidence_type: normalizedSummary ? 'WORKBOOK_NORMALIZED_SUMMARY' : 'SOURCE_RAW_MESSAGE',
     seller_name: sellerName,
     seller_phone: sellerPhone,
+    // Private exact join hint. Removed by enrichRecordsWithDealerDirectory
+    // before the customer response, after resolving the canonical profile.
+    source_dealer_id: evidenceValuePresent(row.dealer_id) ? row.dealer_id : null,
     seller_rating: ratingEvidenceStatus === 'SOURCE_SUPPLIED' ? directRating : null,
     seller_review_count: ratingEvidenceStatus === 'SOURCE_SUPPLIED'
       ? directReviewCount
@@ -1770,6 +1776,13 @@ module.exports = async function handler(req, res) {
       SIX_REVIEWED_WATCH_BRANDS.find(brand => brand.toLowerCase() === value.toLowerCase()) || value))];
     const requestedBrand = requestedBrands.length === 1 ? requestedBrands[0] : '';
     const multiBrandSelection = requestedBrands.length > 1;
+    const requestedModel = cleanExactText(req.query?.model, 120);
+    const requestedModelReferences = requestedBrand === 'Zenith' && requestedModel
+      ? listCanonicalCatalogReferences('Zenith')
+        .filter(entry => entry.model === requestedModel)
+        .map(entry => entry.reference)
+        .slice(0, 50)
+      : [];
     const requestedReference = cleanExactText(req.query?.reference || parsedSearch.reference, 80);
     const reference = referenceComparisonKey(requestedReference);
     const requestedDial = cleanExactText(req.query?.dial || parsedSearch.dial, 40);
@@ -1811,6 +1824,7 @@ module.exports = async function handler(req, res) {
       const unsupportedFacets = [
         requestedItem !== 'watches' ? 'category (must be Watches)' : '',
         search ? 'search' : '',
+        requestedModel ? 'model' : '',
         requestedReference ? 'exact reference' : '',
         requestedDial ? 'dial' : '',
         condition ? 'condition' : '',
@@ -1876,7 +1890,7 @@ module.exports = async function handler(req, res) {
     // run. Totals stay withheld for predicates the snapshot does not encode.
     let publicInventoryTotal = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source' && !multiBrandSelection
       ? snapshotInventoryTotal(summary, {
-          search, reference, dial: requestedDial, imagesOnly, condition, region,
+          search, model: requestedModel, reference, dial: requestedDial, imagesOnly, condition, region,
           rating, postedAfter, itemCategory, brand, listingType, pricedOnly,
         })
       : null;
@@ -1886,8 +1900,10 @@ module.exports = async function handler(req, res) {
       && brand === 'Omega' && ['ALL', 'WATCH'].includes(itemCategory);
     const cartierRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Cartier' && ['ALL', 'WATCH'].includes(itemCategory);
+    const zenithModelRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && brand === 'Zenith' && requestedModel && ['ALL', 'WATCH'].includes(itemCategory);
     const controlledBrandRelease = vacheronOverseasRelease || omegaRelease || cartierRelease;
-    if ((vacheronOverseasRelease || omegaRelease || cartierRelease) && !search && !reference && !requestedDial && !condition
+    if ((vacheronOverseasRelease || omegaRelease || cartierRelease) && !search && !requestedModel && !reference && !requestedDial && !condition
       && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
       const releaseCountRpc = cartierRelease ? 'qnsa_cartier_release_count'
         : omegaRelease ? 'qnsa_omega_release_count' : 'qnsa_vacheron_overseas_release_count';
@@ -1897,6 +1913,35 @@ module.exports = async function handler(req, res) {
             ? listingType : databaseListingType,
         });
       publicInventoryTotal = exactCountError ? null : Number(exactCount || 0);
+    }
+    if (requestedModel && (omegaRelease || cartierRelease) && !search && !reference && !requestedDial && !condition
+      && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
+      const { data: exactModelCount, error: exactModelCountError } = await client
+        .rpc('qnsa_controlled_model_release_count', {
+          p_brand: brand,
+          p_model: requestedModel,
+          p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+        });
+      publicInventoryTotal = exactModelCountError ? null : Number(exactModelCount || 0);
+    }
+    if (zenithModelRelease && !search && !reference && !requestedDial && !condition
+      && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
+      const { data: zenithModelCount, error: zenithModelCountError } = requestedModelReferences.length
+        ? await client.rpc('qnsa_zenith_model_release_count', {
+            p_references: requestedModelReferences,
+            p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+          })
+        : { data: 0, error: null };
+      publicInventoryTotal = zenithModelCountError ? null : Number(zenithModelCount || 0);
+    }
+    if (vacheronOverseasRelease && requestedModel.toLowerCase() === 'overseas'
+      && !search && !reference && !requestedDial && !condition && !region && !rating
+      && !postedAfter && !pricedOnly && !imagesOnly) {
+      const { data: overseasCount, error: overseasCountError } = await client
+        .rpc('qnsa_vacheron_overseas_release_count', {
+          p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+        });
+      publicInventoryTotal = overseasCountError ? null : Number(overseasCount || 0);
     }
     const pageWindow = resolvePageWindow({
       page,
@@ -2134,7 +2179,7 @@ module.exports = async function handler(req, res) {
     // the bounded publication index and renders an image only when the row
     // supplies one.
     const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
-    const sixBrandBroadScope = qnsaBroadPage && watchFeed
+    const sixBrandBroadScope = qnsaBroadPage && watchFeed && !zenithModelRelease
       && (!brand || SIX_REVIEWED_WATCH_BRANDS.includes(brand));
     const sixBrandCompositeScope = sixBrandBroadScope && !controlledBrandRelease;
     const sixBrandScope = requestedBrands.length > 0 ? requestedBrands : SIX_REVIEWED_WATCH_BRANDS;
@@ -2229,10 +2274,32 @@ module.exports = async function handler(req, res) {
       // category feed performs additional expression sorting and immutable
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
-      if (vacheronOverseasRelease || omegaRelease || cartierRelease) {
+      if (zenithModelRelease) {
+        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_zenith_model_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            p_references: requestedModelReferences,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+          }),
+        });
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`QNSA Zenith model page failed: ${response.status} ${body.slice(0, 200)}`);
+        }
+        preloadedQnsaResponse = new Response(JSON.stringify(await response.json()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } else if (vacheronOverseasRelease || omegaRelease || cartierRelease) {
         const releaseRpc = cartierRelease ? 'qnsa_cartier_page_rows'
           : omegaRelease ? 'qnsa_omega_page_rows' : 'qnsa_vacheron_overseas_page_rows';
-        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${releaseRpc}`, {
+        const controlledModelRpc = requestedModel && (omegaRelease || cartierRelease)
+          ? 'qnsa_controlled_model_page_rows'
+          : releaseRpc;
+        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${controlledModelRpc}`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2241,6 +2308,9 @@ module.exports = async function handler(req, res) {
             p_listing_type: controlledBrandRelease && ['WTS', 'WTB'].includes(listingType)
               ? listingType : databaseListingType,
             p_reference: requestedReference || null,
+            ...(requestedModel && (omegaRelease || cartierRelease)
+              ? { p_brand: brand, p_model: requestedModel }
+              : {}),
           }),
         });
         if (!response.ok) {
@@ -2666,6 +2736,7 @@ module.exports = async function handler(req, res) {
         || record.multi_listing_release_approved === true)
       .filter(record => record.item_category === 'WATCH' || record.luxury_identity_eligible === true)
       .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
+      .filter(record => !requestedModel || cleanExactText(record.model, 120).toLowerCase() === requestedModel.toLowerCase())
       .filter(record => !imagesOnly || record.has_images === true)
       .filter(record => !pricedOnly || hasUsableSourcePrice(record))
       .filter(record => !postedAfter || new Date(record.listing_date || record.created_at || 0).getTime() >= new Date(postedAfter).getTime())
@@ -2687,6 +2758,7 @@ module.exports = async function handler(req, res) {
         .filter(record => isPublicTradingIntent(record.listing_type)
           || record.multi_listing_release_approved === true)
         .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
+        .filter(record => !requestedModel || cleanExactText(record.model, 120).toLowerCase() === requestedModel.toLowerCase())
         .filter(record => !imagesOnly || record.has_images === true)
         .filter(record => !pricedOnly || hasUsableSourcePrice(record))
         .filter(record => !postedAfter || new Date(record.listing_date || record.created_at || 0).getTime() >= new Date(postedAfter).getTime())
@@ -2714,7 +2786,7 @@ module.exports = async function handler(req, res) {
         ))
           .filter(record => directSubmissionMatchesImageLane(record, requestedLane))
           .filter(record => !record.multi_listing && directSubmissionMatches(record, {
-            imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search, itemCategory, region,
+            imagesOnly, pricedOnly, listingType, brand, model: requestedModel, reference, dial: requestedDial, condition, search, itemCategory, region,
             rating, postedAfter,
           }));
         const directRecordIds = new Set(directRecords.map(record => String(record.id)));
