@@ -1605,6 +1605,12 @@ function boundedPage(rows, pageSize, hasLookaheadQuery) {
   };
 }
 
+function unwrapRpcRowData(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => row?.row_data || row)
+    .filter(Boolean);
+}
+
 function sortPageWithoutMovingLookahead(rows, pageSize, comparator) {
   const sourceRows = Array.isArray(rows) ? rows : [];
   const visibleRows = sourceRows.slice(0, pageSize).sort(comparator);
@@ -2546,7 +2552,11 @@ module.exports = async function handler(req, res) {
       throw new Error(`REST query failed: ${restRes.status} ${errText.slice(0, 200)}`);
     }
     const data = await restRes.json();
-    const sourceRows = data || [];
+    // Table-valued PostgreSQL RPCs that expose one JSONB column arrive from
+    // PostgREST as [{ row_data: {...} }]. Normalize that envelope here so the
+    // same publication gates evaluate the listing rather than its wrapper.
+    // View-backed and already-unwrapped RPC responses pass through unchanged.
+    const sourceRows = unwrapRpcRowData(data);
     // Retain private lineage only in memory for cross-lane deduplication. The
     // mapped public records intentionally omit message/file lineage fields.
     const privateExactKeysById = new Map(sourceRows
@@ -2946,6 +2956,7 @@ module.exports.compareInventoryForDisplay = compareInventoryForDisplay;
 module.exports.inventoryIntentRank = inventoryIntentRank;
 module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;
 module.exports.isTradingFloorSourceRow = isTradingFloorSourceRow;
+module.exports.unwrapRpcRowData = unwrapRpcRowData;
 module.exports.normalizeItemCategory = normalizeItemCategory;
 module.exports.effectiveItemCategory = effectiveItemCategory;
 module.exports.hasObviousCrossBrandConflict = hasObviousCrossBrandConflict;
