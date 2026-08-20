@@ -119,8 +119,8 @@ jobs:
               'missing_model_rows', count(*) FILTER (WHERE NULLIF(btrim(model_normalized), '') IS NULL),
               'missing_dial_rows', count(*) FILTER (WHERE NULLIF(btrim(dial_color_normalized), '') IS NULL),
               'missing_condition_rows', count(*) FILTER (WHERE NULLIF(btrim(condition_normalized), '') IS NULL),
-              'listing_ids_sha256', encode(digest(string_agg(id::text, E'\n' ORDER BY id), 'sha256'), 'hex'),
-              'source_candidate_hashes_sha256', encode(digest(string_agg(source_candidate_hash, E'\n' ORDER BY source_candidate_hash), 'sha256'), 'hex'),
+              'listing_ids_sha256', encode(extensions.digest(convert_to(string_agg(id::text, E'\n' ORDER BY id), 'UTF8'), 'sha256'), 'hex'),
+              'source_candidate_hashes_sha256', encode(extensions.digest(convert_to(string_agg(source_candidate_hash, E'\n' ORDER BY source_candidate_hash), 'UTF8'), 'sha256'), 'hex'),
               'generated_at', now()
             ) AS evidence
             FROM cohort
