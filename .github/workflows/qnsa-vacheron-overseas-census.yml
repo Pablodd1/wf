@@ -47,6 +47,16 @@ jobs:
             throw 'SUPABASE_ACCESS_TOKEN is unavailable.'
           }
           New-Item -ItemType Directory -Force -Path 'audit-output/vacheron-overseas-census' | Out-Null
+          $catalog = Get-Content -Raw -LiteralPath 'public/catalog-source-v1.json' | ConvertFrom-Json
+          $overseasReferenceKeys = @($catalog.entries |
+            Where-Object { $_.brand -ceq 'Vacheron Constantin' -and $_.model -ceq 'Overseas' } |
+            ForEach-Object { [string]$_.normalized_reference } |
+            Where-Object { $_ -cmatch '^[A-Z0-9]{3,50}$' } |
+            Sort-Object -Unique)
+          if ($overseasReferenceKeys.Count -lt 100) {
+            throw 'The checked-in Overseas catalog reference set is unexpectedly incomplete.'
+          }
+          $catalogArraySql = ($overseasReferenceKeys | ForEach-Object { "'$_'" }) -join ','
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $sql = @'
           SET statement_timeout = '60s';
@@ -75,6 +85,8 @@ jobs:
               lower(btrim(COALESCE(s.model_normalized, ''))) = 'overseas' AS normalized_model_exact,
               lower(btrim(COALESCE(s.model_original, ''))) = 'overseas' AS original_model_exact,
               COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])overseas([^[:alnum:]]|$)' AS raw_overseas_mention,
+              regexp_replace(upper(COALESCE(s.reference_normalized, '')), '[^A-Z0-9]', '', 'g')
+                = ANY(ARRAY[__OVERSEAS_KEYS__]::text[]) AS catalog_overseas_reference,
               upper(COALESCE(s.listing_type, s.intent, '')) AS source_intent,
               COALESCE(s.price_usd, s.price_normalized, 0) > 0 AS has_stored_price,
               btrim(COALESCE(s.image_url, s.source_media_url_candidate, '')) ~* '^https://[^[:space:]]+$' AS has_https_media,
@@ -84,6 +96,7 @@ jobs:
           ), cohort AS MATERIALIZED (
             SELECT * FROM marked
             WHERE normalized_model_exact OR original_model_exact OR raw_overseas_mention
+              OR catalog_overseas_reference
           ), metrics AS (
             SELECT jsonb_build_object(
               'project_ref', 'qnsafosakvonzgfcsphh',
@@ -93,6 +106,16 @@ jobs:
               'normalized_model_exact_rows', (SELECT count(*) FROM marked WHERE normalized_model_exact),
               'original_model_exact_rows', (SELECT count(*) FROM marked WHERE original_model_exact),
               'raw_overseas_mention_rows', (SELECT count(*) FROM marked WHERE raw_overseas_mention),
+              'catalog_overseas_reference_rows', (SELECT count(*) FROM marked WHERE catalog_overseas_reference),
+              'raw_or_model_only_rows', count(*) FILTER (
+                WHERE (normalized_model_exact OR original_model_exact OR raw_overseas_mention)
+                  AND NOT catalog_overseas_reference),
+              'catalog_reference_only_rows', count(*) FILTER (
+                WHERE catalog_overseas_reference
+                  AND NOT (normalized_model_exact OR original_model_exact OR raw_overseas_mention)),
+              'raw_or_model_and_catalog_rows', count(*) FILTER (
+                WHERE catalog_overseas_reference
+                  AND (normalized_model_exact OR original_model_exact OR raw_overseas_mention)),
               'overseas_union_rows', count(*),
               'overseas_unique_listing_ids', count(DISTINCT id),
               'overseas_unique_source_records', count(DISTINCT source_record_id),
@@ -145,6 +168,8 @@ jobs:
             'models', COALESCE((SELECT jsonb_agg(to_jsonb(model_counts)) FROM model_counts), '[]'::jsonb)
           ) AS report;
           '@
+          $sql = $sql.Replace('__OVERSEAS_KEYS__', $catalogArraySql)
+          if ($sql.Contains('__OVERSEAS_KEYS__')) { throw 'Catalog reference placeholder was not replaced.' }
           if ($sql -match '(?im)^\s*(INSERT|UPDATE|DELETE|TRUNCATE|ALTER|DROP|CREATE|GRANT|REVOKE)\b') {
             throw 'Census SQL is not read-only.'
           }
