@@ -29,7 +29,8 @@ test('Cartier workflow is pinned, bounded, and blocks cross-category leakage', (
 test('Cartier is admitted through reviewed Trading and Price Research gates', () => {
   assert.match(research, /'richard mille', 'cartier'/);
   assert.match(inventory, /brand === 'CARTIER'/);
-  assert.match(floor, /releaseBrands\.length \? releaseBrands/);
+  assert.match(floor, /releaseBrands\.find\(brand => brand\.toLowerCase\(\) === requestedBrand\.toLowerCase\(\)\)/);
+  assert.match(floor, /matchedBrand \|\| requestedBrand/);
 });
 
 test('Trading cards always disclose rating state without fabricating a score', () => {

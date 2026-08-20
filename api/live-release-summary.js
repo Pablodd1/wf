@@ -71,6 +71,21 @@ async function loadQnsaSummary(client) {
   );
   brands.push(...admittedWorkbookBrands.filter(item => item.listing_count > 0));
   try {
+    const { data: cartierCount, error: cartierError } = await client
+      .rpc('qnsa_cartier_release_count', { p_listing_type: null });
+    if (cartierError) throw cartierError;
+    if (Number(cartierCount || 0) > 0) {
+      const existing = brands.find(item => item.brand === 'Cartier');
+      if (existing) {
+        existing.listing_count = Number(cartierCount);
+        existing.count_status = 'exact';
+      }
+    }
+  } catch {
+    // Preserve the existing reconciled Cartier count until the controlled
+    // manifest is installed and enabled.
+  }
+  try {
     const { data: omegaCount, error: omegaError } = await client
       .rpc('qnsa_omega_release_count', { p_listing_type: null });
     if (omegaError) throw omegaError;

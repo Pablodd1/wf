@@ -338,6 +338,11 @@ function isMultiListing(row) {
     && row.normalization_run_complete === true
     && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Omega'
     && ['WTS', 'WTB'].includes(listingType)) return false;
+  if (row.publication_lane === 'QNSA_CARTIER_RELEASE_V1'
+    && row.raw_lineage_verified === true
+    && row.normalization_run_complete === true
+    && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Cartier'
+    && ['WTS', 'WTB'].includes(listingType)) return false;
 
   // The QNSA Zenith lane is reconciled against immutable raw text before its
   // release control is enabled. Its exact classifier understands dotted Zenith
@@ -770,6 +775,7 @@ function isTradingFloorSourceRow(row) {
     'QNSA_ZENITH_REVIEWED_V1',
     'QNSA_VACHERON_OVERSEAS_RELEASE_V1',
     'QNSA_OMEGA_RELEASE_V1',
+    'QNSA_CARTIER_RELEASE_V1',
   ]
     .includes(row?.publication_lane)
     && row?.normalization_run_complete === true
@@ -1878,11 +1884,14 @@ module.exports = async function handler(req, res) {
       && brand === 'Vacheron Constantin' && ['ALL', 'WATCH'].includes(itemCategory);
     const omegaRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Omega' && ['ALL', 'WATCH'].includes(itemCategory);
-    if ((vacheronOverseasRelease || omegaRelease) && !search && !reference && !requestedDial && !condition
+    const cartierRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && brand === 'Cartier' && ['ALL', 'WATCH'].includes(itemCategory);
+    if ((vacheronOverseasRelease || omegaRelease || cartierRelease) && !search && !reference && !requestedDial && !condition
       && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
+      const releaseCountRpc = cartierRelease ? 'qnsa_cartier_release_count'
+        : omegaRelease ? 'qnsa_omega_release_count' : 'qnsa_vacheron_overseas_release_count';
       const { data: exactCount, error: exactCountError } = await client
-        .rpc(omegaRelease ? 'qnsa_omega_release_count' : 'qnsa_vacheron_overseas_release_count',
-          { p_listing_type: databaseListingType });
+        .rpc(releaseCountRpc, { p_listing_type: databaseListingType });
       publicInventoryTotal = exactCountError ? null : Number(exactCount || 0);
     }
     const pageWindow = resolvePageWindow({
@@ -2211,8 +2220,9 @@ module.exports = async function handler(req, res) {
       // category feed performs additional expression sorting and immutable
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
-      if (vacheronOverseasRelease || omegaRelease) {
-        const releaseRpc = omegaRelease ? 'qnsa_omega_page_rows' : 'qnsa_vacheron_overseas_page_rows';
+      if (vacheronOverseasRelease || omegaRelease || cartierRelease) {
+        const releaseRpc = cartierRelease ? 'qnsa_cartier_page_rows'
+          : omegaRelease ? 'qnsa_omega_page_rows' : 'qnsa_vacheron_overseas_page_rows';
         const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${releaseRpc}`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
