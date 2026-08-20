@@ -27,6 +27,7 @@ test('release is exact, Vacheron-only, private, and reversible', () => {
   assert.match(migration, /contact_publication_approved', false/);
   assert.doesNotMatch(migration, /original_timestamp/);
   assert.match(migration, /'posting_date', s\.created_at/);
+  assert.match(migration, /'raw_reference', CASE WHEN s\.public_reference IS NOT NULL THEN s\.reference_original ELSE NULL END/);
   assert.match(migration, /ALTER TABLE public\.qnsa_vacheron_overseas_release_manifest ENABLE ROW LEVEL SECURITY/);
   assert.match(migration, /REVOKE ALL[\s\S]*FROM PUBLIC, anon, authenticated/);
   assert.doesNotMatch(migration, /(?:INSERT|UPDATE|DELETE)[\s\S]{0,80}(?:public\.dealers|dealer_reviews|dealer_group_memberships)/i);
@@ -88,13 +89,15 @@ test('Vacheron reference picker merges catalog and exact source-proven release r
         wtb_count: 2, priced_wts_count: 4, catalog_reference_confirmed: true },
       { reference: 'SOURCE-123', listing_count: 3, wts_count: 2,
         wtb_count: 1, priced_wts_count: 1, catalog_reference_confirmed: false },
+      { reference: 'SOURCE/123', listing_count: 2, wts_count: 1,
+        wtb_count: 1, priced_wts_count: 1, catalog_reference_confirmed: false },
       { reference: null, listing_count: 2, wts_count: 2,
         wtb_count: 0, priced_wts_count: 1, catalog_reference_confirmed: false },
     ],
   );
   assert.equal(merged.references.length, 2);
   assert.deepEqual(merged.references.map(row => [row.reference, row.listing_count]), [
-    ['4500V/110A-B128', 8], ['SOURCE-123', 3],
+    ['4500V/110A-B128', 8], ['SOURCE-123', 5],
   ]);
   assert.equal(merged.references[1].identity_source, 'SOURCE_PROVEN_RELEASE_REFERENCE');
   assert.equal(merged.unresolvedReferenceListingCount, 2);

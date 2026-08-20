@@ -142,7 +142,7 @@ AS $$
     'canonical_brand', 'Vacheron Constantin',
     'model', 'Overseas',
     'catalog_model', 'Overseas',
-    'raw_reference', s.reference_original,
+    'raw_reference', CASE WHEN s.public_reference IS NOT NULL THEN s.reference_original ELSE NULL END,
     'normalized_reference', s.public_reference,
     'catalog_reference', CASE WHEN s.catalog_reference_confirmed THEN s.public_reference ELSE NULL END,
     'dial_color', s.dial_color_normalized,
