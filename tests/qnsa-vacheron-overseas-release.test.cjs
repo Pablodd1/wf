@@ -29,6 +29,7 @@ test('release is exact, Vacheron-only, private, and reversible', () => {
   assert.match(migration, /'posting_date', s\.created_at/);
   assert.match(migration, /'raw_reference', CASE WHEN s\.public_reference IS NOT NULL THEN s\.reference_original ELSE NULL END/);
   assert.match(migration, /REFERENCE_PRICE_COLLISION_WITHHELD/);
+  assert.match(migration, /'catalog_reference_confirmed', s\.catalog_reference_confirmed/);
   assert.match(migration, /'verified_price_usd', CASE WHEN NOT s\.reference_price_collision/);
   assert.match(migration, /ALTER TABLE public\.qnsa_vacheron_overseas_release_manifest ENABLE ROW LEVEL SECURITY/);
   assert.match(migration, /REVOKE ALL[\s\S]*FROM PUBLIC, anon, authenticated/);

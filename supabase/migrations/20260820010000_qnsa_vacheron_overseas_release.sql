@@ -151,6 +151,7 @@ AS $$
     'raw_reference', CASE WHEN s.public_reference IS NOT NULL THEN s.reference_original ELSE NULL END,
     'normalized_reference', s.public_reference,
     'catalog_reference', CASE WHEN s.catalog_reference_confirmed THEN s.public_reference ELSE NULL END,
+    'catalog_reference_confirmed', s.catalog_reference_confirmed,
     'dial_color', s.dial_color_normalized,
     'catalog_dial', s.dial_color_normalized,
     'condition', s.condition_normalized,

@@ -194,3 +194,21 @@ test('uses an explicit non-watch category as a fail-closed demand gate', () => {
   assert.equal(classifyDemandItemEligibility({ item_category: 'JEWELRY' }), 'NOT_WATCH_DEMAND');
   assert.equal(classifyDemandItemEligibility({ category: 'WATCH' }), null);
 });
+
+test('Vacheron source-proven references remain tracked but cannot affect exact cohort analytics', () => {
+  const row = {
+    brand: 'Vacheron Constantin',
+    model: 'Overseas',
+    reference: '49150',
+    dial_color: 'Blue',
+    listing_type: 'WTS',
+    price_usd: 25000,
+    analytics_currency_status: 'VERIFIED',
+    publication_lane: 'QNSA_VACHERON_OVERSEAS_RELEASE_V1',
+    catalog_reference_confirmed: false,
+    owner_reviewed_identity: true,
+  };
+  assert.equal(classifyResearchEligibility(row, {
+    found: true, model: 'Overseas', dialColors: ['Blue'],
+  }), 'CATALOG_REFERENCE_UNCONFIRMED');
+});
