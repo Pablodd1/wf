@@ -147,7 +147,8 @@ jobs:
                     COALESCE(NULLIF(btrim(contact_number), ''), NULLIF(btrim(from_number), ''),
                       NULLIF(btrim(user_name), ''), NULLIF(btrim(from_name), ''),
                       'UNLINKED:' || source_record_id),
-                    source_candidate_hash)),
+                    source_candidate_hash))
+            ) || jsonb_build_object(
               'release_unique_individual_listings', (SELECT count(*) FROM release_rows),
               'release_duplicates_excluded', count(*) - (SELECT count(*) FROM release_rows),
               'release_wts_rows', (SELECT count(*) FROM release_rows WHERE source_intent = 'WTS'),
