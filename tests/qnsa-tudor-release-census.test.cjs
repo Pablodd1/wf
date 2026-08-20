@@ -18,6 +18,11 @@ test('Tudor census is read-only, QNSA-pinned, and exact-source gated', () => {
   assert.match(script, /source_candidate_hash ~ '\^\[0-9a-f\]\{64\}\$'/);
   assert.match(script, /parent_id IS NULL/);
   assert.match(script, /is_bundle, false\) = false/);
+  assert.match(script, /source_reference_supported/);
+  assert.match(script, /plausible_reference/);
+  assert.match(script, /'BRACELET','STRAP','WATCH','TUDOR'/);
+  assert.match(script, /catalog_family/);
+  assert.match(script, /resolved_model/);
   assert.match(script, /seller_candidate_rank = 1/);
 });
 

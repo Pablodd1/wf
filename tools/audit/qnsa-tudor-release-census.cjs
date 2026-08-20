@@ -33,23 +33,44 @@ async function managementQuery(sql) {
   return response.json();
 }
 
-function catalogReferenceKeys() {
+function catalogReferenceLookups() {
   const catalog = JSON.parse(fs.readFileSync(
     path.join(__dirname, '..', '..', 'public', 'catalog-source-v1.json'), 'utf8'));
-  const keys = [...new Set((catalog.entries || [])
-    .filter(entry => entry.brand === 'Tudor')
-    .map(entry => String(entry.normalized_reference || ''))
-    .filter(key => /^[A-Z0-9]{3,50}$/.test(key)))].sort();
-  if (keys.length < 150) throw new Error('Checked-in Tudor catalog reference set is incomplete.');
-  return keys;
+  const entries = (catalog.entries || []).filter(entry => entry.brand === 'Tudor');
+  const exact = entries.map(entry => ({
+    key: String(entry.normalized_reference || ''),
+    model: String(entry.model || '').trim(),
+  })).filter(entry => /^[A-Z0-9]{4,50}$/.test(entry.key) && entry.model);
+  const familyModels = new Map();
+  for (const entry of entries) {
+    const familyKey = String(entry.reference || '').toUpperCase()
+      .replace(/^M/, '').replace(/-[0-9]{4}$/, '').replace(/[^A-Z0-9]/g, '');
+    if (!/^(?=.*[0-9])[A-Z0-9]{4,30}$/.test(familyKey)) continue;
+    if (!familyModels.has(familyKey)) familyModels.set(familyKey, new Set());
+    familyModels.get(familyKey).add(String(entry.model || '').trim());
+  }
+  const family = [...familyModels.entries()]
+    .filter(([, models]) => models.size === 1 && [...models][0])
+    .map(([key, models]) => ({ key, model: [...models][0] }));
+  if (exact.length < 150 || family.length < 20) {
+    throw new Error('Checked-in Tudor catalog reference set is incomplete.');
+  }
+  return { exact, family };
 }
 
-function censusSql(keys) {
-  const catalogArray = keys.map(sqlText).join(',');
+function catalogValues(entries) {
+  return entries.map(entry => `(${sqlText(entry.key)},${sqlText(entry.model)})`).join(',');
+}
+
+function censusSql(lookups) {
   return `
 SET statement_timeout = '90s';
 SET lock_timeout = '5s';
-WITH control AS MATERIALIZED (
+WITH catalog_exact(reference_key, model) AS (
+  VALUES ${catalogValues(lookups.exact)}
+), catalog_family(reference_key, model) AS (
+  VALUES ${catalogValues(lookups.family)}
+), control AS MATERIALIZED (
   SELECT enabled_run_key FROM public.qnsa_market_feed_control
   WHERE singleton = true AND enabled = true
 ), source AS MATERIALIZED (
@@ -65,25 +86,54 @@ WITH control AS MATERIALIZED (
       'bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate',
       'withdrawn','rejected','hidden','deleted','archived')
     AND upper(COALESCE(l.verdict, '')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
-), marked AS MATERIALIZED (
+), normalized AS MATERIALIZED (
   SELECT s.*,
-    COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])tudor([^[:alnum:]]|$)'
-      AS raw_tudor_brand,
-    COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])(black[ -]?bay|pelagos|ranger|royal|1926|heritage|glamour|north[ -]?flag|clair[ -]?de[ -]?rose)([^[:alnum:]]|$)'
-      AS raw_tudor_collection,
-    regexp_replace(upper(COALESCE(s.reference_normalized, '')), '[^A-Z0-9]', '', 'g')
-      = ANY(ARRAY[${catalogArray}]::text[]) AS catalog_tudor_reference,
-    COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])(rolex|patek|audemars|richard[ -]?mille|cartier|vacheron|panerai|iwc|hublot|omega|breitling)([^[:alnum:]]|$)'
-      AS competing_brand,
-    upper(COALESCE(s.listing_type, s.intent, '')) AS source_intent,
-    COALESCE(s.price_usd, s.price_normalized, 0) > 0 AS has_stored_price,
-    btrim(COALESCE(s.image_url, s.source_media_url_candidate, '')) ~* '^https://[^[:space:]]+$'
-      AS has_https_media
+    regexp_replace(upper(COALESCE(s.reference_normalized, '')), '[^A-Z0-9]', '', 'g') AS reference_key,
+    regexp_replace(upper(COALESCE(s.raw_message_text, '')), '[^A-Z0-9]', '', 'g') AS raw_key,
+    CASE
+      WHEN COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])black[ -]?bay([^[:alnum:]]|$)' THEN 'Black Bay'
+      WHEN COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])pelagos([^[:alnum:]]|$)' THEN 'Pelagos'
+      WHEN COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])ranger([^[:alnum:]]|$)' THEN 'Ranger'
+      WHEN COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])royal([^[:alnum:]]|$)' THEN 'Royal'
+      WHEN COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])1926([^[:alnum:]]|$)' THEN '1926'
+      WHEN COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])heritage([^[:alnum:]]|$)' THEN 'Heritage'
+      WHEN COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])glamour([^[:alnum:]]|$)' THEN 'Glamour'
+      WHEN COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])north[ -]?flag([^[:alnum:]]|$)' THEN 'North Flag'
+      WHEN COALESCE(s.raw_message_text, '') ~* '(^|[^[:alnum:]])clair[ -]?de[ -]?rose([^[:alnum:]]|$)' THEN 'Clair de Rose'
+      ELSE NULL
+    END AS raw_collection_model
   FROM source s
+), marked AS MATERIALIZED (
+  SELECT n.*,
+    COALESCE(n.raw_message_text, '') ~* '(^|[^[:alnum:]])tudor([^[:alnum:]]|$)'
+      AS raw_tudor_brand,
+    n.raw_collection_model IS NOT NULL
+      AS raw_tudor_collection,
+    COALESCE(ce.reference_key, cf.reference_key) IS NOT NULL AS catalog_tudor_reference,
+    COALESCE(ce.model, cf.model, n.raw_collection_model) AS resolved_model,
+    n.reference_key ~ '[0-9]'
+      AND length(n.reference_key) BETWEEN 4 AND 30
+      AND n.reference_key !~ '^(19|20)[0-9]{2}$'
+      AND n.reference_key !~ '^[0-9]{1,3}(MM|CM)$'
+      AND n.reference_key NOT IN ('BRACELET','STRAP','WATCH','TUDOR','MODEL','REFERENCE','AVAILABLE','PRICE','FULLSET')
+      AND NOT CASE WHEN n.reference_key ~ '^[0-9]+$'
+        THEN n.reference_key::numeric = COALESCE(n.price_normalized, n.price_usd, -1)
+        ELSE false END AS plausible_reference,
+    position(n.reference_key in n.raw_key) > 0 AS source_reference_supported,
+    COALESCE(n.raw_message_text, '') ~* '(^|[^[:alnum:]])(rolex|patek|audemars|richard[ -]?mille|cartier|vacheron|panerai|iwc|hublot|omega|breitling)([^[:alnum:]]|$)'
+      AS competing_brand,
+    upper(COALESCE(n.listing_type, n.intent, '')) AS source_intent,
+    COALESCE(n.price_usd, n.price_normalized, 0) > 0 AS has_stored_price,
+    btrim(COALESCE(n.image_url, n.source_media_url_candidate, '')) ~* '^https://[^[:space:]]+$'
+      AS has_https_media
+  FROM normalized n
+  LEFT JOIN catalog_exact ce ON ce.reference_key = n.reference_key
+  LEFT JOIN catalog_family cf ON cf.reference_key = regexp_replace(n.reference_key, '^M', '')
 ), identity_safe AS MATERIALIZED (
   SELECT * FROM marked
-  WHERE (raw_tudor_brand OR raw_tudor_collection OR catalog_tudor_reference)
-    AND NOT (competing_brand AND NOT raw_tudor_brand)
+  WHERE plausible_reference AND source_reference_supported
+    AND (raw_tudor_brand OR raw_tudor_collection OR catalog_tudor_reference)
+    AND NOT competing_brand
 ), ranked AS MATERIALIZED (
   SELECT identity_safe.*,
     row_number() OVER (
@@ -99,13 +149,16 @@ WITH control AS MATERIALIZED (
   SELECT jsonb_build_object(
     'project_ref', '${PROJECT_REF}',
     'enabled_run_key', (SELECT enabled_run_key FROM control),
-    'catalog_reference_keys', ${keys.length},
+    'catalog_reference_keys', ${lookups.exact.length},
+    'catalog_family_keys', ${lookups.family.length},
     'tudor_source_rows', (SELECT count(*) FROM source),
     'raw_tudor_brand_rows', (SELECT count(*) FROM marked WHERE raw_tudor_brand),
     'raw_tudor_collection_rows', (SELECT count(*) FROM marked WHERE raw_tudor_collection),
     'catalog_tudor_reference_rows', (SELECT count(*) FROM marked WHERE catalog_tudor_reference),
     'competing_brand_rows', (SELECT count(*) FROM marked WHERE competing_brand),
     'identity_safe_rows', (SELECT count(*) FROM identity_safe),
+    'reference_not_plausible_rows', (SELECT count(*) FROM marked WHERE NOT plausible_reference),
+    'reference_not_source_supported_rows', (SELECT count(*) FROM marked WHERE NOT source_reference_supported),
     'identity_held_rows', (SELECT count(*) FROM marked) - (SELECT count(*) FROM identity_safe),
     'release_unique_individual_listings', (SELECT count(*) FROM released),
     'release_duplicates_excluded', (SELECT count(*) FROM identity_safe) - (SELECT count(*) FROM released),
@@ -129,14 +182,14 @@ WITH control AS MATERIALIZED (
     'release_exact_dealer_linked_rows', (SELECT count(*) FROM released r
       JOIN public.dealer_listing_links dl ON dl.listing_id = r.id AND dl.link_status = 'APPLIED'),
     'release_missing_reference_rows', (SELECT count(*) FROM released WHERE NULLIF(btrim(reference_normalized), '') IS NULL),
-    'release_missing_model_rows', (SELECT count(*) FROM released WHERE NULLIF(btrim(model_normalized), '') IS NULL),
+    'release_missing_model_rows', (SELECT count(*) FROM released WHERE NULLIF(btrim(resolved_model), '') IS NULL),
     'release_missing_dial_rows', (SELECT count(*) FROM released WHERE NULLIF(btrim(dial_color_normalized), '') IS NULL),
     'release_listing_ids_sha256', (SELECT encode(extensions.digest(convert_to(
       string_agg(id::text, E'\\n' ORDER BY id), 'UTF8'), 'sha256'), 'hex') FROM released),
     'generated_at', now()
   ) AS evidence
 ), models AS (
-  SELECT COALESCE(NULLIF(btrim(model_normalized), ''), 'UNRESOLVED') AS model, count(*)::bigint AS row_count
+  SELECT COALESCE(NULLIF(btrim(resolved_model), ''), 'UNRESOLVED') AS model, count(*)::bigint AS row_count
   FROM released GROUP BY 1 ORDER BY row_count DESC, model LIMIT 50
 ), reference_counts AS (
   SELECT COALESCE(NULLIF(btrim(reference_normalized), ''), 'UNRESOLVED') AS reference, count(*)::bigint AS row_count
@@ -151,7 +204,7 @@ SELECT jsonb_build_object(
 
 async function main() {
   const output = path.resolve(process.argv[process.argv.indexOf('--output') + 1] || 'tudor-census.json');
-  const rows = await managementQuery(censusSql(catalogReferenceKeys()));
+  const rows = await managementQuery(censusSql(catalogReferenceLookups()));
   const report = rows?.[0]?.report;
   if (!report || report.evidence?.project_ref !== PROJECT_REF) throw new Error('Invalid census response.');
   if (Number(report.evidence.tudor_source_rows || 0) < 1) throw new Error('No Tudor source rows found.');
