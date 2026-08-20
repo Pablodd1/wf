@@ -4,6 +4,7 @@
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
+const { resolveTradingIntent } = require('../../api/_lib/trading-intent.cjs');
 
 const PROJECT_REF = 'qnsafosakvonzgfcsphh';
 const RELEASE_RUN_KEY = 'cartier-20260820-v1';
@@ -138,7 +139,7 @@ WITH control AS MATERIALIZED (
     GREATEST(0, stats.q1 - 3.0 * (stats.q3 - stats.q1))
     AND stats.q3 + 3.0 * (stats.q3 - stats.q1)
 )
-SELECT id::text AS listing_id, source_hash, source_candidate_hash, release_order,
+SELECT id::text AS listing_id, source_hash, source_candidate_hash, release_order, raw_message_text,
   CASE
     WHEN catalog_cartier_reference THEN NULLIF(btrim(reference_normalized), '')
     WHEN NULLIF(btrim(reference_normalized), '') IS NOT NULL
@@ -186,7 +187,14 @@ ORDER BY release_order;`;
 async function loadPlan() {
   const rows = await managementQuery(candidateSql(catalogReferenceKeys()), true);
   const catalogModels = catalogModelsByReference();
-  const plan = (rows || []).map(row => ({
+  const plan = (rows || []).map(row => {
+    const resolvedIntent = resolveTradingIntent({
+      rawMessage: row.raw_message_text,
+      structuredIntent: row.listing_type,
+      hasSourcePrice: row.price_lane !== 'PRICE_NOT_SUPPLIED' && row.price_lane !== 'WTB_PRICE_WITHHELD',
+      eligibleSingleWatch: true,
+    }).intent;
+    return ({
     listing_id: String(row.listing_id),
     source_hash: String(row.source_hash),
     source_candidate_hash: String(row.source_candidate_hash),
@@ -195,13 +203,14 @@ async function loadPlan() {
     public_model: catalogModels.get(String(row.public_reference || '').replace(/[^A-Za-z0-9]/g, '').toUpperCase()) || 'Cartier',
     identity_source: String(row.identity_source),
     catalog_reference_confirmed: row.catalog_cartier_reference === true,
-    listing_type: String(row.listing_type),
-    price_lane: String(row.price_lane),
+    listing_type: ['WTS', 'WTB'].includes(resolvedIntent) ? resolvedIntent : String(row.listing_type),
+    price_lane: resolvedIntent === 'WTB' ? 'WTB_PRICE_WITHHELD' : String(row.price_lane),
     source_cartier_identity: row.source_cartier_identity === true,
     exact_image: row.exact_image === true,
     exact_dealer_linked: row.exact_dealer_linked === true,
     pr_independently_qualified: row.pr_independently_qualified === true,
-  }));
+    });
+  });
   const planSha = sha256(plan.map(row => row.listing_id).sort().join('\n'));
   if (plan.length !== EXPECTED_COUNT || planSha !== EXPECTED_PLAN_SHA256) {
     throw new Error(`Release plan drifted: count=${plan.length}, sha256=${planSha}.`);

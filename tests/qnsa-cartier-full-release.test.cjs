@@ -155,4 +155,10 @@ test('candidate query preserves source lineage and does not infer parent or imag
   assert.match(sql, /seller_candidate_rank = 1/);
   assert.match(sql, /percentile_cont\(0\.25\)/);
   assert.match(sql, /3\.0 \* \(stats\.q3 - stats\.q1\)/);
+  assert.match(sql, /raw_message_text/);
+  const releaseSource = fs.readFileSync(path.join(root, 'tools', 'intake',
+    'release-qnsa-cartier.cjs'), 'utf8');
+  assert.match(releaseSource, /resolveTradingIntent/);
+  assert.match(releaseSource, /resolvedIntent === 'WTB' \? 'WTB_PRICE_WITHHELD'/);
+  assert.match(inventory, /controlledBrandRelease && \['WTS', 'WTB'\]\.includes\(listingType\)/);
 });
