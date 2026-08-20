@@ -53,7 +53,7 @@ function classifyResearchEligibility(row, catalog) {
   if ([row?.model, row?.dial_color].some(isMultiListingSentinel)) return 'BUNDLE_SOURCE_UNSPLIT';
   if (!row?.brand || String(row.brand).trim().toUpperCase() === 'UNKNOWN') return 'MISSING_BRAND';
   if (!row?.reference) return 'MISSING_REFERENCE';
-  if (['QNSA_VACHERON_OVERSEAS_RELEASE_V1', 'QNSA_OMEGA_RELEASE_V1', 'QNSA_CARTIER_RELEASE_V1'].includes(row?.publication_lane)
+  if (['QNSA_VACHERON_OVERSEAS_RELEASE_V1', 'QNSA_OMEGA_RELEASE_V1', 'QNSA_CARTIER_RELEASE_V1', 'QNSA_TUDOR_RELEASE_V1'].includes(row?.publication_lane)
     && row?.catalog_reference_confirmed !== true) return 'CATALOG_REFERENCE_UNCONFIRMED';
   if ((!catalog?.found || !catalog.model) && !ownerReviewedIdentity) return 'CATALOG_MODEL_UNCONFIRMED';
   if (row?.listing_type && normalizedStatus(row.listing_type) !== 'WTS') return 'NOT_WTS_SALE';

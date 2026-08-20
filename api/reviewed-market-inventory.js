@@ -341,6 +341,11 @@ function isMultiListing(row) {
     && row.normalization_run_complete === true
     && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Omega'
     && ['WTS', 'WTB'].includes(listingType)) return false;
+  if (row.publication_lane === 'QNSA_TUDOR_RELEASE_V1'
+    && row.raw_lineage_verified === true
+    && row.normalization_run_complete === true
+    && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Tudor'
+    && ['WTS', 'WTB'].includes(listingType)) return false;
   if (row.publication_lane === 'QNSA_CARTIER_RELEASE_V1'
     && row.raw_lineage_verified === true
     && row.normalization_run_complete === true
@@ -778,6 +783,7 @@ function isTradingFloorSourceRow(row) {
     'QNSA_ZENITH_REVIEWED_V1',
     'QNSA_VACHERON_OVERSEAS_RELEASE_V1',
     'QNSA_OMEGA_RELEASE_V1',
+    'QNSA_TUDOR_RELEASE_V1',
     'QNSA_CARTIER_RELEASE_V1',
   ]
     .includes(row?.publication_lane)
@@ -1899,15 +1905,18 @@ module.exports = async function handler(req, res) {
       && brand === 'Vacheron Constantin' && ['ALL', 'WATCH'].includes(itemCategory);
     const omegaRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Omega' && ['ALL', 'WATCH'].includes(itemCategory);
+    const tudorRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && brand === 'Tudor' && ['ALL', 'WATCH'].includes(itemCategory);
     const cartierRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Cartier' && ['ALL', 'WATCH'].includes(itemCategory);
     const zenithModelRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Zenith' && requestedModel && ['ALL', 'WATCH'].includes(itemCategory);
-    const controlledBrandRelease = vacheronOverseasRelease || omegaRelease || cartierRelease;
-    if ((vacheronOverseasRelease || omegaRelease || cartierRelease) && !search && !requestedModel && !reference && !requestedDial && !condition
+    const controlledBrandRelease = vacheronOverseasRelease || omegaRelease || cartierRelease || tudorRelease;
+    if (controlledBrandRelease && !search && !requestedModel && !reference && !requestedDial && !condition
       && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
       const releaseCountRpc = cartierRelease ? 'qnsa_cartier_release_count'
-        : omegaRelease ? 'qnsa_omega_release_count' : 'qnsa_vacheron_overseas_release_count';
+        : omegaRelease ? 'qnsa_omega_release_count'
+        : tudorRelease ? 'qnsa_tudor_release_count' : 'qnsa_vacheron_overseas_release_count';
       const { data: exactCount, error: exactCountError } = await client
         .rpc(releaseCountRpc, {
           p_listing_type: controlledBrandRelease && ['WTS', 'WTB'].includes(listingType)
@@ -1915,7 +1924,7 @@ module.exports = async function handler(req, res) {
         });
       publicInventoryTotal = exactCountError ? null : Number(exactCount || 0);
     }
-    if (requestedModel && (omegaRelease || cartierRelease) && !search && !reference && !requestedDial && !condition
+    if (requestedModel && (omegaRelease || cartierRelease || tudorRelease) && !search && !reference && !requestedDial && !condition
       && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
       const { data: exactModelCount, error: exactModelCountError } = await client
         .rpc('qnsa_controlled_model_release_count', {
@@ -2294,10 +2303,11 @@ module.exports = async function handler(req, res) {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
-      } else if (vacheronOverseasRelease || omegaRelease || cartierRelease) {
+      } else if (vacheronOverseasRelease || omegaRelease || cartierRelease || tudorRelease) {
         const releaseRpc = cartierRelease ? 'qnsa_cartier_page_rows'
-          : omegaRelease ? 'qnsa_omega_page_rows' : 'qnsa_vacheron_overseas_page_rows';
-        const controlledModelRpc = requestedModel && (omegaRelease || cartierRelease)
+          : omegaRelease ? 'qnsa_omega_page_rows'
+          : tudorRelease ? 'qnsa_tudor_page_rows' : 'qnsa_vacheron_overseas_page_rows';
+        const controlledModelRpc = requestedModel && (omegaRelease || cartierRelease || tudorRelease)
           ? 'qnsa_controlled_model_page_rows'
           : releaseRpc;
         const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${controlledModelRpc}`, {
@@ -2309,7 +2319,7 @@ module.exports = async function handler(req, res) {
             p_listing_type: controlledBrandRelease && ['WTS', 'WTB'].includes(listingType)
               ? listingType : databaseListingType,
             p_reference: requestedReference || null,
-            ...(requestedModel && (omegaRelease || cartierRelease)
+            ...(requestedModel && (omegaRelease || cartierRelease || tudorRelease)
               ? { p_brand: brand, p_model: requestedModel }
               : {}),
           }),
@@ -2578,15 +2588,18 @@ module.exports = async function handler(req, res) {
       const zenithExactReference = normalizedBrand === 'zenith' && !familyReference;
       const vacheronExactReference = normalizedBrand === 'vacheron constantin';
       const omegaExactReference = normalizedBrand === 'omega';
+      const tudorExactReference = normalizedBrand === 'tudor';
       const rpcResponses = await Promise.all(rpcRequests.map(request => fetch(
-        `${process.env.SUPABASE_URL}/rest/v1/rpc/${omegaExactReference
+        `${process.env.SUPABASE_URL}/rest/v1/rpc/${tudorExactReference
+          ? 'qnsa_tudor_reference_rows'
+          : omegaExactReference
           ? 'qnsa_omega_reference_rows'
           : vacheronExactReference
           ? 'qnsa_vacheron_overseas_reference_rows'
           : (zenithExactReference ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows')}`,
         {
           method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify((vacheronExactReference || omegaExactReference) ? {
+          body: JSON.stringify((vacheronExactReference || omegaExactReference || tudorExactReference) ? {
             p_reference: request.reference,
             p_limit: qnsaBrandScanLimit,
             p_offset: requestedOffset,

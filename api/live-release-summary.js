@@ -100,6 +100,16 @@ async function loadQnsaSummary(client) {
       // Omega remains absent rather than publishing an unverified count.
     }
   }
+  try {
+    const { data: tudorCount, error: tudorError } = await client
+      .rpc('qnsa_tudor_release_count', { p_listing_type: null });
+    if (tudorError) throw tudorError;
+    if (Number(tudorCount || 0) > 0) {
+      brands.push({ brand: 'Tudor', listing_count: Number(tudorCount), count_status: 'exact' });
+    }
+  } catch {
+    // Tudor remains absent until the controlled manifest is installed and enabled.
+  }
   return {
     success: true,
     surface: 'Trading Floor',

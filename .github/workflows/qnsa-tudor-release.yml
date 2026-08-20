@@ -1,0 +1,74 @@
+name: QNSA Tudor controlled release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: audit, canary, full, or rollback
+        required: true
+        type: choice
+        options: [audit, canary, full, rollback]
+      confirmation:
+        description: Exact mode-specific confirmation phrase
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-tudor-controlled-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate exact authorization
+        shell: pwsh
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $required = switch ($env:INPUT_MODE) {
+            'audit' { 'AUDIT_QNSA_TUDOR_RELEASE' }
+            'canary' { 'APPLY_QNSA_TUDOR_CANARY' }
+            'full' { 'APPLY_QNSA_TUDOR_FULL' }
+            'rollback' { 'ROLLBACK_QNSA_TUDOR_RELEASE' }
+            default { throw 'Unsupported mode.' }
+          }
+          if ($env:INPUT_CONFIRMATION -cne $required) { throw "Confirmation must exactly match $required." }
+          if ($env:SUPABASE_PROJECT_REF -cne 'qnsafosakvonzgfcsphh') { throw 'Workflow is pinned to canonical QNSA.' }
+
+      - name: Execute exact manifest control
+        shell: pwsh
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          TUDOR_RELEASE_CONFIRMATION: ${{ inputs.confirmation }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          New-Item -ItemType Directory -Force -Path 'audit-output/tudor-release' | Out-Null
+          node tools/intake/release-qnsa-tudor.cjs `
+            --mode $env:INPUT_MODE `
+            --output 'audit-output/tudor-release/report.json'
+
+      - name: Upload aggregate control evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-tudor-release-${{ inputs.mode }}-${{ github.run_id }}
+          path: audit-output/tudor-release/report.json
+          if-no-files-found: error
+          retention-days: 30
+
