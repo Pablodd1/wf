@@ -331,6 +331,7 @@ test('Trading Floor uses selected-dial evidence by default and the exact referen
   assert.match(floor, /reference_stats/);
   assert.match(floor, /Ref avg/);
   assert.match(floor, /Not rated · \$\{availableComparableCount\}\/2 qualified/);
+  assert.match(floor, /Not rated · evidence unavailable/);
   assert.match(floor, /No exact directory match/);
   assert.match(floor, /comparableCount >= 2 \? benchmarkStats : null/);
   assert.match(floor, /displayedCardPriceRating\.rating\.code === 'NOT_RATED'/);

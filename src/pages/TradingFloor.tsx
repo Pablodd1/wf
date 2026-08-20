@@ -211,6 +211,7 @@ export default function TradingFloor() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 50);
   const [priceSummaries, setPriceSummaries] = useState<Record<string, PriceResearchBatchSummary>>({});
+  const [priceSummariesLoaded, setPriceSummariesLoaded] = useState(false);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
   const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter].join('\u001f');
@@ -258,15 +259,23 @@ export default function TradingFloor() {
   useEffect(() => {
     if (!visiblePricePairs.length) {
       setPriceSummaries({});
+      setPriceSummariesLoaded(true);
       return;
     }
     let active = true;
+    setPriceSummariesLoaded(false);
     void loadPriceResearchBatchSummaries(visiblePricePairs)
       .then(summaries => {
-        if (active) setPriceSummaries(Object.fromEntries(summaries.map(summary => [summary.key, summary])));
+        if (active) {
+          setPriceSummaries(Object.fromEntries(summaries.map(summary => [summary.key, summary])));
+          setPriceSummariesLoaded(true);
+        }
       })
       .catch(error => {
-        if (active && error?.name !== 'AbortError') setPriceSummaries({});
+        if (active && error?.name !== 'AbortError') {
+          setPriceSummaries({});
+          setPriceSummariesLoaded(true);
+        }
       });
     return () => { active = false; };
   // The serialized exact identities change only when the visible page changes.
@@ -622,6 +631,7 @@ export default function TradingFloor() {
                         dial: usesExactReferencePriceBenchmark(listing.brand) ? null : listing.dial_color,
                       })]
                       : undefined}
+                    priceSummaryLoaded={priceSummariesLoaded}
                     selected={false}
                     onSelect={() => openListing(listing)}
                   />
@@ -988,7 +998,7 @@ function getListingImageSrc(listing: ListingRecord): string | null {
   return direct ? direct.trim() : null;
 }
 
-function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: ListingRecord; priceSummary?: PriceResearchBatchSummary; selected: boolean; onSelect: () => void }) {
+function ListingCard({ listing, priceSummary, priceSummaryLoaded, selected, onSelect }: { listing: ListingRecord; priceSummary?: PriceResearchBatchSummary; priceSummaryLoaded: boolean; selected: boolean; onSelect: () => void }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const imageUrl = getListingImageSrc(listing);
   const [imageAvailable, setImageAvailable] = useState(Boolean(imageUrl));
@@ -1016,7 +1026,7 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
     : 0;
   const benchmarkStats = exactReferenceRating ? priceSummary?.reference_stats || null : priceSummary?.stats || null;
   const displayedCardPriceRating = {
-    loading: canRatePrice && priceSummary === undefined,
+    loading: canRatePrice && !priceSummaryLoaded,
     count: comparableCount,
     rating: rateMarketPrice(
       listing.price_usd,
@@ -1029,6 +1039,8 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
     : displayedCardPriceRating.rating.code === 'NOT_RATED'
       ? canRatePrice && priceSummary
         ? `Not rated · ${availableComparableCount}/2 qualified`
+        : canRatePrice
+          ? 'Not rated · evidence unavailable'
         : 'Not rated'
       : displayedCardPriceRating.rating.label;
   const exactReferenceAverageLabel = exactReferenceRating && comparableCount >= 2 && benchmarkStats
