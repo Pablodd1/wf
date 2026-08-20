@@ -320,15 +320,18 @@ test('pages make one batch request and client rejects cross-reference summaries'
   assert.match(research, /qualified WTS/);
 });
 
-test('Trading Floor uses selected-dial evidence by default and the exact reference benchmark for Zenith', () => {
+test('Trading Floor uses selected-dial evidence by default and the exact reference benchmark for Zenith, Cartier, and Omega', () => {
   assert.match(floor, /Price rating: \{cardPriceRatingLabel\}/);
-  assert.match(floor, /Boolean\(listing\.brand && listing\.reference && \(listing\.dial_color \|\| zenithReferenceRating\)\)/);
+  assert.match(floor, /Boolean\(listing\.brand && listing\.reference && \(listing\.dial_color \|\| exactReferenceRating\)\)/);
   assert.doesNotMatch(floor, /canRatePrice[\s\S]{0,180}price_research_eligible/);
   assert.match(floor, /selected_dial_qualified_count/);
-  assert.match(floor, /isZenithBrand/);
+  assert.match(floor, /usesExactReferencePriceBenchmark/);
+  assert.match(floor, /\['zenith', 'cartier', 'omega'\]/);
   assert.match(floor, /reference_qualified_wts_count/);
   assert.match(floor, /reference_stats/);
   assert.match(floor, /Ref avg/);
+  assert.match(floor, /Not rated · \$\{availableComparableCount\}\/2 qualified/);
+  assert.match(floor, /No exact directory match/);
   assert.match(floor, /comparableCount >= 2 \? benchmarkStats : null/);
   assert.match(floor, /displayedCardPriceRating\.rating\.code === 'NOT_RATED'/);
   assert.match(floor, /<ListingDealerEvidence/);

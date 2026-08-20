@@ -238,12 +238,12 @@ export default function TradingFloor() {
   const visiblePricePairs = useMemo(() => {
     const seen = new Set<string>();
     return visibleListings.flatMap(listing => {
-      const zenithReferenceRating = isZenithBrand(listing.brand);
-      if (listing.item_category !== 'WATCH' || !listing.brand || !listing.reference || (!listing.dial_color && !zenithReferenceRating)) return [];
-      // Zenith is rated against its qualified exact-reference average. Passing
-      // no dial also makes a missing or sparse dial cohort visible to the
-      // bounded batch endpoint without widening its reference identity.
-      const pair = { brand: listing.brand, reference: listing.reference, dial: zenithReferenceRating ? null : listing.dial_color };
+      const exactReferenceRating = usesExactReferencePriceBenchmark(listing.brand);
+      if (listing.item_category !== 'WATCH' || !listing.brand || !listing.reference || (!listing.dial_color && !exactReferenceRating)) return [];
+      // Zenith, Cartier and Omega are rated against their qualified
+      // exact-reference average. Passing no dial makes a missing or sparse
+      // dial cohort visible without widening the reference identity.
+      const pair = { brand: listing.brand, reference: listing.reference, dial: exactReferenceRating ? null : listing.dial_color };
       const key = priceResearchSummaryKey(pair);
       if (seen.has(key)) return [];
       seen.add(key);
@@ -615,11 +615,11 @@ export default function TradingFloor() {
                   <ListingCard
                     key={listing.id}
                     listing={listing}
-                    priceSummary={listing.brand && listing.reference && (listing.dial_color || isZenithBrand(listing.brand))
+                    priceSummary={listing.brand && listing.reference && (listing.dial_color || usesExactReferencePriceBenchmark(listing.brand))
                       ? priceSummaries[priceResearchSummaryKey({
                         brand: listing.brand,
                         reference: listing.reference,
-                        dial: isZenithBrand(listing.brand) ? null : listing.dial_color,
+                        dial: usesExactReferencePriceBenchmark(listing.brand) ? null : listing.dial_color,
                       })]
                       : undefined}
                     selected={false}
@@ -1000,20 +1000,21 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
     ratingEvidenceStatus: listing.seller_rating_evidence_status,
   });
   const listingIntent = cleanValue(listing.intent || listing.listing_type).toUpperCase();
-  const zenithReferenceRating = isZenithBrand(listing.brand);
+  const exactReferenceRating = usesExactReferencePriceBenchmark(listing.brand);
   const canRatePrice = listing.item_category === 'WATCH'
     && listingIntent === 'WTS'
-    && Boolean(listing.brand && listing.reference && (listing.dial_color || zenithReferenceRating))
+    && Boolean(listing.brand && listing.reference && (listing.dial_color || exactReferenceRating))
     && Number.isFinite(Number(listing.price_usd))
     && Number(listing.price_usd) > 0;
-  const comparableCount = canRatePrice && (zenithReferenceRating
+  const availableComparableCount = Number(exactReferenceRating
+    ? priceSummary?.reference_qualified_wts_count || 0
+    : priceSummary?.selected_dial_qualified_count || 0);
+  const comparableCount = canRatePrice && (exactReferenceRating
     ? priceSummary?.reference_analytics_ready === true
     : priceSummary?.analytics_ready === true)
-    ? Number(zenithReferenceRating
-      ? priceSummary?.reference_qualified_wts_count || 0
-      : priceSummary?.selected_dial_qualified_count || 0)
+    ? availableComparableCount
     : 0;
-  const benchmarkStats = zenithReferenceRating ? priceSummary?.reference_stats || null : priceSummary?.stats || null;
+  const benchmarkStats = exactReferenceRating ? priceSummary?.reference_stats || null : priceSummary?.stats || null;
   const displayedCardPriceRating = {
     loading: canRatePrice && priceSummary === undefined,
     count: comparableCount,
@@ -1026,11 +1027,18 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
   const cardPriceRatingLabel = displayedCardPriceRating.loading
     ? 'Loading…'
     : displayedCardPriceRating.rating.code === 'NOT_RATED'
-      ? 'Not rated'
+      ? canRatePrice && priceSummary
+        ? `Not rated · ${availableComparableCount}/2 qualified`
+        : 'Not rated'
       : displayedCardPriceRating.rating.label;
-  const exactReferenceAverageLabel = zenithReferenceRating && comparableCount >= 2 && benchmarkStats
+  const exactReferenceAverageLabel = exactReferenceRating && comparableCount >= 2 && benchmarkStats
     ? ` · Ref avg ${formatUsdPrice(benchmarkStats.avg)}`
     : '';
+  const dealerStatusHint = dealerRating
+    ? null
+    : listing.dealer_profile_path
+      ? 'No source-backed feedback'
+      : 'No exact directory match';
 
   return (
     <article
@@ -1093,6 +1101,7 @@ function ListingCard({ listing, priceSummary, selected, onSelect }: { listing: L
           reviewCount={listing.seller_review_count}
           ratingEvidenceStatus={listing.seller_rating_evidence_status}
         />
+        {dealerStatusHint && <span>· {dealerStatusHint}</span>}
       </div>
 
       {/* 6. Badges (Location & Date) */}
@@ -1578,8 +1587,8 @@ function cleanValue(value: string | number | null | undefined) {
   return text;
 }
 
-function isZenithBrand(value: string | null | undefined) {
-  return cleanValue(value).toLocaleLowerCase() === 'zenith';
+function usesExactReferencePriceBenchmark(value: string | null | undefined) {
+  return ['zenith', 'cartier', 'omega'].includes(cleanValue(value).toLocaleLowerCase());
 }
 
 function displayDial(value: string | null | undefined) {
