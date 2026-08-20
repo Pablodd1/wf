@@ -134,7 +134,7 @@ SELECT id::text AS listing_id, source_hash, source_candidate_hash, release_order
       AND upper(reference_normalized) !~ '^[0-9]+(?:MM|CM|G|KG)$'
       AND NOT CASE
         WHEN btrim(reference_normalized) ~ '^[0-9]+$'
-          THEN btrim(reference_normalized)::numeric = COALESCE(price_normalized, price_usd)
+          THEN COALESCE(btrim(reference_normalized)::numeric = COALESCE(price_normalized, price_usd), false)
         ELSE false
       END
       AND regexp_replace(upper(COALESCE(raw_message_text, '')), '[^A-Z0-9]', '', 'g')

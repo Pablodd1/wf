@@ -106,7 +106,7 @@ AS $$
       dl.dealer_id AS exact_dealer_id,
       CASE
         WHEN btrim(l.reference_normalized) ~ '^[0-9]+$'
-          THEN btrim(l.reference_normalized)::numeric = COALESCE(l.price_normalized, l.price_usd)
+          THEN COALESCE(btrim(l.reference_normalized)::numeric = COALESCE(l.price_normalized, l.price_usd), false)
         ELSE false
       END AS reference_price_collision
     FROM public.qnsa_vacheron_overseas_release_control c
@@ -232,7 +232,7 @@ AS $$
         AND m.price_lane NOT IN ('PRICE_NOT_SUPPLIED', 'WTB_PRICE_WITHHELD')
         AND NOT CASE
           WHEN btrim(l.reference_normalized) ~ '^[0-9]+$'
-            THEN btrim(l.reference_normalized)::numeric = COALESCE(l.price_normalized, l.price_usd)
+            THEN COALESCE(btrim(l.reference_normalized)::numeric = COALESCE(l.price_normalized, l.price_usd), false)
           ELSE false
         END
     )::bigint AS priced_wts_count,
