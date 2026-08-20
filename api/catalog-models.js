@@ -185,6 +185,30 @@ module.exports = async function handler(req, res) {
       _cache.set(brand, { at: Date.now(), payload });
       return res.status(200).json(payload);
     }
+    if (brand.toLowerCase() === 'tudor') {
+      const catalogReferences = listCanonicalCatalogReferences('Tudor');
+      const grouped = new Map();
+      for (const entry of catalogReferences) {
+        const model = normalizeCanonicalModel(entry.model || REFERENCE_ONLY_MODEL, 'Tudor');
+        if (!grouped.has(model)) grouped.set(model, new Set());
+        grouped.get(model).add(entry.reference);
+      }
+      const models = [...grouped.entries()]
+        .map(([model, references]) => ({ model, reference_count: references.size }))
+        .sort((a, b) => b.reference_count - a.reference_count || a.model.localeCompare(b.model));
+      const payload = {
+        success: true,
+        brand: 'Tudor',
+        model_count: models.length,
+        catalog_reference_count: catalogReferences.length,
+        models,
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'CATALOG_ONLY_UNTIL_CONTROLLED_RELEASE',
+        sample_capped: false,
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (isReviewedWorkbookBrowseBrand(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(getClient(), brand);
       if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });

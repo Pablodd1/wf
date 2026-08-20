@@ -160,6 +160,13 @@ type ViewMode = 'grid' | 'list';
 type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
+type ModelFilter = string;
+
+interface CatalogModelOption {
+  model: string;
+  listing_count?: number;
+  reference_count?: number;
+}
 
 function hasListingImage(listing: ListingRecord): boolean {
   return getListingImageSrc(listing) !== null;
@@ -190,10 +197,12 @@ export default function TradingFloor() {
     : '';
   const search = searchParams.get('q') || '';
   const requestedBrand = searchParams.get('brand') || '';
+  const modelFilter: ModelFilter = searchParams.get('model') || '';
   const imagesOnly = searchParams.get('images') === 'true';
   const pricedOnly = searchParams.get('priced') === 'true';
   const locationFilter = searchParams.get('location') || '';
   const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
+  const [modelOptions, setModelOptions] = useState<CatalogModelOption[]>([]);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
@@ -214,16 +223,37 @@ export default function TradingFloor() {
   const [priceSummariesLoaded, setPriceSummariesLoaded] = useState(false);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter].join('\u001f');
+  const viewKey = [brandFilter, modelFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
+    Boolean(modelFilter),
     categoryFilter !== 'all',
     Boolean(intentFilter),
     imagesOnly,
     pricedOnly,
     Boolean(locationFilter),
   ].filter(Boolean).length;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!brandFilter) {
+      setModelOptions([]);
+      return () => controller.abort();
+    }
+    void fetch(`/api/catalog-models?brand=${encodeURIComponent(brandFilter)}`, { signal: controller.signal })
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Models unavailable')))
+      .then(payload => {
+        const next = Array.isArray(payload?.models)
+          ? payload.models.filter((item: CatalogModelOption) => cleanValue(item?.model))
+          : [];
+        setModelOptions(next);
+      })
+      .catch(error => {
+        if (error?.name !== 'AbortError') setModelOptions([]);
+      });
+    return () => controller.abort();
+  }, [brandFilter]);
   const locationOptions = useMemo(() => [...new Set(listings
     .map(listing => cleanValue(listing.location || listing.seller_country || listing.region))
     .filter(Boolean))].sort((a, b) => a.localeCompare(b)), [listings]);
@@ -381,6 +411,7 @@ export default function TradingFloor() {
         const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
         if (cursor) params.set('cursor', cursor);
         if (brandFilter) params.set('brand', brandFilter);
+        if (modelFilter) params.set('model', modelFilter);
         if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
         if (imagesOnly) params.set('images', 'true');
@@ -448,7 +479,7 @@ export default function TradingFloor() {
 
     void load();
     return () => controller.abort();
-  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, locationFilter, pageSize, pricedOnly, search]);
+  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, locationFilter, modelFilter, pageSize, pricedOnly, search]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -554,6 +585,8 @@ export default function TradingFloor() {
         <MobileFilterSheet
           brand={brandFilter}
           releaseBrands={releaseBrands}
+          model={modelFilter}
+          models={modelOptions}
           category={categoryFilter}
           intent={intentFilter}
           imagesOnly={imagesOnly}
@@ -565,6 +598,7 @@ export default function TradingFloor() {
             resetResults();
             updateViewParams({
               brand: next.brand || null,
+              model: next.model || null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
               images: next.imagesOnly ? 'true' : null,
@@ -595,6 +629,8 @@ export default function TradingFloor() {
               <DesktopFilters
                 brand={brandFilter}
                 releaseBrands={releaseBrands}
+                model={modelFilter}
+                models={modelOptions}
                 category={categoryFilter}
                 intent={intentFilter}
                 imagesOnly={imagesOnly}
@@ -725,6 +761,8 @@ function FilterCheck({ checked, disabled = false, label, onChange }: { checked: 
 function DesktopFilters({
   brand,
   releaseBrands,
+  model,
+  models,
   category,
   intent,
   imagesOnly,
@@ -735,6 +773,8 @@ function DesktopFilters({
 }: {
   brand: BrandFilter;
   releaseBrands: string[];
+  model: ModelFilter;
+  models: CatalogModelOption[];
   category: CategoryFilter;
   intent: IntentFilter;
   imagesOnly: boolean;
@@ -747,16 +787,24 @@ function DesktopFilters({
     <div className="space-y-7">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
-        {(brand || category !== 'all' || intent || imagesOnly || pricedOnly || location) && (
-          <button type="button" onClick={() => onChange({ brand: null, item: null, type: null, images: null, priced: null, location: null })} className="text-xs font-semibold underline underline-offset-4" style={{ color: GOLD_BRIGHT }}>Clear</button>
+        {(brand || model || category !== 'all' || intent || imagesOnly || pricedOnly || location) && (
+          <button type="button" onClick={() => onChange({ brand: null, model: null, item: null, type: null, images: null, priced: null, location: null })} className="text-xs font-semibold underline underline-offset-4" style={{ color: GOLD_BRIGHT }}>Clear</button>
         )}
       </div>
 
       <fieldset>
         <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Brand</label>
-        <select id="brand-filter" value={brand} onChange={event => onChange({ brand: event.target.value || null })} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none" style={{ borderColor: BORDER, color: INK }}>
+        <select id="brand-filter" value={brand} onChange={event => onChange({ brand: event.target.value || null, model: null })} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none" style={{ borderColor: BORDER, color: INK }}>
           <option value="">All brands</option>
           {releaseBrands.map(value => <option key={value} value={value}>{value}</option>)}
+        </select>
+      </fieldset>
+
+      <fieldset>
+        <label htmlFor="model-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Model</label>
+        <select id="model-filter" value={model} disabled={!brand || models.length === 0} onChange={event => onChange({ model: event.target.value || null })} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-50" style={{ borderColor: BORDER, color: INK }}>
+          <option value="">{brand ? (models.length ? 'All models' : 'No published models') : 'Select a brand first'}</option>
+          {models.map(option => <option key={option.model} value={option.model}>{option.model}{option.listing_count ? ` (${option.listing_count.toLocaleString()})` : ''}</option>)}
         </select>
       </fieldset>
 
@@ -800,6 +848,8 @@ function DesktopFilters({
 function MobileFilterSheet({
   brand,
   releaseBrands,
+  model,
+  models,
   category,
   intent,
   imagesOnly,
@@ -811,21 +861,37 @@ function MobileFilterSheet({
 }: {
   brand: BrandFilter;
   releaseBrands: string[];
+  model: ModelFilter;
+  models: CatalogModelOption[];
   category: CategoryFilter;
   intent: IntentFilter;
   imagesOnly: boolean;
   pricedOnly: boolean;
   location: string;
   locations: string[];
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; location: string }) => void;
+  onApply: (filters: { brand: BrandFilter; model: ModelFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; location: string }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
+  const [draftModel, setDraftModel] = useState<ModelFilter>(model);
+  const [draftModels, setDraftModels] = useState<CatalogModelOption[]>(models);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
   const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
   const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
   const [draftLocation, setDraftLocation] = useState(location);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!draftBrand) return () => controller.abort();
+    void fetch(`/api/catalog-models?brand=${encodeURIComponent(draftBrand)}`, { signal: controller.signal })
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('Models unavailable')))
+      .then(payload => setDraftModels(Array.isArray(payload?.models)
+        ? payload.models.filter((item: CatalogModelOption) => cleanValue(item?.model))
+        : []))
+      .catch(error => { if (error?.name !== 'AbortError') setDraftModels([]); });
+    return () => controller.abort();
+  }, [draftBrand]);
 
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="presentation">
@@ -847,11 +913,17 @@ function MobileFilterSheet({
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
           <FilterGroup label="Brands">
             {releaseBrands.length > 0 && (
-              <FilterChoice active={!draftBrand} label="All brands" onClick={() => setDraftBrand('')} />
+              <FilterChoice active={!draftBrand} label="All brands" onClick={() => { setDraftBrand(''); setDraftModel(''); setDraftModels([]); }} />
             )}
             {releaseBrands.map(value => (
-              <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
+              <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => { setDraftBrand(value); setDraftModel(''); setDraftModels([]); }} />
             ))}
+          </FilterGroup>
+          <FilterGroup label="Models">
+            <select value={draftModel} disabled={!draftBrand || draftModels.length === 0} onChange={event => setDraftModel(event.target.value)} className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-50" style={{ borderColor: BORDER, color: INK }}>
+              <option value="">{draftBrand ? (draftModels.length ? 'All models' : 'No published models') : 'Select a brand first'}</option>
+              {draftModels.map(option => <option key={option.model} value={option.model}>{option.model}{option.listing_count ? ` (${option.listing_count.toLocaleString()})` : ''}</option>)}
+            </select>
           </FilterGroup>
           <FilterGroup label="Category">
             {CATEGORY_OPTIONS.map(option => (
@@ -884,13 +956,14 @@ function MobileFilterSheet({
         <footer className="grid shrink-0 grid-cols-2 gap-3 border-t p-4" style={{ borderColor: BORDER, background: SURFACE }}>
           <button type="button" onClick={() => {
             setDraftBrand('');
+            setDraftModel('');
             setDraftCategory('all');
             setDraftIntent('');
             setDraftImagesOnly(false);
             setDraftPricedOnly(false);
             setDraftLocation('');
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, location: draftLocation })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, model: draftModel, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, location: draftLocation })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
         </footer>
       </section>
     </div>
@@ -1487,7 +1560,7 @@ function getListingMeta(listing: ListingRecord) {
   const priceEvidenceLabel = verifiedUsd !== null
     ? 'Source-confirmed USD'
     : reviewedWorkbookUsd !== null
-      ? 'Workbook-reviewed USD - not in averages'
+      ? 'Owner-assumed USD - tracked, excluded from averages unless independently qualified'
       : workbookPriceNeedsReview
         ? 'Workbook price anomaly - held for review'
         : sourcePrice
@@ -1539,10 +1612,10 @@ function reviewedWorkbookUsdPrice(listing: ListingRecord) {
   // workbook_price_review_reason is set by the API when the price is out of
   // plausibility range (e.g. reference number stored as price like 79377000).
   if (listing.workbook_price_review_reason
-    || !['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(
+    || !['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED', 'OWNER_ASSUMED_USD', 'OWNER_ASSUMED_USD_CANDIDATE'].includes(
       cleanValue(listing.price_evidence_status).toUpperCase(),
     )) return null;
-  const value = Number(listing.workbook_price_usd);
+  const value = Number(listing.workbook_price_usd ?? listing.price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
@@ -1600,7 +1673,7 @@ function cleanValue(value: string | number | null | undefined) {
 }
 
 function usesExactReferencePriceBenchmark(value: string | null | undefined) {
-  return ['zenith', 'cartier', 'omega'].includes(cleanValue(value).toLocaleLowerCase());
+  return ['zenith', 'cartier', 'omega', 'tudor'].includes(cleanValue(value).toLocaleLowerCase());
 }
 
 function displayDial(value: string | null | undefined) {
