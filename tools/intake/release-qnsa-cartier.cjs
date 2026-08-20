@@ -11,6 +11,8 @@ const EXPECTED_COUNT = 7154;
 const EXPECTED_PLAN_SHA256 = 'e9daa59f7a058d5fa503cc549cdbbf50182ef28a0009e7531ca0a4139d815369';
 const MIGRATION = path.join(__dirname, '..', '..', 'supabase', 'migrations',
   '20260820150000_qnsa_cartier_full_release.sql');
+const PERFORMANCE_MIGRATION = path.join(__dirname, '..', '..', 'supabase', 'migrations',
+  '20260820153000_qnsa_cartier_release_rpc_performance.sql');
 
 function arg(name, fallback = '') {
   const index = process.argv.indexOf(`--${name}`);
@@ -254,7 +256,8 @@ async function dealerSnapshot() {
 
 async function applySchema() {
   const migration = fs.readFileSync(MIGRATION, 'utf8');
-  await managementQuery(`BEGIN; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s';\n${migration}\nCOMMIT;`);
+  const performanceMigration = fs.readFileSync(PERFORMANCE_MIGRATION, 'utf8');
+  await managementQuery(`BEGIN; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='30s';\n${migration}\n${performanceMigration}\nCOMMIT;`);
 }
 
 async function ensureRun(plan, planSha) {
@@ -287,18 +290,20 @@ async function insertBatch(batch) {
     WITH payload AS (
       SELECT * FROM jsonb_to_recordset('${json}'::jsonb) AS x(
         listing_id uuid, source_hash text, source_candidate_hash text, release_order integer,
-        public_reference text, public_model text, identity_source text, catalog_reference_confirmed boolean, price_lane text)
+        public_reference text, public_model text, identity_source text, catalog_reference_confirmed boolean,
+        price_lane text, listing_type text)
     )
     INSERT INTO public.qnsa_cartier_release_manifest(
       listing_id, release_run_key, release_order, source_hash, source_candidate_hash,
-      public_reference, public_model, identity_source, catalog_reference_confirmed, price_lane)
+      public_reference, public_model, identity_source, catalog_reference_confirmed, price_lane, listing_type)
     SELECT listing_id, ${sqlText(RELEASE_RUN_KEY)}, release_order, source_hash, source_candidate_hash,
-      public_reference, public_model, identity_source, catalog_reference_confirmed, price_lane FROM payload
+      public_reference, public_model, identity_source, catalog_reference_confirmed, price_lane, listing_type FROM payload
     ON CONFLICT (listing_id) DO UPDATE SET
       release_run_key=EXCLUDED.release_run_key, release_order=EXCLUDED.release_order,
       source_hash=EXCLUDED.source_hash, source_candidate_hash=EXCLUDED.source_candidate_hash,
       public_reference=EXCLUDED.public_reference, public_model=EXCLUDED.public_model, identity_source=EXCLUDED.identity_source,
-      catalog_reference_confirmed=EXCLUDED.catalog_reference_confirmed, price_lane=EXCLUDED.price_lane;
+      catalog_reference_confirmed=EXCLUDED.catalog_reference_confirmed, price_lane=EXCLUDED.price_lane,
+      listing_type=EXCLUDED.listing_type;
     SELECT count(*)::integer AS reconciled FROM public.qnsa_cartier_release_manifest
       WHERE release_run_key=${sqlText(RELEASE_RUN_KEY)} AND listing_id = ANY(ARRAY[${idArray}]);
   COMMIT;`);
