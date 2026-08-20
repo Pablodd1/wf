@@ -100,9 +100,15 @@ AS $$
       m.release_order, m.public_reference, m.catalog_reference_confirmed, m.price_lane,
       l.id, l.source_record_id, l.created_at, l.user_name, l.from_name,
       l.raw_message_text, l.listing_type, l.intent, l.brand_original, l.reference_original,
+      l.reference_normalized,
       l.dial_color_normalized, l.condition_normalized, l.price_usd, l.price_normalized,
       l.currency_normalized, l.overall_confidence, l.verdict, l.location,
-      dl.dealer_id AS exact_dealer_id
+      dl.dealer_id AS exact_dealer_id,
+      CASE
+        WHEN btrim(l.reference_normalized) ~ '^[0-9]+$'
+          THEN btrim(l.reference_normalized)::numeric = COALESCE(l.price_normalized, l.price_usd)
+        ELSE false
+      END AS reference_price_collision
     FROM public.qnsa_vacheron_overseas_release_control c
     JOIN public.qnsa_vacheron_overseas_release_manifest m
       ON m.release_run_key = c.release_run_key
@@ -149,21 +155,25 @@ AS $$
     'catalog_dial', s.dial_color_normalized,
     'condition', s.condition_normalized,
     'workbook_price_usd', CASE
+      WHEN s.reference_price_collision THEN NULL
       WHEN s.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX') THEN s.price_usd
       WHEN s.price_lane = 'OWNER_ASSUMED_USD_CANDIDATE' THEN s.price_normalized
       ELSE NULL END,
-    'source_price_amount', s.price_normalized,
-    'source_currency', s.currency_normalized,
-    'price_evidence_status', s.price_lane,
+    'source_price_amount', CASE WHEN s.reference_price_collision THEN NULL ELSE s.price_normalized END,
+    'source_currency', CASE WHEN s.reference_price_collision THEN NULL ELSE s.currency_normalized END,
+    'price_evidence_status', CASE WHEN s.reference_price_collision
+      THEN 'REFERENCE_PRICE_COLLISION_WITHHELD' ELSE s.price_lane END,
     'confidence', s.overall_confidence,
     'verdict', s.verdict,
     'verification_status', 'APPROVED_SINGLE_CANDIDATE',
     'user_image_url', NULL,
     'imported_at', s.created_at,
     'has_exact_source_image', false,
-    'verified_price_usd', CASE WHEN s.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX')
+    'verified_price_usd', CASE WHEN NOT s.reference_price_collision
+      AND s.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX')
       THEN s.price_usd ELSE NULL END,
-    'has_verified_usd_price', s.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX')
+    'has_verified_usd_price', NOT s.reference_price_collision
+      AND s.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX')
       AND COALESCE(s.price_usd, 0) > 0,
     'has_complete_identity', s.public_reference IS NOT NULL,
     'trading_floor_status', 'RELEASED_VACHERON_OVERSEAS',
@@ -220,6 +230,11 @@ AS $$
     count(*) FILTER (
       WHERE upper(COALESCE(l.listing_type, l.intent, '')) = 'WTS'
         AND m.price_lane NOT IN ('PRICE_NOT_SUPPLIED', 'WTB_PRICE_WITHHELD')
+        AND NOT CASE
+          WHEN btrim(l.reference_normalized) ~ '^[0-9]+$'
+            THEN btrim(l.reference_normalized)::numeric = COALESCE(l.price_normalized, l.price_usd)
+          ELSE false
+        END
     )::bigint AS priced_wts_count,
     bool_or(m.catalog_reference_confirmed) AS catalog_reference_confirmed
   FROM public.qnsa_vacheron_overseas_release_control c
