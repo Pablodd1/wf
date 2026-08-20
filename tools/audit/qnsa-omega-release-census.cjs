@@ -138,14 +138,14 @@ WITH control AS MATERIALIZED (
 ), models AS (
   SELECT COALESCE(NULLIF(btrim(model_normalized), ''), 'UNRESOLVED') AS model, count(*)::bigint AS row_count
   FROM released GROUP BY 1 ORDER BY row_count DESC, model LIMIT 50
-), references AS (
+), reference_counts AS (
   SELECT COALESCE(NULLIF(btrim(reference_normalized), ''), 'UNRESOLVED') AS reference, count(*)::bigint AS row_count
   FROM released GROUP BY 1 ORDER BY row_count DESC, reference LIMIT 100
 )
 SELECT jsonb_build_object(
   'evidence', (SELECT evidence FROM metrics),
   'models', COALESCE((SELECT jsonb_agg(to_jsonb(models)) FROM models), '[]'::jsonb),
-  'top_references', COALESCE((SELECT jsonb_agg(to_jsonb(references)) FROM references), '[]'::jsonb)
+  'top_references', COALESCE((SELECT jsonb_agg(to_jsonb(reference_counts)) FROM reference_counts), '[]'::jsonb)
 ) AS report;`;
 }
 
