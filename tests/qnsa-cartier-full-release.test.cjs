@@ -136,6 +136,13 @@ test('Trading Floor unwraps table-valued Cartier RPC rows before publication gat
   assert.match(inventory, /const sourceRows = unwrapRpcRowData\(data\)/);
 });
 
+test('controlled Cartier pages retain their manifest offset instead of a zeroed six-brand cursor', () => {
+  assert.match(inventory, /const sixBrandKeysetCursor = sixBrandBroadScope && !controlledBrandRelease/);
+  assert.match(inventory, /brandKeysets: sixBrandKeysetCursor/);
+  assert.match(inventory, /brandScope: sixBrandKeysetCursor \? sixBrandScope : null/);
+  assert.match(inventory, /!sixBrandBroadScope \|\| controlledBrandRelease/);
+});
+
 test('candidate query preserves source lineage and does not infer parent or image evidence', () => {
   const sql = release.candidateSql(release.catalogReferenceKeys());
   assert.match(sql, /source_hash ~ '\^\[0-9a-f\]\{64\}\$'/);
