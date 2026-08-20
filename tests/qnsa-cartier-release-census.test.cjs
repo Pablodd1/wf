@@ -18,7 +18,6 @@ test('Cartier census is QNSA-pinned, aggregate-only, and read-only', () => {
   assert.match(workflow, /environment: production/);
   assert.match(workflow, /permissions:\s*\n\s*contents: read/);
 });
-
 test('Cartier census separates identity, intent, price, media, dealer, and missing fields', () => {
   for (const marker of [
     'identity_held_rows', 'release_duplicates_excluded', 'release_wts_rows', 'release_wtb_rows',
@@ -27,5 +26,4 @@ test('Cartier census separates identity, intent, price, media, dealer, and missi
     'release_exact_image_claim_rows', 'release_exact_dealer_linked_rows', 'release_missing_reference_rows',
   ]) assert.match(script, new RegExp(marker));
 });
-
 

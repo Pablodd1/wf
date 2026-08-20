@@ -50,5 +50,3 @@ jobs:
           path: audit-output/cartier-release-census/report.json
           if-no-files-found: error
           retention-days: 14
-
-
