@@ -52,6 +52,11 @@ test('Vacheron Overseas census reports the required source and cohort boundaries
     'release_exact_image_rows',
     'release_exact_dealer_linked_rows',
     'release_listing_ids_sha256',
+    'release_owner_assumed_usd_candidates',
+    'release_named_currency_requires_dated_fx',
+    'release_pr_independently_qualified',
+    'release_pr_excluded_from_averages',
+    'source_overseas_bundle_or_parent_rows',
     'explicit_wts_rows',
     'explicit_wtb_rows',
     'missing_or_other_intent_rows',
@@ -75,6 +80,8 @@ test('Vacheron Overseas census reports the required source and cohort boundaries
   assert.doesNotMatch(workflow, /original_timestamp/);
   assert.doesNotMatch(workflow, /source_created_on/);
   assert.match(workflow, /\) \|\| jsonb_build_object\(/);
+  assert.match(workflow, /percentile_cont\(0\.25\)/);
+  assert.match(workflow, /3\.0 \* \(stats\.q3 - stats\.q1\)/);
 });
 
 test('management credential is scoped only to the census step', () => {

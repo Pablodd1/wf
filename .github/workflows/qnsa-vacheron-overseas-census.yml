@@ -110,6 +110,28 @@ jobs:
             FROM cohort
           ), release_rows AS MATERIALIZED (
             SELECT * FROM release_ranked WHERE seller_candidate_rank = 1
+          ), pr_candidates AS MATERIALIZED (
+            SELECT * FROM release_rows
+            WHERE source_intent = 'WTS'
+              AND catalog_overseas_reference
+              AND NULLIF(btrim(dial_color_normalized), '') IS NOT NULL
+              AND COALESCE(price_usd, 0) > 0
+              AND upper(COALESCE(currency_normalized, '')) IN ('USD','USDT')
+          ), pr_stats AS MATERIALIZED (
+            SELECT reference_normalized, dial_color_normalized,
+              percentile_cont(0.25) WITHIN GROUP (ORDER BY price_usd) AS q1,
+              percentile_cont(0.75) WITHIN GROUP (ORDER BY price_usd) AS q3,
+              count(*) AS cohort_count
+            FROM pr_candidates
+            GROUP BY reference_normalized, dial_color_normalized
+          ), pr_qualified AS MATERIALIZED (
+            SELECT candidate.*
+            FROM pr_candidates candidate
+            JOIN pr_stats stats USING (reference_normalized, dial_color_normalized)
+            WHERE stats.cohort_count < 2
+              OR candidate.price_usd BETWEEN
+                GREATEST(0, stats.q1 - 3.0 * (stats.q3 - stats.q1))
+                AND stats.q3 + 3.0 * (stats.q3 - stats.q1)
           ), metrics AS (
             SELECT jsonb_build_object(
               'project_ref', 'qnsafosakvonzgfcsphh',
@@ -166,6 +188,23 @@ jobs:
                 WHERE source_intent = 'WTS' AND COALESCE(price_normalized, 0) > 0
                   AND upper(COALESCE(currency_normalized, '')) NOT IN ('USD','USDT')
                   AND NOT (COALESCE(conversion_rate, 0) > 0 AND conversion_timestamp IS NOT NULL)),
+              'release_owner_assumed_usd_candidates', (SELECT count(*) FROM release_rows
+                WHERE source_intent = 'WTS' AND COALESCE(price_normalized, 0) > 0
+                  AND NULLIF(btrim(currency_normalized), '') IS NULL),
+              'release_named_currency_requires_dated_fx', (SELECT count(*) FROM release_rows
+                WHERE source_intent = 'WTS' AND COALESCE(price_normalized, 0) > 0
+                  AND NULLIF(btrim(currency_normalized), '') IS NOT NULL
+                  AND upper(currency_normalized) NOT IN ('USD','USDT')
+                  AND NOT (COALESCE(conversion_rate, 0) > 0 AND conversion_timestamp IS NOT NULL)),
+              'release_pr_independently_qualified', (SELECT count(*) FROM pr_qualified),
+              'release_pr_excluded_from_averages', (SELECT count(*) FROM release_rows
+                WHERE source_intent = 'WTS' AND has_stored_price) - (SELECT count(*) FROM pr_qualified),
+              'source_overseas_bundle_or_parent_rows', (SELECT count(*)
+                FROM control c JOIN staging.listings l ON l.normalization_run_key = c.enabled_run_key
+                WHERE l.brand_normalized = 'Vacheron Constantin'
+                  AND COALESCE(l.raw_message_text, '') ~* '(^|[^[:alnum:]])overseas([^[:alnum:]]|$)'
+                  AND (l.parent_id IS NOT NULL OR COALESCE(l.is_bundle, false)
+                    OR COALESCE(l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') <> 'SINGLE_CANDIDATE')),
               'release_exact_image_rows', (SELECT count(*) FROM release_rows
                 WHERE public_image_eligible = true
                   AND NULLIF(btrim(source_media_key), '') IS NOT NULL
