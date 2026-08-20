@@ -119,7 +119,20 @@ jobs:
               'overseas_union_rows', count(*),
               'overseas_unique_listing_ids', count(DISTINCT id),
               'overseas_unique_source_records', count(DISTINCT source_record_id),
+              'overseas_unique_source_hashes', count(DISTINCT source_hash),
               'overseas_unique_candidate_hashes', count(DISTINCT source_candidate_hash),
+              'overseas_unique_source_candidate_pairs', count(DISTINCT (source_hash, source_candidate_hash)),
+              'overseas_unique_seller_candidate_pairs', count(DISTINCT (
+                COALESCE(NULLIF(btrim(contact_number), ''), NULLIF(btrim(from_number), ''),
+                  NULLIF(btrim(user_name), ''), NULLIF(btrim(from_name), ''), 'UNLINKED'),
+                source_candidate_hash)),
+              'exact_source_candidate_repost_rows', count(*)
+                - count(DISTINCT (source_hash, source_candidate_hash)),
+              'seller_candidate_repost_rows', count(*)
+                - count(DISTINCT (
+                    COALESCE(NULLIF(btrim(contact_number), ''), NULLIF(btrim(from_number), ''),
+                      NULLIF(btrim(user_name), ''), NULLIF(btrim(from_name), ''), 'UNLINKED'),
+                    source_candidate_hash)),
               'explicit_wts_rows', count(*) FILTER (WHERE source_intent = 'WTS'),
               'explicit_wtb_rows', count(*) FILTER (WHERE source_intent = 'WTB'),
               'missing_or_other_intent_rows', count(*) FILTER (WHERE source_intent NOT IN ('WTS','WTB')),
