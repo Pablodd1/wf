@@ -76,10 +76,11 @@ function mergeVacheronReleaseReferences(catalogEntries, observedRows) {
     };
     byKey.set(key, {
       ...current,
-      listing_count: Number(row.listing_count || 0),
-      wts_observation_count: Number(row.wts_count || 0),
-      wtb_observation_count: Number(row.wtb_count || 0),
-      priced_wts_observation_count: Number(row.priced_wts_count || 0),
+      listing_count: Number(current.listing_count || 0) + Number(row.listing_count || 0),
+      wts_observation_count: Number(current.wts_observation_count || 0) + Number(row.wts_count || 0),
+      wtb_observation_count: Number(current.wtb_observation_count || 0) + Number(row.wtb_count || 0),
+      priced_wts_observation_count: Number(current.priced_wts_observation_count || 0)
+        + Number(row.priced_wts_count || 0),
       identity_source: row.catalog_reference_confirmed === true
         ? 'CATALOG_AND_RELEASE_MANIFEST'
         : current.identity_source,
