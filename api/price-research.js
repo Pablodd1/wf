@@ -144,6 +144,8 @@ function qnsaReferenceRowToMarketRow(row) {
     has_images: source.has_exact_source_image === true,
     owner_reviewed_identity: true,
     contact_publication_approved: contactApproved,
+    publication_lane: source.publication_lane || null,
+    catalog_reference_confirmed: source.catalog_reference_confirmed === true,
   };
 }
 
