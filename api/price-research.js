@@ -42,6 +42,7 @@ const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { enrichRowsWithExactDealerEvidence } = require('./_lib/listing-dealer-evidence.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
+const { isFourBrand, loadEffectivePage } = require('./_lib/four-brand-field-enrichment.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -404,6 +405,14 @@ async function loadQnsaVerifiedTradingPrices(client, {
 }) {
   let rpcMarketRows = [];
   let exactReleasedRows = [];
+  if (isFourBrand(brand) && !familyPrefix) {
+    const effectivePages = await Promise.all(referenceVariants.slice(0, 25).map(reference =>
+      loadEffectivePage(client, {
+        brand, reference, listingType: 'WTS', limit: Math.min(101, limit),
+      })));
+    const effectiveById = new Map(effectivePages.flat().map(row => [String(row.id), row]));
+    exactReleasedRows = [...effectiveById.values()].slice(0, limit);
+  }
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
@@ -423,9 +432,12 @@ async function loadQnsaVerifiedTradingPrices(client, {
     // downstream analytics eligibility gate.
     try {
       const exactEvidence = await loadQnsaExactReleasedEvidence(client, { brand, referenceVariants, limit });
-      exactReleasedRows = exactEvidence.rows
+      const recoveredRows = exactEvidence.rows
         .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS')
         .map(row => ({ ...row, exact_evidence_recovery_capped: exactEvidence.capped }));
+      const exactById = new Map(exactReleasedRows.map(row => [String(row.id), row]));
+      for (const row of recoveredRows) if (!exactById.has(String(row.id))) exactById.set(String(row.id), row);
+      exactReleasedRows = [...exactById.values()].slice(0, limit);
     } catch (error) {
       console.warn('[price-research] exact Trading evidence recovery unavailable:', error.message || error);
     }
@@ -437,9 +449,12 @@ async function loadQnsaVerifiedTradingPrices(client, {
       console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
     }
   }
-  if (['vacheron constantin', 'omega', 'cartier'].includes(String(brand || '').trim().toLowerCase())) {
-    const merged = new Map(exactReleasedRows.map(row => [String(row.id), row]));
-    for (const row of rpcMarketRows) merged.set(String(row.id), row);
+  if (['vacheron constantin', 'omega', 'cartier', 'tudor', 'zenith']
+    .includes(String(brand || '').trim().toLowerCase())) {
+    const merged = new Map(rpcMarketRows.map(row => [String(row.id), row]));
+    // The effective sidecar page is the authoritative presentation record for
+    // these four brands. Older priced RPC rows may supplement but never erase it.
+    for (const row of exactReleasedRows) merged.set(String(row.id), row);
     return [...merged.values()].map(row => {
       const canonicalVerified = ['SOURCE_EXPLICIT_USD_USDT', 'DATED_VERIFIED_FX']
         .includes(String(row.price_evidence_status || '').toUpperCase());
@@ -554,6 +569,15 @@ async function loadQnsaTradingDemand(client, {
   limit,
 }) {
   let rpcDemandRows = [];
+  let effectiveDemandRows = [];
+  if (isFourBrand(brand) && !familyPrefix) {
+    const effectivePages = await Promise.all(referenceVariants.slice(0, 25).map(reference =>
+      loadEffectivePage(client, {
+        brand, reference, listingType: 'WTB', limit: Math.min(101, limit),
+      })));
+    effectiveDemandRows = [...new Map(effectivePages.flat()
+      .map(row => [String(row.id), row])).values()].slice(0, limit);
+  }
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
@@ -572,9 +596,10 @@ async function loadQnsaTradingDemand(client, {
     } catch (error) {
       console.warn('[price-research] exact Trading demand recovery unavailable:', error.message || error);
     }
-    if (recovered.length || rpcDemandRows.length) {
+    if (effectiveDemandRows.length || recovered.length || rpcDemandRows.length) {
       const merged = new Map(recovered.map(row => [String(row.id), row]));
       for (const row of rpcDemandRows) merged.set(String(row.id), row);
+      for (const row of effectiveDemandRows) merged.set(String(row.id), row);
       return [...merged.values()];
     }
   }
