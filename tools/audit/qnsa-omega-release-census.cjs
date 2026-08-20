@@ -18,7 +18,18 @@ async function managementQuery(sql) {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: sql, read_only: true }),
   });
-  if (!response.ok) throw new Error(`QNSA read-only census failed with HTTP ${response.status}.`);
+  if (!response.ok) {
+    const body = await response.text();
+    let detail = '';
+    try {
+      const parsed = JSON.parse(body);
+      detail = String(parsed.message || parsed.error || parsed.code || '');
+    } catch {
+      detail = '';
+    }
+    detail = detail.replace(/[\r\n]+/g, ' ').replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]').slice(0, 240);
+    throw new Error(`QNSA read-only census failed with HTTP ${response.status}${detail ? `: ${detail}` : ''}.`);
+  }
   return response.json();
 }
 
