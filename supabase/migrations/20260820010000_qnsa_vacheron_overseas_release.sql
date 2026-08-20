@@ -198,13 +198,52 @@ AS $$
   FROM public.qnsa_vacheron_overseas_page_rows(p_limit, p_offset, p_listing_type, p_reference);
 $$;
 
+CREATE OR REPLACE FUNCTION public.qnsa_vacheron_overseas_reference_index()
+RETURNS TABLE(
+  reference text,
+  listing_count bigint,
+  wts_count bigint,
+  wtb_count bigint,
+  priced_wts_count bigint,
+  catalog_reference_confirmed boolean
+)
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public, staging, pg_catalog
+AS $$
+  SELECT
+    m.public_reference AS reference,
+    count(*)::bigint AS listing_count,
+    count(*) FILTER (WHERE upper(COALESCE(l.listing_type, l.intent, '')) = 'WTS')::bigint AS wts_count,
+    count(*) FILTER (WHERE upper(COALESCE(l.listing_type, l.intent, '')) = 'WTB')::bigint AS wtb_count,
+    count(*) FILTER (
+      WHERE upper(COALESCE(l.listing_type, l.intent, '')) = 'WTS'
+        AND m.price_lane NOT IN ('PRICE_NOT_SUPPLIED', 'WTB_PRICE_WITHHELD')
+    )::bigint AS priced_wts_count,
+    bool_or(m.catalog_reference_confirmed) AS catalog_reference_confirmed
+  FROM public.qnsa_vacheron_overseas_release_control c
+  JOIN public.qnsa_vacheron_overseas_release_manifest m
+    ON m.release_run_key = c.release_run_key
+  JOIN staging.listings l ON l.id = m.listing_id
+  WHERE c.singleton = true AND c.enabled = true
+    AND l.brand_normalized = 'Vacheron Constantin'
+    AND l.parent_id IS NULL AND COALESCE(l.is_bundle, false) = false
+    AND l.source_hash = m.source_hash
+    AND l.source_candidate_hash = m.source_candidate_hash
+  GROUP BY m.public_reference
+  ORDER BY count(*) DESC, m.public_reference NULLS LAST;
+$$;
+
 REVOKE ALL ON FUNCTION public.qnsa_vacheron_overseas_release_count(text),
   public.qnsa_vacheron_overseas_page_rows(integer,integer,text,text),
-  public.qnsa_vacheron_overseas_reference_rows(text,integer,integer,text)
+  public.qnsa_vacheron_overseas_reference_rows(text,integer,integer,text),
+  public.qnsa_vacheron_overseas_reference_index()
   FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.qnsa_vacheron_overseas_release_count(text),
   public.qnsa_vacheron_overseas_page_rows(integer,integer,text,text),
-  public.qnsa_vacheron_overseas_reference_rows(text,integer,integer,text)
+  public.qnsa_vacheron_overseas_reference_rows(text,integer,integer,text),
+  public.qnsa_vacheron_overseas_reference_index()
   TO service_role;
 
 NOTIFY pgrst, 'reload schema';
