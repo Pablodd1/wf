@@ -35,6 +35,9 @@ test('Vacheron Overseas census reports the required source and cohort boundaries
     'vacheron_source_rows',
     'normalized_model_exact_rows',
     'raw_overseas_mention_rows',
+    'catalog_overseas_reference_rows',
+    'catalog_reference_only_rows',
+    'raw_or_model_and_catalog_rows',
     'overseas_union_rows',
     'explicit_wts_rows',
     'explicit_wtb_rows',
@@ -53,6 +56,9 @@ test('Vacheron Overseas census reports the required source and cohort boundaries
   assert.match(workflow, /models/);
   assert.doesNotMatch(workflow, /\), references AS \(/);
   assert.match(workflow, /extensions\.digest\(convert_to\(/);
+  assert.match(workflow, /public\/catalog-source-v1\.json/);
+  assert.match(workflow, /__OVERSEAS_KEYS__/);
+  assert.match(workflow, /\^\[A-Z0-9\]\{3,50\}\$/);
 });
 
 test('management credential is scoped only to the census step', () => {
