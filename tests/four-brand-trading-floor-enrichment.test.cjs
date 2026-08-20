@@ -81,9 +81,10 @@ test('owner-assumed Cartier price displays and rates but stays outside averages'
   assert.equal(mapped.source_dealer_id, '11111111-1111-4111-8111-111111111111');
 });
 
-test('Tudor models are discoverable by catalog while its inventory release stays evidence-gated', () => {
+test('Tudor models are served from the exact controlled release manifest', () => {
   assert.match(modelsSource, /brand\.toLowerCase\(\) === 'tudor'/);
-  assert.match(modelsSource, /CATALOG_ONLY_UNTIL_CONTROLLED_RELEASE/);
+  assert.match(modelsSource, /qnsa_tudor_reference_index/);
+  assert.match(modelsSource, /EXACT_RELEASE_MANIFEST/);
   assert.ok(!inventory.publicationBrandsFromSummary({ brands: [], count_snapshot_available: false })
     .includes('Tudor'));
 });

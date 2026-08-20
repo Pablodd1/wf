@@ -69,11 +69,12 @@ function isMissingRpcError(error) {
 
 async function loadQnsaPriceRpcRows(client, args) {
   const brand = String(args?.p_brand || '').trim().toLowerCase();
-  if (brand === 'vacheron constantin' || brand === 'omega' || brand === 'cartier') {
+  if (brand === 'vacheron constantin' || brand === 'omega' || brand === 'cartier' || brand === 'tudor') {
     const references = [...new Set(args?.p_references || [])].filter(Boolean).slice(0, 8);
     const pages = await Promise.all(references.map(reference => client.rpc(
       brand === 'cartier' ? 'qnsa_cartier_reference_rows'
-        : brand === 'omega' ? 'qnsa_omega_reference_rows' : 'qnsa_vacheron_overseas_reference_rows', {
+        : brand === 'omega' ? 'qnsa_omega_reference_rows'
+        : brand === 'tudor' ? 'qnsa_tudor_reference_rows' : 'qnsa_vacheron_overseas_reference_rows', {
         p_reference: reference,
         p_limit: Math.min(101, Math.max(1, Number(args?.p_limit) || 101)),
         p_offset: 0,
@@ -102,7 +103,7 @@ function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin', 'omega'].includes(normalizedBrand)
+    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin', 'omega', 'tudor'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
     : null;
 }
@@ -225,13 +226,15 @@ async function loadQnsaExactReleasedEvidence(client, { brand, referenceVariants,
         const zenith = normalizedBrand === 'zenith';
         const vacheron = normalizedBrand === 'vacheron constantin';
         const omega = normalizedBrand === 'omega';
+        const tudor = normalizedBrand === 'tudor';
         const cartier = normalizedBrand === 'cartier';
         const { data, error } = await client.rpc(
           cartier ? 'qnsa_cartier_reference_rows'
             : omega ? 'qnsa_omega_reference_rows'
+            : tudor ? 'qnsa_tudor_reference_rows'
             : vacheron ? 'qnsa_vacheron_overseas_reference_rows'
             : (zenith ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows'),
-          (vacheron || omega || cartier) ? {
+          (vacheron || omega || cartier || tudor) ? {
             p_reference: reference,
             p_limit: EXACT_REFERENCE_RPC_PAGE_SIZE,
             p_offset: offset,

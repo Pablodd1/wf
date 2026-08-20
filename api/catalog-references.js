@@ -351,10 +351,12 @@ module.exports = async function handler(req, res) {
       _cache.set(cacheKey, { at: Date.now(), payload });
       return res.status(200).json(payload);
     }
-    if (['omega', 'cartier'].includes(brand.toLowerCase())) {
-      const canonicalBrand = brand.toLowerCase() === 'cartier' ? 'Cartier' : 'Omega';
+    if (['omega', 'cartier', 'tudor'].includes(brand.toLowerCase())) {
+      const canonicalBrand = brand.toLowerCase() === 'cartier' ? 'Cartier'
+        : brand.toLowerCase() === 'tudor' ? 'Tudor' : 'Omega';
       const releaseIndexRpc = canonicalBrand === 'Cartier'
-        ? 'qnsa_cartier_reference_index' : 'qnsa_omega_reference_index';
+        ? 'qnsa_cartier_reference_index'
+        : canonicalBrand === 'Tudor' ? 'qnsa_tudor_reference_index' : 'qnsa_omega_reference_index';
       const { data: observedRows, error: observedError } = await client.rpc(releaseIndexRpc);
       if (observedError) throw observedError;
       const scopedObserved = (observedRows || []).filter(row =>

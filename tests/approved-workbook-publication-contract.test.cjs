@@ -27,7 +27,7 @@ test('Trading Floor shows USD only for source-confirmed eligible evidence', () =
   assert.doesNotMatch(page, /OWNER_DOLLAR_USD_POLICY|OWNER_K_USD_POLICY/);
   assert.match(page, /verifiedUsd !== null[\s\S]*formatUsdPrice\(verifiedUsd\)/);
   assert.doesNotMatch(page, /Price on request/);
-  assert.match(page, /Workbook-reviewed USD - not in averages/);
+  assert.match(page, /Owner-assumed USD - tracked, excluded from averages unless independently qualified/);
   assert.match(page, /Original source price · no USD conversion/);
   assert.match(page, /contact\?\.contact_channels\?\.whatsapp/);
   assert.doesNotMatch(page, /\{contact\?\.phone_display/);
