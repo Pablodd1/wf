@@ -27,11 +27,14 @@ test('Trading Floor binds brand-selected model filters to the server cursor', ()
   assert.match(inventorySource, /qnsa_zenith_model_page_rows/);
 });
 
-test('controlled model SQL pages manifests before immutable staging joins', () => {
-  assert.match(controlledSql, /idx_qnsa_omega_manifest_run_model_type_order/);
-  assert.match(controlledSql, /idx_qnsa_cartier_manifest_run_model_type_order/);
-  assert.match(controlledSql, /manifest_page AS MATERIALIZED/);
-  assert.ok(controlledSql.indexOf('LIMIT LEAST') < controlledSql.indexOf('JOIN staging.listings l'));
+test('controlled model SQL filters the indexed manifest then verifies intent and lineage before paging', () => {
+  assert.match(controlledSql, /idx_qnsa_omega_manifest_run_model_order/);
+  assert.match(controlledSql, /idx_qnsa_cartier_manifest_run_model_order/);
+  assert.match(controlledSql, /manifest_rows AS MATERIALIZED/);
+  const pageFunction = controlledSql.indexOf('CREATE OR REPLACE FUNCTION public.qnsa_controlled_model_page_rows');
+  assert.ok(controlledSql.indexOf('JOIN staging.listings l', pageFunction)
+    < controlledSql.indexOf('LIMIT LEAST', pageFunction));
+  assert.match(controlledSql, /upper\(COALESCE\(l\.listing_type, l\.intent, ''\)\)/);
   assert.match(controlledSql, /source_hash = m\.source_hash/);
   assert.match(controlledSql, /source_candidate_hash = m\.source_candidate_hash/);
   assert.match(controlledSql, /REVOKE ALL[\s\S]*FROM PUBLIC, anon, authenticated/);
@@ -47,7 +50,7 @@ test('Zenith model browsing is bounded to catalog references and exact release r
 test('model schema workflow is manual, QNSA-pinned, checksum-bound, and DML-free', () => {
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /qnsafosakvonzgfcsphh/);
-  assert.match(workflow, /1594c4fd7326b975d89963e29ac1595b95e2c51faec0e93e745435b8b44eb9bf/);
+  assert.match(workflow, /9ab36c398b40967bba4e8548f57383f9455534743e150bcc011cd6b5a5fbfac3/);
   assert.match(workflow, /2c58a2bbc915cf23323c31165bf21d01de2bc69c8e1cb66d84e6ba9f4a2e2f20/);
   assert.match(workflow, /inventory DML/);
   assert.match(workflow, /ROLLBACK;/);
