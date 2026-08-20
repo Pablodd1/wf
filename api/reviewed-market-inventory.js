@@ -1892,7 +1892,10 @@ module.exports = async function handler(req, res) {
       const releaseCountRpc = cartierRelease ? 'qnsa_cartier_release_count'
         : omegaRelease ? 'qnsa_omega_release_count' : 'qnsa_vacheron_overseas_release_count';
       const { data: exactCount, error: exactCountError } = await client
-        .rpc(releaseCountRpc, { p_listing_type: databaseListingType });
+        .rpc(releaseCountRpc, {
+          p_listing_type: controlledBrandRelease && ['WTS', 'WTB'].includes(listingType)
+            ? listingType : databaseListingType,
+        });
       publicInventoryTotal = exactCountError ? null : Number(exactCount || 0);
     }
     const pageWindow = resolvePageWindow({
@@ -2235,7 +2238,8 @@ module.exports = async function handler(req, res) {
           body: JSON.stringify({
             p_limit: qnsaBrandScanLimit,
             p_offset: requestedOffset,
-            p_listing_type: databaseListingType,
+            p_listing_type: controlledBrandRelease && ['WTS', 'WTB'].includes(listingType)
+              ? listingType : databaseListingType,
             p_reference: requestedReference || null,
           }),
         });
