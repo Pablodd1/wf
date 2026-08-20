@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 10
     env:
       PROJECT_REF: qnsafosakvonzgfcsphh
-      CONTROLLED_SHA256: 1594c4fd7326b975d89963e29ac1595b95e2c51faec0e93e745435b8b44eb9bf
+      CONTROLLED_SHA256: 9ab36c398b40967bba4e8548f57383f9455534743e150bcc011cd6b5a5fbfac3
       ZENITH_SHA256: 2c58a2bbc915cf23323c31165bf21d01de2bc69c8e1cb66d84e6ba9f4a2e2f20
     steps:
       - uses: actions/checkout@v4

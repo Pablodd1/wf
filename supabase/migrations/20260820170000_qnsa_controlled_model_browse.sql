@@ -1,12 +1,13 @@
 -- Exact model-scoped Trading Floor browsing for the reviewed Omega and Cartier
--- manifests. The manifest is paged before joining immutable staging evidence.
+-- manifests. Model candidates are indexed before their exact immutable
+-- staging intent and lineage are verified, then the verified set is paged.
 
 BEGIN;
 
-CREATE INDEX IF NOT EXISTS idx_qnsa_omega_manifest_run_model_type_order
-  ON public.qnsa_omega_release_manifest(release_run_key, public_model, listing_type, release_order);
-CREATE INDEX IF NOT EXISTS idx_qnsa_cartier_manifest_run_model_type_order
-  ON public.qnsa_cartier_release_manifest(release_run_key, public_model, listing_type, release_order);
+CREATE INDEX IF NOT EXISTS idx_qnsa_omega_manifest_run_model_order
+  ON public.qnsa_omega_release_manifest(release_run_key, public_model, release_order);
+CREATE INDEX IF NOT EXISTS idx_qnsa_cartier_manifest_run_model_order
+  ON public.qnsa_cartier_release_manifest(release_run_key, public_model, release_order);
 
 CREATE OR REPLACE FUNCTION public.qnsa_controlled_model_release_count(
   p_brand text, p_model text, p_listing_type text DEFAULT NULL
@@ -20,17 +21,21 @@ AS $$
       SELECT count(*)
       FROM public.qnsa_omega_release_control c
       JOIN public.qnsa_omega_release_manifest m ON m.release_run_key = c.release_run_key
+      JOIN staging.listings l ON l.id = m.listing_id
       WHERE c.singleton = true AND c.enabled = true
         AND m.public_model = btrim(p_model)
-        AND (p_listing_type IS NULL OR m.listing_type = upper(p_listing_type))
+        AND l.source_hash = m.source_hash AND l.source_candidate_hash = m.source_candidate_hash
+        AND (p_listing_type IS NULL OR upper(COALESCE(l.listing_type, l.intent, '')) = upper(p_listing_type))
     )
     WHEN 'Cartier' THEN (
       SELECT count(*)
       FROM public.qnsa_cartier_release_control c
       JOIN public.qnsa_cartier_release_manifest m ON m.release_run_key = c.release_run_key
+      JOIN staging.listings l ON l.id = m.listing_id
       WHERE c.singleton = true AND c.enabled = true
         AND m.public_model = btrim(p_model)
-        AND (p_listing_type IS NULL OR m.listing_type = upper(p_listing_type))
+        AND l.source_hash = m.source_hash AND l.source_candidate_hash = m.source_candidate_hash
+        AND (p_listing_type IS NULL OR upper(COALESCE(l.listing_type, l.intent, '')) = upper(p_listing_type))
     )
     ELSE 0
   END;
@@ -47,41 +52,35 @@ SET search_path = public, staging, pg_catalog
 AS $$
   WITH manifest_rows AS MATERIALIZED (
     SELECT 'Omega'::text AS canonical_brand, m.release_order, m.public_reference,
-      m.public_model, m.catalog_reference_confirmed, m.price_lane, m.listing_type,
+      m.public_model, m.catalog_reference_confirmed, m.price_lane,
       m.listing_id, m.source_hash, m.source_candidate_hash
     FROM public.qnsa_omega_release_control c
     JOIN public.qnsa_omega_release_manifest m ON m.release_run_key = c.release_run_key
     WHERE btrim(p_brand) = 'Omega' AND c.singleton = true AND c.enabled = true
       AND m.public_model = btrim(p_model)
-      AND (p_listing_type IS NULL OR m.listing_type = upper(p_listing_type))
       AND (p_reference IS NULL OR regexp_replace(upper(COALESCE(m.public_reference, '')), '[^A-Z0-9]', '', 'g')
         = regexp_replace(upper(p_reference), '[^A-Z0-9]', '', 'g'))
     UNION ALL
     SELECT 'Cartier'::text, m.release_order, m.public_reference,
-      m.public_model, m.catalog_reference_confirmed, m.price_lane, m.listing_type,
+      m.public_model, m.catalog_reference_confirmed, m.price_lane,
       m.listing_id, m.source_hash, m.source_candidate_hash
     FROM public.qnsa_cartier_release_control c
     JOIN public.qnsa_cartier_release_manifest m ON m.release_run_key = c.release_run_key
     WHERE btrim(p_brand) = 'Cartier' AND c.singleton = true AND c.enabled = true
       AND m.public_model = btrim(p_model)
-      AND (p_listing_type IS NULL OR m.listing_type = upper(p_listing_type))
       AND (p_reference IS NULL OR regexp_replace(upper(COALESCE(m.public_reference, '')), '[^A-Z0-9]', '', 'g')
         = regexp_replace(upper(p_reference), '[^A-Z0-9]', '', 'g'))
-  ), manifest_page AS MATERIALIZED (
-    SELECT * FROM manifest_rows
-    ORDER BY release_order
-    LIMIT LEAST(GREATEST(COALESCE(p_limit, 51), 1), 101)
-    OFFSET GREATEST(COALESCE(p_offset, 0), 0)
   ), selected AS MATERIALIZED (
     SELECT m.*, l.id, l.source_record_id, l.created_at, l.user_name, l.from_name,
       l.raw_message_text, l.brand_original, l.reference_original, l.reference_normalized,
+      upper(COALESCE(l.listing_type, l.intent, '')) AS listing_type,
       l.dial_color_normalized, l.condition_normalized, l.price_usd, l.price_normalized,
       l.currency_normalized, l.overall_confidence, l.verdict, l.location,
       dl.dealer_id AS exact_dealer_id,
       CASE WHEN btrim(l.reference_normalized) ~ '^[0-9]+$'
         THEN COALESCE(btrim(l.reference_normalized)::numeric = COALESCE(l.price_normalized, l.price_usd), false)
         ELSE false END AS reference_price_collision
-    FROM manifest_page m
+    FROM manifest_rows m
     JOIN staging.listings l ON l.id = m.listing_id
     LEFT JOIN public.dealer_listing_links dl ON dl.listing_id = l.id AND dl.link_status = 'APPLIED'
     WHERE l.brand_normalized = m.canonical_brand
@@ -89,6 +88,11 @@ AS $$
       AND COALESCE(l.provenance_metadata->>'bundle_status', 'SINGLE_CANDIDATE') = 'SINGLE_CANDIDATE'
       AND l.raw_message_version_id IS NOT NULL AND COALESCE(l.source_record_id, '') <> ''
       AND l.source_hash = m.source_hash AND l.source_candidate_hash = m.source_candidate_hash
+      AND upper(COALESCE(l.listing_type, l.intent, '')) IN ('WTS','WTB')
+      AND (p_listing_type IS NULL OR upper(COALESCE(l.listing_type, l.intent, '')) = upper(p_listing_type))
+    ORDER BY m.release_order
+    LIMIT LEAST(GREATEST(COALESCE(p_limit, 51), 1), 101)
+    OFFSET GREATEST(COALESCE(p_offset, 0), 0)
   )
   SELECT jsonb_build_object(
     'id', s.id::text, 'parent_id', NULL, 'source_file', 'MARIADB_IMMUTABLE_RAW',
