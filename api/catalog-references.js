@@ -351,16 +351,19 @@ module.exports = async function handler(req, res) {
       _cache.set(cacheKey, { at: Date.now(), payload });
       return res.status(200).json(payload);
     }
-    if (brand.toLowerCase() === 'omega') {
-      const { data: observedRows, error: observedError } = await client.rpc('qnsa_omega_reference_index');
+    if (['omega', 'cartier'].includes(brand.toLowerCase())) {
+      const canonicalBrand = brand.toLowerCase() === 'cartier' ? 'Cartier' : 'Omega';
+      const releaseIndexRpc = canonicalBrand === 'Cartier'
+        ? 'qnsa_cartier_reference_index' : 'qnsa_omega_reference_index';
+      const { data: observedRows, error: observedError } = await client.rpc(releaseIndexRpc);
       if (observedError) throw observedError;
       const scopedObserved = (observedRows || []).filter(row =>
         String(row.model || '').trim().toLowerCase() === model.toLowerCase());
       const merged = mergeVacheronReleaseReferences(
-        listCanonicalCatalogReferences('Omega', model), scopedObserved);
+        listCanonicalCatalogReferences(canonicalBrand, model), scopedObserved);
       const payload = {
         success: true,
-        brand: 'Omega',
+        brand: canonicalBrand,
         model,
         reference_count: merged.references.length,
         observed_listing_count: merged.references.reduce((sum, item) => sum + Number(item.listing_count || 0), 0),

@@ -137,13 +137,16 @@ module.exports = async function handler(req, res) {
   }
 
   try {
-    if (brand.toLowerCase() === 'omega') {
+    if (['omega', 'cartier'].includes(brand.toLowerCase())) {
       const client = getClient();
-      const { data: observedRows, error: observedError } = await client.rpc('qnsa_omega_reference_index');
+      const canonicalBrand = brand.toLowerCase() === 'cartier' ? 'Cartier' : 'Omega';
+      const releaseIndexRpc = canonicalBrand === 'Cartier'
+        ? 'qnsa_cartier_reference_index' : 'qnsa_omega_reference_index';
+      const { data: observedRows, error: observedError } = await client.rpc(releaseIndexRpc);
       if (observedError) throw observedError;
       const grouped = new Map();
       for (const row of observedRows || []) {
-        const model = String(row.model || 'Omega').trim() || 'Omega';
+        const model = String(row.model || canonicalBrand).trim() || canonicalBrand;
         const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
         if (row.reference) current.references.add(String(row.reference));
         current.listing_count += Number(row.listing_count || 0);
@@ -156,7 +159,7 @@ module.exports = async function handler(req, res) {
       })).sort((a, b) => b.listing_count - a.listing_count || a.model.localeCompare(b.model));
       const payload = {
         success: true,
-        brand: 'Omega',
+        brand: canonicalBrand,
         model_count: models.length,
         catalog_reference_count: models.reduce((sum, item) => sum + item.reference_count, 0),
         models,

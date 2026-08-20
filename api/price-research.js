@@ -69,10 +69,11 @@ function isMissingRpcError(error) {
 
 async function loadQnsaPriceRpcRows(client, args) {
   const brand = String(args?.p_brand || '').trim().toLowerCase();
-  if (brand === 'vacheron constantin' || brand === 'omega') {
+  if (brand === 'vacheron constantin' || brand === 'omega' || brand === 'cartier') {
     const references = [...new Set(args?.p_references || [])].filter(Boolean).slice(0, 8);
     const pages = await Promise.all(references.map(reference => client.rpc(
-      brand === 'omega' ? 'qnsa_omega_reference_rows' : 'qnsa_vacheron_overseas_reference_rows', {
+      brand === 'cartier' ? 'qnsa_cartier_reference_rows'
+        : brand === 'omega' ? 'qnsa_omega_reference_rows' : 'qnsa_vacheron_overseas_reference_rows', {
         p_reference: reference,
         p_limit: Math.min(101, Math.max(1, Number(args?.p_limit) || 101)),
         p_offset: 0,
@@ -224,11 +225,13 @@ async function loadQnsaExactReleasedEvidence(client, { brand, referenceVariants,
         const zenith = normalizedBrand === 'zenith';
         const vacheron = normalizedBrand === 'vacheron constantin';
         const omega = normalizedBrand === 'omega';
+        const cartier = normalizedBrand === 'cartier';
         const { data, error } = await client.rpc(
-          omega ? 'qnsa_omega_reference_rows'
+          cartier ? 'qnsa_cartier_reference_rows'
+            : omega ? 'qnsa_omega_reference_rows'
             : vacheron ? 'qnsa_vacheron_overseas_reference_rows'
             : (zenith ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows'),
-          (vacheron || omega) ? {
+          (vacheron || omega || cartier) ? {
             p_reference: reference,
             p_limit: EXACT_REFERENCE_RPC_PAGE_SIZE,
             p_offset: offset,
@@ -431,7 +434,7 @@ async function loadQnsaVerifiedTradingPrices(client, {
       console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
     }
   }
-  if (['vacheron constantin', 'omega'].includes(String(brand || '').trim().toLowerCase())) {
+  if (['vacheron constantin', 'omega', 'cartier'].includes(String(brand || '').trim().toLowerCase())) {
     const merged = new Map(exactReleasedRows.map(row => [String(row.id), row]));
     for (const row of rpcMarketRows) merged.set(String(row.id), row);
     return [...merged.values()].map(row => {
