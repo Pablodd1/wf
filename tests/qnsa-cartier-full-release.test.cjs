@@ -9,6 +9,8 @@ const release = require('../tools/intake/release-qnsa-cartier.cjs');
 const root = path.join(__dirname, '..');
 const migration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
   '20260820150000_qnsa_cartier_full_release.sql'), 'utf8');
+const performanceMigration = fs.readFileSync(path.join(root, 'supabase', 'migrations',
+  '20260820153000_qnsa_cartier_release_rpc_performance.sql'), 'utf8');
 const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
   'qnsa-cartier-release.yml'), 'utf8');
 const inventory = fs.readFileSync(path.join(root, 'api', 'reviewed-market-inventory.js'), 'utf8');
@@ -81,6 +83,20 @@ test('Trading Floor and Price Research route Cartier through exact release RPCs'
   assert.match(research, /'vacheron constantin'/);
   assert.match(research, /canonical_qnsa_price_evidence_checked: true/);
   assert.match(migration, /qnsa_cartier_reference_index/);
+});
+
+test('Cartier customer RPCs page the release manifest before staging and index without staging scans', () => {
+  assert.match(performanceMigration, /WITH manifest_page AS MATERIALIZED/);
+  assert.match(performanceMigration, /FROM manifest_page m\s+JOIN staging\.listings l/);
+  assert.match(performanceMigration, /LIMIT LEAST[\s\S]*OFFSET GREATEST[\s\S]*\), selected AS MATERIALIZED/);
+  assert.match(performanceMigration, /CREATE OR REPLACE FUNCTION public\.qnsa_cartier_reference_index/);
+  const indexBody = performanceMigration.split('CREATE OR REPLACE FUNCTION public.qnsa_cartier_reference_index')[1];
+  assert.doesNotMatch(indexBody, /JOIN staging\.listings/);
+  assert.match(performanceMigration, /m\.listing_type = upper\(p_listing_type\)/);
+  const releaseSource = fs.readFileSync(path.join(root, 'tools', 'intake',
+    'release-qnsa-cartier.cjs'), 'utf8');
+  assert.match(releaseSource, /20260820153000_qnsa_cartier_release_rpc_performance\.sql/);
+  assert.match(releaseSource, /price_lane text, listing_type text/);
 });
 
 test('Cartier reference picker merges catalog and exact source-proven release references', () => {
