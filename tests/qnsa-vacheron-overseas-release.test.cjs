@@ -24,6 +24,8 @@ test('release is exact, Vacheron-only, private, and reversible', () => {
   assert.match(migration, /QNSA_VACHERON_OVERSEAS_RELEASE_V1/);
   assert.match(migration, /user_image_url', NULL/);
   assert.match(migration, /contact_publication_approved', false/);
+  assert.doesNotMatch(migration, /original_timestamp/);
+  assert.match(migration, /'posting_date', s\.created_at/);
   assert.match(migration, /ALTER TABLE public\.qnsa_vacheron_overseas_release_manifest ENABLE ROW LEVEL SECURITY/);
   assert.match(migration, /REVOKE ALL[\s\S]*FROM PUBLIC, anon, authenticated/);
   assert.doesNotMatch(migration, /(?:INSERT|UPDATE|DELETE)[\s\S]{0,80}(?:public\.dealers|dealer_reviews|dealer_group_memberships)/i);

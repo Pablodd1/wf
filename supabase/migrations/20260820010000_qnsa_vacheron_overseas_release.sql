@@ -98,7 +98,7 @@ AS $$
   WITH selected AS MATERIALIZED (
     SELECT
       m.release_order, m.public_reference, m.catalog_reference_confirmed, m.price_lane,
-      l.id, l.source_record_id, l.original_timestamp, l.created_at, l.user_name, l.from_name,
+      l.id, l.source_record_id, l.created_at, l.user_name, l.from_name,
       l.raw_message_text, l.listing_type, l.intent, l.brand_original, l.reference_original,
       l.dial_color_normalized, l.condition_normalized, l.price_usd, l.price_normalized,
       l.currency_normalized, l.overall_confidence, l.verdict, l.location,
@@ -131,7 +131,7 @@ AS $$
     'source_file', 'MARIADB_IMMUTABLE_RAW',
     'source_row_number', 1,
     'source_record_id', s.source_record_id,
-    'posting_date', COALESCE(s.original_timestamp, s.created_at),
+    'posting_date', s.created_at,
     'seller_name', COALESCE(NULLIF(btrim(s.user_name), ''), NULLIF(btrim(s.from_name), ''), 'Source dealer'),
     'seller_phone', NULL,
     'contact_publication_approved', false,
