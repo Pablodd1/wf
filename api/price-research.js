@@ -799,14 +799,10 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     .filter(row => !classifyDemandEligibility(row, catalog));
   const { uniqueRows: eligible, repostRows } = deduplicateReposts(eligibleBeforeReposts);
   const grouped = new Map();
-  for (const row of eligible.filter(row => matchesSelection({
-    ...row,
-    dial_color: normalizeDialValue(row.dial_color).known ? normalizeDialValue(row.dial_color).value : '',
-  }, selection))) {
+  for (const row of eligible) {
     const normalizedDial = normalizeDialValue(row.dial_color);
-    const dial = normalizedDial.known ? normalizedDial.value : '';
+    const dial = normalizedDial.known ? normalizedDial.value : 'Unspecified';
     const key = dial.toLowerCase();
-    if (!key) continue;
     const current = grouped.get(key) || { dial_color: dial, count: 0 };
     current.count += 1;
     grouped.set(key, current);
@@ -1619,7 +1615,24 @@ module.exports = async function handler(req, res) {
       { page: demandPage, pageSize: demandPageSize },
       rolexPatekOverlayRows.filter(row => String(row.listing_type || '').toUpperCase() === 'WTB'),
     );
-    const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
+    const indicatorLiquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
+    // Demand is always an all-dial, exact-reference buyer signal. It must not
+    // inherit the selected WTS dial because buyers often omit a dial entirely.
+    // Use the same scope for the denominator so a stored indicator ratio can
+    // never conflict with the cards and buyer count shown to the customer.
+    const referenceQualifiedWtsCount = marketRows.length;
+    const exactReferenceDemandRatio = referenceQualifiedWtsCount > 0
+      ? demand.demand_count / referenceQualifiedWtsCount
+      : null;
+    const liquidity = {
+      ...indicatorLiquidity,
+      indicator_source: indicatorLiquidity.source,
+      source: 'live_exact_reference',
+      demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
+      reference_qualified_wts_count: referenceQualifiedWtsCount,
+      demand_score: demand.demand_count,
+      wtb_fs_ratio: exactReferenceDemandRatio,
+    };
 
     const comparableEvidencePage = paginateEvidenceRows(includedRows, evidencePage, evidencePageSize);
     // Unpriced WTS belongs on the Trading Floor only. Price Research still
@@ -1727,6 +1740,8 @@ module.exports = async function handler(req, res) {
       total_tracked_listings: totalTrackedListings,
       wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
       wtb_demand_count: wtbDemandCount,
+      reference_qualified_wts_count: referenceQualifiedWtsCount,
+      demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
       excluded_count: excludedTotalCount,
       excluded_breakdown: {
         ...wtsAccounting.breakdown,
@@ -1759,6 +1774,8 @@ module.exports = async function handler(req, res) {
       total_tracked_listings: totalTrackedListings,
       wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
       wtb_demand_count: wtbDemandCount,
+      reference_qualified_wts_count: referenceQualifiedWtsCount,
+      demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
       demand_rows: demand?.demand_rows || [],
       demand_evidence: {
         returned: demand?.demand_returned || 0,

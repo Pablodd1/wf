@@ -258,6 +258,20 @@ test('Zenith uses the canonical QNSA exact loader and not the workbook shortcut'
   assert.equal(result.rows.length, 1);
 });
 
+test('Zenith and Omega WTB demand remains visible without a dial or catalog-model decoration', () => {
+  const pairs = batchApi.normalizePairs([
+    { brand: 'Zenith', reference: '03.2522.400' },
+    { brand: 'Omega', reference: '210.30.42.20.01.001' },
+  ]);
+  const rows = [
+    { ...row('zenith-wtb', '03.2522.400', null, null, 'WTB'), brand: 'Zenith', model: null },
+    { ...row('omega-wtb', '210.30.42.20.01.001', null, null, 'WTB'), brand: 'Omega', model: null },
+  ];
+  const [zenith, omega] = batchApi.buildBatchSummaries(pairs, rows);
+  assert.equal(zenith.wtb_observation_count, 1);
+  assert.equal(omega.wtb_observation_count, 1);
+});
+
 test('Zenith reference summaries provide an exact-reference benchmark across qualified dials', () => {
   const [pair] = batchApi.normalizePairs([{ brand: 'Zenith', reference: '03.2522.400' }]);
   const [summary] = batchApi.buildBatchSummaries([pair], [
