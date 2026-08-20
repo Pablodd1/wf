@@ -78,6 +78,20 @@ test('Trading Floor and Price Research route Vacheron through exact release RPCs
   assert.match(research, /canonical_qnsa_price_evidence_checked: true/);
 });
 
+test('Trading Floor unwraps table-valued Vacheron RPC rows before publication gates', () => {
+  const inventoryModule = require('../api/reviewed-market-inventory.js');
+  const listing = {
+    id: 'vacheron-canary',
+    listing_type: 'WTS',
+    canonical_brand: 'Vacheron Constantin',
+    model: 'Overseas',
+  };
+  assert.deepEqual(inventoryModule.unwrapRpcRowData([{ row_data: listing }]), [listing]);
+  assert.deepEqual(inventoryModule.unwrapRpcRowData([listing]), [listing]);
+  assert.deepEqual(inventoryModule.unwrapRpcRowData(null), []);
+  assert.match(inventory, /const sourceRows = unwrapRpcRowData\(data\)/);
+});
+
 test('candidate query preserves source lineage and does not infer parent or image evidence', () => {
   const sql = release.candidateSql(release.catalogReferenceKeys());
   assert.match(sql, /source_hash ~ '\^\[0-9a-f\]\{64\}\$'/);
