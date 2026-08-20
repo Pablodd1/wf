@@ -33,7 +33,21 @@ async function managementQuery(sql, readOnly = false) {
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ query: sql, read_only: readOnly }),
   });
-  if (!response.ok) throw new Error(`QNSA database query failed with HTTP ${response.status}.`);
+  if (!response.ok) {
+    const raw = await response.text();
+    let detail = '';
+    try {
+      const parsed = JSON.parse(raw);
+      detail = String(parsed.message || parsed.error || parsed.code || '');
+    } catch {
+      detail = '';
+    }
+    const sanitized = detail
+      .replace(/Bearer\s+\S+/gi, 'Bearer [REDACTED]')
+      .replace(/[\r\n]+/g, ' ')
+      .slice(0, 300);
+    throw new Error(`QNSA database query failed with HTTP ${response.status}${sanitized ? `: ${sanitized}` : ''}.`);
+  }
   return response.json();
 }
 

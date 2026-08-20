@@ -41,6 +41,14 @@ test('workflow is manual, serialized, QNSA pinned, and uses env-safe inputs', ()
   assert.doesNotMatch(workflow, /jobs:[\s\S]{0,400}\benv:\s*\n\s+SUPABASE_ACCESS_TOKEN:/);
 });
 
+test('database diagnostics are bounded and redact bearer credentials', () => {
+  const source = fs.readFileSync(path.join(root, 'tools', 'intake',
+    'release-qnsa-vacheron-overseas.cjs'), 'utf8');
+  assert.match(source, /replace\(\/Bearer\\s\+\\S\+\/gi, 'Bearer \[REDACTED\]'\)/);
+  assert.match(source, /slice\(0, 300\)/);
+  assert.doesNotMatch(source, /throw new Error\(`QNSA database query failed[^`]*\$\{raw\}/);
+});
+
 test('canary selects at most ten and covers deterministic intent, price, and identity lanes', () => {
   const rows = [
     ['WTS','SOURCE_EXPLICIT_USD_USDT','CATALOG_OVERSEAS_REFERENCE'],
