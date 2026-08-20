@@ -351,6 +351,29 @@ module.exports = async function handler(req, res) {
       _cache.set(cacheKey, { at: Date.now(), payload });
       return res.status(200).json(payload);
     }
+    if (brand.toLowerCase() === 'omega') {
+      const { data: observedRows, error: observedError } = await client.rpc('qnsa_omega_reference_index');
+      if (observedError) throw observedError;
+      const scopedObserved = (observedRows || []).filter(row =>
+        String(row.model || '').trim().toLowerCase() === model.toLowerCase());
+      const merged = mergeVacheronReleaseReferences(
+        listCanonicalCatalogReferences('Omega', model), scopedObserved);
+      const payload = {
+        success: true,
+        brand: 'Omega',
+        model,
+        reference_count: merged.references.length,
+        observed_listing_count: merged.references.reduce((sum, item) => sum + Number(item.listing_count || 0), 0),
+        unresolved_reference_listing_count: merged.unresolvedReferenceListingCount,
+        unresolved_reference_priced_wts_count: merged.unresolvedReferencePricedWtsCount,
+        references: merged.references,
+        identity_source: 'CATALOG_PLUS_EXACT_RELEASE_MANIFEST',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+        sample_capped: false,
+      };
+      _cache.set(cacheKey, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (isReviewedWorkbookBrowseBrand(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
       if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });

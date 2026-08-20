@@ -68,7 +68,7 @@ const REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set([
   'A. Lange & Söhne', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling',
   'Bulgari', 'Chopard', 'F.P. Journe', 'Franck Muller',
   'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
-  'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines', 'Omega',
+  'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines',
   'TAG Heuer', 'Ulysse Nardin',
 ]);
 
@@ -332,6 +332,11 @@ function isMultiListing(row) {
     && row.normalization_run_complete === true
     && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Vacheron Constantin'
     && cleanExactText(row?.catalog_model || row?.model, 80) === 'Overseas'
+    && ['WTS', 'WTB'].includes(listingType)) return false;
+  if (row.publication_lane === 'QNSA_OMEGA_RELEASE_V1'
+    && row.raw_lineage_verified === true
+    && row.normalization_run_complete === true
+    && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Omega'
     && ['WTS', 'WTB'].includes(listingType)) return false;
 
   // The QNSA Zenith lane is reconciled against immutable raw text before its
@@ -764,6 +769,7 @@ function isTradingFloorSourceRow(row) {
     'QNSA_SIX_BRAND_IMAGE_LANE_V1',
     'QNSA_ZENITH_REVIEWED_V1',
     'QNSA_VACHERON_OVERSEAS_RELEASE_V1',
+    'QNSA_OMEGA_RELEASE_V1',
   ]
     .includes(row?.publication_lane)
     && row?.normalization_run_complete === true
@@ -1870,10 +1876,13 @@ module.exports = async function handler(req, res) {
       : null;
     const vacheronOverseasRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Vacheron Constantin' && ['ALL', 'WATCH'].includes(itemCategory);
-    if (vacheronOverseasRelease && !search && !reference && !requestedDial && !condition
+    const omegaRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && brand === 'Omega' && ['ALL', 'WATCH'].includes(itemCategory);
+    if ((vacheronOverseasRelease || omegaRelease) && !search && !reference && !requestedDial && !condition
       && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
       const { data: exactCount, error: exactCountError } = await client
-        .rpc('qnsa_vacheron_overseas_release_count', { p_listing_type: databaseListingType });
+        .rpc(omegaRelease ? 'qnsa_omega_release_count' : 'qnsa_vacheron_overseas_release_count',
+          { p_listing_type: databaseListingType });
       publicInventoryTotal = exactCountError ? null : Number(exactCount || 0);
     }
     const pageWindow = resolvePageWindow({
@@ -2193,7 +2202,7 @@ module.exports = async function handler(req, res) {
         })
       : queryParams;
     let usedLegacyViewContract = legacyMarketViewContractDetected;
-    const laterReviewedBrand = ['Richard Mille', 'Cartier', 'Zenith'].includes(brand);
+    const laterReviewedBrand = ['Richard Mille', 'Cartier', 'Zenith', 'Omega'].includes(brand);
     // Broad QNSA brand pages first resolve a tiny ordered ID page from the
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
@@ -2202,8 +2211,9 @@ module.exports = async function handler(req, res) {
       // category feed performs additional expression sorting and immutable
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
-      if (vacheronOverseasRelease) {
-        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_vacheron_overseas_page_rows`, {
+      if (vacheronOverseasRelease || omegaRelease) {
+        const releaseRpc = omegaRelease ? 'qnsa_omega_page_rows' : 'qnsa_vacheron_overseas_page_rows';
+        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${releaseRpc}`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2215,7 +2225,7 @@ module.exports = async function handler(req, res) {
         });
         if (!response.ok) {
           const body = await response.text();
-          throw new Error(`QNSA Vacheron Overseas page failed: ${response.status} ${body.slice(0, 200)}`);
+          throw new Error(`QNSA controlled brand page failed: ${response.status} ${body.slice(0, 200)}`);
         }
         preloadedQnsaResponse = new Response(JSON.stringify(await response.json()), {
           status: 200,
@@ -2476,13 +2486,16 @@ module.exports = async function handler(req, res) {
         : [{ reference: rpcReference, family: Boolean(familyReference || patekBaseEquivalent) }];
       const zenithExactReference = normalizedBrand === 'zenith' && !familyReference;
       const vacheronExactReference = normalizedBrand === 'vacheron constantin';
+      const omegaExactReference = normalizedBrand === 'omega';
       const rpcResponses = await Promise.all(rpcRequests.map(request => fetch(
-        `${process.env.SUPABASE_URL}/rest/v1/rpc/${vacheronExactReference
+        `${process.env.SUPABASE_URL}/rest/v1/rpc/${omegaExactReference
+          ? 'qnsa_omega_reference_rows'
+          : vacheronExactReference
           ? 'qnsa_vacheron_overseas_reference_rows'
           : (zenithExactReference ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows')}`,
         {
           method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(vacheronExactReference ? {
+          body: JSON.stringify((vacheronExactReference || omegaExactReference) ? {
             p_reference: request.reference,
             p_limit: qnsaBrandScanLimit,
             p_offset: requestedOffset,

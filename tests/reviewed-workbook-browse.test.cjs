@@ -62,12 +62,13 @@ test('new admission brands use observed workbook evidence for browse counts', ()
     'A. Lange & Söhne', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling',
     'Bulgari', 'Chopard', 'F.P. Journe', 'Franck Muller',
     'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
-    'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines', 'Omega',
+    'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines',
     'TAG Heuer', 'Ulysse Nardin',
   ]) {
     assert.equal(isReviewedWorkbookBrowseBrand(brand), true);
   }
   assert.equal(isReviewedWorkbookBrowseBrand('Rolex'), false);
+  assert.equal(isReviewedWorkbookBrowseBrand('Omega'), false);
 
   const modelsApi = fs.readFileSync(path.join(__dirname, '..', 'api', 'catalog-models.js'), 'utf8');
   const referencesApi = fs.readFileSync(path.join(__dirname, '..', 'api', 'catalog-references.js'), 'utf8');
@@ -111,7 +112,8 @@ test('Price Research discovery merges released admission-brand counts', () => {
   const releaseSummary = fs.readFileSync(path.join(__dirname, '..', 'api', 'live-release-summary.js'), 'utf8');
   const research = fs.readFileSync(path.join(__dirname, '..', 'src/pages/PriceResearch.tsx'), 'utf8');
   assert.match(releaseSummary, /'A\. Lange & Söhne', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling'/);
-  assert.match(releaseSummary, /'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines', 'Omega'/);
+  assert.match(releaseSummary, /'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines'/);
+  assert.match(releaseSummary, /qnsa_omega_release_count/);
   assert.match(releaseSummary, /loadReviewedWorkbookBrandCount\(client, brand\)/);
   assert.match(releaseSummary, /mapWithConcurrency\([\s\S]*admittedWorkbookBrandNames,[\s\S]*3,/);
   assert.doesNotMatch(releaseSummary, /loadReviewedWorkbookBrandRows\(client, brand\)/);

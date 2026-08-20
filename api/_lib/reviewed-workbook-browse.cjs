@@ -27,7 +27,6 @@ const REVIEWED_WORKBOOK_BROWSE_BRANDS = new Set([
   'jacob & co',
   'jaeger-lecoultre',
   'longines',
-  'omega',
   'tag heuer',
   'ulysse nardin',
 ]);

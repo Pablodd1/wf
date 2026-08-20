@@ -137,6 +137,35 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    if (brand.toLowerCase() === 'omega') {
+      const client = getClient();
+      const { data: observedRows, error: observedError } = await client.rpc('qnsa_omega_reference_index');
+      if (observedError) throw observedError;
+      const grouped = new Map();
+      for (const row of observedRows || []) {
+        const model = String(row.model || 'Omega').trim() || 'Omega';
+        const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
+        if (row.reference) current.references.add(String(row.reference));
+        current.listing_count += Number(row.listing_count || 0);
+        grouped.set(model, current);
+      }
+      const models = [...grouped.entries()].map(([model, value]) => ({
+        model,
+        reference_count: value.references.size,
+        listing_count: value.listing_count,
+      })).sort((a, b) => b.listing_count - a.listing_count || a.model.localeCompare(b.model));
+      const payload = {
+        success: true,
+        brand: 'Omega',
+        model_count: models.length,
+        catalog_reference_count: models.reduce((sum, item) => sum + item.reference_count, 0),
+        models,
+        identity_source: 'EXACT_RELEASE_MANIFEST',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (brand.toLowerCase() === 'vacheron constantin') {
       const references = listCanonicalCatalogReferences('Vacheron Constantin')
         .filter(entry => String(entry.model || '').trim().toLowerCase() === 'overseas');
