@@ -13,6 +13,7 @@ const workflow = fs.readFileSync(path.join(root, '.github', 'workflows',
   'qnsa-vacheron-overseas-release.yml'), 'utf8');
 const inventory = fs.readFileSync(path.join(root, 'api', 'reviewed-market-inventory.js'), 'utf8');
 const research = fs.readFileSync(path.join(root, 'api', 'price-research.js'), 'utf8');
+const catalogReferences = require('../api/catalog-references.js');
 
 test('release is exact, Vacheron-only, private, and reversible', () => {
   assert.equal(release.PROJECT_REF, 'qnsafosakvonzgfcsphh');
@@ -76,6 +77,28 @@ test('Trading Floor and Price Research route Vacheron through exact release RPCs
   assert.match(research, /qnsa_vacheron_overseas_reference_rows/);
   assert.match(research, /'vacheron constantin'/);
   assert.match(research, /canonical_qnsa_price_evidence_checked: true/);
+  assert.match(migration, /qnsa_vacheron_overseas_reference_index/);
+});
+
+test('Vacheron reference picker merges catalog and exact source-proven release references', () => {
+  const merged = catalogReferences.mergeVacheronReleaseReferences(
+    [{ reference: '4500V/110A-B128' }],
+    [
+      { reference: '4500V/110A-B128', listing_count: 8, wts_count: 6,
+        wtb_count: 2, priced_wts_count: 4, catalog_reference_confirmed: true },
+      { reference: 'SOURCE-123', listing_count: 3, wts_count: 2,
+        wtb_count: 1, priced_wts_count: 1, catalog_reference_confirmed: false },
+      { reference: null, listing_count: 2, wts_count: 2,
+        wtb_count: 0, priced_wts_count: 1, catalog_reference_confirmed: false },
+    ],
+  );
+  assert.equal(merged.references.length, 2);
+  assert.deepEqual(merged.references.map(row => [row.reference, row.listing_count]), [
+    ['4500V/110A-B128', 8], ['SOURCE-123', 3],
+  ]);
+  assert.equal(merged.references[1].identity_source, 'SOURCE_PROVEN_RELEASE_REFERENCE');
+  assert.equal(merged.unresolvedReferenceListingCount, 2);
+  assert.equal(merged.unresolvedReferencePricedWtsCount, 1);
 });
 
 test('Trading Floor unwraps table-valued Vacheron RPC rows before publication gates', () => {
