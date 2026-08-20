@@ -1886,6 +1886,7 @@ module.exports = async function handler(req, res) {
       && brand === 'Omega' && ['ALL', 'WATCH'].includes(itemCategory);
     const cartierRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Cartier' && ['ALL', 'WATCH'].includes(itemCategory);
+    const controlledBrandRelease = vacheronOverseasRelease || omegaRelease || cartierRelease;
     if ((vacheronOverseasRelease || omegaRelease || cartierRelease) && !search && !reference && !requestedDial && !condition
       && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
       const releaseCountRpc = cartierRelease ? 'qnsa_cartier_release_count'
@@ -2158,7 +2159,11 @@ module.exports = async function handler(req, res) {
       }
     }
     const qnsaUnpartitionedMedia = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
-      && !imagesOnly && !sixBrandBroadScope;
+      && !imagesOnly && (!sixBrandBroadScope || controlledBrandRelease);
+    // A single controlled release uses a manifest offset, even though its
+    // brand also belongs to the historical six-brand family. Encoding that
+    // offset as a composite v2 cursor forces it to zero and repeats page one.
+    const sixBrandKeysetCursor = sixBrandBroadScope && !controlledBrandRelease;
     const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || 'images');
     const requestedOffset = pagination === 'cursor'
       ? (inventoryCursor?.offset || 0)
@@ -2884,12 +2889,12 @@ module.exports = async function handler(req, res) {
           offset: reviewedOverlayLaneActive ? requestedOffset : nextOffset,
           deltaOffset: requestedDeltaOffset + reviewedOverlayConsumed,
           page: page + 1,
-          brandKeysets: sixBrandBroadScope
+          brandKeysets: sixBrandKeysetCursor
             ? reviewedOverlayLaneActive
               ? inventoryCursor?.brandKeysets || {}
               : qnsaCandidateCursorMeta?.nextBrandKeysets || {}
             : null,
-          brandScope: sixBrandBroadScope ? sixBrandScope : null,
+          brandScope: sixBrandKeysetCursor ? sixBrandScope : null,
         })
       : null;
     const publicationBrands = publicationBrandsFromSummary(summary);
