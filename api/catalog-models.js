@@ -137,6 +137,22 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    if (brand.toLowerCase() === 'vacheron constantin') {
+      const references = listCanonicalCatalogReferences('Vacheron Constantin')
+        .filter(entry => String(entry.model || '').trim().toLowerCase() === 'overseas');
+      const payload = {
+        success: true,
+        brand: 'Vacheron Constantin',
+        model_count: 1,
+        catalog_reference_count: references.length,
+        models: [{ model: 'Overseas', reference_count: references.length }],
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+        sample_capped: false,
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (isReviewedWorkbookBrowseBrand(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(getClient(), brand);
       if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
