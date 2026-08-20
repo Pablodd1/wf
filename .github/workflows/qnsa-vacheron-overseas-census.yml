@@ -97,6 +97,19 @@ jobs:
             SELECT * FROM marked
             WHERE normalized_model_exact OR original_model_exact OR raw_overseas_mention
               OR catalog_overseas_reference
+          ), release_ranked AS MATERIALIZED (
+            SELECT cohort.*,
+              row_number() OVER (
+                PARTITION BY
+                  COALESCE(NULLIF(btrim(contact_number), ''), NULLIF(btrim(from_number), ''),
+                    NULLIF(btrim(user_name), ''), NULLIF(btrim(from_name), ''),
+                    'UNLINKED:' || source_record_id),
+                  source_candidate_hash
+                ORDER BY COALESCE(original_timestamp, source_created_on, created_at) DESC, id DESC
+              ) AS seller_candidate_rank
+            FROM cohort
+          ), release_rows AS MATERIALIZED (
+            SELECT * FROM release_ranked WHERE seller_candidate_rank = 1
           ), metrics AS (
             SELECT jsonb_build_object(
               'project_ref', 'qnsafosakvonzgfcsphh',
@@ -124,15 +137,49 @@ jobs:
               'overseas_unique_source_candidate_pairs', count(DISTINCT (source_hash, source_candidate_hash)),
               'overseas_unique_seller_candidate_pairs', count(DISTINCT (
                 COALESCE(NULLIF(btrim(contact_number), ''), NULLIF(btrim(from_number), ''),
-                  NULLIF(btrim(user_name), ''), NULLIF(btrim(from_name), ''), 'UNLINKED'),
+                  NULLIF(btrim(user_name), ''), NULLIF(btrim(from_name), ''),
+                  'UNLINKED:' || source_record_id),
                 source_candidate_hash)),
               'exact_source_candidate_repost_rows', count(*)
                 - count(DISTINCT (source_hash, source_candidate_hash)),
               'seller_candidate_repost_rows', count(*)
                 - count(DISTINCT (
                     COALESCE(NULLIF(btrim(contact_number), ''), NULLIF(btrim(from_number), ''),
-                      NULLIF(btrim(user_name), ''), NULLIF(btrim(from_name), ''), 'UNLINKED'),
+                      NULLIF(btrim(user_name), ''), NULLIF(btrim(from_name), ''),
+                      'UNLINKED:' || source_record_id),
                     source_candidate_hash)),
+              'release_unique_individual_listings', (SELECT count(*) FROM release_rows),
+              'release_duplicates_excluded', count(*) - (SELECT count(*) FROM release_rows),
+              'release_wts_rows', (SELECT count(*) FROM release_rows WHERE source_intent = 'WTS'),
+              'release_wtb_rows', (SELECT count(*) FROM release_rows WHERE source_intent = 'WTB'),
+              'release_other_rows', (SELECT count(*) FROM release_rows WHERE source_intent NOT IN ('WTS','WTB')),
+              'release_priced_wts_rows', (SELECT count(*) FROM release_rows WHERE source_intent = 'WTS' AND has_stored_price),
+              'release_unpriced_wts_rows', (SELECT count(*) FROM release_rows WHERE source_intent = 'WTS' AND NOT has_stored_price),
+              'release_explicit_usd_usdt_wts_rows', (SELECT count(*) FROM release_rows
+                WHERE source_intent = 'WTS' AND COALESCE(price_usd, 0) > 0
+                  AND upper(COALESCE(currency_normalized, '')) IN ('USD','USDT')),
+              'release_dated_fx_wts_rows', (SELECT count(*) FROM release_rows
+                WHERE source_intent = 'WTS' AND COALESCE(price_usd, 0) > 0
+                  AND COALESCE(conversion_rate, 0) > 0 AND conversion_timestamp IS NOT NULL),
+              'release_currency_unconfirmed_wts_rows', (SELECT count(*) FROM release_rows
+                WHERE source_intent = 'WTS' AND COALESCE(price_normalized, 0) > 0
+                  AND upper(COALESCE(currency_normalized, '')) NOT IN ('USD','USDT')
+                  AND NOT (COALESCE(conversion_rate, 0) > 0 AND conversion_timestamp IS NOT NULL)),
+              'release_exact_image_rows', (SELECT count(*) FROM release_rows
+                WHERE public_image_eligible = true
+                  AND NULLIF(btrim(source_media_key), '') IS NOT NULL
+                  AND btrim(COALESCE(source_media_url_candidate, image_url, '')) ~* '^https://[^[:space:]]+$'),
+              'release_text_only_rows', (SELECT count(*) FROM release_rows
+                WHERE NOT (public_image_eligible = true
+                  AND NULLIF(btrim(source_media_key), '') IS NOT NULL
+                  AND btrim(COALESCE(source_media_url_candidate, image_url, '')) ~* '^https://[^[:space:]]+$')),
+              'release_exact_dealer_linked_rows', (SELECT count(*) FROM release_rows r
+                JOIN public.dealer_listing_links dl ON dl.listing_id = r.id AND dl.link_status = 'APPLIED'),
+              'release_unlinked_dealer_rows', (SELECT count(*) FROM release_rows r
+                LEFT JOIN public.dealer_listing_links dl ON dl.listing_id = r.id AND dl.link_status = 'APPLIED'
+                WHERE dl.listing_id IS NULL),
+              'release_listing_ids_sha256', (SELECT encode(extensions.digest(convert_to(
+                string_agg(id::text, E'\n' ORDER BY id), 'UTF8'), 'sha256'), 'hex') FROM release_rows),
               'explicit_wts_rows', count(*) FILTER (WHERE source_intent = 'WTS'),
               'explicit_wtb_rows', count(*) FILTER (WHERE source_intent = 'WTB'),
               'missing_or_other_intent_rows', count(*) FILTER (WHERE source_intent NOT IN ('WTS','WTB')),
