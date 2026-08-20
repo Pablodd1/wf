@@ -101,3 +101,16 @@ test('preserves a genuine MYR amount for an RM reference', async () => {
   assert.equal(row.runtime_price_recovery_applied, true);
   assert.equal(row.price_evidence_status, 'EXPLICIT_SOURCE_FX_CONVERTED');
 });
+
+test('does not recover a price after an exact reference-price collision hold', async () => {
+  const [row] = await recoverRecordPrices([{
+    reference: null,
+    raw_message: 'Vacheron Constantin Overseas 14000 USD',
+    price_usd: null,
+    source_price_amount: null,
+    price_evidence_status: 'REFERENCE_PRICE_COLLISION_WITHHELD',
+  }]);
+  assert.equal(row.price_usd, null);
+  assert.equal(row.price_evidence_status, 'REFERENCE_PRICE_COLLISION_WITHHELD');
+  assert.equal(row.runtime_price_recovery_applied, undefined);
+});
