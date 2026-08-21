@@ -167,6 +167,10 @@ test("dedicated workflow is QNSA-pinned, checksum-gated, read-only, and short-li
   assert.match(workflow, /advisory_sha256_json/);
   assert.match(workflow, /--run-key/);
   assert.match(workflow, /m\.run_key!==process\.env\.INPUT_RUN_KEY/);
+  assert.match(workflow, /projects\/\$env:PROJECT_REF\/api-keys/);
+  assert.match(workflow, /::add-mask::\$\(\$service\.api_key\)/);
+  assert.match(workflow, /QNSA_RUNTIME_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY: \$\{\{ secrets\.SUPABASE_SERVICE_ROLE_KEY \}\}/);
   assert.match(
     workflow,
     /Build service-only private manifest without writes[\s\S]*INPUT_RUN_KEY: \$\{\{ inputs\.run_key \}\}[\s\S]*--run-key',\$env:INPUT_RUN_KEY/,
