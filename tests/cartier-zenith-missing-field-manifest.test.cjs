@@ -56,6 +56,14 @@ test('one bare dollar amount is isolated as tracked-only owner policy evidence',
   assert.equal(manifest.owner_policy_tracked_only[0].analytics_admission, 'TRACKED_ONLY_NOT_INDEPENDENTLY_QUALIFIED');
 });
 
+test('Node 22 compatible named USD parsing supports currency before or after amount', () => {
+  const manifest = buildCorrectionManifest([
+    { id: 'cartier-usd-before', brand: 'Cartier', model: 'Santos 100', reference: 'W2006951', price_usd: null, listing_type: 'WTS', raw_message: 'Cartier W2006951 USD 7,400' },
+    { id: 'cartier-usd-after', brand: 'Cartier', model: 'Santos 100', reference: 'W2006951', price_usd: null, listing_type: 'WTS', raw_message: 'Cartier W2006951 7400 USDT' },
+  ], catalog);
+  assert.deepEqual(manifest.corrections.filter(item => item.field === 'price_usd').map(item => item.proposed_value), [7400, 7400]);
+});
+
 test('competing prices, bare NEW, and ambiguous model names remain blocked', () => {
   const manifest = buildCorrectionManifest([{
     id: 'zenith-ambiguous', brand: 'Zenith', model: null, reference: null,
