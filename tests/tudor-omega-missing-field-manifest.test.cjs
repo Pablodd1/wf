@@ -122,7 +122,7 @@ test('manifest reconciles unique IDs and rejects duplicate input rows', () => {
 
 test('public crawl is paginated and reconciles the exact endpoint total', async () => {
   const pages = [
-    { total: 2, records: [row()], hasMore: true },
+    { total: 2, records: [row()], hasMore: true, nextCursor: 'cursor-2' },
     { total: 2, records: [row({ id: '22222222-2222-4222-8222-222222222222' })], hasMore: false },
   ];
   const seen = [];
@@ -132,5 +132,17 @@ test('public crawl is paginated and reconciles the exact endpoint total', async 
   });
   assert.equal(records.length, 2);
   assert.match(seen[0], /brand=Omega/);
-  assert.match(seen[1], /page=2/);
+  assert.match(seen[0], /pagination=cursor/);
+  assert.match(seen[1], /cursor=cursor-2/);
+});
+
+test('public crawl retries transient server failures without advancing the cursor', async () => {
+  let attempts = 0;
+  const records = await crawlBrand('https://example.test', 'Omega', async () => {
+    attempts += 1;
+    if (attempts === 1) return { ok: false, status: 503 };
+    return { ok: true, status: 200, json: async () => ({ total: 1, records: [row()], hasMore: false }) };
+  });
+  assert.equal(attempts, 2);
+  assert.equal(records.length, 1);
 });
