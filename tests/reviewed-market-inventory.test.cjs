@@ -154,7 +154,7 @@ test('a count-snapshot failure does not take the bounded customer feed offline',
 });
 
 test('broad pages bypass the reference-scoped FX sidecar', () => {
-  const broadStart = source.indexOf('if (qnsaBroadPage && !legacyMarketViewContractDetected)');
+  const broadStart = source.indexOf('if ((qnsaBroadPage || fourBrandEffectiveScope) && !legacyMarketViewContractDetected)');
   const broadBlock = source.slice(
     broadStart,
     source.indexOf('const pageRows =', broadStart),
