@@ -1188,6 +1188,81 @@ test('audited Rolex/Patek delta singles bypass only the legacy prose splitter', 
   assert.equal(api.isMultiListing({ ...auditedSingle, raw_lineage_verified: false }), true);
 });
 
+test('effective four-brand audited singles bypass only the legacy prose splitter', () => {
+  const auditedSingle = record({
+    publication_lane: 'QNSA_FOUR_BRAND_EFFECTIVE_SIDECAR_V1',
+    verification_status: 'APPROVED_SINGLE_CANDIDATE',
+    normalization_run_complete: true,
+    raw_lineage_verified: true,
+    canonical_brand: 'Omega',
+    brand_scope: 'Omega',
+    raw_message: 'Omega 310.30.42.50.01.001 USD 7,000; dealer signature mentions Rolex 126500LN',
+  });
+  assert.equal(api.isAuditedFourBrandEffectiveSingle(auditedSingle), true);
+  assert.equal(api.isMultiListing(auditedSingle), false);
+
+  for (const unsafe of [
+    { publication_lane: 'UNREVIEWED_V1' },
+    { verification_status: 'REVIEW_PENDING' },
+    { normalization_run_complete: false },
+    { raw_lineage_verified: false },
+    { canonical_brand: 'Rolex', brand_scope: 'Rolex' },
+    { listing_type: 'OTHER' },
+  ]) {
+    assert.equal(api.isAuditedFourBrandEffectiveSingle({ ...auditedSingle, ...unsafe }), false);
+  }
+  assert.equal(api.isMultiListing({ ...auditedSingle, is_bundle: true }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, multi_listing: true }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, listing_type: 'MULTI' }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, model: 'Multiple' }), true);
+});
+
+test('effective endpoint publication gate preserves exact count-to-crawl parity', () => {
+  const sourceTotals = new Map([
+    ['Tudor', 2555],
+    ['Omega', 6871],
+    ['Cartier', 7154],
+    ['Zenith', 453],
+  ]);
+  const formerlySplit = new Map([
+    ['Tudor', 13],
+    ['Omega', 26],
+    ['Cartier', 54],
+    ['Zenith', 1],
+  ]);
+  let exactCount = 0;
+  let crawledCards = 0;
+  for (const [brand, count] of sourceTotals) {
+    const rows = Array.from({ length: count }, (_, index) => record({
+      id: `${brand.toLowerCase()}-${index}`,
+      publication_lane: 'QNSA_FOUR_BRAND_EFFECTIVE_SIDECAR_V1',
+      verification_status: 'APPROVED_SINGLE_CANDIDATE',
+      verdict: 'APPROVED',
+      publication_state: 'APPROVED',
+      normalization_run_complete: true,
+      raw_lineage_verified: true,
+      canonical_brand: brand,
+      brand_scope: brand,
+      raw_message: index < formerlySplit.get(brand)
+        ? `${brand} 1234 USD 7,000; dealer signature mentions Rolex 126500LN`
+        : `${brand} 1234 USD 7,000`,
+    }));
+    exactCount += rows.length;
+    crawledCards += rows.filter(api.isTradingFloorSourceRow).length;
+  }
+  assert.equal(exactCount, 17033);
+  assert.equal(crawledCards, exactCount);
+});
+
+test('four-brand exact count is serialized after page mapping and omitted on continuation', () => {
+  const mappedPage = source.indexOf('const combinedPageRecords =');
+  const exactCount = source.indexOf('await loadEffectiveCount(client, fourBrandCountOptions)');
+  assert.ok(mappedPage >= 0 && exactCount > mappedPage);
+  assert.match(source, /if \(fourBrandEffectiveScope && firstEffectiveCountPage\)/);
+  assert.match(source, /else if \(fourBrandEffectiveScope\)[\s\S]*publicInventoryTotal = null/);
+  assert.doesNotMatch(source, /fourBrandCountPromise/);
+});
+
 test('Zenith exact Trading Floor lookups use the reconciled punctuation-preserving lane', () => {
   const migration = fs.readFileSync(
     path.join(__dirname, '../supabase/migrations/20260815121500_qnsa_zenith_exact_reference_rows.sql'),
