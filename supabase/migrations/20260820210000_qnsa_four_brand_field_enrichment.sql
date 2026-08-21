@@ -739,7 +739,8 @@ SET search_path=public,staging,pg_catalog AS $$
     'normalized_reference',s.effective_reference,
     'catalog_reference',CASE WHEN s.catalog_reference_confirmed OR s.proposed_catalog_reference_confirmed
       THEN s.effective_reference END,
-    'catalog_reference_confirmed',s.catalog_reference_confirmed OR s.proposed_catalog_reference_confirmed,
+    'catalog_reference_confirmed',s.catalog_reference_confirmed OR s.proposed_catalog_reference_confirmed
+  ) || jsonb_build_object(
     'dial_color',s.effective_dial,'catalog_dial',s.effective_dial,'condition',s.effective_condition,
     'workbook_price_usd',CASE
       WHEN s.proposed_price_usd>0 THEN s.proposed_price_usd
