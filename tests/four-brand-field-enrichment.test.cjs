@@ -307,6 +307,10 @@ test("workflow is QNSA-pinned, private-artifact based, bounded, and rollback cap
   assert.match(workflow, /SCHEMA_CONTRACT_VERSION/);
   assert.match(workflow, /MIGRATION_VERSION: '20260820210000'/);
   assert.match(workflow, /supabase_migrations\.schema_migrations/);
+  assert.match(
+    workflow,
+    /to_regclass\('supabase_migrations\.schema_migrations'\) IS NOT NULL AS migration_table_exists;[\s\S]*if \(\[bool\]\$preflight\[0\]\.migration_table_exists\) \{[\s\S]*SELECT EXISTS \(SELECT 1 FROM supabase_migrations\.schema_migrations/,
+  );
   assert.match(workflow, /Migration version exists without the exact schema contract marker/);
   assert.match(workflow, /Unversioned sidecar schema exists; refusing install/);
   assert.match(workflow, /Existing sidecar schema contract is incompatible/);
