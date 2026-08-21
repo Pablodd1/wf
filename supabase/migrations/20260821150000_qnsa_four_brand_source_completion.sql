@@ -208,7 +208,8 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.activate_qnsa_four_brand_source_completion(p_run_key text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
-SET search_path=public,staging,pg_catalog AS $$
+SET search_path=public,staging,pg_catalog
+SET statement_timeout='180s' AS $$
 DECLARE v_expected integer; v_invalid integer; v_updated integer; v_mode text;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtext('qnsa_four_brand_source_completion'));
@@ -286,7 +287,8 @@ $$;
 
 CREATE OR REPLACE FUNCTION public.rollback_qnsa_four_brand_source_completion(p_run_key text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER
-SET search_path=public,staging,pg_catalog AS $$
+SET search_path=public,staging,pg_catalog
+SET statement_timeout='180s' AS $$
 DECLARE v_expected integer; v_restored integer;
 BEGIN
   PERFORM pg_advisory_xact_lock(hashtext('qnsa_four_brand_source_completion'));
