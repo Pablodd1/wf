@@ -56,7 +56,9 @@ test('migration is private, lineage-bound, missing-only, and rollback capable', 
   assert.match(sql, /REVOKE ALL ON public\.qnsa_four_brand_source_completion_runs[\s\S]*FROM PUBLIC,anon,authenticated/);
   assert.match(sql, /l\.source_record_id IS DISTINCT FROM 'mysql_auctions_'/);
   assert.match(sql, /l\.parent_id IS NOT NULL OR COALESCE\(l\.is_bundle,false\)/);
-  assert.match(sql, /NULLIF\(btrim\(COALESCE\(l\.image_url,l\.source_media_url_candidate,''\)\),''\) IS NOT NULL/);
+  assert.match(sql, /NULLIF\(btrim\(COALESCE\(l\.image_url,''\)\),''\) IS NOT NULL/);
+  assert.match(sql, /l\.source_media_url_candidate IS DISTINCT FROM r->>'proposed_image_url'/);
+  assert.match(sql, /l\.source_media_url_candidate IS DISTINCT FROM p\.proposed_image_url/);
   assert.match(sql, /COALESCE\(l\.price_usd,l\.price_normalized,0\)>0/);
   assert.match(sql, /price_evidence_status.*OWNER_ASSUMED_USD/s);
   assert.match(sql, /qnsa_four_brand_source_completion_snapshots/);
@@ -66,8 +68,10 @@ test('migration is private, lineage-bound, missing-only, and rollback capable', 
 test('workflow separates schema install from audit and activation', () => {
   const workflow = fs.readFileSync(path.join(ROOT,
     '.github/workflows/qnsa-four-brand-source-completion.yml'), 'utf8');
-  assert.match(workflow, /if: inputs\.mode == 'schema'/);
-  assert.match(workflow, /if: inputs\.mode != 'schema'/);
+  assert.match(workflow, /options: \[schema, repair, audit, canary, full, rollback\]/);
+  assert.match(workflow, /'repair' \{ "REPAIR_SCHEMA_/);
+  assert.match(workflow, /if: inputs\.mode == 'schema' \|\| inputs\.mode == 'repair'/);
+  assert.match(workflow, /if: inputs\.mode != 'schema' && inputs\.mode != 'repair'/);
   assert.match(workflow, /qnsafosakvonzgfcsphh/);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.match(workflow, /EXPECTED_MIGRATION_SHA256: [0-9a-f]{64}/);
