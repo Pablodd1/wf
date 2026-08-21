@@ -146,3 +146,16 @@ test('public crawl retries transient server failures without advancing the curso
   assert.equal(attempts, 2);
   assert.equal(records.length, 1);
 });
+
+test('public crawl reconciles by terminal cursor when the effective total is withheld', async () => {
+  const pages = [
+    { total: null, records: [row()], hasMore: true, nextCursor: 'cursor-2' },
+    { total: null, records: [row({ id: '22222222-2222-4222-8222-222222222222' })], hasMore: false },
+  ];
+  const records = await crawlBrand('https://example.test', 'Omega', async () => ({
+    ok: true,
+    status: 200,
+    json: async () => pages.shift(),
+  }));
+  assert.equal(records.length, 2);
+});

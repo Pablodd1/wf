@@ -272,7 +272,10 @@ async function crawlBrand(origin, brand, fetchImpl = fetch) {
     }
     if (!response.ok) throw new Error(`${brand} page ${page} failed with HTTP ${response.status}.`);
     const body = await response.json();
-    if (expectedTotal === null) expectedTotal = Number(body.total);
+    if (expectedTotal === null && body.total !== null && body.total !== undefined) {
+      const reportedTotal = Number(body.total);
+      if (Number.isInteger(reportedTotal) && reportedTotal >= 0) expectedTotal = reportedTotal;
+    }
     for (const record of body.records || []) {
       if (record?.id && !seen.has(record.id)) {
         seen.add(record.id);
@@ -280,7 +283,7 @@ async function crawlBrand(origin, brand, fetchImpl = fetch) {
       }
     }
     if (!body.hasMore || !body.nextCursor) {
-      if (!Number.isInteger(expectedTotal) || records.length !== expectedTotal) {
+      if (Number.isInteger(expectedTotal) && records.length !== expectedTotal) {
         throw new Error(`${brand} crawl did not reconcile: expected ${expectedTotal}, received ${records.length}.`);
       }
       return records;

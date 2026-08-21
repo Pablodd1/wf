@@ -1914,10 +1914,13 @@ module.exports = async function handler(req, res) {
       && brand === 'Tudor' && ['ALL', 'WATCH'].includes(itemCategory);
     const cartierRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Cartier' && ['ALL', 'WATCH'].includes(itemCategory);
+    const fourBrandEffectiveScope = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && isFourBrand(brand) && ['ALL', 'WATCH'].includes(itemCategory);
     const zenithModelRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Zenith' && requestedModel && ['ALL', 'WATCH'].includes(itemCategory);
     const controlledBrandRelease = vacheronOverseasRelease || omegaRelease || cartierRelease || tudorRelease;
-    if (controlledBrandRelease && !search && !requestedModel && !reference && !requestedDial && !condition
+    if (controlledBrandRelease && !fourBrandEffectiveScope
+      && !search && !requestedModel && !reference && !requestedDial && !condition
       && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
       const releaseCountRpc = cartierRelease ? 'qnsa_cartier_release_count'
         : omegaRelease ? 'qnsa_omega_release_count'
@@ -1949,6 +1952,11 @@ module.exports = async function handler(req, res) {
         : { data: 0, error: null };
       publicInventoryTotal = zenithModelCountError ? null : Number(zenithModelCount || 0);
     }
+    // The legacy release counters predate the effective-page publication
+    // lineage gates and can be broader than the rows this endpoint may return.
+    // Keep every effective scope fail-closed after all legacy count overrides;
+    // terminal cursor traversal remains the exact advisory reconciliation.
+    if (fourBrandEffectiveScope) publicInventoryTotal = null;
     if (vacheronOverseasRelease && requestedModel.toLowerCase() === 'overseas'
       && !search && !reference && !requestedDial && !condition && !region && !rating
       && !postedAfter && !pricedOnly && !imagesOnly) {
@@ -2196,7 +2204,8 @@ module.exports = async function handler(req, res) {
     const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
     const sixBrandBroadScope = qnsaBroadPage && watchFeed && !zenithModelRelease
       && (!brand || SIX_REVIEWED_WATCH_BRANDS.includes(brand));
-    const sixBrandCompositeScope = sixBrandBroadScope && !controlledBrandRelease;
+    const sixBrandCompositeScope = sixBrandBroadScope
+      && !controlledBrandRelease && !fourBrandEffectiveScope;
     const sixBrandScope = requestedBrands.length > 0 ? requestedBrands : SIX_REVIEWED_WATCH_BRANDS;
     if (sixBrandCompositeScope && pagination !== 'cursor' && page > 1) {
       return res.status(400).json({
@@ -2223,7 +2232,7 @@ module.exports = async function handler(req, res) {
       }
     }
     const qnsaUnpartitionedMedia = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
-      && !imagesOnly && (!sixBrandBroadScope || controlledBrandRelease);
+      && !imagesOnly && (!sixBrandBroadScope || controlledBrandRelease || fourBrandEffectiveScope);
     // A single controlled release uses a manifest offset, even though its
     // brand also belongs to the historical six-brand family. Encoding that
     // offset as a composite v2 cursor forces it to zero and repeats page one.
@@ -2284,7 +2293,6 @@ module.exports = async function handler(req, res) {
     // Broad QNSA brand pages first resolve a tiny ordered ID page from the
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
-    const fourBrandEffectiveScope = isFourBrand(brand) && ['ALL', 'WATCH'].includes(itemCategory);
     if ((qnsaBroadPage || fourBrandEffectiveScope) && !legacyMarketViewContractDetected) {
       // WATCH browsing uses the proven indexed watch-only feed. The general
       // category feed performs additional expression sorting and immutable
