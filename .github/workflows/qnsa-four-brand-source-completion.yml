@@ -97,6 +97,12 @@ jobs:
           if ($env:MODE -eq 'repair' -and $objectCount -ne 3) { throw 'Source-completion schema repair requires the exact installed private tables.' }
           $migration = Get-Content -LiteralPath 'supabase/migrations/20260821150000_qnsa_four_brand_source_completion.sql' -Raw
           $migration = $migration -replace '(?im)^\s*BEGIN\s*;\s*$', '' -replace '(?im)^\s*COMMIT\s*;\s*$', ''
+          if ($env:MODE -eq 'repair') {
+            $functionMarker = 'CREATE OR REPLACE FUNCTION public.stage_qnsa_four_brand_source_completion('
+            $functionStart = $migration.IndexOf($functionMarker, [StringComparison]::Ordinal)
+            if ($functionStart -lt 0) { throw 'Pinned repair function marker is absent.' }
+            $migration = $migration.Substring($functionStart)
+          }
           $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='45s';`n$migration`nCOMMIT;"
           $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `

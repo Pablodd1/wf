@@ -72,6 +72,8 @@ test('workflow separates schema install from audit and activation', () => {
   assert.match(workflow, /'repair' \{ "REPAIR_SCHEMA_/);
   assert.match(workflow, /if: inputs\.mode == 'schema' \|\| inputs\.mode == 'repair'/);
   assert.match(workflow, /if: inputs\.mode != 'schema' && inputs\.mode != 'repair'/);
+  assert.match(workflow, /CREATE OR REPLACE FUNCTION public\.stage_qnsa_four_brand_source_completion/);
+  assert.match(workflow, /\$migration = \$migration\.Substring\(\$functionStart\)/);
   assert.match(workflow, /qnsafosakvonzgfcsphh/);
   assert.match(workflow, /cancel-in-progress: false/);
   assert.match(workflow, /EXPECTED_MIGRATION_SHA256: [0-9a-f]{64}/);
