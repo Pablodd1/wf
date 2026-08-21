@@ -43,6 +43,7 @@ const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { enrichRowsWithExactDealerEvidence } = require('./_lib/listing-dealer-evidence.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const { isFourBrand, loadEffectivePage } = require('./_lib/four-brand-field-enrichment.cjs');
+const { applyConfirmedFiveWatchPublication } = require('./_lib/five-watch-publication.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -117,7 +118,7 @@ function qnsaReferenceRowToMarketRow(row) {
     condition: source.condition,
     raw_message: source.raw_message,
   });
-  return {
+  return applyConfirmedFiveWatchPublication({
     id: source.id,
     brand: source.canonical_brand || source.brand_scope,
     model: source.catalog_model || source.model,
@@ -148,7 +149,7 @@ function qnsaReferenceRowToMarketRow(row) {
     contact_publication_approved: contactApproved,
     publication_lane: source.publication_lane || null,
     catalog_reference_confirmed: source.catalog_reference_confirmed === true,
-  };
+  });
 }
 
 function consentApprovedPhone(row) {

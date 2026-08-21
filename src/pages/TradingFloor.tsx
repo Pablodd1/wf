@@ -57,6 +57,10 @@ interface ListingRecord {
   source_price_amount?: number | null;
   source_price_text?: string | null;
   source_currency?: string | null;
+  original_price_amount?: number | null;
+  original_currency?: string | null;
+  price_confirmation_note?: string | null;
+  confirmed_data_publication?: string | null;
   price_evidence_status?: string | null;
   price_research_eligible?: boolean;
   dial_color: string | null;
@@ -1075,8 +1079,11 @@ function ListingCard({ listing, priceSummary, priceSummaryLoaded, selected, onSe
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const imageUrl = getListingImageSrc(listing);
   const [imageAvailable, setImageAvailable] = useState(Boolean(imageUrl));
+  useEffect(() => setImageAvailable(Boolean(imageUrl)), [imageUrl]);
   const cardHasImage = Boolean(imageUrl && imageAvailable);
-  const rawMsg = listing.raw_message || listing.raw_line || listing.description || '';
+  const rawMsg = listing.raw_message_scope === 'normalized_summary'
+    ? ''
+    : listing.raw_message || listing.raw_line || listing.description || '';
   const dealerRating = sourceBackedDealerRating({
     rating: listing.seller_rating,
     reviewCount: listing.seller_review_count,
@@ -1179,6 +1186,10 @@ function ListingCard({ listing, priceSummary, priceSummaryLoaded, selected, onSe
           Price rating: {cardPriceRatingLabel}{exactReferenceAverageLabel}
         </div>
       </div>
+      <div className="mt-1 text-xs font-medium text-[#6B7280]">{meta.priceEvidenceLabel}</div>
+      {meta.originalPriceLabel && meta.originalPriceLabel !== meta.priceLabel && (
+        <div className="mt-0.5 text-xs text-[#7A8699]">Original: {meta.originalPriceLabel}</div>
+      )}
       <div className="text-xs text-[#7A8699] mt-0.5 flex items-center gap-1">
         Dealer:
         <DealerRatingBadge
@@ -1397,6 +1408,10 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </div>
 
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+            <div className="mt-1 text-xs font-medium text-[#6B7280]">{meta.priceEvidenceLabel}</div>
+            {meta.originalPriceLabel && meta.originalPriceLabel !== meta.priceLabel && (
+              <div className="mt-0.5 text-xs text-[#7A8699]">Original: {meta.originalPriceLabel}</div>
+            )}
 
             <div className="mt-5 border-t border-stone-100 pt-4">
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5826]">Original raw message</div>
@@ -1545,6 +1560,7 @@ function getListingMeta(listing: ListingRecord) {
   const reviewedWorkbookUsd = reviewedWorkbookUsdPrice(listing);
   const workbookPriceNeedsReview = Boolean(cleanValue(listing.workbook_price_review_reason));
   const sourcePrice = formatSourcePrice(listing);
+  const originalPriceLabel = formatOriginalPrice(listing);
   // Price sanity check — flag implausible values
   const verifiedPlausible = isPricePlausible(verifiedUsd);
   const workbookPlausible = isPricePlausible(reviewedWorkbookUsd);
@@ -1572,6 +1588,7 @@ function getListingMeta(listing: ListingRecord) {
     title,
     priceLabel,
     priceEvidenceLabel,
+    originalPriceLabel,
     region,
     postedDate,
   };
@@ -1600,7 +1617,7 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function verifiedUsdPrice(listing: ListingRecord) {
-  if (!['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(
+  if (!['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX'].includes(
     cleanValue(listing.price_evidence_status).toUpperCase(),
   )) return null;
   const value = Number(listing.price_usd);
@@ -1612,7 +1629,7 @@ function reviewedWorkbookUsdPrice(listing: ListingRecord) {
   // workbook_price_review_reason is set by the API when the price is out of
   // plausibility range (e.g. reference number stored as price like 79377000).
   if (listing.workbook_price_review_reason
-    || !['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED', 'OWNER_ASSUMED_USD', 'OWNER_ASSUMED_USD_CANDIDATE'].includes(
+    || !['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX', 'OWNER_ASSUMED_USD', 'OWNER_ASSUMED_USD_CANDIDATE'].includes(
       cleanValue(listing.price_evidence_status).toUpperCase(),
     )) return null;
   const value = Number(listing.workbook_price_usd ?? listing.price_usd);
@@ -1638,6 +1655,14 @@ function formatSourcePrice(listing: ListingRecord) {
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
   if (!currency || !Number.isFinite(amount) || amount <= 0) return '';
+  return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
+}
+
+function formatOriginalPrice(listing: ListingRecord) {
+  const amount = Number(listing.original_price_amount);
+  const currency = cleanValue(listing.original_currency);
+  if (!Number.isFinite(amount) || amount <= 0) return '';
+  if (!currency) return cleanValue(listing.source_price_text) || new Intl.NumberFormat('en-US').format(amount);
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 
