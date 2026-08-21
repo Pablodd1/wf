@@ -15,6 +15,7 @@ const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
   isFourBrand,
   isMissingEffectiveRpcError,
+  loadEffectiveCount,
   loadEffectiveEnrichments,
 } = require('./_lib/four-brand-field-enrichment.cjs');
 const {
@@ -1906,6 +1907,7 @@ module.exports = async function handler(req, res) {
           rating, postedAfter, itemCategory, brand, listingType, pricedOnly,
         })
       : null;
+    let fourBrandCountPromise = null;
     const vacheronOverseasRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Vacheron Constantin' && ['ALL', 'WATCH'].includes(itemCategory);
     const omegaRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
@@ -1952,11 +1954,36 @@ module.exports = async function handler(req, res) {
         : { data: 0, error: null };
       publicInventoryTotal = zenithModelCountError ? null : Number(zenithModelCount || 0);
     }
-    // The legacy release counters predate the effective-page publication
-    // lineage gates and can be broader than the rows this endpoint may return.
-    // Keep every effective scope fail-closed after all legacy count overrides;
-    // terminal cursor traversal remains the exact advisory reconciliation.
-    if (fourBrandEffectiveScope) publicInventoryTotal = null;
+    // The effective count RPC uses the same release, immutable-lineage,
+    // single-watch and customer-filter predicates as the effective page. A
+    // missing forward RPC preserves the prior zero-outage withheld-total state.
+    const firstEffectiveCountPage = pagination === 'cursor'
+      ? !cursorProvided && page === 1 && (inventoryCursor?.offset || 0) === 0
+      : page === 1;
+    if (fourBrandEffectiveScope && firstEffectiveCountPage) {
+      fourBrandCountPromise = loadEffectiveCount(client, {
+          brand,
+          listingType: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+          model: requestedModel || null,
+          reference: requestedReference || null,
+          dial: requestedDial || null,
+          condition: condition || null,
+          search: search || null,
+          references: null,
+          imagesOnly,
+          pricedOnly,
+          postedAfter,
+          region: region || null,
+          rating: rating || null,
+        }).catch(effectiveCountError => {
+        console.warn('[reviewed-market-inventory] four-brand exact count unavailable; total withheld:', effectiveCountError.message);
+        return null;
+      });
+      publicInventoryTotal = null;
+    } else if (fourBrandEffectiveScope) {
+      // Cursor continuation pages never repeat the exact cohort-wide count.
+      publicInventoryTotal = null;
+    }
     if (vacheronOverseasRelease && requestedModel.toLowerCase() === 'overseas'
       && !search && !reference && !requestedDial && !condition && !region && !rating
       && !postedAfter && !pricedOnly && !imagesOnly) {
@@ -1974,6 +2001,7 @@ module.exports = async function handler(req, res) {
     });
 
     if (pageWindow.empty) {
+      if (fourBrandCountPromise) publicInventoryTotal = await fourBrandCountPromise;
       const publicationBrands = publicationBrandsFromSummary(summary);
       return res.status(200).json({
         status: 'ok', count: 0, total: publicInventoryTotal, page, pageSize,
@@ -3045,6 +3073,7 @@ module.exports = async function handler(req, res) {
         })
       : null;
     const publicationBrands = publicationBrandsFromSummary(summary);
+    if (fourBrandCountPromise) publicInventoryTotal = await fourBrandCountPromise;
     const combinedInventoryTotal = combineInventoryTotal(
       publicInventoryTotal,
       reviewedOverlayTotal,

@@ -26,6 +26,7 @@ const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs')
 const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
 const { loadReviewedWorkbookListing } = require('./_lib/reviewed-workbook-analytics.cjs');
 const { ROLEX_PATEK_MULTI_PARENT_ID } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
+const { loadEffectiveDetail } = require('./_lib/four-brand-field-enrichment.cjs');
 
 const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source';
 
@@ -69,7 +70,8 @@ function qnsaListingResponse(listing) {
       condition: listing.condition || null,
       price_raw: listing.price_raw == null ? null : Number(listing.price_raw),
       price_usd: listing.price_usd == null ? null : Number(listing.price_usd),
-      price_evidence_status: Number(listing.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED',
+      price_evidence_status: listing.price_evidence_status
+        || (Number(listing.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED'),
       currency: listing.currency || null,
       raw_message: rawMessage || null,
       raw_message_scope: rawMessage ? 'original_post' : 'unavailable',
@@ -95,6 +97,35 @@ function qnsaListingResponse(listing) {
       data_quality_issues: [],
       data_quality_review_required: false,
     },
+  };
+}
+
+function effectiveDetailListing(row) {
+  const imageUrl = row.has_exact_source_image === true ? row.user_image_url : null;
+  const publicRawMessage = redactPublicSource(row.raw_message).trim();
+  return {
+    id: row.id,
+    brand: row.canonical_brand,
+    model: row.model,
+    reference: row.normalized_reference,
+    dial_color: row.dial_color,
+    condition: row.condition,
+    price_raw: row.source_price_amount,
+    price_usd: row.price_usd,
+    price_evidence_status: row.price_evidence_status,
+    currency: row.source_currency,
+    raw_message: publicRawMessage || null,
+    created_at: row.posting_date,
+    listing_date: row.posting_date,
+    source: row.source_file || 'MARIADB_IMMUTABLE_RAW',
+    source_type: 'qnsa_four_brand_effective_release',
+    listing_type: row.listing_type,
+    listing_status: row.trading_floor_status,
+    confidence: row.confidence,
+    thumbnail_url: imageUrl,
+    image_urls: imageUrl ? [imageUrl] : [],
+    has_images: Boolean(imageUrl),
+    location: row.location,
   };
 }
 
@@ -155,6 +186,18 @@ module.exports = async function handler(req, res) {
       canReview = ['admin', 'reviewer'].includes(userRole(sessionUser));
     } catch {
       // Public evidence remains available when optional reviewer resolution fails.
+    }
+    let effectiveDetail = null;
+    try {
+      effectiveDetail = await loadEffectiveDetail(client, id);
+    } catch (effectiveDetailError) {
+      console.warn('[price-research-listing] four-brand exact detail unavailable; preserving legacy detail path:', effectiveDetailError.message);
+    }
+    if (effectiveDetail?.fourBrandScope) {
+      if (!effectiveDetail.row) return res.status(404).json({ error: 'Listing not found' });
+      return res.status(200).json(qnsaListingResponse(
+        effectiveDetailListing(effectiveDetail.row),
+      ));
     }
     let qnsaListing = null;
     try {
@@ -400,3 +443,4 @@ module.exports = async function handler(req, res) {
 };
 
 module.exports.isTradingFloorOnlyReviewedListingId = isTradingFloorOnlyReviewedListingId;
+module.exports.effectiveDetailListing = effectiveDetailListing;

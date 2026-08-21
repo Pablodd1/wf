@@ -14,12 +14,23 @@ const migration = fs.readFileSync(
   ),
   "utf8",
 );
+const forwardReadMigration = fs.readFileSync(
+  path.join(
+    root,
+    "supabase/migrations/20260821010000_qnsa_four_brand_effective_count_detail.sql",
+  ),
+  "utf8",
+);
 const inventorySource = fs.readFileSync(
   path.join(root, "api/reviewed-market-inventory.js"),
   "utf8",
 );
 const researchSource = fs.readFileSync(
   path.join(root, "api/price-research.js"),
+  "utf8",
+);
+const researchDetailSource = fs.readFileSync(
+  path.join(root, "api/price-research-listing.js"),
   "utf8",
 );
 const workflow = fs.readFileSync(
@@ -35,6 +46,8 @@ const {
   isFourBrand,
   loadEffectiveEnrichments,
   loadEffectivePage,
+  loadEffectiveCount,
+  loadEffectiveDetail,
 } = require("../api/_lib/four-brand-field-enrichment.cjs");
 const {
   readManifest,
@@ -42,6 +55,7 @@ const {
   stable,
   sha,
 } = require("../tools/mariadb-live/run-four-brand-field-enrichment.cjs");
+const priceResearchListing = require("../api/price-research-listing.js");
 
 test("sidecar is limited to four brands and never mutates immutable listing sources", () => {
   assert.match(
@@ -235,14 +249,70 @@ test("four-brand effective pages use one offset stream and never inherit six-bra
     inventorySource,
     /const qnsaUnpartitionedMedia =[\s\S]*fourBrandEffectiveScope/,
   );
-  assert.match(
-    inventorySource,
-    /if \(fourBrandEffectiveScope\) publicInventoryTotal = null/,
-  );
+  assert.match(inventorySource, /if \(fourBrandEffectiveScope && firstEffectiveCountPage\) \{[\s\S]*loadEffectiveCount\(client/);
   assert.doesNotMatch(
     inventorySource,
     /const fourBrandEffectiveScope[^;]+;[\s\S]*const fourBrandEffectiveScope/,
   );
+});
+
+test("forward count shares every effective-page eligibility and customer filter", () => {
+  assert.match(forwardReadMigration, /qnsa_four_brand_effective_row_count/);
+  for (const predicate of [
+    "l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false",
+    "COALESCE(l.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'",
+    "suppressed_exact_duplicate",
+    "l.source_candidate_hash=r.source_candidate_hash",
+    "upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')",
+    "p_listing_type IS NULL",
+    "p_images_only",
+    "p_priced_only",
+    "p_posted_after",
+    "p_region",
+    "p_rating",
+    "p_model IS NULL",
+    "p_reference IS NULL",
+    "p_references IS NULL",
+    "p_dial IS NULL",
+    "p_condition IS NULL",
+    "p_search IS NULL",
+  ]) {
+    assert.ok(migration.includes(predicate), `page predicate missing: ${predicate}`);
+    assert.ok(forwardReadMigration.includes(predicate), `count predicate missing: ${predicate}`);
+  }
+  assert.doesNotMatch(forwardReadMigration, /\b(?:INSERT|UPDATE|DELETE)\b/i);
+  assert.doesNotMatch(forwardReadMigration, /LIMIT\s+2500|OFFSET\s+/i);
+});
+
+test("exact four-brand detail is indexed by UUID and bypasses the legacy research scan", () => {
+  assert.match(forwardReadMigration, /qnsa_four_brand_effective_detail\(p_listing_id uuid\)/);
+  assert.match(forwardReadMigration, /WHERE l\.id=p_listing_id/);
+  for (const manifest of ["omega", "cartier", "tudor"]) {
+    assert.match(forwardReadMigration, new RegExp(`qnsa_${manifest}_release_manifest m ON m\\.listing_id=s\\.id`));
+  }
+  const effectiveCall = researchDetailSource.indexOf("await loadEffectiveDetail(client, id)");
+  const legacyScan = researchDetailSource.indexOf("await loadQnsaReleaseListing(client, id)");
+  assert.ok(effectiveCall >= 0 && legacyScan > effectiveCall);
+  assert.match(
+    researchDetailSource.slice(effectiveCall, legacyScan),
+    /if \(effectiveDetail\?\.fourBrandScope\)[\s\S]*return res\.status\(200\)/,
+  );
+  const publicDetail = priceResearchListing.effectiveDetailListing({
+    id: "11111111-1111-4111-8111-111111111111",
+    canonical_brand: "Zenith",
+    raw_message: "Zenith 03.2522.400 USD 8,500 WhatsApp +1 305 555 1212",
+    has_exact_source_image: false,
+  });
+  assert.match(publicDetail.raw_message, /Zenith 03\.2522\.400 USD 8,500/);
+  assert.doesNotMatch(publicDetail.raw_message, /305|555|1212/);
+});
+
+test("exact count runs on the first cursor page only and is never a row gate", () => {
+  assert.match(inventorySource, /const firstEffectiveCountPage = pagination === 'cursor'/);
+  assert.match(inventorySource, /!cursorProvided && page === 1 && \(inventoryCursor\?\.offset \|\| 0\) === 0/);
+  assert.match(inventorySource, /if \(fourBrandEffectiveScope && firstEffectiveCountPage\)/);
+  assert.match(inventorySource, /else if \(fourBrandEffectiveScope\)[\s\S]*publicInventoryTotal = null/);
+  assert.match(inventorySource, /four-brand exact count unavailable; total withheld/);
 });
 
 test("runner validates private exact lineage and produces a deterministic plan", () => {
@@ -292,6 +362,32 @@ test("missing additive RPC preserves base paths without claiming enrichment", as
   const client = { rpc: async () => ({ data: null, error: { code: "PGRST202", message: "schema cache" } }) };
   assert.deepEqual(await loadEffectiveEnrichments(client, [row]), [row]);
   assert.equal(await loadEffectivePage(client, { brand: "Omega" }), null);
+  assert.equal(await loadEffectiveCount(client, { brand: "Omega" }), null);
+  assert.equal(await loadEffectiveDetail(client, row.id), null);
+});
+
+test("count and exact detail RPCs are bounded and preserve their response contracts", async () => {
+  const calls = [];
+  const client = { rpc: async (name, args) => {
+    calls.push({ name, args });
+    if (name === "qnsa_four_brand_effective_row_count") return { data: 42, error: null };
+    return { data: { four_brand_scope: true, row_data: { id: args.p_listing_id } }, error: null };
+  } };
+  assert.equal(await loadEffectiveCount(client, {
+    brand: "Zenith", listingType: "WTS", reference: "03.2522.400",
+    imagesOnly: true, pricedOnly: true,
+  }), 42);
+  const id = "11111111-1111-4111-8111-111111111111";
+  assert.deepEqual(await loadEffectiveDetail(client, id), {
+    installed: true, fourBrandScope: true, row: { id },
+  });
+  assert.deepEqual(calls.map(call => call.name), [
+    "qnsa_four_brand_effective_row_count",
+    "qnsa_four_brand_effective_detail",
+  ]);
+  assert.equal(calls[0].args.p_reference, "03.2522.400");
+  assert.equal(calls[0].args.p_images_only, true);
+  assert.deepEqual(calls[1].args, { p_listing_id: id });
 });
 
 test("OWNER_ASSUMED_USD is customer-visible excluded evidence only", () => {
@@ -322,6 +418,9 @@ test("workflow is QNSA-pinned, private-artifact based, bounded, and rollback cap
   assert.match(workflow, /qnsa-four-brand-field-enrichment/);
   assert.match(workflow, /qnsa_four_brand_enrichment_schema_contract/);
   assert.match(workflow, /SCHEMA_CONTRACT_VERSION/);
+  assert.match(workflow, /FORWARD_READ_MIGRATION_SHA256/);
+  assert.match(workflow, /20260821010000_qnsa_four_brand_effective_count_detail\.sql/);
+  assert.match(workflow, /Pinned forward read migration SHA mismatch/);
   assert.match(workflow, /MIGRATION_VERSION: '20260820210000'/);
   assert.match(workflow, /supabase_migrations\.schema_migrations/);
   assert.match(
