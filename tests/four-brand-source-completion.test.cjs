@@ -63,6 +63,7 @@ test('migration is private, lineage-bound, missing-only, and rollback capable', 
   assert.match(sql, /price_evidence_status.*OWNER_ASSUMED_USD/s);
   assert.match(sql, /qnsa_four_brand_source_completion_snapshots/);
   assert.match(sql, /rollback_qnsa_four_brand_source_completion/);
+  assert.equal((sql.match(/SET statement_timeout='180s'/g) || []).length, 2);
 });
 
 test('workflow separates schema install from audit and activation', () => {

@@ -37,7 +37,7 @@ jobs:
     env:
       PROJECT_REF: qnsafosakvonzgfcsphh
       SUPABASE_URL: https://qnsafosakvonzgfcsphh.supabase.co
-      EXPECTED_MIGRATION_SHA256: ad581cdc68399731a2a51a82b75d65a871faf070113179d405283bb771153459
+      EXPECTED_MIGRATION_SHA256: 1bc39e89eeb552a7c1dcc3d30d47e7b531adfbd92f980cb94b624f7fde9ac4c2
     steps:
       - uses: actions/checkout@v4
 
