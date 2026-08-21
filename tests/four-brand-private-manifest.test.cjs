@@ -67,6 +67,7 @@ test("private authority uses RPC lineage and raw, never public hashes or evidenc
   assert.equal(manifest.run_key, "private-test-run");
   assert.equal(manifest.records.length, 1);
   const record = manifest.records[0];
+  assert.equal(record.proposal_authority.generator_version, "four-brand-private-manifest-v1");
   assert.equal(record.proposal_authority.source_hash, privateCandidate.source_hash);
   assert.equal(record.proposal_authority.source_candidate_hash, privateCandidate.source_candidate_hash);
   assert.equal(record.proposal_authority.evidence.reference_quote, "123.10.24.60.02.001");
