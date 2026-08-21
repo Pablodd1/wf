@@ -633,8 +633,7 @@ SET search_path=public,staging,pg_catalog AS $$
     UNION ALL
     SELECT 'Zenith',l.id,
       row_number() OVER (ORDER BY
-        EXISTS (SELECT 1 FROM public.listing_image_reviews ir
-          WHERE ir.record_id=l.id::text AND ir.status='VISUALLY_VERIFIED') DESC,
+        COALESCE(NULLIF(btrim(l.image_url),'') ~* '^https?://[^[:space:]]+$',false) DESC,
         (l.price_usd>0 AND (l.currency_normalized IN ('USD','USDT') OR
           (l.conversion_rate>0 AND l.conversion_timestamp IS NOT NULL
             AND NULLIF(btrim(l.conversion_source),'') IS NOT NULL))) DESC,
@@ -673,7 +672,8 @@ SET search_path=public,staging,pg_catalog AS $$
       p.run_key field_enrichment_run_key,
       dl.dealer_id exact_dealer_id,
       d.rating exact_dealer_rating,d.review_count exact_dealer_review_count,
-      mm.public_url verified_image_url
+      CASE WHEN NULLIF(btrim(l.image_url),'') ~* '^https?://[^[:space:]]+$'
+        THEN btrim(l.image_url) END verified_image_url
     FROM released r JOIN staging.listings l ON l.id=r.listing_id
     JOIN public.raw_message_versions rv ON rv.id=l.raw_message_version_id
       AND rv.source_record_id=l.source_record_id AND rv.source_hash=l.source_hash
@@ -683,13 +683,6 @@ SET search_path=public,staging,pg_catalog AS $$
       AND p.canonical_brand=l.brand_normalized
     LEFT JOIN public.dealer_listing_links dl ON dl.listing_id=l.id AND dl.link_status='APPLIED'
     LEFT JOIN public.dealers d ON d.id=dl.dealer_id AND d.status='VERIFIED'
-    LEFT JOIN LATERAL (
-      SELECT mm.public_url FROM public.listing_image_reviews ir
-      JOIN public.media_manifest mm ON mm.source_object_key=ir.source_object_key
-        AND mm.matched_record_id=l.id::text AND mm.verification_status='url_reachable'
-      WHERE ir.record_id=l.id::text AND ir.status='VISUALLY_VERIFIED'
-      ORDER BY ir.reviewed_at DESC NULLS LAST,ir.source_object_key LIMIT 1
-    ) mm ON true
     WHERE l.brand_normalized=r.brand AND l.source_hash=r.source_hash
       AND l.source_candidate_hash=r.source_candidate_hash
       AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
@@ -700,7 +693,8 @@ SET search_path=public,staging,pg_catalog AS $$
         'withdrawn','rejected','hidden','deleted','archived')
       AND upper(COALESCE(l.verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
       AND (p_listing_type IS NULL OR upper(COALESCE(l.listing_type,l.intent,''))=upper(p_listing_type))
-      AND (COALESCE(p_images_only,false)=false OR mm.public_url IS NOT NULL)
+      AND (COALESCE(p_images_only,false)=false
+        OR NULLIF(btrim(l.image_url),'') ~* '^https?://[^[:space:]]+$')
       AND (COALESCE(p_priced_only,false)=false OR COALESCE(p.proposed_price_usd,l.price_usd,l.price_normalized,0)>0)
       AND (p_posted_after IS NULL OR l.created_at>=p_posted_after)
       AND (p_region IS NULL OR COALESCE(l.location,'') ILIKE '%'||p_region||'%')
