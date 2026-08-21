@@ -31,7 +31,7 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.match(landingLinks, /label: 'PRICE RESEARCH', to: '\/price-research'/);
   assert.match(landingLinks, /label: 'POST IT', to: '\/dealer\/post'/);
   assert.match(landingLinks, /label: 'HIRE FI'/);
-  assert.match(landingLinks, /label: 'VIRTUAL AUTHENTICATOR'[\s\S]*VIRTUAL_AUTHENTICATOR_URL/);
+  assert.doesNotMatch(landingLinks, /VIRTUAL AUTHENTICATOR|VIRTUAL_AUTHENTICATOR_URL/);
   assert.match(landingLinks, /label: 'WORKSPACE', to: '\/dealer\/workspace'/);
   assert.doesNotMatch(landingLinks, /MEMBERSHIP/);
   assert.doesNotMatch(header, /label: 'ADM PANEL'/);
@@ -39,8 +39,8 @@ test('customer marketplace has direct primary navigation and the approved Hire F
   assert.doesNotMatch(header, /!landing && <LanguageToggle/);
   assert.match(home, /<MarketHeader className="sticky top-0" landing \/>/);
   assert.match(footer, /\['POST IT', '\/dealer\/post'\]/);
-  assert.match(header, /VIRTUAL_AUTHENTICATOR_URL = 'https:\/\/91933fc4\.curatedlux\.pages\.dev'/);
-  assert.match(footer, /href=\{VIRTUAL_AUTHENTICATOR_URL\}[\s\S]*VIRTUAL AUTHENTICATOR/);
+  assert.doesNotMatch(header, /VIRTUAL AUTHENTICATOR|VIRTUAL_AUTHENTICATOR_URL/);
+  assert.doesNotMatch(footer, /VIRTUAL AUTHENTICATOR|VIRTUAL_AUTHENTICATOR_URL/);
   assert.doesNotMatch(home, /luxuryapp-wf\.vercel\.app/);
   assert.doesNotMatch(postItem, /LUXURY_APP_URL|Luxury App|<iframe/);
   assert.match(postItem, /Open for testing/);

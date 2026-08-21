@@ -27,3 +27,21 @@ test('Cartier and Tudor are present in customer discovery controls', () => {
   assert.match(inventory, /'Vacheron Constantin', 'Omega', 'Tudor'/);
   assert.match(research, /const POPULAR_BRANDS = \[[^\]]*'Cartier'[^\]]*'Tudor'/);
 });
+
+test('exact dealer profiles connect Trading Floor and Price Research to Reference Check', () => {
+  const floor = read('src/pages/TradingFloor.tsx');
+  const research = read('src/pages/PriceResearch.tsx');
+
+  assert.match(floor, /dealerRating \|\| listing\.dealer_profile_path/);
+  assert.match(research, /row\.dealer_profile_path &&/);
+  assert.match(research, /Check this dealer in Reference Check/);
+  assert.doesNotMatch(research, /No exact directory match/);
+});
+
+test('Virtual Authenticator is absent from customer navigation', () => {
+  const header = read('src/components/MarketHeader.tsx');
+  const footer = read('src/components/Footer.tsx');
+
+  assert.doesNotMatch(header, /VIRTUAL AUTHENTICATOR|VIRTUAL_AUTHENTICATOR_URL/);
+  assert.doesNotMatch(footer, /VIRTUAL AUTHENTICATOR|VIRTUAL_AUTHENTICATOR_URL/);
+});

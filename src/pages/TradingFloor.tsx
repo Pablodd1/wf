@@ -1203,7 +1203,7 @@ function ListingCard({ listing, priceSummary, priceSummaryLoaded, selected, onSe
       </div>
 
       {/* 7. Posted by Section */}
-      {(cleanValue(listing.seller_name) || listing['Posted By'] || dealerRating) && (
+      {(cleanValue(listing.seller_name) || listing['Posted By'] || dealerRating || listing.dealer_profile_path) && (
         <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
           <div className="text-[#6B7280]">Posted by</div>
           <ListingDealerEvidence

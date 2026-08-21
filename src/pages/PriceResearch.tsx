@@ -2284,9 +2284,10 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
     ? `Excluded from averages · ${exclusionLabel}`
     : 'Included in qualified comparable average';
   return (
+    <div style={{ borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE }}>
     <button type="button" onClick={onOpen} aria-label={`View source detail for ${title}, ${priceLabel}, ${evidenceStatus}`}
       className={showImage ? '!grid min-h-20 grid-cols-[60px_minmax(0,1fr)] sm:!flex' : '!grid min-h-20 grid-cols-1 sm:!flex'}
-      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px clamp(12px, 3vw, 24px)', border: 0, borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px clamp(12px, 3vw, 24px)', border: 0, backgroundColor: WHITE, cursor: 'pointer', width: '100%', textAlign: 'left' }}
       onMouseEnter={e => (e.currentTarget.style.backgroundColor = LIGHT_GRAY)}
       onMouseLeave={e => (e.currentTarget.style.backgroundColor = WHITE)}>
       {showImage && (
@@ -2354,6 +2355,14 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
       </div>
       <Eye className="hidden h-3.5 w-3.5 sm:block" style={{ color: MUTED, flexShrink: 0 }} />
     </button>
+    {row.dealer_profile_path && (
+      <div style={{ padding: '0 clamp(12px, 3vw, 24px) 10px', fontSize: 11 }}>
+        <Link to={row.dealer_profile_path} className="font-semibold underline underline-offset-2" style={{ color: GOLD }}>
+          Check this dealer in Reference Check
+        </Link>
+      </div>
+    )}
+    </div>
   );
 }
 

@@ -96,9 +96,6 @@ export function Footer() {
             <Link to="/dealers" className="transition-colors hover:text-white">Reference Check</Link>
             <Link to="/dealer/workspace" className="transition-colors hover:text-white">Workspace</Link>
             <Link to="/insight" className="transition-colors hover:text-white">Blog</Link>
-            <a href={LUXFI_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 transition-colors hover:text-white">
-              VIRTUAL AUTHENTICATOR <ExternalLink size={11} />
-            </a>
           </nav>
 
           <nav aria-label="Company & Access" className="flex flex-col gap-2.5 text-xs text-white/60">

@@ -17,7 +17,7 @@ test('home restores cream dealer-network landing and exposes the approved transa
   assert.match(landingLinks, /PRICE RESEARCH/);
   assert.match(landingLinks, /POST IT/);
   assert.match(landingLinks, /HIRE FI/);
-  assert.match(landingLinks, /VIRTUAL AUTHENTICATOR/);
+  assert.doesNotMatch(landingLinks, /VIRTUAL AUTHENTICATOR/);
   assert.match(landingLinks, /WORKSPACE/);
   assert.doesNotMatch(landingLinks, /MEMBERSHIP/);
   assert.match(header, /curated-luxury-logo\.png/);
@@ -38,7 +38,7 @@ test('privacy is public and POST IT supports camera plus file selection', () => 
   const footer = read('src/components/Footer.tsx');
   const post = read('src/pages/DealerSubmitListing.tsx');
   assert.match(app, /path="\/privacy"/);
-  assert.match(footer, /to="\/privacy"/);
+  assert.match(footer, /to="\/info\/privacy"/);
   assert.match(post, /capture="environment"/);
   assert.match(post, /Take photo/);
   assert.match(post, /Choose photos/);
