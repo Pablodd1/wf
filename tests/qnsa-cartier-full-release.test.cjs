@@ -137,12 +137,12 @@ test('Trading Floor unwraps table-valued Cartier RPC rows before publication gat
 });
 
 test('controlled Cartier pages retain their manifest offset instead of a zeroed six-brand cursor', () => {
-  assert.match(inventory, /const sixBrandCompositeScope = sixBrandBroadScope && !controlledBrandRelease/);
+  assert.match(inventory, /const sixBrandCompositeScope = sixBrandBroadScope[\s\S]*!controlledBrandRelease && !fourBrandEffectiveScope/);
   assert.match(inventory, /if \(sixBrandCompositeScope && pagination === 'cursor'/);
   assert.match(inventory, /const sixBrandKeysetCursor = sixBrandCompositeScope/);
   assert.match(inventory, /brandKeysets: sixBrandKeysetCursor/);
   assert.match(inventory, /brandScope: sixBrandKeysetCursor \? sixBrandScope : null/);
-  assert.match(inventory, /!sixBrandBroadScope \|\| controlledBrandRelease/);
+  assert.match(inventory, /!sixBrandBroadScope \|\| controlledBrandRelease \|\| fourBrandEffectiveScope/);
 });
 
 test('candidate query preserves source lineage and does not infer parent or image evidence', () => {

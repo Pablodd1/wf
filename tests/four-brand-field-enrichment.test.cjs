@@ -226,6 +226,25 @@ test("Trading Floor and Price Research both use the same effective RPC", () => {
   assert.match(researchSource, /listingType: 'WTB'/);
 });
 
+test("four-brand effective pages use one offset stream and never inherit six-brand media cursors", () => {
+  assert.match(
+    inventorySource,
+    /const sixBrandCompositeScope = sixBrandBroadScope[\s\S]*!fourBrandEffectiveScope/,
+  );
+  assert.match(
+    inventorySource,
+    /const qnsaUnpartitionedMedia =[\s\S]*fourBrandEffectiveScope/,
+  );
+  assert.match(
+    inventorySource,
+    /if \(fourBrandEffectiveScope\) publicInventoryTotal = null/,
+  );
+  assert.doesNotMatch(
+    inventorySource,
+    /const fourBrandEffectiveScope[^;]+;[\s\S]*const fourBrandEffectiveScope/,
+  );
+});
+
 test("runner validates private exact lineage and produces a deterministic plan", () => {
   const directory = fs.mkdtempSync(
     path.join(os.tmpdir(), "four-brand-enrichment-"),
