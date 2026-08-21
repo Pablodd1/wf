@@ -23,12 +23,12 @@ test('owner-approved workbook contacts are public only through the explicit reco
 
 test('Trading Floor shows USD only for source-confirmed eligible evidence', () => {
   const page = read('src/pages/TradingFloor.tsx');
-  assert.match(page, /\['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'\]\.includes\([\s\S]*listing\.price_evidence_status/);
+  assert.match(page, /\['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX'\]\.includes\([\s\S]*listing\.price_evidence_status/);
   assert.doesNotMatch(page, /OWNER_DOLLAR_USD_POLICY|OWNER_K_USD_POLICY/);
   assert.match(page, /verifiedUsd !== null[\s\S]*formatUsdPrice\(verifiedUsd\)/);
   assert.doesNotMatch(page, /Price on request/);
-  assert.match(page, /Owner-assumed USD - tracked, excluded from averages unless independently qualified/);
-  assert.match(page, /Original source price · no USD conversion/);
+  assert.doesNotMatch(page, /Owner-assumed USD - tracked, excluded from averages unless independently qualified/);
+  assert.doesNotMatch(page, /Original source price · no USD conversion/);
   assert.match(page, /contact\?\.contact_channels\?\.whatsapp/);
   assert.doesNotMatch(page, /\{contact\?\.phone_display/);
   assert.match(page, /sellerAnalytics\?\.wts_posts/);

@@ -5,7 +5,7 @@ const CURRENCY_ALIASES = [
   { code: 'HKD', pattern: 'HKN|HNK' },
   { code: 'HKD', pattern: 'HKD|HDK|HK\\$|H\\.?K\\.?D\\.?|港币|港幣' },
   { code: 'USD', pattern: 'USD|US\\$|U\\$' },
-  { code: 'EUR', pattern: 'EUR|€' },
+  { code: 'EUR', pattern: 'EUR|€|💶' },
   { code: 'GBP', pattern: 'GBP|£' },
   { code: 'CHF', pattern: 'CHF' },
   { code: 'SGD', pattern: 'SGD|S\\$' },
@@ -111,7 +111,7 @@ function normalizeCurrencyToken(token) {
   if (/^(HKD|HDK|HKN|HNK|HK|HK\$|H\.?K\.?D\.?)$/.test(clean) || /港币|港幣/.test(token)) return 'HKD';
   if (/^(USD|US\$|U\$)$/.test(clean)) return 'USD';
   if (clean === 'USDT') return 'USDT';
-  if (clean === 'EUR' || clean === '€') return 'EUR';
+  if (clean === 'EUR' || clean === '€' || clean === '💶') return 'EUR';
   if (clean === 'GBP' || clean === '£') return 'GBP';
   if (clean === 'CHF') return 'CHF';
   if (clean === 'SGD' || clean === 'S$') return 'SGD';
@@ -214,7 +214,7 @@ function extractPriceObservations(text, context = {}) {
     const amount = parseNumber(match[2], match[3]);
     const followedByDateSeparator = /^\s*\/\s*\d/.test(line.slice(match.index + match[0].length));
     const yearLike = !match[3] && amount >= 1900 && amount <= 2099;
-    const explicitMoneySymbol = /^(?:€|£)$/.test(String(match[1] || ''));
+    const explicitMoneySymbol = /^(?:€|£|💶)$/.test(String(match[1] || ''));
     if (followedByDateSeparator || (yearLike && !explicitMoneySymbol)) continue;
     add(match[0], match[2], match[3], match[1], match.index, 'explicit_line_currency', 'prefix');
   }
@@ -224,7 +224,7 @@ function extractPriceObservations(text, context = {}) {
       && !match[2]
       && amount <= 31;
     const yearLike = !match[2] && amount >= 1900 && amount <= 2099;
-    const explicitMoneySymbol = /^(?:€|£)$/.test(String(match[3] || ''));
+    const explicitMoneySymbol = /^(?:€|£|💶)$/.test(String(match[3] || ''));
     if (precededByDateSeparator || (yearLike && !explicitMoneySymbol)) continue;
     add(match[0], match[1], match[2], match[3], match.index, 'explicit_line_currency', 'suffix');
   }
@@ -373,7 +373,7 @@ function hasUnresolvedEmojiPrice(text, context = {}) {
 
   const hasPriceCue = Boolean(context.currency_context)
     || new RegExp(`(?:${CURRENCY_TOKEN})`, 'i').test(raw)
-    || /(?:\$|price|ask(?:ing)?|\u{1F4B0}|\u{1F4B5}|\u{1F4B2})/iu.test(raw);
+    || /(?:\$|price|ask(?:ing)?|\u{1F4B0}|\u{1F4B5}|\u{1F4B2}|\u{1F4B6})/iu.test(raw);
   return hasPriceCue && extractPriceObservations(raw, context).length === 0;
 }
 

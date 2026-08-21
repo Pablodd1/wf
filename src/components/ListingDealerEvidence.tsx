@@ -35,7 +35,7 @@ export function DealerRatingBadge({
   showUnrated = true,
 }: Pick<DealerEvidence, 'rating' | 'reviewCount' | 'ratingEvidenceStatus'> & { showUnrated?: boolean }) {
   const evidence = sourceBackedDealerRating({ rating, reviewCount, ratingEvidenceStatus });
-  if (!evidence) return showUnrated ? <span className="text-xs font-medium text-[#6B7280]">Rating unavailable</span> : null;
+  if (!evidence) return showUnrated ? <span className="text-xs font-medium text-[#6B7280]">Dealer rating not available</span> : null;
   const accessibleLabel = evidence.kind === 'score'
     ? `Dealer rating ${evidence.rating.toFixed(1)} from ${evidence.reviewCount} reviews`
     : `Rated dealer with ${evidence.reviewCount} positive feedback records`;

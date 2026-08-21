@@ -1116,21 +1116,7 @@ function ListingCard({ listing, priceSummary, priceSummaryLoaded, selected, onSe
   };
   const cardPriceRatingLabel = displayedCardPriceRating.loading
     ? 'Loading…'
-    : displayedCardPriceRating.rating.code === 'NOT_RATED'
-      ? canRatePrice && priceSummary
-        ? `Not rated · ${availableComparableCount}/2 qualified`
-        : canRatePrice
-          ? 'Not rated · evidence unavailable'
-        : 'Not rated'
-      : displayedCardPriceRating.rating.label;
-  const exactReferenceAverageLabel = exactReferenceRating && comparableCount >= 2 && benchmarkStats
-    ? ` · Ref avg ${formatUsdPrice(benchmarkStats.avg)}`
-    : '';
-  const dealerStatusHint = dealerRating
-    ? null
-    : listing.dealer_profile_path
-      ? 'No source-backed feedback'
-      : 'No exact directory match';
+    : displayedCardPriceRating.rating.label;
 
   return (
     <article
@@ -1182,22 +1168,23 @@ function ListingCard({ listing, priceSummary, priceSummaryLoaded, selected, onSe
       {/* 5. Price & Price Rating Row */}
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
         <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
-        <div className="text-xs font-medium" style={{ color: displayedCardPriceRating.rating.color }} title={displayedCardPriceRating.rating.reason}>
-          Price rating: {cardPriceRatingLabel}{exactReferenceAverageLabel}
+        <div className="text-xs font-medium" style={{ color: displayedCardPriceRating.rating.color }}>
+          {cardPriceRatingLabel}
         </div>
       </div>
-      <div className="mt-1 text-xs font-medium text-[#6B7280]">{meta.priceEvidenceLabel}</div>
       {meta.originalPriceLabel && meta.originalPriceLabel !== meta.priceLabel && (
         <div className="mt-0.5 text-xs text-[#7A8699]">Original: {meta.originalPriceLabel}</div>
       )}
       <div className="text-xs text-[#7A8699] mt-0.5 flex items-center gap-1">
-        Dealer:
-        <DealerRatingBadge
-          rating={listing.seller_rating}
-          reviewCount={listing.seller_review_count}
-          ratingEvidenceStatus={listing.seller_rating_evidence_status}
-        />
-        {dealerStatusHint && <span>· {dealerStatusHint}</span>}
+        {dealerRating ? <>
+          Dealer:
+          <DealerRatingBadge
+            rating={listing.seller_rating}
+            reviewCount={listing.seller_review_count}
+            ratingEvidenceStatus={listing.seller_rating_evidence_status}
+            showUnrated={false}
+          />
+        </> : <span>Dealer rating not available</span>}
       </div>
 
       {/* 6. Badges (Location & Date) */}
@@ -1216,7 +1203,7 @@ function ListingCard({ listing, priceSummary, priceSummaryLoaded, selected, onSe
       </div>
 
       {/* 7. Posted by Section */}
-      {(cleanValue(listing.seller_name) || listing['Posted By'] || dealerRating) && (
+      {(cleanValue(listing.seller_name) || listing['Posted By'] || dealerRating || listing.dealer_profile_path) && (
         <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
           <div className="text-[#6B7280]">Posted by</div>
           <ListingDealerEvidence
@@ -1408,7 +1395,6 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
             </div>
 
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
-            <div className="mt-1 text-xs font-medium text-[#6B7280]">{meta.priceEvidenceLabel}</div>
             {meta.originalPriceLabel && meta.originalPriceLabel !== meta.priceLabel && (
               <div className="mt-0.5 text-xs text-[#7A8699]">Original: {meta.originalPriceLabel}</div>
             )}
@@ -1436,20 +1422,9 @@ function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose:
           {/* Card 2: Price Rating */}
           <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
             <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">PRICE RATING</div>
-            <div className="mt-2 text-lg font-bold text-[#1C1917]">
-              {benchmark.loading ? 'Loading market evidence…' : (benchmark.rating?.code === 'NOT_RATED' ? 'Not rated' : benchmark.rating?.label)}
+            <div className="mt-2 text-lg font-bold" style={{ color: benchmark.rating?.color || '#9ca3af' }}>
+              {benchmark.loading ? 'Loading…' : (benchmark.rating?.label || 'Insufficient market data')}
             </div>
-            <div className="mt-1 text-xs text-[#8B95A2]">
-              {benchmark.loading ? 'Loading the exact reference and dial cohort.' : (benchmark.rating?.reason || 'Insufficient exact market evidence.')}
-            </div>
-            {benchmark.stats && benchmark.count >= 2 && (
-              <div className="mt-4 grid grid-cols-2 gap-3 border-t border-stone-100 pt-4 sm:grid-cols-4">
-                <MarketStat label="Average" value={benchmark.stats.avg} />
-                <MarketStat label="Median" value={benchmark.stats.median || benchmark.stats.avg} />
-                <MarketStat label="Low" value={benchmark.stats.min} />
-                <MarketStat label="High" value={benchmark.stats.max} />
-              </div>
-            )}
           </div>
 
           {/* Card 3: Posted by & WhatsApp */}
@@ -1520,17 +1495,6 @@ function ContactMetric({ label, value }: { label: string; value: number | string
   return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{displayValue}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
 }
 
-function MarketStat({ label, value }: { label: string; value: number }) {
-  return (
-    <div>
-      <div className="text-[11px] uppercase" style={{ color: MUTED }}>{label}</div>
-      <div className="mt-1 text-sm font-semibold" style={{ color: INK }}>
-        ${Math.round(value).toLocaleString()}
-      </div>
-    </div>
-  );
-}
-
 function sourcePosterContact(listing: ListingRecord): ListingContact | null {
   if (listing.contact_publication_approved !== true) return null;
   const phone = String(listing.seller_phone || listing['Phone Number'] || listing.phone_number || '').trim();
@@ -1573,21 +1537,11 @@ function getListingMeta(listing: ListingRecord) {
         ? 'Price requires review'
         : sourcePrice || 'Price not supplied';
 
-  const priceEvidenceLabel = verifiedUsd !== null
-    ? 'Source-confirmed USD'
-    : reviewedWorkbookUsd !== null
-      ? 'Owner-assumed USD - tracked, excluded from averages unless independently qualified'
-      : workbookPriceNeedsReview
-        ? 'Workbook price anomaly - held for review'
-        : sourcePrice
-          ? 'Original source price · no USD conversion'
-          : 'Price not supplied';
   const title = buildListingTitle(listing);
 
   return {
     title,
     priceLabel,
-    priceEvidenceLabel,
     originalPriceLabel,
     region,
     postedDate,

@@ -102,7 +102,7 @@ async function loadQnsaReviewedReleaseSummary(client) {
     count_snapshot_available: !error,
     source: 'mariadb-normalized-20260811-codex-v1',
     brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith',
-      'Vacheron Constantin', 'Omega'].map(brand => ({
+      'Vacheron Constantin', 'Omega', 'Tudor'].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,
@@ -129,7 +129,7 @@ function unavailableQnsaReleaseSummary() {
     count_snapshot_available: false,
     source: 'mariadb-normalized-20260811-codex-v1',
     brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith',
-      'Vacheron Constantin', 'Omega'].map(brand => ({
+      'Vacheron Constantin', 'Omega', 'Tudor'].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,

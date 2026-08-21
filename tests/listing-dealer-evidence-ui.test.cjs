@@ -23,7 +23,7 @@ test('dealer evidence never invents a numeric rating and protects private contac
   assert.match(evidence, /ratingEvidenceStatus === 'SOURCE_SUPPLIED'/);
   assert.match(evidence, /ratingEvidenceStatus === 'SOURCE_FEEDBACK_COUNT'/);
   assert.match(evidence, /Number\.isFinite\(rating\) && rating > 0 && hasReviews/);
-  assert.match(evidence, />Rating unavailable<\/span>/);
+  assert.match(evidence, />Dealer rating not available<\/span>/);
   assert.match(evidence, /contactPublicationApproved && sellerPhone/);
   assert.match(evidence, /publishedGroupCount > 0/);
   assert.match(evidence, /Reference Check profile/);

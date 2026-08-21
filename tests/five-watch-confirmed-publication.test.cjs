@@ -54,9 +54,9 @@ test('exact five publication fails closed if exact identity or raw price evidenc
   assert.equal(held.price_evidence_status, 'EXACT_SOURCE_EVIDENCE_MISMATCH_HELD');
 });
 
-test('Trading Floor renders evidence and original currency while withholding normalized summaries', () => {
+test('Trading Floor renders original currency without verbose price evidence and withholds normalized summaries', () => {
   const source = fs.readFileSync(path.join(root, 'src/pages/TradingFloor.tsx'), 'utf8');
-  assert.match(source, /\{meta\.priceEvidenceLabel\}/);
+  assert.doesNotMatch(source, /priceEvidenceLabel/);
   assert.match(source, /Original: \{meta\.originalPriceLabel\}/);
   assert.match(source, /listing\.raw_message_scope === 'normalized_summary'/);
   assert.match(source, /SOURCE_EXPLICIT_USD_USDT/);
