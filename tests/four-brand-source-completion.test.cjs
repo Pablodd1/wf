@@ -78,3 +78,10 @@ test('workflow separates schema install from audit and activation', () => {
   assert.match(workflow, /cancel-in-progress: false/);
   assert.match(workflow, /EXPECTED_MIGRATION_SHA256: [0-9a-f]{64}/);
 });
+
+test('crawler treats a transient zero header total as unavailable while retaining the global exact count', () => {
+  const runner = fs.readFileSync(path.join(ROOT,
+    'tools/mariadb-live/run-four-brand-source-completion.cjs'), 'utf8');
+  assert.match(runner, /Number\(body\.total\) > 0/);
+  assert.match(runner, /publicRows\.length !== 17033/);
+});

@@ -66,7 +66,9 @@ async function crawlBrand(origin, brand) {
     url.searchParams.set('pagination', 'cursor');
     if (cursor) url.searchParams.set('cursor', cursor);
     const body = await json(url);
-    if (page === 1 && Number.isInteger(Number(body.total))) expected = Number(body.total);
+    if (page === 1 && Number.isInteger(Number(body.total)) && Number(body.total) > 0) {
+      expected = Number(body.total);
+    }
     for (const row of body.records || []) {
       if (!row?.id || ids.has(row.id)) throw new Error(`${brand} public cursor repeated an ID`);
       ids.add(row.id);
