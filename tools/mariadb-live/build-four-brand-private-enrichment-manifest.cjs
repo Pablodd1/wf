@@ -8,6 +8,7 @@ const { getClient } = require("../../api/_lib/supabase");
 const { lookupCatalog, normalizeRef } = require("../../api/_lib/catalog");
 
 const CONTRACT = "four-brand-private-enrichment-manifest-v1";
+const GENERATOR_VERSION = "four-brand-private-manifest-v1";
 const BRANDS = new Set(["Tudor", "Omega", "Cartier", "Zenith"]);
 const FIELDS = new Set(["model", "reference", "dial_color", "condition", "price_usd"]);
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -239,7 +240,7 @@ function buildAuthority(privateRow, advisories) {
     || !BRANDS.has(brand) || !SHA.test(String(privateRow.source_hash || ""))
     || !SHA.test(String(privateRow.source_candidate_hash || "")) || !clean(privateRow.source_record_id) || !raw) return null;
   const authority = {
-    generator_version: CONTRACT,
+    generator_version: GENERATOR_VERSION,
     listing_id: String(privateRow.listing_id).toLowerCase(), canonical_brand: brand,
     raw_message_version_id: String(privateRow.raw_message_version_id).toLowerCase(),
     source_record_id: String(privateRow.source_record_id), source_hash: privateRow.source_hash,
