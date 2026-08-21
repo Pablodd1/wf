@@ -238,6 +238,11 @@ test("Trading Floor and Price Research both use the same effective RPC", () => {
   assert.doesNotMatch(researchSource, /Promise\.all\(referenceVariants\.slice/);
   assert.match(researchSource, /listingType: 'WTS'/);
   assert.match(researchSource, /listingType: 'WTB'/);
+  assert.match(
+    inventorySource,
+    /laterReviewedBrand && \(qnsaBroadPage \|\| fourBrandEffectiveScope\)/,
+    "exact-reference and search pages must retain rows already admitted by the audited effective RPC",
+  );
 });
 
 test("four-brand effective pages use one offset stream and never inherit six-brand media cursors", () => {

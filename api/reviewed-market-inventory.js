@@ -2832,7 +2832,9 @@ module.exports = async function handler(req, res) {
           // lineage, single-item status, duplicate suppression, and release
           // controls. Do not reclassify Cartier as OTHER merely because the
           // maison also produces jewelry; retain the raw cross-brand guard.
-          if (laterReviewedBrand && qnsaBroadPage) return !hasObviousCrossBrandConflict(row);
+          if (laterReviewedBrand && (qnsaBroadPage || fourBrandEffectiveScope)) {
+            return !hasObviousCrossBrandConflict(row);
+          }
           return isTradingFloorSourceRow(row);
         });
     const effectiveEligibleRows = await loadEffectiveEnrichments(client, eligibleRows);
