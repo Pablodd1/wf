@@ -124,7 +124,10 @@ function parseAmount(numberText, hasK) {
 function singlePrice(raw, expression) {
   const matches = [...String(raw || '').matchAll(expression)]
     .map(match => ({
-      value: parseAmount(match.groups?.amount, Boolean(match.groups?.k)),
+      value: parseAmount(
+        match.groups?.amount || match.groups?.amountAfter || match.groups?.amountBefore,
+        Boolean(match.groups?.k || match.groups?.kAfter || match.groups?.kBefore),
+      ),
       match,
     }))
     .filter(item => item.value !== null);
@@ -139,7 +142,7 @@ function isRetailOnlyPrice(raw, evidence) {
 }
 
 function explicitUsdPriceInRaw(raw) {
-  const evidence = singlePrice(raw, /(?:\b(?:USD|USDT)\s*[$:]?\s*(?<amount>\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d{4,8}(?:\.\d{1,2})?)(?<k>[kK])?\b|\b(?<amount>\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d{4,8}(?:\.\d{1,2})?)(?<k>[kK])?\s*(?:USD|USDT)\b)/gi);
+  const evidence = singlePrice(raw, /(?:\b(?:USD|USDT)\s*[$:]?\s*(?<amountAfter>\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d{4,8}(?:\.\d{1,2})?)(?<kAfter>[kK])?\b|\b(?<amountBefore>\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d{4,8}(?:\.\d{1,2})?)(?<kBefore>[kK])?\s*(?:USD|USDT)\b)/gi);
   return isRetailOnlyPrice(raw, evidence) ? null : evidence;
 }
 
