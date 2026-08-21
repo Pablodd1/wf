@@ -13,6 +13,11 @@ const { classifyWatchPartListing } = require('./_lib/watch-item-classification.c
 const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
+  isFourBrand,
+  isMissingEffectiveRpcError,
+  loadEffectiveEnrichments,
+} = require('./_lib/four-brand-field-enrichment.cjs');
+const {
   databaseTradingIntentFilter,
   isPublicTradingIntent,
   resolveTradingIntent,
@@ -2279,12 +2284,52 @@ module.exports = async function handler(req, res) {
     // Broad QNSA brand pages first resolve a tiny ordered ID page from the
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
-    if (qnsaBroadPage && !legacyMarketViewContractDetected) {
+    const fourBrandEffectiveScope = isFourBrand(brand) && ['ALL', 'WATCH'].includes(itemCategory);
+    if ((qnsaBroadPage || fourBrandEffectiveScope) && !legacyMarketViewContractDetected) {
       // WATCH browsing uses the proven indexed watch-only feed. The general
       // category feed performs additional expression sorting and immutable
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
-      if (zenithModelRelease) {
+      if (fourBrandEffectiveScope) {
+        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_four_brand_effective_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            p_brand: brand,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+            p_model: requestedModel || null,
+            p_reference: requestedReference || null,
+            p_dial: requestedDial || null,
+            p_condition: condition || null,
+            p_search: search || null,
+            p_references: null,
+            p_images_only: imagesOnly,
+            p_priced_only: pricedOnly,
+            p_posted_after: postedAfter,
+            p_region: region || null,
+            p_rating: rating || null,
+          }),
+        });
+        if (!response.ok) {
+          const body = await response.text();
+          const rpcError = { status: response.status, message: body };
+          if (isMissingEffectiveRpcError(rpcError)) {
+            // Zero-outage schema-first compatibility. Until the migration is
+            // installed, preserve the pre-existing release route and do not
+            // claim that missing-field enrichment was applied.
+            console.warn('[reviewed-market-inventory] four-brand effective RPC unavailable; preserving base release path');
+          } else {
+            throw new Error(`QNSA four-brand effective page failed: ${response.status} ${body.slice(0, 200)}`);
+          }
+        } else {
+          preloadedQnsaResponse = new Response(JSON.stringify(await response.json()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      } else if (zenithModelRelease) {
         const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_zenith_model_page_rows`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
@@ -2496,7 +2541,8 @@ module.exports = async function handler(req, res) {
       preloadedQnsaResponse = directResponse;
       }
     }
-    if (activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+    if (!preloadedQnsaResponse
+      && activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand && reference && !legacyMarketViewContractDetected) {
       const normalizedBrand = String(brand).trim().toLowerCase();
       const familyReference = (normalizedBrand === 'rolex' && reference === '116500')
@@ -2738,9 +2784,10 @@ module.exports = async function handler(req, res) {
           if (laterReviewedBrand && qnsaBroadPage) return !hasObviousCrossBrandConflict(row);
           return isTradingFloorSourceRow(row);
         });
+    const effectiveEligibleRows = await loadEffectiveEnrichments(client, eligibleRows);
     const recoveredMarketRecords = await enrichRecordsWithDealerDirectory(
       client,
-      (await recoverRecordPrices(eligibleRows.map(mapReviewedRecord)))
+      (await recoverRecordPrices(effectiveEligibleRows.map(mapReviewedRecord)))
         .map(suppressPublicReferenceTokenPrice),
     );
     let records = recoveredMarketRecords
@@ -2766,7 +2813,8 @@ module.exports = async function handler(req, res) {
       // already enforced immutable lineage, single-item status, duplicate and
       // release gates. Preserve those rows if generic cross-category mapping
       // removes the entire Cartier page.
-      records = (await recoverRecordPrices(sourceRows.map(mapReviewedRecord)))
+      const effectiveSourceRows = await loadEffectiveEnrichments(client, sourceRows);
+      records = (await recoverRecordPrices(effectiveSourceRows.map(mapReviewedRecord)))
         .map(suppressPublicReferenceTokenPrice)
         .filter(record => !record.multi_listing || record.multi_listing_release_approved === true)
         .filter(record => isPublicTradingIntent(record.listing_type)

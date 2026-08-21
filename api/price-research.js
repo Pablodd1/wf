@@ -42,6 +42,7 @@ const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { enrichRowsWithExactDealerEvidence } = require('./_lib/listing-dealer-evidence.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
+const { isFourBrand, loadEffectivePage } = require('./_lib/four-brand-field-enrichment.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -404,6 +405,18 @@ async function loadQnsaVerifiedTradingPrices(client, {
 }) {
   let rpcMarketRows = [];
   let exactReleasedRows = [];
+  if (isFourBrand(brand) && !familyPrefix) {
+    const effectivePage = await loadEffectivePage(client, {
+      brand,
+      references: referenceVariants.slice(0, 25),
+      listingType: 'WTS',
+      limit: Math.min(2500, limit),
+      analytics: true,
+    });
+    // `null` means the additive RPC is not installed yet. Keep the existing
+    // exact-release loaders unchanged during schema-first rollout.
+    if (effectivePage !== null) exactReleasedRows = effectivePage.slice(0, limit);
+  }
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
@@ -423,9 +436,12 @@ async function loadQnsaVerifiedTradingPrices(client, {
     // downstream analytics eligibility gate.
     try {
       const exactEvidence = await loadQnsaExactReleasedEvidence(client, { brand, referenceVariants, limit });
-      exactReleasedRows = exactEvidence.rows
+      const recoveredRows = exactEvidence.rows
         .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS')
         .map(row => ({ ...row, exact_evidence_recovery_capped: exactEvidence.capped }));
+      const exactById = new Map(exactReleasedRows.map(row => [String(row.id), row]));
+      for (const row of recoveredRows) if (!exactById.has(String(row.id))) exactById.set(String(row.id), row);
+      exactReleasedRows = [...exactById.values()].slice(0, limit);
     } catch (error) {
       console.warn('[price-research] exact Trading evidence recovery unavailable:', error.message || error);
     }
@@ -437,9 +453,12 @@ async function loadQnsaVerifiedTradingPrices(client, {
       console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
     }
   }
-  if (['vacheron constantin', 'omega', 'cartier'].includes(String(brand || '').trim().toLowerCase())) {
-    const merged = new Map(exactReleasedRows.map(row => [String(row.id), row]));
-    for (const row of rpcMarketRows) merged.set(String(row.id), row);
+  if (['vacheron constantin', 'omega', 'cartier', 'tudor', 'zenith']
+    .includes(String(brand || '').trim().toLowerCase())) {
+    const merged = new Map(rpcMarketRows.map(row => [String(row.id), row]));
+    // The effective sidecar page is the authoritative presentation record for
+    // these four brands. Older priced RPC rows may supplement but never erase it.
+    for (const row of exactReleasedRows) merged.set(String(row.id), row);
     return [...merged.values()].map(row => {
       const canonicalVerified = ['SOURCE_EXPLICIT_USD_USDT', 'DATED_VERIFIED_FX']
         .includes(String(row.price_evidence_status || '').toUpperCase());
@@ -534,8 +553,10 @@ async function loadQnsaVerifiedTradingPrices(client, {
     has_images: row.has_exact_source_image === true,
   }));
   const mergedRows = new Map(releasedRows.map(row => [String(row.id), row]));
-  for (const row of exactReleasedRows) mergedRows.set(String(row.id), row);
   for (const row of rpcMarketRows) mergedRows.set(String(row.id), row);
+  // Effective values are authoritative only for missing fields and must win
+  // over the compatible base loaders after activation.
+  for (const row of exactReleasedRows) mergedRows.set(String(row.id), row);
   // This loader is the canonical bounded QNSA price boundary. A positive
   // price has already passed its verified-USD/correction contract; a null
   // price intentionally failed that contract. Preserve that decision so the
@@ -554,6 +575,17 @@ async function loadQnsaTradingDemand(client, {
   limit,
 }) {
   let rpcDemandRows = [];
+  let effectiveDemandRows = [];
+  if (isFourBrand(brand) && !familyPrefix) {
+    const effectivePage = await loadEffectivePage(client, {
+      brand,
+      references: referenceVariants.slice(0, 25),
+      listingType: 'WTB',
+      limit: Math.min(2500, limit),
+      analytics: true,
+    });
+    if (effectivePage !== null) effectiveDemandRows = effectivePage.slice(0, limit);
+  }
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
@@ -572,9 +604,10 @@ async function loadQnsaTradingDemand(client, {
     } catch (error) {
       console.warn('[price-research] exact Trading demand recovery unavailable:', error.message || error);
     }
-    if (recovered.length || rpcDemandRows.length) {
+    if (effectiveDemandRows.length || recovered.length || rpcDemandRows.length) {
       const merged = new Map(recovered.map(row => [String(row.id), row]));
       for (const row of rpcDemandRows) merged.set(String(row.id), row);
+      for (const row of effectiveDemandRows) merged.set(String(row.id), row);
       return [...merged.values()];
     }
   }
@@ -705,7 +738,12 @@ function paginateEvidenceRows(rows, page, pageSize) {
 }
 
 function isCustomerPricedSaleEvidence(row) {
-  return classifySaleEvidenceEligibility(row) === null;
+  if (classifySaleEvidenceEligibility(row) === null) return true;
+  // Owner-assumed USD is a displayed/tracked observation with an explicit
+  // exclusion reason. It never becomes independently qualified evidence.
+  return String(row?.price_evidence_status || '').toUpperCase() === 'OWNER_ASSUMED_USD'
+    && String(row?.listing_type || row?.intent || '').toUpperCase() === 'WTS'
+    && Number(row?.price_usd || row?.workbook_price_usd || row?.source_price_amount) > 0;
 }
 
 function serializePriceProvenance(row) {
@@ -933,6 +971,15 @@ function normalizeAnalyticsPriceRow(row, {
     };
   }
   if (canonicalQnsaEvidence) {
+    if (String(row.price_evidence_status || '').toUpperCase() === 'OWNER_ASSUMED_USD') {
+      const trackedPrice = Number(row.price_usd || row.workbook_price_usd || row.source_price_amount);
+      return {
+        ...conditionCorrectedRow,
+        analytics_price_usd: Number.isFinite(trackedPrice) && trackedPrice > 0 ? trackedPrice : null,
+        price_normalization: 'OWNER_ASSUMED_USD_TRACKED_ONLY',
+        analytics_currency_status: 'OWNER_ASSUMED_USD',
+      };
+    }
     const verifiedPrice = Number.isFinite(canonicalPrice) && canonicalPrice > 0 ? canonicalPrice : null;
     return {
       ...conditionCorrectedRow,
@@ -1435,7 +1482,12 @@ module.exports = async function handler(req, res) {
     const totalListings = analyticsRows.length - bundleParentExcludedCount;
     const requestedDial = String(req.query.dial || '').trim().toLowerCase();
     const requiredFieldExclusions = analyticsRows
-      .map(row => ({ row, reason: classifyResearchEligibility(row, catalogHit) }))
+      .map(row => ({
+        row,
+        reason: String(row.price_evidence_status || '').toUpperCase() === 'OWNER_ASSUMED_USD'
+          ? 'OWNER_ASSUMED_USD_TRACKED_ONLY_EXCLUDED_FROM_INDEPENDENT_AGGREGATES'
+          : classifyResearchEligibility(row, catalogHit),
+      }))
       .filter(item => item.reason)
       .map(({ row, reason }) => ({ ...row, is_outlier: true, outlier_reason: reason }));
     const retainedEvidenceRows = requiredFieldExclusions.filter(row => (
