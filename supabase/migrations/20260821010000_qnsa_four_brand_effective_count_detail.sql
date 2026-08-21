@@ -194,12 +194,21 @@ SET statement_timeout='3s' AS $$
       'dial_color',e.effective_dial,'condition',e.effective_condition,
       'price_usd',CASE WHEN e.proposed_price_usd>0 THEN e.proposed_price_usd
         WHEN e.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX') THEN e.price_usd
-        END,
+        WHEN e.price_usd>0 AND e.conversion_rate>0 AND e.conversion_timestamp IS NOT NULL
+          AND NULLIF(btrim(e.conversion_source),'') IS NOT NULL THEN e.price_usd END,
       'source_price_amount',COALESCE(e.proposed_source_amount,e.proposed_price_usd,
-        CASE WHEN e.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX') THEN e.price_normalized END),
+        CASE WHEN e.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX')
+          OR (e.price_usd>0 AND e.conversion_rate>0 AND e.conversion_timestamp IS NOT NULL
+            AND NULLIF(btrim(e.conversion_source),'') IS NOT NULL) THEN e.price_original END),
       'source_currency',COALESCE(e.proposed_source_currency,
-        CASE WHEN e.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX') THEN e.currency_normalized END),
-      'price_evidence_status',COALESCE(e.proposed_price_status,e.price_lane),
+        CASE WHEN e.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX')
+          OR (e.price_usd>0 AND e.conversion_rate>0 AND e.conversion_timestamp IS NOT NULL
+            AND NULLIF(btrim(e.conversion_source),'') IS NOT NULL) THEN e.currency_original END),
+      'price_evidence_status',COALESCE(e.proposed_price_status,
+        CASE WHEN e.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX') THEN e.price_lane
+          WHEN e.price_usd>0 AND e.conversion_rate>0 AND e.conversion_timestamp IS NOT NULL
+            AND NULLIF(btrim(e.conversion_source),'') IS NOT NULL THEN 'DATED_VERIFIED_FX'
+          ELSE e.price_lane END),
       'confidence',e.overall_confidence,'trading_floor_status','RELEASED_'||upper(e.brand),
       'user_image_url',CASE WHEN NULLIF(btrim(e.image_url),'') ~* '^https?://[^[:space:]]+$'
         THEN btrim(e.image_url) END,
