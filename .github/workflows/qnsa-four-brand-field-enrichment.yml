@@ -175,15 +175,20 @@ jobs:
             +(to_regclass('public.qnsa_four_brand_enrichment_control') IS NOT NULL)::int
             +(to_regclass('public.qnsa_four_brand_enrichment_rollback_ledger') IS NOT NULL)::int AS core_count,
             to_regclass('public.qnsa_four_brand_enrichment_schema_contract') IS NOT NULL AS marker_exists,
-            EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations
-              WHERE version='$($env:MIGRATION_VERSION)') AS migration_recorded;
+            to_regclass('supabase_migrations.schema_migrations') IS NOT NULL AS migration_table_exists;
           "@
           $preflightBody = @{ query = [string]$preflightSql; read_only = $true } | ConvertTo-Json -Depth 3
           $preflight = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
             -Headers $headers -ContentType 'application/json' -Body $preflightBody
           $coreCount = [int]$preflight[0].core_count
           $markerExists = [bool]$preflight[0].marker_exists
-          $migrationRecorded = [bool]$preflight[0].migration_recorded
+          $migrationRecorded = $false
+          if ([bool]$preflight[0].migration_table_exists) {
+            $migrationBody = @{ query = "SELECT EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE version='$($env:MIGRATION_VERSION)') AS migration_recorded;"; read_only = $true } | ConvertTo-Json -Depth 3
+            $migrationResult = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $migrationBody
+            $migrationRecorded = [bool]$migrationResult[0].migration_recorded
+          }
           if ($migrationRecorded -and (-not $markerExists)) { throw 'Migration version exists without the exact schema contract marker.' }
           if (($coreCount -gt 0) -and (-not $markerExists)) { throw 'Unversioned sidecar schema exists; refusing install.' }
           if ($markerExists) {
