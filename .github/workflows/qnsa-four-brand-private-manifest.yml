@@ -103,6 +103,7 @@ jobs:
         shell: pwsh
         env:
           ADVISORY_FILES: ${{ inputs.advisory_files }}
+          INPUT_RUN_KEY: ${{ inputs.run_key }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
         run: |
