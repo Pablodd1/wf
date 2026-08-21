@@ -194,9 +194,11 @@ SET statement_timeout='3s' AS $$
       'dial_color',e.effective_dial,'condition',e.effective_condition,
       'price_usd',CASE WHEN e.proposed_price_usd>0 THEN e.proposed_price_usd
         WHEN e.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX') THEN e.price_usd
-        WHEN e.price_lane='OWNER_ASSUMED_USD_CANDIDATE' THEN e.price_normalized END,
-      'source_price_amount',COALESCE(e.proposed_source_amount,e.proposed_price_usd,e.price_normalized),
-      'source_currency',COALESCE(e.proposed_source_currency,e.currency_normalized),
+        END,
+      'source_price_amount',COALESCE(e.proposed_source_amount,e.proposed_price_usd,
+        CASE WHEN e.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX') THEN e.price_normalized END),
+      'source_currency',COALESCE(e.proposed_source_currency,
+        CASE WHEN e.price_lane IN ('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX') THEN e.currency_normalized END),
       'price_evidence_status',COALESCE(e.proposed_price_status,e.price_lane),
       'confidence',e.overall_confidence,'trading_floor_status','RELEASED_'||upper(e.brand),
       'user_image_url',CASE WHEN NULLIF(btrim(e.image_url),'') ~* '^https?://[^[:space:]]+$'
