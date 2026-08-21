@@ -111,7 +111,7 @@ test("database audit RPC is read-only and is also the staging validation gate", 
   assert.match(runnerSource, /four_brand_enrichment_database_audit/);
 });
 
-test("effective SQL filters before paging and uses only exact image/dealer ledgers", () => {
+test("effective SQL filters before paging and uses exact listing media and dealer evidence", () => {
   const effective = migration.indexOf("qnsa_four_brand_effective_page_rows");
   const selected = migration.indexOf("selected AS (", effective);
   assert.ok(effective >= 0 && selected > effective);
@@ -123,14 +123,11 @@ test("effective SQL filters before paging and uses only exact image/dealer ledge
     migration.indexOf("p_reference IS NULL", selected) <
       migration.indexOf("LIMIT LEAST", selected),
   );
-  assert.match(
-    migration,
-    /listing_image_reviews ir[\s\S]*ir\.status='VISUALLY_VERIFIED'/,
-  );
-  assert.match(
-    migration,
-    /media_manifest mm[\s\S]*mm\.verification_status='url_reachable'/,
-  );
+  assert.match(migration, /NULLIF\(btrim\(l\.image_url\),''\) ~\* '\^https\?:\/\/\[\^\[:space:\]\]\+\$'/);
+  assert.match(migration, /COALESCE\(NULLIF\(btrim\(l\.image_url\),''\) ~\*[\s\S]*false\) DESC/);
+  assert.match(migration, /THEN btrim\(l\.image_url\) END verified_image_url/);
+  assert.doesNotMatch(migration, /NULLIF\(btrim\(l\.image_url\),''\) IS NOT NULL/);
+  assert.doesNotMatch(migration, /listing_image_reviews|media_manifest/);
   assert.match(
     migration,
     /dealer_listing_links dl[\s\S]*dl\.link_status='APPLIED'/,
