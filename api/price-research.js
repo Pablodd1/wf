@@ -415,7 +415,9 @@ async function loadQnsaVerifiedTradingPrices(client, {
     });
     // `null` means the additive RPC is not installed yet. Keep the existing
     // exact-release loaders unchanged during schema-first rollout.
-    if (effectivePage !== null) exactReleasedRows = effectivePage.slice(0, limit);
+    if (effectivePage !== null) {
+      exactReleasedRows = effectivePage.slice(0, limit).map(qnsaReferenceRowToMarketRow);
+    }
   }
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
@@ -584,7 +586,9 @@ async function loadQnsaTradingDemand(client, {
       limit: Math.min(2500, limit),
       analytics: true,
     });
-    if (effectivePage !== null) effectiveDemandRows = effectivePage.slice(0, limit);
+    if (effectivePage !== null) {
+      effectiveDemandRows = effectivePage.slice(0, limit).map(qnsaReferenceRowToMarketRow);
+    }
   }
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
