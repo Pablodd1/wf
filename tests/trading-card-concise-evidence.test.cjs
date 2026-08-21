@@ -38,6 +38,16 @@ test('exact dealer profiles connect Trading Floor and Price Research to Referenc
   assert.doesNotMatch(research, /No exact directory match/);
 });
 
+test('dealer names remain visible independently of rating and profile linkage', () => {
+  const floor = read('src/pages/TradingFloor.tsx');
+  const research = read('src/pages/PriceResearch.tsx');
+  const dealerEvidence = read('src/components/ListingDealerEvidence.tsx');
+
+  assert.match(floor, /sellerName=\{cleanValue\(listing\.seller_name\) \|\| listing\['Posted By'\]/);
+  assert.match(research, /Posted by: <strong[^>]*>\{sellerName\}<\/strong>/);
+  assert.match(dealerEvidence, /\{sellerName \|\| 'Seller not supplied'\}/);
+});
+
 test('Virtual Authenticator is absent from customer navigation', () => {
   const header = read('src/components/MarketHeader.tsx');
   const footer = read('src/components/Footer.tsx');
