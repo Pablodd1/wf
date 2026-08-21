@@ -137,6 +137,7 @@ test("effective SQL filters before paging and uses exact listing media and deale
   }
   assert.doesNotMatch(migration.slice(effective), /MATERIALIZED/);
   assert.match(migration, /LEFT JOIN public\.qnsa_four_brand_effective_enrichment ep/);
+  assert.match(migration.slice(effective), /jsonb_build_object\([\s\S]*\) \|\| jsonb_build_object\(/);
 });
 
 test("activation is one atomic control switch with exact canary IDs", () => {
