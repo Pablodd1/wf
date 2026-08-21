@@ -132,7 +132,9 @@ BEGIN
       RAISE EXCEPTION 'Exact single-listing lineage mismatch for %',r->>'listing_id';
     END IF;
     IF r ? 'proposed_image_url' THEN
-      IF NULLIF(btrim(COALESCE(l.image_url,l.source_media_url_candidate,'')),'') IS NOT NULL
+      IF NULLIF(btrim(COALESCE(l.image_url,'')),'') IS NOT NULL
+        OR (NULLIF(btrim(COALESCE(l.source_media_url_candidate,'')),'') IS NOT NULL
+          AND l.source_media_url_candidate IS DISTINCT FROM r->>'proposed_image_url')
         OR r->>'proposed_image_url' !~ '^https://thecollective-prod\.nyc3\.digitaloceanspaces\.com/listings/full/[^[:space:]]+$'
         OR r->>'source_media_sha256' IS DISTINCT FROM
           encode(extensions.digest(convert_to(r->>'source_media_key','UTF8'),'sha256'),'hex') THEN
@@ -218,7 +220,11 @@ BEGIN
     AND l.source_record_id=p.source_record_id AND l.source_hash=p.source_hash
     AND l.source_candidate_hash=p.source_candidate_hash AND l.brand_normalized=p.canonical_brand
   WHERE p.run_key=p_run_key AND (l.id IS NULL OR l.parent_id IS NOT NULL OR COALESCE(l.is_bundle,false)
-    OR (p.proposed_image_url IS NOT NULL AND NULLIF(btrim(COALESCE(l.image_url,l.source_media_url_candidate,'')),'') IS NOT NULL)
+    OR (p.proposed_image_url IS NOT NULL AND (
+      NULLIF(btrim(COALESCE(l.image_url,'')),'') IS NOT NULL
+      OR (NULLIF(btrim(COALESCE(l.source_media_url_candidate,'')),'') IS NOT NULL
+        AND l.source_media_url_candidate IS DISTINCT FROM p.proposed_image_url)
+    ))
     OR (p.proposed_price_usd IS NOT NULL AND (upper(COALESCE(l.listing_type,l.intent,''))<>'WTS'
       OR COALESCE(l.price_usd,l.price_normalized,0)>0)));
   IF v_invalid<>0 THEN RAISE EXCEPTION 'Activation revalidation failed for % rows',v_invalid; END IF;

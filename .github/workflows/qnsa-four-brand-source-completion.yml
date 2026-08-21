@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: schema, audit, canary, full, or rollback
+        description: schema, repair, audit, canary, full, or rollback
         required: true
         type: choice
-        options: [schema, audit, canary, full, rollback]
+        options: [schema, repair, audit, canary, full, rollback]
       run_key:
         description: Unique immutable run key
         required: true
@@ -37,7 +37,7 @@ jobs:
     env:
       PROJECT_REF: qnsafosakvonzgfcsphh
       SUPABASE_URL: https://qnsafosakvonzgfcsphh.supabase.co
-      EXPECTED_MIGRATION_SHA256: 48032c450fb2681fcd19baf0e24ec4f7b70e7c55090edda152431b233cb73e08
+      EXPECTED_MIGRATION_SHA256: ad581cdc68399731a2a51a82b75d65a871faf070113179d405283bb771153459
     steps:
       - uses: actions/checkout@v4
 
@@ -54,6 +54,7 @@ jobs:
           if ($env:ORIGIN -cne 'https://watchfacts-poc.vercel.app') { throw 'Public origin must be the pinned production site.' }
           $expected = switch ($env:MODE) {
             'schema' { "INSTALL_SCHEMA_$($env:RUN_KEY)" }
+            'repair' { "REPAIR_SCHEMA_$($env:RUN_KEY)" }
             'audit' { "AUDIT_$($env:RUN_KEY)" }
             'canary' { "ACTIVATE_CANARY_$($env:RUN_KEY)" }
             'full' { "ACTIVATE_FULL_$($env:RUN_KEY)" }
@@ -72,10 +73,11 @@ jobs:
           $sha = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
           if ($sha -cne $env:EXPECTED_MIGRATION_SHA256) { throw 'Pinned migration checksum mismatch.' }
 
-      - name: Install private schema atomically
-        if: inputs.mode == 'schema'
+      - name: Install or repair private schema atomically
+        if: inputs.mode == 'schema' || inputs.mode == 'repair'
         shell: pwsh
         env:
+          MODE: ${{ inputs.mode }}
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
@@ -90,7 +92,9 @@ jobs:
           $preflightBody = @{ query = $preflight; read_only = $true } | ConvertTo-Json
           $existing = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
             -Headers $headers -ContentType 'application/json' -Body $preflightBody
-          if ([int]$existing[0].object_count -ne 0) { throw 'Source-completion schema already exists; refusing blind reinstall.' }
+          $objectCount = [int]$existing[0].object_count
+          if ($env:MODE -eq 'schema' -and $objectCount -ne 0) { throw 'Source-completion schema already exists; refusing blind reinstall.' }
+          if ($env:MODE -eq 'repair' -and $objectCount -ne 3) { throw 'Source-completion schema repair requires the exact installed private tables.' }
           $migration = Get-Content -LiteralPath 'supabase/migrations/20260821150000_qnsa_four_brand_source_completion.sql' -Raw
           $migration = $migration -replace '(?im)^\s*BEGIN\s*;\s*$', '' -replace '(?im)^\s*COMMIT\s*;\s*$', ''
           $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='45s';`n$migration`nCOMMIT;"
@@ -99,7 +103,7 @@ jobs:
             -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
 
       - name: Verify installed private contract without DDL
-        if: inputs.mode != 'schema'
+        if: inputs.mode != 'schema' && inputs.mode != 'repair'
         shell: pwsh
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -123,11 +127,11 @@ jobs:
             if (-not [bool]$result[0].$field) { throw "Missing exact installed object: $field" }
           }
 
-      - if: inputs.mode != 'schema'
+      - if: inputs.mode != 'schema' && inputs.mode != 'repair'
         run: npm ci
 
       - name: Resolve current service key without exposing it
-        if: inputs.mode != 'schema'
+        if: inputs.mode != 'schema' && inputs.mode != 'repair'
         shell: pwsh
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -141,7 +145,7 @@ jobs:
           "QNSA_RUNTIME_SERVICE_ROLE_KEY=$($service.api_key)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Audit or activate exact source completion
-        if: inputs.mode != 'schema'
+        if: inputs.mode != 'schema' && inputs.mode != 'repair'
         shell: pwsh
         env:
           MODE: ${{ inputs.mode }}
