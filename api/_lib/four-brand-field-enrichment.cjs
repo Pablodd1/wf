@@ -158,26 +158,12 @@ async function loadEffectivePage(client, options = {}) {
   const { data, error } = await client.rpc(
     "qnsa_four_brand_effective_page_rows",
     {
-      p_brand: brand,
+      ...effectiveFilterArgs(options),
       p_limit: Math.min(
         options.analytics === true ? 2500 : 101,
         Math.max(1, Number(options.limit) || 51),
       ),
       p_offset: Math.max(0, Number(options.offset) || 0),
-      p_listing_type: options.listingType || null,
-      p_model: options.model || null,
-      p_reference: options.reference || null,
-      p_dial: options.dial || null,
-      p_condition: options.condition || null,
-      p_search: options.search || null,
-      p_references: Array.isArray(options.references) && options.references.length
-        ? options.references
-        : null,
-      p_images_only: options.imagesOnly === true,
-      p_priced_only: options.pricedOnly === true,
-      p_posted_after: options.postedAfter || null,
-      p_region: options.region || null,
-      p_rating: options.rating || null,
     },
   );
   if (error) {
@@ -185,6 +171,62 @@ async function loadEffectivePage(client, options = {}) {
     throw error;
   }
   return (data || []).map((value) => value?.row_data || value).filter(Boolean);
+}
+
+function effectiveFilterArgs(options = {}) {
+  return {
+    p_brand: String(options.brand || "").trim(),
+    p_listing_type: options.listingType || null,
+    p_model: options.model || null,
+    p_reference: options.reference || null,
+    p_dial: options.dial || null,
+    p_condition: options.condition || null,
+    p_search: options.search || null,
+    p_references: Array.isArray(options.references) && options.references.length
+      ? options.references
+      : null,
+    p_images_only: options.imagesOnly === true,
+    p_priced_only: options.pricedOnly === true,
+    p_posted_after: options.postedAfter || null,
+    p_region: options.region || null,
+    p_rating: options.rating || null,
+  };
+}
+
+async function loadEffectiveCount(client, options = {}) {
+  const brand = String(options.brand || "").trim();
+  if (!isFourBrand(brand)) return 0;
+  const { data, error } = await client.rpc(
+    "qnsa_four_brand_effective_row_count",
+    effectiveFilterArgs(options),
+  );
+  if (error) {
+    if (isMissingEffectiveRpcError(error)) return null;
+    throw error;
+  }
+  const count = Number(data);
+  if (!Number.isSafeInteger(count) || count < 0)
+    throw new Error("Invalid four-brand effective count response");
+  return count;
+}
+
+async function loadEffectiveDetail(client, listingId) {
+  const id = String(listingId || "").trim();
+  if (!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(id))
+    return { installed: true, fourBrandScope: false, row: null };
+  const { data, error } = await client.rpc(
+    "qnsa_four_brand_effective_detail",
+    { p_listing_id: id },
+  );
+  if (error) {
+    if (isMissingEffectiveRpcError(error)) return null;
+    throw error;
+  }
+  return {
+    installed: true,
+    fourBrandScope: data?.four_brand_scope === true,
+    row: data?.row_data || null,
+  };
 }
 
 module.exports = {
@@ -195,4 +237,6 @@ module.exports = {
   isMissingEffectiveRpcError,
   loadEffectiveEnrichments,
   loadEffectivePage,
+  loadEffectiveCount,
+  loadEffectiveDetail,
 };

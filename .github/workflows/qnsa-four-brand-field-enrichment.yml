@@ -52,6 +52,7 @@ jobs:
       SUPABASE_URL: https://qnsafosakvonzgfcsphh.supabase.co
       MIGRATION_VERSION: '20260820210000'
       MIGRATION_SHA256: c7124258d982cbd12e664301614c8635d042f21ad7010cc596e82213f2462490
+      FORWARD_READ_MIGRATION_SHA256: f8bf79113d0aaaf9fc30fdb9a1c2ecf1d1de6c9878ee32b69be29a4a7b95a525
       SCHEMA_CONTRACT_VERSION: 2026-08-20-v2
       SCHEMA_CONTRACT_SHA256: d67cb39107e7446de3d8d26be20058a3f7f5dce932f7feb92a56d4ac742406b2
     steps:
@@ -85,6 +86,10 @@ jobs:
           $actual = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
             [Text.UTF8Encoding]::new($false).GetBytes($migration))).ToLowerInvariant()
           if ($actual -cne $env:MIGRATION_SHA256) { throw 'Pinned migration SHA mismatch.' }
+          $forwardMigration = (Get-Content -LiteralPath 'supabase/migrations/20260821010000_qnsa_four_brand_effective_count_detail.sql' -Raw).Replace("`r`n","`n")
+          $forwardActual = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+            [Text.UTF8Encoding]::new($false).GetBytes($forwardMigration))).ToLowerInvariant()
+          if ($forwardActual -cne $env:FORWARD_READ_MIGRATION_SHA256) { throw 'Pinned forward read migration SHA mismatch.' }
 
       - name: Verify trusted private-manifest run and artifact provenance
         if: inputs.mode != 'rollback' && inputs.mode != 'schema'
@@ -203,7 +208,9 @@ jobs:
           }
           $migration = Get-Content -LiteralPath 'supabase/migrations/20260820210000_qnsa_four_brand_field_enrichment.sql' -Raw
           $migration = $migration -replace '(?im)^\s*BEGIN\s*;\s*$', '' -replace '(?im)^\s*COMMIT\s*;\s*$', ''
-          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='45s';`n$migration`nCOMMIT;"
+          $forwardMigration = Get-Content -LiteralPath 'supabase/migrations/20260821010000_qnsa_four_brand_effective_count_detail.sql' -Raw
+          $forwardMigration = $forwardMigration -replace '(?im)^\s*BEGIN\s*;\s*$', '' -replace '(?im)^\s*COMMIT\s*;\s*$', ''
+          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='45s';`n$migration`n$forwardMigration`nCOMMIT;"
           $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
           Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
             -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
