@@ -41,6 +41,7 @@ const {
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const EXPLICIT_USD_STATUS = 'SOURCE_EXPLICIT_USD_MATCH';
+const { applyConfirmedFiveWatchPublication } = require('./_lib/five-watch-publication.cjs');
 const OWNER_ASSUMED_USD_STATUSES = new Set([
   'OWNER_ASSUMED_USD',
   'OWNER_ASSUMED_USD_CANDIDATE',
@@ -590,7 +591,7 @@ function dealerEvidenceRank(record) {
 function hasVerifiedExplicitPrice(record) {
   const status = cleanExactText(record?.price_evidence_status, 60).toUpperCase();
   return record?.price_research_eligible === true
-    && ['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(status)
+    && ['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX'].includes(status)
     && hasUsableSourcePrice(record) !== null;
 }
 
@@ -3090,7 +3091,8 @@ module.exports = async function handler(req, res) {
         })
       : null;
     const publicationBrands = publicationBrandsFromSummary(summary);
-    const publicBaseRecords = reviewedOverlayLaneActive ? [] : records;
+    const publicBaseRecords = (reviewedOverlayLaneActive ? [] : records)
+      .map(applyConfirmedFiveWatchPublication);
     const combinedPageRecords = [...publicBaseRecords, ...reviewedOverlayRecords];
     // Serialize the cohort-wide count after the bounded page has been fetched,
     // mapped and filtered. Running both cold scans in parallel caused avoidable

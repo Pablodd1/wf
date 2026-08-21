@@ -7,6 +7,11 @@ on:
         description: Type AUDIT_QNSA_VACHERON_OVERSEAS
         required: true
         type: string
+      exact_five:
+        description: Restrict the run to the frozen five-watch production canary
+        required: true
+        default: false
+        type: boolean
 
 concurrency:
   group: qnsa-vacheron-overseas-census
@@ -37,7 +42,213 @@ jobs:
             throw 'Workflow is pinned to canonical QNSA.'
           }
 
+      - uses: actions/setup-node@v4
+        if: inputs.exact_five == true
+        with:
+          node-version: 22
+
+      - name: Install exact-canary runtime
+        if: inputs.exact_five == true
+        run: npm ci
+
+      - name: Run exact five-watch source and public audit
+        id: exact_source_public
+        if: inputs.exact_five == true
+        continue-on-error: true
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_URL: https://qnsafosakvonzgfcsphh.supabase.co
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_PORT: ${{ secrets.MYSQL_PORT }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PASS: ${{ secrets.MYSQL_PASS }}
+          MYSQL_DB: thecollective_inventory
+          WATCHFACTS_ORIGIN: https://watchfacts-poc.vercel.app
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          if (-not $env:MYSQL_HOST -or -not $env:MYSQL_USER -or -not $env:MYSQL_PASS) {
+            throw 'MariaDB read credentials are unavailable.'
+          }
+          New-Item -ItemType Directory -Force -Path 'audit-output/five-watch-production' | Out-Null
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $keys = Invoke-RestMethod -Method Get `
+            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/api-keys" -Headers $headers
+          $service = @($keys | Where-Object {
+            $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret')
+          }) | Select-Object -First 1
+          if (-not $service.api_key) { throw 'Current QNSA service key is unavailable.' }
+          "::add-mask::$($service.api_key)"
+          $env:SUPABASE_SERVICE_ROLE_KEY = [string]$service.api_key
+          node tools/audit/five-watch-production-readonly.cjs `
+            --output 'audit-output/five-watch-production/public-source.json'
+          if ($LASTEXITCODE -ne 0) { throw 'Exact public/source audit failed.' }
+
+      - name: Snapshot exact five staging and release rows
+        if: inputs.exact_five == true
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @'
+          SET statement_timeout = '15s';
+          SET lock_timeout = '3s';
+          WITH targets(id, expected_brand, expected_reference, expected_source_record_id, ordinal) AS (
+            VALUES
+              ('d7ca9584-c8d0-43a5-8e19-7cf3fc4473e2'::uuid,'Zenith','95.9000.9004/78.M9000','mysql_auctions_f5aa2a73-53cf-47fd-b5c9-12d9912ceea6',1),
+              ('0a6e7949-1717-4123-994c-17377f7e9ab8'::uuid,'Tudor','79830RB','mysql_auctions_8dda4207-e65a-415e-825a-684aeea99203',2),
+              ('5f11c5b4-bd08-4976-9a87-af1a9921a8a3'::uuid,'Omega','310.60.42.50.01.001','mysql_auctions_1b50a1b1-a3c1-4747-bdc1-16de9060c729',3),
+              ('ec507bd1-9cfc-4be2-aaa4-3f0dd477af80'::uuid,'Cartier','WSSA0039','mysql_auctions_149a44ef-e6b5-4e86-a1fd-1ae7717b0679',4),
+              ('f125afdc-c21a-4450-a59b-01f3f667edb2'::uuid,'Vacheron Constantin','7900V/110A-B546','mysql_auctions_a562f952-4be0-4571-b27d-a7daa4ff354b',5)
+          ), rows AS MATERIALIZED (
+            SELECT t.id AS expected_id, t.expected_brand, t.expected_reference,
+              t.expected_source_record_id, t.ordinal, l.*,
+              rv.source_record_id AS rv_source_record_id,
+              rv.source_hash AS rv_source_hash,
+              rv.observed_at AS rv_observed_at,
+              rv.created_at AS rv_created_at,
+              rv.raw_message_source AS rv_raw_message_source,
+              rv.raw_text AS rv_raw_text,
+              rv.media AS rv_media
+            FROM targets t
+            LEFT JOIN staging.listings l ON l.id=t.id
+            LEFT JOIN public.raw_message_versions rv ON rv.id=l.raw_message_version_id
+          ), shaped AS (
+            SELECT r.ordinal, jsonb_build_object(
+              'expected_id',r.expected_id::text,
+              'found',r.id IS NOT NULL,
+              'expected_brand',r.expected_brand,
+              'brand_original',r.brand_original,
+              'brand_normalized',r.brand_normalized,
+              'expected_reference',r.expected_reference,
+              'reference_original',r.reference_original,
+              'reference_normalized',r.reference_normalized,
+              'expected_source_record_id',r.expected_source_record_id,
+              'source_record_id',r.source_record_id,
+              'source_record_matches',r.source_record_id IS NOT DISTINCT FROM r.expected_source_record_id,
+              'normalization_run_key',r.normalization_run_key,
+              'raw_message_version_id',r.raw_message_version_id,
+              'source_hash',r.source_hash,
+              'source_candidate_hash',r.source_candidate_hash,
+              'raw_version_source_record_matches',r.rv_source_record_id IS NOT NULL
+                AND r.rv_source_record_id=r.source_record_id,
+              'raw_version_source_hash_matches',r.rv_source_hash IS NOT NULL
+                AND r.rv_source_hash=r.source_hash,
+              'raw_message_exact_match',r.rv_raw_text IS NOT NULL AND r.raw_message_text IS NOT NULL
+                AND r.rv_raw_text=r.raw_message_text,
+              'raw_message_length',length(COALESCE(r.raw_message_text,'')),
+              'raw_message_sha256',encode(extensions.digest(convert_to(COALESCE(r.raw_message_text,''),'UTF8'),'sha256'),'hex'),
+              'raw_version_length',length(COALESCE(r.rv_raw_text,'')),
+              'raw_version_sha256',encode(extensions.digest(convert_to(COALESCE(r.rv_raw_text,''),'UTF8'),'sha256'),'hex'),
+              'raw_message_source',r.rv_raw_message_source,
+              'raw_media_count',jsonb_array_length(COALESCE(r.rv_media,'[]'::jsonb)),
+              'raw_observed_at',r.rv_observed_at,
+              'raw_version_created_at',r.rv_created_at
+            ) || jsonb_build_object(
+              'listing_created_at',r.created_at,
+              'model_original',r.model_original,
+              'model_normalized',r.model_normalized,
+              'price_original',r.price_original,
+              'currency_original',r.currency_original,
+              'price_normalized',r.price_normalized,
+              'currency_normalized',r.currency_normalized,
+              'price_usd',r.price_usd,
+              'conversion_rate',r.conversion_rate,
+              'conversion_source',r.conversion_source,
+              'conversion_timestamp',r.conversion_timestamp,
+              'condition_original',r.condition_original,
+              'condition_normalized',r.condition_normalized,
+              'image_url',CASE WHEN btrim(COALESCE(r.image_url,''))
+                ~* '^https://thecollective-prod\.nyc3\.digitaloceanspaces\.com/listings/full/[^[:space:]]+$'
+                THEN regexp_replace(btrim(r.image_url),'\?.*$','') END,
+              'image_url_sha256',CASE WHEN NULLIF(btrim(r.image_url),'') IS NOT NULL
+                THEN encode(extensions.digest(convert_to(btrim(r.image_url),'UTF8'),'sha256'),'hex') END,
+              'source_media_key_sha256',CASE WHEN NULLIF(btrim(r.source_media_key),'') IS NOT NULL
+                THEN encode(extensions.digest(convert_to(btrim(r.source_media_key),'UTF8'),'sha256'),'hex') END,
+              'source_media_url_candidate',CASE WHEN btrim(COALESCE(r.source_media_url_candidate,''))
+                ~* '^https://thecollective-prod\.nyc3\.digitaloceanspaces\.com/listings/full/[^[:space:]]+$'
+                THEN regexp_replace(btrim(r.source_media_url_candidate),'\?.*$','') END,
+              'source_media_url_candidate_sha256',CASE
+                WHEN NULLIF(btrim(r.source_media_url_candidate),'') IS NOT NULL
+                THEN encode(extensions.digest(convert_to(btrim(r.source_media_url_candidate),'UTF8'),'sha256'),'hex') END,
+              'public_image_eligible',r.public_image_eligible,
+              'publication_review_status',r.publication_review_status,
+              'seller_name',COALESCE(NULLIF(btrim(r.user_name),''),NULLIF(btrim(r.from_name),'')),
+              'location',r.location,
+              'listing_type',upper(COALESCE(r.listing_type,r.intent,'')),
+              'trading_floor_status',r.trading_floor_status,
+              'verdict',r.verdict,
+              'release_row',CASE WHEN r.expected_brand='Vacheron Constantin' THEN (
+                SELECT v.row_data - ARRAY['raw_message','user_image_url']::text[]
+                FROM public.qnsa_vacheron_overseas_reference_rows(r.expected_reference,101,0,NULL) v
+                WHERE v.row_data->>'id'=r.id::text LIMIT 1
+              ) ELSE (public.qnsa_four_brand_effective_detail(r.id)->'row_data')
+                - ARRAY['raw_message','user_image_url']::text[] END
+            ) row_data FROM rows r
+          )
+          SELECT jsonb_build_object(
+            'contract','watchfacts-five-watch-database-snapshot-v1',
+            'read_only',true,
+            'project_ref','qnsafosakvonzgfcsphh',
+            'row_count',count(*),
+            'missing_rows',count(*) FILTER (WHERE NOT COALESCE((row_data->>'found')::boolean,false)),
+            'rows',jsonb_agg(row_data ORDER BY ordinal),
+            'generated_at',now()
+          ) report FROM shaped;
+          '@
+          if ($sql -match '(?im)^\s*(INSERT|UPDATE|DELETE|TRUNCATE|ALTER|DROP|CREATE|GRANT|REVOKE)\b') {
+            throw 'Exact five-watch SQL is not read-only.'
+          }
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post `
+            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body
+          if (@($result).Count -ne 1 -or -not $result[0].report) {
+            throw 'Exact five-watch database snapshot did not return one report.'
+          }
+          $report = $result[0].report
+          if ([long]$report.row_count -ne 5 -or [long]$report.missing_rows -ne 0) {
+            throw 'Exact five-watch database snapshot did not reconcile all five frozen IDs.'
+          }
+          foreach ($row in @($report.rows)) {
+            $expectedReference = ([string]$row.expected_reference).ToUpperInvariant() -replace '[^A-Z0-9]',''
+            $actualReference = ([string]$row.reference_normalized).ToUpperInvariant() -replace '[^A-Z0-9]',''
+            if ($row.found -ne $true -or $row.source_record_matches -ne $true -or
+                $row.raw_version_source_record_matches -ne $true -or
+                $row.raw_version_source_hash_matches -ne $true -or
+                $row.raw_message_exact_match -ne $true -or
+                $row.brand_normalized -cne $row.expected_brand -or
+                $actualReference -cne $expectedReference -or -not $row.release_row) {
+              throw "Exact lineage/release mismatch for frozen ID $($row.expected_id)."
+            }
+          }
+          $report | ConvertTo-Json -Depth 20 | Set-Content `
+            -LiteralPath 'audit-output/five-watch-production/database.json' -Encoding utf8NoBOM
+
+      - name: Upload exact five-watch evidence only
+        if: always() && inputs.exact_five == true
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-five-watch-production-${{ github.run_id }}
+          path: audit-output/five-watch-production/*.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Enforce exact source/public evidence completeness
+        if: always() && inputs.exact_five == true
+        shell: pwsh
+        env:
+          SOURCE_PUBLIC_OUTCOME: ${{ steps.exact_source_public.outcome }}
+        run: |
+          if ($env:SOURCE_PUBLIC_OUTCOME -cne 'success') {
+            throw 'Exact five-watch source/public evidence was incomplete.'
+          }
+
       - name: Run count-only production census
+        if: inputs.exact_five != true
         shell: pwsh
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -290,6 +501,7 @@ jobs:
           Write-Output "listing_ids_sha256=$($report.evidence.listing_ids_sha256)"
 
       - name: Upload aggregate evidence only
+        if: inputs.exact_five != true
         uses: actions/upload-artifact@v4
         with:
           name: qnsa-vacheron-overseas-census-${{ github.run_id }}

@@ -27,6 +27,10 @@ const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
 const { loadReviewedWorkbookListing } = require('./_lib/reviewed-workbook-analytics.cjs');
 const { ROLEX_PATEK_MULTI_PARENT_ID } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
 const { loadEffectiveDetail } = require('./_lib/four-brand-field-enrichment.cjs');
+const {
+  applyConfirmedFiveWatchPublication,
+  frozenFiveDefinition,
+} = require('./_lib/five-watch-publication.cjs');
 
 const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source';
 
@@ -73,6 +77,13 @@ function qnsaListingResponse(listing) {
       price_evidence_status: listing.price_evidence_status
         || (Number(listing.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED'),
       currency: listing.currency || null,
+      source_price_amount: listing.source_price_amount ?? listing.price_raw ?? null,
+      source_currency: listing.source_currency ?? listing.currency ?? null,
+      source_price_text: listing.source_price_text || null,
+      original_price_amount: listing.original_price_amount ?? listing.source_price_amount ?? listing.price_raw ?? null,
+      original_currency: listing.original_currency ?? listing.source_currency ?? listing.currency ?? null,
+      price_confirmation_note: listing.price_confirmation_note || null,
+      confirmed_data_publication: listing.confirmed_data_publication || null,
       raw_message: rawMessage || null,
       raw_message_scope: rawMessage ? 'original_post' : 'unavailable',
       raw_message_truncated: false,
@@ -86,6 +97,7 @@ function qnsaListingResponse(listing) {
       confidence: listing.confidence == null ? null : Number(listing.confidence),
       accessories: [],
       image_urls: imageUrls,
+      thumbnail_url: imageUrls[0] || null,
       has_images: listing.has_images === true && imageUrls.length > 0,
       image_evidence_type: listing.has_images === true && imageUrls.length > 0 ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
       image_evidence_label: listing.has_images === true && imageUrls.length > 0 ? 'Source-supplied listing image' : null,
@@ -127,6 +139,21 @@ function effectiveDetailListing(row) {
     has_images: Boolean(imageUrl),
     location: row.location,
   };
+}
+
+async function loadFrozenVacheronDetail(client, id) {
+  const definition = frozenFiveDefinition(id);
+  if (!definition || definition.brand !== 'Vacheron Constantin') return null;
+  const { data, error } = await client.rpc('qnsa_vacheron_overseas_reference_rows', {
+    p_reference: definition.reference,
+    p_limit: 101,
+    p_offset: 0,
+    p_listing_type: null,
+  });
+  if (error) throw error;
+  const row = (data || []).map(value => value?.row_data || value)
+    .find(value => String(value?.id) === String(id));
+  return row ? effectiveDetailListing(row) : null;
 }
 
 function normalizeAccessories(value) {
@@ -196,7 +223,13 @@ module.exports = async function handler(req, res) {
     if (effectiveDetail?.fourBrandScope) {
       if (!effectiveDetail.row) return res.status(404).json({ error: 'Listing not found' });
       return res.status(200).json(qnsaListingResponse(
-        effectiveDetailListing(effectiveDetail.row),
+        applyConfirmedFiveWatchPublication(effectiveDetailListing(effectiveDetail.row)),
+      ));
+    }
+    const frozenVacheronDetail = await loadFrozenVacheronDetail(client, id);
+    if (frozenVacheronDetail) {
+      return res.status(200).json(qnsaListingResponse(
+        applyConfirmedFiveWatchPublication(frozenVacheronDetail),
       ));
     }
     let qnsaListing = null;
@@ -444,3 +477,4 @@ module.exports = async function handler(req, res) {
 
 module.exports.isTradingFloorOnlyReviewedListingId = isTradingFloorOnlyReviewedListingId;
 module.exports.effectiveDetailListing = effectiveDetailListing;
+module.exports.loadFrozenVacheronDetail = loadFrozenVacheronDetail;
