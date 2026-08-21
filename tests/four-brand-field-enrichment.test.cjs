@@ -415,7 +415,11 @@ test("effective detail never promotes an unresolved owner-assumed candidate amou
   );
   assert.match(
     forwardReadMigration,
-    /CASE WHEN e\.price_lane IN \('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX'\) THEN e\.price_normalized END/,
+    /CASE WHEN e\.price_lane IN \('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX'\)[\s\S]*THEN e\.price_original END/,
+  );
+  assert.match(
+    forwardReadMigration,
+    /e\.conversion_rate>0 AND e\.conversion_timestamp IS NOT NULL[\s\S]*THEN 'DATED_VERIFIED_FX'/,
   );
 });
 
