@@ -341,6 +341,9 @@ test("workflow is QNSA-pinned, private-artifact based, bounded, and rollback cap
   assert.match(workflow, /manifest\.run_key -cne \$env:INPUT_RUN_KEY/);
   assert.match(workflow, /Install sidecar schema only under explicit schema authorization[\s\S]*if: inputs\.mode == 'schema'/);
   assert.match(workflow, /Verify exact installed schema contract without DDL[\s\S]*if: inputs\.mode != 'schema'/);
+  assert.match(workflow, /projects\/\$env:PROJECT_REF\/api-keys/);
+  assert.match(workflow, /QNSA_RUNTIME_SERVICE_ROLE_KEY/);
+  assert.doesNotMatch(workflow, /SUPABASE_SERVICE_ROLE_KEY: \$\{\{ secrets\.SUPABASE_SERVICE_ROLE_KEY \}\}/);
   const installStart = workflow.indexOf("- name: Install sidecar schema only");
   const installedCheck = workflow.indexOf("- name: Verify exact installed schema contract", installStart);
   assert.ok(installStart >= 0 && installedCheck > installStart);
