@@ -491,7 +491,7 @@ const RED = '#dc3545';
 const BLUE = '#0d6efd';
 const WTB_LISTING_PAGE_SIZE = 24;
 const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
-const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega'];
+const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega', 'Tudor'];
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 const displayCatalogModel = (model: string) => model === REFERENCE_ONLY_MODEL ? 'Other exact references' : model;
 
@@ -2344,9 +2344,6 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
             reviewCount={row.seller_review_count}
             ratingEvidenceStatus={row.seller_rating_evidence_status}
           />
-          <span style={{ fontSize: 10 }}>
-            {row.dealer_profile_path ? 'Reference Check linked' : 'Reference Check unlinked'}
-          </span>
         </div>
       </div>
       <div className="hidden sm:block" style={{ textAlign: 'right', flexShrink: 0 }}>

@@ -29,6 +29,26 @@ test('converts explicit non-USD evidence only with a dated named snapshot', () =
   assert.equal(recovered.fx_date, '2026-08-13T00:00:00Z');
 });
 
+test('recovers a euro banknote amount without changing the raw message', async () => {
+  const rawMessage = 'Omega 130.30.39.21.03.001\n💶 3900';
+  const [row] = await recoverRecordPrices([{
+    raw_message: rawMessage,
+    price_usd: null,
+  }], {
+    snapshot: {
+      observed_at: '2026-08-11T00:00:00Z',
+      source: 'European Central Bank reference rates',
+      usd_per_unit: { EUR: 1.1 },
+    },
+  });
+
+  assert.equal(row.raw_message, rawMessage);
+  assert.equal(row.source_price_amount, 3900);
+  assert.equal(row.source_currency, 'EUR');
+  assert.equal(row.price_usd, 4290);
+  assert.equal(row.price_evidence_status, 'EXPLICIT_SOURCE_FX_CONVERTED');
+});
+
 test('leaves existing verified prices unchanged', async () => {
   const [row] = await recoverRecordPrices([{ raw_message: 'RM11 200000 USDT', price_usd: 190000 }]);
   assert.equal(row.price_usd, 190000);
