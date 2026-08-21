@@ -321,9 +321,21 @@ function isAuditedRolexPatekDeltaSingle(row) {
     && isRolexPatekOverlayBrand(brand);
 }
 
+function isAuditedFourBrandEffectiveSingle(row) {
+  const listingType = cleanExactText(row?.listing_type, 30).toUpperCase();
+  const brand = row?.canonical_brand || row?.brand_scope || row?.brand;
+  return row?.publication_lane === 'QNSA_FOUR_BRAND_EFFECTIVE_SIDECAR_V1'
+    && row?.verification_status === 'APPROVED_SINGLE_CANDIDATE'
+    && row?.raw_lineage_verified === true
+    && row?.normalization_run_complete === true
+    && isFourBrand(brand)
+    && ['WTS', 'WTB'].includes(listingType);
+}
+
 function isMultiListing(row) {
   const listingType = cleanExactText(row.listing_type, 30).toUpperCase();
-  if (row.is_bundle === true || ['MULTI', 'MULTI_LISTING', 'BUNDLE'].includes(listingType)) return true;
+  if (row.is_bundle === true || row.multi_listing === true
+    || ['MULTI', 'MULTI_LISTING', 'BUNDLE'].includes(listingType)) return true;
   if ([row.model, row.catalog_model, row.dial_color, row.catalog_dial]
     .some(value => MULTIPLE_LISTING_IDENTITY_VALUES.includes(cleanExactText(value, 40).toLowerCase()))) {
     return true;
@@ -335,6 +347,13 @@ function isMultiListing(row) {
   // dealer signatures or accessory text for a second watch. Explicit bundle
   // flags, multi intents, and multi identity sentinels above still fail closed.
   if (isAuditedRolexPatekDeltaSingle(row)) return false;
+
+  // The effective four-brand RPC has already enforced immutable lineage,
+  // released single-candidate identity, parent_id NULL, is_bundle=false and
+  // duplicate suppression. Its lane replaces the older brand-specific lane
+  // names, so retain that exact audited single without re-running the generic
+  // prose splitter. Explicit bundle/type/identity sentinels above still win.
+  if (isAuditedFourBrandEffectiveSingle(row)) return false;
 
   if (row.publication_lane === 'QNSA_VACHERON_OVERSEAS_RELEASE_V1'
     && row.raw_lineage_verified === true
@@ -1907,7 +1926,7 @@ module.exports = async function handler(req, res) {
           rating, postedAfter, itemCategory, brand, listingType, pricedOnly,
         })
       : null;
-    let fourBrandCountPromise = null;
+    let fourBrandCountOptions = null;
     const vacheronOverseasRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Vacheron Constantin' && ['ALL', 'WATCH'].includes(itemCategory);
     const omegaRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
@@ -1961,24 +1980,21 @@ module.exports = async function handler(req, res) {
       ? !cursorProvided && page === 1 && (inventoryCursor?.offset || 0) === 0
       : page === 1;
     if (fourBrandEffectiveScope && firstEffectiveCountPage) {
-      fourBrandCountPromise = loadEffectiveCount(client, {
-          brand,
-          listingType: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
-          model: requestedModel || null,
-          reference: requestedReference || null,
-          dial: requestedDial || null,
-          condition: condition || null,
-          search: search || null,
-          references: null,
-          imagesOnly,
-          pricedOnly,
-          postedAfter,
-          region: region || null,
-          rating: rating || null,
-        }).catch(effectiveCountError => {
-        console.warn('[reviewed-market-inventory] four-brand exact count unavailable; total withheld:', effectiveCountError.message);
-        return null;
-      });
+      fourBrandCountOptions = {
+        brand,
+        listingType: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+        model: requestedModel || null,
+        reference: requestedReference || null,
+        dial: requestedDial || null,
+        condition: condition || null,
+        search: search || null,
+        references: null,
+        imagesOnly,
+        pricedOnly,
+        postedAfter,
+        region: region || null,
+        rating: rating || null,
+      };
       publicInventoryTotal = null;
     } else if (fourBrandEffectiveScope) {
       // Cursor continuation pages never repeat the exact cohort-wide count.
@@ -2001,7 +2017,6 @@ module.exports = async function handler(req, res) {
     });
 
     if (pageWindow.empty) {
-      if (fourBrandCountPromise) publicInventoryTotal = await fourBrandCountPromise;
       const publicationBrands = publicationBrandsFromSummary(summary);
       return res.status(200).json({
         status: 'ok', count: 0, total: publicInventoryTotal, page, pageSize,
@@ -3073,14 +3088,24 @@ module.exports = async function handler(req, res) {
         })
       : null;
     const publicationBrands = publicationBrandsFromSummary(summary);
-    if (fourBrandCountPromise) publicInventoryTotal = await fourBrandCountPromise;
+    const publicBaseRecords = reviewedOverlayLaneActive ? [] : records;
+    const combinedPageRecords = [...publicBaseRecords, ...reviewedOverlayRecords];
+    // Serialize the cohort-wide count after the bounded page has been fetched,
+    // mapped and filtered. Running both cold scans in parallel caused avoidable
+    // database contention; count metadata remains advisory and fail-open.
+    if (fourBrandCountOptions) {
+      try {
+        publicInventoryTotal = await loadEffectiveCount(client, fourBrandCountOptions);
+      } catch (effectiveCountError) {
+        console.warn('[reviewed-market-inventory] four-brand exact count unavailable; total withheld:', effectiveCountError.message);
+        publicInventoryTotal = null;
+      }
+    }
     const combinedInventoryTotal = combineInventoryTotal(
       publicInventoryTotal,
       reviewedOverlayTotal,
       reviewedOverlayCountHasUnsupportedFilter || reviewedOverlayDuplicateCount > 0,
     );
-    const publicBaseRecords = reviewedOverlayLaneActive ? [] : records;
-    const combinedPageRecords = [...publicBaseRecords, ...reviewedOverlayRecords];
 
     return res.status(200).json({
       status: 'ok',
@@ -3169,6 +3194,7 @@ module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;
 module.exports.isMultiListing = isMultiListing;
 module.exports.isAuditedRolexPatekDeltaSingle = isAuditedRolexPatekDeltaSingle;
+module.exports.isAuditedFourBrandEffectiveSingle = isAuditedFourBrandEffectiveSingle;
 module.exports.safeSearchTerm = safeSearchTerm;
 module.exports.locationSearchPattern = locationSearchPattern;
 module.exports.locationMatches = locationMatches;
