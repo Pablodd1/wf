@@ -12,7 +12,6 @@ const { luxuryIdentityEligibility, normalizeLuxuryIdentity } = require('./_lib/l
 const { classifyWatchPartListing } = require('./_lib/watch-item-classification.cjs');
 const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
-const { isFourBrand, loadEffectiveEnrichments } = require('./_lib/four-brand-field-enrichment.cjs');
 const {
   databaseTradingIntentFilter,
   isPublicTradingIntent,
@@ -2285,33 +2284,7 @@ module.exports = async function handler(req, res) {
       // category feed performs additional expression sorting and immutable
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
-      if (isFourBrand(brand)) {
-        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_four_brand_effective_page_rows`, {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            p_brand: brand,
-            p_limit: qnsaBrandScanLimit,
-            p_offset: requestedOffset,
-            p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
-            p_model: requestedModel || null,
-            p_reference: requestedReference || null,
-            p_dial: requestedDial || null,
-            p_condition: condition || null,
-            p_search: search || null,
-          }),
-        });
-        if (!response.ok) {
-          const body = await response.text();
-          // Do not fall back to pre-overlay filtering: it would silently hide
-          // the exact rows this effective-field route is required to find.
-          throw new Error(`QNSA four-brand effective page failed: ${response.status} ${body.slice(0, 200)}`);
-        }
-        preloadedQnsaResponse = new Response(JSON.stringify(await response.json()), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        });
-      } else if (zenithModelRelease) {
+      if (zenithModelRelease) {
         const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_zenith_model_page_rows`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
@@ -2765,10 +2738,9 @@ module.exports = async function handler(req, res) {
           if (laterReviewedBrand && qnsaBroadPage) return !hasObviousCrossBrandConflict(row);
           return isTradingFloorSourceRow(row);
         });
-    const effectiveEligibleRows = await loadEffectiveEnrichments(client, eligibleRows);
     const recoveredMarketRecords = await enrichRecordsWithDealerDirectory(
       client,
-      (await recoverRecordPrices(effectiveEligibleRows.map(mapReviewedRecord)))
+      (await recoverRecordPrices(eligibleRows.map(mapReviewedRecord)))
         .map(suppressPublicReferenceTokenPrice),
     );
     let records = recoveredMarketRecords
@@ -2794,8 +2766,7 @@ module.exports = async function handler(req, res) {
       // already enforced immutable lineage, single-item status, duplicate and
       // release gates. Preserve those rows if generic cross-category mapping
       // removes the entire Cartier page.
-      const effectiveSourceRows = await loadEffectiveEnrichments(client, sourceRows);
-      records = (await recoverRecordPrices(effectiveSourceRows.map(mapReviewedRecord)))
+      records = (await recoverRecordPrices(sourceRows.map(mapReviewedRecord)))
         .map(suppressPublicReferenceTokenPrice)
         .filter(record => !record.multi_listing || record.multi_listing_release_approved === true)
         .filter(record => isPublicTradingIntent(record.listing_type)
