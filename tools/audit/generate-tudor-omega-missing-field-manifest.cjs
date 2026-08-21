@@ -255,23 +255,39 @@ function buildManifest(records) {
 
 async function crawlBrand(origin, brand, fetchImpl = fetch) {
   const records = [];
+  const seen = new Set();
   let expectedTotal = null;
-  for (let page = 1; page <= 200; page += 1) {
+  let cursor = null;
+  for (let page = 1; page <= 2_000; page += 1) {
     const url = new URL('/api/reviewed-market-inventory', origin);
     url.searchParams.set('brand', brand);
     url.searchParams.set('pageSize', '100');
-    url.searchParams.set('page', String(page));
-    const response = await fetchImpl(url);
+    url.searchParams.set('pagination', 'cursor');
+    if (cursor) url.searchParams.set('cursor', cursor);
+    let response;
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      response = await fetchImpl(url);
+      if (response.ok || (response.status !== 429 && response.status < 500)) break;
+      await new Promise(resolve => setTimeout(resolve, attempt * 500));
+    }
     if (!response.ok) throw new Error(`${brand} page ${page} failed with HTTP ${response.status}.`);
     const body = await response.json();
     if (expectedTotal === null) expectedTotal = Number(body.total);
-    records.push(...(body.records || []));
-    if (!body.hasMore) break;
+    for (const record of body.records || []) {
+      if (record?.id && !seen.has(record.id)) {
+        seen.add(record.id);
+        records.push(record);
+      }
+    }
+    if (!body.hasMore || !body.nextCursor) {
+      if (!Number.isInteger(expectedTotal) || records.length !== expectedTotal) {
+        throw new Error(`${brand} crawl did not reconcile: expected ${expectedTotal}, received ${records.length}.`);
+      }
+      return records;
+    }
+    cursor = body.nextCursor;
   }
-  if (!Number.isInteger(expectedTotal) || records.length !== expectedTotal) {
-    throw new Error(`${brand} crawl did not reconcile: expected ${expectedTotal}, received ${records.length}.`);
-  }
-  return records;
+  throw new Error(`${brand} cursor did not terminate within 2,000 pages.`);
 }
 
 async function main() {

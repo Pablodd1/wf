@@ -263,9 +263,14 @@ async function fetchBrand(baseUrl, brand) {
   for (let page = 0; page < 2_000; page += 1) {
     const query = new URLSearchParams({ brand, pageSize: '100', pagination: 'cursor' });
     if (cursor) query.set('cursor', cursor);
-    const response = await fetch(`${baseUrl}/api/reviewed-market-inventory?${query}`, {
-      signal: AbortSignal.timeout(60_000),
-    });
+    let response;
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      response = await fetch(`${baseUrl}/api/reviewed-market-inventory?${query}`, {
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (response.ok || (response.status !== 429 && response.status < 500)) break;
+      await new Promise(resolve => setTimeout(resolve, attempt * 500));
+    }
     if (!response.ok) throw new Error(`${brand} inventory returned HTTP ${response.status}`);
     const payload = await response.json();
     for (const record of payload.records || []) {
