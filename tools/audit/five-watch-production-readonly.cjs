@@ -551,8 +551,24 @@ async function main() {
     });
   }
 
-  const maria = await loadMariaDbRows();
-  const supabase = await loadSupabaseEvidence();
+  let maria;
+  try {
+    maria = await loadMariaDbRows();
+  } catch (error) {
+    maria = {
+      error: error?.message || String(error),
+      tls_encrypted: false,
+      transaction_read_only: false,
+      rows: [],
+      image_urls: [],
+    };
+  }
+  let supabase;
+  try {
+    supabase = await loadSupabaseEvidence();
+  } catch (error) {
+    supabase = { error: error?.message || String(error), image_urls: [] };
+  }
   const imageUrls = new Set();
   for (const entry of publicRows) {
     const row = entry.trading.row;

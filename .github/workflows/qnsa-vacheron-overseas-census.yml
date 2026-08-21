@@ -146,7 +146,8 @@ jobs:
               'raw_message_source',r.rv_raw_message_source,
               'raw_media_count',jsonb_array_length(COALESCE(r.rv_media,'[]'::jsonb)),
               'raw_observed_at',r.rv_observed_at,
-              'raw_version_created_at',r.rv_created_at,
+              'raw_version_created_at',r.rv_created_at
+            ) || jsonb_build_object(
               'listing_created_at',r.created_at,
               'model_original',r.model_original,
               'model_normalized',r.model_normalized,
