@@ -408,6 +408,13 @@ test("OWNER_ASSUMED_USD is customer-visible excluded evidence only", () => {
   assert.match(researchSource, /OWNER_ASSUMED_USD_TRACKED_ONLY_EXCLUDED_FROM_INDEPENDENT_AGGREGATES/);
 });
 
+test("Price Research maps four-brand effective WTS and WTB rows into market fields", () => {
+  assert.equal(
+    (researchSource.match(/effectivePage\.slice\(0, limit\)\.map\(qnsaReferenceRowToMarketRow\)/g) || []).length,
+    2,
+  );
+});
+
 test("effective detail never promotes an unresolved owner-assumed candidate amount", () => {
   assert.doesNotMatch(
     forwardReadMigration,
