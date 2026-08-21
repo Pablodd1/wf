@@ -408,6 +408,17 @@ test("OWNER_ASSUMED_USD is customer-visible excluded evidence only", () => {
   assert.match(researchSource, /OWNER_ASSUMED_USD_TRACKED_ONLY_EXCLUDED_FROM_INDEPENDENT_AGGREGATES/);
 });
 
+test("effective detail never promotes an unresolved owner-assumed candidate amount", () => {
+  assert.doesNotMatch(
+    forwardReadMigration,
+    /WHEN e\.price_lane='OWNER_ASSUMED_USD_CANDIDATE' THEN e\.price_normalized/,
+  );
+  assert.match(
+    forwardReadMigration,
+    /CASE WHEN e\.price_lane IN \('SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX'\) THEN e\.price_normalized END/,
+  );
+});
+
 test("workflow is QNSA-pinned, private-artifact based, bounded, and rollback capable", () => {
   assert.match(workflow, /qnsafosakvonzgfcsphh/);
   assert.match(workflow, /actions\/download-artifact@v4/);
