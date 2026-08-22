@@ -15,7 +15,7 @@ WITH control AS MATERIALIZED (
     AND upper(COALESCE(l.verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
     AND lower(COALESCE(l.price_research_status,''))<>'suppressed_exact_duplicate'
     AND upper(COALESCE(l.publication_review_status,'PENDING_REVIEW')) IN ('PENDING_REVIEW','APPROVED','READY_FOR_PUBLICATION_REVIEW')
-    AND abs(mod(hashtextextended(l.id::text,0),8))=__SHARD__
+    AND l.id>='__LOW__'::uuid __HIGH_CONDITION__
 )
 SELECT jsonb_build_object(
   'contract','watchfacts-rolex-phase2-rating-v1','project_ref','qnsafosakvonzgfcsphh',
