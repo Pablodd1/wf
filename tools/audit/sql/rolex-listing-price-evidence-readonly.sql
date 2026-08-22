@@ -35,7 +35,6 @@ WITH control AS MATERIALIZED (
     NULLIF(btrim(p.condition_normalized),'') AS condition,
     p.price_usd,
     CASE
-      WHEN NULLIF(btrim(COALESCE(p.dealer_id::text,'')),'') IS NOT NULL THEN 'D:'||md5(upper(regexp_replace(p.dealer_id::text,'[^A-Z0-9]','','g')))
       WHEN NULLIF(regexp_replace(COALESCE(p.contact_number,p.from_number,''),'[^0-9]','','g'),'') IS NOT NULL THEN 'P:'||md5(regexp_replace(COALESCE(p.contact_number,p.from_number),'[^0-9]','','g'))
       WHEN NULLIF(btrim(COALESCE(p.raw_message_text,'')),'') IS NOT NULL THEN 'M:'||md5(upper(regexp_replace(btrim(p.raw_message_text),'[[:space:]]+',' ','g')))
       ELSE 'R:'||p.id::text
