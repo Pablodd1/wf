@@ -3,7 +3,8 @@ import { Link, useLocation } from 'react-router-dom';
 import { LanguageToggle } from './LanguageToggle';
 import { useLanguage } from '@/i18n/LanguageContext';
 
-const LUXFI_URL = 'https://luxfi.ai/#add-fi';
+export const LUXFI_URL = 'https://luxfi.ai/#add-fi';
+export const VIRTUAL_AUTHENTICATOR_URL = 'https://curatedlux.pages.dev/valuation';
 
 type HeaderLink = {
   label: string;

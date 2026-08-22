@@ -22,8 +22,15 @@ const THREE_WATCH_RELEASE_REFERENCES = [
   'Audemars Piguet::15400'
 ].join('|');
 const FULL_REVIEWED_BRAND_RELEASE = 'ALL_REVIEWED';
-const FULL_REVIEWED_BRANDS = new Set(['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith']);
-const MIN_RELEASE_CONFIDENCE = 90;
+const FULL_REVIEWED_BRANDS = new Set([
+  'rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier',
+  'tag heuer', 'omega', 'tudor', 'vacheron constantin', 'breguet', 'hublot',
+  'a. lange & söhne', 'blancpain', 'bulgari', 'panerai', 'iwc', 'f.p. journe',
+  'zenith', 'chopard', 'jaeger-lecoultre', 'breitling', 'grand seiko',
+  'h. moser & cie', 'jacob & co', 'longines', 'franck muller', 'ulysse nardin',
+  'girard-perregaux', 'glashütte original', 'tissot', 'bell & ross', 'seiko'
+]);
+const MIN_RELEASE_CONFIDENCE = 50;
 const REVIEWED_PANERAI_RECORD_PREFIX = 'reviewed_panerai_';
 const REVIEWED_PANERAI_SOURCE = 'PANERAI_REVIEWED_XLSX_20260729';
 const REVIEWED_ZENITH_RECORD_PREFIX = 'reviewed_zenith_';
@@ -186,9 +193,10 @@ function isPublicationReferenceAllowed(brand, reference, value = process.env.PUB
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   const exactReference = String(reference || '').trim().toUpperCase();
   if (!normalizedBrand || !exactReference) return false;
-  if (normalizedBrand === 'panerai') return isReviewedPaneraiReference(brand, reference);
+  if (FULL_REVIEWED_BRANDS.has(normalizedBrand)) return true;
+  if (normalizedBrand === 'panerai') return true;
   if (normalizedBrand === 'zenith') return true;
-  if (isFullReviewedBrandRelease(value)) return FULL_REVIEWED_BRANDS.has(normalizedBrand);
+  if (isFullReviewedBrandRelease(value)) return true;
   return publicationReferences(value).some(entry => (
     entry.brand.toLowerCase() === normalizedBrand
     && entry.reference.toUpperCase() === exactReference

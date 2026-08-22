@@ -1,6 +1,6 @@
 import { ExternalLink, MessageCircle } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { LUXFI_URL } from './MarketHeader';
+import { LUXFI_URL, VIRTUAL_AUTHENTICATOR_URL } from './MarketHeader';
 
 export const CONTACT_WHATSAPP_URL = 'https://api.whatsapp.com/send?phone=17869569201&text=Hello,%20I%20would%20like%20more%20information%20about%20your%20services.';
 export const CONTACT_EMAIL = 'support@watchfacts.com';
@@ -96,6 +96,9 @@ export function Footer() {
             <Link to="/dealers" className="transition-colors hover:text-white">Reference Check</Link>
             <Link to="/dealer/workspace" className="transition-colors hover:text-white">Workspace</Link>
             <Link to="/insight" className="transition-colors hover:text-white">Blog</Link>
+            <a href={VIRTUAL_AUTHENTICATOR_URL} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 transition-colors hover:text-white">
+              VIRTUAL AUTHENTICATOR <ExternalLink size={11} />
+            </a>
           </nav>
 
           <nav aria-label="Company & Access" className="flex flex-col gap-2.5 text-xs text-white/60">

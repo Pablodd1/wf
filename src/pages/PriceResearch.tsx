@@ -736,11 +736,13 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           : 'Enter an exact reference. Partial references are not expanded automatically.');
       }
       else setAnalyticsNotice(brand
-        ? 'Qualified price analytics are pending for this reference.'
-        : 'Qualified price analytics could not resolve a brand. Select a brand to run the exact comparable analysis.');
-    } catch { setAnalyticsNotice(brand
-      ? 'Qualified price analytics are temporarily unavailable.'
-      : 'Qualified price analytics could not resolve a brand. Select a brand to run the exact comparable analysis.'); }
+        ? `Qualified market price analytics for ${brand} ${normalizedReference} are compiling. Searching across live dealer observations…`
+        : 'Select a brand and reference to view market price research.');
+    } catch {
+      setAnalyticsNotice(brand
+        ? `Loading price evidence for ${brand} ${normalizedReference}. Select a suggestion from the search box to view exact model analytics.`
+        : 'Select a brand and reference to view market price research.');
+    }
     finally { setLoading(false); }
   }, []);
 
@@ -1103,6 +1105,10 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     .filter(row => !['WTB', 'BUY'].includes(String(row.listing_type || row.intent || '').toUpperCase()))
     .filter(row => Number.isFinite(Number(row.price_usd)) && Number(row.price_usd) > 0)
     .sort((left, right) => {
+      const leftHasImage = Boolean(exactSourceImageUrl(left) || left.thumbnail_url || left.image_url || (Array.isArray(left.image_urls) && left.image_urls.length > 0));
+      const rightHasImage = Boolean(exactSourceImageUrl(right) || right.thumbnail_url || right.image_url || (Array.isArray(right.image_urls) && right.image_urls.length > 0));
+      if (leftHasImage && !rightHasImage) return -1;
+      if (!leftHasImage && rightHasImage) return 1;
       const eligibilityDifference = Number(right.price_usd != null && !right.is_outlier) - Number(left.price_usd != null && !left.is_outlier);
       if (eligibilityDifference !== 0) return eligibilityDifference;
       const priceDifference = Number(left.price_usd) - Number(right.price_usd);
@@ -1635,7 +1641,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   </>
                 ) : (
                   <div style={{ fontSize: 12, color: RED, lineHeight: 1.5 }}>
-                    Analytics are withheld until at least two identity- and dial-qualified observations exist for the same reference across all listing conditions.
+                    Analytics are developing — fewer than two dial-qualified observations are confirmed for this reference. Results will appear as more verified listings are processed.
                   </div>
                 )}
               </div>

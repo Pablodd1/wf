@@ -93,9 +93,9 @@ export default function DealerProfile() {
 
       <section className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-12">
         <div className="grid gap-px bg-white/10 sm:grid-cols-3">
+          <ProfileMetric label="Total listings posted ever" value={linkagePending ? 'Pending linkage' : count(payload.listing_total ?? ((stats?.wts_count != null || stats?.wtb_count != null) ? (stats?.wts_count || 0) + (stats?.wtb_count || 0) : null))} />
           <ProfileMetric label="For sale posts" value={linkagePending ? 'Pending linkage' : count(stats?.wts_count)} />
           <ProfileMetric label="Want to buy posts" value={linkagePending ? 'Pending linkage' : count(stats?.wtb_count)} />
-          <ProfileMetric label={groupsAreCountOnly ? 'Common groups (count only)' : 'Common groups'} value={count(stats?.group_count)} />
         </div>
         {groupsAreCountOnly && <p className="mt-3 text-xs leading-5 text-white/40">Aggregate group count only. Individual community names are not published, and none are inferred.</p>}
         <p className="mt-5 text-xs text-white/40">First post shown: {date(stats?.first_post)} · Latest post shown: {date(stats?.latest_post)}. Import timestamps are never substituted for missing source dates.</p>

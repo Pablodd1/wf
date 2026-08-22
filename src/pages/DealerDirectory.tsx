@@ -51,7 +51,7 @@ export default function DealerDirectory() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [view, setView] = useState<DirectoryView>('all');
+  const [view, setView] = useState<DirectoryView>('rated');
   const pageSize = view === 'top-rated' ? 25 : 24;
 
   useEffect(() => {
@@ -65,16 +65,51 @@ export default function DealerDirectory() {
     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
     params.set('mode', view);
     if (search) params.set('q', search);
-    fetch(`/api/dealers?${params}`, { credentials: 'include', signal: controller.signal })
-      .then(async response => {
-        const payload = await response.json();
-        if (!response.ok) throw new Error(payload.error || 'Unable to load dealers');
-        setDealers(payload.dealers || []);
-        setTotal(Number(payload.total) || 0);
-        setError('');
-      })
-      .catch(caught => { if (caught?.name !== 'AbortError') setError(caught.message); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    const loadDealers = async () => {
+      try {
+        const response = await fetch(`/api/dealers?${params}`, { credentials: 'include', signal: controller.signal });
+        if (response.ok) {
+          const payload = await response.json();
+          if (payload && Array.isArray(payload.dealers)) {
+            setDealers(payload.dealers);
+            setTotal(Number(payload.total) || payload.dealers.length);
+            setError('');
+            return;
+          }
+        }
+      } catch {}
+
+      // Fallback to /dealers.json
+      try {
+        const fallbackRes = await fetch('/dealers.json', { signal: controller.signal });
+        if (fallbackRes.ok) {
+          const raw = await fallbackRes.json();
+          let list: DealerSummary[] = view === 'top-rated' ? raw.topRated : view === 'rated' ? raw.rated : raw.all;
+          if (search) {
+            const qLower = search.toLowerCase();
+            list = list.filter(d => 
+              (d.display_name || '').toLowerCase().includes(qLower) || 
+              (d.company_name || '').toLowerCase().includes(qLower) ||
+              (d.city || '').toLowerCase().includes(qLower)
+            );
+          }
+          setTotal(list.length);
+          const from = (page - 1) * pageSize;
+          setDealers(list.slice(from, from + pageSize));
+          setError('');
+          return;
+        }
+      } catch (err: any) {
+        if (err?.name !== 'AbortError') {
+          setError('Unable to load dealers');
+        }
+      }
+    };
+
+    loadDealers().finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+
     return () => controller.abort();
   }, [page, pageSize, search, view]);
 
@@ -140,9 +175,9 @@ export default function DealerDirectory() {
                   <span className="flex items-center gap-1"><CalendarDays size={13} /> {dealer.member_since || (dealer.verified_at ? `Verified ${new Date(dealer.verified_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}` : 'Member date unavailable')}</span>
                 </div>
                 <div className="mt-7 grid grid-cols-3 border-t border-white/10 pt-5 text-center">
+                  <Metric label="Total Posted" value={stats?.total_posts ?? ((stats?.wts_posts != null || stats?.wtb_posts != null) ? (stats?.wts_posts || 0) + (stats?.wtb_posts || 0) : null)} pending={linkagePending} />
                   <Metric label="For sale" value={stats?.wts_posts ?? null} pending={linkagePending} />
                   <Metric label="Looking for" value={stats?.wtb_posts ?? null} pending={linkagePending} />
-                  <Metric label="Groups" value={dealer.whatsapp_group_count ?? null} />
                 </div>
                 {view === 'all' && linkagePending && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Listing activity is awaiting exact verified seller linkage; zero is not inferred.</p>}
                 {view === 'all' && sourceCandidateUnlinked && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Source-backed activity is shown; exact linkage to current Trading Floor cards is pending.</p>}

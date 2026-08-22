@@ -133,3 +133,15 @@ For every finding include:
 - Regression tests required
 - Migration or dependency risk
 
+## Mandatory UI/UX & Catalog Presentation Standards
+
+- **Frozen UI Layout Guarantee:** The layout, styling, typography, field positions, and card anatomy across Trading Floor, Price Research, and Dealer Profiles are strictly static and frozen. Zero unrequested visual or design changes during data/backend work.
+- **Mandatory Image Presentation & Sorting:**
+  - Single-watch listings with confirmed photos must render the image at the top of the card in a 340px container.
+  - Unbundled listings without dedicated photos must omit the image container entirely and display clean text specifications. Never display composite group bundle shots as single-watch photos.
+  - Both Trading Floor and Price Research must sort listings so that items with confirmed images appear first.
+- **Mandatory Authentic Price Ratings:** Price rating badges (`Good price`, `Market price`, `High price`) must only be rendered when verified market benchmark statistics are qualified ($N \ge 2$ comparable offers). If benchmark data is unavailable or compiling, the UI must display `Price rating: Open for rating` in neutral grey text. Never inject artificial or fake "Market price" fallback badges.
+- **Mandatory Currency Disambiguation:** Never default or convert non-USD amounts to `$`. Explicit currencies (`HKD`, `EUR`, `GBP`, `CHF`, `SGD`, `JPY`, `CAD`, `AUD`, etc.) must always display their actual currency code and formatted amount (e.g. `HKD 115,000`).
+- **Location Filter Search & Multi-Selection:** Location filters in both Desktop and Mobile views must include an inline search input (`Search locations...`) enabling users to search and multi-select distinct dealer locations via checkboxes.
+- **Footer-Only Virtual Authenticator:** The Virtual Authenticator link belongs exclusively in the footer navigation pointing to `https://curatedlux.pages.dev/valuation`. It must never be placed in the top header.
+

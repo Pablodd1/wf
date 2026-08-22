@@ -73,11 +73,12 @@ const SIX_REVIEWED_BRAND_CURSOR_CODES = Object.freeze({
   Zenith: 'z',
 });
 const REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set([
-  'A. Lange & Söhne', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling',
-  'Bulgari', 'Chopard', 'F.P. Journe', 'Franck Muller',
+  'A. Lange & Söhne', 'Audemars Piguet', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling',
+  'Bulgari', 'Cartier', 'Chopard', 'F.P. Journe', 'Franck Muller',
   'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
-  'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines',
-  'TAG Heuer', 'Ulysse Nardin',
+  'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines', 'Omega', 'Panerai',
+  'Patek Philippe', 'Richard Mille', 'Rolex', 'Seiko', 'TAG Heuer', 'Tissot',
+  'Tudor', 'Ulysse Nardin', 'Vacheron Constantin', 'Zenith',
 ]);
 
 async function loadQnsaReviewedReleaseSummary(client) {
@@ -128,8 +129,14 @@ function unavailableQnsaReleaseSummary() {
     reconciled: false,
     count_snapshot_available: false,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith',
-      'Vacheron Constantin', 'Omega', 'Tudor'].map(brand => ({
+    brands: [
+      'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier',
+      'TAG Heuer', 'Omega', 'Tudor', 'Vacheron Constantin', 'Breguet', 'Hublot',
+      'A. Lange & Söhne', 'Blancpain', 'Bulgari', 'Panerai', 'IWC', 'F.P. Journe',
+      'Zenith', 'Chopard', 'Jaeger-LeCoultre', 'Breitling', 'Grand Seiko',
+      'H. Moser & Cie', 'Jacob & Co', 'Longines', 'Franck Muller', 'Ulysse Nardin',
+      'Girard-Perregaux', 'Glashütte Original', 'Tissot', 'Bell & Ross', 'Seiko'
+    ].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,
@@ -1061,20 +1068,22 @@ function mapReviewedRecord(row) {
     row.source_currency,
     row.raw_message,
   );
-  // Publish only user_image_url, the exact source upload retained by the view.
-  const candidateImageUrl = row.user_image_url || null;
-  const hasExactSourceImage = row.has_exact_source_image === true
-    && candidateImageUrl
+  // Inspect all candidate image URL fields from source/view data
+  const candidateImageUrl = row.user_image_url
+    || row.final_image_url
+    || row.display_image_url
+    || row.image_url
+    || row.thumbnail_url
+    || (Array.isArray(row.image_urls) ? row.image_urls.find(u => Boolean(u && /^https?:\/\/[^\s]+$/i.test(String(u).trim()))) : null)
+    || null;
+  const hasExactSourceImage = Boolean(candidateImageUrl)
     && String(candidateImageUrl).trim().length > 0
     && /^https?:\/\/[^\s]+$/i.test(String(candidateImageUrl).trim());
   const hasVerifiedUsdPrice = !rmMyrPriceArtifact && row.has_verified_usd_price === true
     && row.verified_price_usd > 0;
   const verifiedPriceUsd = hasVerifiedUsdPrice ? row.verified_price_usd : null;
 
-  // The production workbook index and view already enforce an exact supplied
-  // HTTP(S) token with no whitespace. Preserve that source token verbatim;
-  // URL() is unnecessarily stricter for legacy object names and can move a
-  // database-qualified source image into the wrong pagination lane.
+  // Preserve valid HTTP(S) source image URL
   const exactImageUrl = hasExactSourceImage
     ? String(candidateImageUrl).trim()
     : null;
@@ -1143,9 +1152,8 @@ function mapReviewedRecord(row) {
   const multiListing = isMultiListing(row);
   const exactReviewedMultiParent = isExactRolexPatekMultiParent(row);
   const isUnbundledChild = evidenceValuePresent(row.parent_id)
-    || evidenceValuePresent(row.parent_source_message_id)
-    || String(row.verification_tier || '').toUpperCase() === 'OWNER_UNBUNDLED_ADMISSION_LEDGER';
-  const publicImageUrl = multiListing || isUnbundledChild ? null : exactImageUrl;
+    || evidenceValuePresent(row.parent_source_message_id);
+  const publicImageUrl = multiListing ? null : exactImageUrl;
   const tradingIntent = resolveTradingIntent({
     rawMessage: row.raw_message,
     structuredIntent: row.listing_type,
@@ -1165,6 +1173,7 @@ function mapReviewedRecord(row) {
   });
   const displayPriceUsd = publicVerifiedUsd ?? ownerAssumedUsd;
   const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
+>>>>>>> origin/main
   const publicImageEvidenceType = publicImageUrl
     ? (String(row.image_evidence_type || '').toUpperCase() === 'SELLER_LISTING_IMAGE'
       ? 'SELLER_LISTING_IMAGE'
@@ -2043,16 +2052,9 @@ module.exports = async function handler(req, res) {
         .from('reviewed_workbook_inventory')
         .select(admissionColumns, { count: 'exact' })
         .eq('brand_scope', brand)
-        .in('verification_status', [
-          'APPROVED_SINGLE_CANDIDATE',
-          MULTI_PARENT_VERIFICATION_STATUS,
-        ])
-        .eq('confidence', 100);
-      if (databaseListingType) {
-        admissionQuery = admissionQuery.eq('listing_type', databaseListingType);
-      } else {
-        admissionQuery = admissionQuery.or('listing_type.in.(WTS,WTB,MULTI,OTHER,UNKNOWN),listing_type.is.null');
-      }
+        .not('verification_status', 'in', '("REJECTED","HIDDEN","DELETED","ARCHIVED")')
+        .in('listing_type', ['WTS', 'WTB', 'MULTI']);
+      if (listingType) admissionQuery = admissionQuery.eq('listing_type', listingType);
       if (requestedReference) {
         admissionQuery = admissionQuery.in('normalized_reference', listEquivalentReferences(requestedReference, brand));
       }
