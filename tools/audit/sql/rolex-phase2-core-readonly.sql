@@ -26,13 +26,11 @@ WITH control AS MATERIALIZED (
   SELECT regexp_replace(upper(btrim(a.reference_normalized)), '[^A-Z0-9]', '', 'g') ref_key, a.id,
     (btrim(COALESCE(a.image_url,a.source_media_url_candidate,''))~*'^https?://[^[:space:]]+$') has_image,
     (COALESCE(price_normalized,price_original,price_usd,0)>0) has_price,
-    (NULLIF(btrim(COALESCE(a.user_name,a.from_name,rv.raw_payload#>>'{raw_data,from_name}','')),'') IS NOT NULL) has_user,
-    (COALESCE(a.dealer_rating,a.rating,CASE WHEN COALESCE(rv.raw_payload#>>'{raw_data,dealer_rating}','')~'^[0-9]+([.][0-9]+)?$' THEN (rv.raw_payload#>>'{raw_data,dealer_rating}')::numeric END) IS NOT NULL) has_rating,
+    (NULLIF(btrim(COALESCE(a.user_name,a.from_name,'')),'') IS NOT NULL) has_user,
     (upper(COALESCE(a.listing_type,a.intent,''))='WTS' AND COALESCE(a.price_usd,0)>0 AND COALESCE(a.price_normalized,0)>0
       AND (a.currency_normalized IN ('USD','USDT') OR (a.currency_normalized IS NOT NULL
         AND COALESCE(a.conversion_rate,0)>0 AND a.conversion_timestamp IS NOT NULL))) price_research_eligible
-  FROM active a JOIN public.raw_message_versions rv ON rv.id=a.raw_message_version_id
-    AND rv.source_record_id=a.source_record_id AND rv.source_hash=a.source_hash
+  FROM active a
   WHERE upper(COALESCE(a.category,''))='WATCH' AND NULLIF(btrim(a.reference_normalized),'') IS NOT NULL
     AND a.parent_id IS NULL AND COALESCE(a.is_bundle,false)=false
     AND upper(COALESCE(a.listing_type,a.intent,'')) IN ('WTS','WTB')
@@ -48,7 +46,6 @@ WITH control AS MATERIALIZED (
     count(*) FILTER (WHERE b.has_price) prices, count(*) FILTER (WHERE b.has_user) users,
     count(*) FILTER (WHERE b.price_research_eligible) price_observations,
     count(*) FILTER (WHERE link.listing_id IS NOT NULL) dealer_links,
-    count(*) FILTER (WHERE b.has_rating) source_ratings,
     count(*) FILTER (WHERE d.rating IS NOT NULL AND d.review_count>0) directory_ratings
   FROM eligible_base b
   LEFT JOIN public.dealer_listing_links link ON link.listing_id=b.id AND link.link_status='APPLIED'
@@ -74,7 +71,7 @@ WITH control AS MATERIALIZED (
     COALESCE(b.prices,0)+COALESCE(o.prices,0) prices,
     COALESCE(b.users,0)+COALESCE(o.users,0) users,
     COALESCE(b.price_observations,0)+COALESCE(o.price_observations,0) price_observations,
-    COALESCE(b.dealer_links,0) dealer_links, COALESCE(b.source_ratings,0) source_ratings,
+    COALESCE(b.dealer_links,0) dealer_links,
     COALESCE(b.directory_ratings,0) directory_ratings
   FROM surface_keys k LEFT JOIN base_by_ref b USING(ref_key) LEFT JOIN overlay_by_ref o USING(ref_key)
 )
