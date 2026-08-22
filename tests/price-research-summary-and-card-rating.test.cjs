@@ -324,6 +324,7 @@ test('Rolex Trading Floor resolves price ratings progressively with bounded pair
   assert.match(floor, /ROLEX_PRICE_SUMMARY_CONCURRENCY = 2/);
   assert.match(floor, /isRolexOnlyPriceSummaryPage/);
   assert.match(floor, /loadPriceResearchBatchSummaries\(\[pair\], signal\)/);
+  assert.match(floor, /name === 'AbortError' && attempt === 0/);
   assert.match(floor, /setSettledPriceSummaryKeys\(current => new Set\(current\)\.add\(key\)\)/);
   assert.match(floor, /settledPriceSummaryKeys\.has\(priceResearchSummaryKey/);
 });
