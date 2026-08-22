@@ -15,10 +15,11 @@ WITH control AS MATERIALIZED (
     AND upper(COALESCE(l.verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
     AND lower(COALESCE(l.price_research_status,''))<>'suppressed_exact_duplicate'
     AND upper(COALESCE(l.publication_review_status,'PENDING_REVIEW')) IN ('PENDING_REVIEW','APPROVED','READY_FOR_PUBLICATION_REVIEW')
+    AND abs(mod(hashtextextended(l.id::text,0),8))=__SHARD__
 )
 SELECT jsonb_build_object(
   'contract','watchfacts-rolex-phase2-rating-v1','project_ref','qnsafosakvonzgfcsphh',
-  'read_only',true,'transaction_read_only',current_setting('transaction_read_only'),
+  'read_only',true,'transaction_read_only',current_setting('transaction_read_only'),'shard',__SHARD__,
   'counts',jsonb_build_object(
     'eligible_listings_with_source_backed_rating',count(*) FILTER (WHERE COALESCE(e.dealer_rating,e.rating,
       CASE WHEN COALESCE(rv.raw_payload#>>'{raw_data,dealer_rating}','')~'^[0-9]+([.][0-9]+)?$'
