@@ -412,34 +412,58 @@ function isDateLikeReferenceToken(rawToken) {
   return /^(?:19|20)\d{2}\/(?:0?[1-9]|1[0-2])$/i.test(String(rawToken || '').trim());
 }
 
+function cleanStockTokens(text) {
+  return String(text)
+    .replace(/(?:🔖|🏷️\s*stock|stock\s*#?|stk\s*#?|inv\s*#?)\s*[:=]?\s*[A-Za-z0-9_-]+/gi, ' ')
+    .trim();
+}
+
+function formatContinuousOmega(ref) {
+  const digits = String(ref || '').replace(/\D/g, '');
+  if (digits.length === 14) {
+    return `${digits.slice(0,3)}.${digits.slice(3,5)}.${digits.slice(5,7)}.${digits.slice(7,9)}.${digits.slice(9,11)}.${digits.slice(11,14)}`;
+  }
+  return ref;
+}
+
 function extractReference(line) {
-  const text = String(line);
+  const cleaned = cleanStockTokens(line);
+  const text = String(cleaned);
   const patterns = [
     /\b(RM\s*\d{2,3}(?:-\d{2})?(?:\s*[A-Z0-9]+)?)\b/i,
     /\b(IW\d{6})\b/i,
     /\b(Q\d{7})\b/i,
     /\b(M\d{4}[A-Z0-9]+-\d{4})\b/i,
     /\b(G0A\d{5})\b/i,
-    /\b(W[A-Z]{3}\d{4})\b/i,
+    /\b(W[A-Z0-9]{7})\b/i,
+    /\b(W\d{6,7}[A-Z0-9]?)\b/i,
     /\b(\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3})\b/i,
+    /\b([123]\d{3}\.\d{2})\b/i,
     /\b(L\d\.\d{3}\.\d\.\d{2}\.\d)\b/i,
     /\b(BR[A-Z0-9][A-Z0-9/-]{5,})\b/i,
     /\b((?:15|26|67|77)\d{3}[A-Z]{2}(?:\.[A-Z0-9.]+)?)\b/i,
     /\b([245678]\d{3}[VH]\/[A-Z0-9-]+)\b/i,
-    /\b(WSSA\d{4})\b/i,
     /\b(\d{3}\.[A-Z]{2}\.\d{4}\.[A-Z]{2}\.\d{4})\b/i,
     /\b(?:PP|PATEK)\s*([345678]\d{3}[A-Z]?(?:\/\d[A-Z0-9]*)?(?:-\d{3})?)\b/i,
     /\b(\d{4}\/\d[A-Z0-9-]*)\b/i,
     /\b([345678]\d{3}[A-Z](?:-\d{3})?)\b/i,
     /\b(PAM\s*\d{3,5})\b/i,
+    /\b([A-Z]{3}\d{3,4}[A-Z]?(?:\.[A-Z0-9]+)?)\b/i,
+    /\b(79\d{3}[A-Z]{0,4})\b/i,
+    /\b(256\d{2}[A-Z]{0,4})\b/i,
     /\b(\d{5,6}[A-Z]{1,5})\b/i,
+    /\b(\d{14})\b/,
   ];
   for (const pattern of patterns) {
     const match = text.match(pattern);
     if (match
       && !isDateLikeReferenceToken(match[1])
       && !isPriceLikeReferenceToken(text, match.index, match[1])) {
-      return match[1].replace(/\s/g, '').toUpperCase();
+      let ref = match[1].replace(/\s/g, '').toUpperCase();
+      if (/^\d{14}$/.test(ref)) {
+        ref = formatContinuousOmega(ref);
+      }
+      return ref;
     }
   }
 

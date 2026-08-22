@@ -1938,9 +1938,17 @@ function getListingMeta(listing: ListingRecord) {
 
 function buildListingTitle(listing: ListingRecord) {
   if (listing.listing_type === 'MULTI' && !cleanValue(listing.reference)) return 'Multi-item dealer listing';
+  const brand = cleanValue(listing.brand) === 'Unknown' ? '' : cleanValue(listing.brand);
+  let model = cleanValue(listing.model);
+
+  // Suppress duplicate brand in model (e.g. brand="Omega", model="Omega")
+  if (brand && model && model.trim().toLowerCase() === brand.trim().toLowerCase()) {
+    model = '';
+  }
+
   const parts = [
-    cleanValue(listing.brand) === 'Unknown' ? '' : cleanValue(listing.brand),
-    cleanValue(listing.model),
+    brand,
+    model,
     cleanValue(listing.reference),
     cleanValue(listing.condition),
     listing.year ? String(listing.year) : '',
