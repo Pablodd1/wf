@@ -96,5 +96,3 @@ export function MarketHeader({ compact = false, className = '', landing = false,
     </header>
   );
 }
-
-export { LUXFI_URL };
