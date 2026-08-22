@@ -10,7 +10,8 @@ WITH control AS MATERIALIZED (
   WHERE l.brand_normalized = 'Rolex'
 ), refs AS MATERIALIZED (
   SELECT regexp_replace(upper(btrim(reference_normalized)), '[^A-Z0-9]', '', 'g') AS ref_key,
-    min(btrim(reference_normalized)) AS reference
+    min(btrim(reference_normalized)) AS reference,
+    array_agg(DISTINCT btrim(reference_normalized) ORDER BY btrim(reference_normalized)) AS variants
   FROM active
   WHERE upper(COALESCE(category, '')) = 'WATCH'
     AND NULLIF(btrim(reference_normalized), '') IS NOT NULL
@@ -31,7 +32,7 @@ SELECT jsonb_build_object(
     'normalized_rows_active_run', (SELECT count(*) FROM active),
     'unique_rolex_references', (SELECT count(*) FROM refs)
   ),
-  'authoritative_references', (SELECT COALESCE(jsonb_agg(jsonb_build_object('reference', reference, 'key', ref_key) ORDER BY ref_key), '[]'::jsonb) FROM refs),
+  'authoritative_references', (SELECT COALESCE(jsonb_agg(jsonb_build_object('reference', reference, 'key', ref_key, 'variants', variants) ORDER BY ref_key), '[]'::jsonb) FROM refs),
   'checksums', jsonb_build_object(
     'active_rows', md5((SELECT count(*)::text || ':' || COALESCE(sum(hashtextextended(id::text, 0)::numeric), 0)::text FROM active)),
     'active_references', md5(COALESCE((SELECT string_agg(ref_key, ',' ORDER BY ref_key) FROM refs), ''))
