@@ -1,8 +1,10 @@
-WITH rows AS MATERIALIZED (
-  SELECT b.id,b.currency_original,b.currency_normalized,b.price_normalized,b.price_usd,
-    b.conversion_rate,b.conversion_timestamp,b.raw_message_text
-  FROM public.qnsa_rolex_patek_reviewed_release_base b
-  WHERE b.brand_normalized='Rolex'
+WITH control AS MATERIALIZED (
+  SELECT enabled_run_key FROM public.qnsa_two_brand_release_control WHERE canonical_brand='Rolex'
+), rows AS MATERIALIZED (
+  SELECT l.id,l.currency_original,l.currency_normalized,l.price_normalized,l.price_usd,
+    l.conversion_rate,l.conversion_timestamp,l.raw_message_text
+  FROM staging.listings l JOIN control c ON c.enabled_run_key=l.normalization_run_key
+  WHERE l.brand_normalized='Rolex'
 ), currencies AS MATERIALIZED (
   SELECT COALESCE(NULLIF(upper(btrim(currency_original)),''),'MISSING') currency,count(*) count
   FROM rows GROUP BY 1 ORDER BY 2 DESC,1
