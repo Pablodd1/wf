@@ -320,6 +320,14 @@ test('pages make one batch request and client rejects cross-reference summaries'
   assert.match(research, /qualified WTS/);
 });
 
+test('Rolex Trading Floor resolves price ratings progressively with bounded pair concurrency', () => {
+  assert.match(floor, /ROLEX_PRICE_SUMMARY_CONCURRENCY = 2/);
+  assert.match(floor, /isRolexOnlyPriceSummaryPage/);
+  assert.match(floor, /loadPriceResearchBatchSummaries\(\[pair\], signal\)/);
+  assert.match(floor, /setSettledPriceSummaryKeys\(current => new Set\(current\)\.add\(key\)\)/);
+  assert.match(floor, /settledPriceSummaryKeys\.has\(priceResearchSummaryKey/);
+});
+
 test('Trading Floor uses selected-dial evidence by default and shows concise ratings for Zenith, Cartier, Omega, and Tudor', () => {
   assert.match(floor, /displayedCardPriceRating\.rating\.label/);
   assert.match(floor, /Boolean\(listing\.brand && listing\.reference && \(listing\.dial_color \|\| exactReferenceRating\)\)/);
