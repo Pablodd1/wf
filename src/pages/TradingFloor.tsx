@@ -188,6 +188,33 @@ function isBundleListing(listing: ListingRecord) {
 /** Plausible price range for luxury watches */
 const MIN_PLAUSIBLE_PRICE_USD = 500;
 const MAX_PLAUSIBLE_PRICE_USD = 50_000_000;
+const ROLEX_PRICE_SUMMARY_CONCURRENCY = 2;
+
+async function loadRolexPriceSummariesProgressively(
+  pairs: Array<{ brand: string; reference: string; dial: string | null }>,
+  onSettled: (key: string, summaries: PriceResearchBatchSummary[]) => void,
+  signal: AbortSignal,
+) {
+  let nextIndex = 0;
+  const workers = Array.from(
+    { length: Math.min(ROLEX_PRICE_SUMMARY_CONCURRENCY, pairs.length) },
+    async () => {
+      while (nextIndex < pairs.length && !signal.aborted) {
+        const pair = pairs[nextIndex];
+        nextIndex += 1;
+        const key = priceResearchSummaryKey(pair);
+        try {
+          const summaries = await loadPriceResearchBatchSummaries([pair], signal);
+          if (!signal.aborted) onSettled(key, summaries);
+        } catch (error) {
+          if (signal.aborted || (error as { name?: string })?.name === 'AbortError') return;
+          onSettled(key, []);
+        }
+      }
+    },
+  );
+  await Promise.all(workers);
+}
 
 export default function TradingFloor() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -225,6 +252,7 @@ export default function TradingFloor() {
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 50);
   const [priceSummaries, setPriceSummaries] = useState<Record<string, PriceResearchBatchSummary>>({});
   const [priceSummariesLoaded, setPriceSummariesLoaded] = useState(false);
+  const [settledPriceSummaryKeys, setSettledPriceSummaryKeys] = useState<Set<string>>(() => new Set());
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
   const viewKey = [brandFilter, modelFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, locationFilter].join('\u001f');
@@ -293,25 +321,55 @@ export default function TradingFloor() {
   useEffect(() => {
     if (!visiblePricePairs.length) {
       setPriceSummaries({});
+      setSettledPriceSummaryKeys(new Set());
       setPriceSummariesLoaded(true);
       return;
     }
     let active = true;
+    const controller = new AbortController();
+    setPriceSummaries({});
+    setSettledPriceSummaryKeys(new Set());
     setPriceSummariesLoaded(false);
+    const isRolexOnlyPriceSummaryPage = visiblePricePairs.every(pair => pair.brand.trim().toLowerCase() === 'rolex');
+    if (isRolexOnlyPriceSummaryPage) {
+      void loadRolexPriceSummariesProgressively(
+        visiblePricePairs,
+        (key, summaries) => {
+          if (!active) return;
+          setPriceSummaries(current => ({
+            ...current,
+            ...Object.fromEntries(summaries.map(summary => [summary.key, summary])),
+          }));
+          setSettledPriceSummaryKeys(current => new Set(current).add(key));
+        },
+        controller.signal,
+      ).then(() => {
+        if (active) setPriceSummariesLoaded(true);
+      });
+      return () => {
+        active = false;
+        controller.abort();
+      };
+    }
     void loadPriceResearchBatchSummaries(visiblePricePairs)
       .then(summaries => {
         if (active) {
           setPriceSummaries(Object.fromEntries(summaries.map(summary => [summary.key, summary])));
+          setSettledPriceSummaryKeys(new Set(visiblePricePairs.map(priceResearchSummaryKey)));
           setPriceSummariesLoaded(true);
         }
       })
       .catch(error => {
         if (active && error?.name !== 'AbortError') {
           setPriceSummaries({});
+          setSettledPriceSummaryKeys(new Set(visiblePricePairs.map(priceResearchSummaryKey)));
           setPriceSummariesLoaded(true);
         }
       });
-    return () => { active = false; };
+    return () => {
+      active = false;
+      controller.abort();
+    };
   // The serialized exact identities change only when the visible page changes.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visiblePricePairKey]);
@@ -671,7 +729,14 @@ export default function TradingFloor() {
                         dial: usesExactReferencePriceBenchmark(listing.brand) ? null : listing.dial_color,
                       })]
                       : undefined}
-                    priceSummaryLoaded={priceSummariesLoaded}
+                    priceSummaryLoaded={priceSummariesLoaded || Boolean(
+                      listing.brand && listing.reference && (listing.dial_color || usesExactReferencePriceBenchmark(listing.brand))
+                      && settledPriceSummaryKeys.has(priceResearchSummaryKey({
+                        brand: listing.brand,
+                        reference: listing.reference,
+                        dial: usesExactReferencePriceBenchmark(listing.brand) ? null : listing.dial_color,
+                      })),
+                    )}
                     selected={false}
                     onSelect={() => openListing(listing)}
                   />
