@@ -92,6 +92,7 @@ function exactPriceCandidate(row, fxSnapshot) {
   const observations = extractPriceObservations(raw, {}).map(value => applyCurrencyPolicy(value, fxSnapshot))
     .filter(value => value?.amount_original > 0 && value?.amount_usd > 0 && value?.currency_original
       && value?.conversion_rate > 0 && value?.conversion_source
+      && value.currency_evidence !== 'usd_defaulted_by_policy'
       && (['USD','USDT'].includes(value.currency_original) || value.conversion_timestamp));
   if (!observations.length) return { reason: 'NO_EXPLICIT_CONVERTIBLE_PRICE' };
   let price = null;
