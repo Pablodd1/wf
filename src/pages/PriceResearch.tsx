@@ -1634,7 +1634,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   </>
                 ) : (
                   <div style={{ fontSize: 12, color: RED, lineHeight: 1.5 }}>
-                    Analytics are withheld until at least two identity- and dial-qualified observations exist for the same reference across all listing conditions.
+                    Analytics are developing — fewer than two dial-qualified observations are confirmed for this reference. Results will appear as more verified listings are processed.
                   </div>
                 )}
               </div>
