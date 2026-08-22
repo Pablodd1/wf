@@ -21,12 +21,16 @@ SELECT jsonb_build_object(
   'contract','watchfacts-rolex-phase2-rating-v1','project_ref','qnsafosakvonzgfcsphh',
   'read_only',true,'transaction_read_only',current_setting('transaction_read_only'),'shard',__SHARD__,
   'counts',jsonb_build_object(
-    'eligible_listings_with_source_backed_rating',count(*) FILTER (WHERE COALESCE(e.dealer_rating,e.rating,
+    'eligible_listings_with_source_backed_rating',count(*) FILTER (WHERE COALESCE((COALESCE(e.dealer_rating,e.rating,
       CASE WHEN COALESCE(rv.raw_payload#>>'{raw_data,dealer_rating}','')~'^[0-9]+([.][0-9]+)?$'
-        THEN (rv.raw_payload#>>'{raw_data,dealer_rating}')::numeric END) IS NOT NULL),
-    'eligible_listings_without_source_backed_rating',count(*) FILTER (WHERE COALESCE(e.dealer_rating,e.rating,
+        THEN (rv.raw_payload#>>'{raw_data,dealer_rating}')::numeric END)>0
+      AND CASE WHEN COALESCE(rv.raw_payload#>>'{raw_data,review_count}','')~'^[0-9]+$'
+        THEN (rv.raw_payload#>>'{raw_data,review_count}')::integer ELSE 0 END>0),false)),
+    'eligible_listings_without_source_backed_rating',count(*) FILTER (WHERE NOT COALESCE((COALESCE(e.dealer_rating,e.rating,
       CASE WHEN COALESCE(rv.raw_payload#>>'{raw_data,dealer_rating}','')~'^[0-9]+([.][0-9]+)?$'
-        THEN (rv.raw_payload#>>'{raw_data,dealer_rating}')::numeric END) IS NULL)
+        THEN (rv.raw_payload#>>'{raw_data,dealer_rating}')::numeric END)>0
+      AND CASE WHEN COALESCE(rv.raw_payload#>>'{raw_data,review_count}','')~'^[0-9]+$'
+        THEN (rv.raw_payload#>>'{raw_data,review_count}')::integer ELSE 0 END>0),false))
   )
 ) AS rating
 FROM eligible e JOIN public.raw_message_versions rv ON rv.id=e.raw_message_version_id
