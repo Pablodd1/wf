@@ -1,0 +1,60 @@
+name: QNSA Rolex Phase 2 read-only census
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type READ_ONLY_ROLEX_PHASE_2
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-rolex-phase2-readonly-census
+  cancel-in-progress: false
+
+jobs:
+  census:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      AUDIT_OUTPUT_DIR: audit-output/rolex-phase2-census
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate authorization and read-only contract
+        shell: pwsh
+        env:
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:INPUT_CONFIRMATION -cne 'READ_ONLY_ROLEX_PHASE_2') {
+            throw 'Confirmation must exactly match READ_ONLY_ROLEX_PHASE_2.'
+          }
+          if ($env:SUPABASE_PROJECT_REF -cne 'qnsafosakvonzgfcsphh') {
+            throw 'Workflow is pinned to canonical QNSA.'
+          }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) {
+            throw 'SUPABASE_ACCESS_TOKEN is unavailable.'
+          }
+          node tools/audit/rolex-phase2-readonly-census.cjs --validate-only
+
+      - name: Run private production aggregate census
+        run: node tools/audit/rolex-phase2-readonly-census.cjs
+
+      - name: Upload aggregate-only census evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-phase2-readonly-census-${{ github.run_id }}
+          path: audit-output/rolex-phase2-census/*.json
+          if-no-files-found: error
+          retention-days: 30
