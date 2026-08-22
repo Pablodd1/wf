@@ -1,100 +1,15 @@
 #!/usr/bin/env node
 'use strict';
-
-const crypto = require('node:crypto');
-const fs = require('node:fs');
-const path = require('node:path');
-
-const PROJECT_REF = 'qnsafosakvonzgfcsphh';
-const SQL_PATH = path.join(__dirname, 'sql', 'rolex-phase2-readonly-census.sql');
-const OUTPUT_DIR = path.resolve(process.env.AUDIT_OUTPUT_DIR || 'audit-output/rolex-phase2-census');
-
-function sha256(value) {
-  return crypto.createHash('sha256').update(value).digest('hex');
-}
-
-function assertReadOnlySql(sql) {
-  const stripped = sql
-    .replace(/--[^\n]*/g, ' ')
-    .replace(/\/\*[\s\S]*?\*\//g, ' ')
-    .replace(/'(?:''|[^'])*'/g, "''");
-  const forbidden = /\b(INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE|COPY|CALL|DO|EXECUTE|REFRESH|VACUUM|ANALYZE|SET|RESET|NOTIFY|LISTEN|LOCK)\b/i;
-  const match = stripped.match(forbidden);
-  if (match) throw new Error(`SQL is not read-only: forbidden token ${match[1]}`);
-  if (!/^\s*(WITH|SELECT)\b/i.test(stripped)) throw new Error('SQL must start with WITH or SELECT.');
-  if ((stripped.match(/;/g) || []).length !== 1 || !/;\s*$/.test(stripped)) {
-    throw new Error('SQL must be exactly one statement.');
-  }
-}
-
-async function managementQuery(sql) {
-  const token = process.env.SUPABASE_ACCESS_TOKEN;
-  if (!token) throw new Error('SUPABASE_ACCESS_TOKEN is unavailable.');
-  if ((process.env.SUPABASE_PROJECT_REF || PROJECT_REF) !== PROJECT_REF) {
-    throw new Error('Census is pinned to canonical QNSA.');
-  }
-  const response = await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`, {
-    method: 'POST',
-    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-    body: JSON.stringify({ query: sql, read_only: true }),
-    signal: AbortSignal.timeout(120_000),
-  });
-  const body = await response.text();
-  if (!response.ok) throw new Error(`Supabase read-only query failed (${response.status}): ${body.slice(0, 500)}`);
-  return JSON.parse(body);
-}
-
-function assertSafeReport(census) {
-  if (!census || census.contract !== 'watchfacts-rolex-phase2-readonly-census-v1') {
-    throw new Error('Unexpected census contract.');
-  }
-  if (census.project_ref !== PROJECT_REF || census.read_only !== true) {
-    throw new Error('Census project/read-only assertion failed.');
-  }
-  if (census.transaction_read_only !== 'on') {
-    throw new Error(`Database transaction was not read-only (${census.transaction_read_only || 'unknown'}).`);
-  }
-  const serialized = JSON.stringify(census);
-  for (const forbidden of ['raw_message_text', 'raw_message', 'phone_number', 'seller_phone', 'contact_number']) {
-    if (serialized.includes(`\"${forbidden}\"`)) throw new Error(`Unsafe field leaked into report: ${forbidden}`);
-  }
-  const counts = census.counts || {};
-  for (const [key, value] of Object.entries(counts)) {
-    if (!Number.isSafeInteger(Number(value)) || Number(value) < 0) throw new Error(`Invalid count ${key}.`);
-  }
-  if (Number(census.lineage_integrity?.active_rows_missing_exact_raw_version) !== 0) {
-    throw new Error('Active normalized Rolex rows have broken immutable raw lineage.');
-  }
-}
-
-async function main() {
-  const sql = fs.readFileSync(SQL_PATH, 'utf8');
-  assertReadOnlySql(sql);
-  if (process.argv.includes('--validate-only')) {
-    process.stdout.write('Rolex Phase 2 census SQL is one read-only statement.\n');
-    return;
-  }
-  const result = await managementQuery(sql);
-  if (!Array.isArray(result) || result.length !== 1 || !result[0]?.census) {
-    throw new Error('Census query did not return exactly one report.');
-  }
-  const census = result[0].census;
-  assertSafeReport(census);
-  fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  const reportText = `${JSON.stringify(census, null, 2)}\n`;
-  fs.writeFileSync(path.join(OUTPUT_DIR, 'census.json'), reportText, { encoding: 'utf8', mode: 0o600 });
-  fs.writeFileSync(path.join(OUTPUT_DIR, 'manifest.json'), `${JSON.stringify({
-    contract: 'watchfacts-rolex-phase2-readonly-census-manifest-v1',
-    project_ref: PROJECT_REF,
-    read_only: true,
-    sql_sha256: sha256(sql),
-    census_sha256: sha256(reportText),
-    generated_at: census.generated_at,
-  }, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
-  process.stdout.write(`${JSON.stringify({ counts: census.counts, checksums: census.checksums }, null, 2)}\n`);
-}
-
-main().catch(error => {
-  process.stderr.write(`${error.stack || error.message}\n`);
-  process.exitCode = 1;
-});
+const crypto=require('node:crypto');const fs=require('node:fs');const path=require('node:path');
+const PROJECT_REF='qnsafosakvonzgfcsphh',SQL_DIR=path.join(__dirname,'sql');
+const SHARDS=[['core','rolex-phase2-core-readonly.sql'],['trading_floor','rolex-phase2-trading-floor-readonly.sql'],['data_quality','rolex-phase2-data-quality-readonly.sql']];
+const OUTPUT_DIR=path.resolve(process.env.AUDIT_OUTPUT_DIR||'audit-output/rolex-phase2-census'),PR_BATCH_SIZE=100,PR_CONCURRENCY=2;
+const sha256=v=>crypto.createHash('sha256').update(v).digest('hex');
+function assertReadOnlySql(sql){const s=sql.replace(/--[^\n]*/g,' ').replace(/\/\*[\s\S]*?\*\//g,' ').replace(/'(?:''|[^'])*'/g,"''");const m=s.match(/\b(INSERT|UPDATE|DELETE|MERGE|CREATE|ALTER|DROP|TRUNCATE|GRANT|REVOKE|COPY|CALL|DO|EXECUTE|REFRESH|VACUUM|ANALYZE|SET|RESET|NOTIFY|LISTEN|LOCK)\b/i);if(m)throw new Error(`SQL is not read-only: ${m[1]}`);if(!/^\s*(WITH|SELECT)\b/i.test(s))throw new Error('SQL must start with WITH or SELECT.');if((s.match(/;/g)||[]).length!==1||!/;\s*$/.test(s))throw new Error('SQL must be one statement.');}
+async function managementQuery(sql){const token=process.env.SUPABASE_ACCESS_TOKEN;if(!token)throw new Error('SUPABASE_ACCESS_TOKEN is unavailable.');if((process.env.SUPABASE_PROJECT_REF||PROJECT_REF)!==PROJECT_REF)throw new Error('Census is pinned to canonical QNSA.');assertReadOnlySql(sql);const response=await fetch(`https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,{method:'POST',headers:{authorization:`Bearer ${token}`,'content-type':'application/json'},body:JSON.stringify({query:sql,read_only:true}),signal:AbortSignal.timeout(120000)});const body=await response.text();if(!response.ok)throw new Error(`Supabase read-only query failed (${response.status}): ${body.slice(0,500)}`);return JSON.parse(body);}
+function verifyEnvelope(v,contract){if(!v||v.contract!==contract||v.project_ref!==PROJECT_REF||v.read_only!==true||v.transaction_read_only!=='on')throw new Error(`Invalid read-only envelope for ${contract}.`);}
+function priceResearchBatchSql(keys){if(!keys.length||keys.some(k=>!/^[A-Z0-9]+$/.test(k)))throw new Error('Unsafe Price Research batch.');const values=keys.map(k=>`('${k}')`).join(',');return `WITH targets(ref_key) AS (VALUES ${values}), base AS MATERIALIZED (SELECT regexp_replace(upper(COALESCE(normalized_reference,'')),'[^A-Z0-9]','','g') ref_key,count(*) observations FROM public.qnsa_rolex_patek_price_research_source WHERE brand='Rolex' AND regexp_replace(upper(COALESCE(normalized_reference,'')),'[^A-Z0-9]','','g') IN (SELECT ref_key FROM targets) GROUP BY 1), overlay AS MATERIALIZED (SELECT regexp_replace(upper(COALESCE(normalized_reference,'')),'[^A-Z0-9]','','g') ref_key,count(*) observations FROM public.reviewed_workbook_inventory WHERE brand_scope='Rolex' AND verification_tier='QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1' AND verification_status='APPROVED_SINGLE_CANDIDATE' AND confidence=100 AND source_message_id IS NOT NULL AND upper(COALESCE(listing_type,''))='WTS' AND regexp_replace(upper(COALESCE(normalized_reference,'')),'[^A-Z0-9]','','g') IN (SELECT ref_key FROM targets) GROUP BY 1), represented AS (SELECT t.ref_key,COALESCE(b.observations,0)+COALESCE(o.observations,0) observations FROM targets t LEFT JOIN base b USING(ref_key) LEFT JOIN overlay o USING(ref_key)) SELECT jsonb_build_object('contract','watchfacts-rolex-phase2-price-research-batch-v1','project_ref','${PROJECT_REF}','read_only',true,'transaction_read_only',current_setting('transaction_read_only'),'rows',jsonb_agg(jsonb_build_object('key',ref_key,'observations',observations) ORDER BY ref_key)) AS price_research FROM represented;`;}
+async function mapLimited(items,limit,worker){const out=new Array(items.length);let next=0;await Promise.all(Array.from({length:Math.min(limit,items.length)},async()=>{while(true){const i=next++;if(i>=items.length)return;out[i]=await worker(items[i],i);}}));return out;}
+async function loadPriceResearchBatches(keys){const batches=[];for(let i=0;i<keys.length;i+=PR_BATCH_SIZE)batches.push({index:batches.length,keys:keys.slice(i,i+PR_BATCH_SIZE)});const execute=async b=>{const result=await managementQuery(priceResearchBatchSql(b.keys)),value=result?.[0]?.price_research;verifyEnvelope(value,'watchfacts-rolex-phase2-price-research-batch-v1');return{...b,rows:value.rows||[],attempts:1};};const first=await mapLimited(batches,PR_CONCURRENCY,async b=>{try{return await execute(b);}catch(error){return{...b,error:error.message,attempts:1};}});const failed=first.filter(x=>x.error);const retries=await mapLimited(failed,1,async b=>{try{return{...(await execute(b)),attempts:2};}catch(error){return{...b,error:error.message,attempts:2};}});const retryMap=new Map(retries.map(x=>[x.index,x])),final=first.map(x=>retryMap.get(x.index)||x),remaining=final.filter(x=>x.error);if(remaining.length)throw new Error(`Price Research batches failed after retry: ${remaining.map(x=>x.index).join(',')}`);return final;}
+async function main(){const sqlFiles=SHARDS.map(([n,f])=>[n,fs.readFileSync(path.join(SQL_DIR,f),'utf8')]);for(const[,sql]of sqlFiles)assertReadOnlySql(sql);if(process.argv.includes('--validate-only')){process.stdout.write(`Validated ${sqlFiles.length} read-only census shards.\n`);return;}const shards={};for(const[name,sql]of sqlFiles){const result=await managementQuery(sql),value=result?.[0]?.[name];verifyEnvelope(value,`watchfacts-rolex-phase2-${name.replace('_','-')}-v1`);shards[name]=value;}const refs=shards.core.authoritative_references||[],batches=await loadPriceResearchBatches(refs.map(r=>r.key)),prRows=batches.flatMap(b=>b.rows),prKeys=new Set(prRows.filter(r=>Number(r.observations)>0).map(r=>r.key)),tfKeys=new Set(shards.trading_floor.reference_keys||[]),missingTf=refs.filter(r=>!tfKeys.has(r.key)),missingPr=refs.filter(r=>!prKeys.has(r.key));const census={contract:'watchfacts-rolex-phase2-readonly-census-v2',project_ref:PROJECT_REF,read_only:true,transaction_read_only:'on',generated_at:shards.core.generated_at,control:shards.core.control,counts:{...shards.core.counts,...shards.trading_floor.counts,price_research_references:prKeys.size,price_research_observations:prRows.reduce((s,r)=>s+Number(r.observations||0),0),missing_trading_floor_references:missingTf.length,missing_price_research_references:missingPr.length},data_quality:shards.data_quality.counts,counts_by_original_currency:shards.data_quality.counts_by_original_currency,references_missing_from_trading_floor:missingTf,references_missing_from_price_research:missingPr,price_research_batch_audit:{batch_size:PR_BATCH_SIZE,concurrency:PR_CONCURRENCY,batch_count:batches.length,failed_after_retry:0,retried_batches:batches.filter(b=>b.attempts>1).map(b=>b.index)},checksums:{...shards.core.checksums,trading_floor_rows:shards.trading_floor.checksum,price_research_references:sha256([...prKeys].sort().join('\n'))},lineage_integrity:shards.core.lineage_integrity};const serialized=JSON.stringify(census);for(const field of['raw_message_text','raw_message','phone_number','seller_phone','contact_number'])if(serialized.includes(`\"${field}\"`))throw new Error(`Unsafe field leaked: ${field}`);if(Number(census.lineage_integrity.active_rows_missing_exact_raw_version)!==0)throw new Error('Broken active raw lineage.');fs.mkdirSync(OUTPUT_DIR,{recursive:true});const report=`${JSON.stringify(census,null,2)}\n`;fs.writeFileSync(path.join(OUTPUT_DIR,'census.json'),report,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(OUTPUT_DIR,'manifest.json'),`${JSON.stringify({contract:'watchfacts-rolex-phase2-readonly-census-manifest-v2',project_ref:PROJECT_REF,read_only:true,census_sha256:sha256(report),shard_sql_sha256:Object.fromEntries(sqlFiles.map(([n,s])=>[n,sha256(s)])),generated_at:census.generated_at},null,2)}\n`,{encoding:'utf8',mode:0o600});process.stdout.write(`${JSON.stringify({counts:census.counts,data_quality:census.data_quality,checksums:census.checksums,price_research_batch_audit:census.price_research_batch_audit},null,2)}\n`);}
+main().catch(error=>{process.stderr.write(`${error.stack||error.message}\n`);process.exitCode=1;});
