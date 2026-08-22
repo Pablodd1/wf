@@ -203,12 +203,21 @@ async function loadRolexPriceSummariesProgressively(
         const pair = pairs[nextIndex];
         nextIndex += 1;
         const key = priceResearchSummaryKey(pair);
-        try {
-          const summaries = await loadPriceResearchBatchSummaries([pair], signal);
-          if (!signal.aborted) onSettled(key, summaries);
-        } catch (error) {
-          if (signal.aborted || (error as { name?: string })?.name === 'AbortError') return;
-          onSettled(key, []);
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          try {
+            const summaries = await loadPriceResearchBatchSummaries([pair], signal);
+            if (!signal.aborted) onSettled(key, summaries);
+            break;
+          } catch (error) {
+            if (signal.aborted) return;
+            // React's effect replay can start this worker while the client cache
+            // still contains the just-aborted promise from the discarded pass.
+            // That rejection evicts itself immediately, so one Rolex-only retry
+            // obtains a fresh request without retrying a real transport failure.
+            if ((error as { name?: string })?.name === 'AbortError' && attempt === 0) continue;
+            onSettled(key, []);
+            break;
+          }
         }
       }
     },
