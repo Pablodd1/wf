@@ -48,6 +48,34 @@ function proposal(row) {
 }
 async function rpc(client,name,input) { const {data,error}=await client.rpc(name,input); if(error) throw new Error(`${name}: ${error.message||error}`); return data; }
 
+async function managementQuery(sql) {
+  const response=await fetch('https://api.supabase.com/v1/projects/qnsafosakvonzgfcsphh/database/query',{
+    method:'POST',headers:{authorization:`Bearer ${process.env.SUPABASE_ACCESS_TOKEN}`,'content-type':'application/json'},
+    body:JSON.stringify({query:sql,read_only:true}),signal:AbortSignal.timeout(300000)});
+  const body=await response.text(); if(!response.ok) throw new Error(`Null-only preflight failed ${response.status}: ${body.slice(0,300)}`);
+  return JSON.parse(body);
+}
+async function stillMissing(records,minimum=Number.POSITIVE_INFINITY) {
+  const output=[];
+  for(let offset=0;offset<records.length;offset+=500){
+    const page=records.slice(offset,offset+500);
+    const ids=page.map(row=>{if(!/^[0-9a-f-]{36}$/i.test(row.listing_id)) throw new Error('Invalid listing ID');return `'${row.listing_id}'::uuid`;}).join(',');
+    const current=await managementQuery(`SELECT id::text,COALESCE(price_usd,price_normalized,0)>0 has_price,
+      NULLIF(btrim(COALESCE(image_url,source_media_url_candidate,'')),'') IS NOT NULL has_image
+      FROM staging.listings WHERE id IN (${ids});`);
+    const byId=new Map(current.map(row=>[row.id,row]));
+    for(const original of page){
+      const state=byId.get(original.listing_id); if(!state) continue;
+      const row={...original};
+      if(state.has_price){for(const key of ['proposed_price_usd','source_price_amount','source_currency','currency_evidence','conversion_rate','conversion_timestamp','conversion_source']) delete row[key];}
+      if(state.has_image){for(const key of ['proposed_image_url','source_media_key','source_media_sha256','image_verified_at']) delete row[key];}
+      if(row.proposed_price_usd||row.proposed_image_url) output.push(row);
+    }
+    if(output.length>=minimum) break;
+  }
+  return output;
+}
+
 async function main() {
   const o=args(process.argv.slice(2)); exactConfirm(o);
   if(String(process.env.SUPABASE_URL||'').replace(/\/$/,'')!=='https://qnsafosakvonzgfcsphh.supabase.co') throw new Error('Refusing non-QNSA target');
@@ -55,7 +83,9 @@ async function main() {
   if(o.mode==='rollback') { const result=await rpc(client,'rollback_qnsa_rolex_null_only_completion',{p_run_key:o['run-key']}); process.stdout.write(`${JSON.stringify(result)}\n`); return; }
   const file=path.resolve(o.manifest||'candidate-manifest.json'); const bytes=fs.readFileSync(file);
   const digest=sha256(bytes); if(digest!==o['manifest-sha256']) throw new Error('Candidate manifest checksum mismatch');
-  const all=mergeManifest(JSON.parse(bytes)); const chosen=(o.mode==='canary'?canary(all):all).map(proposal);
+  const all=mergeManifest(JSON.parse(bytes));
+  const eligible=await stillMissing(all,o.mode==='canary'?20:Number.POSITIVE_INFINITY);
+  const chosen=(o.mode==='canary'?canary(eligible):eligible).map(proposal);
   if(!chosen.length) throw new Error('No deterministic null-only candidates');
   await rpc(client,'begin_qnsa_rolex_null_only_completion',{p_run_key:o['run-key'],p_mode:o.mode.toUpperCase(),p_manifest_sha256:digest,p_expected_count:chosen.length});
   for(let offset=0;offset<chosen.length;offset+=500) await rpc(client,'stage_qnsa_rolex_null_only_completion',{p_run_key:o['run-key'],p_records:chosen.slice(offset,offset+500)});
