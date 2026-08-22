@@ -149,9 +149,16 @@ test('rejects a year token copied into the market price', () => {
   );
 });
 
-test('WTB demand requires identity and dial but not an asking price', () => {
+test('WTB demand requires an exact watch identity but not a dial, model, catalog match, or asking price', () => {
   assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTB', price_usd: null }, catalog), null);
-  assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTB', dial_color: 'Purple', price_usd: null }, catalog), 'CATALOG_DIAL_MISMATCH');
+  assert.equal(classifyDemandEligibility({
+    brand: 'Zenith', reference: '03.2522.400', listing_type: 'WTB', price_usd: null, dial_color: null, model: null,
+  }, { found: false }), null);
+  assert.equal(classifyDemandEligibility({
+    brand: 'Omega', reference: '210.30.42.20.01.001', listing_type: 'WTB', price_usd: null, dial_color: 'Purple', model: null,
+  }, { found: false }), null);
+  assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTS' }, catalog), 'NOT_WTB_DEMAND');
+  assert.equal(classifyDemandEligibility({ ...valid, listing_type: 'WTB', bundle_candidate_count: 2 }, catalog), 'BUNDLE_SOURCE_UNSPLIT');
 });
 
 test('excludes explicit watch-part requests from complete-watch WTB demand', () => {
@@ -193,4 +200,22 @@ test('uses an explicit non-watch category as a fail-closed demand gate', () => {
   assert.equal(classifyDemandItemEligibility({ category: 'ACCESSORY' }), 'NOT_WATCH_DEMAND');
   assert.equal(classifyDemandItemEligibility({ item_category: 'JEWELRY' }), 'NOT_WATCH_DEMAND');
   assert.equal(classifyDemandItemEligibility({ category: 'WATCH' }), null);
+});
+
+test('Vacheron source-proven references remain tracked but cannot affect exact cohort analytics', () => {
+  const row = {
+    brand: 'Vacheron Constantin',
+    model: 'Overseas',
+    reference: '49150',
+    dial_color: 'Blue',
+    listing_type: 'WTS',
+    price_usd: 25000,
+    analytics_currency_status: 'VERIFIED',
+    publication_lane: 'QNSA_VACHERON_OVERSEAS_RELEASE_V1',
+    catalog_reference_confirmed: false,
+    owner_reviewed_identity: true,
+  };
+  assert.equal(classifyResearchEligibility(row, {
+    found: true, model: 'Overseas', dialColors: ['Blue'],
+  }), 'CATALOG_REFERENCE_UNCONFIRMED');
 });

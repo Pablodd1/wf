@@ -99,11 +99,11 @@ function normalizeMarketRow(row, reference) {
     return {
       ...row,
       analytics_price_usd: amount || stored,
-      price_normalization: 'USD_DEFAULTED_BY_POLICY',
-      analytics_currency_status: amount || stored ? 'VERIFIED' : 'MISSING_PRICE',
+      price_normalization: null,
+      analytics_currency_status: amount || stored ? 'AMBIGUOUS_DOLLAR_CURRENCY' : 'MISSING_PRICE',
       source_price_amount: amount || stored,
-      source_currency: 'USD',
-      source_currency_evidence: 'USD_DEFAULTED_BY_POLICY',
+      source_currency: null,
+      source_currency_evidence: 'BARE_DOLLAR_UNRESOLVED',
     };
   }
   return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: stored ? 'CURRENCY_UNVERIFIED' : 'MISSING_PRICE' };

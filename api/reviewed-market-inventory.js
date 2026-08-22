@@ -2,7 +2,7 @@
 
 const { getClient } = require('./_lib/supabase');
 const { parseTradingSearch } = require('./_lib/trading-search.cjs');
-const { listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
+const { listCanonicalCatalogReferences, listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const { ratedDealerEvidence } = require('./_lib/dealer-directory-source.cjs');
 const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
@@ -13,9 +13,23 @@ const { classifyWatchPartListing } = require('./_lib/watch-item-classification.c
 const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
+  isFourBrand,
+  isMissingEffectiveRpcError,
+  loadEffectiveCount,
+  loadEffectiveEnrichments,
+} = require('./_lib/four-brand-field-enrichment.cjs');
+const {
+  databaseTradingIntentFilter,
+  isPublicTradingIntent,
+  resolveTradingIntent,
+} = require('./_lib/trading-intent.cjs');
+const {
+  isExactRolexPatekMultiParent,
   isRolexPatekOverlayBrand,
+  loadRolexPatekOverlayExactKeys,
   loadRolexPatekOverlayRows,
   mergeByExactLineage,
+  overlayExactKeys,
   ROLEX_PATEK_DELTA_TIER,
 } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
 const {
@@ -27,6 +41,13 @@ const {
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
 const EXPLICIT_USD_STATUS = 'SOURCE_EXPLICIT_USD_MATCH';
+const { applyConfirmedFiveWatchPublication } = require('./_lib/five-watch-publication.cjs');
+const OWNER_ASSUMED_USD_STATUSES = new Set([
+  'OWNER_ASSUMED_USD',
+  'OWNER_ASSUMED_USD_CANDIDATE',
+  'OWNER_DOLLAR_USD_POLICY',
+  'OWNER_K_USD_POLICY',
+]);
 const MULTI_PARENT_VERIFICATION_STATUS = 'APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY';
 const MULTI_PARENT_PUBLICATION_LANE = 'OWNER_MULTI_PARENT_SOURCE_LINEAGE_V1';
 const ALLOWED_MARKET_SOURCE_VIEWS = new Set([
@@ -81,7 +102,8 @@ async function loadQnsaReviewedReleaseSummary(client) {
     reconciled: !error,
     count_snapshot_available: !error,
     source: 'mariadb-normalized-20260811-codex-v1',
-    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith'].map(brand => ({
+    brands: ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith',
+      'Vacheron Constantin', 'Omega', 'Tudor'].map(brand => ({
       brand,
       files: 1,
       files_complete: 1,
@@ -128,8 +150,9 @@ function unavailableQnsaReleaseSummary() {
 
 function snapshotInventoryTotal(summary, filters) {
   if (summary?.count_snapshot_available === false) return null;
-  const unsupported = filters.search || filters.reference || filters.dial || filters.imagesOnly
-    || filters.condition || filters.region || filters.rating || filters.postedAfter;
+  const unsupported = filters.search || filters.model || filters.reference || filters.dial || filters.imagesOnly
+    || filters.condition || filters.region || filters.rating || filters.postedAfter
+    || ['WTS', 'WTB'].includes(filters.listingType);
   if (unsupported || !Array.isArray(summary?.market_counts)) return null;
   return summary.market_counts
     .filter(row => filters.itemCategory === 'ALL'
@@ -148,7 +171,7 @@ const EVIDENCE_CONTRACT = Object.freeze({
   identity: 'Available identity fields are published; complete valid identity is required only for price-research eligibility.',
   contact: 'Seller identity may be published when supplied; phone/contact details require source-backed publication consent.',
   image: 'Only an exact supplied HTTP(S) source URL is image-eligible.',
-  price: 'Analytics accepts explicit-source USD plus separately labeled owner-approved dollar/K USD policy evidence. Named foreign currencies remain held.',
+  price: 'Analytics accepts explicit-source USD/USDT or complete dated-FX evidence. Bare dollar/K and incomplete foreign-currency evidence remain visible only as original source evidence.',
   rating: 'Rated status requires either a source-supplied score plus review count or an exact phone/profile match to public dealer feedback. Feedback counts are never converted into a five-point score.',
   ordering: Object.freeze({
     qnsa_database: 'Global exact-source-image lane first. Dealer rating/profile is enriched after the bounded RPC and is not globally ordered.',
@@ -207,10 +230,53 @@ function referenceIsPriceToken(reference, sourceAmount, sourceCurrency) {
   const currencyKey = currencyComparisonKey(sourceCurrency);
   return Boolean(
     amountKey
-    && currencyKey
-    && (referenceKey === `${amountKey}${currencyKey}`
-      || referenceKey === `${currencyKey}${amountKey}`),
+    && ((/^\d+$/.test(referenceKey) && referenceKey === amountKey)
+      || (currencyKey && (referenceKey === `${amountKey}${currencyKey}`
+        || referenceKey === `${currencyKey}${amountKey}`))),
   );
+}
+
+function ownerAssumedDisplayPrice({
+  row,
+  resolvedIntent,
+  sourceAmount,
+  workbookUsd,
+  priceEvidenceStatus,
+  invalidReference,
+  workbookPriceReview,
+  rmMyrPriceArtifact,
+}) {
+  if (resolvedIntent !== 'WTS' || !OWNER_ASSUMED_USD_STATUSES.has(priceEvidenceStatus)) return null;
+  if (invalidReference || workbookPriceReview || rmMyrPriceArtifact) return null;
+  if (/MULTIPLE|COMPETING|AMBIGUOUS_AMOUNT|YEAR_TOKEN|DIMENSION|WEIGHT|QUANTITY|SERIAL/i
+    .test(String(row?.review_reasons || ''))) return null;
+  const candidate = positiveNumber(row?.display_price_usd)
+    ?? positiveNumber(row?.owner_assumed_price_usd)
+    ?? positiveNumber(workbookUsd)
+    ?? positiveNumber(sourceAmount);
+  if (candidate === null) return null;
+  const currentYear = new Date().getUTCFullYear();
+  if (Number.isInteger(candidate) && candidate >= 1900 && candidate <= currentYear + 2) return null;
+  if (referenceIsPriceToken(
+    row?.normalized_reference || row?.raw_reference || row?.catalog_reference,
+    candidate,
+    'USD',
+  )) return null;
+  return candidate;
+}
+
+function hasValidIntentPrice(row, sourceAmount) {
+  const candidate = positiveNumber(sourceAmount);
+  if (candidate === null) return false;
+  const currentYear = new Date().getUTCFullYear();
+  if (Number.isInteger(candidate) && candidate >= 1900 && candidate <= currentYear + 2) return false;
+  if (referenceIsPriceToken(
+    row?.normalized_reference || row?.raw_reference || row?.catalog_reference || row?.reference,
+    candidate,
+    row?.source_currency || row?.currency,
+  )) return false;
+  return !/MULTIPLE|COMPETING|AMBIGUOUS_AMOUNT|DIMENSION|WEIGHT|QUANTITY|SERIAL/i
+    .test(String(row?.review_reasons || row?.data_quality_issues || ''));
 }
 
 function evidenceValuePresent(value) {
@@ -263,9 +329,21 @@ function isAuditedRolexPatekDeltaSingle(row) {
     && isRolexPatekOverlayBrand(brand);
 }
 
+function isAuditedFourBrandEffectiveSingle(row) {
+  const listingType = cleanExactText(row?.listing_type, 30).toUpperCase();
+  const brand = row?.canonical_brand || row?.brand_scope || row?.brand;
+  return row?.publication_lane === 'QNSA_FOUR_BRAND_EFFECTIVE_SIDECAR_V1'
+    && row?.verification_status === 'APPROVED_SINGLE_CANDIDATE'
+    && row?.raw_lineage_verified === true
+    && row?.normalization_run_complete === true
+    && isFourBrand(brand)
+    && ['WTS', 'WTB'].includes(listingType);
+}
+
 function isMultiListing(row) {
   const listingType = cleanExactText(row.listing_type, 30).toUpperCase();
-  if (row.is_bundle === true || ['MULTI', 'MULTI_LISTING', 'BUNDLE'].includes(listingType)) return true;
+  if (row.is_bundle === true || row.multi_listing === true
+    || ['MULTI', 'MULTI_LISTING', 'BUNDLE'].includes(listingType)) return true;
   if ([row.model, row.catalog_model, row.dial_color, row.catalog_dial]
     .some(value => MULTIPLE_LISTING_IDENTITY_VALUES.includes(cleanExactText(value, 40).toLowerCase()))) {
     return true;
@@ -277,6 +355,35 @@ function isMultiListing(row) {
   // dealer signatures or accessory text for a second watch. Explicit bundle
   // flags, multi intents, and multi identity sentinels above still fail closed.
   if (isAuditedRolexPatekDeltaSingle(row)) return false;
+
+  // The effective four-brand RPC has already enforced immutable lineage,
+  // released single-candidate identity, parent_id NULL, is_bundle=false and
+  // duplicate suppression. Its lane replaces the older brand-specific lane
+  // names, so retain that exact audited single without re-running the generic
+  // prose splitter. Explicit bundle/type/identity sentinels above still win.
+  if (isAuditedFourBrandEffectiveSingle(row)) return false;
+
+  if (row.publication_lane === 'QNSA_VACHERON_OVERSEAS_RELEASE_V1'
+    && row.raw_lineage_verified === true
+    && row.normalization_run_complete === true
+    && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Vacheron Constantin'
+    && cleanExactText(row?.catalog_model || row?.model, 80) === 'Overseas'
+    && ['WTS', 'WTB'].includes(listingType)) return false;
+  if (row.publication_lane === 'QNSA_OMEGA_RELEASE_V1'
+    && row.raw_lineage_verified === true
+    && row.normalization_run_complete === true
+    && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Omega'
+    && ['WTS', 'WTB'].includes(listingType)) return false;
+  if (row.publication_lane === 'QNSA_TUDOR_RELEASE_V1'
+    && row.raw_lineage_verified === true
+    && row.normalization_run_complete === true
+    && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Tudor'
+    && ['WTS', 'WTB'].includes(listingType)) return false;
+  if (row.publication_lane === 'QNSA_CARTIER_RELEASE_V1'
+    && row.raw_lineage_verified === true
+    && row.normalization_run_complete === true
+    && cleanExactText(row?.canonical_brand || row?.brand_scope, 80) === 'Cartier'
+    && ['WTS', 'WTB'].includes(listingType)) return false;
 
   // The QNSA Zenith lane is reconciled against immutable raw text before its
   // release control is enabled. Its exact classifier understands dotted Zenith
@@ -367,7 +474,8 @@ function isPriorityHumanReviewBrand(value) {
     || brand === 'AUDEMARS PIGUET'
     || brand === 'RICHARD MILLE'
     || brand === 'CARTIER'
-    || brand === 'ZENITH';
+    || brand === 'ZENITH'
+    || brand === 'VACHERON CONSTANTIN';
 }
 
 function searchTermsMatch(record, query) {
@@ -490,8 +598,34 @@ function dealerEvidenceRank(record) {
 function hasVerifiedExplicitPrice(record) {
   const status = cleanExactText(record?.price_evidence_status, 60).toUpperCase();
   return record?.price_research_eligible === true
-    && ['SOURCE_EXPLICIT_USD_MATCH', 'OWNER_DOLLAR_USD_POLICY', 'OWNER_K_USD_POLICY', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(status)
+    && ['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX'].includes(status)
     && hasUsableSourcePrice(record) !== null;
+}
+
+function reviewedOverlayCursorState({
+  requestedDeltaOffset,
+  reviewedOverlayTotal,
+  reviewedOverlayConsumed,
+  canonicalBaseHasMore,
+  canonicalBaseRecordCount,
+}) {
+  const laneActive = Number(requestedDeltaOffset) < Number(reviewedOverlayTotal);
+  const overlayHasMore = laneActive
+    && Number(requestedDeltaOffset) + Number(reviewedOverlayConsumed) < Number(reviewedOverlayTotal);
+  return {
+    laneActive,
+    overlayHasMore,
+    hasMore: laneActive
+      ? overlayHasMore || Boolean(canonicalBaseHasMore) || Number(canonicalBaseRecordCount) > 0
+      : Boolean(canonicalBaseHasMore),
+  };
+}
+
+function excludeReviewedOverlayExactLineage(records, reviewedExactKeys, privateExactKeysById = new Map()) {
+  if (!(reviewedExactKeys instanceof Set) || reviewedExactKeys.size === 0) return records;
+  return (records || []).filter(record =>
+    !(privateExactKeysById.get(String(record?.id)) || overlayExactKeys(record))
+      .some(key => reviewedExactKeys.has(key)));
 }
 
 function listingCompletenessScore(record) {
@@ -630,14 +764,39 @@ function hasObviousCrossBrandConflict(row) {
 
 function isTradingFloorSourceRow(row) {
   const itemCategory = effectiveItemCategory(row);
-  const listingType = cleanExactText(row?.listing_type, 30).toUpperCase();
   const status = cleanExactText(row?.trading_floor_status || row?.listing_status, 60).toUpperCase();
+  const decision = cleanExactText(row?.verdict || row?.verification_status, 80).toUpperCase();
   if (!['WATCH', 'HANDBAG', 'JEWELRY', 'ACCESSORY'].includes(itemCategory)) return false;
+  if (['REJECTED', 'HIDDEN', 'DELETED', 'ARCHIVED'].includes(decision)) return false;
   const explicitlyReleasedMultiListing = isExplicitlyReleasedMultiListing(row);
   if (explicitlyReleasedMultiListing) return true;
-  if (!['WTS', 'WTB'].includes(listingType)) return false;
+  const multiListing = isMultiListing(row);
+  if (multiListing) return false;
+  const sourceAmount = positiveNumber(row?.source_price_amount)
+    ?? positiveNumber(row?.price_raw);
+  const resolvedIntent = resolveTradingIntent({
+    rawMessage: row?.raw_message,
+    structuredIntent: row?.listing_type,
+    hasSourcePrice: hasValidIntentPrice(row, sourceAmount),
+    eligibleSingleWatch: itemCategory === 'WATCH',
+  });
+  if (!isPublicTradingIntent(resolvedIntent.intent)) return false;
   if (hasObviousCrossBrandConflict(row)) return false;
-  if ((row?.parent_id || row?.is_bundle === true) && !explicitlyReleasedMultiListing) return false;
+  const isUnbundledChild = evidenceValuePresent(row?.parent_id)
+    || evidenceValuePresent(row?.parent_source_message_id)
+    || cleanExactText(row?.verification_tier, 80).toUpperCase() === 'OWNER_UNBUNDLED_ADMISSION_LEDGER';
+  const storedConfidence = Number(row?.confidence);
+  const confidencePercent = storedConfidence >= 0 && storedConfidence <= 1
+    ? storedConfidence * 100
+    : storedConfidence;
+  const exactReviewedChild = isUnbundledChild
+    && row?.is_bundle !== true
+    && row?.raw_lineage_verified === true
+    && row?.normalization_run_complete === true
+    && Number.isFinite(confidencePercent)
+    && confidencePercent >= 90;
+  if ((row?.is_bundle === true || (isUnbundledChild && !exactReviewedChild))
+    && !explicitlyReleasedMultiListing) return false;
   if (['BUNDLE_CHILD_PENDING_REVIEW', 'BUNDLE_PENDING_SEPARATION', 'SUPPRESSED_EXACT_DUPLICATE', 'HIDDEN', 'REJECTED', 'DELETED', 'ARCHIVED'].includes(status)) {
     return false;
   }
@@ -655,6 +814,10 @@ function isTradingFloorSourceRow(row) {
     'QNSA_REVIEWED_LATER_BRAND_V1',
     'QNSA_SIX_BRAND_IMAGE_LANE_V1',
     'QNSA_ZENITH_REVIEWED_V1',
+    'QNSA_VACHERON_OVERSEAS_RELEASE_V1',
+    'QNSA_OMEGA_RELEASE_V1',
+    'QNSA_TUDOR_RELEASE_V1',
+    'QNSA_CARTIER_RELEASE_V1',
   ]
     .includes(row?.publication_lane)
     && row?.normalization_run_complete === true
@@ -778,6 +941,7 @@ function directSubmissionMatches(record, filters) {
   if (filters.pricedOnly && record.price_raw == null) return false;
   if (filters.listingType && record.listing_type !== filters.listingType) return false;
   if (filters.brand && record.brand?.toLowerCase() !== filters.brand.toLowerCase()) return false;
+  if (filters.model && record.model?.toLowerCase() !== filters.model.toLowerCase()) return false;
   if (filters.reference && record.reference_search_key !== filters.reference) return false;
   if (filters.dial && record.dial_color?.toLowerCase() !== filters.dial.toLowerCase()) return false;
   if (filters.condition && record.condition?.toLowerCase() !== filters.condition.toLowerCase()) return false;
@@ -984,12 +1148,32 @@ function mapReviewedRecord(row) {
   const hasCompleteIdentity = itemCategory === 'WATCH'
     ? locallyCompleteIdentity && !invalidReference
     : true;
-  const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
   const normalizedSummary = isNormalizedWorkbookSummary(row);
   const multiListing = isMultiListing(row);
+  const exactReviewedMultiParent = isExactRolexPatekMultiParent(row);
   const isUnbundledChild = evidenceValuePresent(row.parent_id)
     || evidenceValuePresent(row.parent_source_message_id);
   const publicImageUrl = multiListing ? null : exactImageUrl;
+  const tradingIntent = resolveTradingIntent({
+    rawMessage: row.raw_message,
+    structuredIntent: row.listing_type,
+    hasSourcePrice: hasValidIntentPrice(row, sourceAmount),
+    eligibleSingleWatch: itemCategory === 'WATCH' && !multiListing,
+  });
+  const priceEvidenceStatus = cleanExactText(row.price_evidence_status, 80).toUpperCase();
+  const ownerAssumedUsd = ownerAssumedDisplayPrice({
+    row,
+    resolvedIntent: tradingIntent.intent,
+    sourceAmount,
+    workbookUsd,
+    priceEvidenceStatus,
+    invalidReference,
+    workbookPriceReview,
+    rmMyrPriceArtifact,
+  });
+  const displayPriceUsd = publicVerifiedUsd ?? ownerAssumedUsd;
+  const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
+>>>>>>> origin/main
   const publicImageEvidenceType = publicImageUrl
     ? (String(row.image_evidence_type || '').toUpperCase() === 'SELLER_LISTING_IMAGE'
       ? 'SELLER_LISTING_IMAGE'
@@ -1060,7 +1244,13 @@ function mapReviewedRecord(row) {
     has_complete_identity: hasCompleteIdentity,
     dial_color: dialColor,
     condition: correctedWatchFields.condition,
-    listing_type: row.listing_type || 'OTHER',
+    listing_type: exactReviewedMultiParent ? 'MULTI' : tradingIntent.intent,
+    listing_type_original: exactReviewedMultiParent ? 'MULTI' : tradingIntent.original_intent,
+    listing_type_provenance: exactReviewedMultiParent ? 'REVIEWED_EXACT_MULTI_PARENT' : tradingIntent.provenance,
+    listing_type_inferred: exactReviewedMultiParent ? false : tradingIntent.inferred,
+    listing_type_review_reason: exactReviewedMultiParent
+      ? 'Exact structured multi-offer parent; singular price, identity, and media withheld.'
+      : tradingIntent.review_reason,
     listing_date: row.posting_date || null,
     source_posted_at_text: evidenceValuePresent(row.source_posted_at_text)
       ? row.source_posted_at_text
@@ -1071,16 +1261,25 @@ function mapReviewedRecord(row) {
     raw_message_evidence_type: normalizedSummary ? 'WORKBOOK_NORMALIZED_SUMMARY' : 'SOURCE_RAW_MESSAGE',
     seller_name: sellerName,
     seller_phone: sellerPhone,
+    // Private exact join hint. Removed by enrichRecordsWithDealerDirectory
+    // before the customer response, after resolving the canonical profile.
+    source_dealer_id: evidenceValuePresent(row.dealer_id) ? row.dealer_id : null,
     seller_rating: ratingEvidenceStatus === 'SOURCE_SUPPLIED' ? directRating : null,
     seller_review_count: ratingEvidenceStatus === 'SOURCE_SUPPLIED'
       ? directReviewCount
       : publicRatedEvidence?.review_count || 0,
     seller_rating_evidence_status: ratingEvidenceStatus,
     seller_trust_status: publicRatedEvidence?.trust_status || null,
-    seller_rating_source_url: publicRatedEvidence?.source_url || null,
+    // Legacy crawl provenance remains private; the public payload carries only
+    // the source-backed rating/feedback result and canonical profile path.
+    seller_rating_source_url: null,
     contact_publication_approved: contactApproved,
-    price_usd: publicVerifiedUsd,
-    effective_price_source: row.effective_price_source || null,
+    price_usd: displayPriceUsd,
+    effective_price_source: publicVerifiedUsd !== null
+      ? (row.effective_price_source || 'VERIFIED_USD')
+      : ownerAssumedUsd !== null
+        ? 'OWNER_ASSUMED_USD'
+        : (row.effective_price_source || null),
     price_correction_applied: row.price_correction_applied === true,
     price_correction_id: row.price_correction_id || null,
     price_correction_key: row.price_correction_key || null,
@@ -1094,7 +1293,11 @@ function mapReviewedRecord(row) {
     source_price_amount: sourceAmount,
     source_price_text: rmMyrPriceArtifact ? null : (row.source_price_text || null),
     source_currency: sourceCurrency,
-    price_evidence_status: rmMyrPriceArtifact ? 'REFERENCE_TOKEN_AS_PRICE' : row.price_evidence_status,
+    price_evidence_status: rmMyrPriceArtifact
+      ? 'REFERENCE_TOKEN_AS_PRICE'
+      : ownerAssumedUsd !== null
+        ? 'OWNER_ASSUMED_USD'
+        : row.price_evidence_status,
     price_research_eligible: priceEligible,
     confidence: row.confidence == null ? null : Number(row.confidence),
     verdict: row.verdict || row.verification_status || null,
@@ -1462,6 +1665,12 @@ function boundedPage(rows, pageSize, hasLookaheadQuery) {
   };
 }
 
+function unwrapRpcRowData(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map(row => row?.row_data || row)
+    .filter(Boolean);
+}
+
 function sortPageWithoutMovingLookahead(rows, pageSize, comparator) {
   const sourceRows = Array.isArray(rows) ? rows : [];
   const visibleRows = sourceRows.slice(0, pageSize).sort(comparator);
@@ -1609,6 +1818,13 @@ module.exports = async function handler(req, res) {
       SIX_REVIEWED_WATCH_BRANDS.find(brand => brand.toLowerCase() === value.toLowerCase()) || value))];
     const requestedBrand = requestedBrands.length === 1 ? requestedBrands[0] : '';
     const multiBrandSelection = requestedBrands.length > 1;
+    const requestedModel = cleanExactText(req.query?.model, 120);
+    const requestedModelReferences = requestedBrand === 'Zenith' && requestedModel
+      ? listCanonicalCatalogReferences('Zenith')
+        .filter(entry => entry.model === requestedModel)
+        .map(entry => entry.reference)
+        .slice(0, 50)
+      : [];
     const requestedReference = cleanExactText(req.query?.reference || parsedSearch.reference, 80);
     const reference = referenceComparisonKey(requestedReference);
     const requestedDial = cleanExactText(req.query?.dial || parsedSearch.dial, 40);
@@ -1634,6 +1850,11 @@ module.exports = async function handler(req, res) {
     if (listingType && !['WTS', 'WTB', 'OTHER', 'MULTI'].includes(listingType)) {
       return res.status(400).json({ status: 'error', error: 'Invalid listing type' });
     }
+    // WTS/WTB can be an owner fallback for an otherwise approved single-watch
+    // row whose stored intent is missing. Fetch the bounded unresolved source
+    // window and apply that policy after mapping; exact MULTI/OTHER filters can
+    // still be pushed into PostgreSQL/RPCs.
+    const databaseListingType = databaseTradingIntentFilter(listingType);
     if (rating && !['rated', 'unrated'].includes(rating)) {
       return res.status(400).json({ status: 'error', error: 'Invalid dealer rating filter' });
     }
@@ -1645,6 +1866,7 @@ module.exports = async function handler(req, res) {
       const unsupportedFacets = [
         requestedItem !== 'watches' ? 'category (must be Watches)' : '',
         search ? 'search' : '',
+        requestedModel ? 'model' : '',
         requestedReference ? 'exact reference' : '',
         requestedDial ? 'dial' : '',
         condition ? 'condition' : '',
@@ -1708,12 +1930,95 @@ module.exports = async function handler(req, res) {
     }
     // The snapshot is an exact census of the enabled reconciled market-feed
     // run. Totals stay withheld for predicates the snapshot does not encode.
-    const publicInventoryTotal = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source' && !multiBrandSelection
+    let publicInventoryTotal = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source' && !multiBrandSelection
       ? snapshotInventoryTotal(summary, {
-          search, reference, dial: requestedDial, imagesOnly, condition, region,
+          search, model: requestedModel, reference, dial: requestedDial, imagesOnly, condition, region,
           rating, postedAfter, itemCategory, brand, listingType, pricedOnly,
         })
       : null;
+    let fourBrandCountOptions = null;
+    const vacheronOverseasRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && brand === 'Vacheron Constantin' && ['ALL', 'WATCH'].includes(itemCategory);
+    const omegaRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && brand === 'Omega' && ['ALL', 'WATCH'].includes(itemCategory);
+    const tudorRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && brand === 'Tudor' && ['ALL', 'WATCH'].includes(itemCategory);
+    const cartierRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && brand === 'Cartier' && ['ALL', 'WATCH'].includes(itemCategory);
+    const fourBrandEffectiveScope = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && isFourBrand(brand) && ['ALL', 'WATCH'].includes(itemCategory);
+    const zenithModelRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+      && brand === 'Zenith' && requestedModel && ['ALL', 'WATCH'].includes(itemCategory);
+    const controlledBrandRelease = vacheronOverseasRelease || omegaRelease || cartierRelease || tudorRelease;
+    if (controlledBrandRelease && !fourBrandEffectiveScope
+      && !search && !requestedModel && !reference && !requestedDial && !condition
+      && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
+      const releaseCountRpc = cartierRelease ? 'qnsa_cartier_release_count'
+        : omegaRelease ? 'qnsa_omega_release_count'
+        : tudorRelease ? 'qnsa_tudor_release_count' : 'qnsa_vacheron_overseas_release_count';
+      const { data: exactCount, error: exactCountError } = await client
+        .rpc(releaseCountRpc, {
+          p_listing_type: controlledBrandRelease && ['WTS', 'WTB'].includes(listingType)
+            ? listingType : databaseListingType,
+        });
+      publicInventoryTotal = exactCountError ? null : Number(exactCount || 0);
+    }
+    if (requestedModel && (omegaRelease || cartierRelease || tudorRelease) && !search && !reference && !requestedDial && !condition
+      && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
+      const { data: exactModelCount, error: exactModelCountError } = await client
+        .rpc('qnsa_controlled_model_release_count', {
+          p_brand: brand,
+          p_model: requestedModel,
+          p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+        });
+      publicInventoryTotal = exactModelCountError ? null : Number(exactModelCount || 0);
+    }
+    if (zenithModelRelease && !search && !reference && !requestedDial && !condition
+      && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
+      const { data: zenithModelCount, error: zenithModelCountError } = requestedModelReferences.length
+        ? await client.rpc('qnsa_zenith_model_release_count', {
+            p_references: requestedModelReferences,
+            p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+          })
+        : { data: 0, error: null };
+      publicInventoryTotal = zenithModelCountError ? null : Number(zenithModelCount || 0);
+    }
+    // The effective count RPC uses the same release, immutable-lineage,
+    // single-watch and customer-filter predicates as the effective page. A
+    // missing forward RPC preserves the prior zero-outage withheld-total state.
+    const firstEffectiveCountPage = pagination === 'cursor'
+      ? !cursorProvided && page === 1 && (inventoryCursor?.offset || 0) === 0
+      : page === 1;
+    if (fourBrandEffectiveScope && firstEffectiveCountPage) {
+      fourBrandCountOptions = {
+        brand,
+        listingType: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+        model: requestedModel || null,
+        reference: requestedReference || null,
+        dial: requestedDial || null,
+        condition: condition || null,
+        search: search || null,
+        references: null,
+        imagesOnly,
+        pricedOnly,
+        postedAfter,
+        region: region || null,
+        rating: rating || null,
+      };
+      publicInventoryTotal = null;
+    } else if (fourBrandEffectiveScope) {
+      // Cursor continuation pages never repeat the exact cohort-wide count.
+      publicInventoryTotal = null;
+    }
+    if (vacheronOverseasRelease && requestedModel.toLowerCase() === 'overseas'
+      && !search && !reference && !requestedDial && !condition && !region && !rating
+      && !postedAfter && !pricedOnly && !imagesOnly) {
+      const { data: overseasCount, error: overseasCountError } = await client
+        .rpc('qnsa_vacheron_overseas_release_count', {
+          p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+        });
+      publicInventoryTotal = overseasCountError ? null : Number(overseasCount || 0);
+    }
     const pageWindow = resolvePageWindow({
       page,
       pageSize,
@@ -1813,6 +2118,10 @@ module.exports = async function handler(req, res) {
       });
       const records = (await enrichRecordsWithDealerDirectory(client, mappedAdmissionRows))
         .filter(record => !record.multi_listing || record.multi_listing_release_approved === true)
+        .filter(record => isPublicTradingIntent(record.listing_type)
+          || record.multi_listing_release_approved === true)
+        .filter(record => !listingType
+          || cleanExactText(record.listing_type, 30).toUpperCase() === listingType)
         .filter(record => !condition || cleanExactText(record.condition, 80).toLowerCase() === condition.toLowerCase())
         .filter(record => !region || locationMatches(record.location, region))
         .filter(record => ratingMatches(record, rating))
@@ -1822,11 +2131,13 @@ module.exports = async function handler(req, res) {
       return res.status(200).json({
         status: 'ok',
         count: records.length,
-        total: Number(admissionCount || 0),
+        total: ['WTS', 'WTB'].includes(listingType) ? null : Number(admissionCount || 0),
         page,
         pageSize,
         totalIsEstimate: false,
-        totalStatus: 'available_from_approved_admission_inventory',
+        totalStatus: ['WTS', 'WTB'].includes(listingType)
+          ? 'withheld_for_owner_intent_fallback_filter'
+          : 'available_from_approved_admission_inventory',
         hasMore,
         nextCursor: hasMore ? encodeInventoryCursor({ lane: 'images', offset: nextOffset, page: page + 1 }) : null,
         records,
@@ -1895,7 +2206,7 @@ module.exports = async function handler(req, res) {
       }
     }
     if (exactDialVariants.length) queryParams.set('dial_color', `in.(${exactDialVariants.join(',')})`);
-    if (listingType) queryParams.set('listing_type', `eq.${listingType}`);
+    if (databaseListingType) queryParams.set('listing_type', `eq.${databaseListingType}`);
     if (itemCategory === 'WATCH') {
       // Include legacy OTHER rows only so the fail-closed brand/reference rule
       // above can recover real watches. The mapped category filter removes
@@ -1937,16 +2248,18 @@ module.exports = async function handler(req, res) {
     // the bounded publication index and renders an image only when the row
     // supplies one.
     const watchFeed = ['ALL', 'WATCH'].includes(itemCategory);
-    const sixBrandBroadScope = qnsaBroadPage && watchFeed
+    const sixBrandBroadScope = qnsaBroadPage && watchFeed && !zenithModelRelease
       && (!brand || SIX_REVIEWED_WATCH_BRANDS.includes(brand));
+    const sixBrandCompositeScope = sixBrandBroadScope
+      && !controlledBrandRelease && !fourBrandEffectiveScope;
     const sixBrandScope = requestedBrands.length > 0 ? requestedBrands : SIX_REVIEWED_WATCH_BRANDS;
-    if (sixBrandBroadScope && pagination !== 'cursor' && page > 1) {
+    if (sixBrandCompositeScope && pagination !== 'cursor' && page > 1) {
       return res.status(400).json({
         status: 'error',
         error: 'Six-brand Trading Floor pagination requires a cursor after the first page.',
       });
     }
-    if (sixBrandBroadScope && pagination === 'cursor' && cursorProvided
+    if (sixBrandCompositeScope && pagination === 'cursor' && cursorProvided
       && page > 1 && !inventoryCursor?.brandKeysets) {
       return res.status(400).json({
         status: 'error',
@@ -1965,7 +2278,11 @@ module.exports = async function handler(req, res) {
       }
     }
     const qnsaUnpartitionedMedia = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
-      && !imagesOnly && !sixBrandBroadScope;
+      && !imagesOnly && (!sixBrandBroadScope || controlledBrandRelease || fourBrandEffectiveScope);
+    // A single controlled release uses a manifest offset, even though its
+    // brand also belongs to the historical six-brand family. Encoding that
+    // offset as a composite v2 cursor forces it to zero and repeats page one.
+    const sixBrandKeysetCursor = sixBrandCompositeScope;
     const requestedLane = imagesOnly ? 'images' : (inventoryCursor?.lane || 'images');
     const requestedOffset = pagination === 'cursor'
       ? (inventoryCursor?.offset || 0)
@@ -2014,20 +2331,107 @@ module.exports = async function handler(req, res) {
       ? buildLegacyMarketQueryParams({
           pageSize, offset: requestedOffset, imageLane: requestedLane,
           brand, requestedReference, exactDialVariants,
-          listingType, imagesOnly, pricedOnly, search, postedAfter,
+          listingType: databaseListingType, imagesOnly, pricedOnly, search, postedAfter,
         })
       : queryParams;
     let usedLegacyViewContract = legacyMarketViewContractDetected;
-    const laterReviewedBrand = ['Richard Mille', 'Cartier', 'Zenith'].includes(brand);
+    const laterReviewedBrand = ['Richard Mille', 'Cartier', 'Zenith', 'Omega', 'Tudor'].includes(brand);
     // Broad QNSA brand pages first resolve a tiny ordered ID page from the
     // enabled normalization run. Fetching the strict evidence view by those IDs
     // avoids a slow ordered scan through its release-control/checkpoint joins.
-    if (qnsaBroadPage && !legacyMarketViewContractDetected) {
+    if ((qnsaBroadPage || fourBrandEffectiveScope) && !legacyMarketViewContractDetected) {
       // WATCH browsing uses the proven indexed watch-only feed. The general
       // category feed performs additional expression sorting and immutable
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
-      if (sixBrandBroadScope) {
+      if (fourBrandEffectiveScope) {
+        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_four_brand_effective_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            p_brand: brand,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+            p_model: requestedModel || null,
+            p_reference: requestedReference || null,
+            p_dial: requestedDial || null,
+            p_condition: condition || null,
+            p_search: search || null,
+            p_references: null,
+            p_images_only: imagesOnly,
+            p_priced_only: pricedOnly,
+            p_posted_after: postedAfter,
+            p_region: region || null,
+            p_rating: rating || null,
+          }),
+        });
+        if (!response.ok) {
+          const body = await response.text();
+          const rpcError = { status: response.status, message: body };
+          if (isMissingEffectiveRpcError(rpcError)) {
+            // Zero-outage schema-first compatibility. Until the migration is
+            // installed, preserve the pre-existing release route and do not
+            // claim that missing-field enrichment was applied.
+            console.warn('[reviewed-market-inventory] four-brand effective RPC unavailable; preserving base release path');
+          } else {
+            throw new Error(`QNSA four-brand effective page failed: ${response.status} ${body.slice(0, 200)}`);
+          }
+        } else {
+          preloadedQnsaResponse = new Response(JSON.stringify(await response.json()), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          });
+        }
+      } else if (zenithModelRelease) {
+        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_zenith_model_page_rows`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            p_references: requestedModelReferences,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+          }),
+        });
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`QNSA Zenith model page failed: ${response.status} ${body.slice(0, 200)}`);
+        }
+        preloadedQnsaResponse = new Response(JSON.stringify(await response.json()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } else if (vacheronOverseasRelease || omegaRelease || cartierRelease || tudorRelease) {
+        const releaseRpc = cartierRelease ? 'qnsa_cartier_page_rows'
+          : omegaRelease ? 'qnsa_omega_page_rows'
+          : tudorRelease ? 'qnsa_tudor_page_rows' : 'qnsa_vacheron_overseas_page_rows';
+        const controlledModelRpc = requestedModel && (omegaRelease || cartierRelease || tudorRelease)
+          ? 'qnsa_controlled_model_page_rows'
+          : releaseRpc;
+        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${controlledModelRpc}`, {
+          method: 'POST',
+          headers: { ...headers, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: controlledBrandRelease && ['WTS', 'WTB'].includes(listingType)
+              ? listingType : databaseListingType,
+            p_reference: requestedReference || null,
+            ...(requestedModel && (omegaRelease || cartierRelease || tudorRelease)
+              ? { p_brand: brand, p_model: requestedModel }
+              : {}),
+          }),
+        });
+        if (!response.ok) {
+          const body = await response.text();
+          throw new Error(`QNSA controlled brand page failed: ${response.status} ${body.slice(0, 200)}`);
+        }
+        preloadedQnsaResponse = new Response(JSON.stringify(await response.json()), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      } else if (sixBrandBroadScope) {
         const streamBrands = sixBrandScope;
         const previousBrandKeysets = inventoryCursor?.brandKeysets || {};
         const entries = await Promise.all(streamBrands.map(brandName => {
@@ -2048,7 +2452,7 @@ module.exports = async function handler(req, res) {
                   p_after_created_at: windowCursor?.createdAt ?? null,
                   p_after_id: windowCursor?.id ?? null,
                   p_limit: pageSize,
-                  p_listing_type: listingType || null,
+                  p_listing_type: databaseListingType,
                   p_scan_limit: 500,
                 }),
               });
@@ -2089,14 +2493,14 @@ module.exports = async function handler(req, res) {
         body: JSON.stringify(watchFeed
           ? (laterReviewedBrand
             ? { p_brand: brand || null, p_limit: pageSize,
-                p_offset: requestedOffset, p_listing_type: listingType || null }
+                p_offset: requestedOffset, p_listing_type: databaseListingType }
             : { p_brand: brand || null, p_limit: qnsaBrandScanLimit,
-                p_offset: requestedOffset, p_listing_type: listingType || null })
+                p_offset: requestedOffset, p_listing_type: databaseListingType })
           : {
               p_category: itemCategory,
               p_limit: qnsaBrandScanLimit,
               p_offset: requestedOffset,
-              p_listing_type: listingType || null,
+              p_listing_type: databaseListingType,
               p_images_only: imagesOnly,
               p_location: region || null,
               p_posted_after: postedAfter,
@@ -2112,7 +2516,7 @@ module.exports = async function handler(req, res) {
             p_category: itemCategory,
             p_limit: qnsaBrandScanLimit,
             p_offset: requestedOffset,
-            p_listing_type: listingType || null,
+            p_listing_type: databaseListingType,
             p_images_only: imagesOnly,
             p_location: region || null,
             p_posted_after: postedAfter,
@@ -2128,7 +2532,7 @@ module.exports = async function handler(req, res) {
         pageRowsRes = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_later_brand_page_rows_strict`, {
           method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
-            p_offset: requestedOffset, p_listing_type: listingType || null }),
+            p_offset: requestedOffset, p_listing_type: databaseListingType }),
         });
       }
       if (!pageRowsRes.ok && [404, 400].includes(pageRowsRes.status) && ['ALL', 'WATCH'].includes(itemCategory)) {
@@ -2139,7 +2543,7 @@ module.exports = async function handler(req, res) {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ p_brand: brand || null, p_limit: qnsaBrandScanLimit,
-            p_offset: requestedOffset, p_listing_type: listingType || null }),
+            p_offset: requestedOffset, p_listing_type: databaseListingType }),
         });
       }
       if (!pageRowsRes.ok) {
@@ -2171,7 +2575,7 @@ module.exports = async function handler(req, res) {
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ p_brand: brand || null, p_limit: 51,
             p_offset: brand === 'Cartier' ? requestedOffset + 2650 : requestedOffset,
-            p_listing_type: listingType || null }),
+            p_listing_type: databaseListingType }),
         });
         if (fallbackRes.ok) {
           pageRows = (await fallbackRes.json())
@@ -2191,7 +2595,8 @@ module.exports = async function handler(req, res) {
       preloadedQnsaResponse = directResponse;
       }
     }
-    if (activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+    if (!preloadedQnsaResponse
+      && activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand && reference && !legacyMarketViewContractDetected) {
       const normalizedBrand = String(brand).trim().toLowerCase();
       const familyReference = (normalizedBrand === 'rolex' && reference === '116500')
@@ -2281,17 +2686,29 @@ module.exports = async function handler(req, res) {
         ? []
         : [{ reference: rpcReference, family: Boolean(familyReference || patekBaseEquivalent) }];
       const zenithExactReference = normalizedBrand === 'zenith' && !familyReference;
+      const vacheronExactReference = normalizedBrand === 'vacheron constantin';
+      const omegaExactReference = normalizedBrand === 'omega';
+      const tudorExactReference = normalizedBrand === 'tudor';
       const rpcResponses = await Promise.all(rpcRequests.map(request => fetch(
-        `${process.env.SUPABASE_URL}/rest/v1/rpc/${zenithExactReference
-          ? 'qnsa_zenith_reference_rows'
-          : 'qnsa_trading_floor_reference_rows'}`,
+        `${process.env.SUPABASE_URL}/rest/v1/rpc/${tudorExactReference
+          ? 'qnsa_tudor_reference_rows'
+          : omegaExactReference
+          ? 'qnsa_omega_reference_rows'
+          : vacheronExactReference
+          ? 'qnsa_vacheron_overseas_reference_rows'
+          : (zenithExactReference ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows')}`,
         {
           method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify(zenithExactReference ? {
+          body: JSON.stringify((vacheronExactReference || omegaExactReference || tudorExactReference) ? {
             p_reference: request.reference,
             p_limit: qnsaBrandScanLimit,
             p_offset: requestedOffset,
-            p_listing_type: listingType || null,
+            p_listing_type: databaseListingType,
+          } : zenithExactReference ? {
+            p_reference: request.reference,
+            p_limit: qnsaBrandScanLimit,
+            p_offset: requestedOffset,
+            p_listing_type: databaseListingType,
           } : {
             p_brand: brand,
             p_reference: request.reference,
@@ -2342,7 +2759,7 @@ module.exports = async function handler(req, res) {
       activeQueryParams = buildLegacyMarketQueryParams({
         pageSize, offset: requestedOffset, imageLane: requestedLane,
         brand, requestedReference, exactDialVariants,
-        listingType, imagesOnly, pricedOnly, search, postedAfter,
+        listingType: databaseListingType, imagesOnly, pricedOnly, search, postedAfter,
       });
       restUrl = `${process.env.SUPABASE_URL}/rest/v1/${activeMarketSourceView}?${activeQueryParams.toString()}`;
       restRes = await fetch(restUrl, { headers });
@@ -2352,7 +2769,16 @@ module.exports = async function handler(req, res) {
       throw new Error(`REST query failed: ${restRes.status} ${errText.slice(0, 200)}`);
     }
     const data = await restRes.json();
-    const sourceRows = data || [];
+    // Table-valued PostgreSQL RPCs that expose one JSONB column arrive from
+    // PostgREST as [{ row_data: {...} }]. Normalize that envelope here so the
+    // same publication gates evaluate the listing rather than its wrapper.
+    // View-backed and already-unwrapped RPC responses pass through unchanged.
+    const sourceRows = unwrapRpcRowData(data);
+    // Retain private lineage only in memory for cross-lane deduplication. The
+    // mapped public records intentionally omit message/file lineage fields.
+    const privateExactKeysById = new Map(sourceRows
+      .filter(row => row?.id)
+      .map(row => [String(row.id), overlayExactKeys(row)]));
     const brandRows = sourceRows;
     let rawRows = brandRows.slice(0, pageSize);
     let hasMore = qnsaCandidateCursorMeta
@@ -2409,19 +2835,25 @@ module.exports = async function handler(req, res) {
           // lineage, single-item status, duplicate suppression, and release
           // controls. Do not reclassify Cartier as OTHER merely because the
           // maison also produces jewelry; retain the raw cross-brand guard.
-          if (laterReviewedBrand && qnsaBroadPage) return !hasObviousCrossBrandConflict(row);
+          if (laterReviewedBrand && (qnsaBroadPage || fourBrandEffectiveScope)) {
+            return !hasObviousCrossBrandConflict(row);
+          }
           return isTradingFloorSourceRow(row);
         });
+    const effectiveEligibleRows = await loadEffectiveEnrichments(client, eligibleRows);
     const recoveredMarketRecords = await enrichRecordsWithDealerDirectory(
       client,
-      (await recoverRecordPrices(eligibleRows.map(mapReviewedRecord)))
+      (await recoverRecordPrices(effectiveEligibleRows.map(mapReviewedRecord)))
         .map(suppressPublicReferenceTokenPrice),
     );
     let records = recoveredMarketRecords
       .filter(record => (usedLegacyViewContract ? isLegacyReviewedInventoryRecord(record) : true)
         && (!record.multi_listing || record.multi_listing_release_approved === true))
+      .filter(record => isPublicTradingIntent(record.listing_type)
+        || record.multi_listing_release_approved === true)
       .filter(record => record.item_category === 'WATCH' || record.luxury_identity_eligible === true)
       .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
+      .filter(record => !requestedModel || cleanExactText(record.model, 120).toLowerCase() === requestedModel.toLowerCase())
       .filter(record => !imagesOnly || record.has_images === true)
       .filter(record => !pricedOnly || hasUsableSourcePrice(record))
       .filter(record => !postedAfter || new Date(record.listing_date || record.created_at || 0).getTime() >= new Date(postedAfter).getTime())
@@ -2437,10 +2869,14 @@ module.exports = async function handler(req, res) {
       // already enforced immutable lineage, single-item status, duplicate and
       // release gates. Preserve those rows if generic cross-category mapping
       // removes the entire Cartier page.
-      records = (await recoverRecordPrices(sourceRows.map(mapReviewedRecord)))
+      const effectiveSourceRows = await loadEffectiveEnrichments(client, sourceRows);
+      records = (await recoverRecordPrices(effectiveSourceRows.map(mapReviewedRecord)))
         .map(suppressPublicReferenceTokenPrice)
         .filter(record => !record.multi_listing || record.multi_listing_release_approved === true)
+        .filter(record => isPublicTradingIntent(record.listing_type)
+          || record.multi_listing_release_approved === true)
         .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
+        .filter(record => !requestedModel || cleanExactText(record.model, 120).toLowerCase() === requestedModel.toLowerCase())
         .filter(record => !imagesOnly || record.has_images === true)
         .filter(record => !pricedOnly || hasUsableSourcePrice(record))
         .filter(record => !postedAfter || new Date(record.listing_date || record.created_at || 0).getTime() >= new Date(postedAfter).getTime())
@@ -2468,7 +2904,7 @@ module.exports = async function handler(req, res) {
         ))
           .filter(record => directSubmissionMatchesImageLane(record, requestedLane))
           .filter(record => !record.multi_listing && directSubmissionMatches(record, {
-            imagesOnly, pricedOnly, listingType, brand, reference, dial: requestedDial, condition, search, itemCategory, region,
+            imagesOnly, pricedOnly, listingType, brand, model: requestedModel, reference, dial: requestedDial, condition, search, itemCategory, region,
             rating, postedAfter,
           }));
         const directRecordIds = new Set(directRecords.map(record => String(record.id)));
@@ -2501,6 +2937,8 @@ module.exports = async function handler(req, res) {
         ? qnsaCandidateCursorMeta.nextOffset
         : requestedOffset + consumedSourceRecordCount;
     }
+    const canonicalBaseHasMore = hasMore;
+    const canonicalBaseRecordsAvailable = records.length > 0;
     let reviewedOverlayRecords = [];
     let reviewedOverlayTotal = 0;
     let reviewedOverlaySingleTotal = 0;
@@ -2508,6 +2946,7 @@ module.exports = async function handler(req, res) {
     let reviewedOverlayDuplicateCount = 0;
     let reviewedOverlayConsumed = 0;
     let reviewedOverlayHasMore = false;
+    let reviewedOverlayLaneActive = false;
     const reviewedOverlayBrands = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       ? (isRolexPatekOverlayBrand(brand)
         ? [brand]
@@ -2517,13 +2956,19 @@ module.exports = async function handler(req, res) {
       : [];
     if (reviewedOverlayBrands.length) {
       try {
+        const overlayListingTypes = listingType === 'MULTI'
+          ? ['MULTI']
+          : ['WTS', 'WTB', 'OTHER', 'UNKNOWN', ...(listingType ? [] : ['MULTI'])];
+        const overlayReferences = requestedReference
+          ? listEquivalentReferences(requestedReference, brand || reviewedOverlayBrands[0])
+          : [];
+        const overlayIncludeMissingIntent = listingType !== 'MULTI';
         const overlayRequest = (overlayBrand, limit, offset, count) =>
           loadRolexPatekOverlayRows(client, {
             brand: overlayBrand,
-            references: requestedReference ? listEquivalentReferences(requestedReference, overlayBrand) : [],
-            listingTypes: listingType
-              ? [listingType]
-              : ['WTS', 'WTB', 'MULTI'],
+            references: requestedReference ? listEquivalentReferences(requestedReference, overlayBrand) : overlayReferences,
+            listingTypes: overlayListingTypes,
+            includeMissingIntent: overlayIncludeMissingIntent,
             includeMultiParents: true,
             limit, offset, count,
           });
@@ -2536,7 +2981,13 @@ module.exports = async function handler(req, res) {
         reviewedOverlayTotal = overlayCounts.reduce((sum, result) => sum + Number(result.count || 0), 0);
         reviewedOverlaySingleTotal = overlayCounts.reduce((sum, result) => sum + Number(result.singleCount || 0), 0);
         reviewedOverlayMultiParentTotal = overlayCounts.reduce((sum, result) => sum + Number(result.multiParentCount || 0), 0);
-        const overlayCapacity = Math.max(0, pageSize - records.length);
+        reviewedOverlayLaneActive = requestedDeltaOffset < reviewedOverlayTotal;
+        // The reviewed delta is its own deterministic cursor lane. Serve it
+        // first so a large canonical base feed cannot make the additions
+        // practically unreachable or cause them to be skipped while advancing
+        // the base cursor. The canonical base cursor remains frozen until the
+        // reviewed lane is exhausted.
+        const overlayCapacity = reviewedOverlayLaneActive ? pageSize : 0;
         let remainingGlobalOffset = requestedDeltaOffset;
         let remainingCapacity = overlayCapacity;
         const overlayPlans = [];
@@ -2556,11 +3007,16 @@ module.exports = async function handler(req, res) {
           overlayRequest(plan.brand, plan.limit, plan.offset, false)));
         const overlaySourceRows = overlayResults.flatMap(result => result.rows);
         reviewedOverlayConsumed = overlaySourceRows.length;
+        if (reviewedOverlayLaneActive && reviewedOverlayConsumed === 0) {
+          throw new Error('Reviewed overlay cursor did not advance.');
+        }
         const mappedOverlay = await enrichRecordsWithDealerDirectory(
           client,
           overlaySourceRows.map(mapReviewedRecord),
         );
         const filteredOverlay = mappedOverlay
+          .filter(record => isPublicTradingIntent(record.listing_type)
+            || record.multi_listing_release_approved === true)
           .filter(record => !listingType || String(record.listing_type || '').toUpperCase() === listingType)
           .filter(record => !imagesOnly || record.has_images === true)
           .filter(record => !pricedOnly || hasUsableSourcePrice(record))
@@ -2571,47 +3027,95 @@ module.exports = async function handler(req, res) {
           .filter(record => ratingMatches(record, rating))
           .filter(record => itemCategory === 'ALL' || record.item_category === itemCategory)
           .sort(compareInventoryForDisplay);
-        const overlayMerge = mergeByExactLineage(records, filteredOverlay);
+        // The reviewed lane is served first, so the hidden frozen base page
+        // must not suppress its overlay copy. Deduplicate only within the
+        // reviewed page here; matching base rows are removed later when their
+        // canonical page is actually served.
+        const overlayMerge = mergeByExactLineage([], filteredOverlay);
         reviewedOverlayDuplicateCount = overlayMerge.overlay_duplicate_count;
-        const baseIds = new Set(records.map(record => String(record.id)));
         reviewedOverlayRecords = boundReviewedOverlayPage(
-          records,
-          overlayMerge.rows.filter(record => !baseIds.has(String(record.id))),
+          [],
+          overlayMerge.rows,
           pageSize,
         );
         reviewedOverlayHasMore = requestedDeltaOffset + reviewedOverlayConsumed < reviewedOverlayTotal;
+        // Once the reviewed lane is exhausted, every canonical base page is
+        // checked against the complete bounded overlay lineage set. This
+        // prevents an exact source from reappearing on a later base page.
+        if (!reviewedOverlayLaneActive && records.length > 0) {
+          const exactKeySets = await Promise.all(reviewedOverlayBrands.map(overlayBrand =>
+            loadRolexPatekOverlayExactKeys(client, {
+              brand: overlayBrand,
+              references: requestedReference ? listEquivalentReferences(requestedReference, overlayBrand) : [],
+              listingTypes: overlayListingTypes,
+              includeMissingIntent: overlayIncludeMissingIntent,
+              includeMultiParents: true,
+            })));
+          const reviewedExactKeys = new Set(exactKeySets.flatMap(keySet => [...keySet]));
+          const deduplicatedBaseRecords = excludeReviewedOverlayExactLineage(
+            records,
+            reviewedExactKeys,
+            privateExactKeysById,
+          );
+          reviewedOverlayDuplicateCount += records.length - deduplicatedBaseRecords.length;
+          records = deduplicatedBaseRecords;
+        }
       } catch (overlayError) {
         // Overlay failure must never take the established QNSA feed offline.
         console.warn('[reviewed-market-inventory] Rolex/Patek reviewed overlay unavailable:', overlayError.message);
       }
     }
-    hasMore = hasMore || reviewedOverlayHasMore;
+    const reviewedCursorState = reviewedOverlayCursorState({
+      requestedDeltaOffset,
+      reviewedOverlayTotal,
+      reviewedOverlayConsumed,
+      canonicalBaseHasMore,
+      canonicalBaseRecordCount: canonicalBaseRecordsAvailable ? 1 : 0,
+    });
+    reviewedOverlayLaneActive = reviewedCursorState.laneActive;
+    reviewedOverlayHasMore = reviewedCursorState.overlayHasMore;
+    hasMore = reviewedCursorState.hasMore;
     const reviewedOverlayCountHasUnsupportedFilter = Boolean(
       imagesOnly || pricedOnly || requestedDial || condition || search || region || rating || postedAfter,
     );
     const nextCursor = hasMore
       ? encodeInventoryCursor({
-          lane: nextLane,
-          offset: nextOffset,
+          lane: reviewedOverlayLaneActive ? requestedLane : nextLane,
+          offset: reviewedOverlayLaneActive ? requestedOffset : nextOffset,
           deltaOffset: requestedDeltaOffset + reviewedOverlayConsumed,
           page: page + 1,
-          brandKeysets: sixBrandBroadScope
-            ? qnsaCandidateCursorMeta?.nextBrandKeysets || {}
+          brandKeysets: sixBrandKeysetCursor
+            ? reviewedOverlayLaneActive
+              ? inventoryCursor?.brandKeysets || {}
+              : qnsaCandidateCursorMeta?.nextBrandKeysets || {}
             : null,
-          brandScope: sixBrandBroadScope ? sixBrandScope : null,
+          brandScope: sixBrandKeysetCursor ? sixBrandScope : null,
         })
       : null;
     const publicationBrands = publicationBrandsFromSummary(summary);
+    const publicBaseRecords = (reviewedOverlayLaneActive ? [] : records)
+      .map(applyConfirmedFiveWatchPublication);
+    const combinedPageRecords = [...publicBaseRecords, ...reviewedOverlayRecords];
+    // Serialize the cohort-wide count after the bounded page has been fetched,
+    // mapped and filtered. Running both cold scans in parallel caused avoidable
+    // database contention; count metadata remains advisory and fail-open.
+    if (fourBrandCountOptions) {
+      try {
+        publicInventoryTotal = await loadEffectiveCount(client, fourBrandCountOptions);
+      } catch (effectiveCountError) {
+        console.warn('[reviewed-market-inventory] four-brand exact count unavailable; total withheld:', effectiveCountError.message);
+        publicInventoryTotal = null;
+      }
+    }
     const combinedInventoryTotal = combineInventoryTotal(
       publicInventoryTotal,
       reviewedOverlayTotal,
-      reviewedOverlayCountHasUnsupportedFilter,
+      reviewedOverlayCountHasUnsupportedFilter || reviewedOverlayDuplicateCount > 0,
     );
-    const combinedPageRecords = [...records, ...reviewedOverlayRecords];
 
     return res.status(200).json({
       status: 'ok',
-      count: records.length + reviewedOverlayRecords.length,
+      count: combinedPageRecords.length,
       total: combinedInventoryTotal,
       page,
       pageSize,
@@ -2619,7 +3123,7 @@ module.exports = async function handler(req, res) {
       totalStatus: combinedInventoryTotal === null ? 'withheld_for_unsupported_filter' : 'available_from_market_feed_plus_reviewed_overlay_counts',
       hasMore,
       nextCursor,
-      records,
+      records: publicBaseRecords,
       reviewedOverlayRecords,
       reviewedOverlay: {
         source: 'reviewed_workbook_inventory',
@@ -2660,6 +3164,8 @@ module.exports.MULTI_PARENT_VERIFICATION_STATUS = MULTI_PARENT_VERIFICATION_STAT
 module.exports.MULTI_PARENT_PUBLICATION_LANE = MULTI_PARENT_PUBLICATION_LANE;
 module.exports.combineInventoryTotal = combineInventoryTotal;
 module.exports.boundReviewedOverlayPage = boundReviewedOverlayPage;
+module.exports.reviewedOverlayCursorState = reviewedOverlayCursorState;
+module.exports.excludeReviewedOverlayExactLineage = excludeReviewedOverlayExactLineage;
 module.exports.MARKET_SOURCE_VIEW = MARKET_SOURCE_VIEW;
 module.exports.MULTIPLE_LISTING_IDENTITY_VALUES = MULTIPLE_LISTING_IDENTITY_VALUES;
 module.exports.EVIDENCE_CONTRACT = EVIDENCE_CONTRACT;
@@ -2685,6 +3191,7 @@ module.exports.compareInventoryForDisplay = compareInventoryForDisplay;
 module.exports.inventoryIntentRank = inventoryIntentRank;
 module.exports.isApprovedInventoryRecord = isApprovedInventoryRecord;
 module.exports.isTradingFloorSourceRow = isTradingFloorSourceRow;
+module.exports.unwrapRpcRowData = unwrapRpcRowData;
 module.exports.normalizeItemCategory = normalizeItemCategory;
 module.exports.effectiveItemCategory = effectiveItemCategory;
 module.exports.hasObviousCrossBrandConflict = hasObviousCrossBrandConflict;
@@ -2693,6 +3200,7 @@ module.exports.mapReviewedRecord = mapReviewedRecord;
 module.exports.isNormalizedWorkbookSummary = isNormalizedWorkbookSummary;
 module.exports.isMultiListing = isMultiListing;
 module.exports.isAuditedRolexPatekDeltaSingle = isAuditedRolexPatekDeltaSingle;
+module.exports.isAuditedFourBrandEffectiveSingle = isAuditedFourBrandEffectiveSingle;
 module.exports.safeSearchTerm = safeSearchTerm;
 module.exports.locationSearchPattern = locationSearchPattern;
 module.exports.locationMatches = locationMatches;

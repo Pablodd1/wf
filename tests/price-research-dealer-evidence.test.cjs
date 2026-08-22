@@ -57,15 +57,14 @@ test('lookup failure leaves analytics evidence unchanged and does not infer iden
   assert.deepEqual(result, [row]);
 });
 
-test('Price Research API and UI use bounded exact-ledger evidence with explicit unlinked state', () => {
+test('Price Research API and UI use bounded exact-ledger evidence without verbose linkage state', () => {
   const api = read('api/price-research.js');
   const page = read('src/pages/PriceResearch.tsx');
   assert.match(api, /enrichRowsWithExactDealerEvidence/);
   assert.match(api, /comparableRowsWithDealerEvidence/);
-  assert.match(api, /retainedRowsWithDealerEvidence/);
   assert.match(api, /outlierRowsWithDealerEvidence/);
   assert.match(page, /<DealerRatingBadge/);
-  assert.match(page, /Reference Check linked/);
-  assert.match(page, /Reference Check unlinked/);
+  assert.doesNotMatch(page, /Reference Check linked/);
+  assert.doesNotMatch(page, /Reference Check unlinked/);
   assert.match(page, /<ListingDealerEvidence/);
 });

@@ -22,6 +22,7 @@ const {
   classifyDemandItemEligibility,
   classifyDemandEligibility,
   classifyResearchEligibility,
+  classifySaleEvidenceEligibility,
   isHumanReviewAnalyticsCandidate,
 } = require('./_lib/price-research-eligibility.cjs');
 const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
@@ -41,6 +42,8 @@ const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { enrichRowsWithExactDealerEvidence } = require('./_lib/listing-dealer-evidence.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
+const { isFourBrand, loadEffectivePage } = require('./_lib/four-brand-field-enrichment.cjs');
+const { applyConfirmedFiveWatchPublication } = require('./_lib/five-watch-publication.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -68,6 +71,23 @@ function isMissingRpcError(error) {
 
 async function loadQnsaPriceRpcRows(client, args) {
   const brand = String(args?.p_brand || '').trim().toLowerCase();
+  if (brand === 'vacheron constantin' || brand === 'omega' || brand === 'cartier' || brand === 'tudor') {
+    const references = [...new Set(args?.p_references || [])].filter(Boolean).slice(0, 8);
+    const pages = await Promise.all(references.map(reference => client.rpc(
+      brand === 'cartier' ? 'qnsa_cartier_reference_rows'
+        : brand === 'omega' ? 'qnsa_omega_reference_rows'
+        : brand === 'tudor' ? 'qnsa_tudor_reference_rows' : 'qnsa_vacheron_overseas_reference_rows', {
+        p_reference: reference,
+        p_limit: Math.min(101, Math.max(1, Number(args?.p_limit) || 101)),
+        p_offset: 0,
+        p_listing_type: args?.p_listing_type || null,
+      },
+    )));
+    const failed = pages.find(page => page.error);
+    if (failed) return failed;
+    const data = pages.flatMap(page => page.data || []).map(qnsaReferenceRowToMarketRow);
+    return { data: [...new Map(data.map(row => [String(row.id), row])).values()], error: null };
+  }
   const usesBoundedReviewedSource = ['richard mille', 'cartier', 'zenith'].includes(brand);
   // The correction sidecar is intentionally three-brand scoped. Later brands
   // use the reviewed bounded source; an empty sidecar result is not evidence
@@ -85,7 +105,7 @@ function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith'].includes(normalizedBrand)
+    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin', 'omega', 'tudor'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
     : null;
 }
@@ -98,7 +118,7 @@ function qnsaReferenceRowToMarketRow(row) {
     condition: source.condition,
     raw_message: source.raw_message,
   });
-  return {
+  return applyConfirmedFiveWatchPublication({
     id: source.id,
     brand: source.canonical_brand || source.brand_scope,
     model: source.catalog_model || source.model,
@@ -114,12 +134,11 @@ function qnsaReferenceRowToMarketRow(row) {
     seller_name: source.seller_name,
     seller_phone: contactApproved ? (source.seller_phone || null) : null,
     price_raw: source.source_price_amount,
-    price_usd: source.has_verified_usd_price === true
-      ? (source.verified_price_usd || source.workbook_price_usd)
-      : null,
+    price_usd: source.workbook_price_usd || source.verified_price_usd || null,
     currency: source.source_currency,
     source_price_amount: source.source_price_amount,
     source_currency: source.source_currency,
+    price_evidence_status: source.price_evidence_status || null,
     created_at: source.posting_date || source.imported_at,
     listing_date: source.posting_date || source.imported_at,
     listing_status: source.trading_floor_status,
@@ -128,7 +147,9 @@ function qnsaReferenceRowToMarketRow(row) {
     has_images: source.has_exact_source_image === true,
     owner_reviewed_identity: true,
     contact_publication_approved: contactApproved,
-  };
+    publication_lane: source.publication_lane || null,
+    catalog_reference_confirmed: source.catalog_reference_confirmed === true,
+  });
 }
 
 function consentApprovedPhone(row) {
@@ -140,7 +161,7 @@ function isPendingQnsaBrandRelease(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
   return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['panerai', 'omega'].includes(normalizedBrand);
+    && ['panerai'].includes(normalizedBrand);
 }
 
 function unwrapQnsaJsonEnvelope(data, functionName) {
@@ -205,8 +226,22 @@ async function loadQnsaExactReleasedEvidence(client, { brand, referenceVariants,
       const maximumPages = Math.ceil(boundedLimit / EXACT_REFERENCE_RPC_PAGE_SIZE) + 1;
       for (let page = 0; page < maximumPages; page += 1) {
         const zenith = normalizedBrand === 'zenith';
+        const vacheron = normalizedBrand === 'vacheron constantin';
+        const omega = normalizedBrand === 'omega';
+        const tudor = normalizedBrand === 'tudor';
+        const cartier = normalizedBrand === 'cartier';
         const { data, error } = await client.rpc(
-          zenith ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows',
+          cartier ? 'qnsa_cartier_reference_rows'
+            : omega ? 'qnsa_omega_reference_rows'
+            : tudor ? 'qnsa_tudor_reference_rows'
+            : vacheron ? 'qnsa_vacheron_overseas_reference_rows'
+            : (zenith ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows'),
+          (vacheron || omega || cartier || tudor) ? {
+            p_reference: reference,
+            p_limit: EXACT_REFERENCE_RPC_PAGE_SIZE,
+            p_offset: offset,
+            p_listing_type: null,
+          } :
           zenith ? {
             p_reference: reference,
             p_limit: EXACT_REFERENCE_RPC_PAGE_SIZE,
@@ -371,6 +406,20 @@ async function loadQnsaVerifiedTradingPrices(client, {
 }) {
   let rpcMarketRows = [];
   let exactReleasedRows = [];
+  if (isFourBrand(brand) && !familyPrefix) {
+    const effectivePage = await loadEffectivePage(client, {
+      brand,
+      references: referenceVariants.slice(0, 25),
+      listingType: 'WTS',
+      limit: Math.min(2500, limit),
+      analytics: true,
+    });
+    // `null` means the additive RPC is not installed yet. Keep the existing
+    // exact-release loaders unchanged during schema-first rollout.
+    if (effectivePage !== null) {
+      exactReleasedRows = effectivePage.slice(0, limit).map(qnsaReferenceRowToMarketRow);
+    }
+  }
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
@@ -390,9 +439,12 @@ async function loadQnsaVerifiedTradingPrices(client, {
     // downstream analytics eligibility gate.
     try {
       const exactEvidence = await loadQnsaExactReleasedEvidence(client, { brand, referenceVariants, limit });
-      exactReleasedRows = exactEvidence.rows
+      const recoveredRows = exactEvidence.rows
         .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS')
         .map(row => ({ ...row, exact_evidence_recovery_capped: exactEvidence.capped }));
+      const exactById = new Map(exactReleasedRows.map(row => [String(row.id), row]));
+      for (const row of recoveredRows) if (!exactById.has(String(row.id))) exactById.set(String(row.id), row);
+      exactReleasedRows = [...exactById.values()].slice(0, limit);
     } catch (error) {
       console.warn('[price-research] exact Trading evidence recovery unavailable:', error.message || error);
     }
@@ -403,6 +455,22 @@ async function loadQnsaVerifiedTradingPrices(client, {
     if (rpcError) {
       console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
     }
+  }
+  if (['vacheron constantin', 'omega', 'cartier', 'tudor', 'zenith']
+    .includes(String(brand || '').trim().toLowerCase())) {
+    const merged = new Map(rpcMarketRows.map(row => [String(row.id), row]));
+    // The effective sidecar page is the authoritative presentation record for
+    // these four brands. Older priced RPC rows may supplement but never erase it.
+    for (const row of exactReleasedRows) merged.set(String(row.id), row);
+    return [...merged.values()].map(row => {
+      const canonicalVerified = ['SOURCE_EXPLICIT_USD_USDT', 'DATED_VERIFIED_FX']
+        .includes(String(row.price_evidence_status || '').toUpperCase());
+      return {
+        ...row,
+        canonical_qnsa_price_evidence_checked: canonicalVerified,
+        analytics_currency_status: canonicalVerified ? 'VERIFIED' : null,
+      };
+    });
   }
   // The dedicated research view is the primary source. This bounded fallback
   // uses the same reconciled release base when PostgREST has not refreshed that
@@ -453,11 +521,13 @@ async function loadQnsaVerifiedTradingPrices(client, {
     brand: row.canonical_brand,
     model: row.catalog_model,
     reference: row.normalized_reference,
-    price_raw: row.source_price_amount,
+    price_raw: row.effective_source_amount,
     price_usd: row.has_verified_usd_price === true && Number(row.verified_price_usd) > 0
       ? row.verified_price_usd
       : null,
-    currency: row.source_currency,
+    currency: row.effective_source_currency,
+    source_price_amount: row.effective_source_amount,
+    source_currency: row.effective_source_currency,
     raw_message: row.raw_message,
     flags: [],
     created_at: row.posting_date,
@@ -486,8 +556,10 @@ async function loadQnsaVerifiedTradingPrices(client, {
     has_images: row.has_exact_source_image === true,
   }));
   const mergedRows = new Map(releasedRows.map(row => [String(row.id), row]));
-  for (const row of exactReleasedRows) mergedRows.set(String(row.id), row);
   for (const row of rpcMarketRows) mergedRows.set(String(row.id), row);
+  // Effective values are authoritative only for missing fields and must win
+  // over the compatible base loaders after activation.
+  for (const row of exactReleasedRows) mergedRows.set(String(row.id), row);
   // This loader is the canonical bounded QNSA price boundary. A positive
   // price has already passed its verified-USD/correction contract; a null
   // price intentionally failed that contract. Preserve that decision so the
@@ -506,6 +578,19 @@ async function loadQnsaTradingDemand(client, {
   limit,
 }) {
   let rpcDemandRows = [];
+  let effectiveDemandRows = [];
+  if (isFourBrand(brand) && !familyPrefix) {
+    const effectivePage = await loadEffectivePage(client, {
+      brand,
+      references: referenceVariants.slice(0, 25),
+      listingType: 'WTB',
+      limit: Math.min(2500, limit),
+      analytics: true,
+    });
+    if (effectivePage !== null) {
+      effectiveDemandRows = effectivePage.slice(0, limit).map(qnsaReferenceRowToMarketRow);
+    }
+  }
   if (!familyPrefix) {
     const { data: rpcRows, error: rpcError } = await loadQnsaPriceRpcRows(client, {
       p_brand: brand,
@@ -524,9 +609,10 @@ async function loadQnsaTradingDemand(client, {
     } catch (error) {
       console.warn('[price-research] exact Trading demand recovery unavailable:', error.message || error);
     }
-    if (recovered.length || rpcDemandRows.length) {
+    if (effectiveDemandRows.length || recovered.length || rpcDemandRows.length) {
       const merged = new Map(recovered.map(row => [String(row.id), row]));
       for (const row of rpcDemandRows) merged.set(String(row.id), row);
+      for (const row of effectiveDemandRows) merged.set(String(row.id), row);
       return [...merged.values()];
     }
   }
@@ -657,7 +743,24 @@ function paginateEvidenceRows(rows, page, pageSize) {
 }
 
 function isCustomerPricedSaleEvidence(row) {
-  return Number.isFinite(Number(row?.price_usd)) && Number(row.price_usd) > 0;
+  if (classifySaleEvidenceEligibility(row) === null) return true;
+  // Owner-assumed USD is a displayed/tracked observation with an explicit
+  // exclusion reason. It never becomes independently qualified evidence.
+  return String(row?.price_evidence_status || '').toUpperCase() === 'OWNER_ASSUMED_USD'
+    && String(row?.listing_type || row?.intent || '').toUpperCase() === 'WTS'
+    && Number(row?.price_usd || row?.workbook_price_usd || row?.source_price_amount) > 0;
+}
+
+function serializePriceProvenance(row) {
+  return {
+    source_price_amount: row.source_price_amount ?? row.price_raw ?? null,
+    source_currency: row.source_currency || row.currency || null,
+    price_evidence_status: row.price_evidence_status || row.analytics_currency_status || null,
+    effective_price_source: row.effective_price_source || null,
+    fx_rate: row.analytics_fx_rate || null,
+    fx_source: row.analytics_fx_source || null,
+    fx_date: row.analytics_fx_date || null,
+  };
 }
 
 async function lookupDemand(client, sourceTable, brand, referenceVariants, catalog, selection, preloadedRows = null, familyPrefix = null, pagination = {}, overlayRows = []) {
@@ -745,14 +848,10 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     .filter(row => !classifyDemandEligibility(row, catalog));
   const { uniqueRows: eligible, repostRows } = deduplicateReposts(eligibleBeforeReposts);
   const grouped = new Map();
-  for (const row of eligible.filter(row => matchesSelection({
-    ...row,
-    dial_color: normalizeDialValue(row.dial_color).known ? normalizeDialValue(row.dial_color).value : '',
-  }, selection))) {
+  for (const row of eligible) {
     const normalizedDial = normalizeDialValue(row.dial_color);
-    const dial = normalizedDial.known ? normalizedDial.value : '';
+    const dial = normalizedDial.known ? normalizedDial.value : 'Unspecified';
     const key = dial.toLowerCase();
-    if (!key) continue;
     const current = grouped.get(key) || { dial_color: dial, count: 0 };
     current.count += 1;
     grouped.set(key, current);
@@ -862,6 +961,9 @@ function normalizeAnalyticsPriceRow(row, {
     && row.canonical_qnsa_price_evidence_checked === true;
   const canonicalPrice = Number(row.price_usd);
   if (usingReviewedWorkbook || row.price_correction_applied === true || row.runtime_price_recovery_applied === true) {
+    const reviewedCurrencyStatus = usingReviewedWorkbook
+      ? (row.analytics_currency_status || 'CURRENCY_UNVERIFIED')
+      : 'VERIFIED';
     return {
       ...conditionCorrectedRow,
       analytics_price_usd: row.price_usd,
@@ -870,10 +972,19 @@ function normalizeAnalyticsPriceRow(row, {
         : row.runtime_price_recovery_applied
           ? 'DATED_RUNTIME_SOURCE_RECOVERY'
           : null,
-      analytics_currency_status: 'VERIFIED',
+      analytics_currency_status: reviewedCurrencyStatus,
     };
   }
   if (canonicalQnsaEvidence) {
+    if (String(row.price_evidence_status || '').toUpperCase() === 'OWNER_ASSUMED_USD') {
+      const trackedPrice = Number(row.price_usd || row.workbook_price_usd || row.source_price_amount);
+      return {
+        ...conditionCorrectedRow,
+        analytics_price_usd: Number.isFinite(trackedPrice) && trackedPrice > 0 ? trackedPrice : null,
+        price_normalization: 'OWNER_ASSUMED_USD_TRACKED_ONLY',
+        analytics_currency_status: 'OWNER_ASSUMED_USD',
+      };
+    }
     const verifiedPrice = Number.isFinite(canonicalPrice) && canonicalPrice > 0 ? canonicalPrice : null;
     return {
       ...conditionCorrectedRow,
@@ -1428,7 +1539,12 @@ module.exports = async function handler(req, res) {
     const totalListings = analyticsRows.length - bundleParentExcludedCount;
     const requestedDial = String(req.query.dial || '').trim().toLowerCase();
     const requiredFieldExclusions = analyticsRows
-      .map(row => ({ row, reason: classifyResearchEligibility(row, catalogHit) }))
+      .map(row => ({
+        row,
+        reason: String(row.price_evidence_status || '').toUpperCase() === 'OWNER_ASSUMED_USD'
+          ? 'OWNER_ASSUMED_USD_TRACKED_ONLY_EXCLUDED_FROM_INDEPENDENT_AGGREGATES'
+          : classifyResearchEligibility(row, catalogHit),
+      }))
       .filter(item => item.reason)
       .map(({ row, reason }) => ({ ...row, is_outlier: true, outlier_reason: reason }));
     const retainedEvidenceRows = requiredFieldExclusions.filter(row => (
@@ -1614,7 +1730,24 @@ module.exports = async function handler(req, res) {
       { page: demandPage, pageSize: demandPageSize },
       rolexPatekOverlayRows.filter(row => String(row.listing_type || '').toUpperCase() === 'WTB'),
     );
-    const liquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
+    const indicatorLiquidity = await lookupLiquidity(client, targetRef, listedRows.length, demand, selection);
+    // Demand is always an all-dial, exact-reference buyer signal. It must not
+    // inherit the selected WTS dial because buyers often omit a dial entirely.
+    // Use the same scope for the denominator so a stored indicator ratio can
+    // never conflict with the cards and buyer count shown to the customer.
+    const referenceQualifiedWtsCount = marketRows.length;
+    const exactReferenceDemandRatio = referenceQualifiedWtsCount > 0
+      ? demand.demand_count / referenceQualifiedWtsCount
+      : null;
+    const liquidity = {
+      ...indicatorLiquidity,
+      indicator_source: indicatorLiquidity.source,
+      source: 'live_exact_reference',
+      demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
+      reference_qualified_wts_count: referenceQualifiedWtsCount,
+      demand_score: demand.demand_count,
+      wtb_fs_ratio: exactReferenceDemandRatio,
+    };
 
     const comparableEvidencePage = paginateEvidenceRows(includedRows, evidencePage, evidencePageSize);
     // Unpriced WTS belongs on the Trading Floor only. Price Research still
@@ -1645,6 +1778,9 @@ module.exports = async function handler(req, res) {
       source_file: r.source_file || null,
       stored_price_usd: r.stored_price_usd, price_normalization: r.price_normalization,
       is_outlier: r.is_outlier, outlier_reason: r.outlier_reason,
+      source_price_amount: r.source_price_amount ?? r.price_raw ?? null,
+      source_currency: r.source_currency || r.currency || null,
+      ...serializePriceProvenance(r),
     }));
     const outlierDealerEvidenceRows = serializedOutliers.map(r => ({
       id: r.id,
@@ -1661,8 +1797,9 @@ module.exports = async function handler(req, res) {
       outlier_reason: r.outlier_reason,
       stored_price_usd: r.stored_price_usd,
       price_normalization: r.price_normalization,
-      source_price_amount: r.source_price_amount || null,
-      source_currency: r.source_currency || null,
+      source_price_amount: r.source_price_amount ?? r.price_raw ?? null,
+      source_currency: r.source_currency || r.currency || null,
+      ...serializePriceProvenance(r),
       thumbnail_url: r.thumbnail_url || null,
       image_urls: r.image_urls || null,
       has_images: r.has_images || false,
@@ -1718,6 +1855,8 @@ module.exports = async function handler(req, res) {
       total_tracked_listings: totalTrackedListings,
       wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
       wtb_demand_count: wtbDemandCount,
+      reference_qualified_wts_count: referenceQualifiedWtsCount,
+      demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
       excluded_count: excludedTotalCount,
       excluded_breakdown: {
         ...wtsAccounting.breakdown,
@@ -1740,10 +1879,8 @@ module.exports = async function handler(req, res) {
         tier: 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1',
         accepted_usd_statuses: [
           'SOURCE_EXPLICIT_USD_MATCH',
-          'OWNER_DOLLAR_USD_POLICY',
-          'OWNER_K_USD_POLICY',
         ],
-        owner_policy_statuses_remain_distinct_from_source_explicit: true,
+        bare_currency_policy_statuses_excluded_from_usd_analytics: true,
         input_wts_count: overlayWtsRows.length,
         added_wts_count: overlayMerge.overlay_added_count,
         exact_lineage_duplicates_held: overlayMerge.overlay_duplicate_count,
@@ -1752,6 +1889,8 @@ module.exports = async function handler(req, res) {
       total_tracked_listings: totalTrackedListings,
       wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
       wtb_demand_count: wtbDemandCount,
+      reference_qualified_wts_count: referenceQualifiedWtsCount,
+      demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
       demand_rows: demand?.demand_rows || [],
       demand_evidence: {
         returned: demand?.demand_returned || 0,
@@ -1763,6 +1902,7 @@ module.exports = async function handler(req, res) {
       },
       excluded_count: excludedTotalCount,
       excluded_breakdown: reconciliation.excluded_breakdown,
+      exclusion_reason_counts: requiredFieldReasonCounts,
       reconciliation,
       dial_analysis,
       dial_trends,
@@ -1917,6 +2057,7 @@ module.exports.loadQnsaVerifiedTradingPrices = loadQnsaVerifiedTradingPrices;
 module.exports.normalizeAnalyticsPriceRow = normalizeAnalyticsPriceRow;
 module.exports.paginateEvidenceRows = paginateEvidenceRows;
 module.exports.isCustomerPricedSaleEvidence = isCustomerPricedSaleEvidence;
+module.exports.serializePriceProvenance = serializePriceProvenance;
 module.exports.loadQnsaTradingDemand = loadQnsaTradingDemand;
 module.exports.loadRuntimePriceRecoveryRows = loadRuntimePriceRecoveryRows;
 module.exports.reviewedFamilyPrefix = reviewedFamilyPrefix;

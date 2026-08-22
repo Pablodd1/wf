@@ -137,6 +137,56 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    if (['omega', 'cartier', 'tudor'].includes(brand.toLowerCase())) {
+      const client = getClient();
+      const canonicalBrand = brand.toLowerCase() === 'cartier' ? 'Cartier'
+        : brand.toLowerCase() === 'tudor' ? 'Tudor' : 'Omega';
+      const releaseIndexRpc = canonicalBrand === 'Cartier'
+        ? 'qnsa_cartier_reference_index'
+        : canonicalBrand === 'Tudor' ? 'qnsa_tudor_reference_index' : 'qnsa_omega_reference_index';
+      const { data: observedRows, error: observedError } = await client.rpc(releaseIndexRpc);
+      if (observedError) throw observedError;
+      const grouped = new Map();
+      for (const row of observedRows || []) {
+        const model = String(row.model || canonicalBrand).trim() || canonicalBrand;
+        const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
+        if (row.reference) current.references.add(String(row.reference));
+        current.listing_count += Number(row.listing_count || 0);
+        grouped.set(model, current);
+      }
+      const models = [...grouped.entries()].map(([model, value]) => ({
+        model,
+        reference_count: value.references.size,
+        listing_count: value.listing_count,
+      })).sort((a, b) => b.listing_count - a.listing_count || a.model.localeCompare(b.model));
+      const payload = {
+        success: true,
+        brand: canonicalBrand,
+        model_count: models.length,
+        catalog_reference_count: models.reduce((sum, item) => sum + item.reference_count, 0),
+        models,
+        identity_source: 'EXACT_RELEASE_MANIFEST',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
+    if (brand.toLowerCase() === 'vacheron constantin') {
+      const references = listCanonicalCatalogReferences('Vacheron Constantin')
+        .filter(entry => String(entry.model || '').trim().toLowerCase() === 'overseas');
+      const payload = {
+        success: true,
+        brand: 'Vacheron Constantin',
+        model_count: 1,
+        catalog_reference_count: references.length,
+        models: [{ model: 'Overseas', reference_count: references.length }],
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+        sample_capped: false,
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (isReviewedWorkbookBrowseBrand(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(getClient(), brand);
       if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });

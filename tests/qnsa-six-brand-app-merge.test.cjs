@@ -216,7 +216,7 @@ test('six-brand route excludes the non-paginated direct-submission overlay', () 
 
 test('six-brand page two requires the composite cursor instead of repeating page one', () => {
   assert.match(source,
-    /sixBrandBroadScope && pagination !== 'cursor' && page > 1[\s\S]*requires a cursor/);
+    /sixBrandCompositeScope && pagination !== 'cursor' && page > 1[\s\S]*requires a cursor/);
 });
 
 test('bounded refill crosses initial sparse windows and populates the same customer page', async () => {

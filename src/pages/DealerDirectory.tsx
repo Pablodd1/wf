@@ -124,7 +124,7 @@ export default function DealerDirectory() {
           <div className="mt-3 grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
             <div>
               <h1 className="font-serif text-4xl sm:text-5xl">Reference Check</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{view === 'rated' ? 'Rated Dealers shows profiles with source-backed feedback. Feedback counts remain evidence and are never converted into fictional five-point scores.' : view === 'top-rated' ? 'Top Rated Dealers is ordered by captured public source rank and feedback—not an invented star score.' : 'All Dealers connects verified dealer identities to released WTS and WTB listings, reviews, business profile data and group evidence.'}</p>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{view === 'rated' ? 'Rated Dealers filters the complete directory to profiles with source-backed feedback. Feedback counts remain evidence and are never converted into fictional five-point scores.' : view === 'top-rated' ? 'Top Rated Dealers is a deterministic ranking of the Rated Dealers set—not an invented star score.' : 'All Dealers reconciles canonical profiles and source dealer candidates, preserving business profile, listing activity, feedback and group evidence when available.'}</p>
             </div>
             <label className="relative block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={17} />
@@ -142,16 +142,18 @@ export default function DealerDirectory() {
 
       <section className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:px-12">
         <div className="mb-5 flex items-center justify-between text-sm text-white/45">
-          <span>{loading ? (view === 'rated' ? 'Loading rated dealer profiles...' : view === 'top-rated' ? 'Loading public-source profiles...' : 'Loading all verified profiles...') : view === 'rated' ? `${total.toLocaleString()} rated dealer profiles` : view === 'top-rated' ? `Top ${Math.min(25, dealers.length)} source-ranked dealers` : `${total.toLocaleString()} verified dealers`}</span>
+          <span>{loading ? (view === 'rated' ? 'Loading rated dealer profiles...' : view === 'top-rated' ? 'Loading ranked dealer profiles...' : 'Loading all dealer profiles...') : view === 'rated' ? `${total.toLocaleString()} rated dealer profiles` : view === 'top-rated' ? `Top ${Math.min(25, total)} source-ranked dealers` : `${total.toLocaleString()} dealer profiles`}</span>
           <span>Page {page} of {pages}</span>
         </div>
         {error && <div role="alert" className="border border-amber-300/25 bg-amber-300/[0.07] px-4 py-3 text-sm text-amber-100/75">{error}</div>}
-        {!error && !loading && dealers.length === 0 && <div className="border border-white/10 px-5 py-12 text-center text-sm text-white/45">{view === 'top-rated' ? 'No source-ranked profiles are available.' : 'No verified profiles match this search.'}</div>}
+        {!error && !loading && dealers.length === 0 && <div className="border border-white/10 px-5 py-12 text-center text-sm text-white/45">{view === 'top-rated' ? 'No source-ranked profiles are available.' : 'No dealer profiles match this search.'}</div>}
         <div className="grid gap-px bg-white/10 md:grid-cols-2 xl:grid-cols-3">
           {dealers.map(dealer => {
             const stats = dealer.stats;
             const linkagePending = dealer.listing_linkage_status === 'PENDING_EXACT_LISTING_LINKAGE';
-            const name = dealer.display_name || dealer.company_name || 'Verified dealer';
+            const sourceCandidateUnlinked = dealer.listing_linkage_status === 'SOURCE_CANDIDATE_UNLINKED';
+            const canonicalVerified = dealer.source_system === 'WATCHFACTS_VERIFIED_DEALERS';
+            const name = dealer.display_name || dealer.company_name || 'Dealer profile';
             return (
               <article key={dealer.id} className="group relative min-h-72 bg-[#101016] p-6 transition-colors hover:bg-[#15151d]">
                 {(view === 'top-rated' || view === 'rated') && <span className="absolute right-6 top-6 font-mono text-xl text-[#c9a96e]">#{dealer.source_rank || ((page - 1) * pageSize + dealers.indexOf(dealer) + 1)}</span>}
@@ -159,7 +161,7 @@ export default function DealerDirectory() {
                   <div className="grid h-12 w-12 place-items-center border border-[#c9a96e]/35 bg-[#08080c] text-[#c9a96e]">
                     {dealer.avatar_url ? <img src={dealer.avatar_url} alt="" className="h-full w-full object-cover" /> : <Building2 size={21} />}
                   </div>
-                  {view !== 'top-rated' && <BadgeCheck size={19} className="text-[#c9a96e]" aria-label="Verified dealer" />}
+                  {view !== 'top-rated' && <BadgeCheck size={19} className="text-[#c9a96e]" aria-label={canonicalVerified ? 'Verified dealer' : 'Source dealer candidate'} />}
                 </div>
                 <h2 className="mt-7 pr-12 text-xl font-semibold">
                   <Link to={`/reference-check/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>
@@ -178,6 +180,7 @@ export default function DealerDirectory() {
                   <Metric label="Looking for" value={stats?.wtb_posts ?? null} pending={linkagePending} />
                 </div>
                 {view === 'all' && linkagePending && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Listing activity is awaiting exact verified seller linkage; zero is not inferred.</p>}
+                {view === 'all' && sourceCandidateUnlinked && <p className="mt-3 text-[10px] leading-4 text-amber-100/55">Source-backed activity is shown; exact linkage to current Trading Floor cards is pending.</p>}
                 <div className="mt-5 border-t border-white/10 pt-4 text-[11px] font-semibold uppercase tracking-wider">
                   <Link to={`/reference-check/${dealer.slug || dealer.id}`} className="inline-flex items-center gap-1 text-[#d4b87a] hover:text-white"><Users size={12} /> Full profile</Link>
                 </div>

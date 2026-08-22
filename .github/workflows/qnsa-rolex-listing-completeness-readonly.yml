@@ -1,0 +1,60 @@
+name: QNSA Rolex listing completeness read-only audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type READ_ONLY_ROLEX_LISTING_COMPLETENESS
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-rolex-listing-completeness-readonly
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      AUDIT_OUTPUT_DIR: audit-output/rolex-listing-completeness
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate authorization and read-only contract
+        shell: pwsh
+        env:
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:INPUT_CONFIRMATION -cne 'READ_ONLY_ROLEX_LISTING_COMPLETENESS') {
+            throw 'Confirmation must exactly match READ_ONLY_ROLEX_LISTING_COMPLETENESS.'
+          }
+          if ($env:SUPABASE_PROJECT_REF -cne 'qnsafosakvonzgfcsphh') {
+            throw 'Workflow is pinned to canonical QNSA.'
+          }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) {
+            throw 'SUPABASE_ACCESS_TOKEN is unavailable.'
+          }
+          node tools/audit/rolex-listing-completeness-readonly.cjs --validate-only
+
+      - name: Run private listing completeness audit
+        run: node tools/audit/rolex-listing-completeness-readonly.cjs
+
+      - name: Upload privacy-safe audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-listing-completeness-${{ github.run_id }}
+          path: audit-output/rolex-listing-completeness/*
+          if-no-files-found: error
+          retention-days: 30

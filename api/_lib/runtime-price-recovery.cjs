@@ -112,7 +112,8 @@ async function recoverRecordPrices(records, options = {}) {
     // A prior identity/price collision decision is authoritative. In
     // particular, references such as "RM 001" must never be reparsed as a
     // Malaysian-ringgit amount by this later recovery pass.
-    observation: String(record?.price_evidence_status || '').toUpperCase() === 'REFERENCE_TOKEN_AS_PRICE'
+    observation: ['REFERENCE_TOKEN_AS_PRICE', 'REFERENCE_PRICE_COLLISION_WITHHELD']
+      .includes(String(record?.price_evidence_status || '').toUpperCase())
       || String(record?.workbook_price_review_reason || '').trim()
       ? null
       : explicitObservation(record?.raw_message),

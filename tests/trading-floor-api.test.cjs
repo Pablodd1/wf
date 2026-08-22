@@ -487,12 +487,11 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.doesNotMatch(floor, /label: 'Bulk listings'/);
   assert.doesNotMatch(floor, /label: 'Trade'/);
   assert.match(floor, /Want to buy/);
-  assert.match(floor, /const endpoint = '\/api\/reviewed-market-inventory'/);
-  assert.match(floor, /const requestUrl = `\$\{endpoint\}\?\$\{params\.toString\(\)\}`/);
-  assert.match(floor, /fetch\(requestUrl/);
+  assert.match(floor, /const endpoint = usesReviewedWatchInventory \? '\/api\/reviewed-market-inventory' : '\/api\/ingest'/);
+  assert.match(floor, /fetch\(`\$\{endpoint\}\?\$\{params\.toString\(\)\}`/);
   assert.doesNotMatch(floor, /InventoryScope|Full archive/);
   assert.match(floor, /const categoryFilter = CATEGORY_OPTIONS\.some/);
-  assert.match(floor, /const intentFilter = INTENT_OPTIONS\.some/);
+  assert.match(floor, /const intentFilter = \['all', 'watches'\]\.includes\(categoryFilter\) && INTENT_OPTIONS\.some/);
   assert.match(floor, /params\.set\('item', categoryFilter\)/);
   assert.match(floor, /MobileFilterSheet/);
   assert.match(floor, /Filter inventory/);
@@ -506,9 +505,9 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.match(floor, /onClose=\{closeListing\}/);
   assert.match(floor, /previousViewKeyRef\.current === viewKey/);
   assert.match(floor, /Back to results/);
-  assert.match(floor, /paginationControls\('top'\)/);
-  assert.match(floor, /paginationControls\('bottom'\)/);
-  assert.match(floor, /'Trading Floor pages top'/);
+  assert.match(floor, /aria-label="Trading Floor pages"/);
+  assert.match(floor, />\s*Previous\s*</);
+  assert.match(floor, /loading \? 'Loading\.\.\.' : 'Next'/);
   assert.match(header, /overflow-x-auto/);
   assert.match(header, /h-11 shrink-0/);
   assert.match(header, /sm:flex-row/);

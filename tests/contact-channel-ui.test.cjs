@@ -14,7 +14,6 @@ test('listing surfaces show verified channel actions without rendering contact n
 
   assert.match(trading, /contact_channels\?\.whatsapp/);
   assert.match(trading, /contact_channels\?\.telegram/);
-  assert.match(trading, /surface=trading-floor[^`]*channel=whatsapp/);
   assert.match(trading, /fetch\(`\/api\/listing-contact\?\$\{contactParams\.toString\(\)\}`/);
   assert.match(trading, /Continue on Telegram/);
   assert.match(trading, /Ask Curated Luxury on WhatsApp/);

@@ -73,6 +73,16 @@ test('defaults suffix dollar and unsupplied numeric asking amounts to USD', () =
   }
 });
 
+test('recognizes the euro banknote emoji as explicit EUR price evidence', () => {
+  for (const raw of ['💶 3900', '3900 💶']) {
+    const prices = extractPriceObservations(raw);
+    assert.equal(prices.length, 1, raw);
+    assert.equal(prices[0].amount_original, 3900, raw);
+    assert.equal(prices[0].currency_original, 'EUR', raw);
+    assert.equal(prices[0].currency_evidence, 'explicit_line_currency', raw);
+  }
+});
+
 test('parses Chinese HKD labels and ten-thousand multipliers without a USD fallback', () => {
   const prices = extractPriceObservations('220\u4e07\u6e2f\u5e01');
   assert.equal(prices.length, 1);

@@ -27,7 +27,8 @@ test('market activity ticker uses bounded released listing evidence rather than 
 });
 
 test('listing cards render the source-backed dealer rating beside price', () => {
-  assert.match(floor, /justify-between gap-2 border-y py-3/);
+  assert.match(floor, /Price rating: \{cardPriceRatingLabel\}/);
+  assert.match(floor, /Dealer:/);
   assert.match(floor, /<DealerRatingBadge/);
   assert.match(dealerEvidence, /Dealer rating \$\{evidence\.rating\.toFixed\(1\)\} from \$\{evidence\.reviewCount\} reviews/);
   assert.match(dealerEvidence, /Rated dealer with \$\{evidence\.reviewCount\} positive feedback records/);

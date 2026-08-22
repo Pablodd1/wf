@@ -18,6 +18,7 @@ const {
 const { redactPublicSource } = require('../api/_lib/source-redaction.cjs');
 const { mapWorkbookAnalyticsRow } = require('../api/_lib/reviewed-workbook-analytics.cjs');
 const priceResearchHandler = require('../api/price-research.js');
+const priceResearchListingHandler = require('../api/price-research-listing.js');
 const tradingFloorApi = require('../api/reviewed-market-inventory.js');
 
 test('public raw evidence redacts contact PII and labeled handles without erasing reference or price evidence', () => {
@@ -56,13 +57,33 @@ test('exact structured multi-offer parent is Trading-Floor-only and excluded fro
   assert.equal(parent.verified_price_usd, null);
   assert.equal(parent.has_exact_source_image, false);
   const publicParent = tradingFloorApi.mapReviewedRecord(parent);
+  assert.equal(publicParent.listing_type, 'MULTI');
+  assert.equal(publicParent.listing_type_provenance, 'REVIEWED_EXACT_MULTI_PARENT');
   assert.equal(publicParent.multi_listing, true);
   assert.equal(publicParent.multi_listing_release_approved, true);
+  assert.equal(priceResearchListingHandler.isTradingFloorOnlyReviewedListingId(parent.id), true);
+  assert.equal(priceResearchListingHandler.isTradingFloorOnlyReviewedListingId(`rpdelta_${'f'.repeat(64)}`), false);
   assert.equal(mapWorkbookAnalyticsRow(parent).price_usd, null);
 
   assert.equal(isExactRolexPatekMultiParent({ ...parent, id: `rpdelta_${'f'.repeat(64)}` }), false);
   assert.equal(isExactRolexPatekMultiParent({ ...parent, normalized_reference: '134300' }), false);
   assert.equal(isExactRolexPatekMultiParent({ ...parent, user_image_url: 'https://example.test/ambiguous.jpg' }), false);
+});
+
+test('Price Research rejects the exact multi parent before any database lookup', async () => {
+  const response = {
+    statusCode: null,
+    payload: null,
+    setHeader() {},
+    status(code) { this.statusCode = code; return this; },
+    json(payload) { this.payload = payload; return this; },
+  };
+  await priceResearchListingHandler({
+    method: 'GET',
+    query: { id: ROLEX_PATEK_MULTI_PARENT_ID },
+  }, response);
+  assert.equal(response.statusCode, 404);
+  assert.deepEqual(response.payload, { error: 'Listing is Trading Floor only' });
 });
 
 test('overlay admits an exact image only and prices only qualified WTS USD evidence', () => {
@@ -97,7 +118,12 @@ test('overlay admits an exact image only and prices only qualified WTS USD evide
       workbook_price_usd: 31500,
     });
     const analyticsRow = mapWorkbookAnalyticsRow(ownerApproved);
+    assert.equal(ownerApproved.has_verified_usd_price, false);
+    assert.equal(ownerApproved.verified_price_usd, null);
+    assert.equal(ownerApproved.display_price_usd, 31500);
+    assert.equal(ownerApproved.analytics_currency_status, 'OWNER_ASSUMED_USD');
     assert.equal(analyticsRow.price_usd, 31500);
+    assert.equal(analyticsRow.analytics_currency_status, 'OWNER_ASSUMED_USD');
     assert.equal(analyticsRow.price_evidence_status, priceEvidenceStatus);
     assert.notEqual(analyticsRow.price_evidence_status, 'SOURCE_EXPLICIT_USD_MATCH');
   }
@@ -146,18 +172,18 @@ test('Trading Floor and Price Research keep the reviewed delta additive', () => 
   const priceApi = fs.readFileSync(path.join(repo, 'api', 'price-research.js'), 'utf8');
   assert.match(tradingApi, /reviewedOverlayRecords/);
   assert.match(tradingApi, /includeMultiParents: true/);
-  assert.match(tradingApi, /listingTypes: listingType\s*\? \[listingType\]\s*: \['WTS', 'WTB', 'MULTI'\]/);
+  assert.match(tradingApi, /const overlayListingTypes = listingType === 'MULTI'/);
   assert.match(tradingApi, /!listingType \|\| String\(record\.listing_type \|\| ''\)\.toUpperCase\(\) === listingType/);
   assert.match(tradingApi, /boundReviewedOverlayPage/);
-  assert.match(tradingApi, /mergeByExactLineage\(records, filteredOverlay\)/);
-  assert.match(tradingUi, /\.\.\.\(data\.records \|\| \[\]\), \.\.\.\(data\.reviewedOverlayRecords \|\| \[\]\)/);
+  assert.match(tradingApi, /mergeByExactLineage\(\[\], filteredOverlay\)/);
+  assert.match(tradingUi, /\[\.\.\.data\.records, \.\.\.overlay\]/);
   assert.match(priceApi, /mergeByExactLineage\(rows \|\| \[\], overlayWtsRows\)/);
   assert.match(priceApi, /SOURCE_EXPLICIT_USD_MATCH|loadRolexPatekOverlayEvidenceRows/);
   const analyticsLib = fs.readFileSync(path.join(repo, 'api', '_lib', 'reviewed-workbook-analytics.cjs'), 'utf8');
   assert.doesNotMatch(analyticsLib, /includeMultiParents:\s*true/);
 });
 
-test('combined Trading Floor pages are bounded and totals label singles versus parent', () => {
+test('combined Trading Floor pages are bounded, overlay-first, and totals label singles versus parent', () => {
   const base = Array.from({ length: 20 }, (_, index) => ({ id: `base-${index}` }));
   const overlay = Array.from({ length: 10 }, (_, index) => ({ id: `overlay-${index}` }));
   const bounded = tradingFloorApi.boundReviewedOverlayPage(base, overlay, 24);
@@ -166,10 +192,87 @@ test('combined Trading Floor pages are bounded and totals label singles versus p
   assert.equal(tradingFloorApi.combineInventoryTotal(562092, 813, false), 562905);
   assert.equal(tradingFloorApi.combineInventoryTotal(null, 813, false), null);
   const tradingUi = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
-  assert.match(tradingUi, /data\.records\.length > 0 \|\| \(data\.reviewedOverlayRecords \|\| \[\]\)\.length > 0/);
+  assert.match(tradingUi, /data\.status === 'ok' && Array\.isArray\(data\.records\)/);
   const tradingApiSource = fs.readFileSync(path.join(__dirname, '..', 'api', 'reviewed-market-inventory.js'), 'utf8');
+  assert.match(tradingApiSource, /const overlayCapacity = reviewedOverlayLaneActive \? pageSize : 0/);
+  assert.match(tradingApiSource, /offset: reviewedOverlayLaneActive \? requestedOffset : nextOffset/);
+  assert.match(tradingApiSource, /const publicBaseRecords = reviewedOverlayLaneActive \? \[\] : records/);
+  assert.match(tradingApiSource, /loadRolexPatekOverlayExactKeys/);
   assert.match(tradingApiSource, /reviewed_single_total/);
   assert.match(tradingApiSource, /structured_multi_parent_total/);
+});
+
+test('final and filtered overlay pages keep the canonical base cursor reachable', () => {
+  const finalOverlayPage = tradingFloorApi.reviewedOverlayCursorState({
+    requestedDeltaOffset: 800,
+    reviewedOverlayTotal: 813,
+    reviewedOverlayConsumed: 13,
+    canonicalBaseHasMore: false,
+    canonicalBaseRecordCount: 7,
+  });
+  assert.deepEqual(finalOverlayPage, {
+    laneActive: true,
+    overlayHasMore: false,
+    hasMore: true,
+  });
+
+  const filteredToZeroButConsumed = tradingFloorApi.reviewedOverlayCursorState({
+    requestedDeltaOffset: 100,
+    reviewedOverlayTotal: 813,
+    reviewedOverlayConsumed: 12,
+    canonicalBaseHasMore: false,
+    canonicalBaseRecordCount: 1,
+  });
+  assert.equal(filteredToZeroButConsumed.laneActive, true);
+  assert.equal(filteredToZeroButConsumed.overlayHasMore, true);
+  assert.equal(filteredToZeroButConsumed.hasMore, true);
+
+  const baseLane = tradingFloorApi.reviewedOverlayCursorState({
+    requestedDeltaOffset: 813,
+    reviewedOverlayTotal: 813,
+    reviewedOverlayConsumed: 0,
+    canonicalBaseHasMore: false,
+    canonicalBaseRecordCount: 7,
+  });
+  assert.deepEqual(baseLane, {
+    laneActive: false,
+    overlayHasMore: false,
+    hasMore: false,
+  });
+});
+
+test('later canonical pages remove exact reviewed lineage without collapsing same-reference offers', () => {
+  const reviewedKeys = new Set(['message:message-1', `file-row:${'a'.repeat(64)}:42`]);
+  const laterBasePage = [
+    { id: 'base-duplicate', reference: '126500LN' },
+    { id: 'base-distinct', reference: '126500LN' },
+  ];
+  const privateKeysById = new Map([
+    ['base-duplicate', ['message:message-1', `file-row:${'a'.repeat(64)}:42`]],
+    ['base-distinct', ['message:message-2', `file-row:${'b'.repeat(64)}:43`]],
+  ]);
+  assert.deepEqual(
+    tradingFloorApi.excludeReviewedOverlayExactLineage(
+      laterBasePage,
+      reviewedKeys,
+      privateKeysById,
+    ).map(row => row.id),
+    ['base-distinct'],
+  );
+});
+
+test('overlay-first publication keeps the reviewed copy when the hidden base page overlaps', () => {
+  const hiddenBase = [{ id: 'base-1', source_record_id: 'source-1' }];
+  const reviewed = [{ id: 'rpdelta-1', source_record_id: 'source-1' }];
+  const overlayFirst = mergeByExactLineage([], reviewed);
+  assert.deepEqual(overlayFirst.rows.map(row => row.id), ['rpdelta-1']);
+  assert.deepEqual(
+    tradingFloorApi.excludeReviewedOverlayExactLineage(
+      hiddenBase,
+      new Set(overlayExactKeys(reviewed[0])),
+    ),
+    [],
+  );
 });
 
 test('runtime handlers load and public mapping never emits private source message ids', async () => {

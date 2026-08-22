@@ -3,10 +3,12 @@
 const crawl = require('../../data/dealer-directory/full-crawl-2026-08-09.json');
 const legacyAudit = require('../../data/dealer-directory/legacy-profile-audit-2026-08-11.json');
 const ratedDealers = require('../../data/dealer-directory/rated-dealers-2026-08-12.json');
+const mariadbDirectory = require('../../data/dealer-directory/mariadb-public-dealers-2026-08-19.json');
 
 const SOURCE_SYSTEM = 'WATCHFACTS_PUBLIC_TOP_RATED_SNAPSHOT';
 const LEGACY_SOURCE_SYSTEM = 'WATCHFACTS_LEGACY_PROFILE_AUDIT_20260811';
 const RATED_SOURCE_SYSTEM = 'WATCHFACTS_PUBLIC_RATED_DEALERS_20260812';
+const MARIADB_SOURCE_SYSTEM = 'MARIADB_DEALER_CANDIDATE_RECONCILIATION_20260819';
 
 function nonNegativeInteger(value) {
   const parsed = Number.parseInt(String(value ?? '').replace(/,/g, ''), 10);
@@ -38,6 +40,45 @@ function withoutPrivateProvenance(profile) {
     ...publicProfile
   } = profile;
   return publicProfile;
+}
+
+function mariadbProfiles() {
+  return (mariadbDirectory.profiles || []).map(profile => ({ ...profile }));
+}
+
+const mariadbProfileById = new Map(mariadbProfiles().map(profile => [String(profile.id), profile]));
+
+function mariadbProfilePayload(identity) {
+  const profile = mariadbProfileById.get(String(identity || '')) || null;
+  if (!profile) return null;
+  return {
+    success: true,
+    dealer: withoutPrivateProvenance(profile),
+    stats: {
+      wts_count: profile.stats?.wts_posts ?? null,
+      wtb_count: profile.stats?.wtb_posts ?? null,
+      group_count: profile.whatsapp_group_count ?? null,
+      first_post: null,
+      latest_post: null,
+      verified_contact_info: null,
+      inventory_records: profile.stats?.inventory_records ?? 0,
+      active_inventory_records: profile.stats?.active_inventory_records ?? 0,
+      review_count: profile.review_count ?? 0,
+      positive_feedback_count: profile.positive_feedback_count ?? 0,
+      negative_feedback_count: null,
+    },
+    listings: [],
+    reviews: [],
+    listing_linkage_status: profile.listing_linkage_status,
+    source_provenance: {
+      source_system: MARIADB_SOURCE_SYSTEM,
+      source_candidate_count: profile.source_candidate_count || 1,
+      exact_private_identity_reconciled: true,
+      public_contact_available: false,
+      listing_linkage_status: profile.listing_linkage_status,
+    },
+    raw_message_access: false,
+  };
 }
 
 function ratedProfileSummary(profile, rank) {
@@ -401,6 +442,7 @@ module.exports = {
   SOURCE_SYSTEM,
   LEGACY_SOURCE_SYSTEM,
   RATED_SOURCE_SYSTEM,
+  MARIADB_SOURCE_SYSTEM,
   legacyProfileForDealerId,
   legacyProfilePayload,
   legacyProfiles,
@@ -411,5 +453,7 @@ module.exports = {
   topRatedProfiles,
   ratedDealerEvidence,
   ratedProfiles,
+  mariadbProfilePayload,
+  mariadbProfiles,
   withoutPrivateProvenance,
 };

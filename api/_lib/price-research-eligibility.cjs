@@ -53,9 +53,11 @@ function classifyResearchEligibility(row, catalog) {
   if ([row?.model, row?.dial_color].some(isMultiListingSentinel)) return 'BUNDLE_SOURCE_UNSPLIT';
   if (!row?.brand || String(row.brand).trim().toUpperCase() === 'UNKNOWN') return 'MISSING_BRAND';
   if (!row?.reference) return 'MISSING_REFERENCE';
+  if (['QNSA_VACHERON_OVERSEAS_RELEASE_V1', 'QNSA_OMEGA_RELEASE_V1', 'QNSA_CARTIER_RELEASE_V1', 'QNSA_TUDOR_RELEASE_V1'].includes(row?.publication_lane)
+    && row?.catalog_reference_confirmed !== true) return 'CATALOG_REFERENCE_UNCONFIRMED';
   if ((!catalog?.found || !catalog.model) && !ownerReviewedIdentity) return 'CATALOG_MODEL_UNCONFIRMED';
-  if (!Number.isFinite(price) || price <= 0) return 'MISSING_PRICE';
   if (row?.listing_type && normalizedStatus(row.listing_type) !== 'WTS') return 'NOT_WTS_SALE';
+  if (!Number.isFinite(price) || price <= 0) return 'MISSING_PRICE';
   if (row?.analytics_currency_status !== 'VERIFIED') {
     return row?.analytics_currency_status || 'CURRENCY_UNVERIFIED';
   }
@@ -73,16 +75,44 @@ function classifyResearchEligibility(row, catalog) {
   return null;
 }
 
+// Customer offer evidence and market-comparable evidence are deliberately
+// separate contracts. A source-backed WTS offer can remain visible when a
+// catalog/cohort gate excludes it from averages (including statistical
+// outliers), but a positive stored number is never enough by itself.
+function classifySaleEvidenceEligibility(row) {
+  if (normalizedStatus(row?.listing_type) !== 'WTS') return 'NOT_WTS_SALE';
+  if (!row?.brand || normalizedStatus(row.brand) === 'UNKNOWN') return 'MISSING_BRAND';
+  if (!row?.reference) return 'MISSING_REFERENCE';
+  if (!normalizeDialValue(row?.dial_color).known) return 'MISSING_DIAL';
+  const price = Number(row?.price_usd);
+  if (!Number.isFinite(price) || price <= 0) return 'MISSING_PRICE';
+  if (normalizedStatus(row?.analytics_currency_status) !== 'VERIFIED') {
+    return normalizedStatus(row?.analytics_currency_status) || 'CURRENCY_UNVERIFIED';
+  }
+  const sourceCurrency = normalizedStatus(row?.source_currency || row?.currency);
+  const directUsd = sourceCurrency === 'USD' || sourceCurrency === 'USDT';
+  const hasDatedFx = Number(row?.analytics_fx_rate) > 0
+    && Boolean(row?.analytics_fx_date)
+    && Boolean(row?.analytics_fx_source);
+  if (!directUsd && !hasDatedFx) return 'FX_PROVENANCE_MISSING';
+  return null;
+}
+
 function classifyDemandEligibility(row, catalog) {
   const itemReason = classifyDemandItemEligibility(row);
   if (itemReason) return itemReason;
-  return classifyResearchEligibility({
-    ...row,
-    listing_type: 'WTS',
-    price_raw: null,
-    price_usd: 1,
-    analytics_currency_status: 'VERIFIED',
-  }, catalog);
+  if (Number(row?.bundle_candidate_count || 0) > 1) return 'BUNDLE_SOURCE_UNSPLIT';
+  if ([row?.model, row?.dial_color].some(isMultiListingSentinel)) return 'BUNDLE_SOURCE_UNSPLIT';
+  const intent = normalizedStatus(row?.listing_type || row?.intent);
+  if (!['WTB', 'NTQ'].includes(intent)) return 'NOT_WTB_DEMAND';
+  if (!row?.brand || normalizedStatus(row.brand) === 'UNKNOWN') return 'MISSING_BRAND';
+  if (!row?.reference) return 'MISSING_REFERENCE';
+
+  // A buyer can ask for an exact watch without stating a dial, model or
+  // budget. Those fields are required only for comparable WTS price cohorts;
+  // applying that sale gate here made genuine exact-reference WTB demand
+  // disappear for Zenith, Omega, and every future publication lane.
+  return null;
 }
 
 // Demand analytics describe buyers seeking a complete watch. A canonical
@@ -112,6 +142,7 @@ module.exports = {
   classifyDemandItemEligibility,
   classifyDemandEligibility,
   classifyResearchEligibility,
+  classifySaleEvidenceEligibility,
   isHumanReviewAnalyticsCandidate,
   isMultiListingSentinel,
 };

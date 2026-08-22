@@ -51,7 +51,7 @@ async function loadQnsaSummary(client) {
       'A. Lange & Söhne', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling',
       'Bulgari', 'Chopard', 'F.P. Journe', 'Franck Muller',
       'Girard-Perregaux', 'Glashütte Original', 'Grand Seiko', 'H. Moser & Cie',
-      'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines', 'Omega',
+      'Hublot', 'IWC', 'Jacob & Co', 'Jaeger-LeCoultre', 'Longines',
       'TAG Heuer', 'Ulysse Nardin',
   ];
   const admittedWorkbookBrands = await mapWithConcurrency(
@@ -70,6 +70,46 @@ async function loadQnsaSummary(client) {
     },
   );
   brands.push(...admittedWorkbookBrands.filter(item => item.listing_count > 0));
+  try {
+    const { data: cartierCount, error: cartierError } = await client
+      .rpc('qnsa_cartier_release_count', { p_listing_type: null });
+    if (cartierError) throw cartierError;
+    if (Number(cartierCount || 0) > 0) {
+      const existing = brands.find(item => item.brand === 'Cartier');
+      if (existing) {
+        existing.listing_count = Number(cartierCount);
+        existing.count_status = 'exact';
+      }
+    }
+  } catch {
+    // Preserve the existing reconciled Cartier count until the controlled
+    // manifest is installed and enabled.
+  }
+  try {
+    const { data: omegaCount, error: omegaError } = await client
+      .rpc('qnsa_omega_release_count', { p_listing_type: null });
+    if (omegaError) throw omegaError;
+    if (Number(omegaCount || 0) > 0) {
+      brands.push({ brand: 'Omega', listing_count: Number(omegaCount), count_status: 'exact' });
+    }
+  } catch {
+    try {
+      const fallbackCount = await loadReviewedWorkbookBrandCount(client, 'Omega');
+      if (fallbackCount > 0) brands.push({ brand: 'Omega', listing_count: fallbackCount, count_status: 'exact' });
+    } catch {
+      // Omega remains absent rather than publishing an unverified count.
+    }
+  }
+  try {
+    const { data: tudorCount, error: tudorError } = await client
+      .rpc('qnsa_tudor_release_count', { p_listing_type: null });
+    if (tudorError) throw tudorError;
+    if (Number(tudorCount || 0) > 0) {
+      brands.push({ brand: 'Tudor', listing_count: Number(tudorCount), count_status: 'exact' });
+    }
+  } catch {
+    // Tudor remains absent until the controlled manifest is installed and enabled.
+  }
   return {
     success: true,
     surface: 'Trading Floor',

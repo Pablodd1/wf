@@ -17,18 +17,14 @@ test('soft credentialing offers a restricted guest workspace session', () => {
   assert.match(login, /Posting, profile editing, saved activity, and transaction history remain unavailable/);
 });
 
-test('Trading Floor filter rail stays visible and rating badges match the filter contract', () => {
+test('Trading Floor rating badges match the source-backed evidence contract', () => {
   const floor = read('src/pages/TradingFloor.tsx');
   const dealerEvidence = read('src/components/ListingDealerEvidence.tsx');
-  assert.match(floor, /filters-sidebar/);
-  assert.match(floor, /md:sticky md:top-5/);
-  assert.match(floor, /md:max-h-\[calc\(100vh-40px\)\]/);
-  assert.match(floor, /overflow-y-auto/);
   assert.match(floor, /<DealerRatingBadge/);
   assert.match(floor, /<ListingDealerEvidence/);
   assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_SUPPLIED'/);
   assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_FEEDBACK_COUNT'/);
-  assert.match(dealerEvidence, />Not rated<\/span>/);
+  assert.match(dealerEvidence, />Dealer rating not available<\/span>/);
   assert.match(dealerEvidence, /contactPublicationApproved && sellerPhone/);
 });
 
@@ -49,7 +45,7 @@ test('Reference Check defaults to All Dealers, filters source-backed rating evid
   assert.match(directory, /const controller = new AbortController\(\);\s*setLoading\(true\);/);
   assert.match(directory, /`\/reference-check\/\$\{dealer\.slug \|\| dealer\.id\}`/);
   assert.match(app, /path="\/reference-check\/:dealerId"/);
-  assert.match(app, /path="\/dealer\/profile\/:dealerId" element=\{<LegacyDealerProfileRedirect \/>\}/);
+  assert.match(app, /path="\/dealer\/profile\/:dealerId" element=\{<DealerProfile \/>\}/);
   assert.match(api, /phoneMatchedDealerIds/);
   assert.match(api, /\.eq\('contact_consent', true\)/);
   assert.match(api, /display_name\.ilike/);

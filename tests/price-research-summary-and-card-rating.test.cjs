@@ -37,6 +37,7 @@ test('Cartier summaries separate all-reference counts from selected-dial analyti
   assert.equal(allReference.wts_observation_count, 3);
   assert.equal(allReference.wtb_observation_count, 1);
   assert.equal(allReference.reference_qualified_wts_count, 3);
+  assert.equal(allReference.reference_stats.median, 24000);
   assert.equal(allReference.selected_dial_qualified_count, 0);
   assert.equal(allReference.analytics_ready, false);
   assert.equal(allReference.stats, null);
@@ -257,6 +258,32 @@ test('Zenith uses the canonical QNSA exact loader and not the workbook shortcut'
   assert.equal(result.rows.length, 1);
 });
 
+test('Zenith and Omega WTB demand remains visible without a dial or catalog-model decoration', () => {
+  const pairs = batchApi.normalizePairs([
+    { brand: 'Zenith', reference: '03.2522.400' },
+    { brand: 'Omega', reference: '210.30.42.20.01.001' },
+  ]);
+  const rows = [
+    { ...row('zenith-wtb', '03.2522.400', null, null, 'WTB'), brand: 'Zenith', model: null },
+    { ...row('omega-wtb', '210.30.42.20.01.001', null, null, 'WTB'), brand: 'Omega', model: null },
+  ];
+  const [zenith, omega] = batchApi.buildBatchSummaries(pairs, rows);
+  assert.equal(zenith.wtb_observation_count, 1);
+  assert.equal(omega.wtb_observation_count, 1);
+});
+
+test('Zenith reference summaries provide an exact-reference benchmark across qualified dials', () => {
+  const [pair] = batchApi.normalizePairs([{ brand: 'Zenith', reference: '03.2522.400' }]);
+  const [summary] = batchApi.buildBatchSummaries([pair], [
+    { ...row('zenith-blue', '03.2522.400', 'Blue', 10000), brand: 'Zenith' },
+    { ...row('zenith-black', '03.2522.400', 'Black', 12000), brand: 'Zenith' },
+  ]);
+  assert.equal(summary.reference_qualified_wts_count, 2);
+  assert.equal(summary.reference_analytics_ready, true);
+  assert.equal(summary.reference_stats.avg, 11000);
+  assert.equal(summary.stats, null);
+});
+
 test('server and client use the same canonical selected-dial key', () => {
   const [pair] = batchApi.normalizePairs([{ brand: 'Cartier', reference: 'WSSA0032', dial: 'Silver Dial' }]);
   assert.equal(pair.key, 'cartier|WSSA0032|SILVER DIAL');
@@ -293,12 +320,30 @@ test('pages make one batch request and client rejects cross-reference summaries'
   assert.match(research, /qualified WTS/);
 });
 
-test('Trading Floor always renders price rating but withholds without selected-dial evidence', () => {
-  assert.match(floor, /Price rating: \{cardPriceRatingLabel\}/);
-  assert.match(floor, /Boolean\(listing\.brand && listing\.reference && listing\.dial_color\)/);
+test('Rolex Trading Floor resolves price ratings progressively with bounded pair concurrency', () => {
+  assert.match(floor, /ROLEX_PRICE_SUMMARY_CONCURRENCY = 2/);
+  assert.match(floor, /isRolexOnlyPriceSummaryPage/);
+  assert.match(floor, /loadPriceResearchBatchSummaries\(\[pair\], signal\)/);
+  assert.match(floor, /name === 'AbortError' && attempt === 0/);
+  assert.match(floor, /setSettledPriceSummaryKeys\(current => new Set\(current\)\.add\(key\)\)/);
+  assert.match(floor, /settledPriceSummaryKeys\.has\(priceResearchSummaryKey/);
+});
+
+test('Trading Floor uses selected-dial evidence by default and shows concise ratings for Zenith, Cartier, Omega, and Tudor', () => {
+  assert.match(floor, /displayedCardPriceRating\.rating\.label/);
+  assert.match(floor, /Boolean\(listing\.brand && listing\.reference && \(listing\.dial_color \|\| exactReferenceRating\)\)/);
   assert.doesNotMatch(floor, /canRatePrice[\s\S]{0,180}price_research_eligible/);
   assert.match(floor, /selected_dial_qualified_count/);
-  assert.match(floor, /comparableCount >= 2 \? priceSummary\?\.stats \|\| null : null/);
-  assert.match(floor, /displayedCardPriceRating\.rating\.code === 'NOT_RATED'/);
+  assert.match(floor, /usesExactReferencePriceBenchmark/);
+  assert.match(floor, /\['zenith', 'cartier', 'omega', 'tudor'\]/);
+  assert.match(floor, /reference_qualified_wts_count/);
+  assert.match(floor, /reference_stats/);
+  assert.doesNotMatch(floor, /Ref avg/);
+  assert.doesNotMatch(floor, /Not rated · \$\{availableComparableCount\}\/2 qualified/);
+  assert.doesNotMatch(floor, /Not rated · evidence unavailable/);
+  assert.doesNotMatch(floor, /No exact directory match/);
+  assert.match(floor, /Dealer rating not available/);
+  assert.match(floor, /comparableCount >= 2 \? benchmarkStats : null/);
+  assert.doesNotMatch(floor, /displayedCardPriceRating\.rating\.code === 'NOT_RATED'/);
   assert.match(floor, /<ListingDealerEvidence/);
 });
