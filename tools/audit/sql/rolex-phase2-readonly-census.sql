@@ -4,15 +4,11 @@ control AS MATERIALIZED (
   FROM public.qnsa_two_brand_release_control
   WHERE canonical_brand = 'Rolex'
 ),
-staging_all AS MATERIALIZED (
-  SELECT l.*
-  FROM staging.listings l
-  WHERE l.brand_normalized = 'Rolex'
-),
 active AS MATERIALIZED (
   SELECT l.*
-  FROM staging_all l
+  FROM staging.listings l
   JOIN control c ON c.enabled_run_key = l.normalization_run_key
+  WHERE l.brand_normalized = 'Rolex'
 ),
 active_refs AS MATERIALIZED (
   SELECT
@@ -188,9 +184,9 @@ SELECT jsonb_build_object(
   'generated_at', now(),
   'control', (SELECT to_jsonb(c) FROM control c),
   'counts', jsonb_build_object(
-    'source_distinct_rows', (SELECT count(DISTINCT source_record_id) FROM staging_all WHERE NULLIF(source_record_id, '') IS NOT NULL),
-    'raw_version_rows_linked', (SELECT count(DISTINCT rv.id) FROM public.raw_message_versions rv JOIN staging_all s ON s.source_record_id = rv.source_record_id),
-    'staging_rows_all_runs', (SELECT count(*) FROM staging_all),
+    'source_distinct_rows', (SELECT count(DISTINCT source_record_id) FROM active WHERE NULLIF(source_record_id, '') IS NOT NULL),
+    'raw_version_rows_linked', (SELECT count(DISTINCT raw_message_version_id) FROM active WHERE raw_message_version_id IS NOT NULL),
+    'staging_rows_active_run', (SELECT count(*) FROM active),
     'normalized_rows_active_run', (SELECT count(*) FROM active),
     'released_base_rows', (SELECT count(*) FROM release_base),
     'reviewed_overlay_rows', (SELECT count(*) FROM overlay),
