@@ -89,7 +89,7 @@ function buildBenchmarks(priceRows) {
   const benchmarks = new Map();
   for (const [key, prices] of groups) {
     const floor = marketPlausibilityFloor(prices);
-    benchmarks.set(key, summarizePrices(prices.filter(price => price >= floor)));
+    benchmarks.set(key, { ...summarizePrices(prices.filter(price => price >= floor)), plausibility_floor: floor });
   }
   return { benchmarks, deduplicatedPriceRows: seen.size };
 }
@@ -103,9 +103,16 @@ function classify(row, benchmarks) {
   const hasPriceRating = Boolean(isWts && hasPrice && benchmark?.analytics_ready && benchmark.stats
     && price >= benchmark.stats.min && price <= benchmark.stats.max);
   let priceRating = '';
+  let priceRatingStatus = !isWts ? 'NOT_APPLICABLE_WTB'
+    : !hasPrice ? 'MISSING_USD_PRICE'
+      : !benchmarkKey(row.reference, row.dial) ? 'MISSING_DIAL'
+        : !benchmark?.analytics_ready || !benchmark.stats ? 'INSUFFICIENT_MARKET_DATA'
+          : price < benchmark.stats.min || price > benchmark.stats.max ? 'OUTSIDE_COMPARABLE_RANGE'
+            : 'RATED';
   if (hasPriceRating) {
     const center = Number(benchmark.stats.median || benchmark.stats.avg);
     priceRating = price <= center * 0.95 ? 'GOOD' : price <= center * 1.05 ? 'MARKET' : 'HIGH';
+    priceRatingStatus = priceRating;
   }
   if (isWts && !hasPrice) issues.push('MISSING_USD_PRICE');
   if (isWts && !hasPriceRating) issues.push('PRICE_RATING_UNAVAILABLE');
@@ -119,7 +126,7 @@ function classify(row, benchmarks) {
   if (!row.has_complete_watch_identity) issues.push('MISSING_WATCH_IDENTITY');
   if (!row.has_posted_user) issues.push('MISSING_POSTED_USER');
   if (!row.posted_at) issues.push('MISSING_POSTED_DATE');
-  return { ...row, has_price_rating: hasPriceRating, price_rating: priceRating, issues };
+  return { ...row, has_price_rating: hasPriceRating, price_rating: priceRating, price_rating_status: priceRatingStatus, issues };
 }
 
 async function main() {
@@ -166,9 +173,11 @@ async function main() {
     }, benchmarks);
   });
   const issueCounts = {};
+  const priceRatingStatusCounts = {};
   const byReference = new Map();
   for (const row of rows) {
     for (const issue of row.issues) issueCounts[issue] = (issueCounts[issue] || 0) + 1;
+    priceRatingStatusCounts[row.price_rating_status] = (priceRatingStatusCounts[row.price_rating_status] || 0) + 1;
     const key = refKey(row.reference) || 'MISSING';
     const current = byReference.get(key) || { reference: row.reference || '', listings: 0, wts: 0, missing_usd_price: 0, price_rating_unavailable: 0, missing_dealer_link: 0, missing_dealer_rating: 0, missing_image: 0, raw_message_problem: 0, missing_identity: 0 };
     current.listings += 1;
@@ -210,6 +219,7 @@ async function main() {
       price_benchmark_cohorts: benchmarks.size,
     },
     issue_counts: issueCounts,
+    price_rating_status_counts: priceRatingStatusCounts,
     checksums: {
       canonical_listing_ids_sha256: sha256(rows.map(row => row.listing_id).sort().join('\n')),
       exception_rows_sha256: sha256(rows.map(row => `${row.listing_id}|${row.issues.join(';')}`).sort().join('\n')),
@@ -219,7 +229,7 @@ async function main() {
   };
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
-  const listingColumns = ['listing_id','source_record_id','source_lane','reference','model','dial','listing_type','posted_at','price_usd','original_currency','dealer_id','dealer_name','has_posted_user','has_location','has_valid_image','raw_message_state','has_exact_dealer_link','has_dealer_rating','has_complete_watch_identity','has_price_rating','price_rating','issues'];
+  const listingColumns = ['listing_id','source_record_id','source_lane','reference','model','dial','listing_type','posted_at','price_usd','original_currency','dealer_id','dealer_name','has_posted_user','has_location','has_valid_image','raw_message_state','has_exact_dealer_link','has_dealer_rating','has_complete_watch_identity','has_price_rating','price_rating','price_rating_status','issues'];
   const listingCsv = [listingColumns.join(','), ...rows.map(row => listingColumns.map(column => csvValue(column === 'issues' ? row.issues.join(';') : row[column])).join(','))].join('\n') + '\n';
   const referenceColumns = ['reference','listings','wts','missing_usd_price','price_rating_unavailable','missing_dealer_link','missing_dealer_rating','missing_image','raw_message_problem','missing_identity'];
   const referenceRows = [...byReference.values()].sort((a,b) => refKey(a.reference).localeCompare(refKey(b.reference)));
