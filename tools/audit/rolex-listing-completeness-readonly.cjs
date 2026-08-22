@@ -124,6 +124,7 @@ function classify(row, benchmarks) {
 
 async function main() {
   const catalog = listCanonicalCatalogReferences('Rolex');
+  const catalogModelByReference = new Map(catalog.map(row => [refKey(row.reference), row.model || null]));
   const canonical = [...new Set(catalog.map(row => refKey(row.reference)).filter(Boolean))].sort();
   const canonicalSql = canonical.map(key => `'${key.replaceAll("'", "''")}'`).join(',');
   const baseTemplate = fs.readFileSync(path.join(SQL_DIR, 'rolex-listing-completeness-base-readonly.sql'), 'utf8');
@@ -156,7 +157,14 @@ async function main() {
   }
 
   const { benchmarks, deduplicatedPriceRows } = buildBenchmarks(priceRows);
-  const rows = [...baseRows, ...overlayValue.rows].map(row => classify(row, benchmarks));
+  const rows = [...baseRows, ...overlayValue.rows].map(row => {
+    const model = row.model || catalogModelByReference.get(refKey(row.reference)) || null;
+    return classify({
+      ...row,
+      model,
+      has_complete_watch_identity: Boolean(row.reference && model && row.dial),
+    }, benchmarks);
+  });
   const issueCounts = {};
   const byReference = new Map();
   for (const row of rows) {
@@ -207,7 +215,7 @@ async function main() {
       exception_rows_sha256: sha256(rows.map(row => `${row.listing_id}|${row.issues.join(';')}`).sort().join('\n')),
       price_evidence_sha256: sha256(priceRows.map(row => `${row.listing_id}|${row.dedup_key}|${row.price_usd}`).sort().join('\n')),
     },
-    privacy: { raw_messages_exported: false, phone_numbers_exported: false, image_urls_exported: false },
+    privacy: { raw_messages_exported: false, contact_values_exported: false, image_urls_exported: false },
   };
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
