@@ -138,16 +138,21 @@ async function priceCensus(canonicalSql, fxSnapshot) {
 }
 
 async function imageCensus(canonicalSql) {
-  const sql = `WITH control AS MATERIALIZED (SELECT enabled_run_key FROM public.qnsa_two_brand_release_control
-    WHERE canonical_brand='Rolex' AND trading_floor_enabled)
-  SELECT l.id::text listing_id,l.source_record_id,l.source_hash,l.source_candidate_hash,
-    l.raw_message_version_id::text raw_message_version_id,l.reference_normalized
-  FROM staging.listings l JOIN control c ON c.enabled_run_key=l.normalization_run_key
-  WHERE l.brand_normalized='Rolex' AND upper(COALESCE(l.category,''))='WATCH' AND l.parent_id IS NULL
-    AND COALESCE(l.is_bundle,false)=false AND COALESCE(l.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
-    AND regexp_replace(upper(btrim(l.reference_normalized)),'[^A-Z0-9]','','g') IN (${canonicalSql})
-    AND NULLIF(btrim(COALESCE(l.image_url,l.source_media_url_candidate,'')),'') IS NULL ORDER BY l.id;`;
-  const rows = await query(sql, 'missing-images');
+  const rows = [];
+  for (let shard=0;shard<SHARDS;shard+=1) {
+    const {low,high}=shardBounds(shard);
+    const sql = `WITH control AS MATERIALIZED (SELECT enabled_run_key FROM public.qnsa_two_brand_release_control
+      WHERE canonical_brand='Rolex' AND trading_floor_enabled)
+    SELECT l.id::text listing_id,l.source_record_id,l.source_hash,l.source_candidate_hash,
+      l.raw_message_version_id::text raw_message_version_id,l.reference_normalized
+    FROM staging.listings l JOIN control c ON c.enabled_run_key=l.normalization_run_key
+    WHERE l.brand_normalized='Rolex' AND upper(COALESCE(l.category,''))='WATCH' AND l.parent_id IS NULL
+      AND COALESCE(l.is_bundle,false)=false AND COALESCE(l.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
+      AND regexp_replace(upper(btrim(l.reference_normalized)),'[^A-Z0-9]','','g') IN (${canonicalSql})
+      AND NULLIF(btrim(COALESCE(l.image_url,l.source_media_url_candidate,'')),'') IS NULL
+      AND l.id>=${sqlString(low)}::uuid ${high?`AND l.id<${sqlString(high)}::uuid`:''} ORDER BY l.id;`;
+    rows.push(...await query(sql, `missing-images-${shard}`));
+  }
   const ids = rows.map(row => sourceAuctionId(row.source_record_id)).filter(Boolean);
   if (!ids.length) return { scanned: rows.length, candidates: [], missingSource: rows.length };
   const connection = await mysql.createConnection({ host: process.env.MYSQL_HOST, port: Number(process.env.MYSQL_PORT || 3306),
@@ -173,18 +178,25 @@ async function imageCensus(canonicalSql) {
 }
 
 async function linkageSummary(canonicalSql) {
-  const sql = `WITH control AS MATERIALIZED (SELECT enabled_run_key FROM public.qnsa_two_brand_release_control
-    WHERE canonical_brand='Rolex' AND trading_floor_enabled), eligible AS MATERIALIZED (
-    SELECT l.id FROM staging.listings l JOIN control c ON c.enabled_run_key=l.normalization_run_key
-    WHERE l.brand_normalized='Rolex' AND regexp_replace(upper(btrim(l.reference_normalized)),'[^A-Z0-9]','','g') IN (${canonicalSql})
-      AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false)
-  SELECT jsonb_build_object('total',count(*),'linked',count(link.dealer_id),
-    'missing_link',count(*)-count(link.dealer_id),'rated',count(*) FILTER (WHERE COALESCE(d.rating,0)>0 AND COALESCE(d.review_count,0)>0),
-    'missing_rating',count(*)-count(*) FILTER (WHERE COALESCE(d.rating,0)>0 AND COALESCE(d.review_count,0)>0)) summary
-  FROM eligible e LEFT JOIN LATERAL (SELECT dl.dealer_id FROM public.dealer_listing_links dl
-    WHERE dl.listing_id=e.id AND dl.link_status='APPLIED' ORDER BY dl.linked_at,dl.dealer_id LIMIT 1) link ON true
-  LEFT JOIN public.dealers d ON d.id=link.dealer_id;`;
-  return (await query(sql, 'dealer-summary'))?.[0]?.summary;
+  const total={total:0,linked:0,missing_link:0,rated:0,missing_rating:0};
+  for(let shard=0;shard<SHARDS;shard+=1){
+    const {low,high}=shardBounds(shard);
+    const sql = `WITH control AS MATERIALIZED (SELECT enabled_run_key FROM public.qnsa_two_brand_release_control
+      WHERE canonical_brand='Rolex' AND trading_floor_enabled), eligible AS MATERIALIZED (
+      SELECT l.id FROM staging.listings l JOIN control c ON c.enabled_run_key=l.normalization_run_key
+      WHERE l.brand_normalized='Rolex' AND regexp_replace(upper(btrim(l.reference_normalized)),'[^A-Z0-9]','','g') IN (${canonicalSql})
+        AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false AND l.id>=${sqlString(low)}::uuid
+        ${high?`AND l.id<${sqlString(high)}::uuid`:''})
+    SELECT jsonb_build_object('total',count(*),'linked',count(link.dealer_id),
+      'missing_link',count(*)-count(link.dealer_id),'rated',count(*) FILTER (WHERE COALESCE(d.rating,0)>0 AND COALESCE(d.review_count,0)>0),
+      'missing_rating',count(*)-count(*) FILTER (WHERE COALESCE(d.rating,0)>0 AND COALESCE(d.review_count,0)>0)) summary
+    FROM eligible e LEFT JOIN LATERAL (SELECT dl.dealer_id FROM public.dealer_listing_links dl
+      WHERE dl.listing_id=e.id AND dl.link_status='APPLIED' ORDER BY dl.linked_at,dl.dealer_id LIMIT 1) link ON true
+    LEFT JOIN public.dealers d ON d.id=link.dealer_id;`;
+    const value=(await query(sql,`dealer-summary-${shard}`))?.[0]?.summary;
+    for(const key of Object.keys(total)) total[key]+=Number(value?.[key]||0);
+  }
+  return total;
 }
 
 async function main() {
