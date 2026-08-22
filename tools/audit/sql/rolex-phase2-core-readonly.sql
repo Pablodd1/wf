@@ -2,15 +2,19 @@ WITH control AS MATERIALIZED (
   SELECT enabled_run_key, trading_floor_enabled, price_research_enabled
   FROM public.qnsa_two_brand_release_control WHERE canonical_brand = 'Rolex'
 ), active AS MATERIALIZED (
-  SELECT l.id, l.source_record_id, l.raw_message_version_id, l.source_hash,
+  SELECT l.id, l.source_record_id, l.raw_message_version_id, l.source_hash, l.source_candidate_hash,
     l.reference_normalized, l.category, l.parent_id, l.is_bundle,
     l.provenance_metadata, l.listing_type, l.intent, l.trading_floor_status,
-    l.verdict, l.public_image_eligible, l.image_url, l.source_media_url_candidate,
+    l.verdict, l.publication_review_status, l.price_research_status,
+    l.image_url, l.source_media_url_candidate,
     l.price_normalized, l.price_original, l.price_usd, l.currency_normalized,
     l.currency_evidence, l.conversion_rate, l.conversion_timestamp,
-    l.user_name, l.from_name
+    l.user_name, l.from_name, l.rating, l.dealer_rating
   FROM staging.listings l JOIN control c ON c.enabled_run_key = l.normalization_run_key
+  JOIN staging.mariadb_normalization_import_checkpoints checkpoint
+    ON checkpoint.run_key=l.normalization_run_key
   WHERE l.brand_normalized = 'Rolex'
+    AND checkpoint.status='NORMALIZATION_STAGED' AND checkpoint.error_rows=0
 ), refs AS MATERIALIZED (
   SELECT regexp_replace(upper(btrim(reference_normalized)), '[^A-Z0-9]', '', 'g') AS ref_key,
     min(btrim(reference_normalized)) AS reference,
@@ -19,28 +23,33 @@ WITH control AS MATERIALIZED (
   WHERE upper(COALESCE(category, '')) = 'WATCH' AND NULLIF(btrim(reference_normalized), '') IS NOT NULL
   GROUP BY 1 HAVING regexp_replace(upper(btrim(reference_normalized)), '[^A-Z0-9]', '', 'g') <> ''
 ), eligible_base AS MATERIALIZED (
-  SELECT regexp_replace(upper(btrim(reference_normalized)), '[^A-Z0-9]', '', 'g') ref_key, id,
-    (COALESCE(public_image_eligible,false) AND btrim(COALESCE(image_url,source_media_url_candidate,''))~*'^https?://[^[:space:]]+$') has_image,
+  SELECT regexp_replace(upper(btrim(a.reference_normalized)), '[^A-Z0-9]', '', 'g') ref_key, a.id,
+    (btrim(COALESCE(a.image_url,a.source_media_url_candidate,''))~*'^https?://[^[:space:]]+$') has_image,
     (COALESCE(price_normalized,price_original,price_usd,0)>0) has_price,
-    (NULLIF(btrim(COALESCE(user_name,from_name,'')),'') IS NOT NULL) has_user,
-    (upper(COALESCE(listing_type,intent,''))='WTS' AND COALESCE(price_usd,0)>0 AND COALESCE(price_normalized,0)>0
-      AND currency_evidence IN ('explicit_line_currency','section_context','source_record_currency')
-      AND ((currency_normalized IN ('USD','USDT') AND price_usd=price_normalized)
-        OR (currency_normalized NOT IN ('USD','USDT') AND currency_normalized IS NOT NULL
-          AND COALESCE(conversion_rate,0)>0 AND conversion_timestamp IS NOT NULL))) price_research_eligible
-  FROM active
-  WHERE upper(COALESCE(category,''))='WATCH' AND NULLIF(btrim(reference_normalized),'') IS NOT NULL
-    AND parent_id IS NULL AND COALESCE(is_bundle,false)=false
-    AND upper(COALESCE(listing_type,intent,'')) IN ('WTS','WTB')
-    AND COALESCE(provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
-    AND lower(COALESCE(trading_floor_status,'')) NOT IN ('bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate','withdrawn','rejected','hidden','deleted','archived')
-    AND upper(COALESCE(verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+    (NULLIF(btrim(COALESCE(a.user_name,a.from_name,rv.raw_payload#>>'{raw_data,from_name}','')),'') IS NOT NULL) has_user,
+    (COALESCE(a.dealer_rating,a.rating,CASE WHEN COALESCE(rv.raw_payload#>>'{raw_data,dealer_rating}','')~'^[0-9]+([.][0-9]+)?$' THEN (rv.raw_payload#>>'{raw_data,dealer_rating}')::numeric END) IS NOT NULL) has_rating,
+    (upper(COALESCE(a.listing_type,a.intent,''))='WTS' AND COALESCE(a.price_usd,0)>0 AND COALESCE(a.price_normalized,0)>0
+      AND (a.currency_normalized IN ('USD','USDT') OR (a.currency_normalized IS NOT NULL
+        AND COALESCE(a.conversion_rate,0)>0 AND a.conversion_timestamp IS NOT NULL))) price_research_eligible
+  FROM active a JOIN public.raw_message_versions rv ON rv.id=a.raw_message_version_id
+    AND rv.source_record_id=a.source_record_id AND rv.source_hash=a.source_hash
+  WHERE upper(COALESCE(a.category,''))='WATCH' AND NULLIF(btrim(a.reference_normalized),'') IS NOT NULL
+    AND a.parent_id IS NULL AND COALESCE(a.is_bundle,false)=false
+    AND upper(COALESCE(a.listing_type,a.intent,'')) IN ('WTS','WTB')
+    AND COALESCE(a.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
+    AND a.raw_message_version_id IS NOT NULL AND COALESCE(a.source_record_id,'')<>''
+    AND a.source_hash~'^[0-9a-f]{64}$' AND a.source_candidate_hash~'^[0-9a-f]{64}$'
+    AND lower(COALESCE(a.trading_floor_status,'')) NOT IN ('bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate','withdrawn','rejected','hidden','deleted','archived')
+    AND upper(COALESCE(a.verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+    AND lower(COALESCE(a.price_research_status,''))<>'suppressed_exact_duplicate'
+    AND upper(COALESCE(a.publication_review_status,'PENDING_REVIEW')) IN ('PENDING_REVIEW','APPROVED','READY_FOR_PUBLICATION_REVIEW')
 ), base_by_ref AS MATERIALIZED (
   SELECT b.ref_key, count(*) base_count, count(*) FILTER (WHERE b.has_image) images,
     count(*) FILTER (WHERE b.has_price) prices, count(*) FILTER (WHERE b.has_user) users,
     count(*) FILTER (WHERE b.price_research_eligible) price_observations,
     count(*) FILTER (WHERE link.listing_id IS NOT NULL) dealer_links,
-    count(*) FILTER (WHERE d.rating IS NOT NULL AND d.review_count>0) dealer_ratings
+    count(*) FILTER (WHERE b.has_rating) source_ratings,
+    count(*) FILTER (WHERE d.rating IS NOT NULL AND d.review_count>0) directory_ratings
   FROM eligible_base b
   LEFT JOIN public.dealer_listing_links link ON link.listing_id=b.id AND link.link_status='APPLIED'
   LEFT JOIN public.dealers d ON d.id=link.dealer_id GROUP BY b.ref_key
@@ -65,7 +74,8 @@ WITH control AS MATERIALIZED (
     COALESCE(b.prices,0)+COALESCE(o.prices,0) prices,
     COALESCE(b.users,0)+COALESCE(o.users,0) users,
     COALESCE(b.price_observations,0)+COALESCE(o.price_observations,0) price_observations,
-    COALESCE(b.dealer_links,0) dealer_links, COALESCE(b.dealer_ratings,0) dealer_ratings
+    COALESCE(b.dealer_links,0) dealer_links, COALESCE(b.source_ratings,0) source_ratings,
+    COALESCE(b.directory_ratings,0) directory_ratings
   FROM surface_keys k LEFT JOIN base_by_ref b USING(ref_key) LEFT JOIN overlay_by_ref o USING(ref_key)
 )
 SELECT jsonb_build_object(
