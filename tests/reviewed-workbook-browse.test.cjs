@@ -42,6 +42,7 @@ test('TAG Heuer browse fails cross-brand residual models closed', () => {
     { brand_scope: 'TAG Heuer', model: 'Monaco', normalized_reference: 'RM7201' },
     { brand_scope: 'TAG Heuer', model: 'Carrera', normalized_reference: '116508' },
     { brand_scope: 'TAG Heuer', model: 'Calatrava Pointer Date', normalized_reference: '6000' },
+    { brand_scope: 'TAG Heuer', model: '', normalized_reference: '6000' },
     { brand_scope: 'TAG Heuer', model: 'Grand Complications', normalized_reference: '5270P-001' },
     { brand_scope: 'TAG Heuer', model: 'Saxonia', normalized_reference: '219.032' },
   ];
