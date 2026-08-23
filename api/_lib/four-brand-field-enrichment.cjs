@@ -122,6 +122,16 @@ function isMissingEffectiveRpcError(error) {
   );
 }
 
+function isTransientEffectiveRpcTimeout(error) {
+  const status = Number(error?.status || error?.statusCode || 0);
+  const text = [error?.code, error?.message, error?.details, error?.hint]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return error?.code === "57014"
+    || ((status === 500 || status === 503) && /statement timeout/.test(text));
+}
+
 async function loadEffectiveEnrichments(client, rows) {
   const ids = [
     ...new Set(
@@ -138,7 +148,7 @@ async function loadEffectiveEnrichments(client, rows) {
     },
   );
   if (error) {
-    if (isMissingEffectiveRpcError(error)) return rows || [];
+    if (isMissingEffectiveRpcError(error) || isTransientEffectiveRpcTimeout(error)) return rows || [];
     throw error;
   }
   const byId = new Map(
@@ -235,6 +245,7 @@ module.exports = {
   isMissing,
   applyEffectiveEnrichment,
   isMissingEffectiveRpcError,
+  isTransientEffectiveRpcTimeout,
   loadEffectiveEnrichments,
   loadEffectivePage,
   loadEffectiveCount,
