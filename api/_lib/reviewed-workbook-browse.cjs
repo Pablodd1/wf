@@ -81,7 +81,7 @@ function rowModel(row) {
   }
   const claimed = clean(row.catalog_model) || clean(row.model);
   if (!claimed || /^\d+$/.test(claimed) || /^\d{4}[/-]\d{1,2}$/.test(claimed)) {
-    return REFERENCE_ONLY_MODEL;
+    return ownerBrand === 'tag heuer' ? '' : REFERENCE_ONLY_MODEL;
   }
   const foreignBrand = KNOWN_WATCH_BRANDS.some(brand => (
     brand.toLowerCase() !== ownerBrand
