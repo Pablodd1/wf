@@ -6,6 +6,10 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { getClient } = require('../../api/_lib/supabase');
 
+const TARGET_BRAND=String(process.env.COMPLETION_BRAND||'Rolex').trim();
+const ALLOWED_BRANDS=new Set(['Rolex','Patek Philippe']);
+if(!ALLOWED_BRANDS.has(TARGET_BRAND)) throw new Error(`Unsupported completion brand: ${TARGET_BRAND}`);
+const BRAND_SLUG=TARGET_BRAND==='Patek Philippe'?'patek':'rolex';
 const sha256 = value => crypto.createHash('sha256').update(value).digest('hex');
 function stable(value) {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
@@ -23,7 +27,7 @@ function exactConfirm(o) {
   if (o.confirm!==expected) throw new Error(`Exact confirmation required: ${expected}`);
 }
 function mergeManifest(manifest) {
-  if (manifest?.contract!=='watchfacts-rolex-null-only-candidates-v1' || manifest.project_ref!=='qnsafosakvonzgfcsphh') throw new Error('Invalid candidate manifest');
+  if (manifest?.contract!==`watchfacts-${BRAND_SLUG}-null-only-candidates-v1` || manifest.project_ref!=='qnsafosakvonzgfcsphh') throw new Error('Invalid candidate manifest');
   const records=new Map();
   for (const row of manifest.prices||[]) records.set(row.listing_id,{...row});
   for (const row of manifest.images||[]) records.set(row.listing_id,{...(records.get(row.listing_id)||{}),...row});
@@ -80,18 +84,18 @@ async function main() {
   const o=args(process.argv.slice(2)); exactConfirm(o);
   if(String(process.env.SUPABASE_URL||'').replace(/\/$/,'')!=='https://qnsafosakvonzgfcsphh.supabase.co') throw new Error('Refusing non-QNSA target');
   const client=getClient();
-  if(o.mode==='rollback') { const result=await rpc(client,'rollback_qnsa_rolex_null_only_completion',{p_run_key:o['run-key']}); process.stdout.write(`${JSON.stringify(result)}\n`); return; }
+  if(o.mode==='rollback') { const result=await rpc(client,`rollback_qnsa_${BRAND_SLUG}_null_only_completion`,{p_run_key:o['run-key']}); process.stdout.write(`${JSON.stringify(result)}\n`); return; }
   const file=path.resolve(o.manifest||'candidate-manifest.json'); const bytes=fs.readFileSync(file);
   const digest=sha256(bytes); if(digest!==o['manifest-sha256']) throw new Error('Candidate manifest checksum mismatch');
   const all=mergeManifest(JSON.parse(bytes));
   const eligible=await stillMissing(all,o.mode==='canary'?20:Number.POSITIVE_INFINITY);
   const chosen=(o.mode==='canary'?canary(eligible):eligible).map(proposal);
   if(!chosen.length) throw new Error('No deterministic null-only candidates');
-  await rpc(client,'begin_qnsa_rolex_null_only_completion',{p_run_key:o['run-key'],p_mode:o.mode.toUpperCase(),p_manifest_sha256:digest,p_expected_count:chosen.length});
-  for(let offset=0;offset<chosen.length;offset+=500) await rpc(client,'stage_qnsa_rolex_null_only_completion',{p_run_key:o['run-key'],p_records:chosen.slice(offset,offset+500)});
-  await rpc(client,'finalize_qnsa_rolex_null_only_completion',{p_run_key:o['run-key']});
-  const result=await rpc(client,'activate_qnsa_rolex_null_only_completion',{p_run_key:o['run-key']});
-  process.stdout.write(`${JSON.stringify({event:'rolex_null_only_completion',mode:o.mode,manifest_sha256:digest,
+  await rpc(client,`begin_qnsa_${BRAND_SLUG}_null_only_completion`,{p_run_key:o['run-key'],p_mode:o.mode.toUpperCase(),p_manifest_sha256:digest,p_expected_count:chosen.length});
+  for(let offset=0;offset<chosen.length;offset+=500) await rpc(client,`stage_qnsa_${BRAND_SLUG}_null_only_completion`,{p_run_key:o['run-key'],p_records:chosen.slice(offset,offset+500)});
+  await rpc(client,`finalize_qnsa_${BRAND_SLUG}_null_only_completion`,{p_run_key:o['run-key']});
+  const result=await rpc(client,`activate_qnsa_${BRAND_SLUG}_null_only_completion`,{p_run_key:o['run-key']});
+  process.stdout.write(`${JSON.stringify({event:`${BRAND_SLUG}_null_only_completion`,mode:o.mode,manifest_sha256:digest,
     selected:chosen.length,prices:chosen.filter(r=>r.proposed_price_usd).length,images:chosen.filter(r=>r.proposed_image_url).length,
     result,raw_text_logged:false,contact_values_logged:false})}\n`);
 }
