@@ -381,7 +381,9 @@ module.exports = async function handler(req, res) {
     }
     if (isReviewedWorkbookBrowseBrand(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
-      if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      if (!rows.length && brand.toLowerCase() !== 'tag heuer') {
+        return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      }
       if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe reference browsing' });
       let out = summarizeReviewedWorkbookReferences(rows, model, false);
       if (brand.toLowerCase() === 'tag heuer') {
