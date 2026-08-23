@@ -93,6 +93,8 @@ test('new admission brands use observed workbook evidence for browse counts', ()
     assert.match(source, /observed_listing_count/);
     assert.match(source, /OWNER_REVIEWED_WORKBOOK/);
   }
+  assert.match(modelsApi, /CATALOG_PLUS_POSITIVE_OWNER_REVIEWED_WORKBOOK/);
+  assert.match(referencesApi, /listCanonicalCatalogReferences\('TAG Heuer', model\)/);
   assert.match(referencesApi, /eligible_observation_count/);
   assert.match(referencesApi, /EXACT_REFERENCE_ON_SELECTION/);
 });
