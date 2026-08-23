@@ -3125,7 +3125,7 @@ module.exports = async function handler(req, res) {
       totalStatus: combinedInventoryTotal === null ? 'withheld_for_unsupported_filter' : 'available_from_market_feed_plus_reviewed_overlay_counts',
       hasMore,
       nextCursor,
-      records: publicBaseRecords,
+      records: combinedPageRecords,
       reviewedOverlayRecords,
       reviewedOverlay: {
         source: 'reviewed_workbook_inventory',

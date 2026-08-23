@@ -24,4 +24,5 @@ test('canonical QNSA Rolex and Patek requests bypass the sparse admission-only b
   assert.match(admissionBranch, /isRolexPatekOverlayBrand\(brand\)/);
   assert.match(admissionBranch, /reviewed_workbook_inventory/);
   assert.match(source.slice(admissionEnd), /reviewedOverlayBrands/);
+  assert.match(source.slice(admissionEnd), /records: combinedPageRecords/);
 });
