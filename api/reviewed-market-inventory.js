@@ -15,6 +15,7 @@ const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
   isFourBrand,
   isMissingEffectiveRpcError,
+  isTransientEffectiveRpcTimeout,
   loadEffectiveCount,
   loadEffectiveEnrichments,
 } = require('./_lib/four-brand-field-enrichment.cjs');
@@ -2448,11 +2449,13 @@ module.exports = async function handler(req, res) {
         if (!response.ok) {
           const body = await response.text();
           const rpcError = { status: response.status, message: body };
-          if (isMissingEffectiveRpcError(rpcError)) {
+          if (isMissingEffectiveRpcError(rpcError) || isTransientEffectiveRpcTimeout(rpcError)) {
             // Zero-outage schema-first compatibility. Until the migration is
-            // installed, preserve the pre-existing release route and do not
-            // claim that missing-field enrichment was applied.
-            console.warn('[reviewed-market-inventory] four-brand effective RPC unavailable; preserving base release path');
+            // installed, or while the aggregate page RPC exceeds its hosted
+            // statement budget, preserve the bounded base release route. The
+            // returned page is still passed through per-row effective
+            // enrichment below; unrelated RPC failures remain fail-closed.
+            console.warn('[reviewed-market-inventory] four-brand effective RPC unavailable or timed out; preserving bounded base release path');
           } else {
             throw new Error(`QNSA four-brand effective page failed: ${response.status} ${body.slice(0, 200)}`);
           }
