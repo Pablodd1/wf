@@ -19,3 +19,7 @@ test('verified WTB identity loading also uses the proven legacy watch_records pr
   assert.doesNotMatch(demandProjection, /(?:^|,)listing_date(?:,|$)/);
   assert.doesNotMatch(demandProjection, /(?:^|,)listing_status(?:,|$)/);
 });
+
+test('exact catalog references keep a valid empty verified cohort instead of querying the obsolete raw table', () => {
+  assert.match(source, /!configuredSourceTable && !exactKnownReference[\s\S]*result\.error \|\| !\(result\.data \|\| \[\]\)\.length/);
+});

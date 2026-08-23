@@ -1273,7 +1273,12 @@ module.exports = async function handler(req, res) {
       });
     } else {
       let result = await buildRowsQuery(sourceTable);
-      if (!configuredSourceTable && (result.error || !(result.data || []).length)) {
+      // An exact catalog reference with no verified-source rows is a valid
+      // zero-observation cohort. Do not reinterpret that empty result as a
+      // reason to query the obsolete raw watch_records schema. The legacy
+      // fallback remains available only while resolving a non-catalog identity.
+      if (!configuredSourceTable && !exactKnownReference
+        && (result.error || !(result.data || []).length)) {
         sourceTable = 'watch_records';
         result = await buildRowsQuery(sourceTable);
       }
