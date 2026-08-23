@@ -1,7 +1,7 @@
 WITH rows AS MATERIALIZED (
   SELECT w.*
   FROM public.reviewed_workbook_inventory w
-  WHERE w.brand_scope='Rolex'
+  WHERE w.brand_scope='__BRAND__'
     AND w.verification_tier='QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1'
     AND w.verification_status='APPROVED_SINGLE_CANDIDATE'
     AND w.confidence=100
@@ -60,7 +60,7 @@ WITH rows AS MATERIALIZED (
   LEFT JOIN public.dealers d ON d.id=dealer.dealer_id
 )
 SELECT jsonb_build_object(
-  'contract','watchfacts-rolex-listing-completeness-overlay-v1',
+  'contract','__CONTRACT_PREFIX__-completeness-overlay-v1',
   'project_ref','qnsafosakvonzgfcsphh','read_only',true,
   'transaction_read_only',current_setting('transaction_read_only'),
   'rows',COALESCE(jsonb_agg(to_jsonb(s) ORDER BY s.listing_id),'[]'::jsonb)

@@ -12,7 +12,11 @@ const { fetchFxSnapshot } = require('../mariadb-live/fetch-fx-snapshot.cjs');
 const { sourceAuctionId, exactImageUrl } = require('./audit-four-brand-source-completeness.cjs');
 
 const PROJECT_REF = 'qnsafosakvonzgfcsphh';
-const OUTPUT_DIR = path.resolve(process.env.AUDIT_OUTPUT_DIR || 'audit-output/rolex-missing-field-recoverability');
+const TARGET_BRAND = String(process.env.AUDIT_BRAND || 'Rolex').trim();
+const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe']);
+if (!ALLOWED_BRANDS.has(TARGET_BRAND)) throw new Error(`Unsupported audit brand: ${TARGET_BRAND}`);
+const BRAND_SLUG = TARGET_BRAND === 'Patek Philippe' ? 'patek' : 'rolex';
+const OUTPUT_DIR = path.resolve(process.env.AUDIT_OUTPUT_DIR || `audit-output/${BRAND_SLUG}-missing-field-recoverability`);
 const PAGE_SIZE = 250;
 const SHARDS = 16;
 const sha256 = value => crypto.createHash('sha256').update(String(value)).digest('hex');
@@ -54,14 +58,14 @@ function candidateSql(canonicalSql, shard, cursor = null) {
   const { low, high } = shardBounds(shard);
   return `WITH control AS MATERIALIZED (
     SELECT enabled_run_key FROM public.qnsa_two_brand_release_control
-    WHERE canonical_brand='Rolex' AND trading_floor_enabled
+    WHERE canonical_brand=${sqlString(TARGET_BRAND)} AND trading_floor_enabled
   ), page AS MATERIALIZED (
     SELECT l.id,l.source_record_id,l.source_hash,l.source_candidate_hash,l.raw_message_version_id,
       l.reference_normalized,v.raw_payload
     FROM staging.listings l JOIN control c ON c.enabled_run_key=l.normalization_run_key
     JOIN public.raw_message_versions v ON v.id=l.raw_message_version_id
       AND v.source_record_id=l.source_record_id AND v.source_hash=l.source_hash
-    WHERE l.brand_normalized='Rolex' AND upper(COALESCE(l.category,''))='WATCH'
+    WHERE l.brand_normalized=${sqlString(TARGET_BRAND)} AND upper(COALESCE(l.category,''))='WATCH'
       AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
       AND upper(COALESCE(l.listing_type,l.intent,''))='WTS'
       AND COALESCE(l.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
@@ -84,7 +88,10 @@ function exactPriceCandidate(row, fxSnapshot) {
   const source = row.raw_payload;
   if (!source || source.source_record_id !== row.source_record_id || source.raw_sha256 !== row.source_hash) return { reason: 'LINEAGE_MISMATCH' };
   const raw = String(source.raw_message || '');
-  if (!raw || /\b(?:patek(?:\s+philippe)?|audemars\s+piguet|omega|cartier|tudor|vacheron\s+constantin|richard\s+mille)\b/i.test(raw)) {
+  const crossBrand = TARGET_BRAND === 'Rolex'
+    ? /\b(?:patek(?:\s+philippe)?|audemars\s+piguet|omega|cartier|tudor|vacheron\s+constantin|richard\s+mille)\b/i
+    : /\b(?:rolex|audemars\s+piguet|omega|cartier|tudor|vacheron\s+constantin|richard\s+mille)\b/i;
+  if (!raw || crossBrand.test(raw)) {
     return { reason: 'EMPTY_OR_CROSS_BRAND_RAW' };
   }
   const reference = refKey(row.normalized_reference);
@@ -107,7 +114,7 @@ function exactPriceCandidate(row, fxSnapshot) {
   return { candidate: {
     listing_id: String(row.listing_id), source_record_id: row.source_record_id,
     source_hash: row.source_hash, source_candidate_hash: row.source_candidate_hash,
-    raw_message_version_id: row.raw_message_version_id, canonical_brand: 'Rolex',
+    raw_message_version_id: row.raw_message_version_id, canonical_brand: TARGET_BRAND,
     normalized_reference: row.normalized_reference, proposed_price_usd: Number(price.amount_usd),
     source_price_amount: Number(price.amount_original), source_currency: price.currency_original,
     currency_evidence: price.currency_evidence, conversion_rate: Number(price.conversion_rate),
@@ -143,11 +150,11 @@ async function imageCensus(canonicalSql) {
   for (let shard=0;shard<SHARDS;shard+=1) {
     const {low,high}=shardBounds(shard);
     const sql = `WITH control AS MATERIALIZED (SELECT enabled_run_key FROM public.qnsa_two_brand_release_control
-      WHERE canonical_brand='Rolex' AND trading_floor_enabled)
+      WHERE canonical_brand=${sqlString(TARGET_BRAND)} AND trading_floor_enabled)
     SELECT l.id::text listing_id,l.source_record_id,l.source_hash,l.source_candidate_hash,
       l.raw_message_version_id::text raw_message_version_id,l.reference_normalized
     FROM staging.listings l JOIN control c ON c.enabled_run_key=l.normalization_run_key
-    WHERE l.brand_normalized='Rolex' AND upper(COALESCE(l.category,''))='WATCH' AND l.parent_id IS NULL
+    WHERE l.brand_normalized=${sqlString(TARGET_BRAND)} AND upper(COALESCE(l.category,''))='WATCH' AND l.parent_id IS NULL
       AND COALESCE(l.is_bundle,false)=false AND COALESCE(l.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
       AND regexp_replace(upper(btrim(l.reference_normalized)),'[^A-Z0-9]','','g') IN (${canonicalSql})
       AND NULLIF(btrim(COALESCE(l.image_url,l.source_media_url_candidate,'')),'') IS NULL
@@ -183,9 +190,9 @@ async function linkageSummary(canonicalSql) {
   for(let shard=0;shard<SHARDS;shard+=1){
     const {low,high}=shardBounds(shard);
     const sql = `WITH control AS MATERIALIZED (SELECT enabled_run_key FROM public.qnsa_two_brand_release_control
-      WHERE canonical_brand='Rolex' AND trading_floor_enabled), eligible AS MATERIALIZED (
+      WHERE canonical_brand=${sqlString(TARGET_BRAND)} AND trading_floor_enabled), eligible AS MATERIALIZED (
       SELECT l.id FROM staging.listings l JOIN control c ON c.enabled_run_key=l.normalization_run_key
-      WHERE l.brand_normalized='Rolex' AND regexp_replace(upper(btrim(l.reference_normalized)),'[^A-Z0-9]','','g') IN (${canonicalSql})
+      WHERE l.brand_normalized=${sqlString(TARGET_BRAND)} AND regexp_replace(upper(btrim(l.reference_normalized)),'[^A-Z0-9]','','g') IN (${canonicalSql})
         AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false AND l.id>=${sqlString(low)}::uuid
         ${high?`AND l.id<${sqlString(high)}::uuid`:''})
     SELECT jsonb_build_object('total',count(*),'linked',count(link.dealer_id),
@@ -201,22 +208,22 @@ async function linkageSummary(canonicalSql) {
 }
 
 async function main() {
-  const canonical = [...new Set(listCanonicalCatalogReferences('Rolex').map(row => refKey(row.reference)).filter(Boolean))].sort();
+  const canonical = [...new Set(listCanonicalCatalogReferences(TARGET_BRAND).map(row => refKey(row.reference)).filter(Boolean))].sort();
   const canonicalSql = canonical.map(sqlString).join(',');
   if (process.argv.includes('--validate-only')) {
     assertReadOnlySql(candidateSql(canonicalSql, 0));
-    process.stdout.write('Validated Rolex missing-field recoverability read-only contract.\n'); return;
+    process.stdout.write(`Validated ${TARGET_BRAND} missing-field recoverability read-only contract.\n`); return;
   }
   if (!process.env.SUPABASE_ACCESS_TOKEN) throw new Error('SUPABASE_ACCESS_TOKEN unavailable');
   const fxSnapshot = await fetchFxSnapshot();
   const prices = await priceCensus(canonicalSql, fxSnapshot);
   const images = await imageCensus(canonicalSql);
   const dealer = await linkageSummary(canonicalSql);
-  const manifest = { contract: 'watchfacts-rolex-null-only-candidates-v1', project_ref: PROJECT_REF,
+  const manifest = { contract: `watchfacts-${BRAND_SLUG}-null-only-candidates-v1`, project_ref: PROJECT_REF,
     generated_at: new Date().toISOString(), fx_snapshot: fxSnapshot,
     prices: prices.candidates, images: images.candidates };
   const manifestText = JSON.stringify(manifest, null, 2) + '\n';
-  const summary = { contract: 'watchfacts-rolex-missing-field-recoverability-v1', project_ref: PROJECT_REF,
+  const summary = { contract: `watchfacts-${BRAND_SLUG}-missing-field-recoverability-v1`, project_ref: PROJECT_REF,
     read_only: true, generated_at: manifest.generated_at, canonical_references: canonical.length,
     missing_price_rows_scanned: prices.scanned, recoverable_price_rows: prices.candidates.length,
     unrecoverable_price_rows: prices.scanned - prices.candidates.length, price_skip_reasons: prices.skipped,

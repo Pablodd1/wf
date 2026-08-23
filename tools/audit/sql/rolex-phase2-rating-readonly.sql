@@ -1,11 +1,11 @@
 WITH control AS MATERIALIZED (
   SELECT enabled_run_key FROM public.qnsa_two_brand_release_control
-  WHERE canonical_brand='Rolex' AND trading_floor_enabled
+  WHERE canonical_brand='__BRAND__' AND trading_floor_enabled
 ), eligible AS MATERIALIZED (
   SELECT l.id,l.raw_message_version_id,l.source_record_id,l.source_hash,l.dealer_rating,l.rating
   FROM staging.listings l JOIN control c ON c.enabled_run_key=l.normalization_run_key
   JOIN staging.mariadb_normalization_import_checkpoints checkpoint ON checkpoint.run_key=l.normalization_run_key
-  WHERE l.brand_normalized='Rolex' AND checkpoint.status='NORMALIZATION_STAGED' AND checkpoint.error_rows=0
+  WHERE l.brand_normalized='__BRAND__' AND checkpoint.status='NORMALIZATION_STAGED' AND checkpoint.error_rows=0
     AND upper(COALESCE(l.category,''))='WATCH' AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
     AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
     AND COALESCE(l.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
@@ -18,7 +18,7 @@ WITH control AS MATERIALIZED (
     AND l.id>='__LOW__'::uuid __HIGH_CONDITION__
 )
 SELECT jsonb_build_object(
-  'contract','watchfacts-rolex-phase2-rating-v1','project_ref','qnsafosakvonzgfcsphh',
+  'contract','__CONTRACT_PREFIX__-rating-v1','project_ref','qnsafosakvonzgfcsphh',
   'read_only',true,'transaction_read_only',current_setting('transaction_read_only'),'shard',__SHARD__,
   'counts',jsonb_build_object(
     'eligible_listings_with_source_backed_rating',count(*) FILTER (WHERE COALESCE((COALESCE(e.dealer_rating,e.rating,
