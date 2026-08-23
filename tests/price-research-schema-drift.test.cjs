@@ -20,6 +20,6 @@ test('verified WTB identity loading also uses the proven legacy watch_records pr
   assert.doesNotMatch(demandProjection, /(?:^|,)listing_status(?:,|$)/);
 });
 
-test('exact catalog references keep a valid empty verified cohort instead of querying the obsolete raw table', () => {
-  assert.match(source, /!configuredSourceTable && !exactKnownReference[\s\S]*result\.error \|\| !\(result\.data \|\| \[\]\)\.length/);
+test('exact catalog and reviewed-workbook references never query the obsolete raw table for an empty WTS cohort', () => {
+  assert.match(source, /!configuredSourceTable && !exactKnownReference && !exactReviewedWorkbookRelease[\s\S]*result\.error \|\| !\(result\.data \|\| \[\]\)\.length/);
 });
