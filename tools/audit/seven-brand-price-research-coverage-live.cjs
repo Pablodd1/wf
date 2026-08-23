@@ -3,8 +3,8 @@
 
 // Read-only, resumable census of the customer-visible Price Research contract.
 // Catalog discovery uses the deployed browse APIs. Market coverage uses the
-// bounded batch-summary API (24 exact references per request) with one request
-// in flight, a pause between batches, and retries limited to failed batches.
+// bounded batch-summary API with one request in flight, adaptive subdivision,
+// durable failures, and resumable catalog checksums.
 
 const crypto = require('node:crypto');
 const fs = require('node:fs');
@@ -20,7 +20,7 @@ const DEFAULT_BRANDS = [
   'Zenith',
   'Omega',
 ];
-const BATCH_SIZE = 24;
+const BATCH_SIZE = 4;
 const FETCH_TIMEOUT_MS = Math.max(5_000, Number(process.env.SEVEN_BRAND_FETCH_TIMEOUT_MS || 60_000));
 const FETCH_ATTEMPTS = Math.max(1, Number(process.env.SEVEN_BRAND_FETCH_ATTEMPTS || 3));
 
@@ -105,6 +105,35 @@ async function loadBatch(baseUrl, batch) {
   });
 }
 
+function requireCompleteBatch(payload, batch) {
+  const returnedKeys = new Set((payload.summaries || [])
+    .map(summary => referenceKey(summary.brand, summary.reference)));
+  const missing = batch.filter(target => !returnedKeys.has(target.key));
+  if (missing.length) throw new Error(`SUMMARY_NOT_RETURNED: ${missing.map(target => target.key).join(',')}`);
+  return payload;
+}
+
+async function loadBatchAdaptive(batch, load, options = {}) {
+  const onSuccess = options.onSuccess || (() => {});
+  const onFailure = options.onFailure || (() => {});
+  const canAttempt = options.canAttempt || (() => true);
+  const onAttempt = options.onAttempt || (() => {});
+  if (!batch.length || !canAttempt()) return;
+  onAttempt(batch);
+  try {
+    const payload = await load(batch);
+    onSuccess(batch, payload);
+  } catch (error) {
+    if (batch.length > 1 && canAttempt()) {
+      const midpoint = Math.ceil(batch.length / 2);
+      await loadBatchAdaptive(batch.slice(0, midpoint), load, options);
+      await loadBatchAdaptive(batch.slice(midpoint), load, options);
+      return;
+    }
+    onFailure(batch, error);
+  }
+}
+
 function groupSummary(rows, keyName) {
   const groups = new Map();
   for (const row of rows) {
@@ -153,40 +182,94 @@ async function main() {
   const previous = fs.existsSync(checkpointPath)
     ? JSON.parse(fs.readFileSync(checkpointPath, 'utf8'))
     : { rows: [], failed_batches: [] };
-  const completed = new Map((previous.rows || []).map(row => [row.key, row]));
   const catalog = await discoverCatalog(baseUrl, brands);
-  const pending = catalog.references.filter(row => !completed.has(row.key));
+  const catalogChecksum = sha256(catalog.references
+    .map(row => `${row.key}|${row.model || ''}`)
+    .sort().join('\n'));
+  const currentKeys = new Set(catalog.references.map(row => row.key));
+  const previousCatalogChecksum = previous.catalog_references_sha256
+    || previous.checksums?.catalog_references_sha256
+    || null;
+  const catalogChanged = Boolean(previousCatalogChecksum && previousCatalogChecksum !== catalogChecksum);
+  const resumePrevious = !catalogChanged && previous.snapshot_complete !== true;
+  const censusRunId = resumePrevious && previous.census_run_id
+    ? previous.census_run_id
+    : crypto.randomUUID();
+  const censusStartedAt = resumePrevious && previous.census_started_at
+    ? previous.census_started_at
+    : new Date().toISOString();
+  const completed = new Map((resumePrevious ? previous.rows || [] : [])
+    .filter(row => currentKeys.has(row.key) && !row.error)
+    .map(row => [row.key, row]));
+  const previouslyFailedKeys = new Set((resumePrevious ? previous.failed_batches || [] : []).flatMap(batch => batch.keys || []));
+  const pending = catalog.references
+    .filter(row => !completed.has(row.key))
+    .sort((left, right) => Number(previouslyFailedKeys.has(right.key)) - Number(previouslyFailedKeys.has(left.key)));
   let processedBatches = 0;
-  const failedBatches = [];
+  const failureHistory = resumePrevious
+    ? (Array.isArray(previous.failure_history)
+      ? [...previous.failure_history]
+      : (previous.failed_batches || []).map(batch => ({ ...batch, carried_from_previous_checkpoint: true })))
+    : [];
+  const unresolvedFailures = new Map((resumePrevious ? previous.failed_batches || [] : [])
+    .flatMap(batch => (batch.keys || []).map(key => [key, { ...batch, keys: [key] }]))
+    .filter(([key]) => currentKeys.has(key) && !completed.has(key)));
 
-  for (let offset = 0; offset < pending.length && processedBatches < maxBatches; offset += BATCH_SIZE) {
-    const batch = pending.slice(offset, offset + BATCH_SIZE);
-    try {
-      const payload = await loadBatch(baseUrl, batch);
-      const byKey = new Map((payload.summaries || []).map(summary => [referenceKey(summary.brand, summary.reference), summary]));
-      for (const target of batch) {
-        const summary = byKey.get(target.key);
-        completed.set(target.key, summary
-          ? { ...target, ...summary, key: target.key }
-          : { ...target, error: 'SUMMARY_NOT_RETURNED' });
-      }
-    } catch (error) {
-      failedBatches.push({ keys: batch.map(row => row.key), error: error.message });
-    }
-    processedBatches += 1;
+  const saveCheckpoint = () => {
     const rows = catalog.references.map(target => completed.get(target.key)).filter(Boolean);
     atomicJson(checkpointPath, {
       generated_at: new Date().toISOString(),
       read_only: true,
       base_url: baseUrl,
       brands,
+      census_run_id: censusRunId,
+      census_started_at: censusStartedAt,
       catalog_reference_count: catalog.references.length,
+      catalog_references_sha256: catalogChecksum,
+      previous_catalog_references_sha256: previousCatalogChecksum,
+      catalog_changed_since_checkpoint: catalogChanged,
       processed_batches_this_run: processedBatches,
       completed_reference_count: rows.length,
-      failed_batches: failedBatches,
+      unattempted_reference_count: catalog.references.length - rows.length - unresolvedFailures.size,
+      failed_batches: [...unresolvedFailures.values()],
+      failure_history: failureHistory,
       rows,
     });
-    process.stdout.write(`${JSON.stringify({ event: 'seven_brand_batch', processedBatches, completed: rows.length, total: catalog.references.length, failed: failedBatches.length })}\n`);
+    return rows;
+  };
+
+  for (let offset = 0; offset < pending.length && processedBatches < maxBatches; offset += BATCH_SIZE) {
+    const batch = pending.slice(offset, offset + BATCH_SIZE);
+    await loadBatchAdaptive(batch, async current => {
+      const payload = await loadBatch(baseUrl, current);
+      return requireCompleteBatch(payload, current);
+    }, {
+      canAttempt: () => processedBatches < maxBatches,
+      onAttempt: () => { processedBatches += 1; },
+      onSuccess: (targets, payload) => {
+        const byKey = new Map((payload.summaries || []).map(summary => [referenceKey(summary.brand, summary.reference), summary]));
+        for (const target of targets) {
+          const summary = byKey.get(target.key);
+          if (summary) {
+            completed.set(target.key, { ...target, ...summary, key: target.key, observed_at: new Date().toISOString() });
+            unresolvedFailures.delete(target.key);
+          } else {
+            const failure = { keys: [target.key], error: 'SUMMARY_NOT_RETURNED', at: new Date().toISOString() };
+            unresolvedFailures.set(target.key, failure);
+            failureHistory.push(failure);
+          }
+        }
+      },
+      onFailure: (targets, error) => {
+        for (const target of targets) {
+          const failure = { keys: [target.key], error: error.message, at: new Date().toISOString() };
+          unresolvedFailures.set(target.key, failure);
+          failureHistory.push(failure);
+        }
+      },
+    });
+    const rows = saveCheckpoint();
+    process.stdout.write(`${JSON.stringify({ event: 'seven_brand_batch', processedBatches, completed: rows.length, total: catalog.references.length, failed: unresolvedFailures.size })}\n`);
     if (offset + BATCH_SIZE < pending.length) await sleep(pauseMs);
   }
 
@@ -198,16 +281,25 @@ async function main() {
     customer_api_writes: 0,
     base_url: baseUrl,
     brands,
+    census_run_id: censusRunId,
+    census_started_at: censusStartedAt,
     catalog_reference_count: catalog.references.length,
     completed_reference_count: rows.length,
     incomplete_reference_count: catalog.references.length - rows.length,
+    unattempted_reference_count: catalog.references.length - rows.length - unresolvedFailures.size,
+    coverage_accounting_reconciles: rows.length + unresolvedFailures.size
+      + (catalog.references.length - rows.length - unresolvedFailures.size) === catalog.references.length,
+    snapshot_complete: rows.length === catalog.references.length && unresolvedFailures.size === 0,
+    snapshot_observed_at_min: rows.map(row => row.observed_at).filter(Boolean).sort()[0] || null,
+    snapshot_observed_at_max: rows.map(row => row.observed_at).filter(Boolean).sort().at(-1) || null,
     catalog_identity_conflicts: catalog.conflicts,
     advertised_catalog: catalog.brandSummaries,
     brand_summary: groupSummary(rows, 'brand'),
     model_summary: groupSummary(rows, 'model'),
-    failed_batches: failedBatches,
+    failed_batches: [...unresolvedFailures.values()],
+    failure_history: failureHistory,
     checksums: {
-      catalog_references_sha256: sha256(catalog.references.map(row => row.key).sort().join('\n')),
+      catalog_references_sha256: catalogChecksum,
       completed_rows_sha256: sha256(rows.map(row => `${row.key}|${row.source_observation_count || 0}|${row.reference_qualified_wts_count || 0}`).sort().join('\n')),
     },
     count_semantics: {
@@ -220,7 +312,7 @@ async function main() {
   };
   atomicJson(checkpointPath, report);
   atomicJson(reportPath, report);
-  process.stdout.write(`${JSON.stringify({ event: 'seven_brand_coverage_complete', report: reportPath, references: rows.length, incomplete: report.incomplete_reference_count, failed_batches: failedBatches.length })}\n`);
+  process.stdout.write(`${JSON.stringify({ event: report.snapshot_complete ? 'seven_brand_coverage_complete' : 'seven_brand_coverage_incomplete', report: reportPath, references: rows.length, incomplete: report.incomplete_reference_count, failed_batches: report.failed_batches.length })}\n`);
 }
 
 if (require.main === module) main().catch(error => {
@@ -228,4 +320,4 @@ if (require.main === module) main().catch(error => {
   process.exitCode = 1;
 });
 
-module.exports = { BATCH_SIZE, DEFAULT_BRANDS, groupSummary, referenceKey };
+module.exports = { BATCH_SIZE, DEFAULT_BRANDS, groupSummary, loadBatchAdaptive, referenceKey, requireCompleteBatch };

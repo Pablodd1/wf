@@ -12,9 +12,9 @@ const card = trading.slice(trading.indexOf('function ListingCard'), trading.inde
 const detail = trading.slice(trading.indexOf('function ListingDetails'), trading.indexOf('function ContactMetric'));
 
 test('Trading Floor omits unavailable location and posting date instead of rendering placeholders', () => {
-  assert.match(card, /meta\.region && <RegionLabel region=\{meta\.region\}/);
-  assert.match(card, /meta\.postedDate && <div[^>]*>Posted: \{meta\.postedDate\}/);
-  assert.match(detail, /meta\.postedDate && <div[^>]*>[\s\S]*Posted on[\s\S]*meta\.postedDate/);
+  assert.match(card, /meta\.region && <span[\s\S]*\{meta\.region\}[\s\S]*<\/span>/);
+  assert.match(card, /meta\.postedDate && \([\s\S]*Posted \{meta\.postedDate\}/);
+  assert.match(detail, /meta\.postedDate && \([\s\S]*Posted on[\s\S]*meta\.postedDate/);
   assert.match(trading, /if \(!dateStr\) return null/);
   assert.match(trading, /if \(!value\) return null/);
   assert.doesNotMatch(trading, /Location not provided/);

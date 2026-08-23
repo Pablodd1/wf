@@ -53,6 +53,7 @@ const FOREIGN_BRAND_NAMES = [
 ];
 
 const { normalizeCanonicalModel } = require('./_lib/catalog-taxonomy');
+const { buildReleaseBrowseIndex } = require('./_lib/release-catalog-browse.cjs');
 
 function reviewedWorkbookModel(row, brand) {
   const catalog = lookupCatalog(row.reference, brand);
@@ -148,27 +149,17 @@ module.exports = async function handler(req, res) {
         : canonicalBrand === 'Tudor' ? 'qnsa_tudor_reference_index' : 'qnsa_omega_reference_index';
       const { data: observedRows, error: observedError } = await client.rpc(releaseIndexRpc);
       if (observedError) throw observedError;
-      const grouped = new Map();
-      for (const row of observedRows || []) {
-        const model = String(row.model || canonicalBrand).trim() || canonicalBrand;
-        const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
-        if (row.reference) current.references.add(String(row.reference));
-        current.listing_count += Number(row.listing_count || 0);
-        grouped.set(model, current);
-      }
-      const models = [...grouped.entries()].map(([model, value]) => ({
-        model,
-        reference_count: value.references.size,
-        listing_count: value.listing_count,
-      })).sort((a, b) => b.listing_count - a.listing_count || a.model.localeCompare(b.model));
+      const browse = buildReleaseBrowseIndex(canonicalBrand, observedRows || []);
+      const models = browse.models;
       const payload = {
         success: true,
         brand: canonicalBrand,
         model_count: models.length,
-        catalog_reference_count: models.reduce((sum, item) => sum + item.reference_count, 0),
+        catalog_reference_count: browse.references.length,
         models,
         identity_source: 'EXACT_RELEASE_MANIFEST',
         evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+        suppressed_model_conflict_count: browse.modelConflicts.length,
       };
       _cache.set(brand, { at: Date.now(), payload });
       return res.status(200).json(payload);

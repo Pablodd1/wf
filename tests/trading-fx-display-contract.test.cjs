@@ -32,7 +32,7 @@ test('Trading Floor publishes exact source HKD without converting it to USD', ()
   assert.match(trading, /function formatSourcePrice/);
   assert.match(trading, /listing\.source_currency[\s\S]*listing\.currency/);
   assert.match(trading, /listing\.source_price_text/);
-  assert.match(trading, /Original source price · no USD conversion/);
+  assert.match(trading, /sourcePrice \? 'Source price'/);
   assert.match(trading, /listing\.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED'/);
   assert.doesNotMatch(trading, /USD conversion unavailable/);
   assert.doesNotMatch(trading, /Exact source currency is being verified/);

@@ -26,6 +26,7 @@ const {
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
+const { buildReleaseBrowseIndex } = require('./_lib/release-catalog-browse.cjs');
 
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
@@ -359,22 +360,23 @@ module.exports = async function handler(req, res) {
         : canonicalBrand === 'Tudor' ? 'qnsa_tudor_reference_index' : 'qnsa_omega_reference_index';
       const { data: observedRows, error: observedError } = await client.rpc(releaseIndexRpc);
       if (observedError) throw observedError;
-      const scopedObserved = (observedRows || []).filter(row =>
-        String(row.model || '').trim().toLowerCase() === model.toLowerCase());
-      const merged = mergeVacheronReleaseReferences(
-        listCanonicalCatalogReferences(canonicalBrand, model), scopedObserved);
+      const browse = buildReleaseBrowseIndex(canonicalBrand, observedRows || []);
+      const references = browse.references.filter(row => row.model.toLowerCase() === model.toLowerCase());
+      const canonicalModel = references[0]?.model || model;
+      const unresolved = browse.unresolvedByModel[canonicalModel] || { listing_count: 0, priced_wts_count: 0 };
       const payload = {
         success: true,
         brand: canonicalBrand,
         model,
-        reference_count: merged.references.length,
-        observed_listing_count: merged.references.reduce((sum, item) => sum + Number(item.listing_count || 0), 0),
-        unresolved_reference_listing_count: merged.unresolvedReferenceListingCount,
-        unresolved_reference_priced_wts_count: merged.unresolvedReferencePricedWtsCount,
-        references: merged.references,
+        reference_count: references.length,
+        observed_listing_count: references.reduce((sum, item) => sum + Number(item.listing_count || 0), 0),
+        unresolved_reference_listing_count: unresolved.listing_count,
+        unresolved_reference_priced_wts_count: unresolved.priced_wts_count,
+        references,
         identity_source: 'CATALOG_PLUS_EXACT_RELEASE_MANIFEST',
         evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
         sample_capped: false,
+        suppressed_model_conflict_count: browse.modelConflicts.length,
       };
       _cache.set(cacheKey, { at: Date.now(), payload });
       return res.status(200).json(payload);

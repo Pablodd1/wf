@@ -12,7 +12,8 @@ test('Trading Floor cards use concise price and dealer rating labels globally', 
   const floor = read('src/pages/TradingFloor.tsx');
   const dealerEvidence = read('src/components/ListingDealerEvidence.tsx');
 
-  assert.match(floor, /displayedCardPriceRating\.rating\.label/);
+  assert.match(floor, /priceRating\.label/);
+  assert.match(floor, /loadPriceResearchBatchSummaries\(batch, controller\.signal\)/);
   assert.match(dealerEvidence, />Dealer rating not available<\/span>/);
   for (const source of [floor, dealerEvidence]) {
     assert.doesNotMatch(source, /Owner-assumed USD - tracked, excluded from averages unless independently qualified/);
@@ -32,7 +33,7 @@ test('exact dealer profiles connect Trading Floor and Price Research to Referenc
   const floor = read('src/pages/TradingFloor.tsx');
   const research = read('src/pages/PriceResearch.tsx');
 
-  assert.match(floor, /dealerRating \|\| listing\.dealer_profile_path/);
+  assert.match(floor, /listing\.dealer_profile_path \? \(/);
   assert.match(research, /row\.dealer_profile_path &&/);
   assert.match(research, /Check this dealer in Reference Check/);
   assert.doesNotMatch(research, /No exact directory match/);

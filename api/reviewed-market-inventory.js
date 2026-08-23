@@ -422,17 +422,80 @@ function locationSearchPattern(value) {
 }
 
 function locationMatches(value, query) {
-  const normalizedValue = cleanExactText(value, 100)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const normalizedQuery = cleanExactText(query, 100)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return Boolean(normalizedQuery) && normalizedValue.includes(normalizedQuery);
+  return postingCountryName(value) !== null
+    && postingCountryName(value) === postingCountryName(query);
+}
+
+function deduplicateRecordsById(records) {
+  const seen = new Set();
+  let duplicateCount = 0;
+  const uniqueRecords = (records || []).filter(record => {
+    const id = String(record?.id);
+    if (seen.has(id)) {
+      duplicateCount += 1;
+      return false;
+    }
+    seen.add(id);
+    return true;
+  });
+  return { records: uniqueRecords, duplicateCount };
+}
+
+const POSTING_COUNTRY_NAMES = (() => {
+  const countries = {};
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    for (let first = 65; first <= 90; first += 1) {
+      for (let second = 65; second <= 90; second += 1) {
+        const code = String.fromCharCode(first, second);
+        if (['EU', 'EZ', 'UN', 'XA', 'XB'].includes(code)) continue;
+        const name = displayNames.of(code);
+        if (name && name !== code && !/^Unknown Region/i.test(name)) {
+          countries[code] = name;
+          countries[name.toUpperCase()] = name;
+        }
+      }
+    }
+  } catch {}
+  return Object.freeze({
+    ...countries,
+    US: 'United States', USA: 'United States', 'UNITED STATES': 'United States',
+    GB: 'United Kingdom', GBR: 'United Kingdom', UK: 'United Kingdom', 'UNITED KINGDOM': 'United Kingdom',
+    HK: 'Hong Kong', HKG: 'Hong Kong', 'HONG KONG': 'Hong Kong',
+    AE: 'United Arab Emirates', ARE: 'United Arab Emirates', UAE: 'United Arab Emirates', 'UNITED ARAB EMIRATES': 'United Arab Emirates',
+  });
+})();
+
+const CURRENT_ISO_ALPHA2_CODES = new Set((
+  'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ ' +
+  'CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR ' +
+  'GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP ' +
+  'KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT ' +
+  'MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW ' +
+  'SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG ' +
+  'UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'
+).split(' '));
+
+function postingCountryName(value) {
+  const raw = cleanExactText(value, 100);
+  if (!raw) return null;
+  const candidate = raw.split(',').at(-1).trim().toUpperCase();
+  return POSTING_COUNTRY_NAMES[candidate] || null;
+}
+
+function databasePostingCountryToken(country) {
+  const canonical = postingCountryName(country);
+  const tokens = {
+    'United States': ', US',
+    'United Kingdom': ', UK',
+    'Hong Kong': 'Hong Kong',
+    'United Arab Emirates': 'UAE',
+  };
+  if (!canonical) return null;
+  if (tokens[canonical]) return tokens[canonical];
+  const alpha2 = Object.entries(POSTING_COUNTRY_NAMES)
+    .find(([key, name]) => CURRENT_ISO_ALPHA2_CODES.has(key) && name === canonical)?.[0];
+  return alpha2 ? `, ${alpha2}` : null;
 }
 
 const DATE_WINDOWS = Object.freeze({
@@ -579,7 +642,7 @@ function hasUsableSourcePrice(record) {
 function hasExactSourceImage(record) {
   if (record?.multi_listing === true || record?.is_unbundled_child === true) return false;
   const evidence = cleanExactText(record?.image_evidence_type, 40).toUpperCase();
-  const sourceBacked = ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(evidence)
+  const sourceBacked = ['SELLER_LISTING_IMAGE', 'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(evidence)
     || record?.has_exact_source_image === true;
   const urls = [record?.thumbnail_url, ...(Array.isArray(record?.image_urls) ? record.image_urls : [])];
   return sourceBacked && urls.some(value => exactHttpUrl(value));
@@ -1070,11 +1133,11 @@ function mapReviewedRecord(row) {
   );
   // Inspect all candidate image URL fields from source/view data
   const candidateImageUrl = row.user_image_url
-    || row.final_image_url
-    || row.display_image_url
-    || row.image_url
-    || row.thumbnail_url
-    || (Array.isArray(row.image_urls) ? row.image_urls.find(u => Boolean(u && /^https?:\/\/[^\s]+$/i.test(String(u).trim()))) : null)
+    || (row.has_exact_source_image === true ? (
+      row.image_url
+      || row.thumbnail_url
+      || (Array.isArray(row.image_urls) ? row.image_urls.find(u => Boolean(u && /^https?:\/\/[^\s]+$/i.test(String(u).trim()))) : null)
+    ) : null)
     || null;
   const hasExactSourceImage = Boolean(candidateImageUrl)
     && String(candidateImageUrl).trim().length > 0
@@ -1153,7 +1216,7 @@ function mapReviewedRecord(row) {
   const exactReviewedMultiParent = isExactRolexPatekMultiParent(row);
   const isUnbundledChild = evidenceValuePresent(row.parent_id)
     || evidenceValuePresent(row.parent_source_message_id);
-  const publicImageUrl = multiListing ? null : exactImageUrl;
+  const publicImageUrl = multiListing || isUnbundledChild ? null : exactImageUrl;
   const tradingIntent = resolveTradingIntent({
     rawMessage: row.raw_message,
     structuredIntent: row.listing_type,
@@ -1841,7 +1904,12 @@ module.exports = async function handler(req, res) {
     const requestedItem = cleanExactText(req.query?.item, 20).toLowerCase();
     const itemCategories = { all: 'ALL', watches: 'WATCH', handbags: 'HANDBAG', jewelry: 'JEWELRY', accessories: 'ACCESSORY', other: 'OTHER' };
     const itemCategory = requestedItem ? itemCategories[requestedItem] : 'ALL';
-    const region = cleanExactText(req.query?.region, 100);
+    const requestedRegion = cleanExactText(req.query?.region, 100);
+    const region = postingCountryName(requestedRegion);
+    if (requestedRegion && !region) {
+      return res.status(400).json({ status: 'error', error: 'Location filters must be a recognized posting country' });
+    }
+    const databaseRegion = databasePostingCountryToken(region);
     const rating = cleanExactText(req.query?.rating, 12).toLowerCase();
     const dateWindow = cleanExactText(req.query?.date, 4).toUpperCase();
     const postedAfter = dateWindowStart(dateWindow);
@@ -1901,6 +1969,7 @@ module.exports = async function handler(req, res) {
     const activeMarketSourceView = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       && requestedBrand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(requestedBrand)
       && !isRolexPatekOverlayBrand(requestedBrand)
+      && !isFourBrand(requestedBrand)
       ? 'reviewed_workbook_market_source_v2'
       : MARKET_SOURCE_VIEW;
     // Summary and authenticated direct-post reads are independent of the
@@ -2002,7 +2071,7 @@ module.exports = async function handler(req, res) {
         imagesOnly,
         pricedOnly,
         postedAfter,
-        region: region || null,
+        region: databaseRegion || null,
         rating: rating || null,
       };
       publicInventoryTotal = null;
@@ -2040,6 +2109,7 @@ module.exports = async function handler(req, res) {
     }
 
     if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)
+      && !fourBrandEffectiveScope
       && !(activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
         && isRolexPatekOverlayBrand(brand))) {
       const admissionSearch = safeSearchTerm(search);
@@ -2054,9 +2124,16 @@ module.exports = async function handler(req, res) {
         .from('reviewed_workbook_inventory')
         .select(admissionColumns, { count: 'exact' })
         .eq('brand_scope', brand)
-        .not('verification_status', 'in', '("REJECTED","HIDDEN","DELETED","ARCHIVED")')
-        .in('listing_type', ['WTS', 'WTB', 'MULTI']);
-      if (listingType) admissionQuery = admissionQuery.eq('listing_type', listingType);
+        .in('verification_status', [
+          'APPROVED_SINGLE_CANDIDATE',
+          MULTI_PARENT_VERIFICATION_STATUS,
+        ])
+        .eq('confidence', 100);
+      if (databaseListingType) {
+        admissionQuery = admissionQuery.eq('listing_type', databaseListingType);
+      } else {
+        admissionQuery = admissionQuery.or('listing_type.in.(WTS,WTB,MULTI,OTHER,UNKNOWN),listing_type.is.null');
+      }
       if (requestedReference) {
         admissionQuery = admissionQuery.in('normalized_reference', listEquivalentReferences(requestedReference, brand));
       }
@@ -2364,7 +2441,7 @@ module.exports = async function handler(req, res) {
             p_images_only: imagesOnly,
             p_priced_only: pricedOnly,
             p_posted_after: postedAfter,
-            p_region: region || null,
+            p_region: databaseRegion || null,
             p_rating: rating || null,
           }),
         });
@@ -2504,7 +2581,7 @@ module.exports = async function handler(req, res) {
               p_offset: requestedOffset,
               p_listing_type: databaseListingType,
               p_images_only: imagesOnly,
-              p_location: region || null,
+              p_location: databaseRegion || null,
               p_posted_after: postedAfter,
             }),
       });
@@ -2520,7 +2597,7 @@ module.exports = async function handler(req, res) {
             p_offset: requestedOffset,
             p_listing_type: databaseListingType,
             p_images_only: imagesOnly,
-            p_location: region || null,
+            p_location: databaseRegion || null,
             p_posted_after: postedAfter,
           }),
         });
@@ -3097,7 +3174,9 @@ module.exports = async function handler(req, res) {
     const publicationBrands = publicationBrandsFromSummary(summary);
     const publicBaseRecords = (reviewedOverlayLaneActive ? [] : records)
       .map(applyConfirmedFiveWatchPublication);
-    const combinedPageRecords = [...publicBaseRecords, ...reviewedOverlayRecords];
+    const deduplicatedPage = deduplicateRecordsById([...publicBaseRecords, ...reviewedOverlayRecords]);
+    const combinedPageRecords = deduplicatedPage.records;
+    const combinedPageDuplicateCount = deduplicatedPage.duplicateCount;
     // Serialize the cohort-wide count after the bounded page has been fetched,
     // mapped and filtered. Running both cold scans in parallel caused avoidable
     // database contention; count metadata remains advisory and fail-open.
@@ -3112,7 +3191,7 @@ module.exports = async function handler(req, res) {
     const combinedInventoryTotal = combineInventoryTotal(
       publicInventoryTotal,
       reviewedOverlayTotal,
-      reviewedOverlayCountHasUnsupportedFilter || reviewedOverlayDuplicateCount > 0,
+      reviewedOverlayCountHasUnsupportedFilter || reviewedOverlayDuplicateCount > 0 || combinedPageDuplicateCount > 0,
     );
 
     return res.status(200).json({
@@ -3138,6 +3217,7 @@ module.exports = async function handler(req, res) {
         reviewed_single_total: reviewedOverlayCountHasUnsupportedFilter ? null : reviewedOverlaySingleTotal,
         structured_multi_parent_total: reviewedOverlayCountHasUnsupportedFilter ? null : reviewedOverlayMultiParentTotal,
         exact_lineage_duplicates_held: reviewedOverlayDuplicateCount,
+        exact_listing_id_duplicates_held: combinedPageDuplicateCount,
       },
       summary,
       publicationBrands,
@@ -3206,6 +3286,9 @@ module.exports.isAuditedFourBrandEffectiveSingle = isAuditedFourBrandEffectiveSi
 module.exports.safeSearchTerm = safeSearchTerm;
 module.exports.locationSearchPattern = locationSearchPattern;
 module.exports.locationMatches = locationMatches;
+module.exports.postingCountryName = postingCountryName;
+module.exports.databasePostingCountryToken = databasePostingCountryToken;
+module.exports.deduplicateRecordsById = deduplicateRecordsById;
 module.exports.dateWindowStart = dateWindowStart;
 module.exports.isSourceBackedRatedDealer = isSourceBackedRatedDealer;
 module.exports.ratingMatches = ratingMatches;
