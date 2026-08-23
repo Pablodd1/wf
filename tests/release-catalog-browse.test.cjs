@@ -62,3 +62,17 @@ test('unresolvable strict catalog prefixes never become selectable exact referen
     { reference: '22010', listing_count: 3, priced_wts_count: 2 },
   ]);
 });
+
+test('canonical-source entries that resolve only as partial are not browsable exact references', () => {
+  const result = buildReleaseBrowseIndex('Tudor', [
+    { model: '1926', reference: '91650', listing_count: 20, priced_wts_count: 9 },
+  ], [
+    { brand: 'Tudor', model: '1926', reference: '91650' },
+  ]);
+
+  assert.equal(result.references.some(row => row.reference === '91650'), false);
+  assert.equal(result.suppressedPartialReferenceCount, 1);
+  assert.deepEqual(result.suppressedPartialReferences, [
+    { reference: '91650', listing_count: 20, priced_wts_count: 9 },
+  ]);
+});

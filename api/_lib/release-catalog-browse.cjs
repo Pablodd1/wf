@@ -1,6 +1,6 @@
 'use strict';
 
-const { listCanonicalCatalogReferences } = require('./catalog');
+const { listCanonicalCatalogReferences, lookupCatalog } = require('./catalog');
 const { normalizeCanonicalModel } = require('./catalog-taxonomy');
 
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
@@ -14,11 +14,27 @@ function cleanModel(value, brand) {
     || REFERENCE_ONLY_MODEL;
 }
 
+function isStrictPartialCatalogLookup(lookup, candidateKey) {
+  if (!lookup?.found || lookup.matchType !== 'partial') return false;
+  const matchedKey = referenceKey(lookup.reference || lookup.matchedRef);
+  return Boolean(matchedKey && matchedKey !== candidateKey);
+}
+
 function buildReleaseBrowseIndex(brand, observedRows, catalogEntries = listCanonicalCatalogReferences(brand)) {
   const catalogByReference = new Map();
+  const suppressedPartialReferences = new Map();
   for (const entry of catalogEntries || []) {
     const key = referenceKey(entry.reference);
     if (!key || catalogByReference.has(key)) continue;
+    const catalogLookup = lookupCatalog(entry.reference, brand);
+    if (isStrictPartialCatalogLookup(catalogLookup, key)) {
+      suppressedPartialReferences.set(key, {
+        reference: String(entry.reference).trim(),
+        listing_count: 0,
+        priced_wts_count: 0,
+      });
+      continue;
+    }
     catalogByReference.set(key, {
       reference: String(entry.reference).trim(),
       model: cleanModel(entry.model, brand),
@@ -27,7 +43,6 @@ function buildReleaseBrowseIndex(brand, observedRows, catalogEntries = listCanon
   const catalogKeys = [...catalogByReference.keys()];
 
   const observedByReference = new Map();
-  const suppressedPartialReferences = new Map();
   const unresolvedByModel = new Map();
   let unresolvedReferenceListingCount = 0;
   let unresolvedReferencePricedWtsCount = 0;
@@ -45,8 +60,9 @@ function buildReleaseBrowseIndex(brand, observedRows, catalogEntries = listCanon
       unresolvedByModel.set(model, unresolved);
       continue;
     }
-    const strictCatalogPrefix = !catalogByReference.has(key)
-      && catalogKeys.some(catalogKey => catalogKey.startsWith(key));
+    const catalogLookup = lookupCatalog(row?.reference, brand);
+    const strictCatalogPrefix = isStrictPartialCatalogLookup(catalogLookup, key)
+      || (!catalogByReference.has(key) && catalogKeys.some(catalogKey => catalogKey.startsWith(key)));
     if (strictCatalogPrefix) {
       const current = suppressedPartialReferences.get(key) || {
         reference: String(row.reference).trim(),
