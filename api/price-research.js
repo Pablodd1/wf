@@ -792,7 +792,7 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     // some projects. Demand identity reviews supply the canonical model after
     // the bounded base-table read, so selecting model here is unnecessary and
     // turns an otherwise valid exact-reference request into HTTP 500.
-    const columns = 'id,brand,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at,listing_date,listing_status';
+    const columns = 'id,brand,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at';
     try {
       const verifiedDemand = await loadVerifiedDemandIdentityRows(client, {
         brand,
@@ -1207,7 +1207,9 @@ module.exports = async function handler(req, res) {
     // model authority. Some production projects have not applied the optional
     // model-column migration, so use only its proven physical contract and
     // decorate the response from the versioned catalog downstream.
-    const watchRecordColumns = columns.split(',').filter(column => column !== 'model').join(',');
+    const watchRecordColumns = columns.split(',')
+      .filter(column => !['model', 'listing_date', 'listing_status'].includes(column))
+      .join(',');
     // ponytail: admit all records for analytics. classifyResearchEligibility
     // applies per-row quality gates downstream (missing price/brand/dial,
     // catalog mismatch, reference-as-price). Pre-filtering on verdict/confidence
