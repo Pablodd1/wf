@@ -1173,7 +1173,6 @@ function mapReviewedRecord(row) {
   });
   const displayPriceUsd = publicVerifiedUsd ?? ownerAssumedUsd;
   const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
->>>>>>> origin/main
   const publicImageEvidenceType = publicImageUrl
     ? (String(row.image_evidence_type || '').toUpperCase() === 'SELLER_LISTING_IMAGE'
       ? 'SELLER_LISTING_IMAGE'
