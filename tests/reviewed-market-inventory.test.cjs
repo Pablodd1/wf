@@ -94,7 +94,7 @@ test('bounded Trading Floor page rank is evidence-first and never fabricates spa
 });
 
 test('admitted workbook brands are globally ordered in Postgres before cursor range', () => {
-  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand))");
+  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)");
   const branch = source.slice(branchStart, source.indexOf('if (admissionError) throw admissionError;', branchStart));
   assert.match(branch, /\.from\('reviewed_workbook_inventory'\)/);
   const imageOrder = branch.indexOf(".order('has_image', { ascending: false })");
@@ -137,7 +137,7 @@ test('reviewed-workbook multi parent requires its exact status and source-lineag
 });
 
 test('admission query keeps missing-intent singles for post-map resolution and orders parents last', () => {
-  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand))");
+  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)");
   const branch = source.slice(branchStart, source.indexOf('if (admissionError) throw admissionError;', branchStart));
   assert.match(branch, /'APPROVED_SINGLE_CANDIDATE',[\s\S]*MULTI_PARENT_VERIFICATION_STATUS/);
   assert.match(branch, /listing_type\.in\.\(WTS,WTB,MULTI,OTHER,UNKNOWN\),listing_type\.is\.null/);

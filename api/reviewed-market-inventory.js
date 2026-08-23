@@ -1900,6 +1900,7 @@ module.exports = async function handler(req, res) {
     // while making the approved cohort visible after import.
     const activeMarketSourceView = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       && requestedBrand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(requestedBrand)
+      && !isRolexPatekOverlayBrand(requestedBrand)
       ? 'reviewed_workbook_market_source_v2'
       : MARKET_SOURCE_VIEW;
     // Summary and authenticated direct-post reads are independent of the
@@ -2038,7 +2039,9 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)) {
+    if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)
+      && !(activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+        && isRolexPatekOverlayBrand(brand))) {
       const admissionSearch = safeSearchTerm(search);
       const admissionColumns = [
         'id,source_file,source_row_number,source_record_id,source_message_id,parent_source_message_id,posting_date,posted_by,phone_number',

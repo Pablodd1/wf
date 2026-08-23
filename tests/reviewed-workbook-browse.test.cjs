@@ -86,7 +86,7 @@ test('Trading Floor reads admitted brands from approved inventory instead of the
   assert.match(source, /REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set/);
   assert.match(source, /'Glashütte Original'/);
   assert.match(source, /'Ulysse Nardin'/);
-  assert.match(source, /if \(brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS\.has\(brand\)\)/);
+  assert.match(source, /if \(brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS\.has\(brand\)[\s\S]*qnsa_rolex_patek_trading_floor_source[\s\S]*isRolexPatekOverlayBrand\(brand\)/);
   assert.match(source, /\.from\('reviewed_workbook_inventory'\)/);
   assert.match(source, /\.in\('verification_status', \[[\s\S]*'APPROVED_SINGLE_CANDIDATE',[\s\S]*MULTI_PARENT_VERIFICATION_STATUS/);
   assert.match(source, /available_from_approved_admission_inventory/);
