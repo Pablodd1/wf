@@ -377,6 +377,7 @@ module.exports = async function handler(req, res) {
         evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
         sample_capped: false,
         suppressed_model_conflict_count: browse.modelConflicts.length,
+        suppressed_partial_reference_count: browse.suppressedPartialReferenceCount,
       };
       _cache.set(cacheKey, { at: Date.now(), payload });
       return res.status(200).json(payload);

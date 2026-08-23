@@ -1527,7 +1527,6 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
 
       const reference = listing.reference as string;
       const params = new URLSearchParams({ reference, brand: listing.brand });
-      if (listing.condition) params.set('condition', listing.condition);
       if (listing.dial_color) params.set('dial', listing.dial_color);
 
       fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })

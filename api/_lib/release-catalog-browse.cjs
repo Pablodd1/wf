@@ -24,8 +24,10 @@ function buildReleaseBrowseIndex(brand, observedRows, catalogEntries = listCanon
       model: cleanModel(entry.model, brand),
     });
   }
+  const catalogKeys = [...catalogByReference.keys()];
 
   const observedByReference = new Map();
+  const suppressedPartialReferences = new Map();
   const unresolvedByModel = new Map();
   let unresolvedReferenceListingCount = 0;
   let unresolvedReferencePricedWtsCount = 0;
@@ -41,6 +43,19 @@ function buildReleaseBrowseIndex(brand, observedRows, catalogEntries = listCanon
       unresolved.listing_count += listingCount;
       unresolved.priced_wts_count += pricedWtsCount;
       unresolvedByModel.set(model, unresolved);
+      continue;
+    }
+    const strictCatalogPrefix = !catalogByReference.has(key)
+      && catalogKeys.some(catalogKey => catalogKey.startsWith(key));
+    if (strictCatalogPrefix) {
+      const current = suppressedPartialReferences.get(key) || {
+        reference: String(row.reference).trim(),
+        listing_count: 0,
+        priced_wts_count: 0,
+      };
+      current.listing_count += Number(row.listing_count || 0);
+      current.priced_wts_count += Number(row.priced_wts_count || 0);
+      suppressedPartialReferences.set(key, current);
       continue;
     }
     const candidates = observedByReference.get(key) || [];
@@ -131,6 +146,9 @@ function buildReleaseBrowseIndex(brand, observedRows, catalogEntries = listCanon
     references: rows,
     models: [...modelMap.values()].sort((a, b) => b.listing_count - a.listing_count || a.model.localeCompare(b.model)),
     modelConflicts,
+    suppressedPartialReferences: [...suppressedPartialReferences.values()]
+      .sort((left, right) => left.reference.localeCompare(right.reference)),
+    suppressedPartialReferenceCount: suppressedPartialReferences.size,
     unresolvedByModel: Object.fromEntries(unresolvedByModel),
     unresolvedReferenceListingCount,
     unresolvedReferencePricedWtsCount,
