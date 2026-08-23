@@ -788,7 +788,11 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     // Select only physical watch_records columns. phone_number, posted_by,
     // image_url, and display_image_url are view aliases and make PostgREST
     // reject the entire base-table request when selected here.
-    const columns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at,listing_date,listing_status';
+    // Production watch_records predates the optional catalog-model column on
+    // some projects. Demand identity reviews supply the canonical model after
+    // the bounded base-table read, so selecting model here is unnecessary and
+    // turns an otherwise valid exact-reference request into HTTP 500.
+    const columns = 'id,brand,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at,listing_date,listing_status';
     try {
       const verifiedDemand = await loadVerifiedDemandIdentityRows(client, {
         brand,
@@ -1199,6 +1203,11 @@ module.exports = async function handler(req, res) {
     const pageSize = 1000;
     const sampleLimit = 10000;
     const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,seller_name,seller_phone,confidence,verdict,listing_status,thumbnail_url,image_urls,has_images';
+    // The legacy watch_records table is an evidence source, not the catalog
+    // model authority. Some production projects have not applied the optional
+    // model-column migration, so use only its proven physical contract and
+    // decorate the response from the versioned catalog downstream.
+    const watchRecordColumns = columns.split(',').filter(column => column !== 'model').join(',');
     // ponytail: admit all records for analytics. classifyResearchEligibility
     // applies per-row quality gates downstream (missing price/brand/dial,
     // catalog mismatch, reference-as-price). Pre-filtering on verdict/confidence
@@ -1211,7 +1220,7 @@ module.exports = async function handler(req, res) {
     const buildRowsQuery = table => {
       let query = client
         .from(table)
-        .select(columns)
+        .select(table === 'watch_records' ? watchRecordColumns : columns)
         .eq('brand', brand)
         .eq('listing_type', 'WTS');
       query = table === QNSA_PRICE_RESEARCH_SOURCE && familyPrefix
