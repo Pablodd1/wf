@@ -175,6 +175,7 @@ async function main() {
   const outputDir = path.resolve(process.env.SEVEN_BRAND_COVERAGE_OUTPUT || 'audit-output/seven-brand-price-research-coverage');
   const pauseMs = bounded('SEVEN_BRAND_BATCH_PAUSE_MS', 750, 250, 10_000);
   const maxBatches = bounded('SEVEN_BRAND_MAX_BATCHES', 10_000, 1, 10_000);
+  const requestConcurrency = bounded('SEVEN_BRAND_REQUEST_CONCURRENCY', 1, 1, 2);
   const brands = String(process.env.SEVEN_BRAND_AUDIT_BRANDS || DEFAULT_BRANDS.join(','))
     .split(',').map(value => value.trim()).filter(Boolean);
   const checkpointPath = path.join(outputDir, 'checkpoint.json');
@@ -229,6 +230,7 @@ async function main() {
       previous_catalog_references_sha256: previousCatalogChecksum,
       catalog_changed_since_checkpoint: catalogChanged,
       processed_batches_this_run: processedBatches,
+      request_concurrency: requestConcurrency,
       completed_reference_count: rows.length,
       unattempted_reference_count: catalog.references.length - rows.length - unresolvedFailures.size,
       failed_batches: [...unresolvedFailures.values()],
@@ -238,40 +240,46 @@ async function main() {
     return rows;
   };
 
-  for (let offset = 0; offset < pending.length && processedBatches < maxBatches; offset += BATCH_SIZE) {
-    const batch = pending.slice(offset, offset + BATCH_SIZE);
-    await loadBatchAdaptive(batch, async current => {
-      const payload = await loadBatch(baseUrl, current);
-      return requireCompleteBatch(payload, current);
-    }, {
-      canAttempt: () => processedBatches < maxBatches,
-      onAttempt: () => { processedBatches += 1; },
-      onSuccess: (targets, payload) => {
-        const byKey = new Map((payload.summaries || []).map(summary => [referenceKey(summary.brand, summary.reference), summary]));
-        for (const target of targets) {
-          const summary = byKey.get(target.key);
-          if (summary) {
-            completed.set(target.key, { ...target, ...summary, key: target.key, observed_at: new Date().toISOString() });
-            unresolvedFailures.delete(target.key);
-          } else {
-            const failure = { keys: [target.key], error: 'SUMMARY_NOT_RETURNED', at: new Date().toISOString() };
+  let nextOffset = 0;
+  const runWorker = async () => {
+    while (nextOffset < pending.length && processedBatches < maxBatches) {
+      const offset = nextOffset;
+      nextOffset += BATCH_SIZE;
+      const batch = pending.slice(offset, offset + BATCH_SIZE);
+      await loadBatchAdaptive(batch, async current => {
+        const payload = await loadBatch(baseUrl, current);
+        return requireCompleteBatch(payload, current);
+      }, {
+        canAttempt: () => processedBatches < maxBatches,
+        onAttempt: () => { processedBatches += 1; },
+        onSuccess: (targets, payload) => {
+          const byKey = new Map((payload.summaries || []).map(summary => [referenceKey(summary.brand, summary.reference), summary]));
+          for (const target of targets) {
+            const summary = byKey.get(target.key);
+            if (summary) {
+              completed.set(target.key, { ...target, ...summary, key: target.key, observed_at: new Date().toISOString() });
+              unresolvedFailures.delete(target.key);
+            } else {
+              const failure = { keys: [target.key], error: 'SUMMARY_NOT_RETURNED', at: new Date().toISOString() };
+              unresolvedFailures.set(target.key, failure);
+              failureHistory.push(failure);
+            }
+          }
+        },
+        onFailure: (targets, error) => {
+          for (const target of targets) {
+            const failure = { keys: [target.key], error: error.message, at: new Date().toISOString() };
             unresolvedFailures.set(target.key, failure);
             failureHistory.push(failure);
           }
-        }
-      },
-      onFailure: (targets, error) => {
-        for (const target of targets) {
-          const failure = { keys: [target.key], error: error.message, at: new Date().toISOString() };
-          unresolvedFailures.set(target.key, failure);
-          failureHistory.push(failure);
-        }
-      },
-    });
-    const rows = saveCheckpoint();
-    process.stdout.write(`${JSON.stringify({ event: 'seven_brand_batch', processedBatches, completed: rows.length, total: catalog.references.length, failed: unresolvedFailures.size })}\n`);
-    if (offset + BATCH_SIZE < pending.length) await sleep(pauseMs);
-  }
+        },
+      });
+      const rows = saveCheckpoint();
+      process.stdout.write(`${JSON.stringify({ event: 'seven_brand_batch', processedBatches, completed: rows.length, total: catalog.references.length, failed: unresolvedFailures.size })}\n`);
+      if (nextOffset < pending.length) await sleep(pauseMs);
+    }
+  };
+  await Promise.all(Array.from({ length: requestConcurrency }, runWorker));
 
   const rows = catalog.references.map(target => completed.get(target.key)).filter(Boolean);
   const report = {
@@ -281,6 +289,7 @@ async function main() {
     customer_api_writes: 0,
     base_url: baseUrl,
     brands,
+    request_concurrency: requestConcurrency,
     census_run_id: censusRunId,
     census_started_at: censusStartedAt,
     catalog_reference_count: catalog.references.length,

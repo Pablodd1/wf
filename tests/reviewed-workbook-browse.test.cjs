@@ -82,7 +82,7 @@ test('Price Research opens a supplied brand and Trading Floor hides internal evi
   assert.match(research, /if \(initialBrand && !initialReference\) void loadModels\(initialBrand\)/);
   assert.match(research, /onChange=\{event => void loadModels\(event\.target\.value\)\}/);
   assert.doesNotMatch(floor, /aria-label="Listing evidence"|EvidenceIndicators|Source contact supplied|Source-supplied listing image/);
-  assert.match(floor, /cardHasImage \? 'min-h-\[620px\]' : 'min-h-\[320px\]'/);
+  assert.match(floor, /const cardHasImage = Boolean\(imageUrl && imageAvailable\)/);
   assert.match(floor, /\{cardHasImage && \(/);
 });
 
@@ -127,11 +127,11 @@ test('Trading Floor reads admitted brands from approved inventory instead of the
 test('reviewed model calculations keep WTB separate and use only verified WTS prices', () => {
   const { workbookModelStats } = require('../api/model-stats.js');
   const summary = workbookModelStats([
-    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'A', listing_type: 'WTS', has_verified_usd_price: true, verified_price_usd: 5000, posting_date: '2026-01-01' },
-    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'B', listing_type: 'WTS', price_evidence_status: 'EXPLICIT_SOURCE_FX_CONVERTED', verified_price_usd: 7000, posting_date: '2026-02-01' },
-    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'C', listing_type: 'WTB', has_verified_usd_price: true, verified_price_usd: 9000, posting_date: '2026-03-01' },
-    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'D', listing_type: 'WTS', verified_price_usd: 11000, posting_date: '2026-04-01' },
-  ], 'Carrera');
+    { brand_scope: 'Hublot', model: 'Big Bang', public_reference: 'A', listing_type: 'WTS', has_verified_usd_price: true, verified_price_usd: 5000, posting_date: '2026-01-01' },
+    { brand_scope: 'Hublot', model: 'Big Bang', public_reference: 'B', listing_type: 'WTS', price_evidence_status: 'EXPLICIT_SOURCE_FX_CONVERTED', verified_price_usd: 7000, posting_date: '2026-02-01' },
+    { brand_scope: 'Hublot', model: 'Big Bang', public_reference: 'C', listing_type: 'WTB', has_verified_usd_price: true, verified_price_usd: 9000, posting_date: '2026-03-01' },
+    { brand_scope: 'Hublot', model: 'Big Bang', public_reference: 'D', listing_type: 'WTS', verified_price_usd: 11000, posting_date: '2026-04-01' },
+  ], 'Big Bang');
   assert.equal(summary.total, 4);
   assert.equal(summary.wts, 3);
   assert.equal(summary.wtb, 1);

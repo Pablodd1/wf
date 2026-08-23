@@ -46,3 +46,19 @@ test('unresolved-reference counts remain scoped to their observed model', () => 
   assert.equal(result.unresolvedReferenceListingCount, 8);
   assert.equal(result.unresolvedReferencePricedWtsCount, 3);
 });
+
+test('unresolvable strict catalog prefixes never become selectable exact references', () => {
+  const result = buildReleaseBrowseIndex('Omega', [
+    { model: 'Seamaster', reference: '22010', listing_count: 3, priced_wts_count: 2 },
+    { model: 'Seamaster', reference: 'SOURCE-EXACT', listing_count: 1, priced_wts_count: 1 },
+  ], [
+    { brand: 'Omega', model: 'Seamaster', reference: '220.10.38.20.01.002' },
+  ]);
+
+  assert.equal(result.references.some(row => row.reference === '22010'), false);
+  assert.equal(result.references.some(row => row.reference === 'SOURCE-EXACT'), true);
+  assert.equal(result.suppressedPartialReferenceCount, 1);
+  assert.deepEqual(result.suppressedPartialReferences, [
+    { reference: '22010', listing_count: 3, priced_wts_count: 2 },
+  ]);
+});

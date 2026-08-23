@@ -13,6 +13,12 @@ test('seven-brand audit stays within the deployed batch contract', () => {
   ]);
 });
 
+test('live census defaults to one request and caps controlled concurrency at two', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'audit', 'seven-brand-price-research-coverage-live.cjs'), 'utf8');
+  assert.match(source, /bounded\('SEVEN_BRAND_REQUEST_CONCURRENCY', 1, 1, 2\)/);
+  assert.match(source, /Promise\.all\(Array\.from\(\{ length: requestConcurrency \}, runWorker\)\)/);
+});
+
 test('failed census batches subdivide until only the failing reference remains', async () => {
   const completed = [];
   const failed = [];
