@@ -14,3 +14,12 @@ test('four-brand releases bypass workbook admission and use the effective releas
   assert.match(source, /deduplicateRecordsById\(\[\.\.\.publicBaseRecords, \.\.\.reviewedOverlayRecords\]\)/);
   assert.match(source, /exact_listing_id_duplicates_held: combinedPageDuplicateCount/);
 });
+
+test('a transient effective-page timeout falls back to the bounded controlled-brand feed', () => {
+  assert.match(
+    source,
+    /isTransientEffectiveRpcTimeout\(rpcError\)[\s\S]*cartierRelease \? 'qnsa_cartier_page_rows'[\s\S]*omegaRelease \? 'qnsa_omega_page_rows'[\s\S]*tudorRelease \? 'qnsa_tudor_page_rows'/,
+  );
+  assert.match(source, /QNSA controlled brand fallback page failed/);
+  assert.match(source, /preloadedQnsaResponse = new Response\(JSON\.stringify\(await fallbackResponse\.json\(\)\)/);
+});

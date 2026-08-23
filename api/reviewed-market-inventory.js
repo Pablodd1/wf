@@ -2456,6 +2456,36 @@ module.exports = async function handler(req, res) {
             // returned page is still passed through per-row effective
             // enrichment below; unrelated RPC failures remain fail-closed.
             console.warn('[reviewed-market-inventory] four-brand effective RPC unavailable or timed out; preserving bounded base release path');
+            const releaseRpc = cartierRelease ? 'qnsa_cartier_page_rows'
+              : omegaRelease ? 'qnsa_omega_page_rows'
+              : tudorRelease ? 'qnsa_tudor_page_rows' : null;
+            const controlledModelRpc = requestedModel && releaseRpc
+              ? 'qnsa_controlled_model_page_rows'
+              : releaseRpc;
+            if (controlledModelRpc) {
+              const fallbackResponse = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${controlledModelRpc}`, {
+                method: 'POST',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  p_limit: qnsaBrandScanLimit,
+                  p_offset: requestedOffset,
+                  p_listing_type: ['WTS', 'WTB'].includes(listingType)
+                    ? listingType : databaseListingType,
+                  p_reference: requestedReference || null,
+                  ...(requestedModel
+                    ? { p_brand: brand, p_model: requestedModel }
+                    : {}),
+                }),
+              });
+              if (!fallbackResponse.ok) {
+                const fallbackBody = await fallbackResponse.text();
+                throw new Error(`QNSA controlled brand fallback page failed: ${fallbackResponse.status} ${fallbackBody.slice(0, 200)}`);
+              }
+              preloadedQnsaResponse = new Response(JSON.stringify(await fallbackResponse.json()), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              });
+            }
           } else {
             throw new Error(`QNSA four-brand effective page failed: ${response.status} ${body.slice(0, 200)}`);
           }
