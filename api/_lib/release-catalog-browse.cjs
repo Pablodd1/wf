@@ -1,9 +1,23 @@
 'use strict';
 
-const { listCanonicalCatalogReferences, lookupCatalog } = require('./catalog');
+const { listCanonicalCatalogReferences } = require('./catalog');
 const { normalizeCanonicalModel } = require('./catalog-taxonomy');
 
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
+// These observed tokens were individually proven against the deployed
+// canonical Price Research endpoint and returned CANONICAL_PAIR_UNAVAILABLE.
+// Keep this ledger narrow: other partial-looking source references may still be
+// valid exact identities and must not be removed from browse.
+const UNRESOLVABLE_RELEASE_REFERENCES = new Set([
+  'TUDOR|25500T',
+  'TUDOR|79620',
+  'TUDOR|91350',
+  'TUDOR|91650',
+  'CARTIER|11000',
+  'CARTIER|11700',
+  'CARTIER|17200',
+  'CARTIER|57000',
+]);
 
 function referenceKey(value) {
   return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -14,10 +28,8 @@ function cleanModel(value, brand) {
     || REFERENCE_ONLY_MODEL;
 }
 
-function isStrictPartialCatalogLookup(lookup, candidateKey) {
-  if (!lookup?.found || lookup.matchType !== 'partial') return false;
-  const matchedKey = referenceKey(lookup.reference || lookup.matchedRef);
-  return Boolean(matchedKey && matchedKey !== candidateKey);
+function isKnownUnresolvableReference(brand, candidateKey) {
+  return UNRESOLVABLE_RELEASE_REFERENCES.has(`${String(brand || '').trim().toUpperCase()}|${candidateKey}`);
 }
 
 function buildReleaseBrowseIndex(brand, observedRows, catalogEntries = listCanonicalCatalogReferences(brand)) {
@@ -26,8 +38,7 @@ function buildReleaseBrowseIndex(brand, observedRows, catalogEntries = listCanon
   for (const entry of catalogEntries || []) {
     const key = referenceKey(entry.reference);
     if (!key || catalogByReference.has(key)) continue;
-    const catalogLookup = lookupCatalog(entry.reference, brand);
-    if (isStrictPartialCatalogLookup(catalogLookup, key)) {
+    if (isKnownUnresolvableReference(brand, key)) {
       suppressedPartialReferences.set(key, {
         reference: String(entry.reference).trim(),
         listing_count: 0,
@@ -60,8 +71,7 @@ function buildReleaseBrowseIndex(brand, observedRows, catalogEntries = listCanon
       unresolvedByModel.set(model, unresolved);
       continue;
     }
-    const catalogLookup = lookupCatalog(row?.reference, brand);
-    const strictCatalogPrefix = isStrictPartialCatalogLookup(catalogLookup, key)
+    const strictCatalogPrefix = isKnownUnresolvableReference(brand, key)
       || (!catalogByReference.has(key) && catalogKeys.some(catalogKey => catalogKey.startsWith(key)));
     if (strictCatalogPrefix) {
       const current = suppressedPartialReferences.get(key) || {
