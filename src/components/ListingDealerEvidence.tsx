@@ -12,6 +12,7 @@ type DealerEvidence = {
   ratingEvidenceStatus?: DealerRatingEvidenceStatus | null;
   groupCount?: number | null;
   profilePath?: string | null;
+  showSellerName?: boolean;
 };
 
 export function sourceBackedDealerRating(evidence: Pick<DealerEvidence, 'rating' | 'reviewCount' | 'ratingEvidenceStatus'>) {
@@ -55,11 +56,12 @@ export function ListingDealerEvidence({
   ratingEvidenceStatus,
   groupCount,
   profilePath,
+  showSellerName = true,
 }: DealerEvidence) {
   const publishedGroupCount = Number(groupCount);
   return (
     <div className="space-y-1">
-      <div>{sellerName || 'Seller not supplied'}</div>
+      {showSellerName && <div>{sellerName || 'Seller not supplied'}</div>}
       <DealerRatingBadge
         rating={rating}
         reviewCount={reviewCount}

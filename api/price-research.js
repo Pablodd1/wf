@@ -1736,6 +1736,7 @@ module.exports = async function handler(req, res) {
     // Use the same scope for the denominator so a stored indicator ratio can
     // never conflict with the cards and buyer count shown to the customer.
     const referenceQualifiedWtsCount = marketRows.length;
+    const referenceMarketSummary = summarizeComparableRows(marketRows).summary;
     const exactReferenceDemandRatio = referenceQualifiedWtsCount > 0
       ? demand.demand_count / referenceQualifiedWtsCount
       : null;
@@ -1745,6 +1746,8 @@ module.exports = async function handler(req, res) {
       source: 'live_exact_reference',
       demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
       reference_qualified_wts_count: referenceQualifiedWtsCount,
+      reference_analytics_ready: referenceMarketSummary.analytics_ready,
+      reference_stats: referenceMarketSummary.analytics_ready ? referenceMarketSummary.stats : null,
       demand_score: demand.demand_count,
       wtb_fs_ratio: exactReferenceDemandRatio,
     };
@@ -1856,6 +1859,8 @@ module.exports = async function handler(req, res) {
       wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
       wtb_demand_count: wtbDemandCount,
       reference_qualified_wts_count: referenceQualifiedWtsCount,
+      reference_analytics_ready: referenceMarketSummary.analytics_ready,
+      reference_stats: referenceMarketSummary.analytics_ready ? referenceMarketSummary.stats : null,
       demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
       excluded_count: excludedTotalCount,
       excluded_breakdown: {
@@ -1890,6 +1895,8 @@ module.exports = async function handler(req, res) {
       wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
       wtb_demand_count: wtbDemandCount,
       reference_qualified_wts_count: referenceQualifiedWtsCount,
+      reference_analytics_ready: referenceMarketSummary.analytics_ready,
+      reference_stats: referenceMarketSummary.analytics_ready ? referenceMarketSummary.stats : null,
       demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
       demand_rows: demand?.demand_rows || [],
       demand_evidence: {
