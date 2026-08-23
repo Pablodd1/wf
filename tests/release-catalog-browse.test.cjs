@@ -76,3 +76,14 @@ test('canonical-source entries that resolve only as partial are not browsable ex
     { reference: '91650', listing_count: 20, priced_wts_count: 9 },
   ]);
 });
+
+test('verified exact references outside the reconciliation ledger stay browsable', () => {
+  const result = buildReleaseBrowseIndex('Tudor', [
+    { model: 'Pelagos', reference: '25827KN', listing_count: 2, priced_wts_count: 1 },
+  ], [
+    { brand: 'Tudor', model: 'Pelagos', reference: '25827KN' },
+  ]);
+
+  assert.equal(result.references.some(row => row.reference === '25827KN'), true);
+  assert.equal(result.suppressedPartialReferenceCount, 0);
+});
