@@ -21,6 +21,8 @@ const DEFAULT_BRANDS = [
   'Omega',
 ];
 const BATCH_SIZE = 24;
+const FETCH_TIMEOUT_MS = Math.max(5_000, Number(process.env.SEVEN_BRAND_FETCH_TIMEOUT_MS || 60_000));
+const FETCH_ATTEMPTS = Math.max(1, Number(process.env.SEVEN_BRAND_FETCH_ATTEMPTS || 3));
 
 function bounded(name, fallback, minimum, maximum) {
   const parsed = Number(process.env[name] || fallback);
@@ -47,11 +49,11 @@ function referenceKey(brand, reference) {
   return `${String(brand).trim().toUpperCase()}|${String(reference).trim().toUpperCase().replace(/[^A-Z0-9]/g, '')}`;
 }
 
-async function fetchJson(url, options = {}, attempts = 3) {
+async function fetchJson(url, options = {}, attempts = FETCH_ATTEMPTS) {
   let lastError;
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     try {
-      const response = await fetch(url, { ...options, signal: AbortSignal.timeout(60_000) });
+      const response = await fetch(url, { ...options, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
       const text = await response.text();
       if (!response.ok) throw new Error(`HTTP ${response.status}: ${text.slice(0, 300)}`);
       return JSON.parse(text);
