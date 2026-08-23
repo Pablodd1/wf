@@ -267,6 +267,8 @@ test("four-brand effective page timeouts fail over without swallowing unrelated 
   assert.equal(isTransientEffectiveRpcTimeout({ status: 500, message: 'canceling statement due to statement timeout' }), true);
   assert.equal(isTransientEffectiveRpcTimeout({ status: 503, message: 'statement timeout' }), true);
   assert.equal(isTransientEffectiveRpcTimeout({ status: 500, message: 'permission denied' }), false);
+  assert.equal(isTransientEffectiveRpcTimeout({ status: 500, message: 'canceling statement due to user request' }), false);
+  assert.equal(isTransientEffectiveRpcTimeout({ status: 503, message: 'canceling statement during shutdown' }), false);
   assert.match(inventorySource, /isTransientEffectiveRpcTimeout\(rpcError\)/);
 });
 

@@ -129,7 +129,7 @@ function isTransientEffectiveRpcTimeout(error) {
     .join(" ")
     .toLowerCase();
   return error?.code === "57014"
-    || ((status === 500 || status === 503) && /statement timeout|canceling statement/.test(text));
+    || ((status === 500 || status === 503) && /statement timeout/.test(text));
 }
 
 async function loadEffectiveEnrichments(client, rows) {
