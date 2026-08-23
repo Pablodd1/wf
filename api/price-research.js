@@ -1277,7 +1277,7 @@ module.exports = async function handler(req, res) {
       // zero-observation cohort. Do not reinterpret that empty result as a
       // reason to query the obsolete raw watch_records schema. The legacy
       // fallback remains available only while resolving a non-catalog identity.
-      if (!configuredSourceTable && !exactKnownReference
+      if (!configuredSourceTable && !exactKnownReference && !exactReviewedWorkbookRelease
         && (result.error || !(result.data || []).length)) {
         sourceTable = 'watch_records';
         result = await buildRowsQuery(sourceTable);
