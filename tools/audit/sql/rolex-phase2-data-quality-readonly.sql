@@ -1,16 +1,16 @@
 WITH control AS MATERIALIZED (
-  SELECT enabled_run_key FROM public.qnsa_two_brand_release_control WHERE canonical_brand='Rolex'
+  SELECT enabled_run_key FROM public.qnsa_two_brand_release_control WHERE canonical_brand='__BRAND__'
 ), rows AS MATERIALIZED (
   SELECT l.id,l.currency_original,l.currency_normalized,l.price_normalized,l.price_usd,
     l.conversion_rate,l.conversion_timestamp,l.raw_message_text
   FROM staging.listings l JOIN control c ON c.enabled_run_key=l.normalization_run_key
-  WHERE l.brand_normalized='Rolex'
+  WHERE l.brand_normalized='__BRAND__'
 ), currencies AS MATERIALIZED (
   SELECT COALESCE(NULLIF(upper(btrim(currency_original)),''),'MISSING') currency,count(*) count
   FROM rows GROUP BY 1 ORDER BY 2 DESC,1
 )
 SELECT jsonb_build_object(
-  'contract','watchfacts-rolex-phase2-data-quality-v1','project_ref','qnsafosakvonzgfcsphh','read_only',true,
+  'contract','__CONTRACT_PREFIX__-data-quality-v1','project_ref','qnsafosakvonzgfcsphh','read_only',true,
   'transaction_read_only',current_setting('transaction_read_only'),'generated_at',now(),
   'counts',jsonb_build_object(
     'bare_dollar_rows_normalized_as_usd_without_usd_usdt_token',(SELECT count(*) FROM rows WHERE raw_message_text ~ '[$]' AND raw_message_text !~* '(^|[^A-Z0-9])(USD|USDT)([^A-Z0-9]|$)' AND currency_normalized='USD' AND COALESCE(price_usd,0)>0),

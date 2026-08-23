@@ -1,6 +1,6 @@
 WITH control AS MATERIALIZED (
   SELECT enabled_run_key, trading_floor_enabled, price_research_enabled
-  FROM public.qnsa_two_brand_release_control WHERE canonical_brand = 'Rolex'
+  FROM public.qnsa_two_brand_release_control WHERE canonical_brand = '__BRAND__'
 ), active AS MATERIALIZED (
   SELECT l.id, l.source_record_id, l.raw_message_version_id, l.source_hash, l.source_candidate_hash,
     l.reference_normalized, l.category, l.parent_id, l.is_bundle,
@@ -13,7 +13,7 @@ WITH control AS MATERIALIZED (
   FROM staging.listings l JOIN control c ON c.enabled_run_key = l.normalization_run_key
   JOIN staging.mariadb_normalization_import_checkpoints checkpoint
     ON checkpoint.run_key=l.normalization_run_key
-  WHERE l.brand_normalized = 'Rolex'
+  WHERE l.brand_normalized = '__BRAND__'
     AND checkpoint.status='NORMALIZATION_STAGED' AND checkpoint.error_rows=0
 ), refs AS MATERIALIZED (
   SELECT regexp_replace(upper(btrim(reference_normalized)), '[^A-Z0-9]', '', 'g') AS ref_key,
@@ -59,7 +59,7 @@ WITH control AS MATERIALIZED (
     count(*) FILTER (WHERE NULLIF(btrim(COALESCE(w.posted_by,'')),'') IS NOT NULL) users,
     count(*) FILTER (WHERE upper(COALESCE(w.listing_type,''))='WTS') price_observations
   FROM public.reviewed_workbook_inventory w
-  WHERE w.brand_scope='Rolex' AND w.verification_tier='QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1'
+  WHERE w.brand_scope='__BRAND__' AND w.verification_tier='QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1'
     AND w.verification_status='APPROVED_SINGLE_CANDIDATE' AND w.confidence=100
     AND w.source_message_id IS NOT NULL AND NULLIF(btrim(w.normalized_reference),'') IS NOT NULL
   GROUP BY 1
@@ -76,7 +76,7 @@ WITH control AS MATERIALIZED (
   FROM surface_keys k LEFT JOIN base_by_ref b USING(ref_key) LEFT JOIN overlay_by_ref o USING(ref_key)
 )
 SELECT jsonb_build_object(
-  'contract', 'watchfacts-rolex-phase2-core-v2', 'project_ref', 'qnsafosakvonzgfcsphh',
+  'contract', '__CONTRACT_PREFIX__-core-v2', 'project_ref', 'qnsafosakvonzgfcsphh',
   'read_only', true, 'transaction_read_only', current_setting('transaction_read_only'),
   'generated_at', now(), 'control', (SELECT to_jsonb(c) FROM control c),
   'counts', jsonb_build_object(
@@ -84,11 +84,11 @@ SELECT jsonb_build_object(
     'raw_version_rows_linked', (SELECT count(DISTINCT raw_message_version_id) FROM active WHERE raw_message_version_id IS NOT NULL),
     'staging_rows_active_run', (SELECT count(*) FROM active),
     'normalized_rows_active_run', (SELECT count(*) FROM active),
-    'unique_rolex_references', (SELECT count(*) FROM refs)
+    'unique___BRAND_SLUG___references', (SELECT count(*) FROM refs)
   ),
   'authoritative_references', (SELECT COALESCE(jsonb_agg(jsonb_build_object('reference', reference, 'key', ref_key, 'variants', variants) ORDER BY ref_key), '[]'::jsonb) FROM refs),
   'surface_rows', (SELECT COALESCE(jsonb_agg(to_jsonb(s) ORDER BY ref_key),'[]'::jsonb) FROM surfaces s),
-  'multi_parent_count', (SELECT count(*) FROM public.reviewed_workbook_inventory WHERE id='rpdelta_1ac10392cca161ba85a042a2f3efd4ef79cda691ccca2422f8b3280eebbf5972' AND verification_status='APPROVED_MULTI_PARENT_TRADING_FLOOR_ONLY'),
+  'multi_parent_count', (SELECT count(*) FROM public.reviewed_workbook_inventory WHERE __MULTI_PARENT_FILTER__),
   'checksums', jsonb_build_object(
     'active_rows', md5((SELECT count(*)::text || ':' || COALESCE(sum(hashtextextended(id::text, 0)::numeric), 0)::text FROM active)),
     'active_references', md5(COALESCE((SELECT string_agg(ref_key, ',' ORDER BY ref_key) FROM refs), '')),
