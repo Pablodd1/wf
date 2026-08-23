@@ -94,8 +94,5 @@ SELECT jsonb_build_object(
     'active_references', md5(COALESCE((SELECT string_agg(ref_key, ',' ORDER BY ref_key) FROM refs), '')),
     'surface_rows', md5(COALESCE((SELECT string_agg(ref_key||':'||base_count||':'||overlay_count||':'||price_observations, ',' ORDER BY ref_key) FROM surfaces),''))
   ),
-  'lineage_integrity', jsonb_build_object(
-    'active_rows_with_exact_raw_version', (SELECT count(*) FROM active a JOIN public.raw_message_versions rv ON rv.id=a.raw_message_version_id AND rv.source_record_id=a.source_record_id AND rv.source_hash=a.source_hash),
-    'active_rows_missing_exact_raw_version', (SELECT count(*) FROM active a LEFT JOIN public.raw_message_versions rv ON rv.id=a.raw_message_version_id AND rv.source_record_id=a.source_record_id AND rv.source_hash=a.source_hash WHERE rv.id IS NULL)
-  )
+  'lineage_integrity', __LINEAGE_INTEGRITY__
 ) AS core;
