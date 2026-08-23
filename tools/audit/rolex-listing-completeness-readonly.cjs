@@ -9,7 +9,12 @@ const { comparisonKey, normalizeDialValue } = require('../../api/_lib/dial-norma
 const { marketPlausibilityFloor, summarizePrices } = require('../../api/_lib/market-stats.cjs');
 
 const PROJECT_REF = 'qnsafosakvonzgfcsphh';
-const OUTPUT_DIR = path.resolve(process.env.AUDIT_OUTPUT_DIR || 'audit-output/rolex-listing-completeness');
+const TARGET_BRAND = String(process.env.AUDIT_BRAND || 'Rolex').trim();
+const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe']);
+if (!ALLOWED_BRANDS.has(TARGET_BRAND)) throw new Error(`Unsupported audit brand: ${TARGET_BRAND}`);
+const BRAND_SLUG = TARGET_BRAND === 'Patek Philippe' ? 'patek' : 'rolex';
+const CONTRACT_PREFIX = `watchfacts-${BRAND_SLUG}-listing`;
+const OUTPUT_DIR = path.resolve(process.env.AUDIT_OUTPUT_DIR || `audit-output/${BRAND_SLUG}-listing-completeness`);
 const SQL_DIR = path.join(__dirname, 'sql');
 const SHARDS = 16;
 const sha256 = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -52,14 +57,18 @@ function shardSql(template, index, canonicalSql) {
   const low = `${index.toString(16)}0000000-0000-0000-0000-000000000000`;
   const high = index === SHARDS - 1 ? '' : `AND l.id<'${(index + 1).toString(16)}0000000-0000-0000-0000-000000000000'::uuid`;
   return template.replaceAll('__SHARD__', String(index)).replaceAll('__LOW__', low)
-    .replaceAll('__HIGH_CONDITION__', high).replaceAll('__CANONICAL_KEYS__', canonicalSql);
+    .replaceAll('__HIGH_CONDITION__', high).replaceAll('__CANONICAL_KEYS__', canonicalSql)
+    .replaceAll('__BRAND__', TARGET_BRAND.replaceAll("'", "''"))
+    .replaceAll('__CONTRACT_PREFIX__', CONTRACT_PREFIX);
 }
 
 function priceShardSql(template, index, canonicalSql) {
   const low = `${index.toString(16)}0000000-0000-0000-0000-000000000000`;
   const high = index === SHARDS - 1 ? '' : `AND p.id::uuid<'${(index + 1).toString(16)}0000000-0000-0000-0000-000000000000'::uuid`;
   return template.replaceAll('__SHARD__', String(index)).replaceAll('__LOW__', low)
-    .replaceAll('__HIGH_CONDITION__', high).replaceAll('__CANONICAL_KEYS__', canonicalSql);
+    .replaceAll('__HIGH_CONDITION__', high).replaceAll('__CANONICAL_KEYS__', canonicalSql)
+    .replaceAll('__BRAND__', TARGET_BRAND.replaceAll("'", "''"))
+    .replaceAll('__CONTRACT_PREFIX__', CONTRACT_PREFIX);
 }
 
 function csvValue(value) {
@@ -130,7 +139,7 @@ function classify(row, benchmarks) {
 }
 
 async function main() {
-  const catalog = listCanonicalCatalogReferences('Rolex');
+  const catalog = listCanonicalCatalogReferences(TARGET_BRAND);
   const catalogModelByReference = new Map(catalog.map(row => [refKey(row.reference), row.model || null]));
   const canonical = [...new Set(catalog.map(row => refKey(row.reference)).filter(Boolean))].sort();
   const canonicalSql = canonical.map(key => `'${key.replaceAll("'", "''")}'`).join(',');
@@ -139,26 +148,28 @@ async function main() {
   const overlayTemplate = fs.readFileSync(path.join(SQL_DIR, 'rolex-listing-completeness-overlay-readonly.sql'), 'utf8');
   const baseSqls = Array.from({ length: SHARDS }, (_, index) => shardSql(baseTemplate, index, canonicalSql));
   const priceSqls = Array.from({ length: SHARDS }, (_, index) => priceShardSql(priceTemplate, index, canonicalSql));
-  const overlaySql = overlayTemplate.replaceAll('__CANONICAL_KEYS__', canonicalSql);
+  const overlaySql = overlayTemplate.replaceAll('__CANONICAL_KEYS__', canonicalSql)
+    .replaceAll('__BRAND__', TARGET_BRAND.replaceAll("'", "''"))
+    .replaceAll('__CONTRACT_PREFIX__', CONTRACT_PREFIX);
   [...baseSqls, ...priceSqls, overlaySql].forEach(assertReadOnlySql);
   if (process.argv.includes('--validate-only')) {
-    process.stdout.write(`Validated ${SHARDS * 2 + 1} read-only canonical Rolex queries.\n`);
+    process.stdout.write(`Validated ${SHARDS * 2 + 1} read-only canonical ${TARGET_BRAND} queries.\n`);
     return;
   }
 
   const baseRows = [];
   for (let index = 0; index < SHARDS; index += 1) {
     const value = (await query(baseSqls[index], `base-${index}`))?.[0]?.audit;
-    envelope(value, 'watchfacts-rolex-listing-completeness-base-v1');
+    envelope(value, `${CONTRACT_PREFIX}-completeness-base-v1`);
     if (Number(value.shard) !== index) throw new Error(`Base shard mismatch ${index}`);
     baseRows.push(...value.rows);
   }
   const overlayValue = (await query(overlaySql, 'overlay'))?.[0]?.audit;
-  envelope(overlayValue, 'watchfacts-rolex-listing-completeness-overlay-v1');
+  envelope(overlayValue, `${CONTRACT_PREFIX}-completeness-overlay-v1`);
   const priceRows = [];
   for (let index = 0; index < SHARDS; index += 1) {
     const value = (await query(priceSqls[index], `price-${index}`))?.[0]?.audit;
-    envelope(value, 'watchfacts-rolex-listing-price-evidence-v1');
+    envelope(value, `${CONTRACT_PREFIX}-price-evidence-v1`);
     if (Number(value.shard) !== index) throw new Error(`Price shard mismatch ${index}`);
     priceRows.push(...value.rows);
   }
@@ -193,9 +204,9 @@ async function main() {
   }
 
   const summary = {
-    contract: 'watchfacts-rolex-listing-completeness-v1', project_ref: PROJECT_REF,
+    contract: `${CONTRACT_PREFIX}-completeness-v1`, project_ref: PROJECT_REF,
     read_only: true, transaction_read_only: 'on', generated_at: new Date().toISOString(),
-    scope: 'Trading Floor rows whose normalized reference is in the canonical Rolex catalog',
+    scope: `Trading Floor rows whose normalized reference is in the canonical ${TARGET_BRAND} catalog`,
     counts: {
       canonical_catalog_references: canonical.length,
       canonical_base_listings: baseRows.length,
@@ -239,7 +250,7 @@ async function main() {
   fs.writeFileSync(path.join(OUTPUT_DIR, 'listing-exceptions.csv'), listingCsv);
   fs.writeFileSync(path.join(OUTPUT_DIR, 'reference-gap-counts.csv'), referenceCsv);
   fs.writeFileSync(path.join(OUTPUT_DIR, 'manifest.json'), JSON.stringify({
-    contract: 'watchfacts-rolex-listing-completeness-manifest-v1', read_only: true,
+    contract: `${CONTRACT_PREFIX}-completeness-manifest-v1`, read_only: true,
     files: {
       'summary.json': sha256(summaryText),
       'listing-exceptions.csv': sha256(listingCsv),
