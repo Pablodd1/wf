@@ -198,10 +198,11 @@ module.exports = async function handler(req, res) {
       let out = summarizeReviewedWorkbookModels(rows);
       if (brand.toLowerCase() === 'tag heuer') {
         const grouped = new Map();
+        const exactReferenceKey = value => String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
         for (const entry of listCanonicalCatalogReferences('TAG Heuer')) {
           const model = normalizeCanonicalModel(entry.model, 'TAG Heuer');
           const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
-          current.references.add(entry.reference);
+          current.references.add(exactReferenceKey(entry.reference));
           grouped.set(model, current);
         }
         for (const row of rows) {
@@ -209,7 +210,7 @@ module.exports = async function handler(req, res) {
           const reference = rowReference(row);
           if (!model || !reference) continue;
           const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
-          current.references.add(reference);
+          current.references.add(exactReferenceKey(reference));
           current.listing_count += 1;
           grouped.set(model, current);
         }
