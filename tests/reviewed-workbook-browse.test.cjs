@@ -6,6 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 const {
   isReviewedWorkbookBrowseBrand,
+  removeTagReferenceModelConflicts,
   summarizeReviewedWorkbookModels,
   summarizeReviewedWorkbookReferences,
 } = require('../api/_lib/reviewed-workbook-browse.cjs');
@@ -50,6 +51,16 @@ test('TAG Heuer browse fails cross-brand residual models closed', () => {
     { model: 'Carrera', reference_count: 1, listing_count: 1 },
   ]);
   assert.deepEqual(summarizeReviewedWorkbookReferences(tagRows, 'GMT-Master'), []);
+});
+
+test('TAG Heuer browse excludes an uncatalogued reference claimed by multiple models', () => {
+  const rows = [
+    { brand_scope: 'TAG Heuer', model: 'Carrera', normalized_reference: 'CAZ1011.BA0842' },
+    { brand_scope: 'TAG Heuer', model: 'Formula 1', normalized_reference: 'CAZ1011BA0842' },
+    { brand_scope: 'TAG Heuer', model: 'Monaco', normalized_reference: 'CBL2111.FC6453' },
+  ];
+  assert.deepEqual(removeTagReferenceModelConflicts(rows, 'TAG Heuer'), [rows[2]]);
+  assert.equal(removeTagReferenceModelConflicts(rows, 'Omega').length, 3);
 });
 
 test('reviewed workbook references keep unverified prices out of analytics', () => {

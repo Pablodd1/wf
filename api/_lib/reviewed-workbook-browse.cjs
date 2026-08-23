@@ -110,6 +110,27 @@ function isReviewedWorkbookBrowseBrand(value) {
   return REVIEWED_WORKBOOK_BROWSE_BRANDS.has(clean(value).toLowerCase());
 }
 
+function removeTagReferenceModelConflicts(rows, brand) {
+  if (clean(brand).toLowerCase() !== 'tag heuer') return rows;
+  const modelsByReference = new Map();
+  for (const row of rows) {
+    const model = rowModel(row);
+    const key = tagReferenceKey(rowReference(row));
+    if (!model || !key) continue;
+    const models = modelsByReference.get(key) || new Set();
+    models.add(model);
+    modelsByReference.set(key, models);
+  }
+  const conflicts = new Set([...modelsByReference.entries()]
+    .filter(([, models]) => models.size > 1)
+    .map(([key]) => key));
+  return rows.filter(row => {
+    const model = rowModel(row);
+    const key = tagReferenceKey(rowReference(row));
+    return Boolean(model && key && !conflicts.has(key));
+  });
+}
+
 async function loadReviewedWorkbookBrandRows(client, brand) {
   const admissionSource = isReviewedWorkbookBrowseBrand(brand);
   const sourceTable = admissionSource ? 'reviewed_workbook_inventory' : MARKET_SOURCE_VIEW;
@@ -153,9 +174,11 @@ async function loadReviewedWorkbookBrandRows(client, brand) {
         ? Number(row.workbook_price_usd) || null
         : null,
     } : row));
-    if (!data || data.length < PAGE_SIZE) return { rows, truncated: false };
+    if (!data || data.length < PAGE_SIZE) {
+      return { rows: removeTagReferenceModelConflicts(rows, brand), truncated: false };
+    }
   }
-  return { rows, truncated: true };
+  return { rows: removeTagReferenceModelConflicts(rows, brand), truncated: true };
 }
 
 async function loadReviewedWorkbookBrandCount(client, brand) {
@@ -238,6 +261,7 @@ module.exports = {
   isReviewedWorkbookBrowseBrand,
   loadReviewedWorkbookBrandCount,
   loadReviewedWorkbookBrandRows,
+  removeTagReferenceModelConflicts,
   rowModel,
   rowReference,
   summarizeReviewedWorkbookModels,
