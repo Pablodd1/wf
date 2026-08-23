@@ -62,17 +62,36 @@ function clean(value) {
 }
 
 const { normalizeCanonicalModel } = require('./catalog-taxonomy');
+const { lookupCatalog } = require('./catalog');
+
+const TAG_HEUER_MODEL_PATTERN = /^(?:Aquaracer|Autavia|Carrera|Connected|Formula\s*1|Grand\s+Carrera|Heuer[-\s]?0[12]|Heritage|Link|Mikrograph|Monaco|Montreal|Monza|Professional)\b/i;
+const TAG_HEUER_UNCATALOGUED_REFERENCE_PATTERN = /^(?:C[A-Z]{1,3}|W[A-Z]{1,3}|S[A-Z]{1,3})\d/i;
 
 function rowModel(row) {
+  const ownerBrand = clean(row.brand_scope).toLowerCase();
+  const reference = rowReference(row);
+  if (ownerBrand === 'tag heuer') {
+    const catalog = reference ? lookupCatalog(reference, 'TAG Heuer') : null;
+    if (catalog?.found && catalog.model) {
+      return normalizeCanonicalModel(catalog.model, 'TAG Heuer');
+    }
+  }
   const claimed = clean(row.catalog_model) || clean(row.model);
   if (!claimed || /^\d+$/.test(claimed) || /^\d{4}[/-]\d{1,2}$/.test(claimed)) {
     return REFERENCE_ONLY_MODEL;
   }
-  const ownerBrand = clean(row.brand_scope).toLowerCase();
   const foreignBrand = KNOWN_WATCH_BRANDS.some(brand => (
     brand.toLowerCase() !== ownerBrand
     && claimed.toLowerCase().includes(brand.toLowerCase())
   ));
+  // TAG Heuer's reviewed workbook contains confirmed cross-brand residuals
+  // whose claimed models (for example GMT-Master and RM 72-01) do not contain
+  // a foreign brand name.  Uncatalogued TAG rows therefore need a positive
+  // TAG collection identity before they may enter model/reference browsing.
+  if (ownerBrand === 'tag heuer') {
+    if (!TAG_HEUER_MODEL_PATTERN.test(claimed)
+      || !TAG_HEUER_UNCATALOGUED_REFERENCE_PATTERN.test(reference)) return '';
+  }
   const rawResult = foreignBrand ? REFERENCE_ONLY_MODEL : claimed;
   return normalizeCanonicalModel(rawResult, row.brand_scope || row.brand);
 }
@@ -155,6 +174,7 @@ function summarizeReviewedWorkbookModels(rows) {
     const reference = rowReference(row);
     if (!reference) continue;
     const model = rowModel(row);
+    if (!model) continue;
     const current = models.get(model) || { references: new Set(), listing_count: 0 };
     current.references.add(reference);
     current.listing_count += 1;

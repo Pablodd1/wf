@@ -381,9 +381,32 @@ module.exports = async function handler(req, res) {
     }
     if (isReviewedWorkbookBrowseBrand(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
-      if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      if (!rows.length && brand.toLowerCase() !== 'tag heuer') {
+        return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      }
       if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe reference browsing' });
-      const out = summarizeReviewedWorkbookReferences(rows, model, false);
+      let out = summarizeReviewedWorkbookReferences(rows, model, false);
+      if (brand.toLowerCase() === 'tag heuer') {
+        const merged = new Map(listCanonicalCatalogReferences('TAG Heuer', model).map(entry => [
+          referenceKey(entry.reference),
+          {
+            reference: entry.reference,
+            listing_count: 0,
+            eligible_observation_count: 0,
+            analytics_ready: false,
+            sample_capped: false,
+            avg_price: null,
+            dial_colors: [],
+            identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+            evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+          },
+        ]));
+        for (const item of out) merged.set(referenceKey(item.reference), item);
+        out = [...merged.values()].sort((left, right) => (
+          Number(right.listing_count || 0) - Number(left.listing_count || 0)
+          || left.reference.localeCompare(right.reference)
+        ));
+      }
       const payload = {
         success: true,
         brand,
@@ -392,7 +415,9 @@ module.exports = async function handler(req, res) {
         observed_listing_count: out.reduce((sum, item) => sum + item.listing_count, 0),
         eligible_observation_count: out.reduce((sum, item) => sum + item.eligible_observation_count, 0),
         references: out,
-        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        identity_source: brand.toLowerCase() === 'tag heuer'
+          ? 'CATALOG_PLUS_POSITIVE_OWNER_REVIEWED_WORKBOOK'
+          : 'OWNER_REVIEWED_WORKBOOK',
         evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
         sample_capped: false,
       };

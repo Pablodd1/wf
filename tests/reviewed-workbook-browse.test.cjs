@@ -34,6 +34,22 @@ test('foreign brands, dates, and numeric tokens never become customer model name
   ]);
 });
 
+test('TAG Heuer browse fails cross-brand residual models closed', () => {
+  const tagRows = [
+    { brand_scope: 'TAG Heuer', model: 'Carrera', normalized_reference: 'CBS2210.FC6534' },
+    { brand_scope: 'TAG Heuer', model: 'GMT-Master', normalized_reference: '126710BLRO' },
+    { brand_scope: 'TAG Heuer', model: 'RM 72-01', normalized_reference: 'RM7201' },
+    { brand_scope: 'TAG Heuer', model: 'Monaco', normalized_reference: 'RM7201' },
+    { brand_scope: 'TAG Heuer', model: 'Carrera', normalized_reference: '116508' },
+    { brand_scope: 'TAG Heuer', model: 'Grand Complications', normalized_reference: '5270P-001' },
+    { brand_scope: 'TAG Heuer', model: 'Saxonia', normalized_reference: '219.032' },
+  ];
+  assert.deepEqual(summarizeReviewedWorkbookModels(tagRows), [
+    { model: 'Carrera', reference_count: 1, listing_count: 1 },
+  ]);
+  assert.deepEqual(summarizeReviewedWorkbookReferences(tagRows, 'GMT-Master'), []);
+});
+
 test('reviewed workbook references keep unverified prices out of analytics', () => {
   const references = summarizeReviewedWorkbookReferences(rows, 'PanoMaticInverse');
   assert.equal(references.length, 1);
@@ -77,6 +93,8 @@ test('new admission brands use observed workbook evidence for browse counts', ()
     assert.match(source, /observed_listing_count/);
     assert.match(source, /OWNER_REVIEWED_WORKBOOK/);
   }
+  assert.match(modelsApi, /CATALOG_PLUS_POSITIVE_OWNER_REVIEWED_WORKBOOK/);
+  assert.match(referencesApi, /listCanonicalCatalogReferences\('TAG Heuer', model\)/);
   assert.match(referencesApi, /eligible_observation_count/);
   assert.match(referencesApi, /EXACT_REFERENCE_ON_SELECTION/);
 });
