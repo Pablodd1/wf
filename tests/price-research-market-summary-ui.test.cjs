@@ -7,12 +7,12 @@ const path = require('node:path');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
 
-test('Price Research visibly preserves qualified WTS and WTB demand without the outlier summary card', () => {
+test('Price Research visibly preserves qualified WTS, WTB demand, and aggregate outlier accounting', () => {
   assert.match(source, /Liquidity and demand summary/);
   assert.match(source, /Featured listings for sale/);
   assert.match(source, /WTB \/ WTS ratio/);
-  assert.doesNotMatch(source, /Statistical price outliers/);
-  assert.match(source, /wtbDemandCount \/ qualifiedWtsCount/);
+  assert.match(source, /Statistical outliers/);
+  assert.match(source, /displayedWtbWtsRatio/);
   assert.match(source, /Q1 - 3\.0 \* IQR <= price <= Q3 \+ 3\.0 \* IQR/);
   assert.match(source, /Exclusions remain preserved for authorized audit and analysis/);
 });

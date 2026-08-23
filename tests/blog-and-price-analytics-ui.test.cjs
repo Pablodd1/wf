@@ -10,7 +10,7 @@ test('footer exposes the detailed Curated Luxury horology blog', () => {
   const footer = read('src/components/Footer.tsx');
   const app = read('src/App.tsx');
   const blog = read('src/pages/Blog.tsx');
-  assert.match(footer, /\['Blog', '\/blog'\]/);
+  assert.match(footer, /<Link to="\/blog"[^>]*>Blog<\/Link>/);
   assert.match(app, /path="\/blog" element=\{<Blog \/>\}/);
   assert.match(blog, /How a mechanical watch is made/);
   assert.match(blog, /Peter Henlein/);

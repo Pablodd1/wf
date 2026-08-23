@@ -95,6 +95,6 @@ test('search performs one analytics request and requires a brand when identity c
   const fetchData = source.slice(source.indexOf('const fetchData'), source.indexOf('useEffect(() => {', source.indexOf('const fetchData')));
   assert.match(fetchData, /fetch\(`\/api\/price-research\?\$\{params\.toString\(\)\}`/);
   assert.doesNotMatch(fetchData, /reviewed-market-inventory|fetchReviewedInventory/);
-  assert.match(fetchData, /Select a brand to run the exact comparable analysis/);
+  assert.match(fetchData, /Select a brand and reference to view market price research/);
   assert.match(source, /aria-label="Watch brand"/);
 });

@@ -146,12 +146,12 @@ test('QNSA reviewed release sources are explicit and fail closed', () => {
   assert.match(source, /const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source'/);
   assert.match(source, /const QNSA_WTB_DEMAND_SOURCE = 'qnsa_rolex_patek_wtb_demand_source'/);
   assert.match(source, /process\.env\.PRICE_RESEARCH_SOURCE_VIEW/);
-  assert.match(source, /\['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith'\]\.includes\(normalizedBrand\)/);
+  assert.match(source, /\['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin', 'omega', 'tudor'\]\.includes\(normalizedBrand\)/);
   assert.match(source, /table !== QNSA_PRICE_RESEARCH_SOURCE/);
   assert.match(source, /sourceTable === QNSA_PRICE_RESEARCH_SOURCE/);
   assert.match(source, /!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationBrandAllowed/);
-  assert.match(source, /!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationReferenceAllowed/);
-  assert.match(source, /if \(!configuredSourceTable && \(result\.error/);
+  assert.match(source, /!configuredSourceTable && !exactReviewedWorkbookRelease && !exactCatalogReference[\s\S]*!isPublicationReferenceAllowed/);
+  assert.match(source, /if \(!configuredSourceTable && !exactKnownReference && !exactReviewedWorkbookRelease[\s\S]*result\.error/);
   assert.match(source, /QNSA_WTB_DEMAND_SOURCE/);
 });
 
@@ -181,6 +181,7 @@ test('verified workbook preload short-circuits redundant legacy lookups', () => 
 
 test('exact catalog references bypass legacy discovery without admitting prefixes', () => {
   assert.match(source, /requestedCatalogHit\.matchType !== 'partial'/);
+  assert.match(source, /!configuredSourceTable && !exactReviewedWorkbookRelease && !exactCatalogReference[\s\S]*!isPublicationReferenceAllowed/);
   assert.match(source, /exactReviewedReleaseReference = isReviewedReleaseReference\(brand, rawRef\)/);
   assert.match(source, /!exactReviewedWorkbookRelease[\s\S]*exactKnownReference[\s\S]*directWatchRecordBrand[\s\S]*\? 'watch_records'/);
   assert.match(source, /else if \(exactKnownReference\) \{[\s\S]*targetRef = exactCatalogReference \? requestedCatalogHit\.reference : rawRef/);
@@ -201,7 +202,7 @@ test('legacy fallback remains bounded and WTB demand avoids the unindexed workbo
   assert.match(source, /const DEMAND_SAMPLE_LIMIT = 2500/);
   assert.match(source, /loadVerifiedDemandIdentityRows\(client/);
   assert.match(source, /limit: DEMAND_SAMPLE_LIMIT/);
-  assert.match(source, /const columns = 'id,brand,model,reference,[^']*listing_status'/);
+  assert.match(source, /const columns = 'id,brand,model,reference,[^']*listing_status[^']*'/);
   assert.doesNotMatch(source, /const columns = '[^']*(?:,phone_number,|,posted_by,|,display_image_url,|,image_url,)[^']*'/);
   assert.doesNotMatch(source, /retainVerifiedIdentityRows/);
   assert.doesNotMatch(source, /\.limit\(5000\)/);
