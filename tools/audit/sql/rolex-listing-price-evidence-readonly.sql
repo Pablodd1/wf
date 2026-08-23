@@ -1,12 +1,12 @@
 WITH control AS MATERIALIZED (
   SELECT enabled_run_key FROM public.qnsa_two_brand_release_control
-  WHERE canonical_brand='Rolex' AND price_research_enabled
+  WHERE canonical_brand='__BRAND__' AND price_research_enabled
 ), eligible AS MATERIALIZED (
   SELECT p.*
   FROM staging.listings p
   JOIN control c ON c.enabled_run_key=p.normalization_run_key
   JOIN staging.mariadb_normalization_import_checkpoints checkpoint ON checkpoint.run_key=p.normalization_run_key
-  WHERE p.brand_normalized='Rolex' AND checkpoint.status='NORMALIZATION_STAGED' AND checkpoint.error_rows=0
+  WHERE p.brand_normalized='__BRAND__' AND checkpoint.status='NORMALIZATION_STAGED' AND checkpoint.error_rows=0
     AND upper(COALESCE(p.category,''))='WATCH' AND p.parent_id IS NULL AND COALESCE(p.is_bundle,false)=false
     AND upper(COALESCE(p.listing_type,p.intent,''))='WTS'
     AND COALESCE(p.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
@@ -46,7 +46,7 @@ WITH control AS MATERIALIZED (
   FROM eligible p
 )
 SELECT jsonb_build_object(
-  'contract','watchfacts-rolex-listing-price-evidence-v1',
+  'contract','__CONTRACT_PREFIX__-price-evidence-v1',
   'project_ref','qnsafosakvonzgfcsphh','read_only',true,
   'transaction_read_only',current_setting('transaction_read_only'),
   'shard',__SHARD__,
