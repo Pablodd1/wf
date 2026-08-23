@@ -1587,12 +1587,12 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
   return (
     <section className="mb-8 flex flex-col gap-3.5" aria-label="Selected listing">
       {/* Top Banner Link */}
-      <a
-        href={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}`}
+      <Link
+        to={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}`}
         className="w-full rounded border border-[#E8DECF] bg-[#F6EFE5] py-2 text-center text-xs font-semibold text-[#653E23] transition hover:bg-[#EFE5D8] block"
       >
         Open full price research
-      </a>
+      </Link>
 
       <div className={`grid gap-6 ${availableImages.length > 0 ? 'lg:grid-cols-[minmax(320px,460px)_1fr]' : ''}`}>
         {/* Left Column: Watch Image — only when real source images exist */}

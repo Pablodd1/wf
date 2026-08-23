@@ -20,7 +20,7 @@ test('Price Research shows full-width paginated WTS evidence followed by pageabl
   const page = read('src/pages/PriceResearch.tsx');
   assert.match(page, /<DemandSignalsSection/);
   assert.match(page, /filter\(row => !\['WTB', 'BUY'\]\.includes/);
-  assert.match(page, /All available WTS evidence is accessible page by page/);
+  assert.match(page, /Priced WTS evidence is accessible page by page/);
   assert.match(page, /Previous WTS/);
   assert.match(page, /Next WTB/);
   assert.match(page, /width: '100%'/);

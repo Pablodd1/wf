@@ -95,7 +95,7 @@ export function Footer() {
             <Link to="/price-research" className="transition-colors hover:text-white">Price Research</Link>
             <Link to="/dealers" className="transition-colors hover:text-white">Reference Check</Link>
             <Link to="/dealer/workspace" className="transition-colors hover:text-white">Workspace</Link>
-            <Link to="/insight" className="transition-colors hover:text-white">Blog</Link>
+            <Link to="/blog" className="transition-colors hover:text-white">Blog</Link>
           </nav>
 
           <nav aria-label="Company & Access" className="flex flex-col gap-2.5 text-xs text-white/60">

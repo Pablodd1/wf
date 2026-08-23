@@ -134,7 +134,9 @@ function qnsaReferenceRowToMarketRow(row) {
     seller_name: source.seller_name,
     seller_phone: contactApproved ? (source.seller_phone || null) : null,
     price_raw: source.source_price_amount,
-    price_usd: source.workbook_price_usd || source.verified_price_usd || null,
+    price_usd: source.has_verified_usd_price === true
+      ? (source.workbook_price_usd || source.verified_price_usd || null)
+      : null,
     currency: source.source_currency,
     source_price_amount: source.source_price_amount,
     source_currency: source.source_currency,
@@ -1070,21 +1072,22 @@ module.exports = async function handler(req, res) {
   const preloadedReviewedWorkbookRows = preloadedReviewedWorkbookEvidenceRows
     .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS');
   const exactReviewedWorkbookRelease = preloadedReviewedWorkbookEvidenceRows.length > 0;
+  const requestedCatalogHit = lookupCatalog(rawRef, brand || null);
+  const exactCatalogReference = Boolean(
+    requestedCatalogHit?.found
+    && requestedCatalogHit.matchType !== 'partial'
+    && requestedCatalogHit.reference
+  );
   if (!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationBrandAllowed(brand)) {
     return res.status(404).json({ error: 'Brand is not included in this release' });
   }
-  if (!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationReferenceAllowed(brand, rawRef)) {
+  if (!configuredSourceTable && !exactReviewedWorkbookRelease && !exactCatalogReference
+    && !isPublicationReferenceAllowed(brand, rawRef)) {
     return res.status(404).json({ error: 'Reference is not included in this release' });
   }
 
   try {
     const controlledPaneraiRelease = brand.toLowerCase() === 'panerai';
-    const requestedCatalogHit = lookupCatalog(rawRef, brand || null);
-    const exactCatalogReference = Boolean(
-      requestedCatalogHit?.found
-      && requestedCatalogHit.matchType !== 'partial'
-      && requestedCatalogHit.reference
-    );
     const exactReviewedReleaseReference = isReviewedReleaseReference(brand, rawRef);
     const exactKnownReference = exactCatalogReference || exactReviewedReleaseReference;
     const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith']
@@ -1355,58 +1358,6 @@ module.exports = async function handler(req, res) {
     const sourceSampleCapped = exactEvidenceRecoveryCapped || (usingReviewedWorkbook
       ? baseSampleCount >= sampleLimit
       : baseSampleCount >= pageSize);
-
-    if (!rows || rows.length === 0) {
-      try {
-        const fs = require('fs');
-        const path = require('path');
-        const candidateFiles = [
-          path.join(process.cwd(), 'public', 'parsedWatches.json'),
-          path.join(process.cwd(), 'public', 'top_watches_trading_floor.json'),
-        ];
-        for (const filePath of candidateFiles) {
-          if (fs.existsSync(filePath)) {
-            const rawContent = fs.readFileSync(filePath, 'utf-8');
-            const data = JSON.parse(rawContent);
-            if (Array.isArray(data)) {
-              const normTarget = normRef(targetRef);
-              const matched = data.filter(r => {
-                const rRef = Array.isArray(r) ? r[2] : (r.reference || r.formData?.description || '');
-                return normRef(String(rRef || '')) === normTarget;
-              });
-              if (matched.length > 0) {
-                rows = matched.map((r, idx) => {
-                  if (Array.isArray(r)) {
-                    return {
-                      id: String(r[0] || `local_${idx}`),
-                      brand: String(r[1] || brand || 'Unknown'),
-                      reference: String(r[2] || targetRef),
-                      dial_color: String(r[3] || ''),
-                      price_raw: typeof r[4] === 'number' ? r[4] : null,
-                      price_usd: typeof r[5] === 'number' ? r[5] : (typeof r[4] === 'number' ? r[4] : null),
-                      currency: String(r[6] || 'USD'),
-                      condition: String(r[7] || 'New'),
-                      raw_message: String(r[8] || ''),
-                      listing_type: String(r[8] || '').toUpperCase().includes('WTB') ? 'WTB' : 'WTS',
-                      year: typeof r[12] === 'number' ? r[12] : null,
-                      model: String(r[13] || `${brand} ${targetRef}`),
-                      image_url: r[14] ? String(r[14]) : null,
-                      thumbnail_url: r[14] ? String(r[14]) : null,
-                      created_at: '2026-08-18',
-                      listing_date: '2026-08-18',
-                    };
-                  }
-                  return r;
-                });
-                break;
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[price-research] local fallback load failed:', e.message);
-      }
-    }
 
     if ((!rows || rows.length === 0) && preloadedReviewedWorkbookEvidenceRows.length === 0) {
       const emptyReconciliation = {
