@@ -30,7 +30,6 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PHASE7B_RUN_KEY: ${{ inputs.run_key }}
-      PHASE7B_OUTPUT: ${{ runner.temp }}/phase7b-worker.json
       PHASE7B_REPORT_DIR: audit-output/phase7b-verified-price-shadow
       EXPECTED_NORMALIZED_LF_MIGRATION_SHA256: 2e3a439743ae5aad2a87c5742e8e375acb9dd5ea71acbd0033f97b3e965687aa
     steps:
@@ -97,6 +96,8 @@ jobs:
           Write-Output "{`"private_shadow_schema_ready`":true,`"preexisting`":$($installed.ToString().ToLowerInvariant()),`"migration_sha256`":`"$actualSha`",`"customer_source_switches`":0}"
 
       - name: Run bounded checkpointed immutable-evidence shadow rebuild
+        env:
+          PHASE7B_OUTPUT: ${{ runner.temp }}/phase7b-worker.json
         run: npm run audit:phase7b-price-shadow
 
       - name: Build sanitized technical report and analytical artifact
