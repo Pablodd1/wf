@@ -1,0 +1,291 @@
+{
+  "contract": "watchfacts-phase6a-patek-second-brand-pilot-v1",
+  "project_ref": "qnsafosakvonzgfcsphh",
+  "enabled_run_key": "mariadb-normalized-20260811-codex-v1",
+  "generated_at": "2026-08-24T18:07:10.627Z",
+  "mode": "READ_ONLY_SHADOW_ONLY",
+  "transaction_read_only": "on",
+  "production_writes": 0,
+  "census": {
+    "active_staging_listings": 126571,
+    "wts": 98175,
+    "wtb": 28396,
+    "rows_with_exact_source_identifiers": 126571,
+    "distinct_source_identifiers": "UNKNOWN",
+    "rows_with_immutable_raw_version_identifiers": 126571,
+    "distinct_raw_version_identifiers": "UNKNOWN",
+    "populated_model_rows": 0,
+    "populated_model_count": 0,
+    "distinct_reference_values": 3066,
+    "valid_customer_safe_canonical_references": 419,
+    "original_price_count": 72515,
+    "normalized_usd_price_count": 72333,
+    "missing_normalized_usd_with_structured_source_price": 182,
+    "trading_floor_published": 126573,
+    "trading_floor_base": 126571,
+    "trading_floor_reviewed_overlay": 2,
+    "price_research_source_rows": 98176,
+    "price_research_source_rows_strict_customer_safe_reference": 11934,
+    "price_research_qualified_wts_base_all_reference_values": 72305,
+    "price_research_qualified_wts_strict_customer_safe_reference": 10020,
+    "price_research_qualified_wts_strict_exact_reference": 10020,
+    "price_research_surface_price_rows_including_noncanonical_overlay": 72306,
+    "analytics_ready_references": 370
+  },
+  "reference_safety": {
+    "catalog_references": 460,
+    "catalog_models": 13,
+    "distinct_reference_values": 3066,
+    "taxonomy": {
+      "INVALID": 1370,
+      "AMBIGUOUS": 797,
+      "PARTIAL_REFERENCE": 465,
+      "VALID_EXACT_REFERENCE": 416,
+      "VALID_REFERENCE_VARIANT": 9,
+      "COMPONENT": 1,
+      "FREE_TEXT": 8
+    },
+    "valid_customer_safe_reference_count": 419,
+    "exact_reference_count": 416,
+    "variant_only_reference_count": 3,
+    "represented_catalog_references": 419,
+    "catalog_references_not_represented": 41
+  },
+  "model_mapping": {
+    "production_model_rows_populated": 0,
+    "production_model_values_trustworthy": false,
+    "audit_side_exact_reference_to_canonical_model_mappings": 419,
+    "production_backfills": 0
+  },
+  "pilot_references": [
+    {
+      "reference": "5712/1A-001",
+      "model": "Nautilus",
+      "candidate_score": 125.4,
+      "active_rows": 247,
+      "wts": 223,
+      "wtb": 24,
+      "trading_floor_published": 247,
+      "price_research_source_rows": 223,
+      "price_research_qualified_wts": 168,
+      "analytics_ready": true,
+      "missing_usd_wts_screened": 55,
+      "safe": 0,
+      "review": 46,
+      "unresolved": 9,
+      "exclusion_reasons": {
+        "PRICE_OR_CURRENCY_REQUIRES_REVIEW": 46,
+        "NO_EXACT_AUTO_APPROVED_PRICE": 9
+      }
+    },
+    {
+      "reference": "5167/1A-001",
+      "model": "Aquanaut",
+      "candidate_score": 111.65,
+      "active_rows": 58,
+      "wts": 53,
+      "wtb": 5,
+      "trading_floor_published": 58,
+      "price_research_source_rows": 53,
+      "price_research_qualified_wts": 41,
+      "analytics_ready": true,
+      "missing_usd_wts_screened": 12,
+      "safe": 0,
+      "review": 12,
+      "unresolved": 0,
+      "exclusion_reasons": {
+        "PARSER_BUNDLE_PRICE_AMBIGUITY": 6,
+        "PRICE_OR_CURRENCY_REQUIRES_REVIEW": 6
+      }
+    },
+    {
+      "reference": "5167R-001",
+      "model": "Aquanaut",
+      "candidate_score": 110,
+      "active_rows": 245,
+      "wts": 201,
+      "wtb": 44,
+      "trading_floor_published": 245,
+      "price_research_source_rows": 201,
+      "price_research_qualified_wts": 159,
+      "analytics_ready": true,
+      "missing_usd_wts_screened": 42,
+      "safe": 0,
+      "review": 38,
+      "unresolved": 4,
+      "exclusion_reasons": {
+        "PRICE_OR_CURRENCY_REQUIRES_REVIEW": 26,
+        "MULTIPLE_PRICE_CANDIDATES": 11,
+        "IMPLAUSIBLE_HKD_1_TO_3": 1,
+        "NO_EXACT_AUTO_APPROVED_PRICE": 4
+      }
+    },
+    {
+      "reference": "5968A-001",
+      "model": "Aquanaut",
+      "candidate_score": 108.4,
+      "active_rows": 153,
+      "wts": 121,
+      "wtb": 32,
+      "trading_floor_published": 153,
+      "price_research_source_rows": 121,
+      "price_research_qualified_wts": 78,
+      "analytics_ready": true,
+      "missing_usd_wts_screened": 43,
+      "safe": 0,
+      "review": 40,
+      "unresolved": 3,
+      "exclusion_reasons": {
+        "PRICE_OR_CURRENCY_REQUIRES_REVIEW": 31,
+        "NO_EXACT_AUTO_APPROVED_PRICE": 3,
+        "MULTIPLE_PRICE_CANDIDATES": 8,
+        "DATED_FX_UNAVAILABLE": 1
+      }
+    },
+    {
+      "reference": "5726A-001",
+      "model": "Nautilus",
+      "candidate_score": 99.75,
+      "active_rows": 183,
+      "wts": 165,
+      "wtb": 18,
+      "trading_floor_published": 183,
+      "price_research_source_rows": 165,
+      "price_research_qualified_wts": 127,
+      "analytics_ready": true,
+      "missing_usd_wts_screened": 38,
+      "safe": 0,
+      "review": 26,
+      "unresolved": 12,
+      "exclusion_reasons": {
+        "NO_EXACT_AUTO_APPROVED_PRICE": 12,
+        "PRICE_OR_CURRENCY_REQUIRES_REVIEW": 26
+      }
+    }
+  ],
+  "discovery": {
+    "wts_rows_screened": 190,
+    "counts": {
+      "SAFE_EXPLICIT_USD": 0,
+      "SAFE_EXPLICIT_USDT": 0,
+      "SAFE_VERIFIED_FX": 0,
+      "REVIEW_CURRENCY": 137,
+      "REVIEW_MULTIPLE_PRICE": 19,
+      "REVIEW_BUNDLE": 6,
+      "UNRESOLVED": 28
+    },
+    "safe": 0,
+    "review": 162,
+    "unresolved": 28,
+    "safe_by_currency": {},
+    "expected_pr_qualified": 0,
+    "safe_not_pr_qualified": 0,
+    "parser_quality": {
+      "rows_with_price_candidate": 162,
+      "rows_with_explicit_currency": 16,
+      "parser_auto_approved_rows": 4,
+      "contract_auto_approved_rows": 2,
+      "multiple_price_rows": 19,
+      "bundle_rows": 6,
+      "fx_blocked_rows": 2
+    },
+    "reasons": {
+      "PARSER_BUNDLE_PRICE_AMBIGUITY": 6,
+      "PRICE_OR_CURRENCY_REQUIRES_REVIEW": 135,
+      "MULTIPLE_PRICE_CANDIDATES": 19,
+      "NO_EXACT_AUTO_APPROVED_PRICE": 28,
+      "IMPLAUSIBLE_HKD_1_TO_3": 1,
+      "DATED_FX_UNAVAILABLE": 1
+    }
+  },
+  "rolex_vs_patek": {
+    "warning": "Directional comparison only: the Patek opportunity-ranked five-reference cohort and the Rolex Phase 4B predefined five-reference cohort are not population-matched.",
+    "metrics": [
+      {
+        "metric": "Explicit-currency rate",
+        "patek_count": 16,
+        "patek_rate": 8.42,
+        "rolex_count": "UNKNOWN",
+        "rolex_rate": "UNKNOWN",
+        "note": "Rolex Phase 4B did not preserve a comparable explicit-currency aggregate."
+      },
+      {
+        "metric": "Parser AUTO_APPROVED rate",
+        "patek_count": 2,
+        "patek_rate": 1.05,
+        "rolex_count": 408,
+        "rolex_rate": 4.37,
+        "note": "Rows reaching the safe contract before FX validation."
+      },
+      {
+        "metric": "Review-required rate",
+        "patek_count": 162,
+        "patek_rate": 85.26,
+        "rolex_count": 7001,
+        "rolex_rate": 75.01
+      },
+      {
+        "metric": "Unresolved rate",
+        "patek_count": 28,
+        "patek_rate": 14.74,
+        "rolex_count": 2332,
+        "rolex_rate": 24.99
+      },
+      {
+        "metric": "Multiple-price rate",
+        "patek_count": 19,
+        "patek_rate": 10,
+        "rolex_count": 114,
+        "rolex_rate": 1.22
+      },
+      {
+        "metric": "Bundle rate",
+        "patek_count": 6,
+        "patek_rate": 3.16,
+        "rolex_count": 110,
+        "rolex_rate": 1.18
+      },
+      {
+        "metric": "FX-blocked rate",
+        "patek_count": 2,
+        "patek_rate": 1.05,
+        "rolex_count": 408,
+        "rolex_rate": 4.37
+      },
+      {
+        "metric": "Safe WTS recovery rate",
+        "patek_count": 0,
+        "patek_rate": 0,
+        "rolex_count": 0,
+        "rolex_rate": 0
+      }
+    ]
+  },
+  "proposed_production_canary": {
+    "rows": [],
+    "count": 0,
+    "maximum": 25,
+    "status": "EMPTY_NO_SAFE_ROWS"
+  },
+  "recommendation": "BLOCKED_NO_SAFE_COHORT",
+  "limitations": [
+    "Distinct source_record_id and raw_message_version_id counts are UNKNOWN because the global DISTINCT query exceeded the bounded production query window; row-level identifier completeness is exactly 126,571 of 126,571.",
+    "Production model values are unpopulated, so model mapping is catalog-derived in the audit only and was not written back.",
+    "The two reviewed overlay rows use non-canonical partial references (4934G and 5167A); they are counted on the customer surface but not as strict exact-reference Price Research qualifications.",
+    "Rolex explicit-currency rate is UNKNOWN in the preserved Phase 4B aggregate and is not inferred."
+  ],
+  "safeguards": {
+    "raw_messages_exported": false,
+    "contact_values_exported": false,
+    "raw_messages_retained_in_private_input": false,
+    "production_data_modified": false,
+    "raw_data_modified": false,
+    "ui_ux_modified": false,
+    "evidence_standard_relaxed": false
+  },
+  "checksums": {
+    "reference_ranking_sha256": "444871b8e436a8cf163a4d8a7ef5c109f8222dac6056409778e8ba3b582dcbf5",
+    "wts_discovery_sha256": "80d188b6cc281da6f0e45546fcd4db610179d9f6e49345eaa9fd0ae03f2a1df0",
+    "proposed_canary_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  }
+}

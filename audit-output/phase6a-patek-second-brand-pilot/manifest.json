@@ -1,0 +1,33 @@
+{
+  "contract": "watchfacts-phase6a-patek-second-brand-pilot-manifest-v1",
+  "files": [
+    {
+      "file": "audit.json",
+      "sha256": "c3b2d9b92dfbf533217e6f38a15fb7891ceb47617d5391135bbfe24fe3be7cf9"
+    },
+    {
+      "file": "reference-ranking.json",
+      "sha256": "444871b8e436a8cf163a4d8a7ef5c109f8222dac6056409778e8ba3b582dcbf5"
+    },
+    {
+      "file": "wts-discovery.json",
+      "sha256": "80d188b6cc281da6f0e45546fcd4db610179d9f6e49345eaa9fd0ae03f2a1df0"
+    },
+    {
+      "file": "report.md",
+      "sha256": "4ae7e301bfec7d4f86bab5b50fa13fc6763e82efe25cac338f080779741827e4"
+    },
+    {
+      "file": "report.html",
+      "sha256": "051f72445b1cdbacd42a50ff494f1431e312ef2fe3f7737e7cd2c055b4060c6a"
+    },
+    {
+      "file": "chart-reference-opportunity.svg",
+      "sha256": "34aec8e53a2e996cd72ca568ae0176743fee4ff57e0d54cc259296e53a11fe89"
+    },
+    {
+      "file": "report-render.png",
+      "sha256": "779f023fc63d339e2f651c1d0fe8dadb4b282469c8f8ffa6a974290e65fd9bbd"
+    }
+  ]
+}
