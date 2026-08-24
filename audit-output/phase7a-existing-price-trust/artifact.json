@@ -1,0 +1,369 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "title": "WATCHFACTS Phase 7A — Existing Price Integrity & Price Research Trust Audit",
+    "surface": "report",
+    "generatedAt": "2026-08-24T19:19:24.92324+00:00",
+    "description": "Read-only Rolex and Patek price-evidence trust audit.",
+    "sources": [
+      {
+        "id": "qnsa_phase7a",
+        "label": "QNSA production read-only audit",
+        "type": "database",
+        "query": {
+          "engine": "PostgreSQL",
+          "language": "sql",
+          "description": "Read-only active-run census, UUID-sharded canonical-reference reconciliation, and bounded immutable-source parser-v5 shadow audit.",
+          "sql": "WITH control AS (\n  SELECT enabled_run_key FROM public.qnsa_market_feed_control WHERE singleton AND enabled\n)\nSELECT brand_normalized, reference_normalized,\n  count(*) FILTER (WHERE upper(coalesce(listing_type,intent,''))='WTS' AND price_usd>0\n    AND lower(coalesce(price_research_status,''))<>'suppressed_exact_duplicate') AS current_qualified,\n  count(*) FILTER (WHERE upper(coalesce(listing_type,intent,''))='WTS' AND price_usd>0\n    AND lower(coalesce(price_research_status,''))<>'suppressed_exact_duplicate'\n    AND ((upper(coalesce(currency_original,currency_normalized,'')) IN ('USD','USDT')\n      AND currency_evidence IN ('explicit_line_currency','section_currency','SOURCE_EXPLICIT_USD_USDT'))\n      OR (upper(coalesce(currency_original,currency_normalized,'')) NOT IN ('','USD','USDT')\n        AND currency_evidence IN ('explicit_line_currency','section_currency')\n        AND conversion_rate>0 AND conversion_timestamp IS NOT NULL))) AS stored_evidence_verified\nFROM staging.listings JOIN control ON normalization_run_key=enabled_run_key\nWHERE brand_normalized IN ('Rolex','Patek Philippe')\nGROUP BY brand_normalized, reference_normalized;",
+          "tables_used": [
+            "staging.listings",
+            "public.qnsa_market_feed_control",
+            "public.raw_message_versions"
+          ],
+          "filters": [
+            "brand_normalized IN ('Rolex','Patek Philippe')",
+            "active normalization run",
+            "Price Research excludes suppressed_exact_duplicate"
+          ],
+          "metric_definitions": {
+            "current_qualified": "WTS rows with price_usd > 0 excluding suppressed_exact_duplicate.",
+            "stored_evidence_verified": "Current qualified rows with explicit USD/USDT or explicit foreign currency plus positive dated FX provenance.",
+            "trusted_observation_rate": "stored_evidence_verified / current_qualified."
+          }
+        }
+      }
+    ],
+    "charts": [
+      {
+        "id": "trust_chart",
+        "title": "Price Research trust rate by brand",
+        "subtitle": "Verified stored evidence covers about one-third of Rolex and four-fifths of Patek observations.",
+        "dataset": "trust_rates",
+        "type": "bar",
+        "encodings": {
+          "x": {
+            "field": "brand",
+            "type": "nominal"
+          },
+          "y": {
+            "field": "rate",
+            "type": "quantitative"
+          },
+          "color": {
+            "field": "series",
+            "type": "nominal"
+          }
+        },
+        "options": {
+          "orientation": "vertical",
+          "grouping": "grouped"
+        },
+        "source": {
+          "id": "qnsa_phase7a",
+          "label": "QNSA production read-only audit",
+          "type": "database",
+          "query": {
+            "engine": "PostgreSQL",
+            "language": "sql",
+            "description": "Read-only active-run census, UUID-sharded canonical-reference reconciliation, and bounded immutable-source parser-v5 shadow audit.",
+            "sql": "WITH control AS (\n  SELECT enabled_run_key FROM public.qnsa_market_feed_control WHERE singleton AND enabled\n)\nSELECT brand_normalized, reference_normalized,\n  count(*) FILTER (WHERE upper(coalesce(listing_type,intent,''))='WTS' AND price_usd>0\n    AND lower(coalesce(price_research_status,''))<>'suppressed_exact_duplicate') AS current_qualified,\n  count(*) FILTER (WHERE upper(coalesce(listing_type,intent,''))='WTS' AND price_usd>0\n    AND lower(coalesce(price_research_status,''))<>'suppressed_exact_duplicate'\n    AND ((upper(coalesce(currency_original,currency_normalized,'')) IN ('USD','USDT')\n      AND currency_evidence IN ('explicit_line_currency','section_currency','SOURCE_EXPLICIT_USD_USDT'))\n      OR (upper(coalesce(currency_original,currency_normalized,'')) NOT IN ('','USD','USDT')\n        AND currency_evidence IN ('explicit_line_currency','section_currency')\n        AND conversion_rate>0 AND conversion_timestamp IS NOT NULL))) AS stored_evidence_verified\nFROM staging.listings JOIN control ON normalization_run_key=enabled_run_key\nWHERE brand_normalized IN ('Rolex','Patek Philippe')\nGROUP BY brand_normalized, reference_normalized;",
+            "tables_used": [
+              "staging.listings",
+              "public.qnsa_market_feed_control",
+              "public.raw_message_versions"
+            ],
+            "filters": [
+              "brand_normalized IN ('Rolex','Patek Philippe')",
+              "active normalization run",
+              "Price Research excludes suppressed_exact_duplicate"
+            ],
+            "metric_definitions": {
+              "current_qualified": "WTS rows with price_usd > 0 excluding suppressed_exact_duplicate.",
+              "stored_evidence_verified": "Current qualified rows with explicit USD/USDT or explicit foreign currency plus positive dated FX provenance.",
+              "trusted_observation_rate": "stored_evidence_verified / current_qualified."
+            }
+          }
+        }
+      }
+    ],
+    "tables": [
+      {
+        "id": "impact_table",
+        "title": "Highest-impact canonical references",
+        "dataset": "impact_references",
+        "columns": [
+          {
+            "field": "brand",
+            "label": "Brand",
+            "type": "string"
+          },
+          {
+            "field": "reference",
+            "label": "Reference",
+            "type": "string"
+          },
+          {
+            "field": "current_count",
+            "label": "Current observations",
+            "type": "number"
+          },
+          {
+            "field": "verified_count",
+            "label": "Verified observations",
+            "type": "number"
+          },
+          {
+            "field": "trusted_rate",
+            "label": "Trusted rate",
+            "type": "percent"
+          },
+          {
+            "field": "current_median",
+            "label": "Current median",
+            "type": "currency"
+          },
+          {
+            "field": "verified_median",
+            "label": "Verified median",
+            "type": "currency"
+          },
+          {
+            "field": "current_mean",
+            "label": "Current mean",
+            "type": "currency"
+          },
+          {
+            "field": "verified_mean",
+            "label": "Verified mean",
+            "type": "currency"
+          }
+        ],
+        "defaultSort": {
+          "field": "current_count",
+          "direction": "desc"
+        },
+        "source": {
+          "id": "qnsa_phase7a",
+          "label": "QNSA production read-only audit",
+          "type": "database",
+          "query": {
+            "engine": "PostgreSQL",
+            "language": "sql",
+            "description": "Read-only active-run census, UUID-sharded canonical-reference reconciliation, and bounded immutable-source parser-v5 shadow audit.",
+            "sql": "WITH control AS (\n  SELECT enabled_run_key FROM public.qnsa_market_feed_control WHERE singleton AND enabled\n)\nSELECT brand_normalized, reference_normalized,\n  count(*) FILTER (WHERE upper(coalesce(listing_type,intent,''))='WTS' AND price_usd>0\n    AND lower(coalesce(price_research_status,''))<>'suppressed_exact_duplicate') AS current_qualified,\n  count(*) FILTER (WHERE upper(coalesce(listing_type,intent,''))='WTS' AND price_usd>0\n    AND lower(coalesce(price_research_status,''))<>'suppressed_exact_duplicate'\n    AND ((upper(coalesce(currency_original,currency_normalized,'')) IN ('USD','USDT')\n      AND currency_evidence IN ('explicit_line_currency','section_currency','SOURCE_EXPLICIT_USD_USDT'))\n      OR (upper(coalesce(currency_original,currency_normalized,'')) NOT IN ('','USD','USDT')\n        AND currency_evidence IN ('explicit_line_currency','section_currency')\n        AND conversion_rate>0 AND conversion_timestamp IS NOT NULL))) AS stored_evidence_verified\nFROM staging.listings JOIN control ON normalization_run_key=enabled_run_key\nWHERE brand_normalized IN ('Rolex','Patek Philippe')\nGROUP BY brand_normalized, reference_normalized;",
+            "tables_used": [
+              "staging.listings",
+              "public.qnsa_market_feed_control",
+              "public.raw_message_versions"
+            ],
+            "filters": [
+              "brand_normalized IN ('Rolex','Patek Philippe')",
+              "active normalization run",
+              "Price Research excludes suppressed_exact_duplicate"
+            ],
+            "metric_definitions": {
+              "current_qualified": "WTS rows with price_usd > 0 excluding suppressed_exact_duplicate.",
+              "stored_evidence_verified": "Current qualified rows with explicit USD/USDT or explicit foreign currency plus positive dated FX provenance.",
+              "trusted_observation_rate": "stored_evidence_verified / current_qualified."
+            }
+          }
+        }
+      }
+    ],
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# WATCHFACTS Phase 7A — Existing Price Integrity & Price Research Trust Audit"
+      },
+      {
+        "id": "decision",
+        "type": "markdown",
+        "sourceId": "qnsa_phase7a",
+        "body": "## Decision\n\n**Combined recommendation: PRICE_RESEARCH_REBUILD_REQUIRED.** Rolex requires a rebuild; Patek requires partial remediation. Unreliable existing prices are the primary issue, not missing prices."
+      },
+      {
+        "id": "trust_chart_block",
+        "type": "chart",
+        "chartId": "trust_chart"
+      },
+      {
+        "id": "impact_text",
+        "type": "markdown",
+        "sourceId": "qnsa_phase7a",
+        "body": "## Analytics impact\n\nVerified-only eligibility reduces analytics-ready canonical references from 278 to 262 for Rolex and from 370 to 364 for Patek. High-impact exact recomputations show severe mean distortion from implausible legacy maxima."
+      },
+      {
+        "id": "impact_table_block",
+        "type": "table",
+        "tableId": "impact_table"
+      },
+      {
+        "id": "controls",
+        "type": "markdown",
+        "body": "## Controls and proposed disposition\n\nNo values changed. KEEP_VERIFIED requires immutable lineage plus an exact parser-v5 match. Legacy defaulted, ambiguous, bundle, unsupported-FX, and malformed-reference rows should remain stored but be excluded from Price Research pending review."
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "status": "ready",
+    "generatedAt": "2026-08-24T19:19:24.92324+00:00",
+    "datasets": {
+      "trust_rates": [
+        {
+          "brand": "Patek Philippe",
+          "series": "Current qualified",
+          "rate": 1,
+          "current": 72305,
+          "verified": 57378,
+          "legacy_review": 14927
+        },
+        {
+          "brand": "Patek Philippe",
+          "series": "Stored-evidence verified",
+          "rate": 0.79355507917848,
+          "current": 72305,
+          "verified": 57378,
+          "legacy_review": 14927
+        },
+        {
+          "brand": "Rolex",
+          "series": "Current qualified",
+          "rate": 1,
+          "current": 157495,
+          "verified": 51629,
+          "legacy_review": 105866
+        },
+        {
+          "brand": "Rolex",
+          "series": "Stored-evidence verified",
+          "rate": 0.327813581383536,
+          "current": 157495,
+          "verified": 51629,
+          "legacy_review": 105866
+        }
+      ],
+      "impact_references": [
+        {
+          "brand": "Patek Philippe",
+          "reference": "5205G-013",
+          "current_count": 101,
+          "verified_count": 65,
+          "trusted_rate": 0.6435643564356436,
+          "current_median": 42000,
+          "verified_median": 39800,
+          "current_mean": 79438.85,
+          "verified_mean": 40976.52
+        },
+        {
+          "brand": "Patek Philippe",
+          "reference": "5224R-001",
+          "current_count": 51,
+          "verified_count": 18,
+          "trusted_rate": 0.35294117647058826,
+          "current_median": 43500,
+          "verified_median": 39554.5,
+          "current_mean": 67859.51,
+          "verified_mean": 38944.5
+        },
+        {
+          "brand": "Patek Philippe",
+          "reference": "5711/1A-014",
+          "current_count": 57,
+          "verified_count": 24,
+          "trusted_rate": 0.42105263157894735,
+          "current_median": 213500,
+          "verified_median": 225929.5,
+          "current_mean": 637012.47,
+          "verified_mean": 1205529.63
+        },
+        {
+          "brand": "Patek Philippe",
+          "reference": "5905/1A-001",
+          "current_count": 66,
+          "verified_count": 35,
+          "trusted_rate": 0.5303030303030303,
+          "current_median": 47550,
+          "verified_median": 47000,
+          "current_mean": 99162.91,
+          "verified_mean": 46417.09
+        },
+        {
+          "brand": "Patek Philippe",
+          "reference": "6007G-001",
+          "current_count": 49,
+          "verified_count": 9,
+          "trusted_rate": 0.1836734693877551,
+          "current_median": 31500,
+          "verified_median": 28300,
+          "current_mean": 46352.96,
+          "verified_mean": 28666.11
+        },
+        {
+          "brand": "Rolex",
+          "reference": "126300",
+          "current_count": 3184,
+          "verified_count": 1194,
+          "trusted_rate": 0.375,
+          "current_median": 10200,
+          "verified_median": 9757,
+          "current_mean": 252063.28,
+          "verified_mean": 9209.86
+        },
+        {
+          "brand": "Rolex",
+          "reference": "126331",
+          "current_count": 2298,
+          "verified_count": 646,
+          "trusted_rate": 0.28111401218450827,
+          "current_median": 16300,
+          "verified_median": 16100.5,
+          "current_mean": 364626.72,
+          "verified_mean": 14750.21
+        },
+        {
+          "brand": "Rolex",
+          "reference": "126333",
+          "current_count": 2890,
+          "verified_count": 672,
+          "trusted_rate": 0.23252595155709344,
+          "current_median": 15450,
+          "verified_median": 15001,
+          "current_mean": 303405.4,
+          "verified_mean": 14596.49
+        },
+        {
+          "brand": "Rolex",
+          "reference": "126334",
+          "current_count": 6860,
+          "verified_count": 2215,
+          "trusted_rate": 0.3228862973760933,
+          "current_median": 14000,
+          "verified_median": 13600,
+          "current_mean": 556180.46,
+          "verified_mean": 12870.13
+        },
+        {
+          "brand": "Rolex",
+          "reference": "228235",
+          "current_count": 2472,
+          "verified_count": 788,
+          "trusted_rate": 0.3187702265372168,
+          "current_median": 52254,
+          "verified_median": 51489,
+          "current_mean": 512714.05,
+          "verified_mean": 49550.54
+        }
+      ]
+    }
+  },
+  "sources": [
+    {
+      "id": "phase7a_audit",
+      "label": "Sanitized Phase 7A audit JSON",
+      "path": "audit-output/phase7a-existing-price-trust/audit.json"
+    }
+  ]
+}
