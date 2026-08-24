@@ -10,7 +10,8 @@
   },
   "implementation": {
     "branch": "codex/phase7b-verified-price-shadow",
-    "pull_request": null,
+    "implementation_commit": "619841a4",
+    "pull_request": "https://github.com/Pablodd1/wf/pull/762",
     "private_schema": "price_research_shadow",
     "customer_source_switched": false,
     "ui_modified": false,
