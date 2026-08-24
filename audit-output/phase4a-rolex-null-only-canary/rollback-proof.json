@@ -1,0 +1,12 @@
+{
+  "contract": "watchfacts-phase4a-rolex-null-only-rollback-proof-v1",
+  "run_key": "p4a-rolex-null-only-20260824T153651Z",
+  "method": "Uncommitted transaction restored all persisted snapshot fields, verified exact equality, then rolled back the rollback transaction.",
+  "restored_rows_in_simulation": 3,
+  "rollback_state_exact": true,
+  "simulation_persisted": false,
+  "post_simulation_run_status": "ACTIVE",
+  "post_simulation_active_values_match": 3,
+  "snapshot_count": 3,
+  "result": "PASS"
+}

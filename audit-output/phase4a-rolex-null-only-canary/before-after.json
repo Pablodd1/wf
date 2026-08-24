@@ -1,0 +1,54 @@
+{
+  "contract": "watchfacts-phase4a-rolex-null-only-before-after-v1",
+  "run_key": "p4a-rolex-null-only-20260824T153651Z",
+  "rows": [
+    {
+      "listing_id": "42e491b1-b1a4-44f8-99e8-0ef38b1c5973",
+      "reference": "228235",
+      "intent": "WTB",
+      "source_record_id": "mysql_auctions_6fe15a1e-3168-4dfd-b915-ca42a6adc35a",
+      "raw_message_version_id": "f7abfdce-2fc6-4ef2-a22c-5291314b7521",
+      "source_hash": "a739144ee3ae7e48e37fb2d4b0720b66f673043aef7700b39c1ba8239b8cafd3",
+      "source_candidate_hash": "de97ac1b893600c3390e022cf38139b4815080f49036c0ae9625b2585087baa9",
+      "before": {"price_usd":null,"conversion_rate":null,"conversion_timestamp":null,"conversion_source":null},
+      "source_evidence": {"amount":37950,"currency":"GBP","currency_evidence":"explicit_line_currency","observed_ecb_rate":1.3634132086499124,"persisted_rate":1.363413,"fx_date":"2026-08-24T00:00:00+00:00","fx_source":"European Central Bank reference rates"},
+      "after": {"price_usd":51742,"conversion_rate":1.363413,"conversion_timestamp":"2026-08-24T00:00:00+00:00","conversion_source":"European Central Bank reference rates"},
+      "unchanged_fields_sha256_before": "4cdb1a329aa6943606600b926ae5debec0d21ecd470aebd4b1002f3f776b537a",
+      "unchanged_fields_sha256_after": "4cdb1a329aa6943606600b926ae5debec0d21ecd470aebd4b1002f3f776b537a",
+      "raw_text_sha256_before": "74c92778d15578e874a89b184a6543d3e0b19c55491a58726c2824a2b15d43e9",
+      "raw_text_sha256_after": "74c92778d15578e874a89b184a6543d3e0b19c55491a58726c2824a2b15d43e9"
+    },
+    {
+      "listing_id": "ac6840bb-0195-45aa-a3ad-5b536dd6fd7b",
+      "reference": "126334",
+      "intent": "WTB",
+      "source_record_id": "mysql_auctions_0a6dffd1-f1de-46cb-be10-c618a94ceb0f",
+      "raw_message_version_id": "a790717e-7bdf-4629-b9d8-3f87e36c2c51",
+      "source_hash": "ba0295ebc3e4b605f85d34d5f6010ae119d9f509167e5dd40cd4c4bf505097f8",
+      "source_candidate_hash": "1f212c4f808bc29fefa8f9dd05026bbc07a9987f279603b33cd3f985eb81d906",
+      "before": {"price_usd":null,"conversion_rate":null,"conversion_timestamp":null,"conversion_source":null},
+      "source_evidence": {"amount":10000,"currency":"EUR","currency_evidence":"explicit_line_currency","observed_ecb_rate":1.1664,"persisted_rate":1.1664,"fx_date":"2026-08-24T00:00:00+00:00","fx_source":"European Central Bank reference rates"},
+      "after": {"price_usd":11664,"conversion_rate":1.1664,"conversion_timestamp":"2026-08-24T00:00:00+00:00","conversion_source":"European Central Bank reference rates"},
+      "unchanged_fields_sha256_before": "74acffaa25694b5b745ef1ad7c06695aa52b7f6fd4494ec0dcdc6b61e10e386f",
+      "unchanged_fields_sha256_after": "74acffaa25694b5b745ef1ad7c06695aa52b7f6fd4494ec0dcdc6b61e10e386f",
+      "raw_text_sha256_before": "4b28542bf36089001365d2a99796c25cf41938ee4bba35d88deb71ce21dd8c90",
+      "raw_text_sha256_after": "4b28542bf36089001365d2a99796c25cf41938ee4bba35d88deb71ce21dd8c90"
+    },
+    {
+      "listing_id": "fb45c058-f100-4798-b662-6054be07b2c9",
+      "reference": "228238",
+      "intent": "WTB",
+      "source_record_id": "mysql_auctions_bc9fe008-0009-4220-8bfa-bfc045d3691a",
+      "raw_message_version_id": "1c29a51a-014c-475b-ab7d-b311901dc557",
+      "source_hash": "d8a56b57e234fcf91ed269aba3c76673ccb26a52cdb98bddc79c5949b75e221d",
+      "source_candidate_hash": "b99c70c39da6d5f9803cc07c2d6d9b70587cb77fe1542c40df9abe8023d32b28",
+      "before": {"price_usd":null,"conversion_rate":null,"conversion_timestamp":null,"conversion_source":null},
+      "source_evidence": {"amount":52000,"currency":"EUR","currency_evidence":"explicit_line_currency","observed_ecb_rate":1.1664,"persisted_rate":1.1664,"fx_date":"2026-08-24T00:00:00+00:00","fx_source":"European Central Bank reference rates"},
+      "after": {"price_usd":60653,"conversion_rate":1.1664,"conversion_timestamp":"2026-08-24T00:00:00+00:00","conversion_source":"European Central Bank reference rates"},
+      "unchanged_fields_sha256_before": "57ec01b5cb4105b7cc04061dc630c91fb1b2665bf979d6e1de35e659a5fff868",
+      "unchanged_fields_sha256_after": "57ec01b5cb4105b7cc04061dc630c91fb1b2665bf979d6e1de35e659a5fff868",
+      "raw_text_sha256_before": "0f3d37f3cd86d4d72232ce4449387cf19637af0e345ff298fc151cae1d1285a1",
+      "raw_text_sha256_after": "0f3d37f3cd86d4d72232ce4449387cf19637af0e345ff298fc151cae1d1285a1"
+    }
+  ]
+}

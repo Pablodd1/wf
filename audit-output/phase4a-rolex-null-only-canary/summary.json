@@ -1,0 +1,48 @@
+{
+  "contract": "watchfacts-phase4a-rolex-null-only-canary-result-v1",
+  "production_project": "qnsafosakvonzgfcsphh",
+  "run_key": "p4a-rolex-null-only-20260824T153651Z",
+  "status": "CANARY_PASSED",
+  "production_status": "ACTIVE",
+  "created_at": "2026-08-24T15:43:22.021568+00:00",
+  "manifest_sha256": "fb26713049fdf95d43ed69e43292b171f17359ed49372356ddc3ded0c2c6b206",
+  "committed_transaction_sha256": "dacff5300e1d2fa0e71f7b5f1177640c7484b9a11a84a02ffdfc1ab3b43dc58b",
+  "authorized_rows": 3,
+  "attempted_rows": 3,
+  "successful_rows": 3,
+  "aborted_rows": 0,
+  "unauthorized_writes": 0,
+  "non_null_overwrites": 0,
+  "raw_mutations": 0,
+  "unrelated_field_changes": 0,
+  "tf_regression": 0,
+  "price_research_wts_change": 0,
+  "rollback_proof": "PASS",
+  "fields_changed": [
+    "price_usd",
+    "conversion_rate",
+    "conversion_timestamp",
+    "conversion_source"
+  ],
+  "precommit_fail_safe_events": [
+    {
+      "reason": "PL/pgSQL local variable and table alias ambiguity in the snapshot statement",
+      "persisted_runs": 0,
+      "persisted_proposals": 0,
+      "persisted_snapshots": 0,
+      "persisted_target_changes": 0
+    },
+    {
+      "reason": "Post-write equality initially compared full ECB precision with the six-decimal database rate representation",
+      "persisted_runs": 0,
+      "persisted_proposals": 0,
+      "persisted_snapshots": 0,
+      "persisted_target_changes": 0
+    }
+  ],
+  "raw_messages_exported": false,
+  "contact_values_exported": false,
+  "ui_ux_modified": false,
+  "publication_rules_modified": false,
+  "references_marked_verified": false
+}
