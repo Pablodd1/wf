@@ -1,0 +1,242 @@
+{
+  "contract": "watchfacts-phase5a-rolex-price-evidence-remediation-v1",
+  "generated_at": "2026-08-24T17:35:54.737Z",
+  "read_only": true,
+  "production_writes": 0,
+  "evidence_standard_relaxed": false,
+  "raw_messages_exported": false,
+  "contact_values_exported": false,
+  "population": {
+    "exact_known_union_rows": 9936,
+    "phase4b_exact_rows": 9333,
+    "phase4c_frozen_supported_rows": 285,
+    "phase4c_literal_aed_rows": 431,
+    "phase4c_aed_overlap_with_current_supported_rows": 113,
+    "phase4c_aed_only_rows": 318,
+    "current_supported_marker_rows": 294,
+    "supported_marker_drift_from_frozen_cohort": 9,
+    "dirham_alias_only_rows_not_promoted": 37,
+    "deterministic_phase4b_sample_rows": 2395,
+    "deterministic_phase4b_sample_method": "deterministic UUID partitions 0,4,8,c of 16"
+  },
+  "blocker_distribution": {
+    "PRICE_CURRENCY_REVIEW": 6543,
+    "MULTIPLE_PRICE_AMBIGUITY": 196,
+    "NO_EXACT_AUTO_APPROVED_PRICE": 2391,
+    "BUNDLE_OR_MULTIPLE_CONTEXT": 123,
+    "IMPLAUSIBLE_HKD": 12,
+    "AED_WITHOUT_APPROVED_FX": 671
+  },
+  "remediation": {
+    "PRICE_CURRENCY_REVIEW": {
+      "deterministic_remediation_possible": false,
+      "human_review_required": true,
+      "parser_change_required": false,
+      "false_positive_risk": "HIGH",
+      "total_rows": 6543,
+      "phase4b_exact_rows": 6369,
+      "phase4c_frozen_rows": 170,
+      "aed_only_exact_rows": 4,
+      "phase4b_sample_rows": 1620,
+      "phase4b_sample_recoverable": 0,
+      "phase4b_estimated_recoverable": 0,
+      "current_supplement_exact_recoverable": 0,
+      "estimated_recoverable_wts": 0,
+      "estimated_review_or_unresolved": 6543,
+      "source_syntax_patterns": [
+        {
+          "pattern": "BARE_DOLLAR_AMOUNT",
+          "observed_in_bounded_evidence": 1093
+        },
+        {
+          "pattern": "UNLABELED_NUMERIC_AMOUNT",
+          "observed_in_bounded_evidence": 518
+        },
+        {
+          "pattern": "AED_IN_SHARED_OR_ADJACENT_CONTEXT",
+          "observed_in_bounded_evidence": 117
+        },
+        {
+          "pattern": "REF_AND_NAMED_CURRENCY_CONTEXT",
+          "observed_in_bounded_evidence": 60
+        },
+        {
+          "pattern": "DIRHAM_ALIAS_WITHOUT_LITERAL_AED",
+          "observed_in_bounded_evidence": 6
+        }
+      ]
+    },
+    "MULTIPLE_PRICE_AMBIGUITY": {
+      "deterministic_remediation_possible": false,
+      "human_review_required": true,
+      "parser_change_required": true,
+      "false_positive_risk": "HIGH",
+      "total_rows": 196,
+      "phase4b_exact_rows": 114,
+      "phase4c_frozen_rows": 67,
+      "aed_only_exact_rows": 15,
+      "phase4b_sample_rows": 27,
+      "phase4b_sample_recoverable": 0,
+      "phase4b_estimated_recoverable": 0,
+      "current_supplement_exact_recoverable": 0,
+      "estimated_recoverable_wts": 0,
+      "estimated_review_or_unresolved": 196,
+      "source_syntax_patterns": [
+        {
+          "pattern": "ONE_REF_LINE_WITH_MULTIPLE_MESSAGE_PRICES",
+          "observed_in_bounded_evidence": 87
+        },
+        {
+          "pattern": "AED_IN_SHARED_OR_ADJACENT_CONTEXT",
+          "observed_in_bounded_evidence": 30
+        },
+        {
+          "pattern": "REF_AND_AED_AMOUNT_SAME_LINE",
+          "observed_in_bounded_evidence": 1
+        }
+      ]
+    },
+    "NO_EXACT_AUTO_APPROVED_PRICE": {
+      "deterministic_remediation_possible": false,
+      "human_review_required": true,
+      "parser_change_required": false,
+      "false_positive_risk": "CRITICAL",
+      "total_rows": 2391,
+      "phase4b_exact_rows": 2332,
+      "phase4c_frozen_rows": 31,
+      "aed_only_exact_rows": 28,
+      "phase4b_sample_rows": 611,
+      "phase4b_sample_recoverable": 0,
+      "phase4b_estimated_recoverable": 0,
+      "current_supplement_exact_recoverable": 0,
+      "estimated_recoverable_wts": 0,
+      "estimated_review_or_unresolved": 2391,
+      "source_syntax_patterns": [
+        {
+          "pattern": "UNLABELED_NUMERIC_AMOUNT",
+          "observed_in_bounded_evidence": 597
+        },
+        {
+          "pattern": "AED_IN_SHARED_OR_ADJACENT_CONTEXT",
+          "observed_in_bounded_evidence": 38
+        },
+        {
+          "pattern": "REF_AND_NAMED_CURRENCY_CONTEXT",
+          "observed_in_bounded_evidence": 27
+        },
+        {
+          "pattern": "BARE_DOLLAR_AMOUNT",
+          "observed_in_bounded_evidence": 8
+        }
+      ]
+    },
+    "BUNDLE_OR_MULTIPLE_CONTEXT": {
+      "deterministic_remediation_possible": false,
+      "human_review_required": true,
+      "parser_change_required": true,
+      "false_positive_risk": "HIGH",
+      "total_rows": 123,
+      "phase4b_exact_rows": 110,
+      "phase4c_frozen_rows": 11,
+      "aed_only_exact_rows": 2,
+      "phase4b_sample_rows": 30,
+      "phase4b_sample_recoverable": 0,
+      "phase4b_estimated_recoverable": 0,
+      "current_supplement_exact_recoverable": 0,
+      "estimated_recoverable_wts": 0,
+      "estimated_review_or_unresolved": 123,
+      "source_syntax_patterns": [
+        {
+          "pattern": "BARE_DOLLAR_AMOUNT",
+          "observed_in_bounded_evidence": 19
+        },
+        {
+          "pattern": "AED_IN_SHARED_OR_ADJACENT_CONTEXT",
+          "observed_in_bounded_evidence": 9
+        },
+        {
+          "pattern": "UNLABELED_NUMERIC_AMOUNT",
+          "observed_in_bounded_evidence": 7
+        },
+        {
+          "pattern": "REF_AND_NAMED_CURRENCY_CONTEXT",
+          "observed_in_bounded_evidence": 6
+        },
+        {
+          "pattern": "ONE_REF_LINE_WITH_MULTIPLE_MESSAGE_PRICES",
+          "observed_in_bounded_evidence": 2
+        }
+      ]
+    },
+    "IMPLAUSIBLE_HKD": {
+      "deterministic_remediation_possible": true,
+      "human_review_required": true,
+      "parser_change_required": true,
+      "false_positive_risk": "MEDIUM_WHEN_EXPLICIT_MULTIPLIER_ELSE_HIGH",
+      "total_rows": 12,
+      "phase4b_exact_rows": 6,
+      "phase4c_frozen_rows": 6,
+      "aed_only_exact_rows": 0,
+      "phase4b_sample_rows": 4,
+      "phase4b_sample_recoverable": 0,
+      "phase4b_estimated_recoverable": 0,
+      "current_supplement_exact_recoverable": 3,
+      "estimated_recoverable_wts": 3,
+      "estimated_review_or_unresolved": 9,
+      "source_syntax_patterns": [
+        {
+          "pattern": "REF_AND_NAMED_CURRENCY_CONTEXT",
+          "observed_in_bounded_evidence": 10
+        }
+      ]
+    },
+    "AED_WITHOUT_APPROVED_FX": {
+      "deterministic_remediation_possible": true,
+      "human_review_required": true,
+      "parser_change_required": true,
+      "false_positive_risk": "MEDIUM_WHEN_EXACT_LINE_AND_DATED_OFFICIAL_FX_ELSE_HIGH",
+      "total_rows": 671,
+      "phase4b_exact_rows": 402,
+      "phase4c_frozen_rows": 0,
+      "aed_only_exact_rows": 269,
+      "phase4b_sample_rows": 103,
+      "phase4b_sample_recoverable": 35,
+      "phase4b_estimated_recoverable": 137,
+      "current_supplement_exact_recoverable": 35,
+      "estimated_recoverable_wts": 172,
+      "estimated_review_or_unresolved": 499,
+      "source_syntax_patterns": [
+        {
+          "pattern": "AED_IN_SHARED_OR_ADJACENT_CONTEXT",
+          "observed_in_bounded_evidence": 298
+        },
+        {
+          "pattern": "REF_AND_AED_AMOUNT_SAME_LINE",
+          "observed_in_bounded_evidence": 73
+        },
+        {
+          "pattern": "DIRHAM_ALIAS_WITHOUT_LITERAL_AED",
+          "observed_in_bounded_evidence": 1
+        }
+      ]
+    }
+  },
+  "totals": {
+    "recoverable_by_rule_estimate": 175,
+    "recoverable_by_rule_observed_in_bounded_evidence": 73,
+    "review_only_estimate": 7370,
+    "permanently_unresolved_absent_new_source_evidence": 2391,
+    "automatically_correctable_now": 0
+  },
+  "alias_only": {
+    "rows": 37,
+    "classification": "REVIEW_ONLY",
+    "reason": "DIRHAM_ALIAS_IS_NOT_LITERAL_AED_AND_CANNOT_DEFINE_COUNTRY_OR_FX_SERIES"
+  },
+  "decision": "ROLEX_AUTOMATIC_WTS_CORRECTIONS_REMAIN_BLOCKED",
+  "private_inputs_sha256": {
+    "phase4b_sample": "b4fecf8ea0c5a9cd98e3bc4a0a15f372e3409dd9b6554c8327568e2c1cddb0ca",
+    "phase4c_supported": "37b671084b6aac1b16d431b7707c10002c7018a8fe9d31adfd81a6f2404804f5",
+    "aed": "491f78002711811025c9620cbbb2c209b997a81b9bd919343b5319abfc6f4e08"
+  }
+}

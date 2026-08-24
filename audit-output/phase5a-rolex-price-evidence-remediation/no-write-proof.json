@@ -1,0 +1,17 @@
+{
+  "contract": "watchfacts-phase5a-no-write-proof-v1",
+  "project_ref": "qnsafosakvonzgfcsphh",
+  "read_only": true,
+  "transaction_read_only": "on",
+  "production_writes": 0,
+  "correction_runs_created": 0,
+  "correction_functions_invoked": 0,
+  "raw_message_mutations": 0,
+  "parser_behavior_changes": 0,
+  "ui_ux_changes": 0,
+  "schema_or_migration_changes": 0,
+  "evidence_standard_relaxed": false,
+  "query_strategy": "bounded UUID shards and deterministic UUID-partition sample; every production query used BEGIN TRANSACTION READ ONLY and ROLLBACK",
+  "private_raw_payloads_retained": false,
+  "public_artifacts_contain_raw_messages": false
+}

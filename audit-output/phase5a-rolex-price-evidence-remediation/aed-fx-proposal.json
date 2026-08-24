@@ -1,0 +1,67 @@
+{
+  "contract": "watchfacts-phase5a-aed-fx-proposal-v1",
+  "status": "PROPOSAL_ONLY_NOT_APPROVED_NOT_INTEGRATED",
+  "production_writes": 0,
+  "source": {
+    "publisher": "Central Bank of the UAE",
+    "landing_page": "https://www.centralbank.ae/en/forex-eibor/exchange-rates",
+    "historical_example": "https://www.centralbank.ae/en/forex-eibor/exchange-rates/historical-exchange-rates/june-2026/",
+    "example_pdf": "https://www.centralbank.ae/media/rpapxzng/fx_jun26_en.pdf",
+    "published_direction": "AED per one unit of named foreign currency",
+    "cadence": "Monday through Friday at 18:00 UAE time; previous published rate when the market is closed",
+    "historical_coverage_observed": "January 2018 through July 2026 on the official landing page"
+  },
+  "required_conversion_contract": {
+    "source_currency": "AED",
+    "target_currency": "USD",
+    "formula": "amount_aed / official_us_dollar_rate_aed_per_usd",
+    "observation_date": "immutable source_created_on calendar date",
+    "non_publication_day_rule": "use the latest official CBUAE observation on or before the source date; never use a future date",
+    "required_fields": [
+      "source_amount",
+      "source_currency",
+      "source_posted_at",
+      "fx_observation_date",
+      "fx_rate_aed_per_usd",
+      "fx_source_url",
+      "fx_source_document_sha256",
+      "fx_fetched_at",
+      "conversion_formula_version"
+    ],
+    "fail_closed_conditions": [
+      "missing or invalid source date",
+      "missing official observation",
+      "future-dated rate",
+      "zero or negative rate",
+      "rate direction not proven",
+      "source document checksum or schema drift",
+      "non-literal AED or ambiguous dirham alias",
+      "multiple price or bundle ambiguity"
+    ]
+  },
+  "bounded_date_evidence": {
+    "phase4b_sample_literal_aed_rows": 135,
+    "phase4b_sample_rows_with_source_created_on": 135,
+    "phase4c_aed_family_rows": 468,
+    "phase4c_rows_with_source_created_on": 468
+  },
+  "tests_required_before_approval": [
+    "rate direction and inversion",
+    "weekend and holiday prior-observation selection",
+    "no future observation selection",
+    "decimal precision and rounding",
+    "zero negative and missing rates fail closed",
+    "document checksum and schema drift fail closed",
+    "literal AED only; Dhs and generic dirham aliases remain review",
+    "exact-reference single-price source binding",
+    "null-only and immutable-hash predicates",
+    "Price Research before and after reconciliation"
+  ],
+  "approval_gates": [
+    "technical review of the historical-document fetcher",
+    "legal and operational review of the CBUAE publication disclaimer and intended use",
+    "frozen fixture checksum",
+    "shadow replay",
+    "separate explicitly authorized production canary"
+  ]
+}
