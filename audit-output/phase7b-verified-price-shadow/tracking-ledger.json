@@ -1,0 +1,29 @@
+{
+  "phase": "7B",
+  "title": "Verified Price Research rebuild and reference-count foundation",
+  "status": "NOT_READY",
+  "production_run_status": "NOT_RUN",
+  "decision_basis": "A completed canonical-QNSA private shadow run and review are required before CANARY_READY can be considered.",
+  "audit_history": {
+    "branch": "codex/rolex-canary-shadow",
+    "commit": "806931a0ee9db52a33e47b097172acd11c234ab6"
+  },
+  "implementation": {
+    "branch": "codex/phase7b-verified-price-shadow",
+    "pull_request": null,
+    "private_schema": "price_research_shadow",
+    "customer_source_switched": false,
+    "ui_modified": false,
+    "existing_normalized_prices_modified": false,
+    "raw_data_modified": false,
+    "evidence_standard_relaxed": false
+  },
+  "authoritative_results": {
+    "rolex_verified_observations": "UNKNOWN",
+    "patek_verified_observations": "UNKNOWN",
+    "rolex_customer_safe_references": "UNKNOWN",
+    "patek_customer_safe_references": "UNKNOWN",
+    "reason": "Protected production workflow has not run on this implementation branch. Phase 7A values are upper bounds and are not substituted."
+  },
+  "next_gate": "Review PR, then separately dispatch the production-environment shadow workflow; do not switch endpoints."
+}
