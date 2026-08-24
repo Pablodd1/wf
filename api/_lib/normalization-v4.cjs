@@ -38,7 +38,7 @@ const CURRENCY_TOKEN = CURRENCY_ALIASES.map(item => item.pattern).join('|');
 // Dealer shorthand "HK" is accepted only when directly attached to a price.
 // It is intentionally excluded from message/section context because phrases
 // such as "arrive HK" describe location rather than currency.
-const PRICE_CURRENCY_TOKEN = `${CURRENCY_TOKEN}|HK`;
+const PRICE_CURRENCY_TOKEN = CURRENCY_TOKEN;
 const MULTIPLIERS = {
   k: 1_000,
   mil: 1_000,
@@ -50,7 +50,9 @@ const MULTIPLIERS = {
   '万': 10_000,
 };
 const MULTIPLIER_TOKEN = 'million|mill|mil|mn|k|m|w|万';
-const USD_PER_UNIT = { USD: 1, USDT: 1, HKD: 1 / 7.8, EUR: 1.08, GBP: 1.27, CHF: 1.12, SGD: 0.74, CNY: 0.138 };
+// Foreign-currency conversion belongs to the dated-FX stage. The parser may
+// only emit a USD value directly for source USD/USDT evidence.
+const USD_PER_UNIT = { USD: 1, USDT: 1 };
 
 const BRAND_HEADERS = [
   [/\b(?:patek\s*philippe|patek|pp)\b/i, 'Patek Philippe'],
@@ -142,8 +144,14 @@ function parseNumber(rawNumber, rawMultiplier = '') {
   // Dealer typo: 2.070,000 or 2,070.000 means 2,070,000.
   if (/^\d{1,3}(?:[.,]\d{3}){2,}$/.test(token)) {
     token = token.replace(/[.,]/g, '');
+  } else if (rawMultiplier && /^\d+[.,]\d{1,3}$/.test(token)) {
+    // With an explicit scale, one separator is decimal notation. This fixes
+    // source forms such as 1,71M without turning them into 171M.
+    token = token.replace(',', '.');
   } else if (/^\d{1,3}[.,]\d{3}$/.test(token) && !rawMultiplier) {
     token = token.replace(/[.,]/g, '');
+  } else if (/^\d+[.,]\d+$/.test(token)) {
+    token = token.replace(',', '.');
   } else {
     token = token.replace(/,/g, '');
   }
@@ -151,7 +159,8 @@ function parseNumber(rawNumber, rawMultiplier = '') {
   const number = Number.parseFloat(token);
   if (!Number.isFinite(number) || number <= 0) return null;
   const multiplier = MULTIPLIERS[String(rawMultiplier || '').toLowerCase()] || 1;
-  return Math.round(number * multiplier);
+  const expanded = number * multiplier;
+  return rawMultiplier ? Math.round(expanded) : expanded;
 }
 
 function inferContextCurrency(text, existing = null) {
@@ -172,13 +181,13 @@ function extractRetailPrice(text, discountPercent) {
   return parseNumber(matches[matches.length - 1][1]);
 }
 
-function extractPriceObservations(text, context = {}) {
+function extractPriceCandidates(text, context = {}) {
   const observations = [];
   const seen = new Set();
   const parsingView = buildNumericParsingView(text);
   const line = parsingView.text;
 
-  const add = (raw, rawNumber, multiplier, rawCurrency, index, evidence, direction = 'other') => {
+  const add = (raw, rawNumber, multiplier, rawCurrency, index, evidence, direction = 'other', options = {}) => {
     const amount = parseNumber(rawNumber, multiplier);
     const currency = normalizeCurrencyToken(rawCurrency);
     if (!amount || !currency) return;
@@ -199,6 +208,11 @@ function extractPriceObservations(text, context = {}) {
       raw_price_text: parsingView.originalSlice(index, index + raw.length).trim(),
       confidence: 98,
       currency_evidence: evidence,
+      evidence_status: options.reviewReason ? 'REVIEW_REQUIRED' : 'AUTO_APPROVED',
+      review_required: Boolean(options.reviewReason),
+      review_reason: options.reviewReason || null,
+      parser_rule: options.parserRule || evidence,
+      parser_version: 'price-parser-v5-shadow',
       index,
       end: index + raw.length,
       direction,
@@ -207,15 +221,55 @@ function extractPriceObservations(text, context = {}) {
     });
   };
 
+  const addReview = (raw, rawNumber, multiplier, rawCurrency, index, reason, parserRule) => {
+    const amount = parseNumber(rawNumber, multiplier);
+    if (!amount) return;
+    const currency = normalizeCurrencyToken(rawCurrency);
+    const key = `review:${index}:${amount}:${currency || 'UNRESOLVED'}:${reason}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    observations.push({
+      price_type: 'REVIEW_CANDIDATE',
+      amount_original: amount,
+      currency_original: currency,
+      amount_usd: null,
+      is_primary: false,
+      raw_price_text: parsingView.originalSlice(index, index + raw.length).trim(),
+      confidence: 0,
+      currency_evidence: currency ? 'ambiguous_currency_shorthand' : 'currency_unresolved',
+      evidence_status: 'REVIEW_REQUIRED',
+      review_required: true,
+      review_reason: reason,
+      parser_rule: parserRule,
+      parser_version: 'price-parser-v5-shadow',
+      index,
+      end: index + raw.length,
+      direction: 'review',
+      raw_number: String(rawNumber || ''),
+      had_multiplier: Boolean(multiplier),
+    });
+  };
+
   const leftCurrency = new RegExp(`(?<![A-Za-z])(${PRICE_CURRENCY_TOKEN})\\s*[:=]?\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
   const rightCurrency = new RegExp(`(?<![A-Za-z0-9])(?!19\\d{2}\\s*[,;]|20\\d{2}\\s*[,;])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN}))?\\s*(${PRICE_CURRENCY_TOKEN})`, 'gi');
+
+  // Run HK$ prefix recognition independently. In a slash-separated equivalent
+  // pair, the generic alternation can otherwise begin at the bare `$` and lose
+  // the preceding HK marker.
+  const hkDollarPrefix = new RegExp(`(?<![A-Za-z])HK\\$\\s*[:=]?\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
+  for (const match of line.matchAll(hkDollarPrefix)) {
+    add(match[0], match[1], match[2], 'HK$', match.index, 'explicit_line_currency', 'prefix');
+  }
 
   for (const match of line.matchAll(leftCurrency)) {
     const amount = parseNumber(match[2], match[3]);
     const followedByDateSeparator = /^\s*\/\s*\d/.test(line.slice(match.index + match[0].length));
     const yearLike = !match[3] && amount >= 1900 && amount <= 2099;
     const explicitMoneySymbol = /^(?:€|£|💶)$/.test(String(match[1] || ''));
-    if (followedByDateSeparator || (yearLike && !explicitMoneySymbol)) continue;
+    const rmReferenceLike = /^RM$/i.test(String(match[1] || '').trim())
+      && !match[3]
+      && amount < 10_000;
+    if (followedByDateSeparator || (yearLike && !explicitMoneySymbol) || rmReferenceLike) continue;
     add(match[0], match[2], match[3], match[1], match.index, 'explicit_line_currency', 'prefix');
   }
   for (const match of line.matchAll(rightCurrency)) {
@@ -225,7 +279,10 @@ function extractPriceObservations(text, context = {}) {
       && amount <= 31;
     const yearLike = !match[2] && amount >= 1900 && amount <= 2099;
     const explicitMoneySymbol = /^(?:€|£|💶)$/.test(String(match[3] || ''));
-    if (precededByDateSeparator || (yearLike && !explicitMoneySymbol)) continue;
+    const rmReferenceLike = /^RM$/i.test(String(match[3] || '').trim())
+      && !match[2]
+      && amount < 10_000;
+    if (precededByDateSeparator || (yearLike && !explicitMoneySymbol) || rmReferenceLike) continue;
     add(match[0], match[1], match[2], match[3], match.index, 'explicit_line_currency', 'suffix');
   }
 
@@ -260,8 +317,8 @@ function extractPriceObservations(text, context = {}) {
     rejectedOverlaps.add(trailingPair && suffixHasExplicitScale ? prefix : suffix);
   }
 
-  // A bare dollar sign is USD unless an explicit section/message currency is
-  // present. The evidence label keeps this product default auditable.
+  // A bare dollar sign is ambiguous unless an explicit inherited currency is
+  // preserved with the candidate. Never default it to USD.
   const dollarPattern = new RegExp(`(?<![A-Za-z])\\$\\s*([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?`, 'gi');
   for (const match of line.matchAll(dollarPattern)) {
     // `$225,000hkd` is one HKD amount, not simultaneous USD and HKD prices.
@@ -269,14 +326,31 @@ function extractPriceObservations(text, context = {}) {
     const followedByExplicitCurrency = new RegExp(`^\\s*(?:${PRICE_CURRENCY_TOKEN})`, 'i')
       .test(line.slice(match.index + match[0].length));
     if (followedByExplicitCurrency) continue;
-    const contextCurrency = context.currency_context || 'USD';
-    add(match[0], match[1], match[2], contextCurrency, match.index,
-      context.currency_context ? 'section_currency' : 'usd_defaulted_by_policy');
+    if (context.currency_context) {
+      add(match[0], match[1], match[2], context.currency_context, match.index, 'section_currency');
+    } else {
+      addReview(match[0], match[1], match[2], null, match.index, 'CURRENCY_AMBIGUOUS', 'bare_dollar');
+    }
   }
 
   const suffixDollarPattern = new RegExp(`(?<![A-Za-z0-9])([\\d][\\d.,]*)(?:\\s*(${MULTIPLIER_TOKEN})(?![A-Za-z]))?\\$`, 'gi');
   for (const match of line.matchAll(suffixDollarPattern)) {
-    add(match[0], match[1], match[2], 'USD', match.index, 'usd_defaulted_by_policy');
+    if (context.currency_context) {
+      add(match[0], match[1], match[2], context.currency_context, match.index, 'section_currency');
+    } else {
+      addReview(match[0], match[1], match[2], null, match.index, 'CURRENCY_AMBIGUOUS', 'suffix_dollar');
+    }
+  }
+
+  // HK without D/$ is dealer shorthand and may also mean location. Preserve it
+  // for review but never auto-approve it as HKD.
+  const hkPrefix = /(?<![A-Za-z])HK\s*[:=]?\s*([\d][\d.,]*)(?:\s*(million|mill|mil|mn|k|m|w|万)(?![A-Za-z]))?/gi;
+  const hkSuffix = /(?<![A-Za-z0-9])([\d][\d.,]*)(?:\s*(million|mill|mil|mn|k|m|w|万))?\s*(?:\/\s*)?HK(?![A-Za-z$])/gi;
+  for (const match of line.matchAll(hkPrefix)) {
+    addReview(match[0], match[1], match[2], 'HK', match.index, 'CURRENCY_AMBIGUOUS', 'hk_shorthand');
+  }
+  for (const match of line.matchAll(hkSuffix)) {
+    addReview(match[0], match[1], match[2], 'HK', match.index, 'CURRENCY_AMBIGUOUS', 'hk_shorthand');
   }
 
   // A bare yen sign is ambiguous between CNY and JPY. Accept it only after an
@@ -305,8 +379,12 @@ function extractPriceObservations(text, context = {}) {
       const amount = parseNumber(match[1], match[2]);
       const token = String(match[1] || '').replace(/[^0-9A-Z]/gi, '').toUpperCase();
       const adjacentSymbol = `${line.slice(Math.max(0, match.index - 1), match.index)}${line.slice(match.index + match[0].length, match.index + match[0].length + 1)}`;
+      const followingText = line.slice(match.index + match[0].length).trimStart();
+      const goldPurityLike = /^18$/i.test(String(match[1] || ''))
+        && /^k$/i.test(String(match[2] || ''))
+        && /^(?:solid\s+)?(?:yellow|rose|white)?\s*gold\b/i.test(followingText);
       return amount > 0 && !(amount >= 1950 && amount <= 2030)
-        && token !== reference && !/[¥￥]/.test(adjacentSymbol);
+        && token !== reference && !/[¥￥]/.test(adjacentSymbol) && !goldPurityLike;
     });
     if (bare) {
       const multiplier = String(bare[2] || '').toLowerCase();
@@ -323,8 +401,11 @@ function extractPriceObservations(text, context = {}) {
         // Explicit HKD/AED/EUR/etc. is parsed before this fallback and wins.
         || multiplier === 'k';
       if (!(integerToken && millionScale) && hasDefaultablePriceCue) {
-        add(bare[0], bare[1], bare[2], context.currency_context || 'USD', bare.index,
-          context.currency_context ? 'section_currency' : 'usd_defaulted_by_policy');
+        if (context.currency_context) {
+          add(bare[0], bare[1], bare[2], context.currency_context, bare.index, 'section_currency');
+        } else {
+          addReview(bare[0], bare[1], bare[2], null, bare.index, 'CURRENCY_NOT_DETECTED', 'currencyless_scaled_amount');
+        }
       }
     }
   }
@@ -337,17 +418,46 @@ function extractPriceObservations(text, context = {}) {
         && match[1].replace(/[^0-9A-Z]/gi, '').toUpperCase() !== reference;
     });
     const priceCandidate = numericMatches.at(-1);
-    if (priceCandidate) {
-      add(priceCandidate[0], priceCandidate[1], null, context.currency_context || 'USD', priceCandidate.index,
-        context.currency_context ? 'section_currency' : 'usd_defaulted_by_policy');
+    const hasPriceCue = /(?:^|\b)(?:price|asking|ask|net|obo|firm|yours\s+for)\b/i.test(line);
+    if (priceCandidate && (context.currency_context || hasPriceCue)) {
+      if (context.currency_context) {
+        add(priceCandidate[0], priceCandidate[1], null, context.currency_context, priceCandidate.index, 'section_currency');
+      } else {
+        addReview(priceCandidate[0], priceCandidate[1], null, null, priceCandidate.index, 'CURRENCY_NOT_DETECTED', 'currencyless_numeric_amount');
+      }
     }
   }
 
-  const accepted = observations.filter(observation => !rejectedOverlaps.has(observation));
+  // A leading HK$ pair is independently explicit. Historical overlap cleanup
+  // could discard it when a later USDT equivalent appeared in the same line.
+  // Preserve that candidate; the multi-price gate below will keep the entire
+  // set review-only instead of silently choosing the later amount.
+  const accepted = observations.filter(observation => (
+    !rejectedOverlaps.has(observation)
+    || /^HK\$/i.test(observation.raw_price_text)
+  ));
   accepted.sort((a, b) => a.index - b.index);
+  const approved = accepted.filter(entry => entry.evidence_status === 'AUTO_APPROVED');
+  const inferredReferences = [...line.matchAll(/\b(?:RM\s*\d{2}(?:-\d{2})?|[A-Z]{0,5}\d{4,6}[A-Z0-9]*(?:\/[A-Z0-9]+)*(?:-\d{3})?)\b/gi)]
+    .filter(match => !accepted.some(price => match.index >= price.index && match.index < price.end))
+    .map(match => match[0].replace(/\s/g, ''))
+    .filter(token => inferBrandFromReference(token));
+  const reviewReason = new Set(inferredReferences).size > 1
+    ? 'BUNDLE_PRICE_AMBIGUITY'
+    : approved.length > 1 ? 'MULTIPLE_PRICE_AMBIGUITY' : null;
+  if (reviewReason) {
+    for (const entry of approved) {
+      entry.evidence_status = 'REVIEW_REQUIRED';
+      entry.review_required = true;
+      entry.review_reason = reviewReason;
+      entry.amount_usd = null;
+      entry.confidence = 0;
+    }
+  }
   accepted.forEach((entry, index) => {
-    entry.price_type = index === 0 ? 'ASK_PRICE' : 'ALT_CURRENCY_PRICE';
-    entry.is_primary = index === 0;
+    entry.price_type = entry.review_required ? 'REVIEW_CANDIDATE' : (index === 0 ? 'ASK_PRICE' : 'ALT_CURRENCY_PRICE');
+    entry.is_primary = !entry.review_required && index === 0;
+    entry.position = { start: entry.index, end: entry.end };
     delete entry.index;
     delete entry.end;
     delete entry.direction;
@@ -363,6 +473,11 @@ function extractPriceObservations(text, context = {}) {
   }
 
   return accepted;
+}
+
+function extractPriceObservations(text, context = {}) {
+  return extractPriceCandidates(text, context)
+    .filter(candidate => candidate.evidence_status === 'AUTO_APPROVED');
 }
 
 function hasUnresolvedEmojiPrice(text, context = {}) {
@@ -572,12 +687,17 @@ function segmentDealerMessage(rawMessage, initialContext = {}) {
       intent_context: inferIntent(line, context.intent_context),
       condition_context: inferCondition(line, context.condition_context),
     };
-    const prices = extractPriceObservations(line, candidateContext);
+    const priceCandidates = extractPriceCandidates(line, candidateContext);
+    const prices = priceCandidates.filter(candidate => candidate.evidence_status === 'AUTO_APPROVED');
     candidates.push({
       rawLine: line,
       reference,
       context: candidateContext,
       prices,
+      price_candidates: priceCandidates,
+      price_review_reasons: [...new Set(priceCandidates
+        .filter(candidate => candidate.review_required)
+        .map(candidate => candidate.review_reason))],
       emoji_price_ambiguous: !prices.length && hasUnresolvedEmojiPrice(line, context),
     });
   }
@@ -587,6 +707,7 @@ function segmentDealerMessage(rawMessage, initialContext = {}) {
 
 module.exports = {
   decodeNumericUnicode,
+  extractPriceCandidates,
   extractPriceObservations,
   extractReference,
   explicitIntent,
