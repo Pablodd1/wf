@@ -1,0 +1,114 @@
+name: QNSA Phase 7B Verified Price Shadow
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RUN_QNSA_PHASE7B_VERIFIED_PRICE_SHADOW
+        required: true
+        type: string
+      run_key:
+        description: Resumable run key beginning phase7b-
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qnsa-phase7b-verified-price-shadow
+  cancel-in-progress: false
+
+jobs:
+  shadow-rebuild:
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PHASE7B_RUN_KEY: ${{ inputs.run_key }}
+      PHASE7B_OUTPUT: ${{ runner.temp }}/phase7b-worker.json
+      PHASE7B_REPORT_DIR: audit-output/phase7b-verified-price-shadow
+      EXPECTED_NORMALIZED_LF_MIGRATION_SHA256: 2e3a439743ae5aad2a87c5742e8e375acb9dd5ea71acbd0033f97b3e965687aa
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate explicit authorization and pinned target
+        shell: pwsh
+        env:
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:INPUT_CONFIRMATION -cne 'RUN_QNSA_PHASE7B_VERIFIED_PRICE_SHADOW') {
+            throw 'Exact Phase 7B confirmation is required.'
+          }
+          if ($env:PROJECT_REF -cne 'qnsafosakvonzgfcsphh') { throw 'Workflow is pinned to canonical QNSA.' }
+          if ($env:PHASE7B_RUN_KEY -cnotmatch '^phase7b-[a-z0-9][a-z0-9._-]{5,100}$') {
+            throw 'run_key must satisfy the immutable Phase 7B run-key contract.'
+          }
+          foreach ($name in 'SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_ACCESS_TOKEN') {
+            if (-not (Get-Item -LiteralPath "Env:$name").Value) { throw "$name is unavailable." }
+          }
+          if ([Uri]$env:SUPABASE_URL).Host -cne "$($env:PROJECT_REF).supabase.co" {
+            throw 'SUPABASE_URL does not target canonical QNSA.'
+          }
+
+      - run: npm ci
+
+      - name: Verify and atomically install the private shadow schema
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $migrationPath = 'supabase/migrations/20260824190000_phase7b_verified_price_research_shadow.sql'
+          $migration = Get-Content -LiteralPath $migrationPath -Raw
+          $normalized = $migration.Replace("`r`n", "`n")
+          $actualSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($normalized))
+          ).ToLowerInvariant()
+          if ($actualSha -cne $env:EXPECTED_NORMALIZED_LF_MIGRATION_SHA256) {
+            throw 'Pinned normalized-LF Phase 7B migration SHA-256 mismatch.'
+          }
+          $migration = $migration -replace '(?im)^\s*BEGIN\s*;\s*$', ''
+          $migration = $migration -replace '(?im)^\s*COMMIT\s*;\s*$', ''
+          $preflight = Get-Content -LiteralPath 'supabase/tests/phase7b_verified_price_shadow_install_preflight.sql' -Raw
+          $resumePreflight = Get-Content -LiteralPath 'supabase/tests/phase7b_verified_price_shadow_resume_preflight.sql' -Raw
+          $postflight = Get-Content -LiteralPath 'supabase/tests/phase7b_verified_price_shadow_install_postflight.sql' -Raw
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $uri = "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query"
+          $checkBody = @{ query = "SELECT to_regnamespace('price_research_shadow') IS NOT NULL AS installed;"; read_only = $true } | ConvertTo-Json
+          $check = Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -ContentType 'application/json' -Body $checkBody
+          $installed = [bool]$check[0].installed
+          if ($installed) {
+            $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='120s';`n$resumePreflight`n$postflight`nCOMMIT;"
+          } else {
+            $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='120s';`n$preflight`n$migration`n$postflight`nCOMMIT;"
+          }
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Method Post -Uri $uri `
+            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          Write-Output "{`"private_shadow_schema_ready`":true,`"preexisting`":$($installed.ToString().ToLowerInvariant()),`"migration_sha256`":`"$actualSha`",`"customer_source_switches`":0}"
+
+      - name: Run bounded checkpointed immutable-evidence shadow rebuild
+        run: npm run audit:phase7b-price-shadow
+
+      - name: Build sanitized technical report and analytical artifact
+        env:
+          PHASE7B_INPUT: ${{ runner.temp }}/phase7b-worker.json
+        run: node tools/audit/build-phase7b-verified-price-report.cjs
+
+      - name: Upload sanitized Phase 7B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-phase7b-verified-price-shadow-${{ github.run_id }}
+          path: audit-output/phase7b-verified-price-shadow/*
+          if-no-files-found: error
+          retention-days: 30
