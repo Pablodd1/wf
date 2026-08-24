@@ -28,7 +28,7 @@ test('flags brand and reference corrections in shadow output', () => {
   assert.equal(result.proposed_candidates[0].brand, 'Vacheron Constantin');
 });
 
-test('defaults bare-dollar prices to USD with explicit policy provenance', () => {
+test('preserves bare-dollar evidence for review without defaulting USD', () => {
   const result = analyzeRecord({
     id: 'source-3',
     raw_message: '126500LN White $283000',
@@ -39,10 +39,13 @@ test('defaults bare-dollar prices to USD with explicit policy provenance', () =>
     listing_type: 'WTS',
   });
   const candidate = result.proposed_candidates[0];
-  assert.equal(candidate.currency, 'USD');
-  assert.equal(candidate.price_usd, 283000);
-  assert.equal(candidate.currency_evidence, 'usd_defaulted_by_policy');
-  assert.ok(!result.change_flags.includes('CURRENCY_AMBIGUOUS'));
+  assert.equal(candidate.currency, null);
+  assert.equal(candidate.price_usd, null);
+  assert.equal(candidate.price_candidates[0].amount_original, 283000);
+  assert.equal(candidate.price_candidates[0].currency_original, null);
+  assert.equal(candidate.price_candidates[0].review_reason, 'CURRENCY_AMBIGUOUS');
+  assert.ok(result.change_flags.includes('PRICE_REVIEW_REQUIRED'));
+  assert.ok(!result.change_flags.includes('PRICE_PARSE_FAILED'));
 });
 
 test('uses a structured source currency with the amount parsed from raw text', () => {
