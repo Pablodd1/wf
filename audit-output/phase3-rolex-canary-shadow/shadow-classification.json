@@ -1,0 +1,1891 @@
+{
+  "contract": "watchfacts-phase3-rolex-five-reference-shadow-v1",
+  "read_only": true,
+  "production_writes": 0,
+  "generated_at": "2026-08-24T14:55:28.202Z",
+  "input": {
+    "rows": 49,
+    "private_cohort_sha256": "437e781cb6ad486ea2fb77ae54eb9f2047ee5e9758c12c803ccd4757961889b7",
+    "production_generated_at": "2026-08-24T14:48:59.394906+00:00",
+    "expected_rows": 49,
+    "drift": 0
+  },
+  "fx_snapshot": {
+    "contract": "wf-dated-fx-snapshot-v1",
+    "fetched_at": "2026-08-24T14:55:27.155Z",
+    "observed_at": "2026-08-24T00:00:00Z",
+    "source": "European Central Bank reference rates",
+    "source_url": "https://data.ecb.europa.eu/data/datasets/EXR",
+    "base": "USD",
+    "usd_per_unit": {
+      "USD": 1,
+      "EUR": 1.1664,
+      "HKD": 0.12760371083493788,
+      "GBP": 1.3634132086499124,
+      "CHF": 1.2458876308481095,
+      "CNY": 0.14874894789195808,
+      "JPY": 0.006284482758620691,
+      "SGD": 0.7870976449153115,
+      "KRW": 0.0007224080267558529,
+      "THB": 0.03059490084985836,
+      "CAD": 0.7220502661879412,
+      "AUD": 0.716153987843065,
+      "NZD": 0.5961056881484131,
+      "MYR": 0.2473702069901595,
+      "IDR": 0.0000564544349692245,
+      "INR": 0.010443424734191383,
+      "PHP": 0.016202475378182778,
+      "BRL": 0.19417992941333156,
+      "MXN": 0.05907288390537399,
+      "ZAR": 0.06248861554286449,
+      "SEK": 0.10526600785163125,
+      "NOK": 0.10735882921441392,
+      "DKK": 0.15602552269352704
+    },
+    "recognized_but_withheld": [
+      "AED",
+      "SAR",
+      "TWD",
+      "VND"
+    ]
+  },
+  "counts": {
+    "SAFE_NULL_ONLY": 3,
+    "REVIEW_REQUIRED": 46,
+    "UNRESOLVED": 0,
+    "by_classification": {
+      "REVIEW_CURRENCY": 45,
+      "SAFE_VERIFIED_FX": 3,
+      "REVIEW_BUNDLE": 1
+    },
+    "by_reference": {
+      "126300": {
+        "SAFE_NULL_ONLY": 0,
+        "REVIEW_REQUIRED": 6,
+        "UNRESOLVED": 0
+      },
+      "126333": {
+        "SAFE_NULL_ONLY": 0,
+        "REVIEW_REQUIRED": 12,
+        "UNRESOLVED": 0
+      },
+      "126334": {
+        "SAFE_NULL_ONLY": 1,
+        "REVIEW_REQUIRED": 10,
+        "UNRESOLVED": 0
+      },
+      "228235": {
+        "SAFE_NULL_ONLY": 1,
+        "REVIEW_REQUIRED": 6,
+        "UNRESOLVED": 0
+      },
+      "228238": {
+        "SAFE_NULL_ONLY": 1,
+        "REVIEW_REQUIRED": 12,
+        "UNRESOLVED": 0
+      }
+    }
+  },
+  "rows": [
+    {
+      "listing_id": "1bf6bb2e-4c6b-4420-bf13-6ab1b6692531",
+      "source_record_id": "mysql_auctions_876a850d-4cc8-4716-b81e-a7c2c908f85d",
+      "raw_message_version_id": "4d166df4-56df-4640-aa47-186140e2f097",
+      "source_hash": "93576aeede051eb02b8bd09f2a07836d12cd0d4a6e58c92d2c42b8609561b08d",
+      "source_candidate_hash": "87db5ac3845108fba5dcf240ee13c8e990f1b5f6f838806e941012114460dfe9",
+      "normalized_reference": "126300",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-08-05 16:32:33",
+      "seller_lineage": {
+        "seller_name_sha256": "1bb04b4129d8a346d62283522b3dd7062f22bc6dea1e7d7844f627fd2dbcbc9f",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 10400,
+        "currency_original": null,
+        "price_normalized": 10400,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "5ea5cb6e-2e9f-431e-a892-12cd0b9156b1",
+      "source_record_id": "mysql_auctions_c21d9802-e5f3-4d79-98a0-2f7d24a120c9",
+      "raw_message_version_id": "befb418a-4305-49a0-aae4-34728a1cfab3",
+      "source_hash": "20c4e2e969cfb511323c34cfd678ca6568fa406f912b9b4db5f11ebcded9359d",
+      "source_candidate_hash": "01559e8d87a19ac1518d57676a416f9965c053e25e2a089cc2010803927b8266",
+      "normalized_reference": "126300",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-07-16 13:44:04",
+      "seller_lineage": {
+        "seller_name_sha256": "379fe7e33a8e19d7374093450d0c021fd266a5fe62962058cafe15184748fe7a",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 8500,
+        "currency_original": null,
+        "price_normalized": 8500,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "854a6c82-56cb-4c4e-a958-3f1c40054a85",
+      "source_record_id": "mysql_auctions_92038e1a-fa44-4087-afcb-2d95473c2fe1",
+      "raw_message_version_id": "54fceb77-9e7d-4706-866b-a35350085085",
+      "source_hash": "82c15be0988d5a24b96bf08875ba37c5ca289fad9e993f530c56587c8d09901e",
+      "source_candidate_hash": "dd244729f0a8556ccbe864dd702f5d60cb868d725c8fa26381d60ca249a0da1c",
+      "normalized_reference": "126300",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-05-26 11:56:07",
+      "seller_lineage": {
+        "seller_name_sha256": "ca4df559df6950c9b0ff3790f08c656c943aaa7174095ca7489ae7c9be7f0d46",
+        "seller_location": "Asia",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 8200,
+        "currency_original": null,
+        "price_normalized": 8200,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "8c7d028e-1922-4dbe-ae76-39124f4bc0b3",
+      "source_record_id": "mysql_auctions_88582bd7-e86e-47b3-812b-9539180006bd",
+      "raw_message_version_id": "1e2abb64-b22f-4598-830b-a120330d9767",
+      "source_hash": "c52dfea058eec521311509218cd1e74635173b1aac606f48727dfcd0a083591e",
+      "source_candidate_hash": "5d05a62c5d8061da6371062eb2088c93d52fe8046fb2c0afda02de1bf90fd485",
+      "normalized_reference": "126300",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-03-13 12:43:12",
+      "seller_lineage": {
+        "seller_name_sha256": "0015b42952ede1b8a76f376f01bbc95e0336c8682fe864e177485a73dbd26ece",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 8850,
+        "currency_original": null,
+        "price_normalized": 8850,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "cc226a10-b2fa-485e-aea5-17bdc6e57d79",
+      "source_record_id": "mysql_auctions_bf3e7f10-7f8b-4ccd-aa6b-0dab319faa91",
+      "raw_message_version_id": "9cf77f6b-fdfe-4f34-9181-7f7055ecbd00",
+      "source_hash": "17f4214b7fcb0d4d0a3477b0fd2dc22c1c8ef26dd318a9779fbad16b2471f10b",
+      "source_candidate_hash": "81127e285271856061841ee4a3be5f527749a0394b87eb4896728b218275db3e",
+      "normalized_reference": "126300",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-04-30 10:09:11",
+      "seller_lineage": {
+        "seller_name_sha256": "91f026c996feb33556b5d418d17e015945f305c96666b62e5c6284cc1df22a09",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 8595,
+        "currency_original": null,
+        "price_normalized": 8595,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "ddd03e45-c53f-43ce-a265-b7b49b0aa35e",
+      "source_record_id": "mysql_auctions_02030361-c95c-4d5d-8c1c-36cd88cd53be",
+      "raw_message_version_id": "57087c0e-a487-4e78-aeb6-8551df77472e",
+      "source_hash": "551bee723a66abb45e0669ee66f930981e1ca80da2fbce15dd0754967a88b1c4",
+      "source_candidate_hash": "bbbfe0fb9d7f618b01482b02fa7001f7e3d351b4a45bd02d33091b2385d4c155",
+      "normalized_reference": "126300",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-04-30 10:09:41",
+      "seller_lineage": {
+        "seller_name_sha256": "91f026c996feb33556b5d418d17e015945f305c96666b62e5c6284cc1df22a09",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 250,
+        "currency_original": null,
+        "price_normalized": 250,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "116f8e7a-b176-4754-b02a-aa5dca271572",
+      "source_record_id": "mysql_auctions_617bab21-08b1-4359-9596-10ffe7e901ee",
+      "raw_message_version_id": "77954627-52b4-4557-850c-57155c0b105b",
+      "source_hash": "e984e725d18f95986e524f152c205f05d4470fbb99413e6b0c0d34c2410bacd2",
+      "source_candidate_hash": "73903ce6cd15a2ed6c1e01203cbb5355bb1a1346926e228a29a44144ab194356",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-06-23 10:05:08",
+      "seller_lineage": {
+        "seller_name_sha256": "5b3662620ab8b638551d4db5881a64672016f00af5161c95234db76e459a05f2",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 16900,
+        "currency_original": null,
+        "price_normalized": 16900,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "15561dd4-1407-4016-bb81-17b572a169a8",
+      "source_record_id": "mysql_auctions_bf2f3755-7ab9-4f01-b784-015f83a4fa17",
+      "raw_message_version_id": "cc1690f7-884b-4b0b-a31f-b5ab50ab45cf",
+      "source_hash": "1590179a227269d9e75c47d7beada4e8b67bcb95effab5ae78455389e22e4b92",
+      "source_candidate_hash": "ccdecd76c92b86a183559166b063e482a3c37c2ab8b57385f58b85652d3fe38e",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2026-03-21 12:02:09",
+      "seller_lineage": {
+        "seller_name_sha256": "52b67b60260da3937510ad545c7f46f8d9915bd27e1082e76947fb309f913bd3",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 1400,
+        "currency_original": null,
+        "price_normalized": 1400,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "24bd3207-5e8f-486d-8a0c-a247bd6ad495",
+      "source_record_id": "mysql_auctions_bc76d13c-170e-4d35-8ab8-be5e6fe33077",
+      "raw_message_version_id": "28b9c634-4a0a-4c70-bd46-77ce7a256f3a",
+      "source_hash": "a26481cc10d41c77e2530b2788fcc84d19463e54ed95c40ba5e6d3337d8122cd",
+      "source_candidate_hash": "fc8d36ec085e37c8235fa6cc2924577305a835b0c1f43f045b88814cb8717ded",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-12-15 11:35:14",
+      "seller_lineage": {
+        "seller_name_sha256": "2abfdefdf0dd5d5d8f70fe04271bc7fec27f2b3cd274c793eb4a32b9b97e8f3d",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 16250,
+        "currency_original": null,
+        "price_normalized": 16250,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "2c1c0006-8351-4e4f-8c71-57d03f4c828f",
+      "source_record_id": "mysql_auctions_28d09a6c-6aed-4f8c-9617-e0e5f074167e",
+      "raw_message_version_id": "2e073dca-62d4-415e-acb1-8b4c2e4f73ee",
+      "source_hash": "514ec5ea22968cb1effa20a0446f6a7907c69f1386ba56705bb1af650342c90b",
+      "source_candidate_hash": "e8e0296c7bb95c1ee00abb81999803c1c062d982b2e5cac432036324bc33f9dd",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-06-25 13:50:09",
+      "seller_lineage": {
+        "seller_name_sha256": "ff7c8ccc8b579be10cb194759efbad29de125b77b915bebe91ac7456c11b7bfa",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 12800,
+        "currency_original": null,
+        "price_normalized": 12800,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "3fe07bf6-953f-4881-9da3-72bdbaedb6eb",
+      "source_record_id": "mysql_auctions_ad6eae62-da3c-4f9b-8eb2-18f7dfe286b0",
+      "raw_message_version_id": "17ddd894-4610-45bd-b100-cdabda142211",
+      "source_hash": "7bf88a4e229b0a436137dc5fc0518e3c5da5a87452376a24927414ad321cd985",
+      "source_candidate_hash": "49306e77cf7f0c5ba845ac3c8a9c930de6f98d4011c5304ffcda5a5f13ba7661",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-12-11 14:49:39",
+      "seller_lineage": {
+        "seller_name_sha256": "6fce9ec2e16b85ed99186223e5516dfe1e627ae305a3e996228577fd71c6a197",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 13,
+        "currency_original": null,
+        "price_normalized": 13,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "4b80e915-8ad0-4a0b-8100-5bb72ec8c502",
+      "source_record_id": "mysql_auctions_75d33409-5162-4b2f-98de-3e886ded1245",
+      "raw_message_version_id": "fdf4b753-5dc6-4896-aa51-b610048141ca",
+      "source_hash": "dc5cdbd912ad8f2a6331ae8e4778e847b94f4f70e08e789aa04fd9df56395f05",
+      "source_candidate_hash": "1265d493918c1d6e3f335bbc09c71bd52475daa7bbd07bca15929706f29584e8",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-03-24 18:07:17",
+      "seller_lineage": {
+        "seller_name_sha256": "d1d2af7808f0b45e3a2b9a14a4be3c0d1a533849e03a00a7ac436fd5b65907e0",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 14250,
+        "currency_original": null,
+        "price_normalized": 14250,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "69d9c29e-8055-4341-ae6a-5225dd76c0f2",
+      "source_record_id": "mysql_auctions_b5e174d2-09dc-4506-96a8-9bebdb9463d4",
+      "raw_message_version_id": "d64af322-6216-4951-be6d-0cb129bd5f69",
+      "source_hash": "be815f5caf82ba4ee8b2c12160738dbf146d9f3b5339b5665d80148b99e35ac0",
+      "source_candidate_hash": "519e0810602100815700a81b7327eeae074250f9e522ea1b78b6f73be18c55a7",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-06-16 14:25:10",
+      "seller_lineage": {
+        "seller_name_sha256": "ff7c8ccc8b579be10cb194759efbad29de125b77b915bebe91ac7456c11b7bfa",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 13100,
+        "currency_original": null,
+        "price_normalized": 13100,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "6b07f8e6-4a96-4770-84b6-12cfe0eea1f6",
+      "source_record_id": "mysql_auctions_af3b4fb6-b98e-4f08-b251-29c7fce8ea9f",
+      "raw_message_version_id": "3d9708e0-38d3-47da-8d79-b3cbaa82afd8",
+      "source_hash": "8d3fc1cd9f530ce81507e4d8161b9ea39cfee31b0789bf44a1853dcd9b325987",
+      "source_candidate_hash": "ccdecd76c92b86a183559166b063e482a3c37c2ab8b57385f58b85652d3fe38e",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2026-03-21 12:02:19",
+      "seller_lineage": {
+        "seller_name_sha256": "52b67b60260da3937510ad545c7f46f8d9915bd27e1082e76947fb309f913bd3",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 1400,
+        "currency_original": null,
+        "price_normalized": 1400,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "7fd9a26d-50b5-403a-b2a3-e4a8ad510b13",
+      "source_record_id": "mysql_auctions_0480cfe6-f809-49f7-9509-2e5563e65a38",
+      "raw_message_version_id": "dd597c95-09c6-4672-9d33-d822ee295cd8",
+      "source_hash": "df516b7192756c5682ea5b8bbe4ba73363e6c2d11e5ad40f95f37ce8fb04ba2a",
+      "source_candidate_hash": "6c4a3c9d62655bad69957bbbfb9e6cba88bcb597a3116e276d8ad920f90eb292",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-06-23 10:05:13",
+      "seller_lineage": {
+        "seller_name_sha256": "5b3662620ab8b638551d4db5881a64672016f00af5161c95234db76e459a05f2",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 16500,
+        "currency_original": null,
+        "price_normalized": 16500,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "81f02de9-a614-4501-8eb0-c67bf8166068",
+      "source_record_id": "mysql_auctions_f70cf7eb-95fb-4628-b8f4-391fa5fceb66",
+      "raw_message_version_id": "0c06ece3-5026-4be3-ad30-b3e8ab159118",
+      "source_hash": "cb5d54769aa65255f944289eef93f8e854cddec171aeefa7f49b66366181a340",
+      "source_candidate_hash": "ccdecd76c92b86a183559166b063e482a3c37c2ab8b57385f58b85652d3fe38e",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2026-03-21 12:03:15",
+      "seller_lineage": {
+        "seller_name_sha256": "52b67b60260da3937510ad545c7f46f8d9915bd27e1082e76947fb309f913bd3",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 1400,
+        "currency_original": null,
+        "price_normalized": 1400,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "9a067660-b0d0-4b31-8c5b-ccfb83be1212",
+      "source_record_id": "mysql_auctions_cfbcc60b-3f3f-489d-a8e9-e73cca3fdd48",
+      "raw_message_version_id": "045fdcd2-ed27-4911-8a1c-4ad6b14ec6e6",
+      "source_hash": "3284a1d6d78e4853932bc6dfc03ef91f4057fcba76d417789dfbbd5f7539053e",
+      "source_candidate_hash": "2e7ddf2fd0fc86be8f30a5876a4c7ffd9d4989c36dfef3be91ba243102b69816",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-05-13 16:25:26",
+      "seller_lineage": {
+        "seller_name_sha256": "abfbc637198fc367731799945a60ca1ee0dea847c3a3ec626f21c12ebc0bdaa1",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 16500,
+        "currency_original": null,
+        "price_normalized": 16500,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "d024025c-411e-4e05-927c-45dc3699de20",
+      "source_record_id": "mysql_auctions_07d0cbb5-94f2-408b-be77-4c7a3b383b8e",
+      "raw_message_version_id": "2533fb2f-0e5a-4f73-8bac-387551d65386",
+      "source_hash": "5c3a7bafed055a49b818d3f6293cde2e35b244ffd7d665535d126677802dbec1",
+      "source_candidate_hash": "5531ddd5a7ee953704f633c6b9d54ccebc7b3a656602ded8c55819e135a01e5b",
+      "normalized_reference": "126333",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-03-26 15:23:34",
+      "seller_lineage": {
+        "seller_name_sha256": "c3e5471d237703a7c512562b0595f24a2f6fb1c1db51885d0118ebb9a7c046a5",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 12500,
+        "currency_original": null,
+        "price_normalized": 12500,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "156cc660-f3c2-47db-b52e-0d2a66a4a74d",
+      "source_record_id": "mysql_auctions_55ac9e9e-a895-4e4e-92c6-701bfa695ba6",
+      "raw_message_version_id": "5b91b618-9eb1-4d77-a839-2d0f6d954818",
+      "source_hash": "0a8728c4a6e32c4a6b97df4ea15b38656287688fbd56aed10ff03d35226ab138",
+      "source_candidate_hash": "c0311d60f8a0bd1c17d721981216ee3fdc02702f6f0ab1b0a7370b7c4199597c",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2026-01-21 15:23:23",
+      "seller_lineage": {
+        "seller_name_sha256": "b1a711b11670ab6d65ca6973c8a407444dbea219b9bc2dde570103dc3251ce0f",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 14,
+        "currency_original": null,
+        "price_normalized": 14,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "60d8bf7a-2423-415d-a420-fa95adc31898",
+      "source_record_id": "mysql_auctions_871d8967-bc7f-44a8-8cd6-0a7e863304ec",
+      "raw_message_version_id": "63f372c6-eba1-4b19-81f9-d88ff0f2e998",
+      "source_hash": "881d2348584a895ec4715470208de01772f5103c2f03f3661f7697dcc56f1913",
+      "source_candidate_hash": "479a1939fab8a9a5da84de28863a9933c6ff67719e09cd851c71ddca8b86ba05",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-06-11 19:08:05",
+      "seller_lineage": {
+        "seller_name_sha256": "2238dd61a1bf83816b40ad894518814b8edf7221d84d897ffd2c0466ace07c41",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 14000,
+        "currency_original": null,
+        "price_normalized": 14000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "618902ad-0298-4cc0-a75e-10d1196c1505",
+      "source_record_id": "mysql_auctions_2b5cc8bf-0a66-425e-b30d-c96370715ad0",
+      "raw_message_version_id": "bbc81c96-5968-46e4-93d7-0eaabc9fd6a4",
+      "source_hash": "fb7a4d74207f09a15ba6bed1b308e8e83a87a8c06e8be89fed7a543cc68e8e1a",
+      "source_candidate_hash": "a24441f5d601a9b46d8072f7d4ba97721196501240f3a8c510da88e8ae1c1fda",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-05-13 16:25:12",
+      "seller_lineage": {
+        "seller_name_sha256": "abfbc637198fc367731799945a60ca1ee0dea847c3a3ec626f21c12ebc0bdaa1",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 12500,
+        "currency_original": null,
+        "price_normalized": 12500,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "a2c545fa-9661-4e71-a5a3-a8f1087e6e9c",
+      "source_record_id": "mysql_auctions_6393ab9f-9cef-4247-a8da-072b8cb90252",
+      "raw_message_version_id": "d32d5552-b53b-418f-82ad-b64598609357",
+      "source_hash": "f000bdfd2913c64adde84588d6173d34c09d495bfbef11b77c852a93843e7622",
+      "source_candidate_hash": "433e672fc1eba941b237a2d8722001a16f31cc2eb37014bafe6e5d8e56a31417",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-02-26 14:54:06",
+      "seller_lineage": {
+        "seller_name_sha256": "18ed1ecd7575d60981053cc2d7d8f66f6127bbb9ad372ec4f6771eb10f073d1e",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 115000,
+        "currency_original": null,
+        "price_normalized": 115000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "ac6840bb-0195-45aa-a3ad-5b536dd6fd7b",
+      "source_record_id": "mysql_auctions_0a6dffd1-f1de-46cb-be10-c618a94ceb0f",
+      "raw_message_version_id": "a790717e-7bdf-4629-b9d8-3f87e36c2c51",
+      "source_hash": "ba0295ebc3e4b605f85d34d5f6010ae119d9f509167e5dd40cd4c4bf505097f8",
+      "source_candidate_hash": "1f212c4f808bc29fefa8f9dd05026bbc07a9987f279603b33cd3f985eb81d906",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2026-07-17 12:03:43",
+      "seller_lineage": {
+        "seller_name_sha256": "a9b4859b1cc4c9e9dd276d5407b557a4f2388e9b36a9a486cd2a80e69caee424",
+        "seller_location": "Europe",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 10000,
+        "currency_original": "EUR",
+        "price_normalized": 10000,
+        "currency_normalized": "EUR",
+        "price_usd": null,
+        "currency_evidence": "explicit_line_currency",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "SAFE_VERIFIED_FX",
+      "reason": "EXACT_SOURCE_SPAN_AND_IMMUTABLE_LINEAGE_MATCH",
+      "parser_observation": {
+        "source_span": "€10K",
+        "source_amount": 10000,
+        "source_currency": "EUR",
+        "proposed_price_usd": 11664,
+        "parser_rule": "explicit_line_currency",
+        "parser_version": "price-parser-v5-shadow",
+        "currency_evidence": "explicit_line_currency",
+        "fx_source": "European Central Bank reference rates",
+        "fx_date": "2026-08-24T00:00:00Z",
+        "fx_rate": 1.1664
+      }
+    },
+    {
+      "listing_id": "b626597c-9369-4148-bdd3-6175d1bf195f",
+      "source_record_id": "mysql_auctions_5f370afb-4a41-4157-bb7d-4b74e5f5775c",
+      "raw_message_version_id": "cac70d1d-c365-45c1-b645-75096269e554",
+      "source_hash": "e09f6a7a805a48413f0e6fa24f1a62d71080036342c28df124a23c12926e003f",
+      "source_candidate_hash": "780f718f9a8aaadac6b23a4afcd3f75b30cdaadf46d076383604860cf7ab9bc2",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-04-02 18:23:06",
+      "seller_lineage": {
+        "seller_name_sha256": "c0863ca11c5efada54064d660c99ba03a2ec9044e060c8ce7ca0775618ab2eb1",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 10850,
+        "currency_original": null,
+        "price_normalized": 10850,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "d285deec-18bc-4e96-8ed1-0aa4e11ae4d1",
+      "source_record_id": "mysql_auctions_d7a3c554-6cfa-4b7e-ada2-c3a0a3641773",
+      "raw_message_version_id": "8c55aa78-c2bd-4a2c-82dc-1fa44026691f",
+      "source_hash": "9539a3a3ac7e1bf527b2db4aecd6ef4ef6ef91a6e791b24105c4bb58c1320c2c",
+      "source_candidate_hash": "a24441f5d601a9b46d8072f7d4ba97721196501240f3a8c510da88e8ae1c1fda",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-05-17 17:43:00",
+      "seller_lineage": {
+        "seller_name_sha256": "abfbc637198fc367731799945a60ca1ee0dea847c3a3ec626f21c12ebc0bdaa1",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 12500,
+        "currency_original": null,
+        "price_normalized": 12500,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "da745175-5a9e-4ebb-af76-1c464ff7ad02",
+      "source_record_id": "mysql_auctions_12ee5fb7-8941-4aa3-9a4b-bf566e5a385c",
+      "raw_message_version_id": "f539553c-75a4-4ac2-976d-29a4686f13b1",
+      "source_hash": "5fd9671fd47a71ecb3e95198d3051f973cd5a1a7afc616f719127054f9d836e6",
+      "source_candidate_hash": "b93dfd6af28827968fd0a4fd9cea47481c5ce9b65d9288e7f1f0788442d0dc27",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2026-02-24 16:47:08",
+      "seller_lineage": {
+        "seller_name_sha256": "680ce38047bf1f299d9f7e3956216b0ecc353171be36b86754c6f0442f702e23",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 15000,
+        "currency_original": null,
+        "price_normalized": 15000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "f05ffb13-f41d-4daa-8ac4-7eff3dbd17bc",
+      "source_record_id": "mysql_auctions_a88caa6c-ff49-48cf-ab27-176e0d8ad4a8",
+      "raw_message_version_id": "4b8c6a3f-8b63-45f8-890c-6fd6fa5fba99",
+      "source_hash": "57bddfe7dc46674619e77237b08a6c39929fa7eb293f0094c4ca30efaf117129",
+      "source_candidate_hash": "9b05823730bb4109bbc20216dae903ae8ee51583e40b51e3c2730c040a39b1e6",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-02-28 13:05:30",
+      "seller_lineage": {
+        "seller_name_sha256": "204ac66a8856d0cc4eca88d8a2560079f64a9aaaa840308817934574949e04ee",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 139,
+        "currency_original": null,
+        "price_normalized": 139,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "f86d0cdb-563d-418e-9265-dcfb9e5a83ba",
+      "source_record_id": "mysql_auctions_d552bef1-65fa-42d6-af61-2c0460020000",
+      "raw_message_version_id": "ec65b820-4473-40c5-aa98-63c04e3ff4d0",
+      "source_hash": "d14eb89ba4cff181136c22e8eb6af39ab45328f67b0f2dae4c32e1dd06021c71",
+      "source_candidate_hash": "b8600cbb94eea9bd504ea7b65c87cd6af5ca23c12e98373d503490a1a2c20978",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2026-07-04 06:38:31",
+      "seller_lineage": {
+        "seller_name_sha256": "3068d2dbe52cd2fdd6558ccbfdaaaff1efa123fbdd21a635bd0e645ccd8f8c9b",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 12000,
+        "currency_original": null,
+        "price_normalized": 12000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "ff3ff95c-cd5b-40da-b9e4-5c43eb3dcc85",
+      "source_record_id": "mysql_auctions_291fe97a-e8a6-47e5-b7bc-4ef7a1aaad96",
+      "raw_message_version_id": "e2809fdc-38aa-4c63-97b5-d7c409c7b3d3",
+      "source_hash": "0982da7531cd042e9519188dc98edcddf05b754b6eaa1a4fc62106388b87994a",
+      "source_candidate_hash": "f19b31b6da8b405500bc34b87d86adb75083cca09bf268c4a94325b07ee3a424",
+      "normalized_reference": "126334",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-02-28 13:24:58",
+      "seller_lineage": {
+        "seller_name_sha256": "1bb04b4129d8a346d62283522b3dd7062f22bc6dea1e7d7844f627fd2dbcbc9f",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 13950,
+        "currency_original": null,
+        "price_normalized": 13950,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "2cc8bd89-e096-4adb-9bc5-6ae0ea97fb55",
+      "source_record_id": "mysql_auctions_e6b27d9f-0c58-4cdb-a92f-a8d0148725bd",
+      "raw_message_version_id": "0ab3cfd7-9074-4786-8289-871f27147f7b",
+      "source_hash": "df69ad6216b54c1690029e3d4340b0f420f5cdc686ea6977345b166bcbaa437c",
+      "source_candidate_hash": "dcd6ee0e82f16a69eecf4afef672613afb710459bac62ab69be9594fa78e9aa5",
+      "normalized_reference": "228235",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-05-20 10:44:24",
+      "seller_lineage": {
+        "seller_name_sha256": "ca4df559df6950c9b0ff3790f08c656c943aaa7174095ca7489ae7c9be7f0d46",
+        "seller_location": "Asia",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 47500,
+        "currency_original": null,
+        "price_normalized": 47500,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "42e491b1-b1a4-44f8-99e8-0ef38b1c5973",
+      "source_record_id": "mysql_auctions_6fe15a1e-3168-4dfd-b915-ca42a6adc35a",
+      "raw_message_version_id": "f7abfdce-2fc6-4ef2-a22c-5291314b7521",
+      "source_hash": "a739144ee3ae7e48e37fb2d4b0720b66f673043aef7700b39c1ba8239b8cafd3",
+      "source_candidate_hash": "de97ac1b893600c3390e022cf38139b4815080f49036c0ae9625b2585087baa9",
+      "normalized_reference": "228235",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-07-14 12:17:16",
+      "seller_lineage": {
+        "seller_name_sha256": "0dbbd83a14a9c2ca526307accf49180199f30eabd5d8cdd612debf5f009b0ecc",
+        "seller_location": "Europe",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 37950,
+        "currency_original": "GBP",
+        "price_normalized": 37950,
+        "currency_normalized": "GBP",
+        "price_usd": null,
+        "currency_evidence": "explicit_line_currency",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "SAFE_VERIFIED_FX",
+      "reason": "EXACT_SOURCE_SPAN_AND_IMMUTABLE_LINEAGE_MATCH",
+      "parser_observation": {
+        "source_span": "£37,950",
+        "source_amount": 37950,
+        "source_currency": "GBP",
+        "proposed_price_usd": 51742,
+        "parser_rule": "explicit_line_currency",
+        "parser_version": "price-parser-v5-shadow",
+        "currency_evidence": "explicit_line_currency",
+        "fx_source": "European Central Bank reference rates",
+        "fx_date": "2026-08-24T00:00:00Z",
+        "fx_rate": 1.3634132086499124
+      }
+    },
+    {
+      "listing_id": "56394294-2210-4a67-a15d-34d31b421159",
+      "source_record_id": "mysql_auctions_1a0cf912-13d8-489c-b8d7-64eb47e906ac",
+      "raw_message_version_id": "87b19e7e-4a57-4c6e-a1a4-ee7d9dd46ad8",
+      "source_hash": "acb3dbf10c22527b72956f238aa817c7715f3123f3b9f3cf96def409f923992f",
+      "source_candidate_hash": "f85f7b6d4f3438ac17084bda8b02b7d79d54352621f0eb1e11695b083ca5c951",
+      "normalized_reference": "228235",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-05-19 07:35:39",
+      "seller_lineage": {
+        "seller_name_sha256": "ca4df559df6950c9b0ff3790f08c656c943aaa7174095ca7489ae7c9be7f0d46",
+        "seller_location": "Asia",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 55000,
+        "currency_original": null,
+        "price_normalized": 55000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "7f9316f3-a6c0-4aae-a954-b7ca811711fd",
+      "source_record_id": "mysql_auctions_a62db156-5b42-4c4c-beed-9345c28e738c",
+      "raw_message_version_id": "797936e8-4cd5-4134-84e4-dbf337b9cf5c",
+      "source_hash": "304ed7f0c5d2a28e24d45444172d9fdedbd1820bfafd82f320ff34135bba2689",
+      "source_candidate_hash": "358728530727d8f78ddc2baede7832e9d1eda03170a652f97a48278a50f56945",
+      "normalized_reference": "228235",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-12-03 10:55:35",
+      "seller_lineage": {
+        "seller_name_sha256": "e721a96a37019abb6927ac13f9fdeb3d2b44335e6c7b1a0ed83283bfc0c187c7",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 48000,
+        "currency_original": null,
+        "price_normalized": 48000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "c043251c-ff8f-4b24-a60f-1e2092e571b2",
+      "source_record_id": "mysql_auctions_c8e14461-3edb-4bd2-84a6-f2cc52bf8d22",
+      "raw_message_version_id": "c0bd8392-b14f-4a46-bcc0-3cceb290d5fc",
+      "source_hash": "0abed2201fbd3b341cd2f0a56305faa9af46abab633f8faef874f74639879b12",
+      "source_candidate_hash": "4a14763906c2fa4289e4f7bf3dc3388d7b600c36fceae7d1e75feb146dcaf5f1",
+      "normalized_reference": "228235",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-10-01 10:53:48",
+      "seller_lineage": {
+        "seller_name_sha256": "1deef23889df2a7c9b438268ff951508a91b15e2f926e79ff3ee93cb82e4c557",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 44500,
+        "currency_original": null,
+        "price_normalized": 44500,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "dd6f94ef-6661-4324-9ada-8ee2227b13dd",
+      "source_record_id": "mysql_auctions_4a69d31d-5562-44be-96ab-157e92743766",
+      "raw_message_version_id": "259ea7c1-1433-4fb7-b46a-141ae3a7f069",
+      "source_hash": "fa0f0944d4c34a4e03e6a5529094b64d726204173e4d4dd9cbc09f32381520fc",
+      "source_candidate_hash": "89b7e73e2362f908aee4a025148d28d09c789f97e599bdb35f2a21e8f3651621",
+      "normalized_reference": "228235",
+      "intent": "WTS",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-12-23 04:23:20",
+      "seller_lineage": {
+        "seller_name_sha256": "9a48e3e3df2dd3c39024cb4abd696b397b5b2b7117cb6b48e8b14214edde3ed5",
+        "seller_location": "Europe",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 2,
+        "currency_original": "HKD",
+        "price_normalized": 2,
+        "currency_normalized": "HKD",
+        "price_usd": null,
+        "currency_evidence": "explicit_line_currency",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_BUNDLE",
+      "reason": "PARSER_BUNDLE_PRICE_AMBIGUITY"
+    },
+    {
+      "listing_id": "f86c5769-7a68-48a3-95ae-6380095ded43",
+      "source_record_id": "mysql_auctions_de8fa065-3b75-43dc-bb47-20fce7e065f8",
+      "raw_message_version_id": "66a552e7-f95e-44cb-948c-f69e80900581",
+      "source_hash": "eab2f494cebed2add5490ddbd26aab2ff768e877f94543356f853a9ec4f2a6f5",
+      "source_candidate_hash": "dc9b1a664f53aaa58b22c928e62e303b53b1250ce24115e8eb017e31a9d3cddd",
+      "normalized_reference": "228235",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-08-19 13:49:02",
+      "seller_lineage": {
+        "seller_name_sha256": "379fe7e33a8e19d7374093450d0c021fd266a5fe62962058cafe15184748fe7a",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 45500,
+        "currency_original": null,
+        "price_normalized": 45500,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "14a2fa23-7e87-4022-84f2-cc700e98a4ec",
+      "source_record_id": "mysql_auctions_edbf6c6c-eca4-45f0-abbf-918b6ae0c087",
+      "raw_message_version_id": "aae84f0e-fa3c-40ff-9d65-5e09d190fc2b",
+      "source_hash": "91013ec8a9baaf0a1e9dc0cc950fc3a1128a20081b3629c8c1c3e393f41d87fe",
+      "source_candidate_hash": "ce18edc16082a12b6029965c191eb960c533a3a1aa46e24814e0287ebcf02c38",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-04-17 15:59:46",
+      "seller_lineage": {
+        "seller_name_sha256": "7ef18a70ab9a817c2748b956b8d79c15e26bded9fc8c63ca8b7d28047156ef25",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 30,
+        "currency_original": null,
+        "price_normalized": 30,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "3058f322-b8d0-4127-a6a3-d82c9de2b12a",
+      "source_record_id": "mysql_auctions_cc187086-534e-4d4e-9f13-ffa3f96f7efc",
+      "raw_message_version_id": "6b998f01-eeef-4184-b5d8-9019a97dca56",
+      "source_hash": "3fc55fe5d89fefba538284705b40dac0aa97fdf5befbfca9e1a9f212a4f97b25",
+      "source_candidate_hash": "d82dc0574139cd527d54f174cead183ffc26664bfbbcce044aca1bb10c908261",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-06-27 21:30:15",
+      "seller_lineage": {
+        "seller_name_sha256": "44848d2dadd2e83fb760babce1b3df2df1f7ed9a1a967fd354531062ee9571d8",
+        "seller_location": "North America",
+        "dealer_id": "0a5c2728-899f-464c-9e0d-af0472f88741",
+        "dealer_name": "Zack",
+        "dealer_link_method": "EXACT_VERIFIED_PHONE"
+      },
+      "existing_price": {
+        "price_original": 53900,
+        "currency_original": null,
+        "price_normalized": 53900,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "39a6669a-71bb-4007-a015-b633a1b290e8",
+      "source_record_id": "mysql_auctions_09696cce-5cd6-4ef8-bd1e-e2a088a66ae1",
+      "raw_message_version_id": "8055fa79-ea25-4b2a-9e70-2b9cd676d9a2",
+      "source_hash": "e7ee161bc52deec80b37ec1b197c508e418c87c2597a5262853651e2a39ffe2d",
+      "source_candidate_hash": "5f0a9daf8ee46d74f6dbe87620bb3cdbc54768f2f2e8b766755e0bc2d989da01",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-04-14 16:38:45",
+      "seller_lineage": {
+        "seller_name_sha256": "abfbc637198fc367731799945a60ca1ee0dea847c3a3ec626f21c12ebc0bdaa1",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 40000,
+        "currency_original": null,
+        "price_normalized": 40000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "51bba760-d468-48f7-a1e5-4433484d5801",
+      "source_record_id": "mysql_auctions_01683f76-393c-4756-936f-5fed48ab69ae",
+      "raw_message_version_id": "eb97a94d-c78b-45b3-bd2e-67eae1d26a2e",
+      "source_hash": "a332bac04006f807b90eed3429a3c06016f27217b430ffb684c182addb65986e",
+      "source_candidate_hash": "6b82606f9e6c1c2330fd3c6e59cba18892ea875b0cc2d9b6c8d74ff6a99dfe09",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-04-22 15:35:36",
+      "seller_lineage": {
+        "seller_name_sha256": "e6aea9d39c3fdcfb08e453436d60e0b8648e67cd9049f7df93d9274907c57c09",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 52000,
+        "currency_original": null,
+        "price_normalized": 52000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "6979aecb-5e33-4a57-bf76-086b1c8accfd",
+      "source_record_id": "mysql_auctions_4073b1fa-cbe1-4dae-b59e-b5090986a31c",
+      "raw_message_version_id": "b3bc6d82-ecb8-47db-907a-a826bb59244c",
+      "source_hash": "50dcd73a4a8632e120934f74338c2f5ae7086d1d40ba5afe551b08c1af863444",
+      "source_candidate_hash": "1b135da4cc4b3a944fe63465f4051f8b6268b96fa3a9ba43b9d6a3b6d7afd130",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-03-06 15:06:46",
+      "seller_lineage": {
+        "seller_name_sha256": "2abfdefdf0dd5d5d8f70fe04271bc7fec27f2b3cd274c793eb4a32b9b97e8f3d",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 51750,
+        "currency_original": null,
+        "price_normalized": 51750,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "6b7eabd9-696e-4aaa-bb19-18e52515123c",
+      "source_record_id": "mysql_auctions_3229ceca-bef9-45e7-8f4a-2269721b1cd7",
+      "raw_message_version_id": "24fed542-bb54-44ce-917d-437ada7ef5a7",
+      "source_hash": "ffca1fdfe560a0b9a754c41ee81f44eaa65365b676d0ec89aa36d80a532feb3e",
+      "source_candidate_hash": "3493f06e86e103ca33e1509edaa7c518717e94a68b63f74b526a5b95990909cb",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-03-07 13:22:24",
+      "seller_lineage": {
+        "seller_name_sha256": "2abfdefdf0dd5d5d8f70fe04271bc7fec27f2b3cd274c793eb4a32b9b97e8f3d",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 515,
+        "currency_original": null,
+        "price_normalized": 515,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "813532ba-c740-48c1-befb-3da99f0d37d3",
+      "source_record_id": "mysql_auctions_34db257e-f7fd-448d-a11c-81673ae86378",
+      "raw_message_version_id": "36753234-8e70-4ace-91f4-c7f639347132",
+      "source_hash": "9bb5d133b15b55429ca8fa890c6b5dfdd2214a3181a987ede54db06cbd746331",
+      "source_candidate_hash": "10eef6c2310c0abfe8634f7c5cd61e0d47de77b97d451ef056a1f0aa3d108d2e",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-03-04 20:28:22",
+      "seller_lineage": {
+        "seller_name_sha256": "2abfdefdf0dd5d5d8f70fe04271bc7fec27f2b3cd274c793eb4a32b9b97e8f3d",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 52000,
+        "currency_original": null,
+        "price_normalized": 52000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "893aa9ad-cad9-42e0-9be1-53a5e8bbea9d",
+      "source_record_id": "mysql_auctions_f59867c5-19e1-4d0c-a148-eee7899e9385",
+      "raw_message_version_id": "0906049d-269a-4ec2-ac91-57fddb8ea39b",
+      "source_hash": "18f9d949f3f8fb6f9a972ce5fe5657f9f84d789068c5cbd5c6fe624cf1bbd243",
+      "source_candidate_hash": "1ee61d841e59e31cd77361bf5c820d488322bdfa99dc810bcc4d064e983b8887",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-06-01 23:10:40",
+      "seller_lineage": {
+        "seller_name_sha256": "a5f2b2165882fa02c577de04f910bcb5955c16332f232de163ba450c5039dab6",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 54000,
+        "currency_original": null,
+        "price_normalized": 54000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "b37a4439-6902-4b45-8418-73f82f369b31",
+      "source_record_id": "mysql_auctions_e709e079-2b0d-463e-ba16-9d33a70594f5",
+      "raw_message_version_id": "df6fdcad-0cbd-4341-87ca-43dbb62e8ef5",
+      "source_hash": "d8a9254cfb7821eb6e3d716d2d168eb6bfca501a4845cc82b3fafc223841b0a6",
+      "source_candidate_hash": "df7bcb452f21312fd060d0550e81f44ec2cc11f9130415d7e103c0af9785d07d",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-03-05 20:14:51",
+      "seller_lineage": {
+        "seller_name_sha256": "2abfdefdf0dd5d5d8f70fe04271bc7fec27f2b3cd274c793eb4a32b9b97e8f3d",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 51999,
+        "currency_original": null,
+        "price_normalized": 51999,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "b6234f48-011d-40cd-b02c-09acc2fa0dab",
+      "source_record_id": "mysql_auctions_6e775f0b-69f6-4f82-8d89-2578c4e4c119",
+      "raw_message_version_id": "520ae2ed-1c8f-4221-98c4-55d7780451db",
+      "source_hash": "ba71b4cd2d275f6dff5341cf98764698308803ac042a2ccb62a2869a5daee259",
+      "source_candidate_hash": "7594b4534d2c099fbb749bd9352ae58911aa81a66d8acb43300fc6b737055cc7",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-06-05 02:07:46",
+      "seller_lineage": {
+        "seller_name_sha256": "46a8bd302c819865afc3b9da614f2606a4c5a41d6154f5f824e0c0a16b69e934",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 53000,
+        "currency_original": null,
+        "price_normalized": 53000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "d89e05fe-1f00-44b5-a1e6-34cfbab014be",
+      "source_record_id": "mysql_auctions_122ad073-8326-4443-aca4-2a3d7dcfb95a",
+      "raw_message_version_id": "815a17a0-9831-4100-9281-1509e4b6fc40",
+      "source_hash": "3850cb852922205057de936237b9495a53454a095cff94a016829cf09f541626",
+      "source_candidate_hash": "750cef2d46b6f0d8a177300f3e9502a4274ee39149973bda715ad01f7a4cf45a",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-03-14 16:46:25",
+      "seller_lineage": {
+        "seller_name_sha256": "2abfdefdf0dd5d5d8f70fe04271bc7fec27f2b3cd274c793eb4a32b9b97e8f3d",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 515,
+        "currency_original": null,
+        "price_normalized": 515,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "e1a60a94-0f17-4729-96f2-d3c6aaa1278a",
+      "source_record_id": "mysql_auctions_2d68d432-bf14-406a-a9ee-40696592effe",
+      "raw_message_version_id": "757db495-5c31-40c1-90e8-3dec14a8af71",
+      "source_hash": "93dc9a49b173e8205de0d0c09fb7eee8bb96c96ec6540672826e53ed55eb8b93",
+      "source_candidate_hash": "925d15daa754bc2240f871cf11dbdf910c823dd8cde47002aca41853d3c47aa3",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2025-05-18 21:07:26",
+      "seller_lineage": {
+        "seller_name_sha256": "a5f2b2165882fa02c577de04f910bcb5955c16332f232de163ba450c5039dab6",
+        "seller_location": "North America",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 51000,
+        "currency_original": null,
+        "price_normalized": 51000,
+        "currency_normalized": null,
+        "price_usd": null,
+        "currency_evidence": "bare_dollar_unconfirmed",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "REVIEW_CURRENCY",
+      "reason": "CURRENCY_EVIDENCE_NOT_AUTO_APPROVED"
+    },
+    {
+      "listing_id": "fb45c058-f100-4798-b662-6054be07b2c9",
+      "source_record_id": "mysql_auctions_bc9fe008-0009-4220-8bfa-bfc045d3691a",
+      "raw_message_version_id": "1c29a51a-014c-475b-ab7d-b311901dc557",
+      "source_hash": "d8a56b57e234fcf91ed269aba3c76673ccb26a52cdb98bddc79c5949b75e221d",
+      "source_candidate_hash": "b99c70c39da6d5f9803cc07c2d6d9b70587cb77fe1542c40df9abe8023d32b28",
+      "normalized_reference": "228238",
+      "intent": "WTB",
+      "bundle_state": {
+        "parent_id": null,
+        "is_bundle": false,
+        "bundle_status": "SINGLE_CANDIDATE"
+      },
+      "source_posted_at": "2026-03-29 14:36:33",
+      "seller_lineage": {
+        "seller_name_sha256": "4c953419c2662662c5b6491065a3e4c094f802628cc5e696d3ce4212b9637fad",
+        "seller_location": "Europe",
+        "dealer_id": null,
+        "dealer_name": null,
+        "dealer_link_method": null
+      },
+      "existing_price": {
+        "price_original": 52000,
+        "currency_original": "EUR",
+        "price_normalized": 52000,
+        "currency_normalized": "EUR",
+        "price_usd": null,
+        "currency_evidence": "explicit_line_currency",
+        "conversion_rate": null,
+        "conversion_timestamp": null,
+        "conversion_source": null
+      },
+      "parser_version": "price-parser-v5-shadow",
+      "classification": "SAFE_VERIFIED_FX",
+      "reason": "EXACT_SOURCE_SPAN_AND_IMMUTABLE_LINEAGE_MATCH",
+      "parser_observation": {
+        "source_span": "52k€",
+        "source_amount": 52000,
+        "source_currency": "EUR",
+        "proposed_price_usd": 60653,
+        "parser_rule": "explicit_line_currency",
+        "parser_version": "price-parser-v5-shadow",
+        "currency_evidence": "explicit_line_currency",
+        "fx_source": "European Central Bank reference rates",
+        "fx_date": "2026-08-24T00:00:00Z",
+        "fx_rate": 1.1664
+      }
+    }
+  ]
+}

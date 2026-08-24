@@ -1,0 +1,373 @@
+{
+  "contract": "watchfacts-rolex-reference-taxonomy-v1",
+  "generated_at": "2026-08-24T14:57:21.709Z",
+  "source_sha256": "58b238ad8d6b03738f5d0f4ce9fe91fcc6201556a8d667a3a96f0ce4dd626ffe",
+  "classifications": [
+    "VALID_EXACT_REFERENCE",
+    "VALID_REFERENCE_VARIANT",
+    "MODEL_OR_FAMILY_TOKEN",
+    "COMPONENT_ACCESSORY",
+    "FREE_TEXT",
+    "AMBIGUOUS",
+    "INVALID"
+  ],
+  "distinct_values": 4592,
+  "by_classification": {
+    "AMBIGUOUS": 4260,
+    "VALID_EXACT_REFERENCE": 287,
+    "FREE_TEXT": 18,
+    "COMPONENT_ACCESSORY": 6,
+    "INVALID": 21
+  },
+  "listings_by_classification": {
+    "AMBIGUOUS": 83609,
+    "VALID_EXACT_REFERENCE": 187576,
+    "FREE_TEXT": 212,
+    "COMPONENT_ACCESSORY": 10031,
+    "INVALID": 52
+  },
+  "selected_reference_identity": [
+    {
+      "reference": "126334",
+      "classification": "VALID_EXACT_REFERENCE",
+      "reason": "EXACT_LOCAL_CATALOG_MATCH",
+      "canonical_reference": "126334",
+      "canonical_model": "Datejust",
+      "source": "local_catalog_v1"
+    },
+    {
+      "reference": "126300",
+      "classification": "VALID_EXACT_REFERENCE",
+      "reason": "EXACT_LOCAL_CATALOG_MATCH",
+      "canonical_reference": "126300",
+      "canonical_model": "Datejust",
+      "source": "local_catalog_v1"
+    },
+    {
+      "reference": "228235",
+      "classification": "VALID_EXACT_REFERENCE",
+      "reason": "EXACT_LOCAL_CATALOG_MATCH",
+      "canonical_reference": "228235",
+      "canonical_model": "Day-Date",
+      "source": "local_catalog_v1"
+    },
+    {
+      "reference": "228238",
+      "classification": "VALID_EXACT_REFERENCE",
+      "reason": "EXACT_LOCAL_CATALOG_MATCH",
+      "canonical_reference": "228238",
+      "canonical_model": "Day-Date",
+      "source": "local_catalog_v1"
+    },
+    {
+      "reference": "126333",
+      "classification": "VALID_EXACT_REFERENCE",
+      "reason": "EXACT_LOCAL_CATALOG_MATCH",
+      "canonical_reference": "126333",
+      "canonical_model": "Datejust",
+      "source": "local_catalog_v1"
+    }
+  ],
+  "representative_non_exact": [
+    {
+      "reference": "000000E",
+      "listing_count": 3,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "000838",
+      "listing_count": 4,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "001224",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "001240ST",
+      "listing_count": 3,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "003290",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "003494",
+      "listing_count": 10,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "005632",
+      "listing_count": 2,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "005645",
+      "listing_count": 2,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "005678",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "005679",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "00971",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "025950",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "030426",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "037751",
+      "listing_count": 3,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "079434",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "10000",
+      "listing_count": 2,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "100000",
+      "listing_count": 2,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "100000AED",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "100020",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "100182",
+      "listing_count": 93,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "1002/1003",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "10020",
+      "listing_count": 2,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "100200",
+      "listing_count": 2,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "10022",
+      "listing_count": 4,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "10054",
+      "listing_count": 2,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "10100",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101000",
+      "listing_count": 2,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101339",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101707",
+      "listing_count": 3,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101787",
+      "listing_count": 5,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101788",
+      "listing_count": 10,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101790",
+      "listing_count": 6,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101814",
+      "listing_count": 31,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101815",
+      "listing_count": 14,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101816",
+      "listing_count": 34,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101817",
+      "listing_count": 54,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101827",
+      "listing_count": 34,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101828",
+      "listing_count": 40,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101831",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101832",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101835",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101842",
+      "listing_count": 5,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101845",
+      "listing_count": 4,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101850",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "10186",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101870",
+      "listing_count": 4,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101871",
+      "listing_count": 6,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101884",
+      "listing_count": 5,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101891",
+      "listing_count": 2,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    },
+    {
+      "reference": "101893",
+      "listing_count": 1,
+      "classification": "AMBIGUOUS",
+      "reason": "REFERENCE_SHAPED_BUT_NOT_CATALOG_CONFIRMED"
+    }
+  ]
+}

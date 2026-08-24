@@ -1,0 +1,49 @@
+{
+  "contract": "watchfacts-phase3-trading-floor-total-reconciliation-v1",
+  "read_only": true,
+  "generated_at": "2026-08-24T15:10:00.000Z",
+  "snapshot_total": 580325,
+  "live_release_total": 565620,
+  "live_minus_snapshot": -14705,
+  "exact_source_composition": [
+    {"reason":"Vacheron omitted from live summary routing","delta":-9008},
+    {"reason":"Cartier, Omega and Tudor controlled-release replacement versus snapshot","delta":-9491},
+    {"reason":"Panerai omitted from reviewed-workbook admission list","delta":-5533},
+    {"reason":"Other reviewed-workbook brand substitutions and additions, net","delta":9327}
+  ],
+  "brand_deltas": [
+    {"brand":"Vacheron Constantin","delta":-9008},
+    {"brand":"Panerai","delta":-5533},
+    {"brand":"Bulgari","delta":4628},
+    {"brand":"Cartier","delta":-4599},
+    {"brand":"Omega","delta":-3513},
+    {"brand":"IWC","delta":-2888},
+    {"brand":"Breitling","delta":-2284},
+    {"brand":"Jacob & Co","delta":2031},
+    {"brand":"Chopard","delta":1554},
+    {"brand":"Blancpain","delta":1445},
+    {"brand":"Tudor","delta":-1379},
+    {"brand":"Ulysse Nardin","delta":1290},
+    {"brand":"Girard-Perregaux","delta":1248},
+    {"brand":"H. Moser & Cie","delta":720},
+    {"brand":"Breguet","delta":709},
+    {"brand":"Franck Muller","delta":707},
+    {"brand":"Grand Seiko","delta":537},
+    {"brand":"Piaget","delta":-477},
+    {"brand":"TAG Heuer","delta":137},
+    {"brand":"Glashütte Original","delta":116},
+    {"brand":"Bell & Ross","delta":-64},
+    {"brand":"A. Lange & Söhne","delta":-42},
+    {"brand":"Bvlgari","delta":-26},
+    {"brand":"F.P. Journe","delta":-14},
+    {"brand":"Jaeger-LeCoultre","delta":1},
+    {"brand":"MB&F","delta":-1}
+  ],
+  "non_causes": {
+    "category_difference": 0,
+    "separately_attributable_duplicate_delta": 0,
+    "separately_attributable_bundle_delta": 0,
+    "note": "Both displayed totals are WATCH-category totals. The snapshot contract already excludes exact suppressed duplicates, bundle parents and deferred children. The observed difference is produced by live-release source composition and brand routing, not an additional row-level duplicate or bundle subtraction."
+  },
+  "recommended_contract": "COUNT(DISTINCT canonical_listing_observation_id) over currently published single-watch WTS and WTB observations, with WTS and WTB separately exposed, excluding bundle parents, deferred bundle children, exact duplicates, withdrawn/deleted/superseded versions, suppressed rows and review-only candidates."
+}

@@ -1,0 +1,27 @@
+{
+  "contract": "watchfacts-phase3-rolex-five-reference-price-research-customer-contract-v1",
+  "read_only": true,
+  "generated_at": "2026-08-24T15:07:00.603Z",
+  "base_url": "https://watchfacts-poc.vercel.app",
+  "definitions": {
+    "price_research_source_rows": "Rows in qnsa_rolex_patek_price_research_source for the exact reference; this is not the customer analytics count.",
+    "tracked_wts": "WTS rows loaded by the customer Price Research endpoint after its current source-selection path.",
+    "qualified_wts": "Exact-reference WTS rows passing identity, price, currency, bundle and repost gates across all dials.",
+    "analytics_ready": "Reference-level minimum-sample readiness, not selected-dial readiness."
+  },
+  "references": [
+    {"reference":"126334","price_research_source_rows":2215,"tracked_wts":3,"qualified_wts":0,"analytics_ready":false,"included_wts":0,"excluded_wts":3,"excluded":{"required_field_failures":2,"unsplit_bundles":1}},
+    {"reference":"126300","price_research_source_rows":1194,"tracked_wts":2,"qualified_wts":0,"analytics_ready":false,"included_wts":0,"excluded_wts":2,"excluded":{"required_field_failures":2}},
+    {"reference":"228235","price_research_source_rows":788,"tracked_wts":19,"qualified_wts":1,"analytics_ready":false,"included_wts":1,"excluded_wts":18,"excluded":{"unpriced":2,"required_field_failures":16}},
+    {"reference":"228238","price_research_source_rows":714,"tracked_wts":12,"qualified_wts":2,"analytics_ready":true,"included_wts":1,"excluded_wts":11,"excluded":{"required_field_failures":10,"other_dial_cohorts":1}},
+    {"reference":"126333","price_research_source_rows":672,"tracked_wts":4,"qualified_wts":0,"analytics_ready":false,"included_wts":0,"excluded_wts":4,"excluded":{"required_field_failures":4}}
+  ],
+  "totals": {
+    "price_research_source_rows": 5583,
+    "tracked_wts": 40,
+    "qualified_wts": 3,
+    "included_wts": 2,
+    "excluded_wts": 38,
+    "analytics_ready_references": 1
+  }
+}

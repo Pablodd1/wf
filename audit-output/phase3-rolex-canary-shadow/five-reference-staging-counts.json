@@ -1,0 +1,52 @@
+{
+  "contract": "watchfacts-phase3-rolex-five-reference-staging-v1",
+  "read_only": true,
+  "generated_at": "2026-08-24T14:59:02.497Z",
+  "rows": [
+    {
+      "wtb": 665,
+      "wts": 5113,
+      "reference": "126300",
+      "tf_eligible": 5778,
+      "normalized_price": 3190,
+      "explicit_source_price": 1194,
+      "active_normalized_rows": 5778
+    },
+    {
+      "wtb": 671,
+      "wts": 4336,
+      "reference": "126333",
+      "tf_eligible": 5007,
+      "normalized_price": 2902,
+      "explicit_source_price": 672,
+      "active_normalized_rows": 5007
+    },
+    {
+      "wtb": 2460,
+      "wts": 10525,
+      "reference": "126334",
+      "tf_eligible": 12985,
+      "normalized_price": 6872,
+      "explicit_source_price": 2217,
+      "active_normalized_rows": 12985
+    },
+    {
+      "wtb": 1390,
+      "wts": 3772,
+      "reference": "228235",
+      "tf_eligible": 5162,
+      "normalized_price": 2479,
+      "explicit_source_price": 790,
+      "active_normalized_rows": 5162
+    },
+    {
+      "wtb": 1331,
+      "wts": 3133,
+      "reference": "228238",
+      "tf_eligible": 4464,
+      "normalized_price": 2153,
+      "explicit_source_price": 715,
+      "active_normalized_rows": 4464
+    }
+  ]
+}
