@@ -1,0 +1,49 @@
+{
+  "contract": "watchfacts-phase4b-rolex-wts-baseline-no-write-v1",
+  "discovery_run_id": "p4b-rolex-wts-discovery-20260824T162407Z",
+  "correction_run_id": null,
+  "status": "BLOCKED_NO_SAFE_COHORT",
+  "trading_floor_generated_at": "2026-08-24T16:27:55.997993+00:00",
+  "price_research_source_generated_at": "2026-08-24T16:28:29.518189+00:00",
+  "public_price_research_generated_at": "2026-08-24T16:26:23.302Z",
+  "references": [
+    {"reference":"126300","tf_before":5778,"tf_after":5778,"wts_before":5113,"wts_after":5113,"wtb_before":665,"wtb_after":665,"pr_source_before":1194,"pr_source_after":1194,"qualified_wts_before":0,"qualified_wts_after":0,"analytics_ready_before":false,"analytics_ready_after":false,"stats_before":null,"stats_after":null},
+    {"reference":"126333","tf_before":5007,"tf_after":5007,"wts_before":4336,"wts_after":4336,"wtb_before":671,"wtb_after":671,"pr_source_before":672,"pr_source_after":672,"qualified_wts_before":0,"qualified_wts_after":0,"analytics_ready_before":false,"analytics_ready_after":false,"stats_before":null,"stats_after":null},
+    {"reference":"126334","tf_before":12985,"tf_after":12985,"wts_before":10525,"wts_after":10525,"wtb_before":2460,"wtb_after":2460,"pr_source_before":2215,"pr_source_after":2215,"qualified_wts_before":0,"qualified_wts_after":0,"analytics_ready_before":false,"analytics_ready_after":false,"stats_before":null,"stats_after":null},
+    {"reference":"228235","tf_before":5162,"tf_after":5162,"wts_before":3772,"wts_after":3772,"wtb_before":1390,"wtb_after":1390,"pr_source_before":788,"pr_source_after":788,"qualified_wts_before":1,"qualified_wts_after":1,"analytics_ready_before":false,"analytics_ready_after":false,"stats_before":null,"stats_after":null},
+    {"reference":"228238","tf_before":4464,"tf_after":4464,"wts_before":3133,"wts_after":3133,"wtb_before":1331,"wtb_after":1331,"pr_source_before":714,"pr_source_after":714,"qualified_wts_before":2,"qualified_wts_after":2,"analytics_ready_before":true,"analytics_ready_after":true,"stats_before":{"mean":55300,"median":55300,"min":43100,"max":67500,"q1":49200,"q3":61400,"iqr":12200,"lower_fence":12600,"upper_fence":98000,"iqr_multiplier":3},"stats_after":{"mean":55300,"median":55300,"min":43100,"max":67500,"q1":49200,"q3":61400,"iqr":12200,"lower_fence":12600,"upper_fence":98000,"iqr_multiplier":3}}
+  ],
+  "totals": {
+    "tf_before": 33396,
+    "tf_after": 33396,
+    "wts_before": 26879,
+    "wts_after": 26879,
+    "wtb_before": 6517,
+    "wtb_after": 6517,
+    "pr_source_before": 5583,
+    "pr_source_after": 5583,
+    "tracked_public_wts_before": 40,
+    "tracked_public_wts_after": 40,
+    "qualified_wts_before": 3,
+    "qualified_wts_after": 3,
+    "analytics_ready_references_before": 1,
+    "analytics_ready_references_after": 1
+  },
+  "price_rating_change": "NOT_APPLICABLE_NO_AUTHORIZED_ROW",
+  "no_write_proof": {
+    "generated_at": "2026-08-24T16:28:56.580912+00:00",
+    "phase4b_runs": 0,
+    "phase4b_proposals": 0,
+    "phase4b_snapshots": 0,
+    "unauthorized_writes": 0,
+    "non_null_overwrites": 0,
+    "raw_mutations": 0,
+    "unrelated_field_changes": 0,
+    "phase4a_run_status": "ACTIVE",
+    "phase4a_successful_rows_still_matching": 3
+  },
+  "rollback": {
+    "status": "NOT_EXERCISED_NO_WRITE",
+    "reason": "No safe row existed, so no snapshot, activation, or rollback operation was authorized."
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "contract": "watchfacts-phase4b-rolex-wts-discovery-result-v1",
+  "project_ref": "qnsafosakvonzgfcsphh",
+  "discovery_run_id": "p4b-rolex-wts-discovery-20260824T162407Z",
+  "generated_at": "2026-08-24T16:24:07.371Z",
+  "read_only": true,
+  "production_writes": 0,
+  "scope": {
+    "brand": "Rolex",
+    "intent": "WTS",
+    "references": ["126334", "126300", "228235", "228238", "126333"],
+    "maximum_write_cohort": 25
+  },
+  "population": {
+    "wts_missing_usd": 9333,
+    "exact_immutable_lineage": 9333,
+    "non_bundle": 9333,
+    "not_suppressed": 9333,
+    "unique_listing_ids": 9333,
+    "private_cohort_sha256": "36219782e9f6995fd217044c3a46f51734d398df0372789164c5813febaf8894"
+  },
+  "classifications": {
+    "SAFE_EXPLICIT_USD": 0,
+    "SAFE_EXPLICIT_USDT": 0,
+    "SAFE_VERIFIED_FX": 0,
+    "REVIEW_REQUIRED": 7001,
+    "UNRESOLVED": 2332
+  },
+  "review_reasons": {
+    "DATED_FX_UNAVAILABLE": 408,
+    "PRICE_OR_CURRENCY_REQUIRES_REVIEW": 6369,
+    "MULTIPLE_OR_BUNDLE_SOURCE_CONTEXT": 105,
+    "PARSER_BUNDLE_PRICE_AMBIGUITY": 5,
+    "MULTIPLE_PRICE_CANDIDATES": 114
+  },
+  "unresolved_reasons": {
+    "NO_EXACT_AUTO_APPROVED_PRICE": 2332
+  },
+  "dated_fx_unavailable_breakdown": {
+    "AED": 402,
+    "HKD_1_TO_3_CONVERTED_TO_ZERO_USD": 6
+  },
+  "by_reference": {
+    "126300": {"discovery": 1929, "safe": 0, "review_required": 1181, "unresolved": 748},
+    "126333": {"discovery": 1446, "safe": 0, "review_required": 1132, "unresolved": 314},
+    "126334": {"discovery": 3665, "safe": 0, "review_required": 2851, "unresolved": 814},
+    "228235": {"discovery": 1300, "safe": 0, "review_required": 1055, "unresolved": 245},
+    "228238": {"discovery": 993, "safe": 0, "review_required": 782, "unresolved": 211}
+  },
+  "eligibility": {
+    "EXPECTED_PR_QUALIFIED": 0,
+    "SAFE_PRICE_BUT_NOT_PR_QUALIFIED": 0,
+    "selected_write_cohort": 0,
+    "selection_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  "write_outcomes": {
+    "CORRECTED_AND_PR_QUALIFIED": 0,
+    "CORRECTED_NOT_PR_QUALIFIED": 0,
+    "ABORTED": 0,
+    "REVIEW_REQUIRED": 7001,
+    "UNRESOLVED": 2332
+  },
+  "selected_rows": [],
+  "fx": {
+    "source": "European Central Bank reference rates",
+    "observed_at": "2026-08-24T00:00:00Z",
+    "fetched_at": "2026-08-24T16:24:04.956Z",
+    "recognized_but_withheld": ["AED", "SAR", "TWD", "VND"]
+  },
+  "raw_messages_exported": false,
+  "contact_values_exported": false
+}

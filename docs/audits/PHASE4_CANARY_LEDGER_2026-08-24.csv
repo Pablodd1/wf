@@ -1,0 +1,3 @@
+Canary,Brand,Intent,References,Discovery population,Safe population,Selected rows,Corrected rows,PR qualified rows,Status
+P3-RLX-001,Rolex,WTB,"126334;126300;228235;228238;126333",49,3,3,3,0,CANARY_PASSED
+WTS_PRICE_RESEARCH_CANARY,Rolex,WTS,"126334;126300;228235;228238;126333",9333,0,0,0,0,BLOCKED_NO_SAFE_COHORT
