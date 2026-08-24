@@ -311,8 +311,8 @@ export default function TradingFloor() {
     const countries = listings
       .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
       .filter((value): value is string => Boolean(value));
-    return [...new Set(countries)].sort((a, b) => a.localeCompare(b));
-  }, [listings]);
+    return [...new Set([...locationFilters, ...countries])].sort((a, b) => a.localeCompare(b));
+  }, [listings, locationFilters]);
 
   const dynamicDisplayTotal = total !== null && total >= 0 ? total : null;
 
@@ -330,13 +330,13 @@ export default function TradingFloor() {
     listScrollPositionRef.current = null;
   }, []);
 
-  const updateViewParams = useCallback((updates: Record<string, string | null>) => {
+  const updateViewParams = useCallback((updates: Record<string, string | null>, replace = true) => {
     const next = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(updates)) {
       if (value) next.set(key, value);
       else next.delete(key);
     }
-    setSearchParams(next, { replace: true });
+    setSearchParams(next, { replace });
   }, [searchParams, setSearchParams]);
 
   useEffect(() => {
@@ -790,7 +790,7 @@ export default function TradingFloor() {
               images: next.imagesOnly ? 'true' : null,
               priced: next.pricedOnly ? 'true' : null,
               location: next.locations.length ? next.locations.join(',') : null,
-            });
+            }, false);
           }}
           onClose={() => setFiltersOpen(false)}
         />
@@ -831,7 +831,10 @@ export default function TradingFloor() {
                 pricedOnly={pricedOnly}
                 selectedLocations={locationFilters}
                 locations={locationOptions}
-                onChange={updates => { resetResults(); updateViewParams(updates); }}
+                onChange={updates => {
+                  resetResults();
+                  updateViewParams(updates, !Object.prototype.hasOwnProperty.call(updates, 'location'));
+                }}
               />
             </aside>
             {loading && listings.length === 0 ? (
@@ -993,7 +996,9 @@ function DesktopFilters({
       onChange({ location: null });
       return;
     }
-    const updated = selectedLocations.includes(loc) ? [] : [loc];
+    const updated = selectedLocations.includes(loc)
+      ? selectedLocations.filter(value => value !== loc)
+      : [...selectedLocations, loc];
     onChange({ location: updated.length ? updated.join(',') : null });
   };
 
@@ -1083,6 +1088,22 @@ function DesktopFilters({
                 <button type="button" onClick={() => toggleLocation('')} className="text-[10px] font-semibold text-[#7B5719] hover:underline">Clear</button>
               )}
             </div>
+            {selectedLocations.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Selected locations">
+                {selectedLocations.map(value => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleLocation(value)}
+                    aria-label={`Remove ${value} location`}
+                    className="inline-flex min-h-7 items-center gap-1 rounded-full border bg-white px-2 text-[11px] font-medium"
+                    style={{ borderColor: BORDER, color: INK }}
+                  >
+                    {value}<X size={11} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="relative mb-2">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
               <input
@@ -1176,7 +1197,9 @@ function MobileFilterSheet({
       setDraftLocations([]);
       return;
     }
-    setDraftLocations(draftLocations.includes(loc) ? [] : [loc]);
+    setDraftLocations(current => current.includes(loc)
+      ? current.filter(value => value !== loc)
+      : [...current, loc]);
   };
 
   return (
@@ -1228,6 +1251,23 @@ function MobileFilterSheet({
             ))}
           </FilterGroup>
           <FilterGroup label={`Locations (${draftLocations.length || 'All'})`}>
+            {draftLocations.length > 0 && (
+              <div className="mb-2 flex w-full flex-wrap gap-1.5" aria-label="Selected locations">
+                {draftLocations.map(value => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleLocation(value)}
+                    aria-label={`Remove ${value} location`}
+                    className="inline-flex min-h-8 items-center gap-1 rounded-full border bg-white px-2.5 text-xs font-medium"
+                    style={{ borderColor: BORDER, color: INK }}
+                  >
+                    {value}<X size={12} aria-hidden="true" />
+                  </button>
+                ))}
+                <button type="button" onClick={() => toggleLocation('')} className="min-h-8 px-1 text-xs font-semibold text-[#7B5719] hover:underline">Clear locations</button>
+              </div>
+            )}
             <div className="relative mb-2 w-full">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
               <input
@@ -1344,16 +1384,17 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         </button>
       </div>
 
-      {/* 4. Full Original Untouched Raw Message */}
+      {/* 4. Original source evidence, collapsed by default */}
       {messageEvidence && (
-        <div className="mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A5826] mb-1">
-            {messageEvidence.label}
-          </div>
-          <div className="font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
+        <details className="group mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" className="transition-transform group-open:rotate-90">▶</span>
+            <span>{messageEvidence.label}</span>
+          </summary>
+          <div className="mt-2.5 max-h-72 overflow-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
             {messageEvidence.text}
           </div>
-        </div>
+        </details>
       )}
 
       {/* 5. Price & Price Rating Row */}
@@ -1641,12 +1682,17 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
 
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
 
-            <div className="mt-5 border-t border-stone-100 pt-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5826]">{messageEvidence?.label || 'SOURCE TEXT'}</div>
-              <div className="mt-2.5 rounded bg-[#FBF9F6] p-3 font-mono text-xs leading-relaxed text-stone-800 whitespace-pre-wrap">
-                {messageEvidence?.text || 'Original source text is unavailable.'}
-              </div>
-            </div>
+            {messageEvidence && (
+              <details className="group mt-5 border-t border-stone-100 pt-4">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+                  <span aria-hidden="true" className="transition-transform group-open:rotate-90">▶</span>
+                  <span>{messageEvidence.label}</span>
+                </summary>
+                <div className="mt-2.5 max-h-96 overflow-auto rounded bg-[#FBF9F6] p-3 font-mono text-xs leading-relaxed text-stone-800 whitespace-pre-wrap break-words">
+                  {messageEvidence.text}
+                </div>
+              </details>
+            )}
 
             <div className="mt-4 flex flex-wrap gap-2">
               {[displayDial(detailListing.dial_color), cleanValue(detailListing.condition), detailListing.year ? String(detailListing.year) : ''].filter(Boolean).map(value => (
@@ -1909,27 +1955,38 @@ function verifiedUsdPrice(listing: ListingRecord) {
 
 function TradingFloorQuickScroll() {
   const [progress, setProgress] = useState(0);
+  const [scrollable, setScrollable] = useState(false);
   useEffect(() => {
     const update = () => {
-      const maximum = Math.max(1, document.documentElement.scrollHeight - window.innerHeight);
-      setProgress(Math.max(0, Math.min(1, window.scrollY / maximum)));
+      const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      const maximum = Math.max(0, documentHeight - window.innerHeight);
+      setScrollable(maximum > 8);
+      setProgress(maximum > 0 ? Math.max(0, Math.min(1, window.scrollY / maximum)) : 0);
     };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    observer?.observe(document.documentElement);
     update();
     window.addEventListener('scroll', update, { passive: true });
     window.addEventListener('resize', update);
     return () => {
+      observer?.disconnect();
       window.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
     };
   }, []);
   const scrollTo = (top: number) => window.scrollTo({ top, behavior: 'smooth' });
+  if (!scrollable) return null;
   return (
-    <nav aria-label="Quick Trading Floor scroll" className="fixed right-20 top-1/2 z-30 hidden -translate-y-1/2 flex-col items-center rounded-full border bg-white/95 p-2 shadow-lg lg:flex" style={{ borderColor: BORDER }}>
-      <button type="button" aria-label="Scroll to top of Trading Floor" onClick={() => scrollTo(0)} className="grid h-9 w-9 place-items-center rounded-full" style={{ color: GOLD_BRIGHT }}><ChevronUp size={18} /></button>
-      <div aria-label="Trading Floor scroll position" className="my-1 h-28 w-1.5 overflow-hidden rounded-full" style={{ background: PANEL }}>
+    <nav
+      aria-label="Quick Trading Floor scroll"
+      className="fixed right-20 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center rounded-full border bg-white/95 p-1 shadow-lg max-lg:right-2 sm:max-lg:right-4 sm:p-1.5 lg:p-2"
+      style={{ borderColor: BORDER }}
+    >
+      <button type="button" title="Top" aria-label="Scroll to top of Trading Floor" onClick={() => scrollTo(0)} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronUp size={18} /></button>
+      <div role="progressbar" aria-label="Trading Floor scroll position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)} className="my-1 h-16 w-1.5 overflow-hidden rounded-full sm:h-24 lg:h-28" style={{ background: PANEL }}>
         <div className="w-full rounded-full" style={{ height: `${Math.max(8, progress * 100)}%`, background: GOLD }} />
       </div>
-      <button type="button" aria-label="Scroll to bottom of Trading Floor" onClick={() => scrollTo(document.documentElement.scrollHeight)} className="grid h-9 w-9 place-items-center rounded-full" style={{ color: GOLD_BRIGHT }}><ChevronDown size={18} /></button>
+      <button type="button" title="Bottom" aria-label="Scroll to bottom of Trading Floor" onClick={() => scrollTo(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight))} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronDown size={18} /></button>
     </nav>
   );
 }
