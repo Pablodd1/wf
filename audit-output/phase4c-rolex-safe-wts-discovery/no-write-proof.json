@@ -1,0 +1,17 @@
+{
+  "contract": "watchfacts-phase4c-rolex-no-write-proof-v1",
+  "generated_at": "2026-08-24T16:59:13.158146+00:00",
+  "read_only": true,
+  "transaction_read_only": "on",
+  "production_writes": 0,
+  "raw_mutations": 0,
+  "publication_changes": 0,
+  "ui_ux_changes": 0,
+  "schema_changes": 0,
+  "evidence_standard_changes": 0,
+  "row_level_screen_count": 285,
+  "pre_discovery_cohort_md5": "adc992271b8b60923c807819a48e3e79",
+  "post_discovery_cohort_md5": "adc992271b8b60923c807819a48e3e79",
+  "cohort_unchanged": true,
+  "phase4d_executed": false
+}

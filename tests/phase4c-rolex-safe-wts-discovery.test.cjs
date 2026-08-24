@@ -1,0 +1,11 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { classify, selectCohort } = require('../tools/audit/phase4c-rolex-safe-wts-discovery.cjs');
+const hash = 'a'.repeat(64);
+const base = { listing_id:'1',source_record_id:'s1',raw_message_version_id:'v1',source_hash:hash,source_candidate_hash:hash,reference_normalized:'116508',intent:'WTS',raw_message:'Rolex 116508\nUSD 85000',parent_id:null,is_bundle:false,bundle_status:'SINGLE_CANDIDATE',price_usd:null,dial_color_normalized:'Black',condition_normalized:'Used' };
+const fx = { source:'test',observed_at:'2026-08-24T00:00:00Z',fetched_at:'2026-08-24T00:00:00Z',rates:{USD:1,HKD:7.8} };
+test('accepts exact single explicit USD without overwriting',()=>{ const row=classify(base,fx); assert.equal(row.classification,'SAFE_EXPLICIT_USD'); assert.equal(row.parser_evidence.proposed_price_usd,85000); assert.equal(row.existing_price.price_usd,null); });
+test('rejects ambiguous multiple prices',()=>{ const row=classify({...base,raw_message:'Rolex 116508 USD 85000 / USD 90000'},fx); assert.equal(row.classification,'REVIEW_REQUIRED'); });
+test('rejects non-catalog reference',()=>{ const row=classify({...base,reference_normalized:'BRACELET',raw_message:'Rolex BRACELET USD 1000'},fx); assert.equal(row.reason,'NOT_VALID_EXACT_REFERENCE'); });
+test('round robin cohort spans references when available',()=>{ const rows=[{reference:'A',expected_pr_eligibility:'EXPECTED_PR_QUALIFIED'},{reference:'A',expected_pr_eligibility:'EXPECTED_PR_QUALIFIED'},{reference:'B',expected_pr_eligibility:'EXPECTED_PR_QUALIFIED'}]; assert.deepEqual(selectCohort(rows,3).map(x=>x.reference),['A','B','A']); });

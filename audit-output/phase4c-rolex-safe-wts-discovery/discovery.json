@@ -1,0 +1,217 @@
+{
+  "contract": "watchfacts-phase4c-rolex-safe-wts-discovery-v1",
+  "read_only": true,
+  "production_writes": 0,
+  "generated_at": "2026-08-24T16:57:03.249Z",
+  "input": {
+    "rows": 285,
+    "private_cohort_sha256": "b40f09c3e8f12cdd1c5ba4807a3447e4a498a67e3ffeb7b0269243be8b9cf481",
+    "production_generated_at": "2026-08-24T16:56:47.403147+00:00"
+  },
+  "fx_snapshot": {
+    "contract": "wf-dated-fx-snapshot-v1",
+    "fetched_at": "2026-08-24T16:57:01.989Z",
+    "observed_at": "2026-08-24T00:00:00Z",
+    "source": "European Central Bank reference rates",
+    "source_url": "https://data.ecb.europa.eu/data/datasets/EXR",
+    "base": "USD",
+    "usd_per_unit": {
+      "USD": 1,
+      "EUR": 1.1664,
+      "HKD": 0.12760371083493788,
+      "GBP": 1.3634132086499124,
+      "CHF": 1.2458876308481095,
+      "CNY": 0.14874894789195808,
+      "JPY": 0.006284482758620691,
+      "SGD": 0.7870976449153115,
+      "KRW": 0.0007224080267558529,
+      "THB": 0.03059490084985836,
+      "CAD": 0.7220502661879412,
+      "AUD": 0.716153987843065,
+      "NZD": 0.5961056881484131,
+      "MYR": 0.2473702069901595,
+      "IDR": 0.0000564544349692245,
+      "INR": 0.010443424734191383,
+      "PHP": 0.016202475378182778,
+      "BRL": 0.19417992941333156,
+      "MXN": 0.05907288390537399,
+      "ZAR": 0.06248861554286449,
+      "SEK": 0.10526600785163125,
+      "NOK": 0.10735882921441392,
+      "DKK": 0.15602552269352704
+    },
+    "recognized_but_withheld": [
+      "AED",
+      "SAR",
+      "TWD",
+      "VND"
+    ]
+  },
+  "counts": {
+    "SAFE_EXPLICIT_USD": 0,
+    "SAFE_EXPLICIT_USDT": 0,
+    "SAFE_VERIFIED_FX": 0,
+    "REVIEW_REQUIRED": 254,
+    "UNRESOLVED": 31
+  },
+  "reasons": {
+    "NO_EXACT_AUTO_APPROVED_PRICE": 31,
+    "IMPLAUSIBLE_HKD_1_TO_3": 6,
+    "MULTIPLE_PRICE_CANDIDATES": 67,
+    "PRICE_OR_CURRENCY_REQUIRES_REVIEW": 170,
+    "PARSER_BUNDLE_PRICE_AMBIGUITY": 5,
+    "MULTIPLE_OR_BUNDLE_SOURCE_CONTEXT": 6
+  },
+  "references": {
+    "116506": {
+      "screened": 7,
+      "safe": 0,
+      "review_required": 6,
+      "unresolved": 1,
+      "expected_pr_qualified": 0
+    },
+    "116508": {
+      "screened": 50,
+      "safe": 0,
+      "review_required": 46,
+      "unresolved": 4,
+      "expected_pr_qualified": 0
+    },
+    "124060": {
+      "screened": 2,
+      "safe": 0,
+      "review_required": 2,
+      "unresolved": 0,
+      "expected_pr_qualified": 0
+    },
+    "126200": {
+      "screened": 6,
+      "safe": 0,
+      "review_required": 6,
+      "unresolved": 0,
+      "expected_pr_qualified": 0
+    },
+    "126231": {
+      "screened": 7,
+      "safe": 0,
+      "review_required": 3,
+      "unresolved": 4,
+      "expected_pr_qualified": 0
+    },
+    "126233": {
+      "screened": 8,
+      "safe": 0,
+      "review_required": 7,
+      "unresolved": 1,
+      "expected_pr_qualified": 0
+    },
+    "126234": {
+      "screened": 24,
+      "safe": 0,
+      "review_required": 24,
+      "unresolved": 0,
+      "expected_pr_qualified": 0
+    },
+    "126508": {
+      "screened": 31,
+      "safe": 0,
+      "review_required": 23,
+      "unresolved": 8,
+      "expected_pr_qualified": 0
+    },
+    "126622": {
+      "screened": 11,
+      "safe": 0,
+      "review_required": 11,
+      "unresolved": 0,
+      "expected_pr_qualified": 0
+    },
+    "228206": {
+      "screened": 26,
+      "safe": 0,
+      "review_required": 20,
+      "unresolved": 6,
+      "expected_pr_qualified": 0
+    },
+    "326934": {
+      "screened": 17,
+      "safe": 0,
+      "review_required": 17,
+      "unresolved": 0,
+      "expected_pr_qualified": 0
+    },
+    "336934": {
+      "screened": 20,
+      "safe": 0,
+      "review_required": 19,
+      "unresolved": 1,
+      "expected_pr_qualified": 0
+    },
+    "116710LN": {
+      "screened": 11,
+      "safe": 0,
+      "review_required": 11,
+      "unresolved": 0,
+      "expected_pr_qualified": 0
+    },
+    "126610LN": {
+      "screened": 18,
+      "safe": 0,
+      "review_required": 15,
+      "unresolved": 3,
+      "expected_pr_qualified": 0
+    },
+    "126613LB": {
+      "screened": 13,
+      "safe": 0,
+      "review_required": 13,
+      "unresolved": 0,
+      "expected_pr_qualified": 0
+    },
+    "116500LN": {
+      "screened": 3,
+      "safe": 0,
+      "review_required": 3,
+      "unresolved": 0,
+      "expected_pr_qualified": 0
+    },
+    "116610LN": {
+      "screened": 3,
+      "safe": 0,
+      "review_required": 3,
+      "unresolved": 0,
+      "expected_pr_qualified": 0
+    },
+    "126710BLNR": {
+      "screened": 8,
+      "safe": 0,
+      "review_required": 6,
+      "unresolved": 2,
+      "expected_pr_qualified": 0
+    },
+    "126711CHNR": {
+      "screened": 9,
+      "safe": 0,
+      "review_required": 9,
+      "unresolved": 0,
+      "expected_pr_qualified": 0
+    },
+    "126713GRNR": {
+      "screened": 11,
+      "safe": 0,
+      "review_required": 10,
+      "unresolved": 1,
+      "expected_pr_qualified": 0
+    }
+  },
+  "eligibility": {
+    "EXPECTED_PR_QUALIFIED": 0,
+    "SAFE_PRICE_NOT_PR_QUALIFIED": 0
+  },
+  "safe_by_currency": {},
+  "selected_rows": [],
+  "selected_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "safe_rows_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "raw_messages_exported": false,
+  "contact_values_exported": false
+}
