@@ -1,9 +1,13 @@
 # WatchFacts Phase 3 production census — read-only evidence report
 
-Status: **PARTIAL / SHARE WITH CAVEATS**  
-Production project: `qnsafosakvonzgfcsphh` (`watchfacts-pipeline-prod`)  
-Active normalization run: `mariadb-normalized-20260811-codex-v1`  
-Observation date: 2026-08-24 (America/New_York)  
+Status: **PARTIAL / SHARE WITH CAVEATS**
+
+Production project: `qnsafosakvonzgfcsphh` (`watchfacts-pipeline-prod`)
+
+Active normalization run: `mariadb-normalized-20260811-codex-v1`
+
+Observation date: 2026-08-24 (America/New_York)
+
 Merged prerequisite: PR #761, merge commit `421e67ed590d5476247eca3e0aa4216fc032d9db`
 
 ## Technical summary
@@ -159,8 +163,10 @@ Do not call the active staging snapshot, catalog-reference count, or Price Resea
 
 ## Required no-change statements
 
-**NO PRODUCTION DATA WAS MODIFIED.**  
-**NO UI/UX WAS MODIFIED.**  
-**NO NORMALIZED VALUE WAS CHANGED.**  
-**NO PUBLICATION STATE WAS CHANGED.**
+**NO PRODUCTION DATA WAS MODIFIED.**
 
+**NO UI/UX WAS MODIFIED.**
+
+**NO NORMALIZED VALUE WAS CHANGED.**
+
+**NO PUBLICATION STATE WAS CHANGED.**
