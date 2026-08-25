@@ -267,6 +267,7 @@ test('installer bounds immutable source checks to separate Management API reques
   assert.match(installer, /Assert-SameSnapshot 'Customer view definitions'/);
   assert.match(installer, /Assert-SameSnapshot 'Publication controls'/);
   assert.match(installer, /SET LOCAL statement_timeout='120s'/);
+  assert.match(installer, /ALTER FUNCTION public\.phase7b_verified_price_source_page\(text,text,uuid,integer\)[\s\S]*?SET statement_timeout = '45s'/);
   assert.doesNotMatch(installer, /UPDATE\s+staging\.listings/i);
   assert.doesNotMatch(installer, /UPDATE\s+public\.raw_/i);
   assert.doesNotMatch(installer, /price_research_shadow.*(anon|authenticated).*GRANT/i);
