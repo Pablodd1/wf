@@ -249,3 +249,41 @@ test('completed Phase 7B populates Rolex and Patek without confusing Price Resea
   assert.equal(report.snapshot.accessIssues.some(issue => issue.code === 'CANONICAL_QNSA_MANAGEMENT_AUTH'), false);
   assert.match(report.manifest.sources.find(source => source.id === 'qnsa_phase7b_gate').href, /32839980179$/);
 });
+
+test('authoritative catalog census overrides incomplete local fallback counts consistently', () => {
+  const catalogReconciliation = {
+    catalog_reconciliation_complete: true,
+    authoritative_catalog: [
+      { brand: 'Tudor', model: 'Black Bay', reference: 'A' },
+      { brand: 'Tudor', model: 'Pelagos', reference: 'B' },
+    ],
+    brand_summary: [{
+      brand: 'Tudor',
+      authoritative_catalog_reference_count: 2,
+      approved_local_canonical_reference_count: 1,
+      deployed_price_research_catalog_reference_count: 2,
+      exact_local_deployed_overlap: 1,
+      local_only_references: 0,
+      deployed_only_references: 1,
+      observed_catalog_universe_count: 3,
+      exact_published_reference_count: 1,
+      observed_exact_published_reference_count: 1,
+      published_population_snapshot_complete: true,
+      published_partial_count: 1,
+      published_component_count: 0,
+      published_invalid_count: 0,
+      published_unresolved_count: 0,
+    }],
+    checksums: { authoritative_catalog_sha256: 'catalog-census' },
+  };
+  const built = build({ priceReport: {}, tradingReport: {}, tradingCheckpoint: {}, catalogReconciliation });
+  const ledger = built.brandLedgers.Tudor;
+  assert.equal(ledger.catalog_reference_count, 2);
+  assert.equal(ledger.catalog_nonconflicting_reference_count, 2);
+  assert.equal(ledger.references.length, 2);
+  assert.equal(ledger.exact_published_reference_count, 1);
+  assert.equal(ledger.reference_population.approved_local_canonical_reference_count, 1);
+  assert.equal(built.summary.catalog_reference_counts.Tudor, 2);
+  assert.equal(built.summary.source_checksums.catalog_census_authoritative_sha256, 'catalog-census');
+  assert.equal(ledger.deployment_decision, 'NOT_READY');
+});

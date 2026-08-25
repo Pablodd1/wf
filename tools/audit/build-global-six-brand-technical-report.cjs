@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-function build(findings, completion) {
+function build(findings, completion, catalogReconciliation = {}) {
   const generatedAt = findings.observed_at || new Date().toISOString();
   const phase7b = completion.phase7b_verified_shadow;
   const phase7bComplete = phase7b?.complete === true;
@@ -37,6 +37,20 @@ function build(findings, completion) {
     };
   });
   const knownRows = rows.filter(row => Number.isFinite(row.trading_floor_listings));
+  const catalogRows = Array.isArray(catalogReconciliation.source_reconciliation)
+    ? catalogReconciliation.source_reconciliation.map(row => ({
+      brand: row.brand,
+      source: row.source,
+      reference_count: row.reference_count,
+      exact_overlap: row.exact_overlap,
+      unique_references: row.unique_references,
+      aliases: row.aliases,
+      partials: row.partials,
+      components: row.components,
+      invalids: row.invalids,
+      unresolved: row.unresolved,
+    }))
+    : [];
   const sources = [{
     id: 'watchfacts_live_bounded_audits',
     label: 'WatchFacts bounded live Trading Floor and Price Research audits',
@@ -57,6 +71,23 @@ function build(findings, completion) {
         observed_customer_safe_canonical_reference_count: 'Customer-safe canonical references observed in the bounded partial production snapshot; never substituted for the authoritative count.',
         price_research_qualified_wts: 'WTS observations passing exact-reference, price/currency, deduplication, bundle, and publication gates.',
         analytics_ready_references: 'Exact references meeting the unchanged minimum comparable-observation and 3.0x IQR analytics contract.',
+      },
+    },
+  }, {
+    id: 'global_catalog_census_reconciliation',
+    label: 'WatchFacts authoritative six-brand catalog census reconciliation',
+    type: 'repository_artifact',
+    query: {
+      engine: 'Node.js deterministic set reconciliation',
+      language: 'javascript',
+      description: 'Enumerates approved local, deployed API, release-manifest, Phase 7B, curation, legacy lookup, and published-production reference sets without raw messages.',
+      tables_used: ['audit-output/global-six-brand-completion/catalog-census-reconciliation.json'],
+      filters: findings.brands.map(row => row.brand),
+      metric_definitions: {
+        catalog_reference_count: catalogReconciliation.catalog_reference_count_definition || null,
+        exact_overlap: 'Source reference values that exactly match the accepted authoritative catalog for the same brand.',
+        unique_references: 'Source reference values not present in the accepted authoritative catalog; retained and classified rather than discarded.',
+        observed_catalog_universe_count: 'Union of reference values observed across canonical, deployed, legacy lookup, curation, and published-production sources; retained separately from the authoritative catalog.',
       },
     },
   }, {
@@ -145,6 +176,25 @@ function build(findings, completion) {
         defaultSort: { field: 'brand', direction: 'asc' },
         source: sources[0],
       }, {
+        id: 'catalog_source_reconciliation',
+        title: 'Catalog/reference source reconciliation',
+        subtitle: 'Every non-authoritative value remains enumerated as alias, partial, component, invalid, or unresolved evidence.',
+        dataset: 'catalog_source_reconciliation',
+        columns: [
+          { field: 'brand', label: 'Brand', type: 'string' },
+          { field: 'source', label: 'Source', type: 'string' },
+          { field: 'reference_count', label: 'References', type: 'number' },
+          { field: 'exact_overlap', label: 'Exact overlap', type: 'number' },
+          { field: 'unique_references', label: 'Unique', type: 'number' },
+          { field: 'aliases', label: 'Aliases', type: 'number' },
+          { field: 'partials', label: 'Partials', type: 'number' },
+          { field: 'components', label: 'Components', type: 'number' },
+          { field: 'invalids', label: 'Invalids', type: 'number' },
+          { field: 'unresolved', label: 'Unresolved', type: 'number' },
+        ],
+        defaultSort: { field: 'brand', direction: 'asc' },
+        source: sources[1],
+      }, {
         id: 'blocker_register',
         title: 'Production blockers by brand',
         subtitle: 'Every row is a deployment gate, not a request to rewrite or delete historical evidence.',
@@ -154,18 +204,20 @@ function build(findings, completion) {
           { field: 'blocker', label: 'Blocking evidence', type: 'string' },
         ],
         defaultSort: { field: 'brand', direction: 'asc' },
-        source: sources[1],
+        source: sources[2],
       }],
       blocks: [
         { id: 'title', type: 'markdown', body: '# WATCHFACTS Six-Brand Completion Audit' },
         { id: 'technical_summary', type: 'markdown', body: phase7bComplete
           ? '## Technical summary\n\n**The shared evidence contract is implemented, but no brand is authorized for a new cohort deployment.** Canonical QNSA Phase 7B completed under the stable run key and now supplies authoritative Rolex/Patek publication counts plus verified-only Price Research evidence. The customer source remains unchanged; all six brands remain NOT_READY under the stricter global dealer and publication gates.'
-          : '## Technical summary\n\n**The shared evidence contract is implemented, but no brand is authorized for a new cohort deployment.** The deployed catalog contains 3,054 exact references across the six brands. Tudor and Zenith have complete live Trading Floor counts, while Cartier and TAG Heuer have material catalog/publication/Price Research inconsistencies. Rolex and Patek authoritative counts remain unavailable because the private Phase 7B run has not completed and canonical QNSA management authentication most recently failed.' },
-        { id: 'measured_coverage', type: 'markdown', sourceId: 'watchfacts_live_bounded_audits', body: '## Four measured brands already prove the global gates are necessary\n\nTudor has 2,555 published listings and Zenith has 453, but both have Trading Floor references outside the Price Research catalog and their published WTB activity is absent from the Price Research census. Cartier reports 6,834 listings while its catalog browse and exact-reference Price Research results disagree. TAG Heuer returns 278 distinct rows against an advertised 283 and publishes 150 rows outside its current catalog.' },
+          : `## Technical summary\n\n**The shared evidence contract is implemented, but no brand is authorized for a new cohort deployment.** The accepted authoritative catalogs contain ${rows.reduce((sum, row) => sum + Number(row.catalog_references || 0), 0).toLocaleString('en-US')} exact references across the six brands. Tudor and Zenith have complete live Trading Floor counts, while Cartier and TAG Heuer retain material catalog/publication/Price Research inconsistencies. Rolex and Patek authoritative publication evidence remains unavailable until the private Phase 7B run completes.` },
+        { id: 'measured_coverage', type: 'markdown', sourceId: 'watchfacts_live_bounded_audits', body: '## Four measured brands already prove the global gates are necessary\n\nTudor has 2,555 published listings and Zenith has 453, but both retain published reference values outside the approved canonical catalog. Cartier returns 7,154 listings and has 699 deployed browse references not present in its approved canonical catalog. TAG Heuer returns 278 distinct rows against an advertised 283, so its authoritative exact-published-reference count remains null.' },
         { id: 'known_counts_chart', type: 'chart', chartId: 'known_trading_floor_counts' },
         { id: 'brand_status_heading', type: 'markdown', body: '## Every brand remains fail-closed\n\nThe table separates measured coverage from unknown or conflicting values. A catalog reference with no current listing is not automatically a defect; a published reference outside the catalog requires identity review.' },
         { id: 'brand_status_table', type: 'table', tableId: 'brand_completion_status' },
-        { id: 'definitions', type: 'markdown', sourceId: 'global_contract', body: '## One contract now governs identity, price, dealer, counts, and publication\n\nCatalog reference count measures the approved catalog. Catalog nonconflicting count removes catalog identity conflicts but does not claim production coverage. Customer-safe canonical count requires at least one exact customer-eligible production observation after publication and reference safety gates; it remains null until the authoritative production snapshot completes, while the bounded observed count stays separate. Price Research accepts current single-watch WTS only when its independent evidence gates pass. Generic dealer placeholders never become identities or ratings.' },
+        { id: 'catalog_reconciliation_heading', type: 'markdown', sourceId: 'global_catalog_census_reconciliation', body: '## Catalog counts now use one source-of-truth definition\n\nCatalog reference count means distinct exact brand/reference identities in the accepted authoritative source after alias collapse and explicit partial/component/invalid exclusion. Rolex and Patek use completed Phase 7B. Tudor, Zenith, Cartier, and TAG Heuer use the approved local canonical catalog. The larger deployed release/workbook-enriched browse universes remain preserved and fully classified instead of being silently promoted into canonical catalogs.' },
+        { id: 'catalog_reconciliation_table', type: 'table', tableId: 'catalog_source_reconciliation' },
+        { id: 'definitions', type: 'markdown', sourceId: 'global_contract', body: '## One contract now governs identity, price, dealer, counts, and publication\n\nCatalog reference count is the distinct exact brand/reference set in the accepted authoritative source after alias collapse and explicit partial/component/invalid exclusion. Catalog nonconflicting count removes catalog identity conflicts but does not claim production coverage. Customer-safe canonical count requires at least one exact customer-eligible production observation after publication and reference safety gates; it remains null until the authoritative production snapshot completes, while the bounded observed count stays separate. Price Research accepts current single-watch WTS only when its independent evidence gates pass. Generic dealer placeholders never become identities or ratings.' },
         { id: 'methodology', type: 'markdown', body: '## Bounded audits preserve evidence and avoid uncontrolled production work\n\nThe audit uses adaptive four-reference Price Research batches with concurrency capped at two and 50-row Trading Floor cursor pages with resumable checkpoints. Row-level raw messages are removed from checkpoints. The completion ledgers freeze every discovered canonical model/reference and preserve unknown fields as null until their exact query succeeds.' },
         { id: 'limitations', type: 'markdown', body: phase7bComplete
           ? '## Coverage is partial where production access or parity failed\n\nRolex and Patek customer-safe canonical reference counts now come from the completed canonical publication census, not from catalog size or Price Research representation. Their verified Price Research cohorts remain private. Other incomplete brand snapshots retain null authoritative counts, and dealer-identity coverage remains an independent unresolved global gate.'
@@ -191,11 +243,14 @@ function build(findings, completion) {
       }]), {
         sourceId: 'watchfacts_live_bounded_audits',
         code: 'GLOBAL_REFERENCE_CENSUS_INCOMPLETE',
-        message: 'The resumable 3,054-reference Price Research census and Rolex Trading Floor cursor census are not complete; missing values remain null.',
+        message: catalogReconciliation.published_population_complete === false
+          ? 'Catalog reconciliation is complete, but TAG Heuer advertises 283 published rows while its terminating cursor returns 278; its authoritative exact-published-reference count remains null and the observed count is preserved separately.'
+          : 'The global published-production census is incomplete; missing values remain null.',
       }],
       datasets: {
         known_brand_counts: knownRows,
         brand_status: rows,
+        catalog_source_reconciliation: catalogRows,
         blockers: effectiveBrands.flatMap(row => row.blockers.map(blocker => ({ brand: row.brand, blocker }))),
       },
     },
@@ -204,6 +259,8 @@ function build(findings, completion) {
       contract: findings.contract,
       completion_result_sha256: completion.result_sha256 || null,
       snapshot_complete: completion.snapshot_complete === true,
+      catalog_reconciliation_complete: catalogReconciliation.catalog_reconciliation_complete === true,
+      catalog_reconciliation_sha256: catalogReconciliation.checksums?.authoritative_catalog_sha256 || null,
     },
   };
 }
@@ -212,7 +269,8 @@ function main() {
   const outputDir = path.resolve(process.env.GLOBAL_SIX_BRAND_OUTPUT || 'audit-output/global-six-brand-completion');
   const findings = JSON.parse(fs.readFileSync(path.join(outputDir, 'brand-findings.json'), 'utf8'));
   const completion = JSON.parse(fs.readFileSync(path.join(outputDir, 'completion-summary.json'), 'utf8'));
-  const artifact = build(findings, completion);
+  const catalogReconciliation = JSON.parse(fs.readFileSync(path.join(outputDir, 'catalog-census-reconciliation.json'), 'utf8'));
+  const artifact = build(findings, completion, catalogReconciliation);
   const output = path.join(outputDir, 'report-artifact.json');
   fs.writeFileSync(output, `${JSON.stringify(artifact, null, 2)}\n`);
   process.stdout.write(`${JSON.stringify({ output, status: artifact.snapshot.status })}\n`);

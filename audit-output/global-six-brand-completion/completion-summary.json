@@ -1,6 +1,6 @@
 {
   "contract": "watchfacts-global-customer-data-contract-v1",
-  "generated_at": "2026-08-25T11:34:26.813Z",
+  "generated_at": "2026-08-25T13:31:30.530Z",
   "canonical_project_ref": "qnsafosakvonzgfcsphh",
   "brands": [
     "Rolex",
@@ -20,6 +20,7 @@
     "Cartier": "NOT_READY",
     "TAG Heuer": "NOT_READY"
   },
+  "catalog_reference_count_definition": "Distinct exact brand/reference identities in the accepted authoritative source after alias collapse and explicit partial/component/invalid exclusion.",
   "catalog_reference_counts": {
     "Rolex": 303,
     "Patek Philippe": 460,
@@ -27,6 +28,46 @@
     "Zenith": 113,
     "Cartier": 762,
     "TAG Heuer": 105
+  },
+  "approved_local_canonical_reference_counts": {
+    "Rolex": 303,
+    "Patek Philippe": 460,
+    "Tudor": 167,
+    "Zenith": 113,
+    "Cartier": 762,
+    "TAG Heuer": 105
+  },
+  "deployed_price_research_catalog_reference_counts": {
+    "Rolex": 303,
+    "Patek Philippe": 460,
+    "Tudor": 534,
+    "Zenith": 113,
+    "Cartier": 1461,
+    "TAG Heuer": 183
+  },
+  "observed_catalog_universe_counts": {
+    "Rolex": 1179,
+    "Patek Philippe": 3483,
+    "Tudor": 571,
+    "Zenith": 158,
+    "Cartier": 1754,
+    "TAG Heuer": 268
+  },
+  "exact_published_reference_counts": {
+    "Rolex": 287,
+    "Patek Philippe": 416,
+    "Tudor": 80,
+    "Zenith": 31,
+    "Cartier": 234,
+    "TAG Heuer": null
+  },
+  "observed_exact_published_reference_counts": {
+    "Rolex": 287,
+    "Patek Philippe": 416,
+    "Tudor": 80,
+    "Zenith": 31,
+    "Cartier": 234,
+    "TAG Heuer": 17
   },
   "catalog_nonconflicting_reference_counts": {
     "Rolex": 303,
@@ -56,7 +97,9 @@
     "price_research": null,
     "trading_floor": null,
     "phase7b_result_sha256": "c9f1284e4cf837d91cbc4b2104e18766a870bbddaff69c8f56c314baf40a899b",
-    "phase7b_catalog_sha256": "f91a456baf0622ad42694dd6cf1c2c1b9ef43ac2565d50026896e1a6f86938e4"
+    "phase7b_catalog_sha256": "f91a456baf0622ad42694dd6cf1c2c1b9ef43ac2565d50026896e1a6f86938e4",
+    "catalog_census_authoritative_sha256": "d8c9c370f355343ddaa785145fa232e97cb5a0eb38183021b83a07d249c0f99d",
+    "catalog_census_source_reconciliation_sha256": "9448a9b97fe7f54b0cf11f02e09de323d174f4f445c84529dddaceec9601e6d7"
   },
   "phase7b_verified_shadow": {
     "complete": true,
@@ -529,6 +572,13 @@
       }
     }
   },
+  "catalog_census_reconciliation": {
+    "complete": true,
+    "generated_at": "2026-08-25T13:30:58.474Z",
+    "definition": "Distinct exact brand/reference identities in the accepted authoritative source after alias collapse and explicit partial/component/invalid exclusion.",
+    "authoritative_catalog_sha256": "d8c9c370f355343ddaa785145fa232e97cb5a0eb38183021b83a07d249c0f99d",
+    "published_population_complete": false
+  },
   "safety": {
     "raw_messages_modified": 0,
     "historical_normalized_values_modified": 0,
@@ -536,5 +586,5 @@
     "cohorts_deployed": 0,
     "ui_structure_modified": 0
   },
-  "result_sha256": "d34178d524a03574f1c5989f8bb68ada4b6d90402dce361319165c4e41ac1178"
+  "result_sha256": "638acce98c3b6c675d04de560e7f65e69cdd47ae98196994aa994b35c0129cc2"
 }

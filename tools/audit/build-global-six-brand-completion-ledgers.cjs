@@ -213,6 +213,7 @@ function build({
   tradingCheckpoint,
   phase7bAudit = {},
   phase7bArtifact = {},
+  catalogReconciliation = {},
 }) {
   const priceRows = Array.isArray(priceReport?.rows) ? priceReport.rows : [];
   const deployedCatalogRows = priceRows.map(row => ({
@@ -223,16 +224,27 @@ function build({
   }));
   const discoveredCatalogRows = [priceReport?.catalog_references, priceCheckpoint?.catalog_references]
     .find(rows => Array.isArray(rows) && rows.length > 0) || [];
-  const catalogRows = discoveredCatalogRows.length
-    ? discoveredCatalogRows
+  const reconciledCatalogRows = catalogReconciliation?.catalog_reconciliation_complete === true
+    && Array.isArray(catalogReconciliation.authoritative_catalog)
+    ? catalogReconciliation.authoritative_catalog.map(row => ({
+      key: canonicalReferenceKey(row.brand, row.reference),
+      brand: row.brand,
+      model: exact(row.model),
+      reference: exact(row.reference),
+    }))
+    : [];
+  const catalogRows = reconciledCatalogRows.length
+    ? reconciledCatalogRows
+    : discoveredCatalogRows.length ? discoveredCatalogRows
     : deployedCatalogRows.length && priceReport?.snapshot_complete === true
       ? deployedCatalogRows
       : localCatalog();
   const priceByKey = new Map(priceRows.map(row => [row.key || canonicalReferenceKey(row.brand, row.reference), row]));
   const tradingByBrand = tradingCheckpoint?.brand_state || {};
   const tradingByKey = groupTradingRows(contract.brands.flatMap(brand => tradingByBrand[brand]?.rows || []));
-  const conflicts = new Set((priceReport?.catalog_identity_conflicts || priceCheckpoint?.catalog_identity_conflicts || [])
-    .map(row => canonicalReferenceKey(row.brand, row.reference)));
+  const conflicts = reconciledCatalogRows.length ? new Set()
+    : new Set((priceReport?.catalog_identity_conflicts || priceCheckpoint?.catalog_identity_conflicts || [])
+      .map(row => canonicalReferenceKey(row.brand, row.reference)));
   const snapshotsComplete = priceReport?.snapshot_complete === true && tradingReport?.snapshot_complete === true;
   const phase7BaseComplete = phase7bAudit?.phase === '7B'
     && phase7bAudit?.complete === true
@@ -250,6 +262,13 @@ function build({
     && ['Rolex', 'Patek Philippe'].every(brand => phase7References.filter(row => row.brand === brand).length
       === Number(phase7bAudit.customer_safe_reference_counts?.[brand] ?? -1));
   const phase7ByKey = new Map(phase7References.map(row => [canonicalReferenceKey(row.brand, row.canonical_reference), row]));
+  const catalogPublishedRows = Array.isArray(catalogReconciliation?.exact_published_production_reference_population)
+    ? catalogReconciliation.exact_published_production_reference_population
+    : [];
+  const catalogPublishedByKey = new Map(catalogPublishedRows.map(row => [
+    canonicalReferenceKey(row.brand, row.reference),
+    row,
+  ]));
   const generatedAt = new Date().toISOString();
   const brandLedgers = {};
 
@@ -266,6 +285,7 @@ function build({
       snapshotComplete: brandTradingComplete,
     });
     const phase7Summary = phase7bComplete ? phase7bBrandSummary(brand, phase7bAudit, phase7Datasets) : null;
+    const catalogCensus = (catalogReconciliation?.brand_summary || []).find(row => row.brand === brand) || null;
     const phase7BrandReferences = phase7Summary ? phase7References.filter(row => row.brand === brand) : [];
     const phase7PublishedReferences = phase7BrandReferences
       .filter(row => Number(row.total_published_listings || 0) > 0)
@@ -280,30 +300,58 @@ function build({
       referencePopulation.customer_safe_canonical_references = phase7PublishedReferences;
       referencePopulation.observed_customer_safe_canonical_references = phase7PublishedReferences;
     }
+    if (catalogCensus) {
+      referencePopulation.catalog_reconciliation_complete = true;
+      referencePopulation.approved_local_canonical_reference_count =
+        catalogCensus.approved_local_canonical_reference_count;
+      referencePopulation.deployed_price_research_catalog_reference_count =
+        catalogCensus.deployed_price_research_catalog_reference_count;
+      referencePopulation.exact_local_deployed_overlap = catalogCensus.exact_local_deployed_overlap;
+      referencePopulation.local_only_reference_count = catalogCensus.local_only_references;
+      referencePopulation.deployed_only_reference_count = catalogCensus.deployed_only_references;
+      referencePopulation.observed_catalog_universe_count = catalogCensus.observed_catalog_universe_count;
+      referencePopulation.exact_published_reference_count = catalogCensus.exact_published_reference_count;
+      referencePopulation.observed_exact_published_reference_count =
+        catalogCensus.observed_exact_published_reference_count;
+      referencePopulation.published_population_snapshot_complete =
+        catalogCensus.published_population_snapshot_complete;
+      referencePopulation.observed_partial_reference_count = catalogCensus.published_partial_count;
+      referencePopulation.observed_invalid_reference_count = catalogCensus.published_invalid_count;
+      referencePopulation.observed_unresolved_reference_count = catalogCensus.published_unresolved_count;
+      referencePopulation.observed_component_reference_count = catalogCensus.published_component_count;
+    }
     const references = catalogRows.filter(row => row.brand === brand).map(identity => {
       const priceRow = priceByKey.get(identity.key) || null;
       const trading = tradingByKey.get(identity.key) || null;
       const phase7 = phase7Summary ? phase7ByKey.get(identity.key) || null : null;
+      const catalogPublished = catalogCensus ? catalogPublishedByKey.get(identity.key) || null : null;
+      const censusObserved = phase7 || catalogPublished;
       return {
         brand,
         canonical_model: identity.model,
         canonical_reference: identity.reference,
         reference_identity: conflicts.has(identity.key) ? 'AMBIGUOUS' : 'VALID_EXACT_REFERENCE',
-        trading_floor_listings: phase7 ? Number(phase7.total_published_listings || 0) : trading?.trading_floor_listings ?? 0,
-        trading_floor_wts: phase7 ? Number(phase7.wts_listings || 0) : trading?.trading_floor_wts ?? 0,
-        trading_floor_wtb: phase7 ? Number(phase7.wtb_listings || 0) : trading?.trading_floor_wtb ?? 0,
-        trading_floor_priced: phase7 ? Number(phase7.priced_listings || 0) : trading?.trading_floor_priced ?? 0,
-        trading_floor_images: phase7 ? Number(phase7.image_linked_listings || 0) : trading?.trading_floor_images ?? 0,
-        resolved_posting_identities: phase7 ? null : trading?.resolved_posting_identities ?? 0,
-        dealer_identity_review_required: phase7 ? null : trading?.dealer_identity_review_required ?? 0,
+        trading_floor_listings: phase7 ? Number(phase7.total_published_listings || 0)
+          : catalogPublished ? Number(catalogPublished.listing_count || 0) : trading?.trading_floor_listings ?? 0,
+        trading_floor_wts: phase7 ? Number(phase7.wts_listings || 0)
+          : catalogPublished ? Number(catalogPublished.wts_count || 0) : trading?.trading_floor_wts ?? 0,
+        trading_floor_wtb: phase7 ? Number(phase7.wtb_listings || 0)
+          : catalogPublished ? Number(catalogPublished.wtb_count || 0) : trading?.trading_floor_wtb ?? 0,
+        trading_floor_priced: phase7 ? Number(phase7.priced_listings || 0)
+          : catalogPublished ? null : trading?.trading_floor_priced ?? 0,
+        trading_floor_images: phase7 ? Number(phase7.image_linked_listings || 0)
+          : catalogPublished ? null : trading?.trading_floor_images ?? 0,
+        resolved_posting_identities: censusObserved ? null : trading?.resolved_posting_identities ?? 0,
+        dealer_identity_review_required: censusObserved ? null : trading?.dealer_identity_review_required ?? 0,
         dealer_identity_status: phase7 ? 'NOT_AUDITED_BY_PHASE7B'
+          : catalogPublished ? 'NOT_AUDITED_BY_CATALOG_CENSUS'
           : (trading?.dealer_identity_review_required || 0) > 0
             ? contract.dealer_identity.review_status
             : trading?.trading_floor_listings ? 'RESOLVED' : null,
-        customer_safe_published_observations: phase7 ? null : conflicts.has(identity.key)
+        customer_safe_published_observations: censusObserved ? null : conflicts.has(identity.key)
           ? 0
           : trading?.customer_safe_published_observations ?? 0,
-        source_backed_dealer_ratings: phase7 ? null : trading?.source_backed_dealer_ratings ?? 0,
+        source_backed_dealer_ratings: censusObserved ? null : trading?.source_backed_dealer_ratings ?? 0,
         price_research_source_observations: phase7 ? Number(phase7.legacy_pr_observations || 0)
           : priceRow ? Number(priceRow.source_observation_count || 0) : null,
         price_research_wts_observations: phase7 ? Number(phase7.legacy_pr_observations || 0)
@@ -335,6 +383,12 @@ function build({
           current_max: phase7.current_max,
           verified_max: phase7.verified_max,
           census_sha256: phase7.census_sha256,
+        } : null,
+        catalog_census_observed_publication: catalogPublished && !phase7 ? {
+          listing_count: Number(catalogPublished.listing_count || 0),
+          wts_count: Number(catalogPublished.wts_count || 0),
+          wtb_count: Number(catalogPublished.wtb_count || 0),
+          snapshot_complete: catalogCensus.published_population_snapshot_complete === true,
         } : null,
         completion_status: completionStatus({
           snapshotsComplete,
@@ -380,6 +434,7 @@ function build({
       trading_floor_summary: tradingSummary,
       price_research_summary: priceSummary,
       phase7b_verified_shadow: phase7Summary,
+      catalog_census_reconciliation: catalogCensus,
       references,
       checksums: {
         reference_coverage_sha256: sha256(references.map(row => JSON.stringify(row)).join('\n')),
@@ -395,7 +450,30 @@ function build({
     snapshot_complete: snapshotsComplete,
     deployment_authorized: false,
     deployment_decisions: Object.fromEntries(contract.brands.map(brand => [brand, brandLedgers[brand].deployment_decision])),
+    catalog_reference_count_definition: catalogReconciliation?.catalog_reference_count_definition
+      || 'total_canonical_references_in_approved_catalog',
     catalog_reference_counts: Object.fromEntries(contract.brands.map(brand => [brand, brandLedgers[brand].catalog_reference_count])),
+    approved_local_canonical_reference_counts: Object.fromEntries(contract.brands.map(brand => [
+      brand,
+      brandLedgers[brand].catalog_census_reconciliation?.approved_local_canonical_reference_count
+        ?? brandLedgers[brand].catalog_reference_count,
+    ])),
+    deployed_price_research_catalog_reference_counts: Object.fromEntries(contract.brands.map(brand => [
+      brand,
+      brandLedgers[brand].catalog_census_reconciliation?.deployed_price_research_catalog_reference_count ?? null,
+    ])),
+    observed_catalog_universe_counts: Object.fromEntries(contract.brands.map(brand => [
+      brand,
+      brandLedgers[brand].catalog_census_reconciliation?.observed_catalog_universe_count ?? null,
+    ])),
+    exact_published_reference_counts: Object.fromEntries(contract.brands.map(brand => [
+      brand,
+      brandLedgers[brand].exact_published_reference_count,
+    ])),
+    observed_exact_published_reference_counts: Object.fromEntries(contract.brands.map(brand => [
+      brand,
+      brandLedgers[brand].reference_population.observed_exact_published_reference_count,
+    ])),
     catalog_nonconflicting_reference_counts: Object.fromEntries(contract.brands
       .map(brand => [brand, brandLedgers[brand].catalog_nonconflicting_reference_count])),
     customer_safe_canonical_reference_counts: Object.fromEntries(contract.brands
@@ -407,6 +485,9 @@ function build({
       trading_floor: tradingReport?.checksums || null,
       phase7b_result_sha256: phase7bComplete ? phase7bAudit.result_sha256 : null,
       phase7b_catalog_sha256: phase7bComplete ? phase7bAudit.catalog_sha256 : null,
+      catalog_census_authoritative_sha256: catalogReconciliation?.checksums?.authoritative_catalog_sha256 || null,
+      catalog_census_source_reconciliation_sha256:
+        catalogReconciliation?.checksums?.source_reconciliation_sha256 || null,
     },
     phase7b_verified_shadow: phase7bComplete ? {
       complete: true,
@@ -422,6 +503,13 @@ function build({
         brand,
         brandLedgers[brand].phase7b_verified_shadow,
       ])),
+    } : null,
+    catalog_census_reconciliation: catalogReconciliation?.catalog_reconciliation_complete === true ? {
+      complete: true,
+      generated_at: catalogReconciliation.generated_at,
+      definition: catalogReconciliation.catalog_reference_count_definition,
+      authoritative_catalog_sha256: catalogReconciliation.checksums?.authoritative_catalog_sha256 || null,
+      published_population_complete: catalogReconciliation.published_population_complete === true,
     } : null,
     safety: {
       raw_messages_modified: 0,
@@ -456,7 +544,17 @@ function main() {
     || path.join(phase7bDir, 'audit.json')), {});
   const phase7bArtifact = readJson(path.resolve(process.env.GLOBAL_SIX_BRAND_PHASE7B_ARTIFACT
     || path.join(phase7bDir, 'artifact.json')), {});
-  const built = build({ priceReport, priceCheckpoint, tradingReport, tradingCheckpoint, phase7bAudit, phase7bArtifact });
+  const catalogReconciliation = readJson(path.resolve(process.env.GLOBAL_SIX_BRAND_CATALOG_RECONCILIATION
+    || path.join(outputDir, 'catalog-census-reconciliation.json')), {});
+  const built = build({
+    priceReport,
+    priceCheckpoint,
+    tradingReport,
+    tradingCheckpoint,
+    phase7bAudit,
+    phase7bArtifact,
+    catalogReconciliation,
+  });
   const ledgerDir = path.join(outputDir, 'ledgers');
   fs.mkdirSync(ledgerDir, { recursive: true });
   for (const brand of contract.brands) {

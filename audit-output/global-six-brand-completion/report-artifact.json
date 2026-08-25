@@ -4,7 +4,7 @@
     "version": 1,
     "title": "WATCHFACTS Six-Brand Completion Audit",
     "surface": "report",
-    "generatedAt": "2026-08-25T11:21:53.935Z",
+    "generatedAt": "2026-08-25T13:30:58.474Z",
     "description": "Global evidence-contract implementation and production acceptance status for Rolex, Patek Philippe, Tudor, Zenith, Cartier, and TAG Heuer.",
     "sources": [
       {
@@ -37,6 +37,33 @@
             "observed_customer_safe_canonical_reference_count": "Customer-safe canonical references observed in the bounded partial production snapshot; never substituted for the authoritative count.",
             "price_research_qualified_wts": "WTS observations passing exact-reference, price/currency, deduplication, bundle, and publication gates.",
             "analytics_ready_references": "Exact references meeting the unchanged minimum comparable-observation and 3.0x IQR analytics contract."
+          }
+        }
+      },
+      {
+        "id": "global_catalog_census_reconciliation",
+        "label": "WatchFacts authoritative six-brand catalog census reconciliation",
+        "type": "repository_artifact",
+        "query": {
+          "engine": "Node.js deterministic set reconciliation",
+          "language": "javascript",
+          "description": "Enumerates approved local, deployed API, release-manifest, Phase 7B, curation, legacy lookup, and published-production reference sets without raw messages.",
+          "tables_used": [
+            "audit-output/global-six-brand-completion/catalog-census-reconciliation.json"
+          ],
+          "filters": [
+            "Rolex",
+            "Patek Philippe",
+            "Tudor",
+            "Zenith",
+            "Cartier",
+            "TAG Heuer"
+          ],
+          "metric_definitions": {
+            "catalog_reference_count": "Distinct exact brand/reference identities in the accepted authoritative source after alias collapse and explicit partial/component/invalid exclusion.",
+            "exact_overlap": "Source reference values that exactly match the accepted authoritative catalog for the same brand.",
+            "unique_references": "Source reference values not present in the accepted authoritative catalog; retained and classified rather than discarded.",
+            "observed_catalog_universe_count": "Union of reference values observed across canonical, deployed, legacy lookup, curation, and published-production sources; retained separately from the authoritative catalog."
           }
         }
       },
@@ -256,6 +283,95 @@
         }
       },
       {
+        "id": "catalog_source_reconciliation",
+        "title": "Catalog/reference source reconciliation",
+        "subtitle": "Every non-authoritative value remains enumerated as alias, partial, component, invalid, or unresolved evidence.",
+        "dataset": "catalog_source_reconciliation",
+        "columns": [
+          {
+            "field": "brand",
+            "label": "Brand",
+            "type": "string"
+          },
+          {
+            "field": "source",
+            "label": "Source",
+            "type": "string"
+          },
+          {
+            "field": "reference_count",
+            "label": "References",
+            "type": "number"
+          },
+          {
+            "field": "exact_overlap",
+            "label": "Exact overlap",
+            "type": "number"
+          },
+          {
+            "field": "unique_references",
+            "label": "Unique",
+            "type": "number"
+          },
+          {
+            "field": "aliases",
+            "label": "Aliases",
+            "type": "number"
+          },
+          {
+            "field": "partials",
+            "label": "Partials",
+            "type": "number"
+          },
+          {
+            "field": "components",
+            "label": "Components",
+            "type": "number"
+          },
+          {
+            "field": "invalids",
+            "label": "Invalids",
+            "type": "number"
+          },
+          {
+            "field": "unresolved",
+            "label": "Unresolved",
+            "type": "number"
+          }
+        ],
+        "defaultSort": {
+          "field": "brand",
+          "direction": "asc"
+        },
+        "source": {
+          "id": "global_catalog_census_reconciliation",
+          "label": "WatchFacts authoritative six-brand catalog census reconciliation",
+          "type": "repository_artifact",
+          "query": {
+            "engine": "Node.js deterministic set reconciliation",
+            "language": "javascript",
+            "description": "Enumerates approved local, deployed API, release-manifest, Phase 7B, curation, legacy lookup, and published-production reference sets without raw messages.",
+            "tables_used": [
+              "audit-output/global-six-brand-completion/catalog-census-reconciliation.json"
+            ],
+            "filters": [
+              "Rolex",
+              "Patek Philippe",
+              "Tudor",
+              "Zenith",
+              "Cartier",
+              "TAG Heuer"
+            ],
+            "metric_definitions": {
+              "catalog_reference_count": "Distinct exact brand/reference identities in the accepted authoritative source after alias collapse and explicit partial/component/invalid exclusion.",
+              "exact_overlap": "Source reference values that exactly match the accepted authoritative catalog for the same brand.",
+              "unique_references": "Source reference values not present in the accepted authoritative catalog; retained and classified rather than discarded.",
+              "observed_catalog_universe_count": "Union of reference values observed across canonical, deployed, legacy lookup, curation, and published-production sources; retained separately from the authoritative catalog."
+            }
+          }
+        }
+      },
+      {
         "id": "blocker_register",
         "title": "Production blockers by brand",
         "subtitle": "Every row is a deployment gate, not a request to rewrite or delete historical evidence.",
@@ -311,7 +427,7 @@
         "id": "measured_coverage",
         "type": "markdown",
         "sourceId": "watchfacts_live_bounded_audits",
-        "body": "## Four measured brands already prove the global gates are necessary\n\nTudor has 2,555 published listings and Zenith has 453, but both have Trading Floor references outside the Price Research catalog and their published WTB activity is absent from the Price Research census. Cartier reports 6,834 listings while its catalog browse and exact-reference Price Research results disagree. TAG Heuer returns 278 distinct rows against an advertised 283 and publishes 150 rows outside its current catalog."
+        "body": "## Four measured brands already prove the global gates are necessary\n\nTudor has 2,555 published listings and Zenith has 453, but both retain published reference values outside the approved canonical catalog. Cartier returns 7,154 listings and has 699 deployed browse references not present in its approved canonical catalog. TAG Heuer returns 278 distinct rows against an advertised 283, so its authoritative exact-published-reference count remains null."
       },
       {
         "id": "known_counts_chart",
@@ -329,10 +445,21 @@
         "tableId": "brand_completion_status"
       },
       {
+        "id": "catalog_reconciliation_heading",
+        "type": "markdown",
+        "sourceId": "global_catalog_census_reconciliation",
+        "body": "## Catalog counts now use one source-of-truth definition\n\nCatalog reference count means distinct exact brand/reference identities in the accepted authoritative source after alias collapse and explicit partial/component/invalid exclusion. Rolex and Patek use completed Phase 7B. Tudor, Zenith, Cartier, and TAG Heuer use the approved local canonical catalog. The larger deployed release/workbook-enriched browse universes remain preserved and fully classified instead of being silently promoted into canonical catalogs."
+      },
+      {
+        "id": "catalog_reconciliation_table",
+        "type": "table",
+        "tableId": "catalog_source_reconciliation"
+      },
+      {
         "id": "definitions",
         "type": "markdown",
         "sourceId": "global_contract",
-        "body": "## One contract now governs identity, price, dealer, counts, and publication\n\nCatalog reference count measures the approved catalog. Catalog nonconflicting count removes catalog identity conflicts but does not claim production coverage. Customer-safe canonical count requires at least one exact customer-eligible production observation after publication and reference safety gates; it remains null until the authoritative production snapshot completes, while the bounded observed count stays separate. Price Research accepts current single-watch WTS only when its independent evidence gates pass. Generic dealer placeholders never become identities or ratings."
+        "body": "## One contract now governs identity, price, dealer, counts, and publication\n\nCatalog reference count is the distinct exact brand/reference set in the accepted authoritative source after alias collapse and explicit partial/component/invalid exclusion. Catalog nonconflicting count removes catalog identity conflicts but does not claim production coverage. Customer-safe canonical count requires at least one exact customer-eligible production observation after publication and reference safety gates; it remains null until the authoritative production snapshot completes, while the bounded observed count stays separate. Price Research accepts current single-watch WTS only when its independent evidence gates pass. Generic dealer placeholders never become identities or ratings."
       },
       {
         "id": "methodology",
@@ -369,12 +496,12 @@
   "snapshot": {
     "version": 1,
     "status": "partial",
-    "generatedAt": "2026-08-25T11:21:53.935Z",
+    "generatedAt": "2026-08-25T13:30:58.474Z",
     "accessIssues": [
       {
         "sourceId": "watchfacts_live_bounded_audits",
         "code": "GLOBAL_REFERENCE_CENSUS_INCOMPLETE",
-        "message": "The resumable 3,054-reference Price Research census and Rolex Trading Floor cursor census are not complete; missing values remain null."
+        "message": "Catalog reconciliation is complete, but TAG Heuer advertises 283 published rows while its terminating cursor returns 278; its authoritative exact-published-reference count remains null and the observed count is preserved separately."
       }
     ],
     "datasets": {
@@ -382,6 +509,12 @@
         {
           "brand": "Rolex",
           "catalog_references": 303,
+          "approved_local_canonical_references": 303,
+          "deployed_catalog_references": 303,
+          "exact_local_deployed_overlap": 303,
+          "deployed_only_references": 0,
+          "observed_catalog_universe": 1179,
+          "exact_published_references": 287,
           "trading_floor_listings": 187576,
           "wts": 151655,
           "wtb": 35921,
@@ -403,6 +536,12 @@
         {
           "brand": "Patek Philippe",
           "catalog_references": 460,
+          "approved_local_canonical_references": 460,
+          "deployed_catalog_references": 460,
+          "exact_local_deployed_overlap": 460,
+          "deployed_only_references": 0,
+          "observed_catalog_universe": 3483,
+          "exact_published_references": 416,
           "trading_floor_listings": 14231,
           "wts": 11896,
           "wtb": 2335,
@@ -423,7 +562,15 @@
         },
         {
           "brand": "Tudor",
-          "catalog_references": 534,
+          "catalog_references": 167,
+          "approved_local_canonical_references": 167,
+          "deployed_catalog_references": 534,
+          "exact_local_deployed_overlap": 167,
+          "deployed_only_references": 367,
+          "observed_catalog_universe": 571,
+          "exact_published_references": 80,
+          "published_partial_references": 4,
+          "published_unresolved_references": 367,
           "trading_floor_listings": 2555,
           "wts": 2107,
           "wtb": 448,
@@ -440,6 +587,14 @@
         {
           "brand": "Zenith",
           "catalog_references": 113,
+          "approved_local_canonical_references": 113,
+          "deployed_catalog_references": 113,
+          "exact_local_deployed_overlap": 113,
+          "deployed_only_references": 0,
+          "observed_catalog_universe": 158,
+          "exact_published_references": 31,
+          "published_partial_references": 16,
+          "published_unresolved_references": 20,
           "trading_floor_listings": 453,
           "wts": 440,
           "wtb": 13,
@@ -455,10 +610,18 @@
         },
         {
           "brand": "Cartier",
-          "catalog_references": 1461,
-          "trading_floor_listings": 6834,
-          "wts": 5626,
-          "wtb": 1208,
+          "catalog_references": 762,
+          "approved_local_canonical_references": 762,
+          "deployed_catalog_references": 1461,
+          "exact_local_deployed_overlap": 762,
+          "deployed_only_references": 699,
+          "observed_catalog_universe": 1754,
+          "exact_published_references": 234,
+          "published_partial_references": 4,
+          "published_unresolved_references": 699,
+          "trading_floor_listings": 7154,
+          "wts": 5917,
+          "wtb": 1237,
           "price_research_qualified_wts": null,
           "analytics_ready_references": null,
           "decision": "NOT_READY",
@@ -471,7 +634,17 @@
         },
         {
           "brand": "TAG Heuer",
-          "catalog_references": 183,
+          "catalog_references": 105,
+          "approved_local_canonical_references": 105,
+          "deployed_catalog_references": 183,
+          "exact_local_deployed_overlap": 105,
+          "deployed_only_references": 78,
+          "observed_catalog_universe": 268,
+          "exact_published_references": null,
+          "observed_exact_published_references": 17,
+          "published_partial_references": 8,
+          "published_invalid_references": 3,
+          "published_unresolved_references": 147,
           "trading_floor_listings": 278,
           "trading_floor_advertised_total": 283,
           "wts": 193,
@@ -491,6 +664,12 @@
         {
           "brand": "Rolex",
           "catalog_references": 303,
+          "approved_local_canonical_references": 303,
+          "deployed_catalog_references": 303,
+          "exact_local_deployed_overlap": 303,
+          "deployed_only_references": 0,
+          "observed_catalog_universe": 1179,
+          "exact_published_references": 287,
           "trading_floor_listings": 187576,
           "wts": 151655,
           "wtb": 35921,
@@ -512,6 +691,12 @@
         {
           "brand": "Patek Philippe",
           "catalog_references": 460,
+          "approved_local_canonical_references": 460,
+          "deployed_catalog_references": 460,
+          "exact_local_deployed_overlap": 460,
+          "deployed_only_references": 0,
+          "observed_catalog_universe": 3483,
+          "exact_published_references": 416,
           "trading_floor_listings": 14231,
           "wts": 11896,
           "wtb": 2335,
@@ -532,7 +717,15 @@
         },
         {
           "brand": "Tudor",
-          "catalog_references": 534,
+          "catalog_references": 167,
+          "approved_local_canonical_references": 167,
+          "deployed_catalog_references": 534,
+          "exact_local_deployed_overlap": 167,
+          "deployed_only_references": 367,
+          "observed_catalog_universe": 571,
+          "exact_published_references": 80,
+          "published_partial_references": 4,
+          "published_unresolved_references": 367,
           "trading_floor_listings": 2555,
           "wts": 2107,
           "wtb": 448,
@@ -549,6 +742,14 @@
         {
           "brand": "Zenith",
           "catalog_references": 113,
+          "approved_local_canonical_references": 113,
+          "deployed_catalog_references": 113,
+          "exact_local_deployed_overlap": 113,
+          "deployed_only_references": 0,
+          "observed_catalog_universe": 158,
+          "exact_published_references": 31,
+          "published_partial_references": 16,
+          "published_unresolved_references": 20,
           "trading_floor_listings": 453,
           "wts": 440,
           "wtb": 13,
@@ -564,10 +765,18 @@
         },
         {
           "brand": "Cartier",
-          "catalog_references": 1461,
-          "trading_floor_listings": 6834,
-          "wts": 5626,
-          "wtb": 1208,
+          "catalog_references": 762,
+          "approved_local_canonical_references": 762,
+          "deployed_catalog_references": 1461,
+          "exact_local_deployed_overlap": 762,
+          "deployed_only_references": 699,
+          "observed_catalog_universe": 1754,
+          "exact_published_references": 234,
+          "published_partial_references": 4,
+          "published_unresolved_references": 699,
+          "trading_floor_listings": 7154,
+          "wts": 5917,
+          "wtb": 1237,
           "price_research_qualified_wts": null,
           "analytics_ready_references": null,
           "decision": "NOT_READY",
@@ -580,7 +789,17 @@
         },
         {
           "brand": "TAG Heuer",
-          "catalog_references": 183,
+          "catalog_references": 105,
+          "approved_local_canonical_references": 105,
+          "deployed_catalog_references": 183,
+          "exact_local_deployed_overlap": 105,
+          "deployed_only_references": 78,
+          "observed_catalog_universe": 268,
+          "exact_published_references": null,
+          "observed_exact_published_references": 17,
+          "published_partial_references": 8,
+          "published_invalid_references": 3,
+          "published_unresolved_references": 147,
           "trading_floor_listings": 278,
           "trading_floor_advertised_total": 283,
           "wts": 193,
@@ -594,6 +813,656 @@
           "blocker_count": 4,
           "trading_floor_status": "MEASURED",
           "price_research_status": "MEASURED"
+        }
+      ],
+      "catalog_source_reconciliation": [
+        {
+          "brand": "Rolex",
+          "source": "approved_local_canonical_catalog",
+          "reference_count": 303,
+          "exact_overlap": 303,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Rolex",
+          "source": "runtime_legacy_catalog_json",
+          "reference_count": 303,
+          "exact_overlap": 303,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Rolex",
+          "source": "runtime_enriched_refs",
+          "reference_count": 999,
+          "exact_overlap": 135,
+          "unique_references": 864,
+          "aliases": 0,
+          "partials": 346,
+          "components": 0,
+          "invalids": 7,
+          "unresolved": 511
+        },
+        {
+          "brand": "Rolex",
+          "source": "ingestion_master_catalog",
+          "reference_count": 355,
+          "exact_overlap": 303,
+          "unique_references": 52,
+          "aliases": 0,
+          "partials": 27,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 25
+        },
+        {
+          "brand": "Rolex",
+          "source": "deployed_price_research_catalog_api",
+          "reference_count": 303,
+          "exact_overlap": 303,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Rolex",
+          "source": "production_release_manifests",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Rolex",
+          "source": "phase7b_authoritative_catalog",
+          "reference_count": 303,
+          "exact_overlap": 303,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Rolex",
+          "source": "curated_aliases_and_overrides",
+          "reference_count": 1,
+          "exact_overlap": 1,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Rolex",
+          "source": "exact_published_production_reference_population",
+          "reference_count": 287,
+          "exact_overlap": 287,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Patek Philippe",
+          "source": "approved_local_canonical_catalog",
+          "reference_count": 460,
+          "exact_overlap": 460,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Patek Philippe",
+          "source": "runtime_legacy_catalog_json",
+          "reference_count": 3134,
+          "exact_overlap": 345,
+          "unique_references": 2789,
+          "aliases": 2,
+          "partials": 518,
+          "components": 2,
+          "invalids": 35,
+          "unresolved": 2232
+        },
+        {
+          "brand": "Patek Philippe",
+          "source": "runtime_enriched_refs",
+          "reference_count": 1261,
+          "exact_overlap": 325,
+          "unique_references": 936,
+          "aliases": 2,
+          "partials": 291,
+          "components": 0,
+          "invalids": 3,
+          "unresolved": 640
+        },
+        {
+          "brand": "Patek Philippe",
+          "source": "ingestion_master_catalog",
+          "reference_count": 3158,
+          "exact_overlap": 352,
+          "unique_references": 2806,
+          "aliases": 2,
+          "partials": 519,
+          "components": 2,
+          "invalids": 35,
+          "unresolved": 2248
+        },
+        {
+          "brand": "Patek Philippe",
+          "source": "deployed_price_research_catalog_api",
+          "reference_count": 460,
+          "exact_overlap": 460,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Patek Philippe",
+          "source": "production_release_manifests",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Patek Philippe",
+          "source": "phase7b_authoritative_catalog",
+          "reference_count": 460,
+          "exact_overlap": 460,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Patek Philippe",
+          "source": "curated_aliases_and_overrides",
+          "reference_count": 5,
+          "exact_overlap": 3,
+          "unique_references": 2,
+          "aliases": 2,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Patek Philippe",
+          "source": "exact_published_production_reference_population",
+          "reference_count": 416,
+          "exact_overlap": 416,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Tudor",
+          "source": "approved_local_canonical_catalog",
+          "reference_count": 167,
+          "exact_overlap": 167,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Tudor",
+          "source": "runtime_legacy_catalog_json",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Tudor",
+          "source": "runtime_enriched_refs",
+          "reference_count": 47,
+          "exact_overlap": 0,
+          "unique_references": 47,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 47
+        },
+        {
+          "brand": "Tudor",
+          "source": "ingestion_master_catalog",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Tudor",
+          "source": "deployed_price_research_catalog_api",
+          "reference_count": 534,
+          "exact_overlap": 167,
+          "unique_references": 367,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 367
+        },
+        {
+          "brand": "Tudor",
+          "source": "production_release_manifests",
+          "reference_count": 447,
+          "exact_overlap": 80,
+          "unique_references": 367,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 367
+        },
+        {
+          "brand": "Tudor",
+          "source": "phase7b_authoritative_catalog",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Tudor",
+          "source": "curated_aliases_and_overrides",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Tudor",
+          "source": "exact_published_production_reference_population",
+          "reference_count": 451,
+          "exact_overlap": 80,
+          "unique_references": 371,
+          "aliases": 0,
+          "partials": 4,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 367
+        },
+        {
+          "brand": "Zenith",
+          "source": "approved_local_canonical_catalog",
+          "reference_count": 113,
+          "exact_overlap": 113,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Zenith",
+          "source": "runtime_legacy_catalog_json",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Zenith",
+          "source": "runtime_enriched_refs",
+          "reference_count": 10,
+          "exact_overlap": 1,
+          "unique_references": 9,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 9
+        },
+        {
+          "brand": "Zenith",
+          "source": "ingestion_master_catalog",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Zenith",
+          "source": "deployed_price_research_catalog_api",
+          "reference_count": 113,
+          "exact_overlap": 113,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Zenith",
+          "source": "production_release_manifests",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Zenith",
+          "source": "phase7b_authoritative_catalog",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Zenith",
+          "source": "curated_aliases_and_overrides",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Zenith",
+          "source": "exact_published_production_reference_population",
+          "reference_count": 67,
+          "exact_overlap": 31,
+          "unique_references": 36,
+          "aliases": 0,
+          "partials": 16,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 20
+        },
+        {
+          "brand": "Cartier",
+          "source": "approved_local_canonical_catalog",
+          "reference_count": 762,
+          "exact_overlap": 762,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Cartier",
+          "source": "runtime_legacy_catalog_json",
+          "reference_count": 762,
+          "exact_overlap": 762,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Cartier",
+          "source": "runtime_enriched_refs",
+          "reference_count": 460,
+          "exact_overlap": 96,
+          "unique_references": 364,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 35,
+          "unresolved": 329
+        },
+        {
+          "brand": "Cartier",
+          "source": "ingestion_master_catalog",
+          "reference_count": 762,
+          "exact_overlap": 762,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Cartier",
+          "source": "deployed_price_research_catalog_api",
+          "reference_count": 1461,
+          "exact_overlap": 762,
+          "unique_references": 699,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 699
+        },
+        {
+          "brand": "Cartier",
+          "source": "production_release_manifests",
+          "reference_count": 933,
+          "exact_overlap": 234,
+          "unique_references": 699,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 699
+        },
+        {
+          "brand": "Cartier",
+          "source": "phase7b_authoritative_catalog",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Cartier",
+          "source": "curated_aliases_and_overrides",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "Cartier",
+          "source": "exact_published_production_reference_population",
+          "reference_count": 937,
+          "exact_overlap": 234,
+          "unique_references": 703,
+          "aliases": 0,
+          "partials": 4,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 699
+        },
+        {
+          "brand": "TAG Heuer",
+          "source": "approved_local_canonical_catalog",
+          "reference_count": 105,
+          "exact_overlap": 105,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "TAG Heuer",
+          "source": "runtime_legacy_catalog_json",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "TAG Heuer",
+          "source": "runtime_enriched_refs",
+          "reference_count": 5,
+          "exact_overlap": 0,
+          "unique_references": 5,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 5
+        },
+        {
+          "brand": "TAG Heuer",
+          "source": "ingestion_master_catalog",
+          "reference_count": 1,
+          "exact_overlap": 0,
+          "unique_references": 1,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 1
+        },
+        {
+          "brand": "TAG Heuer",
+          "source": "deployed_price_research_catalog_api",
+          "reference_count": 183,
+          "exact_overlap": 105,
+          "unique_references": 78,
+          "aliases": 0,
+          "partials": 8,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 70
+        },
+        {
+          "brand": "TAG Heuer",
+          "source": "production_release_manifests",
+          "reference_count": 95,
+          "exact_overlap": 17,
+          "unique_references": 78,
+          "aliases": 0,
+          "partials": 8,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 70
+        },
+        {
+          "brand": "TAG Heuer",
+          "source": "phase7b_authoritative_catalog",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "TAG Heuer",
+          "source": "curated_aliases_and_overrides",
+          "reference_count": 0,
+          "exact_overlap": 0,
+          "unique_references": 0,
+          "aliases": 0,
+          "partials": 0,
+          "components": 0,
+          "invalids": 0,
+          "unresolved": 0
+        },
+        {
+          "brand": "TAG Heuer",
+          "source": "exact_published_production_reference_population",
+          "reference_count": 175,
+          "exact_overlap": 17,
+          "unique_references": 158,
+          "aliases": 0,
+          "partials": 8,
+          "components": 0,
+          "invalids": 3,
+          "unresolved": 147
         }
       ],
       "blockers": [
@@ -615,7 +1484,7 @@
         },
         {
           "brand": "Tudor",
-          "blocker": "Price Research completed 533 of 534 references because exact reference 79360 returns HTTP 400"
+          "blocker": "The deployed browse union contains 367 reference values not yet accepted by the approved canonical catalog"
         },
         {
           "brand": "Tudor",
@@ -651,11 +1520,11 @@
         },
         {
           "brand": "Cartier",
-          "blocker": "Current public index is 320 listings below the latest private release census"
+          "blocker": "The deployed browse union contains 699 reference values not yet accepted by the approved canonical catalog"
         },
         {
           "brand": "Cartier",
-          "blocker": "Component value BRACELET appears in the reference population"
+          "blocker": "Four published reference values remain classified as partial"
         },
         {
           "brand": "Cartier",
@@ -667,7 +1536,7 @@
         },
         {
           "brand": "TAG Heuer",
-          "blocker": "One hundred fifty published rows are outside the current TAG Heuer catalog"
+          "blocker": "The deployed browse union contains 78 reference values not yet accepted by the approved canonical catalog"
         },
         {
           "brand": "TAG Heuer",
@@ -711,6 +1580,33 @@
           "observed_customer_safe_canonical_reference_count": "Customer-safe canonical references observed in the bounded partial production snapshot; never substituted for the authoritative count.",
           "price_research_qualified_wts": "WTS observations passing exact-reference, price/currency, deduplication, bundle, and publication gates.",
           "analytics_ready_references": "Exact references meeting the unchanged minimum comparable-observation and 3.0x IQR analytics contract."
+        }
+      }
+    },
+    {
+      "id": "global_catalog_census_reconciliation",
+      "label": "WatchFacts authoritative six-brand catalog census reconciliation",
+      "type": "repository_artifact",
+      "query": {
+        "engine": "Node.js deterministic set reconciliation",
+        "language": "javascript",
+        "description": "Enumerates approved local, deployed API, release-manifest, Phase 7B, curation, legacy lookup, and published-production reference sets without raw messages.",
+        "tables_used": [
+          "audit-output/global-six-brand-completion/catalog-census-reconciliation.json"
+        ],
+        "filters": [
+          "Rolex",
+          "Patek Philippe",
+          "Tudor",
+          "Zenith",
+          "Cartier",
+          "TAG Heuer"
+        ],
+        "metric_definitions": {
+          "catalog_reference_count": "Distinct exact brand/reference identities in the accepted authoritative source after alias collapse and explicit partial/component/invalid exclusion.",
+          "exact_overlap": "Source reference values that exactly match the accepted authoritative catalog for the same brand.",
+          "unique_references": "Source reference values not present in the accepted authoritative catalog; retained and classified rather than discarded.",
+          "observed_catalog_universe_count": "Union of reference values observed across canonical, deployed, legacy lookup, curation, and published-production sources; retained separately from the authoritative catalog."
         }
       }
     },
@@ -768,7 +1664,9 @@
   ],
   "package_info": {
     "contract": "watchfacts-global-customer-data-contract-v1",
-    "completion_result_sha256": "d34178d524a03574f1c5989f8bb68ada4b6d90402dce361319165c4e41ac1178",
-    "snapshot_complete": false
+    "completion_result_sha256": "638acce98c3b6c675d04de560e7f65e69cdd47ae98196994aa994b35c0129cc2",
+    "snapshot_complete": false,
+    "catalog_reconciliation_complete": true,
+    "catalog_reconciliation_sha256": "d8c9c370f355343ddaa785145fa232e97cb5a0eb38183021b83a07d249c0f99d"
   }
 }

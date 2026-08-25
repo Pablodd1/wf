@@ -30,6 +30,7 @@
     "canary:price-parser-v5": "node tools/price-quality/shadow-price-parser-v5-canary.cjs",
     "audit:phase7b-price-shadow": "node tools/audit/phase7b-verified-price-shadow-worker.cjs",
     "report:phase7b-price-shadow": "node tools/audit/build-phase7b-verified-price-report.cjs",
+    "audit:global-catalog-census": "node tools/audit/build-global-catalog-census-reconciliation.cjs",
     "report:global-six-brand-completion": "node tools/audit/build-global-six-brand-completion-ledgers.cjs",
     "report:global-six-brand-technical": "node tools/audit/build-global-six-brand-technical-report.cjs",
     "audit:all-price-research": "node tools/price-quality/audit-all-price-research-cohorts.cjs",
