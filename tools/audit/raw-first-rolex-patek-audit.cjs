@@ -119,14 +119,17 @@ function tradingFloorMembershipSql(currentRows, limit = 2000) {
   const listingIds = [...new Set(currentRows.map(row => row.id).filter(Boolean))];
   const sourceIds = [...new Set(currentRows.map(row => row.source_record_id).filter(Boolean))];
   if (!listingIds.length || !sourceIds.length) {
-    return `SELECT tf.id,tf.source_record_id
-    FROM public.qnsa_rolex_patek_trading_floor_source tf
+    return `SELECT tf.id::text AS id,tf.source_record_id
+    FROM public.qnsa_rolex_patek_reviewed_release_base tf
     WHERE false ORDER BY tf.id LIMIT ${size};`;
   }
-  return `SELECT tf.id,tf.source_record_id
-  FROM public.qnsa_rolex_patek_trading_floor_source tf
+  return `SELECT tf.id::text AS id,tf.source_record_id
+  FROM public.qnsa_rolex_patek_reviewed_release_base tf
   WHERE tf.source_record_id IN (${sourceIds.map(sqlLiteral).join(',')})
-    AND tf.id IN (${listingIds.map(sqlLiteral).join(',')})
+    AND tf.id IN (${listingIds.map(value => `${sqlLiteral(value)}::uuid`).join(',')})
+    AND tf.trading_floor_enabled=true
+    AND upper(COALESCE(tf.publication_review_status,'PENDING_REVIEW')) IN
+      ('PENDING_REVIEW','APPROVED','READY_FOR_PUBLICATION_REVIEW')
   ORDER BY tf.id LIMIT ${size};`;
 }
 

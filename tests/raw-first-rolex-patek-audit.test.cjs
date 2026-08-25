@@ -75,10 +75,10 @@ test('current listings and Trading Floor membership are separate bounded keyset 
   assert.doesNotMatch(current, /qnsa_rolex_patek_trading_floor_source|\bEXISTS\s*\(/i);
   assert.match(current, /l\.id>'00000000-0000-0000-0000-000000000123'::uuid/);
   assert.match(current, /ORDER BY l\.id LIMIT 2000/);
-  assert.match(membership, /qnsa_rolex_patek_trading_floor_source/);
-  assert.match(membership, /SELECT tf\.id,tf\.source_record_id/);
+  assert.match(membership, /qnsa_rolex_patek_reviewed_release_base/);
+  assert.match(membership, /SELECT tf\.id::text AS id,tf\.source_record_id/);
   assert.match(membership, /tf\.source_record_id IN \('source-123'\)/);
-  assert.match(membership, /tf\.id IN \('00000000-0000-0000-0000-000000000123'\)/);
+  assert.match(membership, /tf\.id IN \('00000000-0000-0000-0000-000000000123'::uuid\)/);
   assert.match(membership, /ORDER BY tf\.id LIMIT 2000/);
 });
 
