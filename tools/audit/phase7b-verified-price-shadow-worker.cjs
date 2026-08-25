@@ -131,6 +131,20 @@ function classifyObservation(row, catalog = catalogIndex(), options = {}) {
   if (!sourceAmount || !sourceCurrency || !span || !raw.includes(span)) {
     return finish(row, exact, 'SOURCE_NOT_RECONCILABLE', 'PARSER_OBSERVATION_LACKS_EXACT_SOURCE_SPAN');
   }
+  let spanStartUtf16 = observation.position?.start;
+  let spanEndUtf16 = observation.position?.end;
+  if (!Number.isInteger(spanStartUtf16) || !Number.isInteger(spanEndUtf16)
+    || raw.slice(spanStartUtf16, spanEndUtf16) !== span) {
+    const first = raw.indexOf(span);
+    const repeated = first >= 0 && raw.indexOf(span, first + span.length) >= 0;
+    if (first < 0 || repeated) {
+      return finish(row, exact, 'SOURCE_NOT_RECONCILABLE',
+        'PARSER_SOURCE_SPAN_IS_NOT_A_UNIQUE_EXACT_RAW_OCCURRENCE', observation,
+        { sourceAmount, sourceCurrency });
+    }
+    spanStartUtf16 = first;
+    spanEndUtf16 = first + span.length;
+  }
   const structuredAmount = positive(row.price_original);
   const structuredCurrency = clean(row.currency_original)?.toUpperCase();
   if ((structuredAmount && Math.abs(structuredAmount - sourceAmount) > 0.01)
@@ -197,7 +211,8 @@ function classifyObservation(row, catalog = catalogIndex(), options = {}) {
 
   return finish(row, exact, 'VERIFIED_IN_NEW_COHORT', null, observation,
     { sourceAmount, sourceCurrency, fxProvider, fxRate, fxDate, fxApplicableDate,
-      fxContract, fxDirection, fxSourceUrl, storedFxComparison, verifiedUsd, span });
+      fxContract, fxDirection, fxSourceUrl, storedFxComparison, verifiedUsd, span,
+      spanStartUtf16, spanEndUtf16 });
 }
 
 function finish(row, exact, classification, exclusionReason, observation = null, evidence = {}) {
@@ -218,8 +233,8 @@ function finish(row, exact, classification, exclusionReason, observation = null,
     source_currency: evidence.sourceCurrency ?? clean(observation?.currency_original)?.toUpperCase() ?? null,
     parser_version: PARSER_VERSION,
     parser_rule: observation?.parser_rule || null,
-    source_span_start: verified ? postgresCharacterOffset(raw, observation?.position?.start) : null,
-    source_span_end: verified ? postgresCharacterOffset(raw, observation?.position?.end) : null,
+    source_span_start: verified ? postgresCharacterOffset(raw, evidence.spanStartUtf16) : null,
+    source_span_end: verified ? postgresCharacterOffset(raw, evidence.spanEndUtf16) : null,
     source_span_sha256: span ? sha256(span) : null,
     price_evidence_classification: classification,
     fx_provider: verified ? evidence.fxProvider : null,
