@@ -222,4 +222,6 @@ test('GitHub workflow is manual-only, canonical, read-only, and executes one aud
   assert.equal((workflow.match(/^\s+node tools\/audit\/raw-first-rolex-patek-audit\.cjs\s*$/gm) || []).length, 1);
   assert.doesNotMatch(workflow, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|DROP|supabase db push|deploy)\b/i);
   assert.doesNotMatch(workflow, /rolex-manifest|patek-philippe-manifest|remaining-queues/);
+  assert.match(workflow, /VALIDATE_QNSA_RAW_FIRST_CHILD_COUNTS/);
+  assert.match(workflow, /validate-raw-first-child-counts\.cjs/);
 });

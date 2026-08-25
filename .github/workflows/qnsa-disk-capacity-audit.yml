@@ -14,6 +14,10 @@ on:
         description: Optional prior V2 run ID whose sanitized checkpoint should be resumed
         required: false
         type: string
+      validate_artifact_run_id:
+        description: Optional completed V2 run ID to validate without querying QNSA
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -25,6 +29,7 @@ concurrency:
 
 jobs:
   canonical-read-only-audit:
+    if: ${{ inputs.validate_artifact_run_id == '' }}
     name: Canonical QNSA SELECT-only audit
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -181,3 +186,51 @@ jobs:
         if: ${{ always() && startsWith(steps.audit.outputs.decision, 'AUDIT_INCOMPLETE_') }}
         shell: bash
         run: exit 1
+
+  validate-existing-child-counts:
+    if: ${{ inputs.validate_artifact_run_id != '' }}
+    name: Validate existing sanitized child counts
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Validate artifact-only dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "VALIDATE_QNSA_RAW_FIRST_CHILD_COUNTS"
+          [[ "${{ inputs.validate_artifact_run_id }}" =~ ^[0-9]+$ ]]
+
+      - name: Check out validation candidate only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download completed sanitized artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.validate_artifact_run_id }}
+          pattern: qnsa-raw-first-rolex-patek-${{ inputs.validate_artifact_run_id }}-*
+          merge-multiple: true
+          path: audit-resume-input
+
+      - name: Validate identities, paging, and parent cardinality
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-resume-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          artifact_root="$(dirname "$checkpoint")"
+          mkdir -p audit-output/raw-first-child-validation
+          node tools/audit/validate-raw-first-child-counts.cjs \
+            "$artifact_root" \
+            audit-output/raw-first-child-validation/report.json
+
+      - name: Upload compact child-count validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-raw-first-child-validation-${{ inputs.validate_artifact_run_id }}-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          path: audit-output/raw-first-child-validation/report.json
