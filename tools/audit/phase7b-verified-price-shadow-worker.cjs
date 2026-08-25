@@ -31,6 +31,11 @@ const positive = value => Number.isFinite(Number(value)) && Number(value) > 0 ? 
 const refKey = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 const clean = value => String(value || '').trim() || null;
 
+function postgresCharacterOffset(value, utf16Offset) {
+  if (!Number.isInteger(utf16Offset) || utf16Offset < 0) return null;
+  return Array.from(String(value || '').slice(0, utf16Offset)).length;
+}
+
 function stable(value) {
   if (Array.isArray(value)) return `[${value.map(stable).join(',')}]`;
   if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stable(value[key])}`).join(',')}}`;
@@ -198,6 +203,7 @@ function classifyObservation(row, catalog = catalogIndex(), options = {}) {
 function finish(row, exact, classification, exclusionReason, observation = null, evidence = {}) {
   const verified = classification === 'VERIFIED_IN_NEW_COHORT';
   const span = verified ? evidence.span : null;
+  const raw = String(row.raw_message || '');
   const record = {
     listing_id: row.listing_id,
     source_record_id: row.source_record_id,
@@ -212,8 +218,8 @@ function finish(row, exact, classification, exclusionReason, observation = null,
     source_currency: evidence.sourceCurrency ?? clean(observation?.currency_original)?.toUpperCase() ?? null,
     parser_version: PARSER_VERSION,
     parser_rule: observation?.parser_rule || null,
-    source_span_start: verified ? observation?.position?.start ?? null : null,
-    source_span_end: verified ? observation?.position?.end ?? null : null,
+    source_span_start: verified ? postgresCharacterOffset(raw, observation?.position?.start) : null,
+    source_span_end: verified ? postgresCharacterOffset(raw, observation?.position?.end) : null,
     source_span_sha256: span ? sha256(span) : null,
     price_evidence_classification: classification,
     fx_provider: verified ? evidence.fxProvider : null,
