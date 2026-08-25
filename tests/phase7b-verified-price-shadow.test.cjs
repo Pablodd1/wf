@@ -67,6 +67,16 @@ test('records source spans in PostgreSQL Unicode character offsets', () => {
   assert.match(result.source_span_sha256, /^[0-9a-f]{64}$/);
 });
 
+test('every verified span round-trips exactly through PostgreSQL character offsets', () => {
+  const rawMessage = 'Rolex 126334 — asking USD 12,500 ✅';
+  const result = classifyObservation(row({ raw_message: rawMessage }), catalog);
+  assert.equal(result.price_evidence_classification, 'VERIFIED_IN_NEW_COHORT');
+  const databaseSlice = Array.from(rawMessage)
+    .slice(result.source_span_start, result.source_span_end).join('');
+  assert.equal(databaseSlice, result.source_span_text);
+  assert.equal(result.verified_usd_amount, result.current_usd_amount);
+});
+
 test('preserves retired USD defaulting as excluded history', () => {
   const result = classifyObservation(row({
     currency_original: null,
