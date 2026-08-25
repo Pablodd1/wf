@@ -144,6 +144,10 @@ if ([int]$contract.policy_count -ne 0 -or [int]$contract.publication_count -ne 0
 Invoke-ManagementQuery -ReadOnly $false -Query @'
 ALTER FUNCTION public.phase7b_verified_price_source_page(text,text,uuid,integer)
   SET statement_timeout = '45s';
+ALTER FUNCTION public.phase7b_verified_price_source_page(text,text,uuid,integer)
+  SET enable_sort = 'off';
+ALTER FUNCTION public.phase7b_verified_price_source_page(text,text,uuid,integer)
+  SET plan_cache_mode = 'force_custom_plan';
 '@ | Out-Null
 
 Write-Output "{`"private_shadow_schema_ready`":true,`"preexisting`":$($installed.ToString().ToLowerInvariant()),`"migration_sha256`":`"$actualSha`",`"customer_source_switches`":0}"
