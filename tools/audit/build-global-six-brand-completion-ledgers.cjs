@@ -39,6 +39,21 @@ function hasRating(row) {
     || ['SOURCE_SUPPLIED', 'SOURCE_FEEDBACK_COUNT'].includes(exact(row.seller_rating_evidence_status).toUpperCase());
 }
 
+function passesCustomerPublicationSafety(row) {
+  const intent = exact(row.listing_type || row.intent).toUpperCase();
+  if (!['WTS', 'WTB'].includes(intent)) return false;
+  if (row.data_quality_review_required === true) return false;
+  if (row.multi_listing === true && row.multi_listing_release_approved !== true) return false;
+  if (exact(row.reference_invalid_reason)) return false;
+  if (!resolvePostingIdentity(row)) return false;
+  const blockedState = [
+    row.listing_status,
+    row.publication_state,
+    row.verdict,
+  ].map(value => exact(value).toUpperCase()).join('|');
+  return !/(?:DUPLICATE|SUPERSEDED|SUPPRESSED|REJECTED|PENDING|REVIEW|COMPONENT|BUNDLE)/.test(blockedState);
+}
+
 function groupTradingRows(rows) {
   const groups = new Map();
   for (const row of rows) {
@@ -52,6 +67,7 @@ function groupTradingRows(rows) {
       trading_floor_images: 0,
       resolved_posting_identities: 0,
       dealer_identity_review_required: 0,
+      customer_safe_published_observations: 0,
       source_backed_dealer_ratings: 0,
     };
     current.trading_floor_listings += 1;
@@ -62,6 +78,7 @@ function groupTradingRows(rows) {
     if (hasImage(row)) current.trading_floor_images += 1;
     if (resolvePostingIdentity(row)) current.resolved_posting_identities += 1;
     else current.dealer_identity_review_required += 1;
+    if (passesCustomerPublicationSafety(row)) current.customer_safe_published_observations += 1;
     if (hasRating(row)) current.source_backed_dealer_ratings += 1;
     groups.set(key, current);
   }
@@ -74,6 +91,7 @@ function productionReferencePopulation({ brand, rows, catalogRows, conflicts, sn
   const catalogSearchKeys = [...catalogKeys].map(key => key.split('|')[1]);
   const values = new Set();
   const exactPublished = new Set();
+  const customerSafeCanonical = new Set();
   const unresolved = new Set();
   const partial = new Set();
   const invalid = new Set();
@@ -90,6 +108,7 @@ function productionReferencePopulation({ brand, rows, catalogRows, conflicts, sn
     const searchKey = key.split('|')[1];
     if (catalogKeys.has(key) && !conflicts.has(key)) {
       exactPublished.add(reference);
+      if (passesCustomerPublicationSafety(row)) customerSafeCanonical.add(reference);
     } else if (exact(row.reference_invalid_reason)) {
       invalid.add(reference);
     } else if (searchKey.length >= 4 && catalogSearchKeys.some(candidate => candidate.startsWith(searchKey))) {
@@ -103,7 +122,9 @@ function productionReferencePopulation({ brand, rows, catalogRows, conflicts, sn
   return {
     snapshot_complete: snapshotComplete,
     catalog_reference_count: brandCatalog.length,
-    customer_safe_canonical_reference_count: brandCatalog.filter(row => !conflicts.has(row.key)).length,
+    catalog_nonconflicting_reference_count: brandCatalog.filter(row => !conflicts.has(row.key)).length,
+    customer_safe_canonical_reference_count: authoritative(customerSafeCanonical.size),
+    observed_customer_safe_canonical_reference_count: customerSafeCanonical.size,
     production_reference_value_count: authoritative(values.size),
     exact_published_reference_count: authoritative(exactPublished.size),
     unresolved_reference_count: authoritative(unresolved.size),
@@ -118,6 +139,8 @@ function productionReferencePopulation({ brand, rows, catalogRows, conflicts, sn
     observed_missing_reference_listing_count: missingReferenceListings,
     production_reference_values: snapshotComplete ? [...values].sort() : null,
     observed_production_reference_values: [...values].sort(),
+    customer_safe_canonical_references: snapshotComplete ? [...customerSafeCanonical].sort() : null,
+    observed_customer_safe_canonical_references: [...customerSafeCanonical].sort(),
   };
 }
 
@@ -192,6 +215,9 @@ function build({ priceReport, priceCheckpoint = {}, tradingReport, tradingCheckp
         dealer_identity_status: (trading?.dealer_identity_review_required || 0) > 0
           ? contract.dealer_identity.review_status
           : trading?.trading_floor_listings ? 'RESOLVED' : null,
+        customer_safe_published_observations: conflicts.has(identity.key)
+          ? 0
+          : trading?.customer_safe_published_observations ?? 0,
         source_backed_dealer_ratings: trading?.source_backed_dealer_ratings ?? 0,
         price_research_source_observations: priceRow ? Number(priceRow.source_observation_count || 0) : null,
         price_research_wts_observations: priceRow ? Number(priceRow.wts_observation_count || 0) : null,
@@ -226,7 +252,9 @@ function build({ priceReport, priceCheckpoint = {}, tradingReport, tradingCheckp
       deployment_decision: 'NOT_READY',
       acceptance_gates: brandGates,
       catalog_reference_count: referencePopulation.catalog_reference_count,
+      catalog_nonconflicting_reference_count: referencePopulation.catalog_nonconflicting_reference_count,
       customer_safe_canonical_reference_count: referencePopulation.customer_safe_canonical_reference_count,
+      observed_customer_safe_canonical_reference_count: referencePopulation.observed_customer_safe_canonical_reference_count,
       production_reference_value_count: referencePopulation.production_reference_value_count,
       exact_published_reference_count: referencePopulation.exact_published_reference_count,
       unresolved_reference_count: referencePopulation.unresolved_reference_count,
@@ -253,6 +281,12 @@ function build({ priceReport, priceCheckpoint = {}, tradingReport, tradingCheckp
     deployment_authorized: false,
     deployment_decisions: Object.fromEntries(contract.brands.map(brand => [brand, brandLedgers[brand].deployment_decision])),
     catalog_reference_counts: Object.fromEntries(contract.brands.map(brand => [brand, brandLedgers[brand].catalog_reference_count])),
+    catalog_nonconflicting_reference_counts: Object.fromEntries(contract.brands
+      .map(brand => [brand, brandLedgers[brand].catalog_nonconflicting_reference_count])),
+    customer_safe_canonical_reference_counts: Object.fromEntries(contract.brands
+      .map(brand => [brand, brandLedgers[brand].customer_safe_canonical_reference_count])),
+    observed_customer_safe_canonical_reference_counts: Object.fromEntries(contract.brands
+      .map(brand => [brand, brandLedgers[brand].observed_customer_safe_canonical_reference_count])),
     source_checksums: {
       price_research: priceReport?.checksums || null,
       trading_floor: tradingReport?.checksums || null,
@@ -296,5 +330,12 @@ function main() {
     decisions: built.summary.deployment_decisions, result_sha256: built.summary.result_sha256 })}\n`);
 }
 
-module.exports = { build, groupTradingRows, hasImage, hasRating, productionReferencePopulation };
+module.exports = {
+  build,
+  groupTradingRows,
+  hasImage,
+  hasRating,
+  passesCustomerPublicationSafety,
+  productionReferencePopulation,
+};
 if (require.main === module) main();

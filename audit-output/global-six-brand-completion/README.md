@@ -18,3 +18,10 @@ npm run report:global-six-brand-completion
 The generator fails closed: an incomplete source snapshot produces `NOT_READY`
 and preserves unknown Price Research values as `null`. It never reads or emits
 raw messages and never writes production data.
+
+Reference metrics are intentionally separate: catalog count measures the
+approved catalog, catalog nonconflicting count removes catalog identity
+conflicts, and customer-safe canonical count requires an exact customer-eligible
+production observation after publication/reference safety gates. When a brand's
+production census is incomplete, the authoritative customer-safe count is
+`null` and only the bounded observed count is reported.

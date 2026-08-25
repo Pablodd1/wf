@@ -15,10 +15,11 @@
         "query": {
           "engine": "DuckDB",
           "language": "sql",
-          "sql": "SELECT b.brand, b.catalog_references, b.trading_floor_listings, b.wts, b.wtb, b.price_research_qualified_wts, b.analytics_ready_references, b.decision FROM read_json_auto('audit-output/global-six-brand-completion/brand-findings.json') f, UNNEST(f.brands) AS t(b)",
-          "description": "Cursor-bounded Trading Floor inventory and adaptive four-reference Price Research summaries, with row-level raw messages removed before checkpointing.",
+          "sql": "SELECT b.brand, b.catalog_references, json_extract(to_json(c.catalog_nonconflicting_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS catalog_nonconflicting_reference_count, json_extract(to_json(c.customer_safe_canonical_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS customer_safe_canonical_reference_count, json_extract(to_json(c.observed_customer_safe_canonical_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS observed_customer_safe_canonical_reference_count, b.trading_floor_listings, b.wts, b.wtb, b.price_research_qualified_wts, b.analytics_ready_references, b.decision FROM read_json_auto('audit-output/global-six-brand-completion/brand-findings.json') f, UNNEST(f.brands) AS t(b), read_json_auto('audit-output/global-six-brand-completion/completion-summary.json') c",
+          "description": "Joins bounded Trading Floor and Price Research findings to the generated six-brand reference-count summary; row-level raw messages were removed before checkpointing.",
           "tables_used": [
-            "audit-output/global-six-brand-completion/brand-findings.json"
+            "audit-output/global-six-brand-completion/brand-findings.json",
+            "audit-output/global-six-brand-completion/completion-summary.json"
           ],
           "filters": [
             "Rolex",
@@ -31,6 +32,9 @@
           "metric_definitions": {
             "trading_floor_listings": "Distinct customer-visible rows returned by a terminating exact-brand cursor; null means the cursor census is not complete.",
             "catalog_references": "Exact brand/reference identities exposed by the deployed Browse by Model contract.",
+            "catalog_nonconflicting_reference_count": "Approved catalog references with no recorded catalog identity conflict; this is not a production-publication count.",
+            "customer_safe_canonical_reference_count": "Canonical references represented by at least one exact customer-eligible production observation after publication and reference safety gates; null when the authoritative production snapshot is incomplete.",
+            "observed_customer_safe_canonical_reference_count": "Customer-safe canonical references observed in the bounded partial production snapshot; never substituted for the authoritative count.",
             "price_research_qualified_wts": "WTS observations passing exact-reference, price/currency, deduplication, bundle, and publication gates.",
             "analytics_ready_references": "Exact references meeting the unchanged minimum comparable-observation and 3.0x IQR analytics contract."
           }
@@ -118,10 +122,11 @@
           "query": {
             "engine": "DuckDB",
             "language": "sql",
-            "sql": "SELECT b.brand, b.catalog_references, b.trading_floor_listings, b.wts, b.wtb, b.price_research_qualified_wts, b.analytics_ready_references, b.decision FROM read_json_auto('audit-output/global-six-brand-completion/brand-findings.json') f, UNNEST(f.brands) AS t(b)",
-            "description": "Cursor-bounded Trading Floor inventory and adaptive four-reference Price Research summaries, with row-level raw messages removed before checkpointing.",
+            "sql": "SELECT b.brand, b.catalog_references, json_extract(to_json(c.catalog_nonconflicting_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS catalog_nonconflicting_reference_count, json_extract(to_json(c.customer_safe_canonical_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS customer_safe_canonical_reference_count, json_extract(to_json(c.observed_customer_safe_canonical_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS observed_customer_safe_canonical_reference_count, b.trading_floor_listings, b.wts, b.wtb, b.price_research_qualified_wts, b.analytics_ready_references, b.decision FROM read_json_auto('audit-output/global-six-brand-completion/brand-findings.json') f, UNNEST(f.brands) AS t(b), read_json_auto('audit-output/global-six-brand-completion/completion-summary.json') c",
+            "description": "Joins bounded Trading Floor and Price Research findings to the generated six-brand reference-count summary; row-level raw messages were removed before checkpointing.",
             "tables_used": [
-              "audit-output/global-six-brand-completion/brand-findings.json"
+              "audit-output/global-six-brand-completion/brand-findings.json",
+              "audit-output/global-six-brand-completion/completion-summary.json"
             ],
             "filters": [
               "Rolex",
@@ -134,6 +139,9 @@
             "metric_definitions": {
               "trading_floor_listings": "Distinct customer-visible rows returned by a terminating exact-brand cursor; null means the cursor census is not complete.",
               "catalog_references": "Exact brand/reference identities exposed by the deployed Browse by Model contract.",
+              "catalog_nonconflicting_reference_count": "Approved catalog references with no recorded catalog identity conflict; this is not a production-publication count.",
+              "customer_safe_canonical_reference_count": "Canonical references represented by at least one exact customer-eligible production observation after publication and reference safety gates; null when the authoritative production snapshot is incomplete.",
+              "observed_customer_safe_canonical_reference_count": "Customer-safe canonical references observed in the bounded partial production snapshot; never substituted for the authoritative count.",
               "price_research_qualified_wts": "WTS observations passing exact-reference, price/currency, deduplication, bundle, and publication gates.",
               "analytics_ready_references": "Exact references meeting the unchanged minimum comparable-observation and 3.0x IQR analytics contract."
             }
@@ -156,6 +164,21 @@
           {
             "field": "catalog_references",
             "label": "Catalog refs",
+            "type": "number"
+          },
+          {
+            "field": "catalog_nonconflicting_reference_count",
+            "label": "Nonconflicting catalog refs",
+            "type": "number"
+          },
+          {
+            "field": "customer_safe_canonical_reference_count",
+            "label": "Customer-safe canonical refs",
+            "type": "number"
+          },
+          {
+            "field": "observed_customer_safe_canonical_reference_count",
+            "label": "Observed customer-safe refs",
             "type": "number"
           },
           {
@@ -206,10 +229,11 @@
           "query": {
             "engine": "DuckDB",
             "language": "sql",
-            "sql": "SELECT b.brand, b.catalog_references, b.trading_floor_listings, b.wts, b.wtb, b.price_research_qualified_wts, b.analytics_ready_references, b.decision FROM read_json_auto('audit-output/global-six-brand-completion/brand-findings.json') f, UNNEST(f.brands) AS t(b)",
-            "description": "Cursor-bounded Trading Floor inventory and adaptive four-reference Price Research summaries, with row-level raw messages removed before checkpointing.",
+            "sql": "SELECT b.brand, b.catalog_references, json_extract(to_json(c.catalog_nonconflicting_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS catalog_nonconflicting_reference_count, json_extract(to_json(c.customer_safe_canonical_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS customer_safe_canonical_reference_count, json_extract(to_json(c.observed_customer_safe_canonical_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS observed_customer_safe_canonical_reference_count, b.trading_floor_listings, b.wts, b.wtb, b.price_research_qualified_wts, b.analytics_ready_references, b.decision FROM read_json_auto('audit-output/global-six-brand-completion/brand-findings.json') f, UNNEST(f.brands) AS t(b), read_json_auto('audit-output/global-six-brand-completion/completion-summary.json') c",
+            "description": "Joins bounded Trading Floor and Price Research findings to the generated six-brand reference-count summary; row-level raw messages were removed before checkpointing.",
             "tables_used": [
-              "audit-output/global-six-brand-completion/brand-findings.json"
+              "audit-output/global-six-brand-completion/brand-findings.json",
+              "audit-output/global-six-brand-completion/completion-summary.json"
             ],
             "filters": [
               "Rolex",
@@ -222,6 +246,9 @@
             "metric_definitions": {
               "trading_floor_listings": "Distinct customer-visible rows returned by a terminating exact-brand cursor; null means the cursor census is not complete.",
               "catalog_references": "Exact brand/reference identities exposed by the deployed Browse by Model contract.",
+              "catalog_nonconflicting_reference_count": "Approved catalog references with no recorded catalog identity conflict; this is not a production-publication count.",
+              "customer_safe_canonical_reference_count": "Canonical references represented by at least one exact customer-eligible production observation after publication and reference safety gates; null when the authoritative production snapshot is incomplete.",
+              "observed_customer_safe_canonical_reference_count": "Customer-safe canonical references observed in the bounded partial production snapshot; never substituted for the authoritative count.",
               "price_research_qualified_wts": "WTS observations passing exact-reference, price/currency, deduplication, bundle, and publication gates.",
               "analytics_ready_references": "Exact references meeting the unchanged minimum comparable-observation and 3.0x IQR analytics contract."
             }
@@ -305,7 +332,7 @@
         "id": "definitions",
         "type": "markdown",
         "sourceId": "global_contract",
-        "body": "## One contract now governs identity, price, dealer, counts, and publication\n\nA reference must be an exact brand-scoped canonical identity. Price Research accepts current single-watch WTS only when source amount and currency are explicit, dated independent FX is available when needed, and duplicate/bundle/publication gates pass. Total Listings remains distinct published WTS plus WTB and never depends on price verification. Dealer display uses the strongest evidence-backed dealer, seller, or poster identity; generic placeholders never become identities or ratings."
+        "body": "## One contract now governs identity, price, dealer, counts, and publication\n\nCatalog reference count measures the approved catalog. Catalog nonconflicting count removes catalog identity conflicts but does not claim production coverage. Customer-safe canonical count requires at least one exact customer-eligible production observation after publication and reference safety gates; it remains null until the authoritative production snapshot completes, while the bounded observed count stays separate. Price Research accepts current single-watch WTS only when its independent evidence gates pass. Generic dealer placeholders never become identities or ratings."
       },
       {
         "id": "methodology",
@@ -315,7 +342,7 @@
       {
         "id": "limitations",
         "type": "markdown",
-        "body": "## Coverage is partial where production access or parity failed\n\nRolex and Patek population totals are not inferred from capped customer API pages. Cartier qualified-WTS counts remain unknown because two customer-facing sources disagree. The long-running global reference census is resumable but not labeled complete. These limitations prevent deployment; they do not downgrade previously confirmed defects."
+        "body": "## Coverage is partial where production access or parity failed\n\nAuthoritative customer-safe canonical reference counts remain null for every incomplete brand production snapshot and are never inferred from the catalog. Bounded observed counts are shown separately. Rolex and Patek population totals are not inferred from capped customer API pages. Cartier qualified-WTS counts remain unknown because two customer-facing sources disagree. These limitations prevent deployment; they do not downgrade previously confirmed defects."
       },
       {
         "id": "blockers_heading",
@@ -366,6 +393,9 @@
           "price_research_qualified_wts": 40,
           "analytics_ready_references": 6,
           "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 534,
+          "customer_safe_canonical_reference_count": null,
+          "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
           "trading_floor_status": "MEASURED",
           "price_research_status": "MEASURED"
@@ -379,6 +409,9 @@
           "price_research_qualified_wts": 175,
           "analytics_ready_references": 15,
           "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 113,
+          "customer_safe_canonical_reference_count": null,
+          "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
           "trading_floor_status": "MEASURED",
           "price_research_status": "MEASURED"
@@ -392,6 +425,9 @@
           "price_research_qualified_wts": null,
           "analytics_ready_references": null,
           "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 1461,
+          "customer_safe_canonical_reference_count": null,
+          "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
           "trading_floor_status": "MEASURED",
           "price_research_status": "UNKNOWN_OR_CONFLICTING"
@@ -406,6 +442,9 @@
           "price_research_qualified_wts": 1,
           "analytics_ready_references": 0,
           "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 183,
+          "customer_safe_canonical_reference_count": null,
+          "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
           "trading_floor_status": "MEASURED",
           "price_research_status": "MEASURED"
@@ -421,6 +460,9 @@
           "price_research_qualified_wts": null,
           "analytics_ready_references": null,
           "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 303,
+          "customer_safe_canonical_reference_count": null,
+          "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 3,
           "trading_floor_status": "UNKNOWN",
           "price_research_status": "UNKNOWN_OR_CONFLICTING"
@@ -434,6 +476,9 @@
           "price_research_qualified_wts": null,
           "analytics_ready_references": null,
           "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 460,
+          "customer_safe_canonical_reference_count": null,
+          "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 3,
           "trading_floor_status": "UNKNOWN",
           "price_research_status": "UNKNOWN_OR_CONFLICTING"
@@ -447,6 +492,9 @@
           "price_research_qualified_wts": 40,
           "analytics_ready_references": 6,
           "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 534,
+          "customer_safe_canonical_reference_count": null,
+          "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
           "trading_floor_status": "MEASURED",
           "price_research_status": "MEASURED"
@@ -460,6 +508,9 @@
           "price_research_qualified_wts": 175,
           "analytics_ready_references": 15,
           "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 113,
+          "customer_safe_canonical_reference_count": null,
+          "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
           "trading_floor_status": "MEASURED",
           "price_research_status": "MEASURED"
@@ -473,6 +524,9 @@
           "price_research_qualified_wts": null,
           "analytics_ready_references": null,
           "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 1461,
+          "customer_safe_canonical_reference_count": null,
+          "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
           "trading_floor_status": "MEASURED",
           "price_research_status": "UNKNOWN_OR_CONFLICTING"
@@ -487,6 +541,9 @@
           "price_research_qualified_wts": 1,
           "analytics_ready_references": 0,
           "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 183,
+          "customer_safe_canonical_reference_count": null,
+          "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
           "trading_floor_status": "MEASURED",
           "price_research_status": "MEASURED"
@@ -593,10 +650,11 @@
       "query": {
         "engine": "DuckDB",
         "language": "sql",
-        "sql": "SELECT b.brand, b.catalog_references, b.trading_floor_listings, b.wts, b.wtb, b.price_research_qualified_wts, b.analytics_ready_references, b.decision FROM read_json_auto('audit-output/global-six-brand-completion/brand-findings.json') f, UNNEST(f.brands) AS t(b)",
-        "description": "Cursor-bounded Trading Floor inventory and adaptive four-reference Price Research summaries, with row-level raw messages removed before checkpointing.",
+        "sql": "SELECT b.brand, b.catalog_references, json_extract(to_json(c.catalog_nonconflicting_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS catalog_nonconflicting_reference_count, json_extract(to_json(c.customer_safe_canonical_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS customer_safe_canonical_reference_count, json_extract(to_json(c.observed_customer_safe_canonical_reference_counts), '$.\"' || b.brand || '\"')::INTEGER AS observed_customer_safe_canonical_reference_count, b.trading_floor_listings, b.wts, b.wtb, b.price_research_qualified_wts, b.analytics_ready_references, b.decision FROM read_json_auto('audit-output/global-six-brand-completion/brand-findings.json') f, UNNEST(f.brands) AS t(b), read_json_auto('audit-output/global-six-brand-completion/completion-summary.json') c",
+        "description": "Joins bounded Trading Floor and Price Research findings to the generated six-brand reference-count summary; row-level raw messages were removed before checkpointing.",
         "tables_used": [
-          "audit-output/global-six-brand-completion/brand-findings.json"
+          "audit-output/global-six-brand-completion/brand-findings.json",
+          "audit-output/global-six-brand-completion/completion-summary.json"
         ],
         "filters": [
           "Rolex",
@@ -609,6 +667,9 @@
         "metric_definitions": {
           "trading_floor_listings": "Distinct customer-visible rows returned by a terminating exact-brand cursor; null means the cursor census is not complete.",
           "catalog_references": "Exact brand/reference identities exposed by the deployed Browse by Model contract.",
+          "catalog_nonconflicting_reference_count": "Approved catalog references with no recorded catalog identity conflict; this is not a production-publication count.",
+          "customer_safe_canonical_reference_count": "Canonical references represented by at least one exact customer-eligible production observation after publication and reference safety gates; null when the authoritative production snapshot is incomplete.",
+          "observed_customer_safe_canonical_reference_count": "Customer-safe canonical references observed in the bounded partial production snapshot; never substituted for the authoritative count.",
           "price_research_qualified_wts": "WTS observations passing exact-reference, price/currency, deduplication, bundle, and publication gates.",
           "analytics_ready_references": "Exact references meeting the unchanged minimum comparable-observation and 3.0x IQR analytics contract."
         }
@@ -668,7 +729,7 @@
   ],
   "package_info": {
     "contract": "watchfacts-global-customer-data-contract-v1",
-    "completion_result_sha256": "e1dc4f68e00ec256735530e40506058c66fc31016fe82e89b5fb98a424afecdf",
+    "completion_result_sha256": "806f06a0367cc2d58f9d89e1e55e53f1f114f4f4fe5e8de0fa5fe388429ab3a6",
     "snapshot_complete": false
   }
 }

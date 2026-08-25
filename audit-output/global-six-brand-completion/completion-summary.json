@@ -1,6 +1,6 @@
 {
   "contract": "watchfacts-global-customer-data-contract-v1",
-  "generated_at": "2026-08-25T01:00:16.907Z",
+  "generated_at": "2026-08-25T09:40:40.726Z",
   "canonical_project_ref": "qnsafosakvonzgfcsphh",
   "brands": [
     "Rolex",
@@ -28,6 +28,30 @@
     "Cartier": 1461,
     "TAG Heuer": 183
   },
+  "catalog_nonconflicting_reference_counts": {
+    "Rolex": 303,
+    "Patek Philippe": 460,
+    "Tudor": 534,
+    "Zenith": 113,
+    "Cartier": 1461,
+    "TAG Heuer": 183
+  },
+  "customer_safe_canonical_reference_counts": {
+    "Rolex": null,
+    "Patek Philippe": null,
+    "Tudor": null,
+    "Zenith": null,
+    "Cartier": null,
+    "TAG Heuer": null
+  },
+  "observed_customer_safe_canonical_reference_counts": {
+    "Rolex": 0,
+    "Patek Philippe": 0,
+    "Tudor": 0,
+    "Zenith": 0,
+    "Cartier": 0,
+    "TAG Heuer": 0
+  },
   "source_checksums": {
     "price_research": null,
     "trading_floor": null
@@ -39,5 +63,5 @@
     "cohorts_deployed": 0,
     "ui_structure_modified": 0
   },
-  "result_sha256": "e1dc4f68e00ec256735530e40506058c66fc31016fe82e89b5fb98a424afecdf"
+  "result_sha256": "806f06a0367cc2d58f9d89e1e55e53f1f114f4f4fe5e8de0fa5fe388429ab3a6"
 }

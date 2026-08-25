@@ -2,7 +2,12 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { build, groupTradingRows } = require('../tools/audit/build-global-six-brand-completion-ledgers.cjs');
+const {
+  build,
+  groupTradingRows,
+  passesCustomerPublicationSafety,
+} = require('../tools/audit/build-global-six-brand-completion-ledgers.cjs');
+const { build: buildTechnicalReport } = require('../tools/audit/build-global-six-brand-technical-report.cjs');
 
 test('global ledger keeps listing counts independent from Price Research qualification', () => {
   const groups = groupTradingRows([
@@ -26,6 +31,14 @@ test('generic dealer placeholders never count as resolved posting identities', (
   const row = groups.get('CARTIER|WSSA0018');
   assert.equal(row.resolved_posting_identities, 1);
   assert.equal(row.dealer_identity_review_required, 3);
+});
+
+test('customer publication safety excludes review, pending, multi-listing and unresolved dealer rows', () => {
+  assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Dealer A' }), true);
+  assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Dealer A', data_quality_review_required: true }), false);
+  assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Dealer A', publication_state: 'PENDING_VERIFICATION' }), false);
+  assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Dealer A', multi_listing: true }), false);
+  assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Source poster' }), false);
 });
 
 test('incomplete snapshots fail closed and preserve unknown Price Research fields', () => {
@@ -96,7 +109,7 @@ test('every brand ledger separates canonical, production, exact, unresolved, par
         Rolex: {
           complete: true,
           rows: [
-            { brand: 'Rolex', reference: '126000', seller_name: 'Dealer A' },
+            { brand: 'Rolex', reference: '126000', listing_type: 'WTS', seller_name: 'Dealer A' },
             { brand: 'Rolex', reference: '1265', seller_name: 'Dealer B' },
             { brand: 'Rolex', reference: 'BRACELET', reference_invalid_reason: 'COMPONENT', seller_name: 'Dealer C' },
             { brand: 'Rolex', reference: 'FREE TEXT', seller_name: 'Dealer D' },
@@ -107,7 +120,9 @@ test('every brand ledger separates canonical, production, exact, unresolved, par
   });
   const ledger = built.brandLedgers.Rolex;
   assert.equal(ledger.catalog_reference_count, 2);
-  assert.equal(ledger.customer_safe_canonical_reference_count, 2);
+  assert.equal(ledger.catalog_nonconflicting_reference_count, 2);
+  assert.equal(ledger.customer_safe_canonical_reference_count, 1);
+  assert.equal(ledger.observed_customer_safe_canonical_reference_count, 1);
   assert.equal(ledger.production_reference_value_count, 4);
   assert.equal(ledger.exact_published_reference_count, 1);
   assert.equal(ledger.partial_reference_count, 1);
@@ -116,4 +131,54 @@ test('every brand ledger separates canonical, production, exact, unresolved, par
   for (const brandLedger of Object.values(built.brandLedgers)) {
     assert.equal(brandLedger.deployment_decision, 'NOT_READY');
   }
+});
+
+test('incomplete production snapshot keeps authoritative customer-safe count null', () => {
+  const built = build({
+    priceReport: {},
+    priceCheckpoint: {
+      catalog_references: [
+        { key: 'ROLEX|126000', brand: 'Rolex', model: 'Oyster Perpetual', reference: '126000' },
+      ],
+    },
+    tradingReport: { snapshot_complete: false },
+    tradingCheckpoint: {
+      brand_state: {
+        Rolex: {
+          complete: false,
+          rows: [{ brand: 'Rolex', reference: '126000', listing_type: 'WTS', seller_name: 'Dealer A' }],
+        },
+      },
+    },
+  });
+  const ledger = built.brandLedgers.Rolex;
+  assert.equal(ledger.catalog_reference_count, 1);
+  assert.equal(ledger.catalog_nonconflicting_reference_count, 1);
+  assert.equal(ledger.customer_safe_canonical_reference_count, null);
+  assert.equal(ledger.observed_customer_safe_canonical_reference_count, 1);
+  assert.equal(built.summary.customer_safe_canonical_reference_counts.Rolex, null);
+  assert.equal(built.summary.observed_customer_safe_canonical_reference_counts.Rolex, 1);
+  assert.equal(ledger.deployment_decision, 'NOT_READY');
+});
+
+test('technical report preserves catalog, nonconflicting, authoritative and observed semantics', () => {
+  const artifact = buildTechnicalReport({
+    observed_at: '2026-08-25T00:00:00Z',
+    contract: 'test',
+    brands: [{
+      brand: 'Rolex', catalog_references: 303, trading_floor_listings: null,
+      price_research_qualified_wts: null, analytics_ready_references: null,
+      decision: 'NOT_READY', blockers: [],
+    }],
+  }, {
+    snapshot_complete: false,
+    catalog_nonconflicting_reference_counts: { Rolex: 300 },
+    customer_safe_canonical_reference_counts: { Rolex: null },
+    observed_customer_safe_canonical_reference_counts: { Rolex: 12 },
+  });
+  const row = artifact.snapshot.datasets.brand_status[0];
+  assert.equal(row.catalog_references, 303);
+  assert.equal(row.catalog_nonconflicting_reference_count, 300);
+  assert.equal(row.customer_safe_canonical_reference_count, null);
+  assert.equal(row.observed_customer_safe_canonical_reference_count, 12);
 });

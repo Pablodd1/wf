@@ -66,6 +66,11 @@
   "listing_counts": {
     "total_listings": "distinct_currently_published_single_watch_wts_plus_wtb",
     "independent_of_price_research": true,
+    "catalog_reference_count": "total_canonical_references_in_approved_catalog",
+    "catalog_nonconflicting_reference_count": "approved_catalog_references_without_catalog_identity_conflict",
+    "customer_safe_canonical_reference_count": "exact_canonical_references_with_customer_eligible_production_observation_after_publication_and_reference_safety_gates",
+    "incomplete_customer_safe_count": null,
+    "observed_customer_safe_canonical_reference_count": "bounded_partial_observation_only_never_authoritative",
     "exclude": ["duplicate", "superseded", "suppressed", "bundle", "component", "invalid_reference"]
   },
   "price_research": {
