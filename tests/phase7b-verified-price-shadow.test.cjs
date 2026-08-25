@@ -58,6 +58,15 @@ test('admits only an exact immutable parser-v5 USD match', () => {
   assert.ok(!result.evidence_canonical.includes('source_span_text'));
 });
 
+test('records source spans in PostgreSQL Unicode character offsets', () => {
+  const rawMessage = '⌚ Rolex 126334\n💵 USD 12,500';
+  const result = classifyObservation(row({ raw_message: rawMessage }), catalog);
+  assert.equal(result.price_evidence_classification, 'VERIFIED_IN_NEW_COHORT');
+  assert.equal(Array.from(rawMessage).slice(result.source_span_start, result.source_span_end).join(''),
+    result.source_span_text);
+  assert.match(result.source_span_sha256, /^[0-9a-f]{64}$/);
+});
+
 test('preserves retired USD defaulting as excluded history', () => {
   const result = classifyObservation(row({
     currency_original: null,
