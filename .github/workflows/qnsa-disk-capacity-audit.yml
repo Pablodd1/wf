@@ -18,6 +18,11 @@ on:
         description: Optional completed V2 run ID to validate without querying QNSA
         required: false
         type: string
+      sample_high_cardinality:
+        description: Also run ten bounded read-only source samples after artifact validation
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -192,6 +197,9 @@ jobs:
     name: Validate existing sanitized child counts
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    environment: Production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ inputs.sample_high_cardinality && secrets.SUPABASE_ACCESS_TOKEN || '' }}
     steps:
       - name: Validate artifact-only dispatch
         shell: bash
@@ -227,10 +235,18 @@ jobs:
             "$artifact_root" \
             audit-output/raw-first-child-validation/report.json
 
+          if [[ "${{ inputs.sample_high_cardinality }}" = "true" ]]; then
+            test -n "$SUPABASE_ACCESS_TOKEN"
+            node tools/audit/sample-raw-first-high-cardinality.cjs \
+              "$artifact_root" \
+              audit-output/raw-first-child-validation/report.json \
+              audit-output/raw-first-child-validation/high-cardinality-sample.json
+          fi
+
       - name: Upload compact child-count validation
         uses: actions/upload-artifact@v4
         with:
           name: qnsa-raw-first-child-validation-${{ inputs.validate_artifact_run_id }}-${{ github.run_id }}
           if-no-files-found: error
           retention-days: 30
-          path: audit-output/raw-first-child-validation/report.json
+          path: audit-output/raw-first-child-validation/*.json

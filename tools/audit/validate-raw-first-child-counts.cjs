@@ -42,6 +42,7 @@ function emptyBrand() {
     },
     parents_with_repeated_reference_emission: 0,
     repeated_reference_emissions: 0,
+    zero_child_parent_count: 0,
     high_cardinality_samples: [],
   };
 }
@@ -143,7 +144,8 @@ function analyzeArtifact(inputDir, options = {}) {
         summary.raw_parent_count += 1;
         summary.generated_child_count += children.length;
         cardinalities[record.brand].push(children.length);
-        summary.child_count_distribution[distributionBucket(children.length)] += 1;
+        if (children.length === 0) summary.zero_child_parent_count += 1;
+        else summary.child_count_distribution[distributionBucket(children.length)] += 1;
 
         const references = new Map();
         for (const child of children) {

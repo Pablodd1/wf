@@ -54,6 +54,7 @@ test('child count validator reconciles unique identities and detects page overla
 
 test('distribution and nearest-rank percentiles retain exact requested buckets', () => {
   assert.equal(distributionBucket(1), '1');
+  assert.equal(distributionBucket(5), '5-10');
   assert.equal(distributionBucket(7), '5-10');
   assert.equal(distributionBucket(101), '>100');
   assert.equal(percentile([1, 2, 3, 100], 0.95), 100);
