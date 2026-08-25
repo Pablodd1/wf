@@ -121,7 +121,7 @@ function inspectArtifact(artifactRoot) {
     const compressed = fs.readFileSync(path.join(artifactRoot, relative));
     if (sha256(compressed.toString('base64')) !== meta.sha256) throw new Error(`V2 checksum mismatch: ${relative}`);
     const records = JSON.parse(zlib.gunzipSync(compressed).toString('utf8'));
-    const targets = [];
+    let targetCount = 0;
     for (const record of records) {
       if (!BRANDS.includes(record.brand)) continue;
       const brand = brands[record.brand];
@@ -130,7 +130,7 @@ function inspectArtifact(artifactRoot) {
       if (record.classification === 'SINGLE_WATCH') brand.single_watch_parents += 1;
       if (record.classification.startsWith('MULTI_WATCH')) brand.multi_watch_parents += 1;
       if (TARGET_CLASSES.has(record.classification)) {
-        targets.push(record);
+        targetCount += 1;
         targetParents += 1;
         continue;
       }
@@ -150,9 +150,23 @@ function inspectArtifact(artifactRoot) {
         for (const reason of reviews) increment(brand.carried_field_review, reason);
       }
     }
-    if (targets.length) pages.push({ relative, meta, targets });
+    if (targetCount) pages.push({ relative, meta, target_count: targetCount });
   }
   return { checkpoint, entries, pages, brands, target_parents: targetParents };
+}
+
+function loadTargetPage(artifactRoot, page) {
+  const compressed = fs.readFileSync(path.join(artifactRoot, page.relative));
+  if (sha256(compressed.toString('base64')) !== page.meta.sha256) {
+    throw new Error(`V2 checksum mismatch during target reload: ${page.relative}`);
+  }
+  const records = JSON.parse(zlib.gunzipSync(compressed).toString('utf8'));
+  const targets = records.filter(record => BRANDS.includes(record.brand)
+    && TARGET_CLASSES.has(record.classification));
+  if (targets.length !== page.target_count) {
+    throw new Error(`V2 target count drift ${page.relative}: expected ${page.target_count}, found ${targets.length}`);
+  }
+  return targets;
 }
 
 function initialCheckpoint(targetParents) {
@@ -394,11 +408,12 @@ async function run(options = {}) {
   try {
     for (const page of artifact.pages) {
       if (checkpoint.processed_pages[page.relative]) continue;
+      const pageTargets = loadTargetPage(artifactRoot, page);
       const bounds = uuidShard(page.meta.shard, artifact.checkpoint.shard_count);
       const rows = await managementQuery(targetedRawSql(bounds,
         priorCursor(artifact.entries, page.meta), page.meta.last_id,
-        page.targets.map(record => record.parent_key)), `v3-target-${page.meta.shard}-${page.meta.page}`, options);
-      const targets = new Map(page.targets.map(record => [record.parent_key, record]));
+        pageTargets.map(record => record.parent_key)), `v3-target-${page.meta.shard}-${page.meta.page}`, options);
+      const targets = new Map(pageTargets.map(record => [record.parent_key, record]));
       const enriched = [];
       for (const row of rows) {
         const parentKey = sha256(row.raw_message_id);
@@ -420,8 +435,8 @@ async function run(options = {}) {
           summary, occurrences,
         });
       }
-      if (enriched.length !== page.targets.length) {
-        throw new Error(`Target page mismatch ${page.relative}: expected ${page.targets.length}, matched ${enriched.length}`);
+      if (enriched.length !== pageTargets.length) {
+        throw new Error(`Target page mismatch ${page.relative}: expected ${pageTargets.length}, matched ${enriched.length}`);
       }
       const relative = `v3-pages/${path.basename(page.relative)}`;
       const file = path.join(outputRoot, relative);
