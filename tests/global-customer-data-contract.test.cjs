@@ -29,7 +29,10 @@ test('one global evidence contract owns exactly the six requested brands', () =>
   assert.equal(contract.price_research.intent, 'WTS');
   assert.equal(contract.price_research.wtb_affects_price_analytics, false);
   assert.equal(contract.listing_counts.independent_of_price_research, true);
-  assert.equal(contract.listing_counts.catalog_reference_count, 'total_canonical_references_in_approved_catalog');
+  assert.equal(
+    contract.listing_counts.catalog_reference_count,
+    'distinct_exact_brand_reference_identities_in_accepted_authoritative_source_after_alias_collapse_and_explicit_partial_component_invalid_exclusion',
+  );
   assert.equal(contract.listing_counts.catalog_nonconflicting_reference_count, 'approved_catalog_references_without_catalog_identity_conflict');
   assert.equal(contract.listing_counts.incomplete_customer_safe_count, null);
   assert.equal(contract.customer_publication.preserve_raw_message, true);
