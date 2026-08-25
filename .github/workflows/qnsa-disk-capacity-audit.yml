@@ -31,6 +31,14 @@ on:
         description: Optional prior V3 run ID containing a private resumable checkpoint
         required: false
         type: string
+      current_inventory_v2_run_id:
+        description: Completed V2 artifact run ID for the read-only current-inventory shadow
+        required: false
+        type: string
+      current_inventory_v3_run_id:
+        description: Completed private V3 artifact run ID for the read-only current-inventory shadow
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -42,7 +50,7 @@ concurrency:
 
 jobs:
   canonical-read-only-audit:
-    if: ${{ inputs.validate_artifact_run_id == '' && inputs.v3_artifact_run_id == '' }}
+    if: ${{ inputs.validate_artifact_run_id == '' && inputs.v3_artifact_run_id == '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' }}
     name: Canonical QNSA SELECT-only audit
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -201,7 +209,7 @@ jobs:
         run: exit 1
 
   validate-existing-child-counts:
-    if: ${{ inputs.validate_artifact_run_id != '' && inputs.v3_artifact_run_id == '' }}
+    if: ${{ inputs.validate_artifact_run_id != '' && inputs.v3_artifact_run_id == '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' }}
     name: Validate existing sanitized child counts
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -260,7 +268,7 @@ jobs:
           path: audit-output/raw-first-child-validation/*.json
 
   targeted-observation-census-v3:
-    if: ${{ inputs.v3_artifact_run_id != '' }}
+    if: ${{ inputs.v3_artifact_run_id != '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' }}
     name: Targeted evidence-enriched observation census V3
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -364,3 +372,147 @@ jobs:
             ${{ env.RAW_FIRST_V3_OUTPUT }}/summary.json
             ${{ env.RAW_FIRST_V3_OUTPUT }}/checkpoint.json
             ${{ env.RAW_FIRST_V3_OUTPUT }}/v3-pages/**/*.json.gz
+
+  current-inventory-shadow:
+    if: ${{ inputs.current_inventory_v2_run_id != '' || inputs.current_inventory_v3_run_id != '' }}
+    name: Evidence-backed current-inventory shadow
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    environment: Production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      CURRENT_INVENTORY_OUTPUT: audit-output/current-inventory-shadow-${{ github.run_id }}
+      V2_ARTIFACT_RUN_ID: ${{ inputs.current_inventory_v2_run_id }}
+      V3_ARTIFACT_RUN_ID: ${{ inputs.current_inventory_v3_run_id }}
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - name: Validate current-inventory dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "RUN_QNSA_CURRENT_INVENTORY_SHADOW_V1"
+          [[ "${{ inputs.current_inventory_v2_run_id }}" =~ ^[0-9]+$ ]]
+          [[ "${{ inputs.current_inventory_v3_run_id }}" =~ ^[0-9]+$ ]]
+          test -n "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Check out current-inventory candidate only
+        uses: actions/checkout@v4
+        with:
+          ref: codex/rolex-patek-current-inventory-shadow
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate SELECT-only worker contract
+        run: node tools/audit/current-inventory-shadow.cjs --validate-only
+
+      - name: Download completed V2 sanitized evidence
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.current_inventory_v2_run_id }}
+          pattern: qnsa-raw-first-rolex-patek-${{ inputs.current_inventory_v2_run_id }}-*
+          merge-multiple: true
+          path: audit-current-v2-input
+
+      - name: Resolve completed V2 root
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-current-v2-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          echo "RAW_FIRST_V2_ARTIFACT=$(dirname "$checkpoint")" >> "$GITHUB_ENV"
+
+      - name: Download completed private V3 evidence
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.current_inventory_v3_run_id }}
+          pattern: PRIVATE-qnsa-raw-first-observation-v3-${{ inputs.current_inventory_v3_run_id }}
+          merge-multiple: true
+          path: audit-current-v3-input
+
+      - name: Resolve completed V3 root
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-current-v3-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          echo "RAW_FIRST_V3_ARTIFACT=$(dirname "$checkpoint")" >> "$GITHUB_ENV"
+
+      - name: Build read-only shadow inventory and canary evidence
+        id: shadow
+        shell: bash
+        run: |
+          set +e
+          node tools/audit/current-inventory-shadow.cjs
+          shadow_exit=$?
+          set -e
+          test -f "$CURRENT_INVENTORY_OUTPUT/summary.json"
+          decision="$(node -e "process.stdout.write(require('./' + process.env.CURRENT_INVENTORY_OUTPUT + '/summary.json').decision)")"
+          case "$decision" in
+            CURATED_LUXURY_ROLEX_PATEK_CANARY_READY|NOT_READY_CURRENT_INVENTORY_GAPS) ;;
+            *) exit 1 ;;
+          esac
+          if [[ "$shadow_exit" -ne 0 && "$shadow_exit" -ne 2 ]]; then exit "$shadow_exit"; fi
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+
+      - name: Verify fail-closed shadow contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = process.env.CURRENT_INVENTORY_OUTPUT;
+          const summary = JSON.parse(fs.readFileSync(path.join(root, 'summary.json'), 'utf8'));
+          if (summary.canonical_project_ref !== 'qnsafosakvonzgfcsphh') throw new Error('wrong project');
+          if (!summary.read_only || summary.production_writes !== 0 || summary.raw_mutations !== 0
+            || summary.production_source_switch !== false || summary.ui_changes !== 0) throw new Error('mutation boundary failed');
+          if (!['CURATED_LUXURY_ROLEX_PATEK_CANARY_READY', 'NOT_READY_CURRENT_INVENTORY_GAPS'].includes(summary.decision)) {
+            throw new Error('invalid decision');
+          }
+          for (const name of ['checkpoint.json', 'canary-evidence.json', 'manifest-sha256.json', 'observed-reference-registry.json.gz']) {
+            if (!fs.existsSync(path.join(root, name))) throw new Error(`missing ${name}`);
+          }
+          NODE
+
+      - name: Upload compact current-inventory decision
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-current-inventory-shadow-summary-${{ github.run_id }}-${{ steps.shadow.outputs.decision || 'INCOMPLETE' }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/summary.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/checkpoint.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/canary-evidence.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/manifest-sha256.json
+
+      - name: Upload private shadow lineage foundation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRIVATE-qnsa-current-inventory-shadow-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          path: |
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/summary.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/checkpoint.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/canary-evidence.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/manifest-sha256.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/observed-reference-registry.json.gz
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/offer-partitions/**/*.jsonl.gz
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/current-pages/**/*.json.gz
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/family-pages/**/*.json.gz
