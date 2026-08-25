@@ -224,4 +224,7 @@ test('GitHub workflow is manual-only, canonical, read-only, and executes one aud
   assert.doesNotMatch(workflow, /rolex-manifest|patek-philippe-manifest|remaining-queues/);
   assert.match(workflow, /VALIDATE_QNSA_RAW_FIRST_CHILD_COUNTS/);
   assert.match(workflow, /validate-raw-first-child-counts\.cjs/);
+  assert.match(workflow, /RUN_QNSA_RAW_FIRST_OBSERVATION_CENSUS_V3/);
+  assert.match(workflow, /raw-first-observation-census-v3\.cjs --validate-only/);
+  assert.match(workflow, /PRIVATE-qnsa-raw-first-observation-v3-/);
 });
