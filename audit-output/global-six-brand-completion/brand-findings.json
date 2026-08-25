@@ -1,36 +1,44 @@
 {
   "contract": "watchfacts-global-customer-data-contract-v1",
-  "observed_at": "2026-08-25T00:25:00Z",
+  "observed_at": "2026-08-25T11:21:53.935Z",
   "read_only": true,
   "brands": [
     {
       "brand": "Rolex",
       "catalog_references": 303,
-      "trading_floor_listings": null,
-      "wts": null,
-      "wtb": null,
-      "price_research_qualified_wts": null,
-      "analytics_ready_references": null,
+      "trading_floor_listings": 187576,
+      "wts": 151655,
+      "wtb": 35921,
+      "price_research_qualified_wts": 6348,
+      "analytics_ready_references": 222,
+      "phase7b_source_observations": 157495,
+      "phase7b_verified_observations": 6348,
+      "phase7b_legacy_price_research_observations": 102215,
+      "phase7b_verified_price_research_references": 243,
+      "phase7b_decision": "CANARY_READY",
       "decision": "NOT_READY",
       "blockers": [
-        "Authoritative Phase 7B shadow run is not complete",
-        "Canonical QNSA management authentication most recently returned HTTP 401",
-        "Customer Trading Floor cursor total is withheld and the complete census is still resumable"
+        "Phase 7B is CANARY_READY only; no customer source switch or cohort deployment is authorized",
+        "Global dealer/posting-identity acceptance remains incomplete for this authoritative reference census"
       ]
     },
     {
       "brand": "Patek Philippe",
       "catalog_references": 460,
-      "trading_floor_listings": null,
-      "wts": null,
-      "wtb": null,
-      "price_research_qualified_wts": null,
-      "analytics_ready_references": null,
+      "trading_floor_listings": 14231,
+      "wts": 11896,
+      "wtb": 2335,
+      "price_research_qualified_wts": 3075,
+      "analytics_ready_references": 302,
+      "phase7b_source_observations": 72305,
+      "phase7b_verified_observations": 3075,
+      "phase7b_legacy_price_research_observations": 9985,
+      "phase7b_verified_price_research_references": 342,
+      "phase7b_decision": "CANARY_READY",
       "decision": "NOT_READY",
       "blockers": [
-        "Authoritative Phase 7B shadow run is not complete",
-        "Canonical QNSA management authentication most recently returned HTTP 401",
-        "Customer Trading Floor cursor total is withheld and the complete census is still resumable"
+        "Phase 7B is CANARY_READY only; no customer source switch or cohort deployment is authorized",
+        "Global dealer/posting-identity acceptance remains incomplete for this authoritative reference census"
       ]
     },
     {

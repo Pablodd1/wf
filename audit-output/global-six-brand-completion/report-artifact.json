@@ -4,7 +4,7 @@
     "version": 1,
     "title": "WATCHFACTS Six-Brand Completion Audit",
     "surface": "report",
-    "generatedAt": "2026-08-25T00:25:00Z",
+    "generatedAt": "2026-08-25T11:21:53.935Z",
     "description": "Global evidence-contract implementation and production acceptance status for Rolex, Patek Philippe, Tudor, Zenith, Cartier, and TAG Heuer.",
     "sources": [
       {
@@ -62,7 +62,7 @@
         "id": "qnsa_phase7b_gate",
         "label": "Canonical QNSA Phase 7B workflow and authentication gate",
         "type": "github_actions",
-        "href": "https://github.com/Pablodd1/wf/actions/runs/32786073654",
+        "href": "https://github.com/Pablodd1/wf/actions/runs/32839980179",
         "query": {
           "engine": "GitHub Actions",
           "language": "yaml",
@@ -96,7 +96,7 @@
       {
         "id": "known_trading_floor_counts",
         "title": "Measured Trading Floor listings",
-        "subtitle": "Four completed or independently bounded brand snapshots; Rolex and Patek remain unknown and are intentionally omitted.",
+        "subtitle": "Rolex and Patek use the completed canonical Phase 7B reference census; the other four brands retain their bounded audit status.",
         "dataset": "known_brand_counts",
         "type": "bar",
         "encodings": {
@@ -305,7 +305,7 @@
       {
         "id": "technical_summary",
         "type": "markdown",
-        "body": "## Technical summary\n\n**The shared evidence contract is implemented, but no brand is authorized for a new cohort deployment.** The deployed catalog contains 3,054 exact references across the six brands. Tudor and Zenith have complete live Trading Floor counts, while Cartier and TAG Heuer have material catalog/publication/Price Research inconsistencies. Rolex and Patek authoritative counts remain unavailable because the private Phase 7B run has not completed and canonical QNSA management authentication most recently failed."
+        "body": "## Technical summary\n\n**The shared evidence contract is implemented, but no brand is authorized for a new cohort deployment.** Canonical QNSA Phase 7B completed under the stable run key and now supplies authoritative Rolex/Patek publication counts plus verified-only Price Research evidence. The customer source remains unchanged; all six brands remain NOT_READY under the stricter global dealer and publication gates."
       },
       {
         "id": "measured_coverage",
@@ -342,7 +342,7 @@
       {
         "id": "limitations",
         "type": "markdown",
-        "body": "## Coverage is partial where production access or parity failed\n\nAuthoritative customer-safe canonical reference counts remain null for every incomplete brand production snapshot and are never inferred from the catalog. Bounded observed counts are shown separately. Rolex and Patek population totals are not inferred from capped customer API pages. Cartier qualified-WTS counts remain unknown because two customer-facing sources disagree. These limitations prevent deployment; they do not downgrade previously confirmed defects."
+        "body": "## Coverage is partial where production access or parity failed\n\nRolex and Patek customer-safe canonical reference counts now come from the completed canonical publication census, not from catalog size or Price Research representation. Their verified Price Research cohorts remain private. Other incomplete brand snapshots retain null authoritative counts, and dealer-identity coverage remains an independent unresolved global gate."
       },
       {
         "id": "blockers_heading",
@@ -357,25 +357,20 @@
       {
         "id": "next_steps",
         "type": "markdown",
-        "body": "## Recommended next steps\n\n1. Restore canonical QNSA management access and resume the already-dispatched stable Phase 7B run without creating a second key.\n2. Reconcile TAG Heuer and Cartier publication against the same exact-reference gate used by catalog browse and Price Research.\n3. Repair the Tudor 79360 exact-reference conflict, global same-line multi-item detection, and WTB count parity.\n4. Rerun the same bounded audits and activate only brand/reference cohorts whose complete ledger passes every shared gate."
+        "body": "## Recommended next steps\n\n1. Review the completed private Rolex/Patek evidence without activating its proposed canaries.\n2. Complete the shared dealer/posting-identity gate for the authoritative publication cohorts.\n3. Reconcile TAG Heuer and Cartier publication and repair the Tudor/Zenith open reference-parity issues.\n4. Activate nothing until the applicable brand/reference ledger passes every global gate and receives separate authorization."
       },
       {
         "id": "further_questions",
         "type": "markdown",
-        "body": "## Further questions\n\nCan the canonical QNSA management token be restored without changing database credentials? Which currently published outside-catalog references are valid catalog omissions versus cross-brand or component defects? No answer should be inferred from price, amount proximity, or market expectation."
+        "body": "## Further questions\n\nWhich evidence-backed dealer identities remain unresolved inside the authoritative Rolex/Patek publication cohorts? Which currently published outside-catalog references in the other brands are valid catalog omissions versus cross-brand or component defects? No answer should be inferred from price or market expectation."
       }
     ]
   },
   "snapshot": {
     "version": 1,
     "status": "partial",
-    "generatedAt": "2026-08-25T00:25:00Z",
+    "generatedAt": "2026-08-25T11:21:53.935Z",
     "accessIssues": [
-      {
-        "sourceId": "qnsa_phase7b_gate",
-        "code": "CANONICAL_QNSA_MANAGEMENT_AUTH",
-        "message": "Authoritative Rolex and Patek Phase 7B results are unavailable because the latest management-token audit returned HTTP 401 and the stable shadow run is not complete."
-      },
       {
         "sourceId": "watchfacts_live_bounded_audits",
         "code": "GLOBAL_REFERENCE_CENSUS_INCOMPLETE",
@@ -385,6 +380,48 @@
     "datasets": {
       "known_brand_counts": [
         {
+          "brand": "Rolex",
+          "catalog_references": 303,
+          "trading_floor_listings": 187576,
+          "wts": 151655,
+          "wtb": 35921,
+          "price_research_qualified_wts": 6348,
+          "analytics_ready_references": 222,
+          "phase7b_source_observations": 157495,
+          "phase7b_verified_observations": 6348,
+          "phase7b_legacy_price_research_observations": 102215,
+          "phase7b_verified_price_research_references": 243,
+          "phase7b_decision": "CANARY_READY",
+          "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 303,
+          "customer_safe_canonical_reference_count": 287,
+          "observed_customer_safe_canonical_reference_count": 287,
+          "blocker_count": 2,
+          "trading_floor_status": "MEASURED",
+          "price_research_status": "MEASURED"
+        },
+        {
+          "brand": "Patek Philippe",
+          "catalog_references": 460,
+          "trading_floor_listings": 14231,
+          "wts": 11896,
+          "wtb": 2335,
+          "price_research_qualified_wts": 3075,
+          "analytics_ready_references": 302,
+          "phase7b_source_observations": 72305,
+          "phase7b_verified_observations": 3075,
+          "phase7b_legacy_price_research_observations": 9985,
+          "phase7b_verified_price_research_references": 342,
+          "phase7b_decision": "CANARY_READY",
+          "decision": "NOT_READY",
+          "catalog_nonconflicting_reference_count": 460,
+          "customer_safe_canonical_reference_count": 416,
+          "observed_customer_safe_canonical_reference_count": 416,
+          "blocker_count": 2,
+          "trading_floor_status": "MEASURED",
+          "price_research_status": "MEASURED"
+        },
+        {
           "brand": "Tudor",
           "catalog_references": 534,
           "trading_floor_listings": 2555,
@@ -393,7 +430,7 @@
           "price_research_qualified_wts": 40,
           "analytics_ready_references": 6,
           "decision": "NOT_READY",
-          "catalog_nonconflicting_reference_count": 534,
+          "catalog_nonconflicting_reference_count": 167,
           "customer_safe_canonical_reference_count": null,
           "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
@@ -425,7 +462,7 @@
           "price_research_qualified_wts": null,
           "analytics_ready_references": null,
           "decision": "NOT_READY",
-          "catalog_nonconflicting_reference_count": 1461,
+          "catalog_nonconflicting_reference_count": 762,
           "customer_safe_canonical_reference_count": null,
           "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
@@ -442,7 +479,7 @@
           "price_research_qualified_wts": 1,
           "analytics_ready_references": 0,
           "decision": "NOT_READY",
-          "catalog_nonconflicting_reference_count": 183,
+          "catalog_nonconflicting_reference_count": 105,
           "customer_safe_canonical_reference_count": null,
           "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
@@ -454,34 +491,44 @@
         {
           "brand": "Rolex",
           "catalog_references": 303,
-          "trading_floor_listings": null,
-          "wts": null,
-          "wtb": null,
-          "price_research_qualified_wts": null,
-          "analytics_ready_references": null,
+          "trading_floor_listings": 187576,
+          "wts": 151655,
+          "wtb": 35921,
+          "price_research_qualified_wts": 6348,
+          "analytics_ready_references": 222,
+          "phase7b_source_observations": 157495,
+          "phase7b_verified_observations": 6348,
+          "phase7b_legacy_price_research_observations": 102215,
+          "phase7b_verified_price_research_references": 243,
+          "phase7b_decision": "CANARY_READY",
           "decision": "NOT_READY",
           "catalog_nonconflicting_reference_count": 303,
-          "customer_safe_canonical_reference_count": null,
-          "observed_customer_safe_canonical_reference_count": 0,
-          "blocker_count": 3,
-          "trading_floor_status": "UNKNOWN",
-          "price_research_status": "UNKNOWN_OR_CONFLICTING"
+          "customer_safe_canonical_reference_count": 287,
+          "observed_customer_safe_canonical_reference_count": 287,
+          "blocker_count": 2,
+          "trading_floor_status": "MEASURED",
+          "price_research_status": "MEASURED"
         },
         {
           "brand": "Patek Philippe",
           "catalog_references": 460,
-          "trading_floor_listings": null,
-          "wts": null,
-          "wtb": null,
-          "price_research_qualified_wts": null,
-          "analytics_ready_references": null,
+          "trading_floor_listings": 14231,
+          "wts": 11896,
+          "wtb": 2335,
+          "price_research_qualified_wts": 3075,
+          "analytics_ready_references": 302,
+          "phase7b_source_observations": 72305,
+          "phase7b_verified_observations": 3075,
+          "phase7b_legacy_price_research_observations": 9985,
+          "phase7b_verified_price_research_references": 342,
+          "phase7b_decision": "CANARY_READY",
           "decision": "NOT_READY",
           "catalog_nonconflicting_reference_count": 460,
-          "customer_safe_canonical_reference_count": null,
-          "observed_customer_safe_canonical_reference_count": 0,
-          "blocker_count": 3,
-          "trading_floor_status": "UNKNOWN",
-          "price_research_status": "UNKNOWN_OR_CONFLICTING"
+          "customer_safe_canonical_reference_count": 416,
+          "observed_customer_safe_canonical_reference_count": 416,
+          "blocker_count": 2,
+          "trading_floor_status": "MEASURED",
+          "price_research_status": "MEASURED"
         },
         {
           "brand": "Tudor",
@@ -492,7 +539,7 @@
           "price_research_qualified_wts": 40,
           "analytics_ready_references": 6,
           "decision": "NOT_READY",
-          "catalog_nonconflicting_reference_count": 534,
+          "catalog_nonconflicting_reference_count": 167,
           "customer_safe_canonical_reference_count": null,
           "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
@@ -524,7 +571,7 @@
           "price_research_qualified_wts": null,
           "analytics_ready_references": null,
           "decision": "NOT_READY",
-          "catalog_nonconflicting_reference_count": 1461,
+          "catalog_nonconflicting_reference_count": 762,
           "customer_safe_canonical_reference_count": null,
           "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
@@ -541,7 +588,7 @@
           "price_research_qualified_wts": 1,
           "analytics_ready_references": 0,
           "decision": "NOT_READY",
-          "catalog_nonconflicting_reference_count": 183,
+          "catalog_nonconflicting_reference_count": 105,
           "customer_safe_canonical_reference_count": null,
           "observed_customer_safe_canonical_reference_count": 0,
           "blocker_count": 4,
@@ -552,27 +599,19 @@
       "blockers": [
         {
           "brand": "Rolex",
-          "blocker": "Authoritative Phase 7B shadow run is not complete"
+          "blocker": "Phase 7B is CANARY_READY only; no customer source switch or cohort deployment is authorized"
         },
         {
           "brand": "Rolex",
-          "blocker": "Canonical QNSA management authentication most recently returned HTTP 401"
-        },
-        {
-          "brand": "Rolex",
-          "blocker": "Customer Trading Floor cursor total is withheld and the complete census is still resumable"
+          "blocker": "Global dealer/posting-identity acceptance remains incomplete for this authoritative reference census"
         },
         {
           "brand": "Patek Philippe",
-          "blocker": "Authoritative Phase 7B shadow run is not complete"
+          "blocker": "Phase 7B is CANARY_READY only; no customer source switch or cohort deployment is authorized"
         },
         {
           "brand": "Patek Philippe",
-          "blocker": "Canonical QNSA management authentication most recently returned HTTP 401"
-        },
-        {
-          "brand": "Patek Philippe",
-          "blocker": "Customer Trading Floor cursor total is withheld and the complete census is still resumable"
+          "blocker": "Global dealer/posting-identity acceptance remains incomplete for this authoritative reference census"
         },
         {
           "brand": "Tudor",
@@ -697,7 +736,7 @@
       "id": "qnsa_phase7b_gate",
       "label": "Canonical QNSA Phase 7B workflow and authentication gate",
       "type": "github_actions",
-      "href": "https://github.com/Pablodd1/wf/actions/runs/32786073654",
+      "href": "https://github.com/Pablodd1/wf/actions/runs/32839980179",
       "query": {
         "engine": "GitHub Actions",
         "language": "yaml",
@@ -729,7 +768,7 @@
   ],
   "package_info": {
     "contract": "watchfacts-global-customer-data-contract-v1",
-    "completion_result_sha256": "806f06a0367cc2d58f9d89e1e55e53f1f114f4f4fe5e8de0fa5fe388429ab3a6",
+    "completion_result_sha256": "d34178d524a03574f1c5989f8bb68ada4b6d90402dce361319165c4e41ac1178",
     "snapshot_complete": false
   }
 }

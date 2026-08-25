@@ -6,7 +6,25 @@ const path = require('node:path');
 
 function build(findings, completion) {
   const generatedAt = findings.observed_at || new Date().toISOString();
-  const rows = findings.brands.map(row => {
+  const phase7b = completion.phase7b_verified_shadow;
+  const phase7bComplete = phase7b?.complete === true;
+  const effectiveBrands = findings.brands.map(row => {
+    const shadow = phase7bComplete ? phase7b.brand_summaries?.[row.brand] : null;
+    if (!shadow) return row;
+    return {
+      ...row,
+      trading_floor_listings: shadow.total_published_listings,
+      wts: shadow.wts_listings,
+      wtb: shadow.wtb_listings,
+      price_research_qualified_wts: shadow.verified_observations,
+      analytics_ready_references: shadow.verified_analytics_ready_references,
+      blockers: [
+        'Phase 7B is CANARY_READY only; no customer source switch or cohort deployment is authorized',
+        'Global dealer/posting-identity acceptance remains incomplete for this authoritative reference census',
+      ],
+    };
+  });
+  const rows = effectiveBrands.map(row => {
     const { blockers: _blockers, ...scalar } = row;
     return {
       ...scalar,
@@ -57,7 +75,9 @@ function build(findings, completion) {
     id: 'qnsa_phase7b_gate',
     label: 'Canonical QNSA Phase 7B workflow and authentication gate',
     type: 'github_actions',
-    href: 'https://github.com/Pablodd1/wf/actions/runs/32786073654',
+    href: phase7bComplete
+      ? 'https://github.com/Pablodd1/wf/actions/runs/32839980179'
+      : 'https://github.com/Pablodd1/wf/actions/runs/32786073654',
     query: {
       engine: 'GitHub Actions',
       language: 'yaml',
@@ -91,7 +111,9 @@ function build(findings, completion) {
       charts: [{
         id: 'known_trading_floor_counts',
         title: 'Measured Trading Floor listings',
-        subtitle: 'Four completed or independently bounded brand snapshots; Rolex and Patek remain unknown and are intentionally omitted.',
+        subtitle: phase7bComplete
+          ? 'Rolex and Patek use the completed canonical Phase 7B reference census; the other four brands retain their bounded audit status.'
+          : 'Four completed or independently bounded brand snapshots; Rolex and Patek remain unknown and are intentionally omitted.',
         dataset: 'known_brand_counts',
         type: 'bar',
         encodings: {
@@ -136,29 +158,37 @@ function build(findings, completion) {
       }],
       blocks: [
         { id: 'title', type: 'markdown', body: '# WATCHFACTS Six-Brand Completion Audit' },
-        { id: 'technical_summary', type: 'markdown', body: '## Technical summary\n\n**The shared evidence contract is implemented, but no brand is authorized for a new cohort deployment.** The deployed catalog contains 3,054 exact references across the six brands. Tudor and Zenith have complete live Trading Floor counts, while Cartier and TAG Heuer have material catalog/publication/Price Research inconsistencies. Rolex and Patek authoritative counts remain unavailable because the private Phase 7B run has not completed and canonical QNSA management authentication most recently failed.' },
+        { id: 'technical_summary', type: 'markdown', body: phase7bComplete
+          ? '## Technical summary\n\n**The shared evidence contract is implemented, but no brand is authorized for a new cohort deployment.** Canonical QNSA Phase 7B completed under the stable run key and now supplies authoritative Rolex/Patek publication counts plus verified-only Price Research evidence. The customer source remains unchanged; all six brands remain NOT_READY under the stricter global dealer and publication gates.'
+          : '## Technical summary\n\n**The shared evidence contract is implemented, but no brand is authorized for a new cohort deployment.** The deployed catalog contains 3,054 exact references across the six brands. Tudor and Zenith have complete live Trading Floor counts, while Cartier and TAG Heuer have material catalog/publication/Price Research inconsistencies. Rolex and Patek authoritative counts remain unavailable because the private Phase 7B run has not completed and canonical QNSA management authentication most recently failed.' },
         { id: 'measured_coverage', type: 'markdown', sourceId: 'watchfacts_live_bounded_audits', body: '## Four measured brands already prove the global gates are necessary\n\nTudor has 2,555 published listings and Zenith has 453, but both have Trading Floor references outside the Price Research catalog and their published WTB activity is absent from the Price Research census. Cartier reports 6,834 listings while its catalog browse and exact-reference Price Research results disagree. TAG Heuer returns 278 distinct rows against an advertised 283 and publishes 150 rows outside its current catalog.' },
         { id: 'known_counts_chart', type: 'chart', chartId: 'known_trading_floor_counts' },
         { id: 'brand_status_heading', type: 'markdown', body: '## Every brand remains fail-closed\n\nThe table separates measured coverage from unknown or conflicting values. A catalog reference with no current listing is not automatically a defect; a published reference outside the catalog requires identity review.' },
         { id: 'brand_status_table', type: 'table', tableId: 'brand_completion_status' },
         { id: 'definitions', type: 'markdown', sourceId: 'global_contract', body: '## One contract now governs identity, price, dealer, counts, and publication\n\nCatalog reference count measures the approved catalog. Catalog nonconflicting count removes catalog identity conflicts but does not claim production coverage. Customer-safe canonical count requires at least one exact customer-eligible production observation after publication and reference safety gates; it remains null until the authoritative production snapshot completes, while the bounded observed count stays separate. Price Research accepts current single-watch WTS only when its independent evidence gates pass. Generic dealer placeholders never become identities or ratings.' },
         { id: 'methodology', type: 'markdown', body: '## Bounded audits preserve evidence and avoid uncontrolled production work\n\nThe audit uses adaptive four-reference Price Research batches with concurrency capped at two and 50-row Trading Floor cursor pages with resumable checkpoints. Row-level raw messages are removed from checkpoints. The completion ledgers freeze every discovered canonical model/reference and preserve unknown fields as null until their exact query succeeds.' },
-        { id: 'limitations', type: 'markdown', body: '## Coverage is partial where production access or parity failed\n\nAuthoritative customer-safe canonical reference counts remain null for every incomplete brand production snapshot and are never inferred from the catalog. Bounded observed counts are shown separately. Rolex and Patek population totals are not inferred from capped customer API pages. Cartier qualified-WTS counts remain unknown because two customer-facing sources disagree. These limitations prevent deployment; they do not downgrade previously confirmed defects.' },
+        { id: 'limitations', type: 'markdown', body: phase7bComplete
+          ? '## Coverage is partial where production access or parity failed\n\nRolex and Patek customer-safe canonical reference counts now come from the completed canonical publication census, not from catalog size or Price Research representation. Their verified Price Research cohorts remain private. Other incomplete brand snapshots retain null authoritative counts, and dealer-identity coverage remains an independent unresolved global gate.'
+          : '## Coverage is partial where production access or parity failed\n\nAuthoritative customer-safe canonical reference counts remain null for every incomplete brand production snapshot and are never inferred from the catalog. Bounded observed counts are shown separately. Rolex and Patek population totals are not inferred from capped customer API pages. Cartier qualified-WTS counts remain unknown because two customer-facing sources disagree. These limitations prevent deployment; they do not downgrade previously confirmed defects.' },
         { id: 'blockers_heading', type: 'markdown', body: '## Deployment blockers are explicit and reversible' },
         { id: 'blockers_table', type: 'table', tableId: 'blocker_register' },
-        { id: 'next_steps', type: 'markdown', body: '## Recommended next steps\n\n1. Restore canonical QNSA management access and resume the already-dispatched stable Phase 7B run without creating a second key.\n2. Reconcile TAG Heuer and Cartier publication against the same exact-reference gate used by catalog browse and Price Research.\n3. Repair the Tudor 79360 exact-reference conflict, global same-line multi-item detection, and WTB count parity.\n4. Rerun the same bounded audits and activate only brand/reference cohorts whose complete ledger passes every shared gate.' },
-        { id: 'further_questions', type: 'markdown', body: '## Further questions\n\nCan the canonical QNSA management token be restored without changing database credentials? Which currently published outside-catalog references are valid catalog omissions versus cross-brand or component defects? No answer should be inferred from price, amount proximity, or market expectation.' },
+        { id: 'next_steps', type: 'markdown', body: phase7bComplete
+          ? '## Recommended next steps\n\n1. Review the completed private Rolex/Patek evidence without activating its proposed canaries.\n2. Complete the shared dealer/posting-identity gate for the authoritative publication cohorts.\n3. Reconcile TAG Heuer and Cartier publication and repair the Tudor/Zenith open reference-parity issues.\n4. Activate nothing until the applicable brand/reference ledger passes every global gate and receives separate authorization.'
+          : '## Recommended next steps\n\n1. Restore canonical QNSA management access and resume the already-dispatched stable Phase 7B run without creating a second key.\n2. Reconcile TAG Heuer and Cartier publication against the same exact-reference gate used by catalog browse and Price Research.\n3. Repair the Tudor 79360 exact-reference conflict, global same-line multi-item detection, and WTB count parity.\n4. Rerun the same bounded audits and activate only brand/reference cohorts whose complete ledger passes every shared gate.' },
+        { id: 'further_questions', type: 'markdown', body: phase7bComplete
+          ? '## Further questions\n\nWhich evidence-backed dealer identities remain unresolved inside the authoritative Rolex/Patek publication cohorts? Which currently published outside-catalog references in the other brands are valid catalog omissions versus cross-brand or component defects? No answer should be inferred from price or market expectation.'
+          : '## Further questions\n\nCan the canonical QNSA management token be restored without changing database credentials? Which currently published outside-catalog references are valid catalog omissions versus cross-brand or component defects? No answer should be inferred from price, amount proximity, or market expectation.' },
       ],
     },
     snapshot: {
       version: 1,
       status: 'partial',
       generatedAt,
-      accessIssues: [{
+      accessIssues: [...(phase7bComplete ? [] : [{
         sourceId: 'qnsa_phase7b_gate',
         code: 'CANONICAL_QNSA_MANAGEMENT_AUTH',
         message: 'Authoritative Rolex and Patek Phase 7B results are unavailable because the latest management-token audit returned HTTP 401 and the stable shadow run is not complete.',
-      }, {
+      }]), {
         sourceId: 'watchfacts_live_bounded_audits',
         code: 'GLOBAL_REFERENCE_CENSUS_INCOMPLETE',
         message: 'The resumable 3,054-reference Price Research census and Rolex Trading Floor cursor census are not complete; missing values remain null.',
@@ -166,7 +196,7 @@ function build(findings, completion) {
       datasets: {
         known_brand_counts: knownRows,
         brand_status: rows,
-        blockers: findings.brands.flatMap(row => row.blockers.map(blocker => ({ brand: row.brand, blocker }))),
+        blockers: effectiveBrands.flatMap(row => row.blockers.map(blocker => ({ brand: row.brand, blocker }))),
       },
     },
     sources,

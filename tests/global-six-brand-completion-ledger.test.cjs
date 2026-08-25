@@ -182,3 +182,70 @@ test('technical report preserves catalog, nonconflicting, authoritative and obse
   assert.equal(row.customer_safe_canonical_reference_count, null);
   assert.equal(row.observed_customer_safe_canonical_reference_count, 12);
 });
+
+test('completed Phase 7B populates Rolex and Patek without confusing Price Research representation with publication', () => {
+  const phase7bAudit = {
+    phase: '7B',
+    complete: true,
+    run_key: 'phase7b-rolex-patek-verified-20260824-v1',
+    decision: 'CANARY_READY',
+    generated_at: '2026-08-25T11:21:53.935Z',
+    result_sha256: 'result',
+    catalog_sha256: 'catalog',
+    verified_observations: { Rolex: 1, 'Patek Philippe': 0 },
+    customer_safe_reference_counts: { Rolex: 2, 'Patek Philippe': 0 },
+    represented_customer_safe_reference_counts: { Rolex: 1, 'Patek Philippe': 0 },
+    production_mutations: 0,
+    customer_source_switches: 0,
+    ui_changes: 0,
+  };
+  const phase7bArtifact = { manifest: { datasets: {
+    classification_mix: [
+      { brand: 'Rolex', classification: 'VERIFIED_IN_NEW_COHORT', count: 1, verified: true },
+      { brand: 'Rolex', classification: 'REFERENCE_INVALID', count: 2, verified: false },
+    ],
+    reference_census: [
+      {
+        brand: 'Rolex', canonical_model: 'Oyster Perpetual', canonical_reference: '126000',
+        total_published_listings: 2, wts_listings: 1, wtb_listings: 1, priced_listings: 1,
+        image_linked_listings: 2, legacy_pr_observations: 1, verified_pr_observations: 1,
+        current_qualified_comparable_count: 1, verified_qualified_comparable_count: 1,
+        current_analytics_ready: false, verified_analytics_ready: false, census_sha256: 'one',
+      },
+      {
+        brand: 'Rolex', canonical_model: 'Cosmograph Daytona', canonical_reference: '126500LN',
+        total_published_listings: 1, wts_listings: 0, wtb_listings: 1, priced_listings: 0,
+        image_linked_listings: 1, legacy_pr_observations: 0, verified_pr_observations: 0,
+        current_qualified_comparable_count: 0, verified_qualified_comparable_count: 0,
+        current_analytics_ready: false, verified_analytics_ready: false, census_sha256: 'two',
+      },
+    ],
+  } } };
+  const built = build({ priceReport: {}, tradingReport: {}, tradingCheckpoint: {}, phase7bAudit, phase7bArtifact });
+  const ledger = built.brandLedgers.Rolex;
+  assert.equal(ledger.customer_safe_canonical_reference_count, 2);
+  assert.equal(ledger.exact_published_reference_count, 2);
+  assert.equal(ledger.phase7b_verified_shadow.represented_customer_safe_reference_count, 1);
+  assert.equal(ledger.phase7b_verified_shadow.published_customer_safe_reference_count, 2);
+  assert.equal(ledger.references.find(row => row.canonical_reference === '126000').trading_floor_listings, 2);
+  assert.equal(ledger.references.find(row => row.canonical_reference === '126000').resolved_posting_identities, null);
+  assert.equal(ledger.references.find(row => row.canonical_reference === '126000').dealer_identity_status,
+    'NOT_AUDITED_BY_PHASE7B');
+  assert.equal(ledger.references.find(row => row.canonical_reference === '126500LN').price_research_source_observations, 0);
+  assert.equal(ledger.deployment_decision, 'NOT_READY');
+  assert.equal(built.summary.deployment_authorized, false);
+  const report = buildTechnicalReport({
+    observed_at: '2026-08-25T11:21:53.935Z',
+    contract: 'test',
+    brands: [
+      { brand: 'Rolex', catalog_references: 2, trading_floor_listings: null, wts: null, wtb: null,
+        price_research_qualified_wts: null, analytics_ready_references: null, decision: 'NOT_READY',
+        blockers: ['Canonical QNSA management authentication most recently returned HTTP 401'] },
+      { brand: 'Patek Philippe', catalog_references: 0, trading_floor_listings: null, wts: null, wtb: null,
+        price_research_qualified_wts: null, analytics_ready_references: null, decision: 'NOT_READY', blockers: [] },
+    ],
+  }, built.summary);
+  assert.equal(report.snapshot.datasets.brand_status[0].trading_floor_listings, 3);
+  assert.equal(report.snapshot.accessIssues.some(issue => issue.code === 'CANONICAL_QNSA_MANAGEMENT_AUTH'), false);
+  assert.match(report.manifest.sources.find(source => source.id === 'qnsa_phase7b_gate').href, /32839980179$/);
+});
