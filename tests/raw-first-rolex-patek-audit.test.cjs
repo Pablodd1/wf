@@ -3,6 +3,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const test = require('node:test');
 const {
   classifyRawPost,
@@ -18,6 +19,8 @@ const {
   phase7bSql,
   rawSourceSql,
   run,
+  technicalDecision,
+  tradingFloorMembershipSql,
   uuidShard,
 } = require('../tools/audit/raw-first-rolex-patek-audit.cjs');
 
@@ -45,7 +48,8 @@ function row(overrides = {}) {
 
 test('all production SQL is one SELECT-only statement', () => {
   const bounds = uuidShard(1, 16);
-  for (const sql of [DEALERS_SQL, PHASE7B_SUMMARY_SQL, SNAPSHOT_SQL, rawSourceSql(bounds), currentListingsSql(bounds), phase7bSql(bounds)]) {
+  for (const sql of [DEALERS_SQL, PHASE7B_SUMMARY_SQL, SNAPSHOT_SQL, rawSourceSql(bounds),
+    currentListingsSql(bounds), tradingFloorMembershipSql(bounds), phase7bSql(bounds)]) {
     assert.doesNotThrow(() => assertReadOnlySql(sql));
     assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE|CALL)\b/i);
   }
@@ -56,7 +60,55 @@ test('validation mode needs no credentials and validates every shard query', asy
   const result = await run({ validateOnly: true, env: { RAW_FIRST_SHARDS: '16' } });
   assert.equal(result.read_only, true);
   assert.equal(result.shard_count, 16);
-  assert.equal(result.validated_queries, 51);
+  assert.equal(result.validated_queries, 7);
+  assert.equal(result.page_size, 2000);
+  assert.equal(result.database_concurrency, 1);
+});
+
+test('current listings and Trading Floor membership are separate bounded keyset queries', () => {
+  const bounds = uuidShard(0, 16);
+  const current = currentListingsSql(bounds, '00000000-0000-0000-0000-000000000123', 2000);
+  const membership = tradingFloorMembershipSql(bounds, null, 2000);
+  assert.doesNotMatch(current, /qnsa_rolex_patek_trading_floor_source|\bEXISTS\s*\(/i);
+  assert.match(current, /l\.id>'00000000-0000-0000-0000-000000000123'::uuid/);
+  assert.match(current, /ORDER BY l\.id LIMIT 2000/);
+  assert.match(membership, /qnsa_rolex_patek_trading_floor_source/);
+  assert.match(membership, /SELECT tf\.id,tf\.source_record_id/);
+  assert.match(membership, /ORDER BY tf\.id LIMIT 2000/);
+});
+
+test('technical outcomes never masquerade as raw source gaps', () => {
+  assert.equal(technicalDecision(new Error('ERROR: 57014: canceling statement due to statement timeout')),
+    'AUDIT_INCOMPLETE_QUERY_TIMEOUT');
+  assert.equal(technicalDecision(new Error('network unavailable')), 'AUDIT_INCOMPLETE_TECHNICAL');
+});
+
+test('technical failure preserves sanitized checkpoint and summary', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'raw-first-v2-'));
+  const output = path.join(root, 'out');
+  const fetchImpl = async (_url, request) => {
+    const sql = JSON.parse(request.body).query;
+    if (sql.includes("'project_ref','qnsafosakvonzgfcsphh'")) {
+      return new Response(JSON.stringify([{ snapshot: { project_ref: 'qnsafosakvonzgfcsphh' } }]), { status: 200 });
+    }
+    if (sql.includes('dealer_source_identities')) return new Response('[]', { status: 200 });
+    if (sql.includes('reference_census')) return new Response('[]', { status: 200 });
+    if (sql.includes('FROM staging.listings')) {
+      return new Response(JSON.stringify({ message: 'ERROR: 57014: statement timeout' }), { status: 400 });
+    }
+    return new Response('[]', { status: 200 });
+  };
+  try {
+    const result = await run({ token: 'test-token', fetchImpl,
+      env: { RAW_FIRST_SHARDS: '1', RAW_FIRST_PAGE_SIZE: '2', RAW_FIRST_OUTPUT: output } });
+    assert.equal(result.decision, 'AUDIT_INCOMPLETE_QUERY_TIMEOUT');
+    assert.equal(result.production_writes, 0);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(output, 'checkpoint.json'))).status, 'INCOMPLETE');
+    assert.equal(JSON.parse(fs.readFileSync(path.join(output, 'summary.json'))).decision,
+      'AUDIT_INCOMPLETE_QUERY_TIMEOUT');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('single source watch survives catalog-independent parsing with exact source evidence', () => {
@@ -138,7 +190,7 @@ test('GitHub workflow is manual-only, canonical, read-only, and executes one aud
   assert.match(workflow, /environment: Production/);
   assert.match(workflow, /CANONICAL_PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.match(workflow, /SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/);
-  assert.equal((workflow.match(/node tools\/audit\/raw-first-rolex-patek-audit\.cjs(?! --validate-only)/g) || []).length, 1);
+  assert.equal((workflow.match(/^\s+node tools\/audit\/raw-first-rolex-patek-audit\.cjs\s*$/gm) || []).length, 1);
   assert.doesNotMatch(workflow, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|DROP|supabase db push|deploy)\b/i);
   assert.doesNotMatch(workflow, /rolex-manifest|patek-philippe-manifest|remaining-queues/);
 });

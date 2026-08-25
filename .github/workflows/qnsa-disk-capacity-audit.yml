@@ -10,9 +10,14 @@ on:
         description: Type RUN_QNSA_RAW_FIRST_ROLEX_PATEK_AUDIT
         required: true
         type: string
+      resume_run_id:
+        description: Optional prior V2 run ID whose sanitized checkpoint should be resumed
+        required: false
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: qnsa-raw-first-rolex-patek-canonical-audit
@@ -26,8 +31,12 @@ jobs:
     environment: Production
     env:
       CANONICAL_PROJECT_REF: qnsafosakvonzgfcsphh
-      RAW_FIRST_SHARDS: 256
+      RAW_FIRST_SHARDS: 16
+      RAW_FIRST_PAGE_SIZE: 2000
+      RAW_FIRST_PREFLIGHT_PAGE_SIZE: 100
       RAW_FIRST_OUTPUT: audit-output/raw-first-rolex-patek-run-${{ github.run_id }}
+      RAW_FIRST_RESUME_DIR: audit-resume-input
+      RAW_FIRST_PREFLIGHT_OUTPUT: audit-output/raw-first-rolex-patek-preflight-${{ github.run_id }}.json
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     steps:
       - name: Validate dispatch and canonical target
@@ -69,7 +78,25 @@ jobs:
             "https://api.supabase.com/v1/projects/qnsafosakvonzgfcsphh/database/query")"
           node -e "const rows=JSON.parse(process.argv[1]);if(rows?.[0]?.project_ref!=='qnsafosakvonzgfcsphh')process.exit(1)" "$response"
 
-      - name: Execute canonical raw scan exactly once
+      - name: Preflight bounded current and Trading Floor pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/audit/raw-first-rolex-patek-audit.cjs --preflight > "$RAW_FIRST_PREFLIGHT_OUTPUT"
+          node -e "const p=require('./' + process.env.RAW_FIRST_PREFLIGHT_OUTPUT);if(p.decision!=='PREFLIGHT_OK'||p.page_size>500)process.exit(1)"
+
+      - name: Download sanitized resume checkpoint
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.resume_run_id }}
+          pattern: qnsa-raw-first-rolex-patek-${{ inputs.resume_run_id }}-*
+          merge-multiple: true
+          path: ${{ env.RAW_FIRST_RESUME_DIR }}
+
+      - name: Execute or resume canonical bounded census
         id: audit
         shell: bash
         run: |
@@ -77,14 +104,16 @@ jobs:
           node tools/audit/raw-first-rolex-patek-audit.cjs
           audit_exit=$?
           set -e
-          if [[ "$audit_exit" -ne 0 && "$audit_exit" -ne 2 ]]; then
-            exit "$audit_exit"
-          fi
           decision="$(node -e "process.stdout.write(require(process.env.RAW_FIRST_OUTPUT + '/summary.json').decision)")"
-          test "$decision" = "RAW_FIRST_READY" || test "$decision" = "NOT_READY_RAW_SOURCE_GAPS"
+          case "$decision" in
+            RAW_FIRST_READY|NOT_READY_RAW_SOURCE_GAPS|AUDIT_INCOMPLETE_QUERY_TIMEOUT|AUDIT_INCOMPLETE_TECHNICAL) ;;
+            *) exit 1 ;;
+          esac
           echo "decision=$decision" >> "$GITHUB_OUTPUT"
+          echo "audit_exit=$audit_exit" >> "$GITHUB_OUTPUT"
 
       - name: Verify sanitized evidence contract
+        if: ${{ always() && steps.audit.outputs.decision != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -98,18 +127,32 @@ jobs:
             if (summary[key] !== 0) throw new Error(`${key} must be zero`);
           }
           if (summary.phase7b_rerun !== false || summary.read_only !== true) throw new Error('read-only contract failed');
-          for (const name of ['summary.json', 'manifest-sha256.json', 'sanitized-exact-deltas.jsonl.gz']) {
+          for (const name of ['summary.json', 'checkpoint.json']) {
             if (!fs.existsSync(path.join(root, name))) throw new Error(`missing ${name}`);
+          }
+          if (!summary.decision.startsWith('AUDIT_INCOMPLETE_')) {
+            for (const name of ['manifest-sha256.json', 'sanitized-exact-deltas.json.gz']) {
+              if (!fs.existsSync(path.join(root, name))) throw new Error(`missing ${name}`);
+            }
           }
           NODE
 
       - name: Upload sanitized audit evidence
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qnsa-raw-first-rolex-patek-${{ github.run_id }}-${{ steps.audit.outputs.decision }}
+          name: qnsa-raw-first-rolex-patek-${{ github.run_id }}-${{ steps.audit.outputs.decision || 'AUDIT_INCOMPLETE_TECHNICAL' }}
           if-no-files-found: error
           retention-days: 30
           path: |
+            ${{ env.RAW_FIRST_PREFLIGHT_OUTPUT }}
             ${{ env.RAW_FIRST_OUTPUT }}/summary.json
+            ${{ env.RAW_FIRST_OUTPUT }}/checkpoint.json
             ${{ env.RAW_FIRST_OUTPUT }}/manifest-sha256.json
-            ${{ env.RAW_FIRST_OUTPUT }}/sanitized-exact-deltas.jsonl.gz
+            ${{ env.RAW_FIRST_OUTPUT }}/sanitized-exact-deltas.json.gz
+            ${{ env.RAW_FIRST_OUTPUT }}/resume-pages/**/*.json.gz
+
+      - name: Preserve technical outcome after artifact upload
+        if: ${{ always() && startsWith(steps.audit.outputs.decision, 'AUDIT_INCOMPLETE_') }}
+        shell: bash
+        run: exit 1
