@@ -82,36 +82,18 @@ function rawSourceSql(bounds) {
 }
 
 function currentListingsSql(bounds) {
-  return `WITH control AS MATERIALIZED (
-    SELECT canonical_brand,enabled_run_key,trading_floor_enabled,price_research_enabled
-    FROM public.qnsa_two_brand_release_control
-    WHERE canonical_brand IN ('Rolex','Patek Philippe')
-  )
-  SELECT l.id::text,l.source_record_id,l.raw_message_version_id::text,l.source_hash,
+  return `SELECT l.id::text,l.source_record_id,l.raw_message_version_id::text,l.source_hash,
     l.brand_normalized AS brand,l.reference_original,l.reference_normalized,
     upper(COALESCE(l.listing_type,l.intent,'')) AS intent,l.parent_id::text,l.is_bundle,
     l.trading_floor_status,l.price_research_status,l.verdict,l.publication_review_status,
     l.price_normalized,l.currency_normalized,l.price_usd,l.image_url,l.public_image_eligible,
-    (
-      c.trading_floor_enabled
-      AND upper(COALESCE(l.category,''))='WATCH'
-      AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
-      AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
-      AND COALESCE(l.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
-      AND l.raw_message_version_id IS NOT NULL AND COALESCE(l.source_record_id,'')<>''
-      AND l.source_hash ~ '^[0-9a-f]{64}$' AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
-      AND lower(COALESCE(l.trading_floor_status,'')) NOT IN
-        ('bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate',
-         'withdrawn','rejected','hidden','deleted','archived')
-      AND upper(COALESCE(l.verdict,'')) NOT IN
-        ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
-      AND lower(COALESCE(l.price_research_status,''))<>'suppressed_exact_duplicate'
-      AND upper(COALESCE(l.publication_review_status,'PENDING_REVIEW')) IN
-        ('PENDING_REVIEW','APPROVED','READY_FOR_PUBLICATION_REVIEW')
+    EXISTS (
+      SELECT 1 FROM public.qnsa_rolex_patek_trading_floor_source tf
+      WHERE tf.id=l.id::text
     ) AS current_trading_floor_eligible
-  FROM staging.listings l JOIN control c
-    ON c.enabled_run_key=l.normalization_run_key AND c.canonical_brand=l.brand_normalized
-  WHERE l.id>='${bounds.low}'::uuid ${bounds.high ? `AND l.id<'${bounds.high}'::uuid` : ''}
+  FROM staging.listings l
+  WHERE l.brand_normalized IN ('Rolex','Patek Philippe')
+    AND l.id>='${bounds.low}'::uuid ${bounds.high ? `AND l.id<'${bounds.high}'::uuid` : ''}
   ORDER BY l.id;`;
 }
 
@@ -130,7 +112,8 @@ function phase7bSql(bounds) {
 
 const DEALERS_SQL = `WITH unique_phone AS (
   SELECT public.normalize_seller_phone_identity(source_identity) AS phone,
-    min(dealer_id)::text AS dealer_id,count(DISTINCT dealer_id) AS dealer_count,
+    (array_agg(dealer_id ORDER BY dealer_id))[1]::text AS dealer_id,
+    count(DISTINCT dealer_id) AS dealer_count,
     min(source_identity) AS source_identity
   FROM public.dealer_source_identities
   WHERE verification_status='VERIFIED' AND upper(identity_type) IN ('PHONE','WHATSAPP')
@@ -156,6 +139,22 @@ const SNAPSHOT_SQL = `SELECT jsonb_build_object(
   'controls',(SELECT jsonb_agg(to_jsonb(c) ORDER BY c.canonical_brand) FROM public.qnsa_two_brand_release_control c
     WHERE c.canonical_brand IN ('Rolex','Patek Philippe'))
 ) AS snapshot;`;
+
+const PHASE7B_SUMMARY_SQL = `WITH completed AS MATERIALIZED (
+  SELECT run_key FROM price_research_shadow.runs
+  WHERE project_ref='${PROJECT_REF}' AND status='COMPLETE'
+  ORDER BY completed_at DESC NULLS LAST LIMIT 1
+)
+SELECT c.brand,count(*) AS reference_rows,
+  sum(c.total_published_listings) AS authoritative_published_listings,
+  sum(c.wts_listings) AS authoritative_wts_listings,
+  sum(c.wtb_listings) AS authoritative_wtb_listings,
+  sum(c.legacy_pr_observations) AS legacy_price_research_observations,
+  sum(c.verified_pr_observations) AS verified_price_research_observations,
+  sum(c.verified_qualified_comparable_count) AS verified_qualified_comparable_observations
+FROM price_research_shadow.reference_census c
+JOIN completed r ON r.run_key=c.run_key
+GROUP BY c.brand ORDER BY c.brand;`;
 
 function increment(target, key, amount = 1) {
   target[key] = (target[key] || 0) + amount;
@@ -222,6 +221,9 @@ function brandSummary() {
     location_country_resolved_observations: 0,
     current_trading_floor_observations: 0,
     phase7b_observations: 0,
+    raw_first_trading_floor_candidates: 0,
+    phase7b_authoritative_publication_count: 0,
+    phase7b_verified_price_research_count: 0,
     review_counts_by_reason: {},
   };
 }
@@ -231,7 +233,7 @@ async function run(options = {}) {
   const shardCount = Number(env.RAW_FIRST_SHARDS || 256);
   const outputDir = path.resolve(env.RAW_FIRST_OUTPUT || DEFAULT_OUTPUT);
   const validateOnly = options.validateOnly ?? process.argv.includes('--validate-only');
-  const sqls = [DEALERS_SQL, SNAPSHOT_SQL];
+  const sqls = [DEALERS_SQL, SNAPSHOT_SQL, PHASE7B_SUMMARY_SQL];
   for (let index = 0; index < shardCount; index += 1) {
     const bounds = uuidShard(index, shardCount);
     sqls.push(rawSourceSql(bounds), currentListingsSql(bounds), phase7bSql(bounds));
@@ -245,7 +247,10 @@ async function run(options = {}) {
   fs.mkdirSync(outputDir, { recursive: true });
   const snapshot = (await managementQuery(SNAPSHOT_SQL, 'source-snapshot', options))?.[0]?.snapshot;
   if (snapshot?.project_ref !== PROJECT_REF) throw new Error('Canonical QNSA snapshot check failed');
-  const dealers = await managementQuery(DEALERS_SQL, 'dealer-identities', options);
+  const [dealers, phase7bSummary] = await Promise.all([
+    managementQuery(DEALERS_SQL, 'dealer-identities', options),
+    managementQuery(PHASE7B_SUMMARY_SQL, 'phase7b-summary', options),
+  ]);
   const dealerByPhone = new Map(dealers.map(row => [normalizePhone(row.phone), row]).filter(([phone]) => phone));
 
   const currentBySource = new Map();
@@ -285,6 +290,9 @@ async function run(options = {}) {
   const distinctRefs = new Map(BRANDS.map(brand => [brand, new Set()]));
   const catalogs = catalogSets();
   const dispositionCounts = {};
+  const rawTfBySource = new Map();
+  const rawPrBySource = new Map();
+  const sourceReasons = new Map();
 
   for (const row of latestByMessage.values()) {
     const classification = classifyRawPost(row, { dealerByPhone });
@@ -315,6 +323,7 @@ async function run(options = {}) {
     else increment(dispositionCounts, 'child_candidate');
 
     for (const reason of classification.review_reasons || []) increment(summary.review_counts_by_reason, reason);
+    const reasons = new Set(classification.review_reasons || []);
     for (const child of classification.children) {
       summary.total_resulting_watch_observations += 1;
       if (child.intent === 'WTS') summary.wts += 1;
@@ -330,14 +339,31 @@ async function run(options = {}) {
       else increment(summary.review_counts_by_reason, child.price_evidence_status || 'PRICE_UNRESOLVED');
       if (child.source_currency) summary.explicit_currencies += 1;
       else increment(summary.review_counts_by_reason, 'CURRENCY_UNRESOLVED');
-      if (priceResearchEligible(child, disposition)) summary.qualified_price_research_observations += 1;
+      const tfCandidate = !disposition.duplicate && !disposition.withdrawn && !disposition.superseded;
+      if (tfCandidate) {
+        summary.raw_first_trading_floor_candidates += 1;
+        rawTfBySource.set(row.source_record_id, (rawTfBySource.get(row.source_record_id) || 0) + 1);
+      }
+      if (priceResearchEligible(child, disposition)) {
+        summary.qualified_price_research_observations += 1;
+        rawPrBySource.set(row.source_record_id, (rawPrBySource.get(row.source_record_id) || 0) + 1);
+      }
       if (child.source_image) summary.image_linked_observations += 1;
       else increment(summary.review_counts_by_reason, child.source_image_status || 'IMAGE_UNRESOLVED');
       if (child.dealer_id) summary.dealer_linked_observations += 1;
       else summary.unresolved_dealer_observations += 1;
       if (child.country_code) summary.location_country_resolved_observations += 1;
       else increment(summary.review_counts_by_reason, 'LOCATION_COUNTRY_UNRESOLVED');
+      if (!child.observed_reference_key) reasons.add('REFERENCE_UNRESOLVED');
+      else if (!catalogs.get(brand).has(child.observed_reference_key)) reasons.add('CATALOG_ABSENT_REFERENCE');
+      if (!child.source_currency) reasons.add('CURRENCY_UNRESOLVED');
+      if (!(Number(child.source_price_amount) > 0)) reasons.add('PRICE_UNRESOLVED');
+      if (!child.dealer_id) reasons.add('DEALER_IDENTITY_UNRESOLVED');
+      if (!child.source_image) reasons.add(child.source_image_status || 'IMAGE_UNRESOLVED');
     }
+    if (disposition.duplicate) reasons.add('DUPLICATE');
+    if (disposition.withdrawn) reasons.add('WITHDRAWN');
+    sourceReasons.set(row.source_record_id, { brand, reasons: [...reasons].sort() });
     summary.current_trading_floor_observations += currentRows.filter(item => item.current_trading_floor_eligible === true).length;
     summary.phase7b_observations += phaseRows.length;
 
@@ -356,9 +382,85 @@ async function run(options = {}) {
 
   for (const brand of BRANDS) {
     summaries[brand].distinct_observed_references = distinctRefs.get(brand).size;
+    const phase = phase7bSummary.find(row => row.brand === brand) || {};
+    summaries[brand].phase7b_authoritative_publication_count = Number(phase.authoritative_published_listings || 0);
+    summaries[brand].phase7b_verified_price_research_count = Number(phase.verified_price_research_observations || 0);
     await writers.get(brand).close();
   }
   await unresolvedWriter.close();
+
+  const deltaWriter = jsonWriter(path.join(outputDir, 'sanitized-exact-deltas.jsonl.gz'));
+  const deltaTotals = Object.fromEntries(BRANDS.map(brand => [brand, {
+    raw_first_tf_minus_current_tf: 0,
+    raw_first_tf_minus_phase7b_publication: 0,
+    raw_first_pr_minus_phase7b_verified_pr: 0,
+    phase7b_source_rows_minus_authoritative_publication: 0,
+    phase7b_verified_source_rows_minus_reference_census: 0,
+    source_delta_rows: 0,
+    explanations_by_reason: {},
+  }]));
+  const allSources = new Set([...rawTfBySource.keys(), ...rawPrBySource.keys(),
+    ...currentBySource.keys(), ...phase7bBySource.keys()]);
+  for (const sourceRecordId of allSources) {
+    const currentRows = currentBySource.get(sourceRecordId) || [];
+    const phaseRows = phase7bBySource.get(sourceRecordId) || [];
+    const currentTf = currentRows.filter(row => row.current_trading_floor_eligible === true).length;
+    const phasePublication = phaseRows.length;
+    const rawTf = rawTfBySource.get(sourceRecordId) || 0;
+    const rawPr = rawPrBySource.get(sourceRecordId) || 0;
+    const phasePr = phaseRows.filter(row => row.price_evidence_classification === 'VERIFIED_IN_NEW_COHORT').length;
+    const context = sourceReasons.get(sourceRecordId);
+    const brand = context?.brand || currentRows[0]?.brand || phaseRows[0]?.brand || null;
+    if (!BRANDS.includes(brand)
+      || (rawTf === currentTf && rawTf === phasePublication && rawPr === phasePr)) continue;
+    const reasons = new Set(context?.reasons || []);
+    if (rawTf > currentTf) reasons.add('RAW_FIRST_CHILD_NOT_IN_CURRENT_TRADING_FLOOR');
+    if (rawTf < currentTf) reasons.add('CURRENT_TRADING_FLOOR_ROW_WITHOUT_RAW_FIRST_CHILD_MATCH');
+    if (rawTf > phasePublication) reasons.add('RAW_FIRST_CHILD_NOT_IN_PHASE7B_AUTHORITATIVE_PUBLICATION');
+    if (rawTf < phasePublication) reasons.add('PHASE7B_AUTHORITATIVE_PUBLICATION_NOT_RAW_FIRST_CHILD_MATCH');
+    if (rawPr > phasePr) reasons.add('RAW_FIRST_QUALIFIED_NOT_IN_PHASE7B_VERIFIED_PR');
+    if (rawPr < phasePr) reasons.add('PHASE7B_VERIFIED_PR_NOT_RAW_FIRST_QUALIFIED');
+    deltaTotals[brand].source_delta_rows += 1;
+    for (const reason of reasons) increment(deltaTotals[brand].explanations_by_reason, reason);
+    await deltaWriter.write({
+      source_record_id_sha256: sha256(sourceRecordId),
+      brand,
+      raw_first_trading_floor_candidates: rawTf,
+      current_trading_floor_observations: currentTf,
+      phase7b_authoritative_publication_observations: phasePublication,
+      raw_first_qualified_price_research_observations: rawPr,
+      phase7b_verified_price_research_observations: phasePr,
+      trading_floor_delta: rawTf - currentTf,
+      phase7b_publication_delta: rawTf - phasePublication,
+      price_research_delta: rawPr - phasePr,
+      explanation_reasons: [...reasons].sort(),
+    });
+  }
+  await deltaWriter.close();
+  for (const brand of BRANDS) {
+    const summary = summaries[brand];
+    deltaTotals[brand].raw_first_tf_minus_current_tf = summary.raw_first_trading_floor_candidates
+      - summary.current_trading_floor_observations;
+    deltaTotals[brand].raw_first_tf_minus_phase7b_publication = summary.raw_first_trading_floor_candidates
+      - summary.phase7b_authoritative_publication_count;
+    deltaTotals[brand].raw_first_pr_minus_phase7b_verified_pr = summary.qualified_price_research_observations
+      - summary.phase7b_verified_price_research_count;
+    deltaTotals[brand].phase7b_source_rows_minus_authoritative_publication = summary.phase7b_observations
+      - summary.phase7b_authoritative_publication_count;
+    const phaseVerifiedRows = [...phase7bBySource.values()].flat().filter(row => (
+      row.brand === brand && row.price_evidence_classification === 'VERIFIED_IN_NEW_COHORT'
+    )).length;
+    deltaTotals[brand].phase7b_verified_source_rows_minus_reference_census = phaseVerifiedRows
+      - summary.phase7b_verified_price_research_count;
+    if (deltaTotals[brand].phase7b_source_rows_minus_authoritative_publication !== 0) {
+      increment(deltaTotals[brand].explanations_by_reason,
+        'PHASE7B_SOURCE_ROWS_DO_NOT_MATCH_AUTHORITATIVE_PUBLICATION_CENSUS');
+    }
+    if (deltaTotals[brand].phase7b_verified_source_rows_minus_reference_census !== 0) {
+      increment(deltaTotals[brand].explanations_by_reason,
+        'PHASE7B_VERIFIED_SOURCE_ROWS_DO_NOT_MATCH_REFERENCE_CENSUS');
+    }
+  }
 
   const accounted = Object.values(dispositionCounts).reduce((sum, value) => sum + value, 0);
   const remainingQueues = {
@@ -366,9 +468,13 @@ async function run(options = {}) {
     multi_watch_unsplittable: BRANDS.reduce((sum, brand) => sum + summaries[brand].genuinely_unsplittable_observations, 0),
     multi_watch_partially_splittable: BRANDS.reduce((sum, brand) => sum + summaries[brand].partially_splittable_observations, 0),
     unresolved_dealer_observations: BRANDS.reduce((sum, brand) => sum + summaries[brand].unresolved_dealer_observations, 0),
+    reconciliation_count_gaps: BRANDS.reduce((sum, brand) => sum
+      + Math.abs(deltaTotals[brand].phase7b_source_rows_minus_authoritative_publication)
+      + Math.abs(deltaTotals[brand].phase7b_verified_source_rows_minus_reference_census), 0),
   };
   const blockingQueueCount = remainingQueues.raw_brand_unresolved_with_reference
-    + remainingQueues.multi_watch_unsplittable + remainingQueues.multi_watch_partially_splittable;
+    + remainingQueues.multi_watch_unsplittable + remainingQueues.multi_watch_partially_splittable
+    + remainingQueues.reconciliation_count_gaps;
   const decision = blockingQueueCount === 0 && accounted === latestByMessage.size
     ? 'RAW_FIRST_READY' : 'NOT_READY_RAW_SOURCE_GAPS';
   const result = {
@@ -389,6 +495,7 @@ async function run(options = {}) {
     raw_posts_accounted: accounted,
     disposition_counts: dispositionCounts,
     brands: summaries,
+    exact_deltas: deltaTotals,
     remaining_queues: remainingQueues,
   };
   fs.writeFileSync(path.join(outputDir, 'summary.json'), `${JSON.stringify(result, null, 2)}\n`);
@@ -415,6 +522,7 @@ if (require.main === module) {
 module.exports = {
   CONTRACT,
   DEALERS_SQL,
+  PHASE7B_SUMMARY_SQL,
   PROJECT_REF,
   SNAPSHOT_SQL,
   assertReadOnlySql,

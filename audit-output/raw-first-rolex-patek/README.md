@@ -15,6 +15,7 @@ Generated outputs are intentionally absent before the canonical run:
 - `rolex-manifest.jsonl.gz`
 - `patek-philippe-manifest.jsonl.gz`
 - `remaining-queues.jsonl.gz`
+- `sanitized-exact-deltas.jsonl.gz`
 - `manifest-sha256.json`
 
 Safety contract:
@@ -23,6 +24,9 @@ Safety contract:
   statement and submitted with `read_only: true`.
 - No database object, row, endpoint, catalog, UI, or release control is changed.
 - Raw text and lineage fields are copied into private audit artifacts unchanged.
+- GitHub Actions uploads only `summary.json`, `manifest-sha256.json`, and the
+  hashed-source `sanitized-exact-deltas.jsonl.gz`; private manifests and raw
+  review queues remain runner-local and are never uploaded.
 - Ambiguous prices and parent media are never assigned to multiple children.
 - The run returns `RAW_FIRST_READY` only when the source-post accounting is
   exact and all source-brand/multi-watch blocking queues are empty.

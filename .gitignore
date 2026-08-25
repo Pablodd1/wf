@@ -47,4 +47,5 @@ yarn-error.log
 audit-output/raw-first-rolex-patek/summary.json
 audit-output/raw-first-rolex-patek/*-manifest.jsonl.gz
 audit-output/raw-first-rolex-patek/remaining-queues.jsonl.gz
+audit-output/raw-first-rolex-patek/sanitized-exact-deltas.jsonl.gz
 audit-output/raw-first-rolex-patek/manifest-sha256.json

@@ -11,6 +11,7 @@ const {
 } = require('../tools/audit/raw-first-rolex-patek-lib.cjs');
 const {
   DEALERS_SQL,
+  PHASE7B_SUMMARY_SQL,
   SNAPSHOT_SQL,
   assertReadOnlySql,
   currentListingsSql,
@@ -44,7 +45,7 @@ function row(overrides = {}) {
 
 test('all production SQL is one SELECT-only statement', () => {
   const bounds = uuidShard(1, 16);
-  for (const sql of [DEALERS_SQL, SNAPSHOT_SQL, rawSourceSql(bounds), currentListingsSql(bounds), phase7bSql(bounds)]) {
+  for (const sql of [DEALERS_SQL, PHASE7B_SUMMARY_SQL, SNAPSHOT_SQL, rawSourceSql(bounds), currentListingsSql(bounds), phase7bSql(bounds)]) {
     assert.doesNotThrow(() => assertReadOnlySql(sql));
     assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE|CALL)\b/i);
   }
@@ -55,7 +56,7 @@ test('validation mode needs no credentials and validates every shard query', asy
   const result = await run({ validateOnly: true, env: { RAW_FIRST_SHARDS: '16' } });
   assert.equal(result.read_only, true);
   assert.equal(result.shard_count, 16);
-  assert.equal(result.validated_queries, 50);
+  assert.equal(result.validated_queries, 51);
 });
 
 test('single source watch survives catalog-independent parsing with exact source evidence', () => {
@@ -126,4 +127,18 @@ test('audit source contains no production mutation or Phase 7B rerun path', () =
   assert.match(source, /read_only:\s*true/);
   assert.match(source, /phase7b_rerun:\s*false/);
   assert.doesNotMatch(source, /ingest_phase7b|begin_phase7b|complete_phase7b|fetch\([^\n]+rest\/v1/i);
+});
+
+test('GitHub workflow is manual-only, canonical, read-only, and executes one audit scan', () => {
+  const workflow = fs.readFileSync(path.join(
+    __dirname, '..', '.github', 'workflows', 'qnsa-raw-first-rolex-patek-audit.yml',
+  ), 'utf8');
+  assert.match(workflow, /^on:\s*\n\s+workflow_dispatch:/m);
+  assert.doesNotMatch(workflow, /^\s+(?:push|pull_request|schedule|repository_dispatch):/m);
+  assert.match(workflow, /environment: Production/);
+  assert.match(workflow, /CANONICAL_PROJECT_REF: qnsafosakvonzgfcsphh/);
+  assert.match(workflow, /SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/);
+  assert.equal((workflow.match(/node tools\/audit\/raw-first-rolex-patek-audit\.cjs(?! --validate-only)/g) || []).length, 1);
+  assert.doesNotMatch(workflow, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|DROP|supabase db push|deploy)\b/i);
+  assert.doesNotMatch(workflow, /rolex-manifest|patek-philippe-manifest|remaining-queues/);
 });
