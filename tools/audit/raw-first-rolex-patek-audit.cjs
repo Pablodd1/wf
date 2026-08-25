@@ -110,12 +110,23 @@ function currentListingsSql(bounds, lastId = null, limit = 2000) {
   ORDER BY l.id LIMIT ${size};`;
 }
 
-function tradingFloorMembershipSql(bounds, lastId = null, limit = 2000) {
+function sqlLiteral(value) {
+  return `'${String(value ?? '').replace(/'/g, "''")}'`;
+}
+
+function tradingFloorMembershipSql(currentRows, limit = 2000) {
   const size = pageLimit(limit);
-  const lower = lastId || bounds.low;
+  const listingIds = [...new Set(currentRows.map(row => row.id).filter(Boolean))];
+  const sourceIds = [...new Set(currentRows.map(row => row.source_record_id).filter(Boolean))];
+  if (!listingIds.length || !sourceIds.length) {
+    return `SELECT tf.id,tf.source_record_id
+    FROM public.qnsa_rolex_patek_trading_floor_source tf
+    WHERE false ORDER BY tf.id LIMIT ${size};`;
+  }
   return `SELECT tf.id,tf.source_record_id
   FROM public.qnsa_rolex_patek_trading_floor_source tf
-  WHERE tf.id${lastId ? '>' : '>='}'${lower}' ${bounds.high ? `AND tf.id<'${bounds.high}'` : ''}
+  WHERE tf.source_record_id IN (${sourceIds.map(sqlLiteral).join(',')})
+    AND tf.id IN (${listingIds.map(sqlLiteral).join(',')})
   ORDER BY tf.id LIMIT ${size};`;
 }
 
@@ -278,6 +289,46 @@ async function scanDataset({ name, checkpoint, outputDir, shardCount, pageSize, 
       state.sanitized_rows += sanitized.length;
       state.complete = rows.length < pageSize;
       checkpoint.completed_pages += 1;
+      persistCheckpoint(checkpoint, outputDir);
+    }
+  }
+}
+
+async function scanCurrentWithMembership({ checkpoint, outputDir, shardCount, pageSize,
+  sanitizeCurrent, sanitizeMembership, options }) {
+  for (let shard = 0; shard < shardCount; shard += 1) {
+    const currentState = checkpoint.datasets.current.shards[shard];
+    const membershipState = checkpoint.datasets.membership.shards[shard];
+    if (currentState.pages !== membershipState.pages || currentState.last_id !== membershipState.last_id) {
+      throw new Error(`Current/membership resume state diverged at shard ${shard}`);
+    }
+    const bounds = uuidShard(shard, shardCount);
+    while (!currentState.complete) {
+      const page = currentState.pages + 1;
+      const current = await managementQuery(currentListingsSql(bounds, currentState.last_id, pageSize),
+        `current-${shard}-page-${page}`, options);
+      const membership = await managementQuery(tradingFloorMembershipSql(current, pageSize),
+        `membership-${shard}-page-${page}`, options);
+      const lastId = current.length ? String(current.at(-1).id) : currentState.last_id;
+      for (const [name, rows, sanitize, state] of [
+        ['current', current, sanitizeCurrent, currentState],
+        ['membership', membership, sanitizeMembership, membershipState],
+      ]) {
+        const sanitized = rows.map(sanitize).filter(Boolean);
+        const relative = `resume-pages/${name}-${String(shard).padStart(3, '0')}-${String(page).padStart(6, '0')}.json.gz`;
+        writeGzipJson(path.join(outputDir, relative), sanitized);
+        checkpoint.page_files[relative] = {
+          dataset: name, shard, page, last_id: lastId, database_rows: rows.length,
+          sanitized_rows: sanitized.length,
+          sha256: sha256(fs.readFileSync(path.join(outputDir, relative)).toString('base64')),
+        };
+        state.last_id = lastId;
+        state.pages = page;
+        state.database_rows += rows.length;
+        state.sanitized_rows += sanitized.length;
+        state.complete = current.length < pageSize;
+      }
+      checkpoint.completed_pages += 2;
       persistCheckpoint(checkpoint, outputDir);
     }
   }
@@ -605,7 +656,7 @@ async function preflight(options = {}) {
   const bounds = uuidShard(0, Number(env.RAW_FIRST_SHARDS || 16));
   const started = Date.now();
   const current = await managementQuery(currentListingsSql(bounds, null, pageSize), 'preflight-current-0', options);
-  const membership = await managementQuery(tradingFloorMembershipSql(bounds, null, pageSize), 'preflight-membership-0', options);
+  const membership = await managementQuery(tradingFloorMembershipSql(current, pageSize), 'preflight-membership-0', options);
   return {
     contract: CONTRACT, decision: 'PREFLIGHT_OK', canonical_project_ref: PROJECT_REF,
     read_only: true, page_size: pageSize, shard: 0,
@@ -621,9 +672,10 @@ async function run(options = {}) {
   const outputDir = path.resolve(env.RAW_FIRST_OUTPUT || DEFAULT_OUTPUT);
   const validateOnly = options.validateOnly ?? process.argv.includes('--validate-only');
   const bounds = uuidShard(0, shardCount);
+  const membershipSample = [{ id: bounds.low, source_record_id: 'bounded-preflight-source' }];
   const sqls = [DEALERS_SQL, SNAPSHOT_SQL, PHASE7B_SUMMARY_SQL,
     rawSourceSql(bounds, null, pageSize), currentListingsSql(bounds, null, pageSize),
-    tradingFloorMembershipSql(bounds, null, pageSize), phase7bSql(bounds, null, pageSize)];
+    tradingFloorMembershipSql(membershipSample, pageSize), phase7bSql(bounds, null, pageSize)];
   sqls.forEach(assertReadOnlySql);
   if (validateOnly) return { contract: CONTRACT, read_only: true, validated_queries: sqls.length,
     shard_count: shardCount, page_size: pageSize, database_concurrency: 1 };
@@ -657,10 +709,8 @@ async function run(options = {}) {
     const sanitizePhase = row => ({ listing_key: sha256(row.listing_id), source_key: sourceKey(row.source_record_id, row.listing_id),
       brand: row.brand, price_evidence_classification: row.price_evidence_classification });
 
-    await scanDataset({ name: 'current', checkpoint, outputDir, shardCount, pageSize,
-      query: currentListingsSql, sanitize: sanitizeCurrent, options });
-    await scanDataset({ name: 'membership', checkpoint, outputDir, shardCount, pageSize,
-      query: tradingFloorMembershipSql, sanitize: sanitizeMembership, options });
+    await scanCurrentWithMembership({ checkpoint, outputDir, shardCount, pageSize,
+      sanitizeCurrent, sanitizeMembership, options });
     await scanDataset({ name: 'phase7b', checkpoint, outputDir, shardCount, pageSize,
       query: phase7bSql, sanitize: sanitizePhase, options });
     const state = loadCurrentState(checkpoint, outputDir);

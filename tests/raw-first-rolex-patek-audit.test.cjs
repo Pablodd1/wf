@@ -48,8 +48,9 @@ function row(overrides = {}) {
 
 test('all production SQL is one SELECT-only statement', () => {
   const bounds = uuidShard(1, 16);
+  const sample = [{ id: bounds.low, source_record_id: 'sample-source' }];
   for (const sql of [DEALERS_SQL, PHASE7B_SUMMARY_SQL, SNAPSHOT_SQL, rawSourceSql(bounds),
-    currentListingsSql(bounds), tradingFloorMembershipSql(bounds), phase7bSql(bounds)]) {
+    currentListingsSql(bounds), tradingFloorMembershipSql(sample), phase7bSql(bounds)]) {
     assert.doesNotThrow(() => assertReadOnlySql(sql));
     assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE|CALL)\b/i);
   }
@@ -68,12 +69,16 @@ test('validation mode needs no credentials and validates every shard query', asy
 test('current listings and Trading Floor membership are separate bounded keyset queries', () => {
   const bounds = uuidShard(0, 16);
   const current = currentListingsSql(bounds, '00000000-0000-0000-0000-000000000123', 2000);
-  const membership = tradingFloorMembershipSql(bounds, null, 2000);
+  const membership = tradingFloorMembershipSql([
+    { id: '00000000-0000-0000-0000-000000000123', source_record_id: 'source-123' },
+  ], 2000);
   assert.doesNotMatch(current, /qnsa_rolex_patek_trading_floor_source|\bEXISTS\s*\(/i);
   assert.match(current, /l\.id>'00000000-0000-0000-0000-000000000123'::uuid/);
   assert.match(current, /ORDER BY l\.id LIMIT 2000/);
   assert.match(membership, /qnsa_rolex_patek_trading_floor_source/);
   assert.match(membership, /SELECT tf\.id,tf\.source_record_id/);
+  assert.match(membership, /tf\.source_record_id IN \('source-123'\)/);
+  assert.match(membership, /tf\.id IN \('00000000-0000-0000-0000-000000000123'\)/);
   assert.match(membership, /ORDER BY tf\.id LIMIT 2000/);
 });
 
