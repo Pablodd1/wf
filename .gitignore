@@ -42,3 +42,9 @@ npm-debug.log
 yarn-debug.log
 yarn-error.log
 .env*.local
+
+# Private raw-first audit artifacts (README remains reviewable)
+audit-output/raw-first-rolex-patek/summary.json
+audit-output/raw-first-rolex-patek/*-manifest.jsonl.gz
+audit-output/raw-first-rolex-patek/remaining-queues.jsonl.gz
+audit-output/raw-first-rolex-patek/manifest-sha256.json
