@@ -64,36 +64,7 @@ jobs:
 
       - name: Verify and atomically install the private shadow schema
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $migrationPath = 'supabase/migrations/20260824190000_phase7b_verified_price_research_shadow.sql'
-          $migration = Get-Content -LiteralPath $migrationPath -Raw
-          $normalized = $migration.Replace("`r`n", "`n")
-          $actualSha = [Convert]::ToHexString(
-            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($normalized))
-          ).ToLowerInvariant()
-          if ($actualSha -cne $env:EXPECTED_NORMALIZED_LF_MIGRATION_SHA256) {
-            throw 'Pinned normalized-LF Phase 7B migration SHA-256 mismatch.'
-          }
-          $migration = $migration -replace '(?im)^\s*BEGIN\s*;\s*$', ''
-          $migration = $migration -replace '(?im)^\s*COMMIT\s*;\s*$', ''
-          $preflight = Get-Content -LiteralPath 'supabase/tests/phase7b_verified_price_shadow_install_preflight.sql' -Raw
-          $resumePreflight = Get-Content -LiteralPath 'supabase/tests/phase7b_verified_price_shadow_resume_preflight.sql' -Raw
-          $postflight = Get-Content -LiteralPath 'supabase/tests/phase7b_verified_price_shadow_install_postflight.sql' -Raw
-          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $uri = "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query"
-          $checkBody = @{ query = "SELECT to_regnamespace('price_research_shadow') IS NOT NULL AS installed;"; read_only = $true } | ConvertTo-Json
-          $check = Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -ContentType 'application/json' -Body $checkBody
-          $installed = [bool]$check[0].installed
-          if ($installed) {
-            $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='120s';`n$resumePreflight`n$postflight`nCOMMIT;"
-          } else {
-            $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='120s';`n$preflight`n$migration`n$postflight`nCOMMIT;"
-          }
-          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
-          Invoke-RestMethod -Method Post -Uri $uri `
-            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
-          Write-Output "{`"private_shadow_schema_ready`":true,`"preexisting`":$($installed.ToString().ToLowerInvariant()),`"migration_sha256`":`"$actualSha`",`"customer_source_switches`":0}"
+        run: ./tools/audit/install-phase7b-shadow.ps1
 
       - name: Run bounded checkpointed immutable-evidence shadow rebuild
         env:

@@ -254,6 +254,20 @@ test('workflow is manual-only, pinned to QNSA, and uses the Production environme
   assert.match(workflow, /Run bounded checkpointed immutable-evidence shadow rebuild[\s\S]*?PHASE7B_OUTPUT:\s*\$\{\{\s*runner\.temp\s*\}\}\/phase7b-worker\.json/);
 });
 
+test('installer bounds immutable source checks to separate Management API requests', () => {
+  const installer = fs.readFileSync(path.join(__dirname,
+    '../tools/audit/install-phase7b-shadow.ps1'), 'utf8');
+  assert.match(installer, /Get-SourceSnapshot 'staging\.listings'/);
+  assert.match(installer, /Get-SourceSnapshot 'public\.raw_messages'/);
+  assert.match(installer, /Get-SourceSnapshot 'public\.raw_message_versions'/);
+  assert.match(installer, /Assert-SameSnapshot 'Customer view definitions'/);
+  assert.match(installer, /Assert-SameSnapshot 'Publication controls'/);
+  assert.match(installer, /SET LOCAL statement_timeout='120s'/);
+  assert.doesNotMatch(installer, /UPDATE\s+staging\.listings/i);
+  assert.doesNotMatch(installer, /UPDATE\s+public\.raw_/i);
+  assert.doesNotMatch(installer, /price_research_shadow.*(anon|authenticated).*GRANT/i);
+});
+
 test('report remains NOT_READY and UNKNOWN without a completed production run', () => {
   const built = buildReport({ catalog_sha256: hash('c'), report: {} }, '2026-08-24T00:00:00.000Z');
   assert.equal(built.decision, 'NOT_READY');
