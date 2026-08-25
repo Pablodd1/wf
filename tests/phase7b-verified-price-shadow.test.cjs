@@ -248,6 +248,7 @@ test('workflow is manual-only, pinned to QNSA, and uses the Production environme
   assert.match(workflow, /PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.match(workflow, /RUN_QNSA_PHASE7B_VERIFIED_PRICE_SHADOW/);
   assert.match(workflow, /\^phase7b-/);
+  assert.match(workflow, /if \(\(\[Uri\]\$env:SUPABASE_URL\)\.Host -cne "\$\(\$env:PROJECT_REF\)\.supabase\.co"\) \{/);
   const jobEnvironment = workflow.slice(workflow.indexOf('    env:'), workflow.indexOf('    steps:'));
   assert.doesNotMatch(jobEnvironment, /\$\{\{\s*runner\./);
   assert.match(workflow, /Run bounded checkpointed immutable-evidence shadow rebuild[\s\S]*?PHASE7B_OUTPUT:\s*\$\{\{\s*runner\.temp\s*\}\}\/phase7b-worker\.json/);
