@@ -104,7 +104,7 @@ jobs:
           node tools/audit/raw-first-rolex-patek-audit.cjs
           audit_exit=$?
           set -e
-          decision="$(node -e "process.stdout.write(require(process.env.RAW_FIRST_OUTPUT + '/summary.json').decision)")"
+          decision="$(node -e "const fs=require('node:fs'); const path=require('node:path'); process.stdout.write(JSON.parse(fs.readFileSync(path.resolve(process.env.RAW_FIRST_OUTPUT, 'summary.json'),'utf8')).decision)")"
           case "$decision" in
             RAW_FIRST_READY|NOT_READY_RAW_SOURCE_GAPS|AUDIT_INCOMPLETE_QUERY_TIMEOUT|AUDIT_INCOMPLETE_TECHNICAL) ;;
             *) exit 1 ;;

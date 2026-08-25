@@ -16,6 +16,7 @@ const {
   SNAPSHOT_SQL,
   assertReadOnlySql,
   currentListingsSql,
+  managementQuery,
   phase7bSql,
   rawSourceSql,
   run,
@@ -45,6 +46,25 @@ function row(overrides = {}) {
     ...overrides,
   };
 }
+
+test('Management API throttling is retried without changing the SELECT', async () => {
+  const calls = [];
+  const responses = [
+    { ok: false, status: 429, headers: { get: () => null }, text: async () => 'throttled' },
+    { ok: true, status: 200, headers: { get: () => null }, text: async () => '[{"ok":true}]' },
+  ];
+  const rows = await managementQuery('SELECT 1;', 'retry-test', {
+    token: 'test-only', retryLimit: 1, retryBaseMs: 1,
+    fetchImpl: async (_url, init) => {
+      calls.push(JSON.parse(init.body));
+      return responses.shift();
+    },
+  });
+  assert.deepEqual(rows, [{ ok: true }]);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0], calls[1]);
+  assert.equal(calls[0].read_only, true);
+});
 
 test('all production SQL is one SELECT-only statement', () => {
   const bounds = uuidShard(1, 16);

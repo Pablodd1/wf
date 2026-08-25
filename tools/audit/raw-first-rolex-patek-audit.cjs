@@ -35,18 +35,30 @@ async function managementQuery(sql, label, options = {}) {
   assertReadOnlySql(sql);
   const token = options.token || process.env.SUPABASE_ACCESS_TOKEN;
   if (!token) throw new Error('SUPABASE_ACCESS_TOKEN is unavailable');
-  const response = await (options.fetchImpl || fetch)(
-    `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
-    {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ query: sql, read_only: true }),
-      signal: AbortSignal.timeout(Number(options.timeoutMs || 300_000)),
-    },
-  );
-  const body = await response.text();
-  if (!response.ok) throw new Error(`${label} failed ${response.status}: ${body.slice(0, 500)}`);
-  return JSON.parse(body);
+  const fetchImpl = options.fetchImpl || fetch;
+  const retryLimit = Number(options.retryLimit ?? 4);
+  for (let attempt = 0; ; attempt += 1) {
+    const response = await fetchImpl(
+      `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
+      {
+        method: 'POST',
+        headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ query: sql, read_only: true }),
+        signal: AbortSignal.timeout(Number(options.timeoutMs || 300_000)),
+      },
+    );
+    const body = await response.text();
+    if (response.ok) return JSON.parse(body);
+    const transient = response.status === 429 || response.status >= 500;
+    if (!transient || attempt >= retryLimit) {
+      throw new Error(`${label} failed ${response.status}: ${body.slice(0, 500)}`);
+    }
+    const retryAfter = Number(response.headers?.get?.('retry-after'));
+    const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
+      ? Math.min(retryAfter * 1000, 30_000)
+      : Math.min(Number(options.retryBaseMs ?? 1000) * (2 ** attempt), 30_000);
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
 }
 
 function uuidShard(index, shardCount) {
