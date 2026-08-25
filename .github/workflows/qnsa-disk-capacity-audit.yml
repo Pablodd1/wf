@@ -27,7 +27,7 @@ jobs:
     env:
       CANONICAL_PROJECT_REF: qnsafosakvonzgfcsphh
       RAW_FIRST_SHARDS: 256
-      RAW_FIRST_OUTPUT: ${{ runner.temp }}/raw-first-rolex-patek-${{ github.run_id }}
+      RAW_FIRST_OUTPUT: audit-output/raw-first-rolex-patek-run-${{ github.run_id }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
     steps:
       - name: Validate dispatch and canonical target
