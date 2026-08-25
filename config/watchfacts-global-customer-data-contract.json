@@ -36,13 +36,30 @@
       "canonical_dealer_name",
       "linked_dealer_name",
       "dealer_name",
+      "source_dealer_name",
+      "source_identity_name",
       "seller_name",
       "posted_by",
       "Posted By",
-      "source_seller",
-      "source_poster"
+      "source_seller_name",
+      "source_poster_name"
     ],
-    "missing_identity_display": "Source poster",
+    "review_status": "DEALER_IDENTITY_REVIEW_REQUIRED",
+    "generic_roles_are_identities": false,
+    "generic_placeholders": [
+      "Source poster",
+      "Dealer profile",
+      "Seller",
+      "Unknown",
+      "Anonymous",
+      "Seller not supplied",
+      "Source dealer",
+      "Dealer",
+      "Posted by",
+      "Not available",
+      "Unavailable"
+    ],
+    "telephone_or_source_account_may_link_existing_identity_only": true,
     "fabrication_allowed": false,
     "rating_requires_source_evidence": true
   },

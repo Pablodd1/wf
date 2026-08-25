@@ -1,6 +1,6 @@
 {
   "contract": "watchfacts-global-customer-data-contract-v1",
-  "generated_at": "2026-08-25T00:34:46.678Z",
+  "generated_at": "2026-08-25T01:00:16.907Z",
   "canonical_project_ref": "qnsafosakvonzgfcsphh",
   "brands": [
     "Rolex",
@@ -39,5 +39,5 @@
     "cohorts_deployed": 0,
     "ui_structure_modified": 0
   },
-  "result_sha256": "8999fbd1a4568716f7462649495b63a1639240f8d54c77885437c86f1333b01e"
+  "result_sha256": "e1dc4f68e00ec256735530e40506058c66fc31016fe82e89b5fb98a424afecdf"
 }

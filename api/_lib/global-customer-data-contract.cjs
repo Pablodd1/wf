@@ -1,6 +1,8 @@
 'use strict';
 
 const contract = require('../../config/watchfacts-global-customer-data-contract.json');
+const GENERIC_POSTING_IDENTITIES = new Set(contract.dealer_identity.generic_placeholders
+  .map(item => item.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()));
 
 function clean(value) {
   const text = String(value ?? '').trim();
@@ -9,7 +11,10 @@ function clean(value) {
 
 function cleanPostingIdentity(value) {
   const text = clean(value);
-  return text && !/^(?:anonymous|source dealer|source poster|dealer profile|seller not supplied)$/i.test(text)
+  const normalized = text.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  return text && !GENERIC_POSTING_IDENTITIES.has(normalized)
+    && !/^(?:anonymous|unknown)(?: user| seller| dealer| poster)?$/.test(normalized)
+    && !/^(?:seller|dealer)(?: name)? (?:not available|unavailable|not supplied)$/.test(normalized)
     ? text
     : '';
 }
@@ -24,6 +29,12 @@ function resolvePostingIdentity(record = {}) {
     if (name) return { name, source: field };
   }
   return null;
+}
+
+function postingIdentityStatus(record = {}) {
+  return resolvePostingIdentity(record)
+    ? 'RESOLVED'
+    : contract.dealer_identity.review_status;
 }
 
 function priceEvidenceDisposition(classification) {
@@ -42,5 +53,6 @@ module.exports = {
   contract,
   isContractBrand,
   priceEvidenceDisposition,
+  postingIdentityStatus,
   resolvePostingIdentity,
 };

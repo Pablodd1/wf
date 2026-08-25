@@ -13,17 +13,19 @@ test('global ledger keeps listing counts independent from Price Research qualifi
   assert.equal(row.trading_floor_listings, 2);
   assert.equal(row.trading_floor_wts, 1);
   assert.equal(row.trading_floor_wtb, 1);
-  assert.equal(row.linked_posting_identities, 2);
+  assert.equal(row.resolved_posting_identities, 2);
 });
 
 test('generic dealer placeholders never count as resolved posting identities', () => {
   const groups = groupTradingRows([
     { brand: 'Cartier', reference: 'WSSA0018', listing_type: 'WTS', seller_name: 'Source dealer' },
     { brand: 'Cartier', reference: 'WSSA0018', listing_type: 'WTB', posted_by: 'Actual Poster' },
+    { brand: 'Cartier', reference: 'WSSA0018', listing_type: 'WTS', seller_name: 'Seller' },
+    { brand: 'Cartier', reference: 'WSSA0018', listing_type: 'WTS', seller_phone: '+1 212 555 0100' },
   ]);
   const row = groups.get('CARTIER|WSSA0018');
-  assert.equal(row.linked_posting_identities, 1);
-  assert.equal(row.missing_posting_identities, 1);
+  assert.equal(row.resolved_posting_identities, 1);
+  assert.equal(row.dealer_identity_review_required, 3);
 });
 
 test('incomplete snapshots fail closed and preserve unknown Price Research fields', () => {
@@ -56,6 +58,7 @@ test('missing source-backed posting identity blocks a completed brand gate', () 
   assert.equal(built.brandLedgers.Rolex.acceptance_gates.posting_identity_resolved, false);
   assert.equal(built.brandLedgers.Rolex.deployment_decision, 'NOT_READY');
   assert.equal(built.brandLedgers.Rolex.references[0].completion_status, 'REVIEW_REQUIRED');
+  assert.equal(built.brandLedgers.Rolex.references[0].dealer_identity_status, 'DEALER_IDENTITY_REVIEW_REQUIRED');
 });
 
 test('a partial run still freezes every discovered canonical reference in the ledgers', () => {
@@ -73,4 +76,44 @@ test('a partial run still freezes every discovered canonical reference in the le
   assert.equal(built.brandLedgers.Tudor.catalog_reference_count, 2);
   assert.equal(built.brandLedgers.Tudor.references[1].price_research_source_observations, null);
   assert.equal(built.brandLedgers.Tudor.references[1].completion_status, 'AUDIT_INCOMPLETE');
+});
+
+test('every brand ledger separates canonical, production, exact, unresolved, partial and invalid references', () => {
+  const built = build({
+    priceReport: {
+      snapshot_complete: false,
+      rows: [],
+    },
+    priceCheckpoint: {
+      catalog_references: [
+        { key: 'ROLEX|126000', brand: 'Rolex', model: 'Oyster Perpetual', reference: '126000' },
+        { key: 'ROLEX|126500LN', brand: 'Rolex', model: 'Cosmograph Daytona', reference: '126500LN' },
+      ],
+    },
+    tradingReport: { snapshot_complete: false },
+    tradingCheckpoint: {
+      brand_state: {
+        Rolex: {
+          complete: true,
+          rows: [
+            { brand: 'Rolex', reference: '126000', seller_name: 'Dealer A' },
+            { brand: 'Rolex', reference: '1265', seller_name: 'Dealer B' },
+            { brand: 'Rolex', reference: 'BRACELET', reference_invalid_reason: 'COMPONENT', seller_name: 'Dealer C' },
+            { brand: 'Rolex', reference: 'FREE TEXT', seller_name: 'Dealer D' },
+          ],
+        },
+      },
+    },
+  });
+  const ledger = built.brandLedgers.Rolex;
+  assert.equal(ledger.catalog_reference_count, 2);
+  assert.equal(ledger.customer_safe_canonical_reference_count, 2);
+  assert.equal(ledger.production_reference_value_count, 4);
+  assert.equal(ledger.exact_published_reference_count, 1);
+  assert.equal(ledger.partial_reference_count, 1);
+  assert.equal(ledger.invalid_reference_count, 1);
+  assert.equal(ledger.unresolved_reference_count, 1);
+  for (const brandLedger of Object.values(built.brandLedgers)) {
+    assert.equal(brandLedger.deployment_decision, 'NOT_READY');
+  }
 });

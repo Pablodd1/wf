@@ -4,6 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
+const { postingIdentityStatus, resolvePostingIdentity } = require('../api/_lib/global-customer-data-contract.cjs');
 
 const root = path.resolve(__dirname, '..');
 const contract = JSON.parse(fs.readFileSync(
@@ -57,13 +58,36 @@ test('forbidden customer literals cannot appear in customer-facing source', () =
   }
 });
 
-test('posting identity uses evidence priority and a non-identity role fallback', () => {
-  assert.deepEqual(contract.dealer_identity.priority.slice(0, 5), [
-    'canonical_dealer_name', 'linked_dealer_name', 'dealer_name', 'seller_name', 'posted_by',
+test('posting identity uses evidence priority and has no customer-facing role fallback', () => {
+  assert.deepEqual(contract.dealer_identity.priority.slice(0, 7), [
+    'canonical_dealer_name', 'linked_dealer_name', 'dealer_name', 'source_dealer_name',
+    'source_identity_name', 'seller_name', 'posted_by',
   ]);
-  assert.equal(contract.dealer_identity.missing_identity_display, 'Source poster');
+  assert.equal(contract.dealer_identity.review_status, 'DEALER_IDENTITY_REVIEW_REQUIRED');
+  assert.equal(contract.dealer_identity.generic_roles_are_identities, false);
+  assert.equal('missing_identity_display' in contract.dealer_identity, false);
   const resolver = fs.readFileSync(path.join(root, 'src', 'lib', 'customerEvidence.ts'), 'utf8');
-  assert.match(resolver, /source dealer\|source poster\|dealer profile/);
+  assert.match(resolver, /generic_placeholders/);
+  assert.doesNotMatch(resolver, /missingPostingIdentityDisplay/);
+});
+
+test('generic role labels, telephone and source accounts cannot resolve dealer identity', () => {
+  for (const placeholder of [
+    ...contract.dealer_identity.generic_placeholders,
+    'Unknown Dealer', 'Anonymous User', 'Dealer name unavailable', 'Seller not available',
+  ]) {
+    assert.equal(resolvePostingIdentity({ seller_name: placeholder, posted_by: placeholder }), null);
+    assert.equal(postingIdentityStatus({ source_poster_name: placeholder }), 'DEALER_IDENTITY_REVIEW_REQUIRED');
+  }
+  assert.equal(resolvePostingIdentity({ seller_phone: '+1 212 555 0100', source_account: 'acct-9' }), null);
+  assert.deepEqual(resolvePostingIdentity({
+    canonical_dealer_name: 'Canonical Dealer',
+    linked_dealer_name: 'Linked Dealer',
+    seller_name: 'Seller Name',
+  }), { name: 'Canonical Dealer', source: 'canonical_dealer_name' });
+  assert.deepEqual(resolvePostingIdentity({ source_poster_name: 'Pierre Duchateau Stg4' }), {
+    name: 'Pierre Duchateau Stg4', source: 'source_poster_name',
+  });
 });
 
 test('Trading Floor never rates or labels owner-assumed evidence as verified USD', () => {

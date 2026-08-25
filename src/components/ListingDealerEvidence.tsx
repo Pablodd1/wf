@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- the shared evidence classifier must stay identical across both exported renderers */
 import { Link } from 'react-router-dom';
-import { missingPostingIdentityDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
+import { strongestPostingIdentity } from '../lib/customerEvidence';
 
 export type DealerRatingEvidenceStatus = 'SOURCE_SUPPLIED' | 'SOURCE_FEEDBACK_COUNT' | 'UNAVAILABLE';
 
@@ -63,7 +63,7 @@ export function ListingDealerEvidence({
   const postingIdentity = strongestPostingIdentity({ seller_name: sellerName });
   return (
     <div className="space-y-1">
-      {showSellerName && <div>{postingIdentity || missingPostingIdentityDisplay}</div>}
+      {showSellerName && <div>{postingIdentity}</div>}
       <DealerRatingBadge
         rating={rating}
         reviewCount={reviewCount}

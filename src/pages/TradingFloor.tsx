@@ -18,7 +18,7 @@ import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
-import { ambiguousPriceDisplay, missingPostingIdentityDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
+import { ambiguousPriceDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
 import {
   loadPriceResearchBatchSummaries,
   priceResearchSummaryKey,
@@ -1345,6 +1345,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
   const [imageAvailable, setImageAvailable] = useState(true);
   const cardHasImage = Boolean(imageUrl && imageAvailable);
   const messageEvidence = listingMessageEvidence(listing);
+  const postingIdentity = strongestPostingIdentity(listing);
 
   const priceRating = useMemo(() => {
     const price = ratingUsdPrice(listing);
@@ -1443,13 +1444,13 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
       {/* 7. Posted by Section */}
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
         <div className="text-[#6B7280]">Posted by</div>
-        {listing.dealer_profile_path ? (
+        {listing.dealer_profile_path && postingIdentity ? (
           <Link to={listing.dealer_profile_path} className="mt-0.5 block text-sm font-semibold text-[#1C1917] hover:text-[#8A5826]">
-            {strongestPostingIdentity(listing) || 'Dealer profile'}
+            {postingIdentity}
           </Link>
         ) : (
           <div className="text-sm font-semibold text-[#1C1917] mt-0.5">
-            {strongestPostingIdentity(listing) || missingPostingIdentityDisplay}
+            {postingIdentity}
           </div>
         )}
         <div className="mt-0.5">
@@ -1496,6 +1497,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
   const visibleImageIndex = activeImage < availableImages.length ? activeImage : 0;
   const messageEvidence = listingMessageEvidence(listing);
   const normalizedIntent = String(listing.intent || listing.listing_type || '').toUpperCase();
+  const postingIdentity = strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name });
 
   const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS');
   const [benchmark, setBenchmark] = useState<{
@@ -1724,13 +1726,13 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
             <h3 className="text-base font-bold text-[#1C1917]">Posted by</h3>
             <div className="mt-4 border-t border-stone-100 pt-4">
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source-supplied contact</div>
-              {listing.dealer_profile_path ? (
+              {listing.dealer_profile_path && postingIdentity ? (
                 <Link to={listing.dealer_profile_path} className="mt-2 block text-base font-bold text-[#1C1917] hover:text-[#8A5826]">
-                  {strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name }) || 'Dealer profile'}
+                  {postingIdentity}
                 </Link>
               ) : (
                 <div className="mt-2 text-base font-bold text-[#1C1917]">
-                  {strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name }) || missingPostingIdentityDisplay}
+                  {postingIdentity}
                 </div>
               )}
               <div className="mt-0.5">
