@@ -260,14 +260,14 @@ function aggregate(artifact, outputRoot, sourceSummary) {
       const groupKey = parent.source_identity_key
         ? `${parent.raw_text_sha256}|${parent.source_identity_key}` : `unlinked:${parent.parent_key}`;
       const group = bodyGroups.get(groupKey) || [];
-      group.push(parent);
+      group.push(parent.parent_key);
       bodyGroups.set(groupKey, group);
     }
   }
   const repostParentKeys = new Set();
   for (const group of bodyGroups.values()) {
     if (group.length < 2) continue;
-    for (const parent of group) repostParentKeys.add(parent.parent_key);
+    for (const parentKey of group) repostParentKeys.add(parentKey);
   }
   for (const parent of parentRows) {
     if (repostParentKeys.has(parent.parent_key)) {
