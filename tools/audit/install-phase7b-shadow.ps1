@@ -138,4 +138,12 @@ if ([int]$contract.policy_count -ne 0 -or [int]$contract.publication_count -ne 0
   throw 'Private Phase 7B access contract failed.'
 }
 
+# QNSA's role-level timeout is 15 seconds. The page is read-only and bounded to at most
+# 500 rows, but its immutable-lineage join needs the same 45-second ceiling already used
+# by Phase 7B reference materialization. This alters only the private service function.
+Invoke-ManagementQuery -ReadOnly $false -Query @'
+ALTER FUNCTION public.phase7b_verified_price_source_page(text,text,uuid,integer)
+  SET statement_timeout = '45s';
+'@ | Out-Null
+
 Write-Output "{`"private_shadow_schema_ready`":true,`"preexisting`":$($installed.ToString().ToLowerInvariant()),`"migration_sha256`":`"$actualSha`",`"customer_source_switches`":0}"
