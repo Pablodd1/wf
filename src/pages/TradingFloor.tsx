@@ -18,6 +18,7 @@ import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
+import { ambiguousPriceDisplay, missingPostingIdentityDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
 import {
   loadPriceResearchBatchSummaries,
   priceResearchSummaryKey,
@@ -1444,11 +1445,11 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         <div className="text-[#6B7280]">Posted by</div>
         {listing.dealer_profile_path ? (
           <Link to={listing.dealer_profile_path} className="mt-0.5 block text-sm font-semibold text-[#1C1917] hover:text-[#8A5826]">
-            {cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer profile'}
+            {strongestPostingIdentity(listing) || 'Dealer profile'}
           </Link>
         ) : (
           <div className="text-sm font-semibold text-[#1C1917] mt-0.5">
-            {cleanValue(listing.seller_name) || listing['Posted By'] || 'Dealer name not available'}
+            {strongestPostingIdentity(listing) || missingPostingIdentityDisplay}
           </div>
         )}
         <div className="mt-0.5">
@@ -1725,11 +1726,11 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source-supplied contact</div>
               {listing.dealer_profile_path ? (
                 <Link to={listing.dealer_profile_path} className="mt-2 block text-base font-bold text-[#1C1917] hover:text-[#8A5826]">
-                  {contact?.dealer_name || listing['Posted By'] || listing.seller_name || 'Dealer profile'}
+                  {strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name }) || 'Dealer profile'}
                 </Link>
               ) : (
                 <div className="mt-2 text-base font-bold text-[#1C1917]">
-                  {contact?.dealer_name || listing['Posted By'] || listing.seller_name || 'Dealer name not available'}
+                  {strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name }) || missingPostingIdentityDisplay}
                 </div>
               )}
               <div className="mt-0.5">
@@ -1992,16 +1993,11 @@ function TradingFloorQuickScroll() {
 }
 
 function displayUsdPrice(listing: ListingRecord) {
-  const verified = verifiedUsdPrice(listing);
-  if (verified !== null) return verified;
-  if (!['OWNER_ASSUMED_USD', 'OWNER_ASSUMED_USD_CANDIDATE']
-    .includes(String(listing.price_evidence_status || '').toUpperCase())) return null;
-  const value = Number(listing.price_usd);
-  return Number.isFinite(value) && value > 0 ? value : null;
+  return verifiedUsdPrice(listing);
 }
 
 function ratingUsdPrice(listing: ListingRecord) {
-  return displayUsdPrice(listing);
+  return verifiedUsdPrice(listing);
 }
 
 function reviewedWorkbookUsdPrice(listing: ListingRecord) {
@@ -2028,11 +2024,11 @@ function formatSourcePrice(listing: ListingRecord) {
   if (sourceText && currency) {
     return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (sourceText) return `${sourceText} · currency unverified`;
+  if (sourceText) return ambiguousPriceDisplay;
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
   if (!Number.isFinite(amount) || amount <= 0) return '';
-  if (!currency) return `Source amount ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)} · currency unverified`;
+  if (!currency) return ambiguousPriceDisplay;
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 

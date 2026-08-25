@@ -19,6 +19,13 @@ test('live census defaults to one request and caps controlled concurrency at two
   assert.match(source, /Promise\.all\(Array\.from\(\{ length: requestConcurrency \}, runWorker\)\)/);
 });
 
+test('parallel checkpoint writers use unique temporary files and retry Windows rename contention', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'audit', 'seven-brand-price-research-coverage-live.cjs'), 'utf8');
+  assert.match(source, /process\.pid.*crypto\.randomUUID\(\).*\.partial/);
+  assert.match(source, /\['EPERM', 'EACCES'\]/);
+  assert.match(source, /Atomics\.wait/);
+});
+
 test('failed census batches subdivide until only the failing reference remains', async () => {
   const completed = [];
   const failed = [];
@@ -81,5 +88,6 @@ test('authoritative checkpoints reset on catalog ownership changes and never lab
   assert.match(source, /`\$\{row\.key\}\|\$\{row\.model \|\| ''\}`/);
   assert.match(source, /const resumePrevious = !catalogChanged && previous\.snapshot_complete !== true/);
   assert.match(source, /observed_at: new Date\(\)\.toISOString\(\)/);
+  assert.match(source, /catalog_references: catalog\.references/);
   assert.match(source, /report\.snapshot_complete \? 'seven_brand_coverage_complete' : 'seven_brand_coverage_incomplete'/);
 });

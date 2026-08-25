@@ -40,9 +40,21 @@ function sha256(value) {
 
 function atomicJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  const temporary = `${filePath}.partial`;
+  const temporary = `${filePath}.${process.pid}.${crypto.randomUUID()}.partial`;
   fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`);
-  fs.renameSync(temporary, filePath);
+  let lastError;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    try {
+      fs.renameSync(temporary, filePath);
+      return;
+    } catch (error) {
+      lastError = error;
+      if (!['EPERM', 'EACCES'].includes(error.code)) throw error;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 25 * (attempt + 1));
+    }
+  }
+  try { fs.unlinkSync(temporary); } catch {}
+  throw lastError;
 }
 
 function referenceKey(brand, reference) {
@@ -226,6 +238,8 @@ async function main() {
       census_run_id: censusRunId,
       census_started_at: censusStartedAt,
       catalog_reference_count: catalog.references.length,
+      catalog_references: catalog.references,
+      catalog_identity_conflicts: catalog.conflicts,
       catalog_references_sha256: catalogChecksum,
       previous_catalog_references_sha256: previousCatalogChecksum,
       catalog_changed_since_checkpoint: catalogChanged,
@@ -293,6 +307,7 @@ async function main() {
     census_run_id: censusRunId,
     census_started_at: censusStartedAt,
     catalog_reference_count: catalog.references.length,
+    catalog_references: catalog.references,
     completed_reference_count: rows.length,
     incomplete_reference_count: catalog.references.length - rows.length,
     unattempted_reference_count: catalog.references.length - rows.length - unresolvedFailures.size,

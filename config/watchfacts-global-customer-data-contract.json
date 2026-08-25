@@ -1,0 +1,79 @@
+{
+  "contract": "watchfacts-global-customer-data-contract-v1",
+  "canonical_project_ref": "qnsafosakvonzgfcsphh",
+  "brands": ["Rolex", "Patek Philippe", "Tudor", "Zenith", "Cartier", "TAG Heuer"],
+  "reference_identity": {
+    "required_classification": "VALID_EXACT_REFERENCE",
+    "match": "exact_brand_and_canonical_reference",
+    "partial_or_ambiguous_action": "REVIEW_ONLY"
+  },
+  "price_currency_evidence": {
+    "qualified_classes": [
+      "SOURCE_EXPLICIT_USD_MATCH",
+      "SOURCE_EXPLICIT_USD_USDT",
+      "EXPLICIT_SOURCE_FX_CONVERTED",
+      "DATED_VERIFIED_FX",
+      "VERIFIED_IN_NEW_COHORT"
+    ],
+    "review_only_classes": [
+      "LEGACY_USD_DEFAULTED",
+      "BARE_DOLLAR_AMBIGUOUS",
+      "CURRENCYLESS_AMOUNT",
+      "CURRENCYLESS_KM",
+      "FX_PROVENANCE_MISSING",
+      "FX_INVALID",
+      "MULTIPLE_PRICE_AMBIGUOUS",
+      "BUNDLE_PRICE_AMBIGUOUS",
+      "SOURCE_PRICE_CONFLICT",
+      "REVIEW_REQUIRED",
+      "OTHER"
+    ],
+    "foreign_currency_contract": "independent_dated_fx",
+    "missing_or_ambiguous_currency_action": "REVIEW_ONLY"
+  },
+  "dealer_identity": {
+    "priority": [
+      "canonical_dealer_name",
+      "linked_dealer_name",
+      "dealer_name",
+      "seller_name",
+      "posted_by",
+      "Posted By",
+      "source_seller",
+      "source_poster"
+    ],
+    "missing_identity_display": "Source poster",
+    "fabrication_allowed": false,
+    "rating_requires_source_evidence": true
+  },
+  "listing_counts": {
+    "total_listings": "distinct_currently_published_single_watch_wts_plus_wtb",
+    "independent_of_price_research": true,
+    "exclude": ["duplicate", "superseded", "suppressed", "bundle", "component", "invalid_reference"]
+  },
+  "price_research": {
+    "intent": "WTS",
+    "requires_exact_reference": true,
+    "requires_qualified_price_currency_evidence": true,
+    "requires_current_non_duplicate_single_watch": true,
+    "wtb_affects_price_analytics": false,
+    "outlier_method": "3.0x_IQR"
+  },
+  "customer_publication": {
+    "preserve_raw_message": true,
+    "preserve_existing_historical_normalized_data": true,
+    "freeze_ui_structure": true,
+    "forbidden_literals": ["currency unverified", "Dealer name not available"],
+    "ambiguous_price_display": "Price requires review"
+  },
+  "acceptance_gates": [
+    "REFERENCE_IDENTITY_PASS",
+    "PRICE_CURRENCY_EVIDENCE_PASS",
+    "DEALER_IDENTITY_PASS",
+    "LISTING_COUNT_RECONCILIATION_PASS",
+    "PRICE_RESEARCH_ELIGIBILITY_PASS",
+    "CUSTOMER_PUBLICATION_PASS",
+    "RAW_AND_HISTORICAL_DATA_UNCHANGED",
+    "ROLLBACK_OR_INACTIVE_SHADOW_PROOF"
+  ]
+}

@@ -42,3 +42,8 @@ npm-debug.log
 yarn-debug.log
 yarn-error.log
 .env*.local
+
+# Read-only six-brand live checkpoints can contain large row-level API snapshots.
+# Commit only the generated aggregate completion summary and per-brand ledgers.
+audit-output/global-six-brand-completion/price-research/
+audit-output/global-six-brand-completion/trading-floor/

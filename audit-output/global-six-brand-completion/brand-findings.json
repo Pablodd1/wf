@@ -1,0 +1,116 @@
+{
+  "contract": "watchfacts-global-customer-data-contract-v1",
+  "observed_at": "2026-08-25T00:25:00Z",
+  "read_only": true,
+  "brands": [
+    {
+      "brand": "Rolex",
+      "catalog_references": 303,
+      "trading_floor_listings": null,
+      "wts": null,
+      "wtb": null,
+      "price_research_qualified_wts": null,
+      "analytics_ready_references": null,
+      "decision": "NOT_READY",
+      "blockers": [
+        "Authoritative Phase 7B shadow run is not complete",
+        "Canonical QNSA management authentication most recently returned HTTP 401",
+        "Customer Trading Floor cursor total is withheld and the complete census is still resumable"
+      ]
+    },
+    {
+      "brand": "Patek Philippe",
+      "catalog_references": 460,
+      "trading_floor_listings": null,
+      "wts": null,
+      "wtb": null,
+      "price_research_qualified_wts": null,
+      "analytics_ready_references": null,
+      "decision": "NOT_READY",
+      "blockers": [
+        "Authoritative Phase 7B shadow run is not complete",
+        "Canonical QNSA management authentication most recently returned HTTP 401",
+        "Customer Trading Floor cursor total is withheld and the complete census is still resumable"
+      ]
+    },
+    {
+      "brand": "Tudor",
+      "catalog_references": 534,
+      "trading_floor_listings": 2555,
+      "wts": 2107,
+      "wtb": 448,
+      "price_research_qualified_wts": 40,
+      "analytics_ready_references": 6,
+      "decision": "NOT_READY",
+      "blockers": [
+        "Price Research completed 533 of 534 references because exact reference 79360 returns HTTP 400",
+        "Four Trading Floor references are absent from the Price Research catalog",
+        "Price Research returned zero WTB observations despite 448 published WTB rows",
+        "No canonical dealer links are proven for the 2555 source-identified listings"
+      ]
+    },
+    {
+      "brand": "Zenith",
+      "catalog_references": 113,
+      "trading_floor_listings": 453,
+      "wts": 440,
+      "wtb": 13,
+      "price_research_qualified_wts": 175,
+      "analytics_ready_references": 15,
+      "decision": "NOT_READY",
+      "blockers": [
+        "Thirty-six Trading Floor references are absent from the Price Research catalog",
+        "Price Research returned zero WTB observations despite 13 published WTB rows",
+        "Same-line two-reference source text can evade the current multi-item detector",
+        "Only one exact dealer link is proven; it has feedback-count evidence but no numeric rating"
+      ]
+    },
+    {
+      "brand": "Cartier",
+      "catalog_references": 1461,
+      "trading_floor_listings": 6834,
+      "wts": 5626,
+      "wtb": 1208,
+      "price_research_qualified_wts": null,
+      "analytics_ready_references": null,
+      "decision": "NOT_READY",
+      "blockers": [
+        "Catalog browse reports zero eligible observations while bounded exact-reference checks return qualified WTS rows",
+        "Current public index is 320 listings below the latest private release census",
+        "Component value BRACELET appears in the reference population",
+        "Dealer, model, currency, and dated-FX reconciliation remain incomplete"
+      ]
+    },
+    {
+      "brand": "TAG Heuer",
+      "catalog_references": 183,
+      "trading_floor_listings": 278,
+      "trading_floor_advertised_total": 283,
+      "wts": 193,
+      "wtb": 85,
+      "price_research_qualified_wts": 1,
+      "analytics_ready_references": 0,
+      "decision": "NOT_READY",
+      "blockers": [
+        "Trading Floor returns 278 distinct rows while advertising 283",
+        "One hundred fifty published rows are outside the current TAG Heuer catalog",
+        "One hundred nine rows have no explicit currency",
+        "No posting country or numeric dealer rating is present"
+      ]
+    }
+  ],
+  "checksums": {
+    "catalog_references_sha256": "260287ac063b22280b9863ffc179b5d2d3f015c77156ba9cb4bb4759c629af9d",
+    "tudor_zenith_trading_floor_ids_sha256": "2e5e40b7b9e7f2b560e104ac47d3bb0768198d23c5a3b16d1ea76243eaea703e",
+    "cartier_catalog_snapshot_sha256": "89aad38b8fe862fbd9fcc5041f3ee678244e9d2c5b2784969bb0dd999e223b21",
+    "tag_catalog_snapshot_sha256": "eba3dfc9f8727e82565c20462db0ab01317f6409851a20605fc0f8ecb8f8ce25",
+    "tag_trading_floor_ids_sha256": "7e1e45df8eee979197fd33feabc866310df23b80301aeee892bbe98901a028ea"
+  },
+  "safety": {
+    "production_writes": 0,
+    "raw_message_mutations": 0,
+    "historical_normalized_value_mutations": 0,
+    "customer_source_switches": 0,
+    "cohorts_deployed": 0
+  }
+}
