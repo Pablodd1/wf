@@ -56,7 +56,7 @@ jobs:
           foreach ($name in 'SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_ACCESS_TOKEN') {
             if (-not (Get-Item -LiteralPath "Env:$name").Value) { throw "$name is unavailable." }
           }
-          if ([Uri]$env:SUPABASE_URL).Host -cne "$($env:PROJECT_REF).supabase.co" {
+          if (([Uri]$env:SUPABASE_URL).Host -cne "$($env:PROJECT_REF).supabase.co") {
             throw 'SUPABASE_URL does not target canonical QNSA.'
           }
 
