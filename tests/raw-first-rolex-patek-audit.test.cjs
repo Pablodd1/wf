@@ -131,7 +131,7 @@ test('audit source contains no production mutation or Phase 7B rerun path', () =
 
 test('GitHub workflow is manual-only, canonical, read-only, and executes one audit scan', () => {
   const workflow = fs.readFileSync(path.join(
-    __dirname, '..', '.github', 'workflows', 'qnsa-raw-first-rolex-patek-audit.yml',
+    __dirname, '..', '.github', 'workflows', 'qnsa-disk-capacity-audit.yml',
   ), 'utf8');
   assert.match(workflow, /^on:\s*\n\s+workflow_dispatch:/m);
   assert.doesNotMatch(workflow, /^\s+(?:push|pull_request|schedule|repository_dispatch):/m);

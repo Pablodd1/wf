@@ -1,55 +1,115 @@
-name: QNSA read-only disk capacity audit
+# Branch-only registration shim: this path is already registered on the default
+# branch, while this dedicated definition runs only when this audit ref is
+# selected manually.
+name: QNSA Raw-First Rolex Patek Canonical Audit
 
 on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: Type AUDIT_QNSA_DISK_READ_ONLY
+        description: Type RUN_QNSA_RAW_FIRST_ROLEX_PATEK_AUDIT
         required: true
-        type: string
-      minimum_headroom_gib:
-        description: Required free filesystem headroom in GiB
-        required: true
-        default: '0.25'
         type: string
 
+permissions:
+  contents: read
+
 concurrency:
-  group: qnsa-read-only-disk-capacity-audit
+  group: qnsa-raw-first-rolex-patek-canonical-audit
   cancel-in-progress: false
 
 jobs:
-  audit:
-    if: ${{ inputs.confirmation == 'AUDIT_QNSA_DISK_READ_ONLY' }}
+  canonical-read-only-audit:
+    name: Canonical QNSA SELECT-only audit
     runs-on: ubuntu-latest
-    environment: production
-    timeout-minutes: 10
-    permissions:
-      contents: read
+    timeout-minutes: 180
+    environment: Production
     env:
+      CANONICAL_PROJECT_REF: qnsafosakvonzgfcsphh
+      RAW_FIRST_SHARDS: 256
+      RAW_FIRST_OUTPUT: ${{ runner.temp }}/raw-first-rolex-patek-${{ github.run_id }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
-      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
-      MINIMUM_HEADROOM_GIB: ${{ inputs.minimum_headroom_gib }}
-      DISK_AUDIT_PATH: qnsa-disk-capacity-audit.json
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Validate dispatch and canonical target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "RUN_QNSA_RAW_FIRST_ROLEX_PATEK_AUDIT"
+          test "$CANONICAL_PROJECT_REF" = "qnsafosakvonzgfcsphh"
+          test -n "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Check out audit candidate only
+        uses: actions/checkout@v4
+        with:
+          ref: codex/raw-first-rolex-patek-audit
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate read-only audit authorization
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate every statement as SELECT-only
+        run: node tools/audit/raw-first-rolex-patek-audit.cjs --validate-only
+
+      - name: Verify canonical Management API target before audit queries
+        shell: bash
         run: |
-          test "$SUPABASE_PROJECT_REF" = "$EXPECTED_PROJECT_REF"
-          test -n "$SUPABASE_ACCESS_TOKEN"
-          test "$MINIMUM_HEADROOM_GIB" != ""
-      - name: Read configured disk, utilization, and autoscale state
-        run: node tools/supabase/audit-disk-capacity.cjs
-      - name: Enforce minimum filesystem headroom
-        run: node -e "const a=require('./qnsa-disk-capacity-audit.json'); if(!a.gate.headroom_satisfied) throw new Error('QNSA disk headroom gate failed')"
-      - name: Upload sanitized disk evidence
-        if: always()
+          set -euo pipefail
+          payload='{"query":"SELECT '\''qnsafosakvonzgfcsphh'\''::text AS project_ref;","read_only":true}'
+          response="$(curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$payload" \
+            "https://api.supabase.com/v1/projects/qnsafosakvonzgfcsphh/database/query")"
+          node -e "const rows=JSON.parse(process.argv[1]);if(rows?.[0]?.project_ref!=='qnsafosakvonzgfcsphh')process.exit(1)" "$response"
+
+      - name: Execute canonical raw scan exactly once
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          node tools/audit/raw-first-rolex-patek-audit.cjs
+          audit_exit=$?
+          set -e
+          if [[ "$audit_exit" -ne 0 && "$audit_exit" -ne 2 ]]; then
+            exit "$audit_exit"
+          fi
+          decision="$(node -e "process.stdout.write(require(process.env.RAW_FIRST_OUTPUT + '/summary.json').decision)")"
+          test "$decision" = "RAW_FIRST_READY" || test "$decision" = "NOT_READY_RAW_SOURCE_GAPS"
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+
+      - name: Verify sanitized evidence contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = process.env.RAW_FIRST_OUTPUT;
+          const summary = JSON.parse(fs.readFileSync(path.join(root, 'summary.json'), 'utf8'));
+          if (summary.canonical_project_ref !== 'qnsafosakvonzgfcsphh') throw new Error('wrong project');
+          for (const key of ['production_writes', 'raw_mutations', 'endpoint_switches', 'ui_changes', 'catalog_changes']) {
+            if (summary[key] !== 0) throw new Error(`${key} must be zero`);
+          }
+          if (summary.phase7b_rerun !== false || summary.read_only !== true) throw new Error('read-only contract failed');
+          for (const name of ['summary.json', 'manifest-sha256.json', 'sanitized-exact-deltas.jsonl.gz']) {
+            if (!fs.existsSync(path.join(root, name))) throw new Error(`missing ${name}`);
+          }
+          NODE
+
+      - name: Upload sanitized audit evidence
         uses: actions/upload-artifact@v4
         with:
-          name: qnsa-read-only-disk-audit-${{ github.run_id }}
-          path: qnsa-disk-capacity-audit.json
+          name: qnsa-raw-first-rolex-patek-${{ github.run_id }}-${{ steps.audit.outputs.decision }}
           if-no-files-found: error
           retention-days: 30
+          path: |
+            ${{ env.RAW_FIRST_OUTPUT }}/summary.json
+            ${{ env.RAW_FIRST_OUTPUT }}/manifest-sha256.json
+            ${{ env.RAW_FIRST_OUTPUT }}/sanitized-exact-deltas.jsonl.gz
