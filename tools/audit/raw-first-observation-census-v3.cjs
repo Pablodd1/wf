@@ -460,7 +460,8 @@ if (require.main === module) {
   run().then(result => {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
     if (result.error) process.exitCode = 1;
-    else if (result.decision !== 'RAW_FIRST_OBSERVATION_CENSUS_READY') process.exitCode = 2;
+    else if (!process.argv.includes('--validate-only')
+      && result.decision !== 'RAW_FIRST_OBSERVATION_CENSUS_READY') process.exitCode = 2;
   }).catch(error => {
     process.stderr.write(`${JSON.stringify({ contract: CONTRACT, read_only: true, production_writes: 0,
       error: String(error.message || error).slice(0, 500) })}\n`);
