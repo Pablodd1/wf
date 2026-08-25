@@ -203,6 +203,9 @@ test('audit source contains no production mutation or Phase 7B rerun path', () =
   const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'audit', 'raw-first-rolex-patek-audit.cjs'), 'utf8');
   assert.match(source, /read_only:\s*true/);
   assert.match(source, /phase7b_rerun:\s*false/);
+  assert.match(source, /forEachDatasetRow\(checkpoint, outputDir, 'raw'/);
+  assert.match(source, /clearTimeout\(timeout\)/);
+  assert.doesNotMatch(source, /pageFiles\([^)]*\)\.flat\(\)/);
   assert.doesNotMatch(source, /ingest_phase7b|begin_phase7b|complete_phase7b|fetch\([^\n]+rest\/v1/i);
 });
 
@@ -215,6 +218,7 @@ test('GitHub workflow is manual-only, canonical, read-only, and executes one aud
   assert.match(workflow, /environment: Production/);
   assert.match(workflow, /CANONICAL_PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.match(workflow, /SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/);
+  assert.match(workflow, /Audit process terminated before final summary; sanitized checkpoint preserved/);
   assert.equal((workflow.match(/^\s+node tools\/audit\/raw-first-rolex-patek-audit\.cjs\s*$/gm) || []).length, 1);
   assert.doesNotMatch(workflow, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|DROP|supabase db push|deploy)\b/i);
   assert.doesNotMatch(workflow, /rolex-manifest|patek-philippe-manifest|remaining-queues/);

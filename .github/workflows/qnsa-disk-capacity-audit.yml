@@ -104,6 +104,31 @@ jobs:
           node tools/audit/raw-first-rolex-patek-audit.cjs
           audit_exit=$?
           set -e
+          if [[ ! -f "$RAW_FIRST_OUTPUT/summary.json" ]]; then
+            node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = path.resolve(process.env.RAW_FIRST_OUTPUT);
+          const checkpointPath = path.join(root, 'checkpoint.json');
+          const checkpoint = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
+          checkpoint.status = 'INCOMPLETE';
+          checkpoint.decision = 'AUDIT_INCOMPLETE_TECHNICAL';
+          checkpoint.failure = { message: 'Audit process terminated before final summary; sanitized checkpoint preserved' };
+          fs.writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+          fs.writeFileSync(path.join(root, 'summary.json'), `${JSON.stringify({
+            contract: checkpoint.contract,
+            decision: checkpoint.decision,
+            generated_at: new Date().toISOString(),
+            canonical_project_ref: checkpoint.canonical_project_ref,
+            read_only: true,
+            production_writes: 0,
+            raw_mutations: 0,
+            phase7b_rerun: false,
+            error: checkpoint.failure.message,
+            completed_pages: checkpoint.completed_pages,
+          }, null, 2)}\n`);
+          NODE
+          fi
           decision="$(node -e "const fs=require('node:fs'); const path=require('node:path'); process.stdout.write(JSON.parse(fs.readFileSync(path.resolve(process.env.RAW_FIRST_OUTPUT, 'summary.json'),'utf8')).decision)")"
           case "$decision" in
             RAW_FIRST_READY|NOT_READY_RAW_SOURCE_GAPS|AUDIT_INCOMPLETE_QUERY_TIMEOUT|AUDIT_INCOMPLETE_TECHNICAL) ;;
