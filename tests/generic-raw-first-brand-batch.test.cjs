@@ -32,6 +32,7 @@ test('generic batch targets exactly the requested brands and validates SELECT-on
     assert.doesNotThrow(() => assertReadOnlySql(sql));
     assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE|CALL)\b/i);
   }
+  assert.doesNotMatch(currentSourceSql(bounds), /i\.id[^\n]+::uuid/);
   const result = await run({ validateOnly: true, env: {
     GENERIC_RAW_FIRST_SHARDS: '16', GENERIC_RAW_FIRST_PAGE_SIZE: '2000',
   } });
