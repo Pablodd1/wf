@@ -14,6 +14,23 @@ on:
         description: Optional prior V2 run ID whose sanitized checkpoint should be resumed
         required: false
         type: string
+      validate_artifact_run_id:
+        description: Optional completed V2 run ID to validate without querying QNSA
+        required: false
+        type: string
+      sample_high_cardinality:
+        description: Also run ten bounded read-only source samples after artifact validation
+        required: false
+        default: false
+        type: boolean
+      v3_artifact_run_id:
+        description: Completed V2 artifact run ID for targeted observation census V3
+        required: false
+        type: string
+      v3_resume_run_id:
+        description: Optional prior V3 run ID containing a private resumable checkpoint
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -25,6 +42,7 @@ concurrency:
 
 jobs:
   canonical-read-only-audit:
+    if: ${{ inputs.validate_artifact_run_id == '' && inputs.v3_artifact_run_id == '' }}
     name: Canonical QNSA SELECT-only audit
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -104,7 +122,32 @@ jobs:
           node tools/audit/raw-first-rolex-patek-audit.cjs
           audit_exit=$?
           set -e
-          decision="$(node -e "process.stdout.write(require(process.env.RAW_FIRST_OUTPUT + '/summary.json').decision)")"
+          if [[ ! -f "$RAW_FIRST_OUTPUT/summary.json" ]]; then
+            node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = path.resolve(process.env.RAW_FIRST_OUTPUT);
+          const checkpointPath = path.join(root, 'checkpoint.json');
+          const checkpoint = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
+          checkpoint.status = 'INCOMPLETE';
+          checkpoint.decision = 'AUDIT_INCOMPLETE_TECHNICAL';
+          checkpoint.failure = { message: 'Audit process terminated before final summary; sanitized checkpoint preserved' };
+          fs.writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+          fs.writeFileSync(path.join(root, 'summary.json'), `${JSON.stringify({
+            contract: checkpoint.contract,
+            decision: checkpoint.decision,
+            generated_at: new Date().toISOString(),
+            canonical_project_ref: checkpoint.canonical_project_ref,
+            read_only: true,
+            production_writes: 0,
+            raw_mutations: 0,
+            phase7b_rerun: false,
+            error: checkpoint.failure.message,
+            completed_pages: checkpoint.completed_pages,
+          }, null, 2)}\n`);
+          NODE
+          fi
+          decision="$(node -e "const fs=require('node:fs'); const path=require('node:path'); process.stdout.write(JSON.parse(fs.readFileSync(path.resolve(process.env.RAW_FIRST_OUTPUT, 'summary.json'),'utf8')).decision)")"
           case "$decision" in
             RAW_FIRST_READY|NOT_READY_RAW_SOURCE_GAPS|AUDIT_INCOMPLETE_QUERY_TIMEOUT|AUDIT_INCOMPLETE_TECHNICAL) ;;
             *) exit 1 ;;
@@ -156,3 +199,168 @@ jobs:
         if: ${{ always() && startsWith(steps.audit.outputs.decision, 'AUDIT_INCOMPLETE_') }}
         shell: bash
         run: exit 1
+
+  validate-existing-child-counts:
+    if: ${{ inputs.validate_artifact_run_id != '' && inputs.v3_artifact_run_id == '' }}
+    name: Validate existing sanitized child counts
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: Production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ inputs.sample_high_cardinality && secrets.SUPABASE_ACCESS_TOKEN || '' }}
+    steps:
+      - name: Validate artifact-only dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "VALIDATE_QNSA_RAW_FIRST_CHILD_COUNTS"
+          [[ "${{ inputs.validate_artifact_run_id }}" =~ ^[0-9]+$ ]]
+
+      - name: Check out validation candidate only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download completed sanitized artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.validate_artifact_run_id }}
+          pattern: qnsa-raw-first-rolex-patek-${{ inputs.validate_artifact_run_id }}-*
+          merge-multiple: true
+          path: audit-resume-input
+
+      - name: Validate identities, paging, and parent cardinality
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-resume-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          artifact_root="$(dirname "$checkpoint")"
+          mkdir -p audit-output/raw-first-child-validation
+          node tools/audit/validate-raw-first-child-counts.cjs \
+            "$artifact_root" \
+            audit-output/raw-first-child-validation/report.json
+
+          if [[ "${{ inputs.sample_high_cardinality }}" = "true" ]]; then
+            test -n "$SUPABASE_ACCESS_TOKEN"
+            node tools/audit/sample-raw-first-high-cardinality.cjs \
+              "$artifact_root" \
+              audit-output/raw-first-child-validation/report.json \
+              audit-output/raw-first-child-validation/high-cardinality-sample.json
+          fi
+
+      - name: Upload compact child-count validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-raw-first-child-validation-${{ inputs.validate_artifact_run_id }}-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          path: audit-output/raw-first-child-validation/*.json
+
+  targeted-observation-census-v3:
+    if: ${{ inputs.v3_artifact_run_id != '' }}
+    name: Targeted evidence-enriched observation census V3
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: Production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      RAW_FIRST_V3_OUTPUT: audit-output/raw-first-observation-v3-${{ github.run_id }}
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - name: Validate V3 dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "RUN_QNSA_RAW_FIRST_OBSERVATION_CENSUS_V3"
+          [[ "${{ inputs.v3_artifact_run_id }}" =~ ^[0-9]+$ ]]
+          test -n "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Check out V3 candidate only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate V3 SELECT-only target contract
+        run: node tools/audit/raw-first-observation-census-v3.cjs --validate-only
+
+      - name: Download completed V2 sanitized artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.v3_artifact_run_id }}
+          pattern: qnsa-raw-first-rolex-patek-${{ inputs.v3_artifact_run_id }}-*
+          merge-multiple: true
+          path: audit-v2-input
+
+      - name: Resolve completed V2 artifact root
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-v2-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          echo "RAW_FIRST_V2_ARTIFACT=$(dirname "$checkpoint")" >> "$GITHUB_ENV"
+
+      - name: Download optional private V3 resume evidence
+        if: ${{ inputs.v3_resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.v3_resume_run_id }}
+          pattern: PRIVATE-qnsa-raw-first-observation-v3-${{ inputs.v3_resume_run_id }}
+          merge-multiple: true
+          path: audit-v3-resume-input
+
+      - name: Resolve optional V3 resume root
+        if: ${{ inputs.v3_resume_run_id != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-v3-resume-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          echo "RAW_FIRST_V3_RESUME_DIR=$(dirname "$checkpoint")" >> "$GITHUB_ENV"
+
+      - name: Run targeted bounded observation census
+        id: census
+        shell: bash
+        run: |
+          set +e
+          node tools/audit/raw-first-observation-census-v3.cjs
+          census_exit=$?
+          set -e
+          test -f "$RAW_FIRST_V3_OUTPUT/summary.json"
+          decision="$(node -e "process.stdout.write(require('./' + process.env.RAW_FIRST_V3_OUTPUT + '/summary.json').decision)")"
+          case "$decision" in
+            RAW_FIRST_OBSERVATION_CENSUS_READY|NOT_READY_OBSERVATION_IDENTITY_GAPS) ;;
+            *) exit 1 ;;
+          esac
+          if [[ "$census_exit" -ne 0 && "$census_exit" -ne 2 ]]; then exit "$census_exit"; fi
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+
+      - name: Upload compact V3 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-raw-first-observation-v3-summary-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ env.RAW_FIRST_V3_OUTPUT }}/summary.json
+            ${{ env.RAW_FIRST_V3_OUTPUT }}/checkpoint.json
+
+      - name: Upload private resumable V3 lineage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRIVATE-qnsa-raw-first-observation-v3-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          path: |
+            ${{ env.RAW_FIRST_V3_OUTPUT }}/summary.json
+            ${{ env.RAW_FIRST_V3_OUTPUT }}/checkpoint.json
+            ${{ env.RAW_FIRST_V3_OUTPUT }}/v3-pages/**/*.json.gz

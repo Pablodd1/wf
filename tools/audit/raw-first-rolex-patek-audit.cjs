@@ -35,18 +35,38 @@ async function managementQuery(sql, label, options = {}) {
   assertReadOnlySql(sql);
   const token = options.token || process.env.SUPABASE_ACCESS_TOKEN;
   if (!token) throw new Error('SUPABASE_ACCESS_TOKEN is unavailable');
-  const response = await (options.fetchImpl || fetch)(
-    `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
-    {
-      method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
-      body: JSON.stringify({ query: sql, read_only: true }),
-      signal: AbortSignal.timeout(Number(options.timeoutMs || 300_000)),
-    },
-  );
-  const body = await response.text();
-  if (!response.ok) throw new Error(`${label} failed ${response.status}: ${body.slice(0, 500)}`);
-  return JSON.parse(body);
+  const fetchImpl = options.fetchImpl || fetch;
+  const retryLimit = Number(options.retryLimit ?? 4);
+  for (let attempt = 0; ; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), Number(options.timeoutMs || 300_000));
+    let response;
+    let body;
+    try {
+      response = await fetchImpl(
+        `https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query`,
+        {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ query: sql, read_only: true }),
+          signal: controller.signal,
+        },
+      );
+      body = await response.text();
+    } finally {
+      clearTimeout(timeout);
+    }
+    if (response.ok) return JSON.parse(body);
+    const transient = response.status === 429 || response.status >= 500;
+    if (!transient || attempt >= retryLimit) {
+      throw new Error(`${label} failed ${response.status}: ${body.slice(0, 500)}`);
+    }
+    const retryAfter = Number(response.headers?.get?.('retry-after'));
+    const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
+      ? Math.min(retryAfter * 1000, 30_000)
+      : Math.min(Number(options.retryBaseMs ?? 1000) * (2 ** attempt), 30_000);
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+  }
 }
 
 function uuidShard(index, shardCount) {
@@ -251,11 +271,45 @@ function restoreCheckpoint(resumeDir, outputDir, shardCount, pageSize) {
   return checkpoint;
 }
 
-function pageFiles(checkpoint, outputDir, dataset) {
+function pageFileEntries(checkpoint, outputDir, dataset) {
   return Object.entries(checkpoint.page_files)
     .filter(([, meta]) => meta.dataset === dataset)
     .sort(([, a], [, b]) => a.shard - b.shard || a.page - b.page)
-    .map(([relative]) => readGzipJson(path.join(outputDir, relative)));
+    .map(([relative, meta]) => ({ file: path.join(outputDir, relative), meta }));
+}
+
+function forEachDatasetRow(checkpoint, outputDir, dataset, visit) {
+  for (const { file } of pageFileEntries(checkpoint, outputDir, dataset)) {
+    const rows = readGzipJson(file);
+    for (const row of rows) visit(row);
+  }
+}
+
+function chunkedGzipJsonArray(filePath) {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(filePath, zlib.gzipSync('['));
+  let first = true;
+  let chunks = [];
+  let bytes = 0;
+  const flush = () => {
+    if (!chunks.length) return;
+    fs.appendFileSync(filePath, zlib.gzipSync(chunks.join(''), { level: 9 }));
+    chunks = [];
+    bytes = 0;
+  };
+  return {
+    write(value) {
+      const json = `${first ? '' : ','}${JSON.stringify(value)}`;
+      first = false;
+      chunks.push(json);
+      bytes += Buffer.byteLength(json);
+      if (bytes >= 4 * 1024 * 1024) flush();
+    },
+    end() {
+      flush();
+      fs.appendFileSync(filePath, zlib.gzipSync(']\n'));
+    },
+  };
 }
 
 function technicalDecision(error) {
@@ -338,22 +392,42 @@ async function scanCurrentWithMembership({ checkpoint, outputDir, shardCount, pa
 }
 
 function loadCurrentState(checkpoint, outputDir) {
-  const membership = new Set(pageFiles(checkpoint, outputDir, 'membership').flat().map(row => row.listing_key));
-  const currentRows = pageFiles(checkpoint, outputDir, 'current').flat().map(row => ({
-    ...row, current_trading_floor_eligible: membership.has(row.listing_key),
-  }));
-  const phaseRows = pageFiles(checkpoint, outputDir, 'phase7b').flat();
+  const membership = new Set();
+  forEachDatasetRow(checkpoint, outputDir, 'membership', row => membership.add(row.listing_key));
   const currentBySource = new Map();
   const phase7bBySource = new Map();
-  for (const row of currentRows) {
-    if (!currentBySource.has(row.source_key)) currentBySource.set(row.source_key, []);
-    currentBySource.get(row.source_key).push(row);
-  }
-  for (const row of phaseRows) {
-    if (!phase7bBySource.has(row.source_key)) phase7bBySource.set(row.source_key, []);
-    phase7bBySource.get(row.source_key).push(row);
-  }
-  return { currentRows, phaseRows, currentBySource, phase7bBySource };
+  const currentTradingFloorByBrand = Object.fromEntries(BRANDS.map(brand => [brand, 0]));
+  const phaseRowsByBrand = Object.fromEntries(BRANDS.map(brand => [brand, 0]));
+  const phaseVerifiedByBrand = Object.fromEntries(BRANDS.map(brand => [brand, 0]));
+  forEachDatasetRow(checkpoint, outputDir, 'current', row => {
+    const eligible = membership.has(row.listing_key);
+    const aggregate = currentBySource.get(row.source_key) || {
+      brand: row.brand, count: 0, trading_floor: 0, duplicate: false, withdrawn: false,
+    };
+    const disposition = currentDisposition([row]);
+    aggregate.count += 1;
+    aggregate.trading_floor += eligible ? 1 : 0;
+    aggregate.duplicate ||= disposition.duplicate;
+    aggregate.withdrawn ||= disposition.withdrawn;
+    currentBySource.set(row.source_key, aggregate);
+    if (eligible && BRANDS.includes(row.brand)) currentTradingFloorByBrand[row.brand] += 1;
+  });
+  membership.clear();
+  forEachDatasetRow(checkpoint, outputDir, 'phase7b', row => {
+    const verified = row.price_evidence_classification === 'VERIFIED_IN_NEW_COHORT';
+    const aggregate = phase7bBySource.get(row.source_key) || {
+      brand: row.brand, count: 0, verified_pr: 0,
+    };
+    aggregate.count += 1;
+    aggregate.verified_pr += verified ? 1 : 0;
+    phase7bBySource.set(row.source_key, aggregate);
+    if (BRANDS.includes(row.brand)) {
+      phaseRowsByBrand[row.brand] += 1;
+      phaseVerifiedByBrand[row.brand] += verified ? 1 : 0;
+    }
+  });
+  return { currentBySource, phase7bBySource, currentTradingFloorByBrand,
+    phaseRowsByBrand, phaseVerifiedByBrand };
 }
 
 function currentDisposition(rows) {
@@ -375,9 +449,14 @@ function sanitizeRaw(row, context) {
   if (!row.id) return null;
   const classification = classifyRawPost(row, { dealerByPhone: context.dealerByPhone });
   const sourceRecordKey = sourceKey(row.source_record_id, row.id);
-  const currentRows = context.currentBySource.get(sourceRecordKey) || [];
-  const phaseRows = context.phase7bBySource.get(sourceRecordKey) || [];
-  const disposition = currentDisposition(currentRows);
+  const current = context.currentBySource.get(sourceRecordKey);
+  const phase = context.phase7bBySource.get(sourceRecordKey);
+  const disposition = {
+    duplicate: current?.duplicate === true,
+    withdrawn: current?.withdrawn === true,
+    published: Number(current?.trading_floor || 0) > 0,
+    superseded: false,
+  };
   disposition.withdrawn ||= withdrawn(row.raw_data, row.raw_text);
   const invalidBrand = !classification.brand || !BRANDS.includes(classification.brand) || blankBrandQueue(row);
   return {
@@ -387,9 +466,9 @@ function sanitizeRaw(row, context) {
     brand: invalidBrand ? null : classification.brand,
     classification: invalidBrand ? 'RAW_BRAND_UNRESOLVED_WITH_REFERENCE' : classification.classification,
     disposition,
-    current_tf: currentRows.filter(item => item.current_trading_floor_eligible).length,
-    phase_publication: phaseRows.length,
-    phase_verified_pr: phaseRows.filter(item => item.price_evidence_classification === 'VERIFIED_IN_NEW_COHORT').length,
+    current_tf: Number(current?.trading_floor || 0),
+    phase_publication: Number(phase?.count || 0),
+    phase_verified_pr: Number(phase?.verified_pr || 0),
     review_reasons: [...new Set(classification.review_reasons || [])].sort(),
     children: classification.children.map(child => ({
       child_key: child.child_key,
@@ -447,21 +526,19 @@ function brandSummary() {
 }
 
 function aggregateResult({ checkpoint, outputDir, snapshot, phase7bSummary, state }) {
-  const records = new Map();
-  for (const record of pageFiles(checkpoint, outputDir, 'raw').flat()) records.set(record.parent_key, record);
   const summaries = Object.fromEntries(BRANDS.map(brand => [brand, brandSummary()]));
   const distinctRefs = new Map(BRANDS.map(brand => [brand, new Set()]));
   const dispositionCounts = {};
-  const rawTfBySource = new Map();
-  const rawPrBySource = new Map();
-  const sourceReasons = new Map();
+  const rawBySource = new Map();
   let unresolvedBrands = 0;
+  let rawParentPosts = 0;
 
-  for (const record of records.values()) {
+  forEachDatasetRow(checkpoint, outputDir, 'raw', record => {
+    rawParentPosts += 1;
     if (!record.brand) {
       unresolvedBrands += 1;
       increment(dispositionCounts, 'RAW_BRAND_UNRESOLVED_WITH_REFERENCE');
-      continue;
+      return;
     }
     const summary = summaries[record.brand];
     summary.raw_posts_scanned += 1;
@@ -539,30 +616,32 @@ function aggregateResult({ checkpoint, outputDir, snapshot, phase7bSummary, stat
       else reasons.add('LOCATION_COUNTRY_UNRESOLVED');
     }
     summary.raw_first_trading_floor_candidates += rawTf;
-    rawTfBySource.set(record.source_key, (rawTfBySource.get(record.source_key) || 0) + rawTf);
-    rawPrBySource.set(record.source_key, (rawPrBySource.get(record.source_key) || 0) + rawPr);
     if (record.current_tf > 0) summary.gap_dispositions.already_published += Math.min(rawTf, record.current_tf);
     if (rawTf > record.current_tf && ['SINGLE_WATCH', 'MULTI_WATCH_SAFE_TO_SPLIT'].includes(record.classification)) {
       summary.gap_dispositions.safely_recoverable += rawTf - record.current_tf;
     }
     if (record.disposition.duplicate) reasons.add('DUPLICATE');
     if (record.disposition.withdrawn) reasons.add('WITHDRAWN');
-    sourceReasons.set(record.source_key, { brand: record.brand, reasons: [...reasons].sort() });
-  }
+    const source = rawBySource.get(record.source_key) || {
+      brand: record.brand, trading_floor: 0, price_research: 0, reasons: [],
+    };
+    source.trading_floor += rawTf;
+    source.price_research += rawPr;
+    source.reasons = [...new Set([...source.reasons, ...reasons])].sort();
+    rawBySource.set(record.source_key, source);
+  });
 
   for (const brand of BRANDS) {
     const summary = summaries[brand];
     summary.distinct_observed_references = distinctRefs.get(brand).size;
-    summary.current_trading_floor_observations = state.currentRows.filter(row => (
-      row.brand === brand && row.current_trading_floor_eligible
-    )).length;
-    summary.phase7b_observations = state.phaseRows.filter(row => row.brand === brand).length;
+    summary.current_trading_floor_observations = state.currentTradingFloorByBrand[brand];
+    summary.phase7b_observations = state.phaseRowsByBrand[brand];
     const phase = phase7bSummary.find(row => row.brand === brand) || {};
     summary.phase7b_authoritative_publication_count = Number(phase.authoritative_published_listings || 0);
     summary.phase7b_verified_price_research_count = Number(phase.verified_price_research_observations || 0);
   }
 
-  const deltaRows = [];
+  const deltaWriter = chunkedGzipJsonArray(path.join(outputDir, 'sanitized-exact-deltas.json.gz'));
   const deltaTotals = Object.fromEntries(BRANDS.map(brand => [brand, {
     raw_first_tf_minus_current_tf: 0,
     raw_first_tf_minus_phase7b_publication: 0,
@@ -572,20 +651,18 @@ function aggregateResult({ checkpoint, outputDir, snapshot, phase7bSummary, stat
     source_delta_rows: 0,
     explanations_by_reason: {},
   }]));
-  const allSources = new Set([...rawTfBySource.keys(), ...rawPrBySource.keys(),
-    ...state.currentBySource.keys(), ...state.phase7bBySource.keys()]);
-  for (const sourceKey of allSources) {
-    const currentRows = state.currentBySource.get(sourceKey) || [];
-    const phaseRows = state.phase7bBySource.get(sourceKey) || [];
-    const currentTf = currentRows.filter(row => row.current_trading_floor_eligible).length;
-    const phasePublication = phaseRows.length;
-    const rawTf = rawTfBySource.get(sourceKey) || 0;
-    const rawPr = rawPrBySource.get(sourceKey) || 0;
-    const phasePr = phaseRows.filter(row => row.price_evidence_classification === 'VERIFIED_IN_NEW_COHORT').length;
-    const context = sourceReasons.get(sourceKey);
-    const brand = context?.brand || currentRows[0]?.brand || phaseRows[0]?.brand || null;
-    if (!BRANDS.includes(brand) || (rawTf === currentTf && rawTf === phasePublication && rawPr === phasePr)) continue;
-    const reasons = new Set(context?.reasons || []);
+  const reconcileSource = sourceKey => {
+    const current = state.currentBySource.get(sourceKey);
+    const phase = state.phase7bBySource.get(sourceKey);
+    const raw = rawBySource.get(sourceKey);
+    const currentTf = Number(current?.trading_floor || 0);
+    const phasePublication = Number(phase?.count || 0);
+    const rawTf = Number(raw?.trading_floor || 0);
+    const rawPr = Number(raw?.price_research || 0);
+    const phasePr = Number(phase?.verified_pr || 0);
+    const brand = raw?.brand || current?.brand || phase?.brand || null;
+    if (!BRANDS.includes(brand) || (rawTf === currentTf && rawTf === phasePublication && rawPr === phasePr)) return;
+    const reasons = new Set(raw?.reasons || []);
     if (rawTf > currentTf) reasons.add('RAW_FIRST_CHILD_NOT_IN_CURRENT_TRADING_FLOOR');
     if (rawTf < currentTf) reasons.add('CURRENT_TRADING_FLOOR_ROW_WITHOUT_RAW_FIRST_CHILD_MATCH');
     if (rawTf > phasePublication) reasons.add('RAW_FIRST_CHILD_NOT_IN_PHASE7B_AUTHORITATIVE_PUBLICATION');
@@ -594,14 +671,22 @@ function aggregateResult({ checkpoint, outputDir, snapshot, phase7bSummary, stat
     if (rawPr < phasePr) reasons.add('PHASE7B_VERIFIED_PR_NOT_RAW_FIRST_QUALIFIED');
     deltaTotals[brand].source_delta_rows += 1;
     for (const reason of reasons) increment(deltaTotals[brand].explanations_by_reason, reason);
-    deltaRows.push({ source_record_id_sha256: sourceKey, brand,
+    deltaWriter.write({ source_record_id_sha256: sourceKey, brand,
       raw_first_trading_floor_candidates: rawTf, current_trading_floor_observations: currentTf,
       phase7b_authoritative_publication_observations: phasePublication,
       raw_first_qualified_price_research_observations: rawPr,
       phase7b_verified_price_research_observations: phasePr,
       trading_floor_delta: rawTf - currentTf, phase7b_publication_delta: rawTf - phasePublication,
       price_research_delta: rawPr - phasePr, explanation_reasons: [...reasons].sort() });
+  };
+  for (const sourceKey of rawBySource.keys()) reconcileSource(sourceKey);
+  for (const sourceKey of state.currentBySource.keys()) {
+    if (!rawBySource.has(sourceKey)) reconcileSource(sourceKey);
   }
+  for (const sourceKey of state.phase7bBySource.keys()) {
+    if (!rawBySource.has(sourceKey) && !state.currentBySource.has(sourceKey)) reconcileSource(sourceKey);
+  }
+  deltaWriter.end();
 
   for (const brand of BRANDS) {
     const summary = summaries[brand];
@@ -614,9 +699,7 @@ function aggregateResult({ checkpoint, outputDir, snapshot, phase7bSummary, stat
       - summary.phase7b_verified_price_research_count;
     totals.phase7b_source_rows_minus_authoritative_publication = summary.phase7b_observations
       - summary.phase7b_authoritative_publication_count;
-    const verifiedRows = state.phaseRows.filter(row => (
-      row.brand === brand && row.price_evidence_classification === 'VERIFIED_IN_NEW_COHORT'
-    )).length;
+    const verifiedRows = state.phaseVerifiedByBrand[brand];
     totals.phase7b_verified_source_rows_minus_reference_census = verifiedRows
       - summary.phase7b_verified_price_research_count;
     if (totals.phase7b_source_rows_minus_authoritative_publication) {
@@ -627,7 +710,6 @@ function aggregateResult({ checkpoint, outputDir, snapshot, phase7bSummary, stat
     }
   }
 
-  writeGzipJson(path.join(outputDir, 'sanitized-exact-deltas.json.gz'), deltaRows);
   const accounted = Object.values(dispositionCounts).reduce((sum, value) => sum + value, 0);
   const remainingQueues = {
     raw_brand_unresolved_with_reference: unresolvedBrands,
@@ -641,13 +723,13 @@ function aggregateResult({ checkpoint, outputDir, snapshot, phase7bSummary, stat
   const blocking = remainingQueues.raw_brand_unresolved_with_reference
     + remainingQueues.multi_watch_unsplittable + remainingQueues.multi_watch_partially_splittable
     + remainingQueues.reconciliation_count_gaps;
-  const decision = blocking === 0 && accounted === records.size ? 'RAW_FIRST_READY' : 'NOT_READY_RAW_SOURCE_GAPS';
+  const decision = blocking === 0 && accounted === rawParentPosts ? 'RAW_FIRST_READY' : 'NOT_READY_RAW_SOURCE_GAPS';
   return {
     contract: CONTRACT, decision, generated_at: new Date().toISOString(),
     canonical_project_ref: PROJECT_REF, read_only: true, production_writes: 0,
     raw_mutations: 0, endpoint_switches: 0, ui_changes: 0, catalog_changes: 0,
     phase7b_rerun: false, snapshot,
-    raw_parent_posts: records.size, raw_posts_accounted: accounted,
+    raw_parent_posts: rawParentPosts, raw_posts_accounted: accounted,
     disposition_counts: dispositionCounts, brands: summaries, exact_deltas: deltaTotals,
     remaining_queues: remainingQueues,
   };

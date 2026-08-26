@@ -34,6 +34,8 @@
     "report:global-six-brand-completion": "node tools/audit/build-global-six-brand-completion-ledgers.cjs",
     "report:global-six-brand-technical": "node tools/audit/build-global-six-brand-technical-report.cjs",
     "audit:raw-first-rolex-patek": "node tools/audit/raw-first-rolex-patek-audit.cjs",
+    "audit:raw-first-rolex-patek:validate-children": "node tools/audit/validate-raw-first-child-counts.cjs",
+    "audit:raw-first-observation-census-v3": "node tools/audit/raw-first-observation-census-v3.cjs",
     "audit:all-price-research": "node tools/price-quality/audit-all-price-research-cohorts.cjs",
     "audit:source-price-cohorts": "node tools/price-quality/audit-source-price-cohorts.cjs",
     "telegram:shadow-worker": "node tools/telegram-shadow/process-events.cjs",

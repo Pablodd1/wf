@@ -16,6 +16,7 @@ const {
   SNAPSHOT_SQL,
   assertReadOnlySql,
   currentListingsSql,
+  managementQuery,
   phase7bSql,
   rawSourceSql,
   run,
@@ -45,6 +46,25 @@ function row(overrides = {}) {
     ...overrides,
   };
 }
+
+test('Management API throttling is retried without changing the SELECT', async () => {
+  const calls = [];
+  const responses = [
+    { ok: false, status: 429, headers: { get: () => null }, text: async () => 'throttled' },
+    { ok: true, status: 200, headers: { get: () => null }, text: async () => '[{"ok":true}]' },
+  ];
+  const rows = await managementQuery('SELECT 1;', 'retry-test', {
+    token: 'test-only', retryLimit: 1, retryBaseMs: 1,
+    fetchImpl: async (_url, init) => {
+      calls.push(JSON.parse(init.body));
+      return responses.shift();
+    },
+  });
+  assert.deepEqual(rows, [{ ok: true }]);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[0], calls[1]);
+  assert.equal(calls[0].read_only, true);
+});
 
 test('all production SQL is one SELECT-only statement', () => {
   const bounds = uuidShard(1, 16);
@@ -183,6 +203,9 @@ test('audit source contains no production mutation or Phase 7B rerun path', () =
   const source = fs.readFileSync(path.join(__dirname, '..', 'tools', 'audit', 'raw-first-rolex-patek-audit.cjs'), 'utf8');
   assert.match(source, /read_only:\s*true/);
   assert.match(source, /phase7b_rerun:\s*false/);
+  assert.match(source, /forEachDatasetRow\(checkpoint, outputDir, 'raw'/);
+  assert.match(source, /clearTimeout\(timeout\)/);
+  assert.doesNotMatch(source, /pageFiles\([^)]*\)\.flat\(\)/);
   assert.doesNotMatch(source, /ingest_phase7b|begin_phase7b|complete_phase7b|fetch\([^\n]+rest\/v1/i);
 });
 
@@ -195,7 +218,13 @@ test('GitHub workflow is manual-only, canonical, read-only, and executes one aud
   assert.match(workflow, /environment: Production/);
   assert.match(workflow, /CANONICAL_PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.match(workflow, /SUPABASE_ACCESS_TOKEN: \$\{\{ secrets\.SUPABASE_ACCESS_TOKEN \}\}/);
+  assert.match(workflow, /Audit process terminated before final summary; sanitized checkpoint preserved/);
   assert.equal((workflow.match(/^\s+node tools\/audit\/raw-first-rolex-patek-audit\.cjs\s*$/gm) || []).length, 1);
   assert.doesNotMatch(workflow, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE|ALTER|CREATE|DROP|supabase db push|deploy)\b/i);
   assert.doesNotMatch(workflow, /rolex-manifest|patek-philippe-manifest|remaining-queues/);
+  assert.match(workflow, /VALIDATE_QNSA_RAW_FIRST_CHILD_COUNTS/);
+  assert.match(workflow, /validate-raw-first-child-counts\.cjs/);
+  assert.match(workflow, /RUN_QNSA_RAW_FIRST_OBSERVATION_CENSUS_V3/);
+  assert.match(workflow, /raw-first-observation-census-v3\.cjs --validate-only/);
+  assert.match(workflow, /PRIVATE-qnsa-raw-first-observation-v3-/);
 });
