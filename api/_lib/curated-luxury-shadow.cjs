@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 const RUN_ID = '17d6d831-86cd-5e67-9830-c881bcf16e0d';
 const MARKET_SELECTOR = 'curated_luxury_current_shadow_v1';
 const PRICE_SELECTOR = 'curated_luxury_price_research_shadow_v1';
@@ -29,7 +31,10 @@ function urlsFromMedia(value, found = new Set()) {
 }
 
 function mapCard(row) {
-  const images = row.has_images === true ? urlsFromMedia(row.raw_media) : [];
+  // Only the immutable exact-hash child bridge may supply customer images.
+  // Raw parent/version media is lineage evidence, never an image fallback.
+  const images = row.image_state === 'VERIFIED_CHILD_IMAGE'
+    ? urlsFromMedia(row.verified_child_media) : [];
   const sourceCurrency = row.source_currency || null;
   const verifiedUsd = row.price_verified === true && Number(row.price_usd) > 0
     ? Number(row.price_usd) : null;
@@ -68,7 +73,8 @@ function mapCard(row) {
     thumbnail_url: images[0] || null,
     image_url: images[0] || null,
     image_urls: images,
-    image_evidence_type: images.length ? 'SOURCE_LINKED_IMAGE' : 'NO_IMAGE',
+    image_state: images.length ? 'VERIFIED_CHILD_IMAGE' : 'NO_VERIFIED_CHILD_IMAGE',
+    image_evidence_type: images.length ? 'EXACT_CHILD_IMAGE' : 'NO_VERIFIED_CHILD_IMAGE',
     image_evidence_label: images.length ? 'Source-supplied listing image' : null,
     region: row.country_code || null,
     location: row.country_code || null,
@@ -95,8 +101,34 @@ function mapCard(row) {
 
 function countryCodes(value) {
   const values = (Array.isArray(value) ? value : [value]).flatMap(item => String(item || '').split(','));
-  const codes = [...new Set(values.map(item => item.trim().toUpperCase()).filter(item => /^[A-Z]{2}$/.test(item)))];
+  const codes = [...new Set(values.map(item => item.trim().toUpperCase())
+    .filter(item => /^[A-Z]{2,3}$/.test(item) || item === '__NO_MATCH__'))];
   return codes.length ? codes : null;
+}
+
+function shadowScope(options) {
+  const scope = {
+    brand: String(options.brand || ''),
+    listingType: ['WTS', 'WTB'].includes(options.listingType) ? options.listingType : null,
+    countries: countryCodes(options.countries)?.sort() || null,
+    pricedOnly: options.pricedOnly === true,
+    imagesOnly: options.imagesOnly === true,
+    reference: options.reference ? normalizedReference(options.reference) : null,
+    search: options.reference ? null : normalizedReference(options.search),
+    pageSize: Number(options.pageSize),
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(scope)).digest('hex');
+}
+
+function shadowCursorMatches(cursor, options) {
+  return !cursor || cursor.scope === shadowScope(options);
+}
+
+function encodeShadowCursor({ sourceTimestamp, currentListingKey, timestampIsNull, scope, page }) {
+  return Buffer.from(JSON.stringify({
+    v: 3, p: page, t: timestampIsNull ? null : sourceTimestamp,
+    n: timestampIsNull === true, k: currentListingKey, s: scope,
+  })).toString('base64url');
 }
 
 async function loadInventory(client, options) {
@@ -112,21 +144,47 @@ async function loadInventory(client, options) {
     p_search: options.reference ? null : (options.search || null),
     p_reference_key: options.reference ? normalizedReference(options.reference) : null,
   };
-  const [{ data: page, error: pageError }, { data: total, error: countError }] = await Promise.all([
-    client.rpc('curated_luxury_shadow_customer_page', {
-      ...args, p_limit: options.pageSize, p_offset: Math.max(0, (options.page - 1) * options.pageSize),
-    }),
-    client.rpc('curated_luxury_shadow_customer_count', args),
-  ]);
+  const cursor = options.cursor || null;
+  if (!shadowCursorMatches(cursor, options)) throw new Error('Shadow cursor scope mismatch');
+  const firstPage = !cursor;
+  const pageRequest = client.rpc('curated_luxury_shadow_customer_page_keys_v3', {
+    ...args,
+    p_after_timestamp: cursor?.sourceTimestamp || null,
+    p_after_key: cursor?.currentListingKey || null,
+    p_after_timestamp_is_null: cursor?.timestampIsNull === true,
+    p_limit: options.pageSize,
+  });
+  const countRequest = firstPage
+    ? client.rpc('curated_luxury_shadow_customer_count_v2', args)
+    : Promise.resolve({ data: null, error: null });
+  const [{ data: page, error: pageError }, { data: countData, error: countError }] =
+    await Promise.all([pageRequest, countRequest]);
   if (pageError) throw pageError;
-  if (countError) throw countError;
-  const rows = Array.isArray(page?.rows) ? page.rows : [];
-  const exactTotal = Number(total || 0);
-  const hasMore = options.page * options.pageSize < exactTotal;
+  const listingKeys = Array.isArray(page?.keys) ? page.keys : [];
+  const { data: cardData, error: cardError } = listingKeys.length
+    ? await client.rpc('curated_luxury_shadow_customer_cards_v3', {
+      p_run_id: RUN_ID, p_listing_keys: listingKeys,
+    })
+    : { data: [], error: null };
+  if (cardError) throw cardError;
+  const rows = Array.isArray(cardData) ? cardData : [];
+  const exactTotal = countError || countData?.total == null ? null : Number(countData.total);
+  const hasMore = page?.has_more === true;
+  const scope = shadowScope(options);
   return {
     status: 'ok', count: rows.length, total: exactTotal, page: options.page, pageSize: options.pageSize,
-    totalIsEstimate: false, totalStatus: 'exact_complete_shadow', hasMore,
-    nextCursor: hasMore ? Buffer.from(String(options.page + 1)).toString('base64url') : null,
+    totalIsEstimate: exactTotal === null,
+    totalStatus: exactTotal === null
+      ? (firstPage ? 'withheld_after_nonblocking_count_failure' : 'withheld_on_cursor_continuation')
+      : `exact_complete_shadow_${countData.source}`,
+    hasMore,
+    nextCursor: hasMore ? encodeShadowCursor({
+      sourceTimestamp: page.next_timestamp,
+      currentListingKey: page.next_key,
+      timestampIsNull: page.next_timestamp_is_null === true,
+      scope,
+      page: options.page + 1,
+    }) : null,
     records: rows.map(mapCard), publicationBrands: [...BRANDS],
     source: MARKET_SELECTOR, run_id: RUN_ID,
     evidenceContract: {
@@ -218,4 +276,5 @@ async function loadPriceResearch(client, { brand, reference, evidencePage = 1, e
 }
 
 module.exports = { BRANDS, MARKET_SELECTOR, PRICE_SELECTOR, RUN_ID, countryCodes, isShadowBrand,
-  loadInventory, loadPriceResearch, mapCard, normalizedReference, urlsFromMedia };
+  encodeShadowCursor, loadInventory, loadPriceResearch, mapCard, normalizedReference,
+  shadowCursorMatches, shadowScope, urlsFromMedia };

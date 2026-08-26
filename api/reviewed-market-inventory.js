@@ -16,6 +16,7 @@ const {
   MARKET_SELECTOR: CURATED_SHADOW_MARKET_SOURCE,
   isShadowBrand,
   loadInventory: loadCuratedShadowInventory,
+  shadowCursorMatches,
 } = require('./_lib/curated-luxury-shadow.cjs');
 const {
   isFourBrand,
@@ -482,6 +483,13 @@ const CURRENT_ISO_ALPHA2_CODES = new Set((
   'SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG ' +
   'UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'
 ).split(' '));
+
+// The frozen shadow preserves its observed location tokens. Translate only
+// proven customer aliases; an unsupported country must fail closed to no rows.
+const CURATED_SHADOW_COUNTRY_TOKENS = Object.freeze({
+  'United States': 'USA',
+  'Hong Kong': 'HKG',
+});
 
 function postingCountryName(value) {
   const raw = cleanExactText(value, 100);
@@ -1433,6 +1441,25 @@ function parseInventoryCursor(value, pageSize) {
   }
   try {
     const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (decoded?.v === 3) {
+      const page = Number(decoded.p);
+      const timestampIsNull = decoded.n === true;
+      const timestamp = timestampIsNull ? null : new Date(decoded.t || '');
+      const currentListingKey = String(decoded.k || '');
+      const scope = String(decoded.s || '');
+      if (!Number.isSafeInteger(page) || page < 2
+        || (!timestampIsNull && Number.isNaN(timestamp.getTime()))
+        || !/^[0-9a-f]{64}$/i.test(currentListingKey)
+        || !/^[0-9a-f]{64}$/i.test(scope)
+        || Object.keys(decoded).some(key => !['v', 'p', 't', 'n', 'k', 's'].includes(key))) return null;
+      return {
+        lane: 'images', offset: 0, page,
+        shadowKeyset: {
+          sourceTimestamp: timestampIsNull ? null : timestamp.toISOString(),
+          currentListingKey, timestampIsNull, scope,
+        },
+      };
+    }
     if (decoded?.v !== 1 && decoded?.v !== 2) return null;
     const lane = decoded?.l === 'i' ? 'images' : decoded?.l === 'n' ? 'no-images' : null;
     const offset = Number(decoded?.o);
@@ -1927,8 +1954,8 @@ module.exports = async function handler(req, res) {
     const region = resolvedRegions[0] || '';
     const requestedRegion = requestedRegions.join(',');
     const databaseRegion = databasePostingCountryToken(region);
-    const shadowCountryCodes = resolvedRegions.map(country => Object.entries(POSTING_COUNTRY_NAMES)
-      .find(([key, name]) => CURRENT_ISO_ALPHA2_CODES.has(key) && name === country)?.[0]).filter(Boolean);
+    const shadowCountryCodes = resolvedRegions.map(country =>
+      CURATED_SHADOW_COUNTRY_TOKENS[country] || '__NO_MATCH__');
     const rating = cleanExactText(req.query?.rating, 12).toLowerCase();
     const dateWindow = cleanExactText(req.query?.date, 4).toUpperCase();
     const postedAfter = dateWindowStart(dateWindow);
@@ -1981,7 +2008,7 @@ module.exports = async function handler(req, res) {
 
     if (shadowMarketRequest && ['ALL', 'WATCH'].includes(itemCategory)) {
       const client = getClient();
-      const result = await loadCuratedShadowInventory(client, {
+      const shadowOptions = {
         brand: requestedBrand,
         listingType,
         countries: shadowCountryCodes,
@@ -1991,7 +2018,16 @@ module.exports = async function handler(req, res) {
         reference: requestedReference || null,
         page,
         pageSize,
-      });
+        cursor: inventoryCursor?.shadowKeyset || null,
+      };
+      if ((cursorProvided && !inventoryCursor?.shadowKeyset)
+        || !shadowCursorMatches(inventoryCursor?.shadowKeyset || null, shadowOptions)) {
+        return res.status(400).json({ status: 'error', error: 'Invalid or stale shadow cursor' });
+      }
+      if (page > 1 && !inventoryCursor?.shadowKeyset) {
+        return res.status(400).json({ status: 'error', error: 'Shadow pagination requires a cursor after page one' });
+      }
+      const result = await loadCuratedShadowInventory(client, shadowOptions);
       return res.status(200).json(result);
     }
 
