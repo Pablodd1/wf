@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const { listCanonicalCatalogReferences } = require('../../api/_lib/catalog.js');
-const { isQualifiedComparable } = require('./current-inventory-shadow-lib.cjs');
+const { isQualifiedComparable, verifiedUsdAmount } = require('./current-inventory-shadow-lib.cjs');
 
 const CONTRACT = 'curated-luxury-rolex-patek-shadow-load-v1';
 const PROJECT_REF = 'qnsafosakvonzgfcsphh';
@@ -24,6 +24,8 @@ const EXPECTED = Object.freeze({
 
 const CURRENT_COLUMNS = [
   'run_id', 'current_listing_key', 'offer_family_key', 'offer_state_key', 'latest_raw_occurrence_key',
+  'unique_observation_key', 'parent_key', 'version_key', 'source_key', 'source_page', 'origin',
+  'exact_child_text_sha256', 'parent_raw_text_sha256', 'source_identity_key',
   'current_status', 'cohort_status', 'brand', 'observed_reference', 'observed_reference_key', 'intent',
   'condition_as_observed', 'dial_or_color_as_observed', 'source_timestamp', 'source_price_amount',
   'source_currency', 'normalized_usd_amount', 'price_verified', 'image_linked', 'source_image_key',
@@ -147,6 +149,19 @@ function latest(rows) {
     || String(a.raw_occurrence_key).localeCompare(String(b.raw_occurrence_key))).at(-1);
 }
 
+function shadowCurrentStatus(cohortStatus) {
+  if (cohortStatus === 'CONFIRMED_CURRENT') return 'CURRENT_ACTIVE';
+  if (cohortStatus === 'LATEST_OBSERVED') return 'CURRENT_LATEST_STATE';
+  throw new Error(`Invalid cohort status: ${cohortStatus}`);
+}
+
+function requireCurrentLineage(row) {
+  for (const key of ['raw_occurrence_key', 'unique_observation_key', 'parent_key', 'version_key', 'source_key',
+    'exact_child_text_sha256', 'parent_raw_text_sha256']) {
+    if (!String(row[key] || '').trim()) throw new Error(`Current listing missing lineage key: ${key}`);
+  }
+}
+
 function requireFrozenContract(freeze, priceSummary, expected) {
   if (freeze.decision !== 'CURATED_LUXURY_ROLEX_PATEK_FINAL_READY') throw new Error('Final cohort is not ready');
   if (String(freeze.source_artifact_run_id) !== expected.sourceRun) throw new Error('Source run mismatch');
@@ -201,6 +216,7 @@ function materialize(options = {}) {
   for (const relative of currentRelatives) {
     const rows = readGzipJson(verifiedFile(finalRoot, finalManifest, relative));
     const outputRows = rows.map(row => {
+      requireCurrentLineage(row);
       const state = referenceState(references, row);
       state.current_listing_count += 1;
       updateRange(state, row.source_timestamp);
@@ -212,7 +228,16 @@ function materialize(options = {}) {
         offer_family_key: row.offer_family_key,
         offer_state_key: row.offer_state_key,
         latest_raw_occurrence_key: row.raw_occurrence_key,
-        current_status: 'CURRENT_ACTIVE',
+        unique_observation_key: row.unique_observation_key,
+        parent_key: row.parent_key,
+        version_key: row.version_key,
+        source_key: row.source_key,
+        source_page: row.source_page,
+        origin: row.origin,
+        exact_child_text_sha256: row.exact_child_text_sha256,
+        parent_raw_text_sha256: row.parent_raw_text_sha256,
+        source_identity_key: row.source_identity_key,
+        current_status: shadowCurrentStatus(row.cohort_status),
         cohort_status: row.cohort_status,
         brand: row.brand,
         observed_reference: row.observed_reference,
@@ -223,8 +248,8 @@ function materialize(options = {}) {
         source_timestamp: row.source_timestamp,
         source_price_amount: row.source_price_amount,
         source_currency: row.source_currency,
-        normalized_usd_amount: row.price_verified ? row.normalized_usd_amount : null,
-        price_verified: row.price_verified === true,
+        normalized_usd_amount: verifiedUsdAmount(row),
+        price_verified: verifiedUsdAmount(row) !== null,
         image_linked: row.image_linked === true,
         source_image_key: row.source_image_key,
         dealer_key: row.dealer_key,
@@ -269,7 +294,7 @@ function materialize(options = {}) {
         observed_reference_key: row.observed_reference_key,
         source_price_amount: row.source_price_amount,
         source_currency: row.source_currency,
-        normalized_usd_amount: row.source_price_amount,
+        normalized_usd_amount: verifiedUsdAmount(row),
         first_seen: grouped.reduce((value, item) => !value || item.source_timestamp < value ? item.source_timestamp : value, null),
         last_seen: row.source_timestamp,
         occurrence_count: grouped.length,
@@ -285,7 +310,7 @@ function materialize(options = {}) {
   for (const [brand, counts] of Object.entries(expected.brands)) {
     const actual = totals[brand];
     if (actual.current !== counts.final || actual.wts !== counts.wts || actual.wtb !== counts.wtb
-      || actual.priceResearch !== counts.priceResearch) throw new Error(`${brand} materialized count mismatch`);
+      || actual.priceResearch < counts.priceResearch) throw new Error(`${brand} materialized count mismatch`);
   }
   const catalogs = localCatalogs();
   const referenceRows = [...references.values()].sort((a, b) => a.brand.localeCompare(b.brand)

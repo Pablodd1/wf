@@ -7,7 +7,9 @@ const {
   createObservationIdentity,
   displayTier,
   effectiveChildClassification,
+  isQualifiedComparable,
   matchesShadowFilters,
+  verifiedUsdAmount,
 } = require('../tools/audit/current-inventory-shadow-lib.cjs');
 
 function observation(overrides = {}) {
@@ -110,4 +112,22 @@ test('display tiers and server-side filter semantics remain source-backed', () =
   assert.equal(matchesShadowFilters(row, { search: '126334', priced: true, images: true,
     locations: ['US', 'HK'] }), true);
   assert.equal(matchesShadowFilters(row, { locations: ['HK', 'GB'] }), false);
+});
+
+test('Price Research uses direct USD and verified normalized foreign FX only', () => {
+  const usd = observation({ source_price_amount: 13500, source_currency: 'USD',
+    normalized_usd_amount: null, price_evidence_classification: 'SOURCE_EXPLICIT_USD_MATCH' });
+  const hkd = observation({ source_price_amount: 105300, source_currency: 'HKD',
+    normalized_usd_amount: 13500, price_evidence_classification: 'EXPLICIT_SOURCE_FX_CONVERTED' });
+  const eur = observation({ source_price_amount: 12000, source_currency: 'EUR',
+    normalized_usd_amount: 13080, price_evidence_classification: 'DATED_VERIFIED_FX' });
+  assert.equal(verifiedUsdAmount(usd), 13500);
+  assert.equal(verifiedUsdAmount(hkd), 13500);
+  assert.equal(verifiedUsdAmount(eur), 13080);
+  assert.equal(isQualifiedComparable(hkd), true);
+  assert.equal(isQualifiedComparable(eur), true);
+  assert.equal(verifiedUsdAmount(observation({ source_price_amount: 105300, source_currency: 'HKD',
+    normalized_usd_amount: null, price_evidence_classification: 'EXPLICIT_SOURCE_FX_CONVERTED' })), null);
+  assert.equal(verifiedUsdAmount(observation({ source_price_amount: 12000, source_currency: 'EUR',
+    normalized_usd_amount: 13080, price_evidence_classification: 'OWNER_ASSUMED_USD' })), null);
 });

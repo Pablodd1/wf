@@ -69,6 +69,15 @@ CREATE TABLE IF NOT EXISTS public.curated_luxury_current_listings_shadow (
   offer_family_key text NOT NULL,
   offer_state_key text NOT NULL,
   latest_raw_occurrence_key text NOT NULL,
+  unique_observation_key text NOT NULL,
+  parent_key text NOT NULL,
+  version_key text NOT NULL,
+  source_key text NOT NULL,
+  source_page text,
+  origin text,
+  exact_child_text_sha256 text NOT NULL,
+  parent_raw_text_sha256 text,
+  source_identity_key text,
   current_status text NOT NULL CHECK (current_status IN
     ('CURRENT_ACTIVE', 'CURRENT_LATEST_STATE', 'WITHDRAWN', 'SUPERSEDED', 'SUPPRESSED_EXACT_DUPLICATE')),
   cohort_status text NOT NULL CHECK (cohort_status IN ('CONFIRMED_CURRENT', 'LATEST_OBSERVED')),
@@ -92,6 +101,27 @@ CREATE TABLE IF NOT EXISTS public.curated_luxury_current_listings_shadow (
   PRIMARY KEY (run_id, current_listing_key),
   UNIQUE (run_id, offer_family_key)
 );
+
+-- Keep the foundation forward-only and idempotent if the empty pre-lineage shadow
+-- schema was installed during review. Existing populated rows fail closed rather
+-- than receiving fabricated lineage.
+ALTER TABLE public.curated_luxury_current_listings_shadow
+  ADD COLUMN IF NOT EXISTS unique_observation_key text,
+  ADD COLUMN IF NOT EXISTS parent_key text,
+  ADD COLUMN IF NOT EXISTS version_key text,
+  ADD COLUMN IF NOT EXISTS source_key text,
+  ADD COLUMN IF NOT EXISTS source_page text,
+  ADD COLUMN IF NOT EXISTS origin text,
+  ADD COLUMN IF NOT EXISTS exact_child_text_sha256 text,
+  ADD COLUMN IF NOT EXISTS parent_raw_text_sha256 text,
+  ADD COLUMN IF NOT EXISTS source_identity_key text;
+
+ALTER TABLE public.curated_luxury_current_listings_shadow
+  ALTER COLUMN unique_observation_key SET NOT NULL,
+  ALTER COLUMN parent_key SET NOT NULL,
+  ALTER COLUMN version_key SET NOT NULL,
+  ALTER COLUMN source_key SET NOT NULL,
+  ALTER COLUMN exact_child_text_sha256 SET NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.curated_luxury_observed_references_shadow (
   run_id uuid NOT NULL REFERENCES public.curated_luxury_shadow_runs(run_id) ON DELETE CASCADE,
@@ -143,7 +173,7 @@ AS $$
   JOIN public.curated_luxury_shadow_runs r ON r.run_id = c.run_id
   WHERE c.run_id = p_run_id
     AND r.status = 'COMPLETE'
-    AND c.current_status = 'CURRENT_ACTIVE'
+    AND c.current_status IN ('CURRENT_ACTIVE', 'CURRENT_LATEST_STATE')
     AND (p_brands IS NULL OR c.brand = ANY(p_brands))
     AND (p_intents IS NULL OR c.intent = ANY(p_intents))
     AND (p_countries IS NULL OR c.country_code = ANY(p_countries))

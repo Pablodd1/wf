@@ -10,6 +10,7 @@ const {
   explicitBrandConflict,
   isQualifiedComparable,
   isVerifiedUsd,
+  verifiedUsdAmount,
   terminalClassification,
 } = require('./current-inventory-shadow-lib.cjs');
 
@@ -62,7 +63,7 @@ function verifiedManifestFile(root, manifestByPath, relative) {
 function lineageDefects(row) {
   const defects = [];
   for (const key of ['offer_family_key', 'offer_state_key', 'raw_occurrence_key', 'unique_observation_key',
-    'exact_child_text_sha256', 'parent_raw_text_sha256', 'parent_key', 'source_key']) {
+    'exact_child_text_sha256', 'parent_raw_text_sha256', 'parent_key', 'version_key', 'source_key']) {
     if (!String(row[key] || '').trim()) defects.push(`MISSING_${key.toUpperCase()}`);
   }
   if (!BRANDS.includes(row.brand)) defects.push('INVALID_BRAND');
@@ -85,16 +86,17 @@ function rescueLatestObserved(family) {
 }
 
 function publicRow(family, sourceRow, cohortStatus) {
-  const verifiedPrice = isVerifiedUsd(sourceRow);
+  const normalizedUsd = verifiedUsdAmount(sourceRow);
+  const currentStatus = cohortStatus === 'CONFIRMED_CURRENT' ? 'CURRENT_ACTIVE' : 'CURRENT_LATEST_STATE';
   return {
     ...sourceRow,
     current_listing_key: family.offer_family_key,
     offer_family_key: family.offer_family_key,
     offer_state_key: family.latest_observation.offer_state_key,
-    current_status: cohortStatus,
+    current_status: currentStatus,
     cohort_status: cohortStatus,
-    price_verified: verifiedPrice,
-    normalized_usd_amount: verifiedPrice ? Number(sourceRow.source_price_amount) : null,
+    price_verified: normalizedUsd !== null,
+    normalized_usd_amount: normalizedUsd,
   };
 }
 

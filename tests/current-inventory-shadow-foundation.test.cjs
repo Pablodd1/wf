@@ -72,6 +72,11 @@ test('forward schema supports generic bounded server-side filtering without a so
   assert.match(sql, /curated_luxury_current_listings_shadow/);
   assert.match(sql, /curated_luxury_observed_references_shadow/);
   assert.match(sql, /cohort_status text NOT NULL CHECK \(cohort_status IN \('CONFIRMED_CURRENT', 'LATEST_OBSERVED'\)\)/);
+  assert.match(sql, /current_status IN \('CURRENT_ACTIVE', 'CURRENT_LATEST_STATE'\)/);
+  for (const key of ['unique_observation_key', 'parent_key', 'version_key', 'source_key',
+    'exact_child_text_sha256', 'parent_raw_text_sha256', 'source_identity_key', 'source_image_key', 'dealer_key']) {
+    assert.match(sql, new RegExp(`${key} text`));
+  }
   assert.match(sql, /p_brands text\[\]/);
   assert.match(sql, /p_intents text\[\]/);
   assert.match(sql, /p_countries text\[\]/);

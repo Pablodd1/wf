@@ -166,7 +166,8 @@ test('artifact-only pass preserves confirmed baseline, collapses reposts, rescue
     assert.equal(cohort.length, 4);
     assert.equal(new Set(cohort.map(row => row.current_listing_key)).size, 4);
     const rescued = cohort.find(row => row.current_listing_key === 'family-rolex-latest');
-    assert.equal(rescued.current_status, 'LATEST_OBSERVED');
+    assert.equal(rescued.current_status, 'CURRENT_LATEST_STATE');
+    assert.equal(rescued.cohort_status, 'LATEST_OBSERVED');
     assert.equal(rescued.source_currency, 'HKD');
     assert.equal(rescued.source_price_amount, 13500);
     assert.equal(rescued.price_verified, false);

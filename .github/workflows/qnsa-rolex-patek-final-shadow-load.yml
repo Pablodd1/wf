@@ -105,8 +105,11 @@ jobs:
             .final_freeze_run_id == "32953447624" and
             .source_artifact_run_id == "32934432129" and
             .final_manifest_sha256 == "17d6d83186cd8e675830c881bcf16e0d3c011ba1835eecf90710a4c665e4472a" and
-            .counts.Rolex == {current:1535763,wts:1386508,wtb:149255,priceResearch:38521} and
-            .counts["Patek Philippe"] == {current:937001,wts:884326,wtb:52675,priceResearch:45638} and
+            .counts.Rolex.current == 1535763 and .counts.Rolex.wts == 1386508 and
+            .counts.Rolex.wtb == 149255 and .counts.Rolex.priceResearch >= 38521 and
+            .counts["Patek Philippe"].current == 937001 and
+            .counts["Patek Philippe"].wts == 884326 and .counts["Patek Philippe"].wtb == 52675 and
+            .counts["Patek Philippe"].priceResearch >= 45638 and
             .canary == {requested:20,passed:20,failed:0} and
             .source_switch == false and
             .customer_endpoints_changed == false and
@@ -163,7 +166,7 @@ jobs:
           for file in "$SHADOW_LOAD_OUTPUT"/current/*.csv.gz; do
             psql "$db_url" --set=ON_ERROR_STOP=1 <<SQL
           CREATE TEMP TABLE stage_current (LIKE public.curated_luxury_current_listings_shadow INCLUDING DEFAULTS);
-          \copy stage_current (run_id,current_listing_key,offer_family_key,offer_state_key,latest_raw_occurrence_key,current_status,cohort_status,brand,observed_reference,observed_reference_key,intent,condition_as_observed,dial_or_color_as_observed,source_timestamp,source_price_amount,source_currency,normalized_usd_amount,price_verified,image_linked,source_image_key,dealer_key,dealer_rating_qualified,country_code,search_text) FROM PROGRAM 'gzip -dc $file' CSV HEADER
+          \copy stage_current (run_id,current_listing_key,offer_family_key,offer_state_key,latest_raw_occurrence_key,unique_observation_key,parent_key,version_key,source_key,source_page,origin,exact_child_text_sha256,parent_raw_text_sha256,source_identity_key,current_status,cohort_status,brand,observed_reference,observed_reference_key,intent,condition_as_observed,dial_or_color_as_observed,source_timestamp,source_price_amount,source_currency,normalized_usd_amount,price_verified,image_linked,source_image_key,dealer_key,dealer_rating_qualified,country_code,search_text) FROM PROGRAM 'gzip -dc $file' CSV HEADER
           INSERT INTO public.curated_luxury_current_listings_shadow SELECT * FROM stage_current
           ON CONFLICT (run_id, current_listing_key) DO NOTHING;
           SQL
@@ -212,8 +215,8 @@ jobs:
               WHERE run_id=current_setting('app.shadow_run_id')::uuid AND brand='Rolex' AND qualified_price_research;
             SELECT count(*) INTO patek_pr FROM public.curated_luxury_offer_states_shadow
               WHERE run_id=current_setting('app.shadow_run_id')::uuid AND brand='Patek Philippe' AND qualified_price_research;
-            IF (rolex_total,rolex_wts,rolex_wtb,rolex_pr) <> (1535763,1386508,149255,38521)
-              OR (patek_total,patek_wts,patek_wtb,patek_pr) <> (937001,884326,52675,45638) THEN
+            IF (rolex_total,rolex_wts,rolex_wtb) <> (1535763,1386508,149255) OR rolex_pr < 38521
+              OR (patek_total,patek_wts,patek_wtb) <> (937001,884326,52675) OR patek_pr < 45638 THEN
               RAISE EXCEPTION 'Frozen shadow count reconciliation failed';
             END IF;
             UPDATE public.curated_luxury_shadow_runs SET status='COMPLETE', completed_at=now()

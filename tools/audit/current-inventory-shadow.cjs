@@ -15,6 +15,7 @@ const {
   effectiveChildClassification,
   isQualifiedComparable,
   isVerifiedUsd,
+  verifiedUsdAmount,
 } = require('./current-inventory-shadow-lib.cjs');
 
 const CONTRACT = 'watchfacts-current-inventory-shadow-v1';
@@ -174,7 +175,7 @@ function catalogSets() {
 }
 
 function compactObservation({ occurrence, parent, artifactRecord, sourcePage, origin, dealer, sourceStatus,
-  sourceImageKey, priceEvidenceClassification, modelAsPosted }) {
+  sourceImageKey, priceEvidenceClassification, modelAsPosted, normalizedUsdAmount, usdNormalizationMethod }) {
   const brand = occurrence.observed_brand || parent.brand || artifactRecord.brand;
   const classification = effectiveChildClassification({ ...occurrence, brand });
   if (classification !== 'UNIQUE_MARKET_OBSERVATION' || !BRANDS.includes(brand)) {
@@ -207,6 +208,7 @@ function compactObservation({ occurrence, parent, artifactRecord, sourcePage, or
     source_price_amount: Number(occurrence.source_price_amount) || null,
     source_currency: occurrence.explicit_currency || null,
     price_evidence_classification: priceEvidenceClassification || null,
+    normalized_usd_amount: Number(normalizedUsdAmount) > 0 ? Number(normalizedUsdAmount) : null,
     source_image_key: sourceImageKey || null,
     image_linked: occurrence.image_linked === true || Boolean(sourceImageKey),
     country_code: dealer?.country_code || occurrence.country_code || null,
@@ -219,12 +221,13 @@ function compactObservation({ occurrence, parent, artifactRecord, sourcePage, or
     raw_child_text: occurrence.raw_child_text,
   };
   const identity = createObservationIdentity(provisional);
-  const verifiedUsd = isVerifiedUsd(provisional);
+  const normalizedUsd = verifiedUsdAmount(provisional);
   const row = {
     ...provisional,
-    normalized_usd_amount: verifiedUsd ? provisional.source_price_amount : null,
-    usd_normalization_method: verifiedUsd
-      ? (provisional.source_currency === 'USD' ? 'DIRECT_SOURCE_USD' : 'SOURCE_USDT_PARITY') : null,
+    normalized_usd_amount: normalizedUsd,
+    usd_normalization_method: normalizedUsd === null ? null : (usdNormalizationMethod
+      || (provisional.source_currency === 'USD' ? 'DIRECT_SOURCE_USD'
+        : provisional.source_currency === 'USDT' ? 'SOURCE_USDT_PARITY' : null)),
     ...identity,
   };
   delete row.raw_child_text;
@@ -271,6 +274,8 @@ function liveRows(sourceRow, artifactRecord, sourcePage, dealers, expectedV3Pare
         || null,
       sourceImageKey: child.source_image ? sha256(child.source_image) : null,
       priceEvidenceClassification: child.price_evidence_status || null,
+      normalizedUsdAmount: child.normalized_usd_amount,
+      usdNormalizationMethod: child.usd_normalization_method,
       modelAsPosted: child.model_as_posted || null,
     });
   });

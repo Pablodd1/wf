@@ -45,7 +45,8 @@ test('frozen cohort materializer preserves current and Price Research counts wit
       price_evidence_classification: 'SOURCE_EXPLICIT_USD_MATCH', price_verified: true,
       normalized_usd_amount: 13500, cohort_status: 'CONFIRMED_CURRENT', image_linked: false,
       exact_child_text_sha256: 'child-r', parent_raw_text_sha256: 'parent-r', parent_key: 'parent-key-r',
-      source_key: 'source-r', live_source_verified: true,
+      version_key: 'version-r', source_key: 'source-r', source_page: 'page-r', origin: 'LIVE_SOURCE_RECHECK',
+      source_identity_key: 'poster-r', live_source_verified: true,
     };
     const patek = {
       current_listing_key: 'family-p', offer_family_key: 'family-p', offer_state_key: 'state-p',
@@ -55,8 +56,19 @@ test('frozen cohort materializer preserves current and Price Research counts wit
       price_evidence_classification: null, price_verified: false, normalized_usd_amount: null,
       cohort_status: 'LATEST_OBSERVED', image_linked: true, source_image_key: 'image-p',
       exact_child_text_sha256: 'child-p', parent_raw_text_sha256: 'parent-p', parent_key: 'parent-key-p',
-      source_key: 'source-p', live_source_verified: true,
+      version_key: 'version-p', source_key: 'source-p', source_page: 'page-p', origin: 'LIVE_SOURCE_RECHECK',
+      source_identity_key: 'poster-p', live_source_verified: true,
     };
+    const hkd = { ...rolex, current_listing_key: 'family-hkd', offer_family_key: 'family-hkd',
+      offer_state_key: 'state-hkd', raw_occurrence_key: 'raw-hkd', unique_observation_key: 'unique-hkd',
+      brand: 'Patek Philippe', observed_reference: '5711', observed_reference_key: '5711',
+      source_price_amount: 105300, source_currency: 'HKD', normalized_usd_amount: 13500,
+      price_evidence_classification: 'EXPLICIT_SOURCE_FX_CONVERTED' };
+    const eur = { ...rolex, current_listing_key: 'family-eur', offer_family_key: 'family-eur',
+      offer_state_key: 'state-eur', raw_occurrence_key: 'raw-eur', unique_observation_key: 'unique-eur',
+      brand: 'Patek Philippe', observed_reference: '5167A', observed_reference_key: '5167A',
+      source_price_amount: 12000, source_currency: 'EUR', normalized_usd_amount: 13080,
+      price_evidence_classification: 'DATED_VERIFIED_FX' };
     const cohortRelative = 'cohort-pages/partition-000.json.gz';
     const priceRelative = 'price-research-summary.json';
     const canaryRelative = 'canary-evidence.json';
@@ -72,7 +84,7 @@ test('frozen cohort materializer preserves current and Price Research counts wit
       [cohortRelative, priceRelative, canaryRelative]) });
 
     const offerRelative = 'offer-partitions/partition-000.jsonl.gz';
-    writeGzipJson(path.join(sourceRoot, offerRelative), [rolex, patek], true);
+    writeGzipJson(path.join(sourceRoot, offerRelative), [rolex, patek, hkd, eur], true);
     writeJson(path.join(sourceRoot, 'manifest-sha256.json'), { files: manifest(sourceRoot, [offerRelative]) });
     const finalManifestSha = artifactChecksum(path.join(finalRoot, 'manifest-sha256.json'));
     writeJson(path.join(finalRoot, 'freeze.json'), {
@@ -99,13 +111,23 @@ test('frozen cohort materializer preserves current and Price Research counts wit
     assert.equal(summary.counts.Rolex.current, 1);
     assert.equal(summary.counts.Rolex.priceResearch, 1);
     assert.equal(summary.counts['Patek Philippe'].current, 1);
+    assert.equal(summary.counts['Patek Philippe'].priceResearch, 2);
     assert.equal(summary.source_switch, false);
     assert.equal(summary.customer_endpoints_changed, false);
     const currentCsv = zlib.gunzipSync(fs.readFileSync(path.join(outputRoot,
       'current', 'partition-000.csv.gz'))).toString('utf8');
     assert.match(currentCsv, /CONFIRMED_CURRENT/);
     assert.match(currentCsv, /LATEST_OBSERVED/);
+    assert.match(currentCsv, /CURRENT_ACTIVE/);
+    assert.match(currentCsv, /CURRENT_LATEST_STATE/);
+    assert.match(currentCsv, /unique_observation_key,parent_key,version_key,source_key,source_page,origin/);
+    assert.match(currentCsv, /poster-r/);
+    assert.match(currentCsv, /image-p/);
     assert.doesNotMatch(currentCsv, /raw child text/i);
+    const priceCsv = zlib.gunzipSync(fs.readFileSync(path.join(outputRoot,
+      'price-research', 'partition-000.csv.gz'))).toString('utf8');
+    assert.match(priceCsv, /"105300","HKD","13500"/);
+    assert.match(priceCsv, /"12000","EUR","13080"/);
     const referencesCsv = zlib.gunzipSync(fs.readFileSync(path.join(outputRoot,
       'observed-references.csv.gz'))).toString('utf8');
     assert.match(referencesCsv, /OBSERVED_ONLY/);

@@ -197,11 +197,22 @@ function classifyOfferFamily(rows) {
   };
 }
 
-function isVerifiedUsd(observation) {
-  return ['USD', 'USDT'].includes(String(observation.source_currency || '').toUpperCase())
-    && Number(observation.source_price_amount) > 0
+function verifiedUsdAmount(observation) {
+  const currency = String(observation.source_currency || '').toUpperCase();
+  const classification = String(observation.price_evidence_classification || '');
+  const sourceAmount = Number(observation.source_price_amount);
+  const normalizedAmount = Number(observation.normalized_usd_amount);
+  if (['USD', 'USDT'].includes(currency) && Number.isFinite(sourceAmount) && sourceAmount > 0
     && ['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'AUTO_APPROVED', 'VERIFIED_IN_NEW_COHORT']
-      .includes(String(observation.price_evidence_classification || ''));
+      .includes(classification)) return sourceAmount;
+  if (!['USD', 'USDT'].includes(currency) && Number.isFinite(sourceAmount) && sourceAmount > 0
+    && ['EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX'].includes(classification)
+    && Number.isFinite(normalizedAmount) && normalizedAmount > 0) return normalizedAmount;
+  return null;
+}
+
+function isVerifiedUsd(observation) {
+  return verifiedUsdAmount(observation) !== null;
 }
 
 function isQualifiedComparable(observation) {
@@ -247,4 +258,5 @@ module.exports = {
   matchesShadowFilters,
   specificFragmentClassification,
   terminalClassification,
+  verifiedUsdAmount,
 };
