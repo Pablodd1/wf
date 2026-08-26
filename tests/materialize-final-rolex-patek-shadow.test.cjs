@@ -144,7 +144,8 @@ test('manual load workflow is pinned to the frozen evidence and cannot switch cu
   assert.match(workflow, /32934432129/);
   assert.match(workflow, /17d6d83186cd8e675830c881bcf16e0d3c011ba1835eecf90710a4c665e4472a/);
   assert.match(workflow, /LOAD_QNSA_ROLEX_PATEK_FINAL_SHADOW_V1/);
-  assert.match(workflow, /curated_luxury_current_listings_shadow/);
-  assert.match(workflow, /curated_luxury_offer_states_shadow/);
+  assert.match(workflow, /SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh/);
+  assert.match(workflow, /load-final-rolex-patek-shadow\.cjs/);
+  assert.doesNotMatch(workflow, /SUPABASE_DB_PASSWORD|\bpsql\b/);
   assert.doesNotMatch(workflow, /UPDATE\s+public\.watch_records|DELETE\s+FROM|TRUNCATE|customer_source_switch/i);
 });
