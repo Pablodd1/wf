@@ -88,7 +88,8 @@ function explicitBrandConflict(occurrence) {
   if (named.length && !named.includes(assigned)) return true;
   const reference = String(occurrence.exact_observed_reference || occurrence.observed_reference || '')
     .trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
-  return ['Rolex', 'Patek Philippe'].includes(assigned) && /^(?:RM\d|W[A-Z0-9])/.test(reference);
+  return ['Rolex', 'Patek Philippe'].includes(assigned)
+    && /^(?:RM\d|W[A-Z0-9]|Q\d{6,})/.test(reference);
 }
 
 function effectiveChildClassification(occurrence) {
