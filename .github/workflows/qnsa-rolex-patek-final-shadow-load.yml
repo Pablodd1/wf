@@ -1,0 +1,225 @@
+name: Prepare or load frozen Rolex Patek shadow
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Prepare files only, or load the isolated shadow tables
+        required: true
+        type: choice
+        options:
+          - validate_only
+          - load_shadow
+        default: validate_only
+      confirmation:
+        description: Type PREPARE_QNSA_ROLEX_PATEK_FINAL_SHADOW or LOAD_QNSA_ROLEX_PATEK_FINAL_SHADOW_V1
+        required: true
+        type: string
+      final_freeze_run_id:
+        description: Exact successful final freeze run
+        required: true
+        default: '32953447624'
+        type: string
+      source_shadow_run_id:
+        description: Exact source current-inventory artifact run
+        required: true
+        default: '32934432129'
+        type: string
+      final_manifest_sha256:
+        description: Exact frozen cohort manifest SHA-256
+        required: true
+        default: 17d6d83186cd8e675830c881bcf16e0d3c011ba1835eecf90710a4c665e4472a
+        type: string
+
+concurrency:
+  group: qnsa-rolex-patek-final-shadow-load
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: >-
+      ${{ (inputs.mode == 'validate_only' && inputs.confirmation == 'PREPARE_QNSA_ROLEX_PATEK_FINAL_SHADOW') ||
+          (inputs.mode == 'load_shadow' && inputs.confirmation == 'LOAD_QNSA_ROLEX_PATEK_FINAL_SHADOW_V1') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    environment: production
+    permissions:
+      actions: read
+      contents: read
+    env:
+      FINAL_FREEZE_ARTIFACT: ${{ runner.temp }}/final-freeze
+      CURRENT_INVENTORY_SOURCE_ARTIFACT: ${{ runner.temp }}/current-inventory-source
+      SHADOW_LOAD_OUTPUT: ${{ runner.temp }}/shadow-load
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - name: Verify immutable inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.final_freeze_run_id }}" = '32953447624'
+          test "${{ inputs.source_shadow_run_id }}" = '32934432129'
+          test "${{ inputs.final_manifest_sha256 }}" = '17d6d83186cd8e675830c881bcf16e0d3c011ba1835eecf90710a4c665e4472a'
+          test "$SUPABASE_PROJECT_REF" = 'qnsafosakvonzgfcsphh'
+
+      - uses: actions/checkout@v5
+
+      - name: Download exact frozen cohort artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.final_freeze_run_id }}
+          name: PRIVATE-qnsa-rolex-patek-final-cohort-${{ inputs.final_freeze_run_id }}
+          path: ${{ env.FINAL_FREEZE_ARTIFACT }}
+
+      - name: Download exact source current-inventory artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.source_shadow_run_id }}
+          name: PRIVATE-qnsa-current-inventory-shadow-${{ inputs.source_shadow_run_id }}
+          path: ${{ env.CURRENT_INVENTORY_SOURCE_ARTIFACT }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify and materialize immutable shadow load files
+        run: npm run materialize:rolex-patek-final-shadow
+
+      - name: Verify load manifest remains shadow-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '
+            .canonical_project_ref == "qnsafosakvonzgfcsphh" and
+            .status == "READY_TO_LOAD_SHADOW_ONLY" and
+            .final_freeze_run_id == "32953447624" and
+            .source_artifact_run_id == "32934432129" and
+            .final_manifest_sha256 == "17d6d83186cd8e675830c881bcf16e0d3c011ba1835eecf90710a4c665e4472a" and
+            .counts.Rolex == {current:1535763,wts:1386508,wtb:149255,priceResearch:38521} and
+            .counts["Patek Philippe"] == {current:937001,wts:884326,wtb:52675,priceResearch:45638} and
+            .canary == {requested:20,passed:20,failed:0} and
+            .source_switch == false and
+            .customer_endpoints_changed == false and
+            .production_source_tables_mutated == false
+          ' "$SHADOW_LOAD_OUTPUT/load-manifest.json"
+
+      - name: Upload compact load manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-patek-final-shadow-load-manifest-${{ github.run_id }}
+          path: ${{ env.SHADOW_LOAD_OUTPUT }}/load-manifest.json
+          retention-days: 90
+
+      - name: Install PostgreSQL client
+        if: ${{ inputs.mode == 'load_shadow' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
+      - name: Install forward-only shadow schema
+        if: ${{ inputs.mode == 'load_shadow' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 \
+            --file=supabase/migrations/20260825120000_curated_luxury_current_inventory_shadow_foundation.sql
+
+      - name: Load isolated frozen shadow rows idempotently
+        if: ${{ inputs.mode == 'load_shadow' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          run_id="$(jq -r .run_id "$SHADOW_LOAD_OUTPUT/load-manifest.json")"
+          reconciliation="$(jq -c . "$SHADOW_LOAD_OUTPUT/load-manifest.json")"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --set=run_id="$run_id" --set=reconciliation="$reconciliation" <<'SQL'
+          INSERT INTO public.curated_luxury_shadow_runs
+            (run_id, contract, status, decision, source_artifact_runs, reconciliation)
+          VALUES (:'run_id'::uuid, 'curated-luxury-rolex-patek-shadow-load-v1', 'RUNNING',
+            'CURATED_LUXURY_ROLEX_PATEK_FINAL_READY',
+            '{"final_freeze":32953447624,"current_inventory_source":32934432129}'::jsonb,
+            :'reconciliation'::jsonb)
+          ON CONFLICT (run_id) DO NOTHING;
+          SQL
+
+          for file in "$SHADOW_LOAD_OUTPUT"/current/*.csv.gz; do
+            psql "$db_url" --set=ON_ERROR_STOP=1 <<SQL
+          CREATE TEMP TABLE stage_current (LIKE public.curated_luxury_current_listings_shadow INCLUDING DEFAULTS);
+          \copy stage_current (run_id,current_listing_key,offer_family_key,offer_state_key,latest_raw_occurrence_key,current_status,cohort_status,brand,observed_reference,observed_reference_key,intent,condition_as_observed,dial_or_color_as_observed,source_timestamp,source_price_amount,source_currency,normalized_usd_amount,price_verified,image_linked,source_image_key,dealer_key,dealer_rating_qualified,country_code,search_text) FROM PROGRAM 'gzip -dc $file' CSV HEADER
+          INSERT INTO public.curated_luxury_current_listings_shadow SELECT * FROM stage_current
+          ON CONFLICT (run_id, current_listing_key) DO NOTHING;
+          SQL
+          done
+
+          for file in "$SHADOW_LOAD_OUTPUT"/price-research/*.csv.gz; do
+            psql "$db_url" --set=ON_ERROR_STOP=1 <<SQL
+          CREATE TEMP TABLE stage_price (LIKE public.curated_luxury_offer_states_shadow INCLUDING DEFAULTS);
+          \copy stage_price (run_id,offer_state_key,offer_family_key,brand,observed_reference_key,source_price_amount,source_currency,normalized_usd_amount,first_seen,last_seen,occurrence_count,repost_same_offer_count,qualified_price_research,latest_raw_occurrence_key) FROM PROGRAM 'gzip -dc $file' CSV HEADER
+          INSERT INTO public.curated_luxury_offer_states_shadow SELECT * FROM stage_price
+          ON CONFLICT (run_id, offer_state_key) DO NOTHING;
+          SQL
+          done
+
+          reference_file="$SHADOW_LOAD_OUTPUT/observed-references.csv.gz"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<SQL
+          CREATE TEMP TABLE stage_references (LIKE public.curated_luxury_observed_references_shadow INCLUDING DEFAULTS);
+          \copy stage_references (run_id,brand,observed_reference,observed_reference_key,catalog_status,source_occurrence_count,unique_market_observation_count,current_listing_count,qualified_comparable_states,first_seen,last_seen) FROM PROGRAM 'gzip -dc $reference_file' CSV HEADER
+          INSERT INTO public.curated_luxury_observed_references_shadow SELECT * FROM stage_references
+          ON CONFLICT (run_id, brand, observed_reference_key) DO NOTHING;
+          SQL
+
+      - name: Reconcile exact shadow counts and freeze run
+        if: ${{ inputs.mode == 'load_shadow' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          run_id="$(jq -r .run_id "$SHADOW_LOAD_OUTPUT/load-manifest.json")"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --set=run_id="$run_id" <<'SQL'
+          SELECT set_config('app.shadow_run_id', :'run_id', false);
+          DO $$
+          DECLARE
+            rolex_total bigint; rolex_wts bigint; rolex_wtb bigint; rolex_pr bigint;
+            patek_total bigint; patek_wts bigint; patek_wtb bigint; patek_pr bigint;
+          BEGIN
+            SELECT count(*), count(*) FILTER (WHERE intent='WTS'), count(*) FILTER (WHERE intent='WTB')
+              INTO rolex_total, rolex_wts, rolex_wtb
+              FROM public.curated_luxury_current_listings_shadow
+              WHERE run_id=current_setting('app.shadow_run_id')::uuid AND brand='Rolex';
+            SELECT count(*), count(*) FILTER (WHERE intent='WTS'), count(*) FILTER (WHERE intent='WTB')
+              INTO patek_total, patek_wts, patek_wtb
+              FROM public.curated_luxury_current_listings_shadow
+              WHERE run_id=current_setting('app.shadow_run_id')::uuid AND brand='Patek Philippe';
+            SELECT count(*) INTO rolex_pr FROM public.curated_luxury_offer_states_shadow
+              WHERE run_id=current_setting('app.shadow_run_id')::uuid AND brand='Rolex' AND qualified_price_research;
+            SELECT count(*) INTO patek_pr FROM public.curated_luxury_offer_states_shadow
+              WHERE run_id=current_setting('app.shadow_run_id')::uuid AND brand='Patek Philippe' AND qualified_price_research;
+            IF (rolex_total,rolex_wts,rolex_wtb,rolex_pr) <> (1535763,1386508,149255,38521)
+              OR (patek_total,patek_wts,patek_wtb,patek_pr) <> (937001,884326,52675,45638) THEN
+              RAISE EXCEPTION 'Frozen shadow count reconciliation failed';
+            END IF;
+            UPDATE public.curated_luxury_shadow_runs SET status='COMPLETE', completed_at=now()
+              WHERE run_id=current_setting('app.shadow_run_id')::uuid AND status='RUNNING';
+          END $$;
+          SQL
+
+          test "$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --set=run_id="$run_id" \
+            --command="SELECT status FROM public.curated_luxury_shadow_runs WHERE run_id=:'run_id';")" = 'COMPLETE'

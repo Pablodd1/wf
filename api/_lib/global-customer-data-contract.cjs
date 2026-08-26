@@ -43,6 +43,21 @@ function priceEvidenceDisposition(classification) {
   return contract.price_currency_evidence.review_only_classes.includes(value) ? 'REVIEW_ONLY' : 'UNRESOLVED';
 }
 
+function referenceIdentityDisposition(record = {}) {
+  const reference = clean(record.observed_reference || record.reference || record.normalized_reference);
+  const classification = clean(record.reference_identity_classification || record.child_classification).toUpperCase();
+  const catalogStatus = clean(record.catalog_status).toUpperCase();
+  if (!reference || /(?:PARTIAL|AMBIGUOUS|INVALID|COMPONENT|FRAGMENT|REVIEW_REQUIRED)/.test(classification)) {
+    return 'REVIEW_ONLY';
+  }
+  if (catalogStatus === 'CATALOG_CONFIRMED') return 'CATALOG_CONFIRMED';
+  const sourceBacked = record.live_source_verified === true
+    || classification === 'SOURCE_BACKED_OBSERVED_REFERENCE'
+    || catalogStatus === 'OBSERVED_ONLY'
+    || (clean(record.raw_occurrence_key) && clean(record.exact_child_text_sha256));
+  return sourceBacked ? 'OBSERVED_ONLY' : 'REVIEW_ONLY';
+}
+
 function isContractBrand(brand) {
   const value = clean(brand).toLowerCase();
   return contract.brands.some(candidate => candidate.toLowerCase() === value);
@@ -53,6 +68,7 @@ module.exports = {
   contract,
   isContractBrand,
   priceEvidenceDisposition,
+  referenceIdentityDisposition,
   postingIdentityStatus,
   resolvePostingIdentity,
 };

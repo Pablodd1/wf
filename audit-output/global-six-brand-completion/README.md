@@ -36,6 +36,15 @@ production observation after publication/reference safety gates. When a brand's
 production census is incomplete, the authoritative customer-safe count is
 `null` and only the bounded observed count is reported.
 
+Catalog membership is optional enrichment, not a publication or Price Research
+gate. An exact source-backed observed reference may be `OBSERVED_ONLY` and remain
+customer-eligible without being inserted into the canonical catalog. Partial,
+ambiguous, component, invalid, and parser-fragment identities remain review-only.
+Missing dealer identity does not fabricate a dealer or suppress an otherwise
+valid listing; dealer identity and rating appear only when source-backed.
+The committed census JSON remains the dated v1 audit snapshot and is not
+regenerated during this integration; the v2 contract governs future runs.
+
 For Rolex and Patek Philippe, the completed Phase 7B publication census now
 supplies the authoritative customer-safe count. This is the number of canonical
 references with at least one published single-watch WTS/WTB observation under
