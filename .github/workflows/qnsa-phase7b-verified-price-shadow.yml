@@ -27,7 +27,6 @@ jobs:
     env:
       PROJECT_REF: qnsafosakvonzgfcsphh
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       PHASE7B_RUN_KEY: ${{ inputs.run_key }}
       PHASE7B_REPORT_DIR: audit-output/phase7b-verified-price-shadow
@@ -53,47 +52,34 @@ jobs:
           if ($env:PHASE7B_RUN_KEY -cnotmatch '^phase7b-[a-z0-9][a-z0-9._-]{5,100}$') {
             throw 'run_key must satisfy the immutable Phase 7B run-key contract.'
           }
-          foreach ($name in 'SUPABASE_URL','SUPABASE_SERVICE_ROLE_KEY','SUPABASE_ACCESS_TOKEN') {
+          foreach ($name in 'SUPABASE_URL','SUPABASE_ACCESS_TOKEN') {
             if (-not (Get-Item -LiteralPath "Env:$name").Value) { throw "$name is unavailable." }
           }
-          if ([Uri]$env:SUPABASE_URL).Host -cne "$($env:PROJECT_REF).supabase.co" {
+          if (([Uri]$env:SUPABASE_URL).Host -cne "$($env:PROJECT_REF).supabase.co") {
             throw 'SUPABASE_URL does not target canonical QNSA.'
           }
+
+      - name: Resolve the current canonical QNSA service key without exposing it
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $keys = Invoke-RestMethod -Method Get `
+            -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/api-keys" `
+            -Headers $headers
+          $service = @($keys | Where-Object {
+            $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret')
+          }) | Select-Object -First 1
+          if (-not $service.api_key) { throw 'Current canonical QNSA service key is unavailable.' }
+          Write-Output "::add-mask::$($service.api_key)"
+          "SUPABASE_SERVICE_ROLE_KEY=$($service.api_key)" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - run: npm ci
 
       - name: Verify and atomically install the private shadow schema
         shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $migrationPath = 'supabase/migrations/20260824190000_phase7b_verified_price_research_shadow.sql'
-          $migration = Get-Content -LiteralPath $migrationPath -Raw
-          $normalized = $migration.Replace("`r`n", "`n")
-          $actualSha = [Convert]::ToHexString(
-            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($normalized))
-          ).ToLowerInvariant()
-          if ($actualSha -cne $env:EXPECTED_NORMALIZED_LF_MIGRATION_SHA256) {
-            throw 'Pinned normalized-LF Phase 7B migration SHA-256 mismatch.'
-          }
-          $migration = $migration -replace '(?im)^\s*BEGIN\s*;\s*$', ''
-          $migration = $migration -replace '(?im)^\s*COMMIT\s*;\s*$', ''
-          $preflight = Get-Content -LiteralPath 'supabase/tests/phase7b_verified_price_shadow_install_preflight.sql' -Raw
-          $resumePreflight = Get-Content -LiteralPath 'supabase/tests/phase7b_verified_price_shadow_resume_preflight.sql' -Raw
-          $postflight = Get-Content -LiteralPath 'supabase/tests/phase7b_verified_price_shadow_install_postflight.sql' -Raw
-          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $uri = "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query"
-          $checkBody = @{ query = "SELECT to_regnamespace('price_research_shadow') IS NOT NULL AS installed;"; read_only = $true } | ConvertTo-Json
-          $check = Invoke-RestMethod -Method Post -Uri $uri -Headers $headers -ContentType 'application/json' -Body $checkBody
-          $installed = [bool]$check[0].installed
-          if ($installed) {
-            $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='120s';`n$resumePreflight`n$postflight`nCOMMIT;"
-          } else {
-            $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='120s';`n$preflight`n$migration`n$postflight`nCOMMIT;"
-          }
-          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
-          Invoke-RestMethod -Method Post -Uri $uri `
-            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
-          Write-Output "{`"private_shadow_schema_ready`":true,`"preexisting`":$($installed.ToString().ToLowerInvariant()),`"migration_sha256`":`"$actualSha`",`"customer_source_switches`":0}"
+        run: ./tools/audit/install-phase7b-shadow.ps1
 
       - name: Run bounded checkpointed immutable-evidence shadow rebuild
         env:

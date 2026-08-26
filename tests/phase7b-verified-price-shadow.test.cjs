@@ -58,6 +58,25 @@ test('admits only an exact immutable parser-v5 USD match', () => {
   assert.ok(!result.evidence_canonical.includes('source_span_text'));
 });
 
+test('records source spans in PostgreSQL Unicode character offsets', () => {
+  const rawMessage = '⌚ Rolex 126334\n💵 USD 12,500';
+  const result = classifyObservation(row({ raw_message: rawMessage }), catalog);
+  assert.equal(result.price_evidence_classification, 'VERIFIED_IN_NEW_COHORT');
+  assert.equal(Array.from(rawMessage).slice(result.source_span_start, result.source_span_end).join(''),
+    result.source_span_text);
+  assert.match(result.source_span_sha256, /^[0-9a-f]{64}$/);
+});
+
+test('every verified span round-trips exactly through PostgreSQL character offsets', () => {
+  const rawMessage = 'Rolex 126334 — asking USD 12,500 ✅';
+  const result = classifyObservation(row({ raw_message: rawMessage }), catalog);
+  assert.equal(result.price_evidence_classification, 'VERIFIED_IN_NEW_COHORT');
+  const databaseSlice = Array.from(rawMessage)
+    .slice(result.source_span_start, result.source_span_end).join('');
+  assert.equal(databaseSlice, result.source_span_text);
+  assert.equal(result.verified_usd_amount, result.current_usd_amount);
+});
+
 test('preserves retired USD defaulting as excluded history', () => {
   const result = classifyObservation(row({
     currency_original: null,
@@ -248,9 +267,32 @@ test('workflow is manual-only, pinned to QNSA, and uses the Production environme
   assert.match(workflow, /PROJECT_REF: qnsafosakvonzgfcsphh/);
   assert.match(workflow, /RUN_QNSA_PHASE7B_VERIFIED_PRICE_SHADOW/);
   assert.match(workflow, /\^phase7b-/);
+  assert.match(workflow, /if \(\(\[Uri\]\$env:SUPABASE_URL\)\.Host -cne "\$\(\$env:PROJECT_REF\)\.supabase\.co"\) \{/);
+  assert.match(workflow, /api\.supabase\.com\/v1\/projects\/\$env:PROJECT_REF\/api-keys/);
+  assert.match(workflow, /::add-mask::\$\(\$service\.api_key\)/);
+  assert.match(workflow, /SUPABASE_SERVICE_ROLE_KEY=\$\(\$service\.api_key\)/);
   const jobEnvironment = workflow.slice(workflow.indexOf('    env:'), workflow.indexOf('    steps:'));
   assert.doesNotMatch(jobEnvironment, /\$\{\{\s*runner\./);
+  assert.doesNotMatch(jobEnvironment, /SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(workflow, /Run bounded checkpointed immutable-evidence shadow rebuild[\s\S]*?PHASE7B_OUTPUT:\s*\$\{\{\s*runner\.temp\s*\}\}\/phase7b-worker\.json/);
+});
+
+test('installer bounds immutable source checks to separate Management API requests', () => {
+  const installer = fs.readFileSync(path.join(__dirname,
+    '../tools/audit/install-phase7b-shadow.ps1'), 'utf8');
+  assert.match(installer, /Get-SourceSnapshot 'staging\.listings'/);
+  assert.match(installer, /Get-SourceSnapshot 'public\.raw_messages'/);
+  assert.match(installer, /Get-SourceSnapshot 'public\.raw_message_versions'/);
+  assert.match(installer, /Assert-SameSnapshot 'Customer view definitions'/);
+  assert.match(installer, /Assert-SameSnapshot 'Publication controls'/);
+  assert.match(installer, /SET LOCAL statement_timeout='120s'/);
+  assert.match(installer, /ALTER FUNCTION public\.phase7b_verified_price_source_page\(text,text,uuid,integer\)[\s\S]*?SET statement_timeout = '45s'/);
+  assert.match(installer, /SET enable_sort = 'off'/);
+  assert.match(installer, /SET plan_cache_mode = 'force_custom_plan'/);
+  assert.doesNotMatch(installer, /CREATE\s+(?:UNIQUE\s+)?INDEX[\s\S]*?staging\.listings/i);
+  assert.doesNotMatch(installer, /UPDATE\s+staging\.listings/i);
+  assert.doesNotMatch(installer, /UPDATE\s+public\.raw_/i);
+  assert.doesNotMatch(installer, /price_research_shadow.*(anon|authenticated).*GRANT/i);
 });
 
 test('report remains NOT_READY and UNKNOWN without a completed production run', () => {
