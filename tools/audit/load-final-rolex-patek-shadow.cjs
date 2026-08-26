@@ -157,60 +157,84 @@ async function loadFiles(files, table, key, fetchImpl = fetch, batchSize = 500) 
 }
 
 function reconciliationSql(runId) {
-  return `DO $$
-DECLARE
-  rolex_total bigint; rolex_wts bigint; rolex_wtb bigint; rolex_pr bigint;
-  patek_total bigint; patek_wts bigint; patek_wtb bigint; patek_pr bigint;
-  duplicate_rows bigint; invalid_states bigint; missing_lineage bigint;
-BEGIN
-  SELECT count(*),count(*) FILTER (WHERE intent='WTS'),count(*) FILTER (WHERE intent='WTB')
-    INTO rolex_total,rolex_wts,rolex_wtb FROM public.curated_luxury_current_listings_shadow
-    WHERE run_id='${runId}'::uuid AND brand='Rolex';
-  SELECT count(*),count(*) FILTER (WHERE intent='WTS'),count(*) FILTER (WHERE intent='WTB')
-    INTO patek_total,patek_wts,patek_wtb FROM public.curated_luxury_current_listings_shadow
-    WHERE run_id='${runId}'::uuid AND brand='Patek Philippe';
-  SELECT count(*) INTO rolex_pr FROM public.curated_luxury_offer_states_shadow
-    WHERE run_id='${runId}'::uuid AND brand='Rolex' AND qualified_price_research;
-  SELECT count(*) INTO patek_pr FROM public.curated_luxury_offer_states_shadow
-    WHERE run_id='${runId}'::uuid AND brand='Patek Philippe' AND qualified_price_research;
-  SELECT (count(*)-count(DISTINCT current_listing_key))+(count(*)-count(DISTINCT offer_family_key))
-    INTO duplicate_rows FROM public.curated_luxury_current_listings_shadow WHERE run_id='${runId}'::uuid;
-  SELECT count(*) INTO invalid_states FROM public.curated_luxury_current_listings_shadow
-    WHERE run_id='${runId}'::uuid AND NOT (
-      (cohort_status='CONFIRMED_CURRENT' AND current_status='CURRENT_ACTIVE') OR
-      (cohort_status='LATEST_OBSERVED' AND current_status='CURRENT_LATEST_STATE'));
-  SELECT count(*) INTO missing_lineage FROM public.curated_luxury_current_listings_shadow
-    WHERE run_id='${runId}'::uuid AND (unique_observation_key IS NULL OR parent_key IS NULL OR
-      version_key IS NULL OR source_key IS NULL OR exact_child_text_sha256 IS NULL OR parent_raw_text_sha256 IS NULL);
-  IF (rolex_total,rolex_wts,rolex_wtb,rolex_pr)<>(1535763,1386508,149255,38521)
-    OR (patek_total,patek_wts,patek_wtb,patek_pr)<>(937001,884326,52675,45638)
-    OR duplicate_rows<>0 OR invalid_states<>0 OR missing_lineage<>0 THEN
-    RAISE EXCEPTION 'Shadow reconciliation failed';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM public.curated_luxury_current_listings_shadow
-    WHERE run_id='${runId}'::uuid AND current_status='CURRENT_ACTIVE')
-    OR NOT EXISTS (SELECT 1 FROM public.curated_luxury_current_listings_shadow
-    WHERE run_id='${runId}'::uuid AND current_status='CURRENT_LATEST_STATE') THEN
-    RAISE EXCEPTION 'Both availability states are required';
-  END IF;
-  UPDATE public.curated_luxury_shadow_runs SET status='COMPLETE',completed_at=now()
-    WHERE run_id='${runId}'::uuid AND status IN ('RUNNING','INCOMPLETE');
-END $$;
-SELECT jsonb_build_object(
-  'run_status',(SELECT status FROM public.curated_luxury_shadow_runs WHERE run_id='${runId}'::uuid),
-  'Rolex',(SELECT jsonb_build_object('current',count(*),'wts',count(*) FILTER (WHERE intent='WTS'),
-    'wtb',count(*) FILTER (WHERE intent='WTB')) FROM public.curated_luxury_current_listings_shadow
-    WHERE run_id='${runId}'::uuid AND brand='Rolex'),
-  'Patek Philippe',(SELECT jsonb_build_object('current',count(*),'wts',count(*) FILTER (WHERE intent='WTS'),
-    'wtb',count(*) FILTER (WHERE intent='WTB')) FROM public.curated_luxury_current_listings_shadow
-    WHERE run_id='${runId}'::uuid AND brand='Patek Philippe'),
-  'Rolex PR',(SELECT count(*) FROM public.curated_luxury_offer_states_shadow
-    WHERE run_id='${runId}'::uuid AND brand='Rolex' AND qualified_price_research),
-  'Patek PR',(SELECT count(*) FROM public.curated_luxury_offer_states_shadow
-    WHERE run_id='${runId}'::uuid AND brand='Patek Philippe' AND qualified_price_research),
-  'observed_only_references',(SELECT count(*) FROM public.curated_luxury_observed_references_shadow
-    WHERE run_id='${runId}'::uuid AND catalog_status='OBSERVED_ONLY'),
-  'duplicate_rows',0,'invalid_states',0,'missing_lineage',0) AS result;`;
+  return {
+    run: `SELECT status FROM public.curated_luxury_shadow_runs WHERE run_id='${runId}'::uuid;`,
+    brand: brand => `SELECT count(*)::bigint AS current,
+      count(*) FILTER (WHERE intent='WTS')::bigint AS wts,
+      count(*) FILTER (WHERE intent='WTB')::bigint AS wtb
+      FROM public.curated_luxury_current_listings_shadow
+      WHERE run_id='${runId}'::uuid AND brand='${brand.replaceAll("'", "''")}';`,
+    price: brand => `SELECT count(*)::bigint AS price_research
+      FROM public.curated_luxury_offer_states_shadow
+      WHERE run_id='${runId}'::uuid AND brand='${brand.replaceAll("'", "''")}' AND qualified_price_research;`,
+    constraints: `SELECT count(*)::integer AS verified_constraints FROM pg_constraint
+      WHERE conrelid='public.curated_luxury_current_listings_shadow'::regclass
+      AND contype IN ('p','u') AND pg_get_constraintdef(oid) IN
+        ('PRIMARY KEY (run_id, current_listing_key)','UNIQUE (run_id, offer_family_key)');`,
+    states: `SELECT count(*) FILTER (WHERE NOT (
+        (cohort_status='CONFIRMED_CURRENT' AND current_status='CURRENT_ACTIVE') OR
+        (cohort_status='LATEST_OBSERVED' AND current_status='CURRENT_LATEST_STATE')))::bigint AS invalid_states,
+      count(*) FILTER (WHERE current_status='CURRENT_ACTIVE')::bigint AS active,
+      count(*) FILTER (WHERE current_status='CURRENT_LATEST_STATE')::bigint AS latest
+      FROM public.curated_luxury_current_listings_shadow WHERE run_id='${runId}'::uuid;`,
+    lineage: `SELECT count(*)::bigint AS missing_lineage FROM public.curated_luxury_current_listings_shadow
+      WHERE run_id='${runId}'::uuid AND (unique_observation_key IS NULL OR parent_key IS NULL OR
+        version_key IS NULL OR source_key IS NULL OR exact_child_text_sha256 IS NULL OR parent_raw_text_sha256 IS NULL);`,
+    references: `SELECT count(*) FILTER (WHERE catalog_status='OBSERVED_ONLY')::bigint AS observed_only_references
+      FROM public.curated_luxury_observed_references_shadow WHERE run_id='${runId}'::uuid;`,
+    complete: `UPDATE public.curated_luxury_shadow_runs SET status='COMPLETE',completed_at=now()
+      WHERE run_id='${runId}'::uuid AND status IN ('RUNNING','INCOMPLETE') RETURNING status;`,
+  };
+}
+
+function firstRow(response) {
+  if (!Array.isArray(response) || !response[0]) throw new Error('QNSA reconciliation returned no row');
+  return response[0];
+}
+
+function integer(value, label) {
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error(`Invalid reconciliation value: ${label}`);
+  return parsed;
+}
+
+async function reconcile(runId, token, fetchImpl = fetch) {
+  const sql = reconciliationSql(runId);
+  const initial = firstRow(await managementQuery(sql.run, token, fetchImpl));
+  if (!['RUNNING', 'INCOMPLETE', 'COMPLETE'].includes(initial.status)) throw new Error('Shadow run is unavailable');
+  const brands = {};
+  const prices = {};
+  for (const [brand, expected] of Object.entries(EXPECTED)) {
+    const counts = firstRow(await managementQuery(sql.brand(brand), token, fetchImpl));
+    brands[brand] = { current: integer(counts.current, `${brand} current`),
+      wts: integer(counts.wts, `${brand} WTS`), wtb: integer(counts.wtb, `${brand} WTB`) };
+    const price = firstRow(await managementQuery(sql.price(brand), token, fetchImpl));
+    prices[brand] = integer(price.price_research, `${brand} Price Research`);
+    if (brands[brand].current !== expected.current || brands[brand].wts !== expected.wts
+      || brands[brand].wtb !== expected.wtb || prices[brand] !== expected.priceResearch) {
+      throw new Error(`${brand} exact reconciliation failed`);
+    }
+  }
+  const constraints = firstRow(await managementQuery(sql.constraints, token, fetchImpl));
+  if (integer(constraints.verified_constraints, 'unique constraints') !== 2) {
+    throw new Error('Shadow uniqueness constraints are unavailable');
+  }
+  const states = firstRow(await managementQuery(sql.states, token, fetchImpl));
+  if (integer(states.invalid_states, 'invalid states') !== 0
+    || integer(states.active, 'active state rows') === 0 || integer(states.latest, 'latest state rows') === 0) {
+    throw new Error('Availability-state reconciliation failed');
+  }
+  const lineage = firstRow(await managementQuery(sql.lineage, token, fetchImpl));
+  if (integer(lineage.missing_lineage, 'missing lineage') !== 0) throw new Error('Lineage reconciliation failed');
+  const references = firstRow(await managementQuery(sql.references, token, fetchImpl));
+  const observedOnly = integer(references.observed_only_references, 'observed-only references');
+  if (observedOnly === 0) throw new Error('OBSERVED_ONLY references are unavailable');
+  if (initial.status !== 'COMPLETE') firstRow(await managementQuery(sql.complete, token, fetchImpl));
+  const final = firstRow(await managementQuery(sql.run, token, fetchImpl));
+  if (final.status !== 'COMPLETE') throw new Error('Shadow run did not complete');
+  return { run_status: final.status, Rolex: brands.Rolex, 'Patek Philippe': brands['Patek Philippe'],
+    'Rolex PR': prices.Rolex, 'Patek PR': prices['Patek Philippe'], observed_only_references: observedOnly,
+    duplicate_rows: 0, invalid_states: 0, missing_lineage: 0 };
 }
 
 function sortedGzipFiles(directory) {
@@ -225,6 +249,16 @@ async function load(options = {}) {
     throw new Error('Refusing non-QNSA target');
   }
   const outputRoot = path.resolve(options.outputRoot || process.env.SHADOW_LOAD_OUTPUT || '');
+  const reconcileOnly = options.reconcileOnly ?? process.env.SHADOW_RECONCILE_ONLY === 'true';
+  if (reconcileOnly) {
+    const runId = options.runId || process.env.SHADOW_RUN_ID || '17d6d831-86cd-5e67-9830-c881bcf16e0d';
+    const result = await reconcile(runId, token, options.fetchImpl || fetch);
+    const output = { contract: CONTRACT, project_ref: PROJECT_REF, run_id: runId, ...result,
+      production_source_tables_mutated: false, customer_endpoint_switched: false };
+    fs.mkdirSync(outputRoot, { recursive: true });
+    fs.writeFileSync(path.join(outputRoot, 'load-result.json'), `${JSON.stringify(output, null, 2)}\n`);
+    return output;
+  }
   const manifest = JSON.parse(fs.readFileSync(path.join(outputRoot, 'load-manifest.json'), 'utf8'));
   if (manifest.canonical_project_ref !== PROJECT_REF || manifest.status !== 'READY_TO_LOAD_SHADOW_ONLY'
     || manifest.source_switch !== false || manifest.customer_endpoints_changed !== false
@@ -250,9 +284,7 @@ async function load(options = {}) {
   await loadFiles(sortedGzipFiles(path.join(outputRoot, 'current')), TABLES.current, key, fetchImpl, options.batchSize);
   await loadFiles(sortedGzipFiles(path.join(outputRoot, 'price-research')), TABLES.price, key, fetchImpl, options.batchSize);
   await loadFiles([path.join(outputRoot, 'observed-references.csv.gz')], TABLES.references, key, fetchImpl, options.batchSize);
-  const response = await managementQuery(reconciliationSql(manifest.run_id), token, fetchImpl);
-  const result = response.at(-1)?.result || response[0]?.result;
-  if (result?.run_status !== 'COMPLETE') throw new Error('Shadow run did not complete');
+  const result = await reconcile(manifest.run_id, token, fetchImpl);
   const output = { contract: CONTRACT, project_ref: PROJECT_REF, run_id: manifest.run_id, ...result,
     production_source_tables_mutated: false, customer_endpoint_switched: false };
   fs.writeFileSync(path.join(outputRoot, 'load-result.json'), `${JSON.stringify(output, null, 2)}\n`);
@@ -278,6 +310,7 @@ module.exports = {
   parseCsvLine,
   readGzipCsv,
   reconciliationSql,
+  reconcile,
   restUrl,
   typedValue,
 };
