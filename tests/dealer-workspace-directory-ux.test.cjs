@@ -24,7 +24,7 @@ test('Trading Floor rating badges match the source-backed evidence contract', ()
   assert.match(floor, /<ListingDealerEvidence/);
   assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_SUPPLIED'/);
   assert.match(dealerEvidence, /ratingEvidenceStatus === 'SOURCE_FEEDBACK_COUNT'/);
-  assert.match(dealerEvidence, />Dealer rating not available<\/span>/);
+  assert.match(dealerEvidence, />Not rated<\/span>/);
   assert.match(dealerEvidence, /contactPublicationApproved && sellerPhone/);
 });
 
