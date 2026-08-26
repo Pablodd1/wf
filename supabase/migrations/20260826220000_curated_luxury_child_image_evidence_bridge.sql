@@ -120,7 +120,7 @@ BEGIN
     RETURN jsonb_build_object('total',0,'exact',true,'source','complete_gate');
   END IF;
   IF p_images_only THEN
-    SELECT count(*) INTO v_total
+    SELECT count(DISTINCT c.current_listing_key) INTO v_total
     FROM public.curated_luxury_child_image_links_shadow l
     JOIN public.curated_luxury_child_image_assets_shadow a USING(source_image_key)
     JOIN public.curated_luxury_current_listings_shadow c

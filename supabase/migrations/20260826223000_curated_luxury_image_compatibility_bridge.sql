@@ -46,7 +46,7 @@ WITH production_images AS MATERIALIZED (
     AND coalesce(i.has_image,false)
     AND btrim(coalesce(i.user_image_url,'')) ~ '^https?://[^[:space:]]+$'
     AND upper(coalesce(i.verification_status,'')) NOT IN ('REJECTED','HIDDEN','DELETED','ARCHIVED')
-    AND upper(coalesce(i.image_evidence_type,'')) NOT LIKE '%CATALOG%'
+    AND upper(coalesce(i.image_evidence_type,'')) = 'SELLER_LISTING_IMAGE'
     AND i.source_payload_sha256 ~ '^[0-9a-f]{64}$'
     AND i.source_payload_sha256 = encode(extensions.digest(convert_to(i.raw_message,'UTF8'),'sha256'),'hex')
 ), production_counts AS MATERIALIZED (
