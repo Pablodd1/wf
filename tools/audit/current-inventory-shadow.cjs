@@ -285,7 +285,7 @@ function aggregateTemplate() {
     repost_groups: 0, repost_collapsed: 0, historical_only: 0, withdrawn: 0, superseded: 0,
     qualified_historical_price_states: 0, qualified_reference_counts: new Map(),
     display: { IMAGE_AND_PRICE: 0, IMAGE_ONLY: 0, PRICE_ONLY: 0, NEITHER: 0 },
-    canary_pool: [],
+    canary_pool: [], canary_by_reference: new Map(),
   };
 }
 
@@ -316,6 +316,8 @@ function publicBrand(stats, ingest, catalogs) {
   const comparableRefs = [...stats.qualified_reference_counts.entries()].filter(([, count]) => count > 0);
   const ratingReady = comparableRefs.filter(([, count]) => count >= 2).length;
   const current = stats.current_active;
+  const invalidOccurrenceCount = Object.values(ingest.invalid_occurrences)
+    .reduce((sum, value) => sum + Number(value || 0), 0);
   return {
     historical_raw_parents: ingest.raw_parents,
     historical_raw_candidate_occurrences: ingest.raw_candidate_occurrences,
@@ -354,6 +356,10 @@ function publicBrand(stats, ingest, catalogs) {
     },
     reconciliation: {
       historical_unique_market_observations: ingest.valid_unique_historical_observations,
+      child_gate_candidate_occurrences: ingest.raw_candidate_occurrences,
+      child_gate_invalid_occurrences: invalidOccurrenceCount,
+      child_gate_reconciles: ingest.raw_candidate_occurrences
+        === ingest.valid_unique_historical_observations + invalidOccurrenceCount,
       current_active: stats.current_active,
       status_unresolved: stats.status_unresolved,
       repost_collapsed: stats.repost_collapsed,
@@ -396,7 +402,6 @@ async function run(options = {}) {
       const records = readGzip(sourceFile).filter(record => BRANDS.includes(record.brand));
       for (const record of records) {
         checkpoint.brands[record.brand].raw_parents += 1;
-        checkpoint.brands[record.brand].raw_candidate_occurrences += record.children.length;
       }
       const targetRecords = records.filter(record => TARGET_CLASSES.has(record.classification));
       const enriched = [];
@@ -426,6 +431,7 @@ async function run(options = {}) {
       const batches = Array.from({ length: PARTITIONS }, () => []);
       for (const result of enriched) {
         const brand = BRANDS.includes(result.brand) ? result.brand : null;
+        if (brand) checkpoint.brands[brand].raw_candidate_occurrences += 1;
         if (!result.row) {
           if (brand) increment(checkpoint.brands[brand].invalid_occurrences, result.classification);
           continue;
@@ -511,7 +517,12 @@ async function run(options = {}) {
             current_status: family.current_status,
             ...latest,
           });
-          if (latest.live_source_verified && stats.canary_pool.length < 2000) stats.canary_pool.push(currentRows.at(-1));
+          if (latest.live_source_verified) {
+            if (stats.canary_pool.length < 2000) stats.canary_pool.push(currentRows.at(-1));
+            if (latest.observed_reference_key && !stats.canary_by_reference.has(latest.observed_reference_key)) {
+              stats.canary_by_reference.set(latest.observed_reference_key, currentRows.at(-1));
+            }
+          }
         }
         familyRows.push({
           offer_family_key: family.offer_family_key,
@@ -549,9 +560,10 @@ async function run(options = {}) {
       const rare = [...byRef].reverse()[0]?.observed_reference_key;
       const observedOnly = byRef.find(row => row.catalog_status === 'OBSERVED_ONLY')?.observed_reference_key;
       const selectors = [
-        [`${brand}_COMMON_REFERENCE`, row => row.observed_reference_key === common],
-        [`${brand}_RARE_REFERENCE`, row => row.observed_reference_key === rare],
-        [`${brand}_OBSERVED_ONLY_REFERENCE`, row => row.observed_reference_key === observedOnly],
+        [`${brand}_COMMON_REFERENCE`, row => row.observed_reference_key === common, stats.canary_by_reference.get(common)],
+        [`${brand}_RARE_REFERENCE`, row => row.observed_reference_key === rare, stats.canary_by_reference.get(rare)],
+        [`${brand}_OBSERVED_ONLY_REFERENCE`, row => row.observed_reference_key === observedOnly,
+          stats.canary_by_reference.get(observedOnly)],
         [`${brand}_WTB`, row => row.intent === 'WTB'],
         [`${brand}_IMAGE_AND_PRICE`, row => displayTier(row) === 'IMAGE_AND_PRICE'],
         [`${brand}_IMAGE_ONLY`, row => displayTier(row) === 'IMAGE_ONLY'],
@@ -559,8 +571,8 @@ async function run(options = {}) {
         [`${brand}_DEALER_LINKED`, row => Boolean(row.dealer_key)],
         [`${brand}_MULTI_WATCH_CHILD`, row => String(row.parent_classification).startsWith('MULTI_WATCH')],
       ];
-      for (const [label, predicate] of selectors) {
-        const row = stats.canary_pool.find(predicate);
+      for (const [label, predicate, directRow] of selectors) {
+        const row = directRow || stats.canary_pool.find(predicate);
         canary.push({
           label,
           status: row ? 'VERIFIED_FROM_LIVE_SOURCE_RECHECK' : 'NOT_AVAILABLE_IN_ACTIVE_LIVE_RECHECK_POOL',
@@ -590,7 +602,8 @@ async function run(options = {}) {
 
     const publicBrands = Object.fromEntries(BRANDS.map(brand => [brand,
       publicBrand(aggregates[brand], checkpoint.brands[brand], catalogs.get(brand))]));
-    const reconciliationPass = BRANDS.every(brand => publicBrands[brand].reconciliation.reconciles);
+    const reconciliationPass = BRANDS.every(brand => publicBrands[brand].reconciliation.reconciles
+      && publicBrands[brand].reconciliation.child_gate_reconciles);
     const remaining = {
       status_unresolved_offer_families: BRANDS.reduce((sum, brand) => sum + publicBrands[brand].status_unresolved, 0),
       unsplittable_parents: BRANDS.reduce((sum, brand) => sum

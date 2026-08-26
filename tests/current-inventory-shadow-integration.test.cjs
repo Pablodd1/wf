@@ -83,7 +83,14 @@ test('miniature V2 plus V3 census builds a reconciled fail-closed current shadow
     if (summary.brands.Rolex.current_active !== 1) throw new Error('explicit active Rolex missing');
     if (summary.brands['Patek Philippe'].invalid_fragments.UNSPLITTABLE_PARENT !== 1) throw new Error('unsplit Patek missing');
     if (summary.decision !== 'NOT_READY_CURRENT_INVENTORY_GAPS') throw new Error('expected fail-closed decision');
+    if (!summary.brands.Rolex.reconciliation.child_gate_reconciles
+      || !summary.brands['Patek Philippe'].reconciliation.child_gate_reconciles) {
+      throw new Error('child gate counts do not reconcile');
+    }
     if (!fs.existsSync(path.join(output, 'manifest-sha256.json'))) throw new Error('manifest missing');
+    const canary = JSON.parse(fs.readFileSync(path.join(output, 'canary-evidence.json'), 'utf8')).canary;
+    if (canary.find(row => row.label === 'Rolex_RARE_REFERENCE')?.status
+      !== 'VERIFIED_FROM_LIVE_SOURCE_RECHECK') throw new Error('rare-reference canary was sampler-truncated');
     if (calls !== 2) throw new Error(`expected two bounded queries, received ${calls}`);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
