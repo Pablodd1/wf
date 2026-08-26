@@ -138,7 +138,9 @@ function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map(
       if (!row.id) continue;
       const classified = classifyRawPostGeneric(row, { targetBrands: BRANDS, dealerByPhone });
       const targetChildren = classified.children.filter(child => BRANDS.includes(child.brand));
-      for (const brand of new Set(targetChildren.map(child => child.brand))) brands[brand].raw_parents.add(row.raw_message_id);
+      for (const brand of new Set(classified.brands.filter(value => BRANDS.includes(value)))) {
+        brands[brand].raw_parents.add(row.raw_message_id);
+      }
       if (!targetChildren.length) {
         for (const brand of classified.brands.filter(value => BRANDS.includes(value))) {
           brands[brand].parked += 1;
@@ -171,6 +173,7 @@ function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map(
           brand: child.brand, reference: child.observed_reference,
           reference_key: child.observed_reference_key, intent: child.intent,
           timestamp: row.source_created_on || row.observed_at, raw_message_sha256: sha256(row.raw_text),
+          raw_message_present: typeof row.raw_text === 'string' && row.raw_text.length > 0,
           raw_child_sha256: child.raw_child_sha256, source_price_amount: child.source_price_amount,
           source_currency: child.source_currency, price_status: child.price_evidence_status,
           price_qualified: child.intent === 'WTS' && Boolean(child.observed_reference_key)
@@ -210,20 +213,35 @@ function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map(
     const invalidPrice = pr.filter(row => !['USD', 'USDT'].includes(row.source_currency)
       || !(Number(row.source_price_amount) > 0)).length;
     const invalidImage = currentListings.filter(row => row.image_url && !/^https?:\/\/\S+$/.test(row.image_url)).length;
+    const ordered = [...currentListings].sort((a, b) => timestamp(b.timestamp) - timestamp(a.timestamp)
+      || b.raw_occurrence_key.localeCompare(a.raw_occurrence_key));
+    const firstPage = ordered.slice(0, 24);
+    const cursor = firstPage.at(-1);
+    const secondPage = cursor ? ordered.filter(row => timestamp(row.timestamp) < timestamp(cursor.timestamp)
+      || (timestamp(row.timestamp) === timestamp(cursor.timestamp)
+        && row.raw_occurrence_key < cursor.raw_occurrence_key)).slice(0, 24) : [];
+    const paginationOverlap = secondPage.filter(row => firstPage.some(first => first.family === row.family)).length;
+    const sampleReference = firstPage.find(row => row.reference_key)?.reference_key;
+    const exactReferenceFailure = !sampleReference
+      || !currentListings.some(row => row.reference_key === sampleReference);
+    const filterFailure = currentListings.filter(row => row.intent === 'WTS').some(row => row.intent !== 'WTS')
+      || currentListings.filter(row => row.intent === 'WTB').some(row => row.intent !== 'WTB')
+      || currentListings.filter(row => row.image_url).some(row => !/^https?:\/\/\S+$/.test(row.image_url));
     const customerCanary = currentListings.length > 0 && duplicateFamilies === 0 && lineageMissing === 0
-      && invalidImage === 0 && currentListings.every(row => ['WTS', 'WTB'].includes(row.intent));
+      && invalidImage === 0 && paginationOverlap === 0 && !exactReferenceFailure && !filterFailure
+      && currentListings.every(row => ['WTS', 'WTB'].includes(row.intent) && row.raw_message_present);
     const priceCanary = invalidPrice === 0 && new Set(pr.map(row => row.family)).size === pr.length;
     allCanaries &&= customerCanary && priceCanary;
     output[brand] = {
       raw_parents: state.raw_parents.size,
-      valid_unique_observations: state.valid.size,
+      valid_unique_observations: state.valid.size + state.price_changes,
       final_current_listings: currentListings.length,
       confirmed_current: currentListings.filter(row => row.confirmed).length,
       latest_observed: currentListings.filter(row => !row.confirmed).length,
       wts: currentListings.filter(row => row.intent === 'WTS').length,
       wtb: currentListings.filter(row => row.intent === 'WTB').length,
-      distinct_observed_references: new Set(currentListings.map(row => row.reference_key)).size,
-      observed_only_references: [...new Set(currentListings.map(row => row.reference_key))]
+      distinct_observed_references: new Set(currentListings.map(row => row.reference_key).filter(Boolean)).size,
+      observed_only_references: [...new Set(currentListings.map(row => row.reference_key).filter(Boolean))]
         .filter(reference => !state.catalog.has(reference)).length,
       verified_priced: currentListings.filter(row => row.price_qualified).length,
       verified_images: currentListings.filter(row => row.image_url).length,
@@ -237,7 +255,9 @@ function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map(
       customer_canary: customerCanary ? 'PASS' : 'FAIL',
       price_research_canary: priceCanary ? 'PASS' : 'FAIL',
       defects: { duplicate_families: duplicateFamilies, missing_lineage: lineageMissing,
-        invalid_price_evidence: invalidPrice, invalid_images: invalidImage },
+        invalid_price_evidence: invalidPrice, invalid_images: invalidImage,
+        pagination_overlap: paginationOverlap, exact_reference_failure: Number(exactReferenceFailure),
+        filter_failure: Number(filterFailure) },
     };
   }
   return { contract: CONTRACT, decision: allCanaries ? 'NEXT_4_BRANDS_CANARY_READY' : 'NOT_READY_NEXT_4_BRANDS',
