@@ -43,6 +43,11 @@ yarn-debug.log
 yarn-error.log
 .env*.local
 
+# Read-only six-brand live checkpoints can contain large row-level API snapshots.
+# Commit only the generated aggregate completion summary and per-brand ledgers.
+audit-output/global-six-brand-completion/price-research/
+audit-output/global-six-brand-completion/trading-floor/
+
 # Private raw-first audit artifacts (README remains reviewable)
 audit-output/raw-first-rolex-patek/summary.json
 audit-output/raw-first-rolex-patek/*-manifest.jsonl.gz

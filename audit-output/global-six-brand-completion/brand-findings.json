@@ -1,0 +1,172 @@
+{
+  "contract": "watchfacts-global-customer-data-contract-v1",
+  "observed_at": "2026-08-25T13:30:58.474Z",
+  "read_only": true,
+  "brands": [
+    {
+      "brand": "Rolex",
+      "catalog_references": 303,
+      "approved_local_canonical_references": 303,
+      "deployed_catalog_references": 303,
+      "exact_local_deployed_overlap": 303,
+      "deployed_only_references": 0,
+      "observed_catalog_universe": 1179,
+      "exact_published_references": 287,
+      "trading_floor_listings": 187576,
+      "wts": 151655,
+      "wtb": 35921,
+      "price_research_qualified_wts": 6348,
+      "analytics_ready_references": 222,
+      "phase7b_source_observations": 157495,
+      "phase7b_verified_observations": 6348,
+      "phase7b_legacy_price_research_observations": 102215,
+      "phase7b_verified_price_research_references": 243,
+      "phase7b_decision": "CANARY_READY",
+      "decision": "NOT_READY",
+      "blockers": [
+        "Phase 7B is CANARY_READY only; no customer source switch or cohort deployment is authorized",
+        "Global dealer/posting-identity acceptance remains incomplete for this authoritative reference census"
+      ]
+    },
+    {
+      "brand": "Patek Philippe",
+      "catalog_references": 460,
+      "approved_local_canonical_references": 460,
+      "deployed_catalog_references": 460,
+      "exact_local_deployed_overlap": 460,
+      "deployed_only_references": 0,
+      "observed_catalog_universe": 3483,
+      "exact_published_references": 416,
+      "trading_floor_listings": 14231,
+      "wts": 11896,
+      "wtb": 2335,
+      "price_research_qualified_wts": 3075,
+      "analytics_ready_references": 302,
+      "phase7b_source_observations": 72305,
+      "phase7b_verified_observations": 3075,
+      "phase7b_legacy_price_research_observations": 9985,
+      "phase7b_verified_price_research_references": 342,
+      "phase7b_decision": "CANARY_READY",
+      "decision": "NOT_READY",
+      "blockers": [
+        "Phase 7B is CANARY_READY only; no customer source switch or cohort deployment is authorized",
+        "Global dealer/posting-identity acceptance remains incomplete for this authoritative reference census"
+      ]
+    },
+    {
+      "brand": "Tudor",
+      "catalog_references": 167,
+      "approved_local_canonical_references": 167,
+      "deployed_catalog_references": 534,
+      "exact_local_deployed_overlap": 167,
+      "deployed_only_references": 367,
+      "observed_catalog_universe": 571,
+      "exact_published_references": 80,
+      "published_partial_references": 4,
+      "published_unresolved_references": 367,
+      "trading_floor_listings": 2555,
+      "wts": 2107,
+      "wtb": 448,
+      "price_research_qualified_wts": 40,
+      "analytics_ready_references": 6,
+      "decision": "NOT_READY",
+      "blockers": [
+        "The deployed browse union contains 367 reference values not yet accepted by the approved canonical catalog",
+        "Four Trading Floor references are absent from the Price Research catalog",
+        "Price Research returned zero WTB observations despite 448 published WTB rows",
+        "No canonical dealer links are proven for the 2555 source-identified listings"
+      ]
+    },
+    {
+      "brand": "Zenith",
+      "catalog_references": 113,
+      "approved_local_canonical_references": 113,
+      "deployed_catalog_references": 113,
+      "exact_local_deployed_overlap": 113,
+      "deployed_only_references": 0,
+      "observed_catalog_universe": 158,
+      "exact_published_references": 31,
+      "published_partial_references": 16,
+      "published_unresolved_references": 20,
+      "trading_floor_listings": 453,
+      "wts": 440,
+      "wtb": 13,
+      "price_research_qualified_wts": 175,
+      "analytics_ready_references": 15,
+      "decision": "NOT_READY",
+      "blockers": [
+        "Thirty-six Trading Floor references are absent from the Price Research catalog",
+        "Price Research returned zero WTB observations despite 13 published WTB rows",
+        "Same-line two-reference source text can evade the current multi-item detector",
+        "Only one exact dealer link is proven; it has feedback-count evidence but no numeric rating"
+      ]
+    },
+    {
+      "brand": "Cartier",
+      "catalog_references": 762,
+      "approved_local_canonical_references": 762,
+      "deployed_catalog_references": 1461,
+      "exact_local_deployed_overlap": 762,
+      "deployed_only_references": 699,
+      "observed_catalog_universe": 1754,
+      "exact_published_references": 234,
+      "published_partial_references": 4,
+      "published_unresolved_references": 699,
+      "trading_floor_listings": 7154,
+      "wts": 5917,
+      "wtb": 1237,
+      "price_research_qualified_wts": null,
+      "analytics_ready_references": null,
+      "decision": "NOT_READY",
+      "blockers": [
+        "Catalog browse reports zero eligible observations while bounded exact-reference checks return qualified WTS rows",
+        "The deployed browse union contains 699 reference values not yet accepted by the approved canonical catalog",
+        "Four published reference values remain classified as partial",
+        "Dealer, model, currency, and dated-FX reconciliation remain incomplete"
+      ]
+    },
+    {
+      "brand": "TAG Heuer",
+      "catalog_references": 105,
+      "approved_local_canonical_references": 105,
+      "deployed_catalog_references": 183,
+      "exact_local_deployed_overlap": 105,
+      "deployed_only_references": 78,
+      "observed_catalog_universe": 268,
+      "exact_published_references": null,
+      "observed_exact_published_references": 17,
+      "published_partial_references": 8,
+      "published_invalid_references": 3,
+      "published_unresolved_references": 147,
+      "trading_floor_listings": 278,
+      "trading_floor_advertised_total": 283,
+      "wts": 193,
+      "wtb": 85,
+      "price_research_qualified_wts": 1,
+      "analytics_ready_references": 0,
+      "decision": "NOT_READY",
+      "blockers": [
+        "Trading Floor returns 278 distinct rows while advertising 283",
+        "The deployed browse union contains 78 reference values not yet accepted by the approved canonical catalog",
+        "One hundred nine rows have no explicit currency",
+        "No posting country or numeric dealer rating is present"
+      ]
+    }
+  ],
+  "checksums": {
+    "catalog_references_sha256": "d8c9c370f355343ddaa785145fa232e97cb5a0eb38183021b83a07d249c0f99d",
+    "catalog_source_reconciliation_sha256": "9448a9b97fe7f54b0cf11f02e09de323d174f4f445c84529dddaceec9601e6d7",
+    "published_reference_population_sha256": "1f98ca38cfae0df7774a5ddc7d604b5839e1e25c46cb319674bd89c975beda6d",
+    "tudor_zenith_trading_floor_ids_sha256": "2e5e40b7b9e7f2b560e104ac47d3bb0768198d23c5a3b16d1ea76243eaea703e",
+    "cartier_catalog_snapshot_sha256": "89aad38b8fe862fbd9fcc5041f3ee678244e9d2c5b2784969bb0dd999e223b21",
+    "tag_catalog_snapshot_sha256": "eba3dfc9f8727e82565c20462db0ab01317f6409851a20605fc0f8ecb8f8ce25",
+    "tag_trading_floor_ids_sha256": "7e1e45df8eee979197fd33feabc866310df23b80301aeee892bbe98901a028ea"
+  },
+  "safety": {
+    "production_writes": 0,
+    "raw_message_mutations": 0,
+    "historical_normalized_value_mutations": 0,
+    "customer_source_switches": 0,
+    "cohorts_deployed": 0
+  }
+}
