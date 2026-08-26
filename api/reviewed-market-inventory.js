@@ -13,6 +13,11 @@ const { classifyWatchPartListing } = require('./_lib/watch-item-classification.c
 const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
+  MARKET_SELECTOR: CURATED_SHADOW_MARKET_SOURCE,
+  isShadowBrand,
+  loadInventory: loadCuratedShadowInventory,
+} = require('./_lib/curated-luxury-shadow.cjs');
+const {
   isFourBrand,
   isMissingEffectiveRpcError,
   isTransientEffectiveRpcTimeout,
@@ -54,6 +59,7 @@ const MULTI_PARENT_PUBLICATION_LANE = 'OWNER_MULTI_PARENT_SOURCE_LINEAGE_V1';
 const ALLOWED_MARKET_SOURCE_VIEWS = new Set([
   'reviewed_workbook_market_source_v2',
   'qnsa_rolex_patek_trading_floor_source',
+  CURATED_SHADOW_MARKET_SOURCE,
 ]);
 const requestedMarketSourceView = String(process.env.TRADING_FLOOR_SOURCE_VIEW || '').trim();
 const MARKET_SOURCE_VIEW = ALLOWED_MARKET_SOURCE_VIEWS.has(requestedMarketSourceView)
@@ -1905,12 +1911,24 @@ module.exports = async function handler(req, res) {
     const requestedItem = cleanExactText(req.query?.item, 20).toLowerCase();
     const itemCategories = { all: 'ALL', watches: 'WATCH', handbags: 'HANDBAG', jewelry: 'JEWELRY', accessories: 'ACCESSORY', other: 'OTHER' };
     const itemCategory = requestedItem ? itemCategories[requestedItem] : 'ALL';
-    const requestedRegion = cleanExactText(req.query?.region, 100);
-    const region = postingCountryName(requestedRegion);
-    if (requestedRegion && !region) {
+    const requestedRegions = (Array.isArray(req.query?.region) ? req.query.region : [req.query?.region])
+      .flatMap(value => String(value || '').split(','))
+      .map(value => cleanExactText(value, 100))
+      .filter(Boolean);
+    const resolvedRegions = requestedRegions.map(postingCountryName);
+    const shadowMarketRequest = MARKET_SOURCE_VIEW === CURATED_SHADOW_MARKET_SOURCE
+      && isShadowBrand(requestedBrand);
+    if (requestedRegions.length && resolvedRegions.some(value => !value)) {
       return res.status(400).json({ status: 'error', error: 'Location filters must be a recognized posting country' });
     }
+    if (resolvedRegions.length > 1 && !shadowMarketRequest) {
+      return res.status(400).json({ status: 'error', error: 'Multiple location filters are unavailable for this source' });
+    }
+    const region = resolvedRegions[0] || '';
+    const requestedRegion = requestedRegions.join(',');
     const databaseRegion = databasePostingCountryToken(region);
+    const shadowCountryCodes = resolvedRegions.map(country => Object.entries(POSTING_COUNTRY_NAMES)
+      .find(([key, name]) => CURRENT_ISO_ALPHA2_CODES.has(key) && name === country)?.[0]).filter(Boolean);
     const rating = cleanExactText(req.query?.rating, 12).toLowerCase();
     const dateWindow = cleanExactText(req.query?.date, 4).toUpperCase();
     const postedAfter = dateWindowStart(dateWindow);
@@ -1959,6 +1977,22 @@ module.exports = async function handler(req, res) {
         status: 'error',
         error: 'Condition filters require an exact brand and reference until a dedicated publication index is available',
       });
+    }
+
+    if (shadowMarketRequest && ['ALL', 'WATCH'].includes(itemCategory)) {
+      const client = getClient();
+      const result = await loadCuratedShadowInventory(client, {
+        brand: requestedBrand,
+        listingType,
+        countries: shadowCountryCodes,
+        pricedOnly,
+        imagesOnly,
+        search: requestedReference || search || requestedModel || requestedDial || null,
+        reference: requestedReference || null,
+        page,
+        pageSize,
+      });
+      return res.status(200).json(result);
     }
 
     const client = getClient();

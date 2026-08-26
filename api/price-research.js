@@ -42,6 +42,11 @@ const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { enrichRowsWithExactDealerEvidence } = require('./_lib/listing-dealer-evidence.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
+const {
+  PRICE_SELECTOR: CURATED_SHADOW_PRICE_SOURCE,
+  isShadowBrand,
+  loadPriceResearch: loadCuratedShadowPriceResearch,
+} = require('./_lib/curated-luxury-shadow.cjs');
 const { isFourBrand, loadEffectivePage } = require('./_lib/four-brand-field-enrichment.cjs');
 const { applyConfirmedFiveWatchPublication } = require('./_lib/five-watch-publication.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
@@ -104,6 +109,9 @@ async function loadQnsaPriceRpcRows(client, args) {
 function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
+  if (requested === CURATED_SHADOW_PRICE_SOURCE && isShadowBrand(brand)) {
+    return CURATED_SHADOW_PRICE_SOURCE;
+  }
   return requested === QNSA_PRICE_RESEARCH_SOURCE
     && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin', 'omega', 'tudor'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
@@ -1048,6 +1056,21 @@ module.exports = async function handler(req, res) {
   // brand/reference even when an older deployment allowlist has not yet been
   // expanded. Price qualification remains a separate downstream gate.
   const client = getClient();
+  if (String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim() === CURATED_SHADOW_PRICE_SOURCE
+    && isShadowBrand(brand)) {
+    try {
+      const result = await loadCuratedShadowPriceResearch(client, {
+        brand,
+        reference: rawRef,
+        evidencePage,
+        evidencePageSize,
+      });
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('[price-research] curated shadow unavailable:', error.message || error);
+      return res.status(503).json({ error: 'Curated Luxury Price Research is temporarily unavailable' });
+    }
+  }
   const configuredSourceTable = configuredReviewedPriceSource(brand);
   if (isPendingQnsaBrandRelease(brand)) {
     return res.status(404).json({
