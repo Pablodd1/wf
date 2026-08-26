@@ -79,6 +79,19 @@ test('child image bridge is exact-hash, immutable to customers, and used after k
   assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+(?:INTO\s+|FROM\s+)?(?:public\.)?(?:raw_messages|raw_message_versions|staging\.listings)/i);
 });
 
+test('compatibility bridge requires exact one-to-one immutable identity and single-watch scope', () => {
+  const sql = fs.readFileSync(path.join(root,
+    'supabase/migrations/20260826223000_curated_luxury_image_compatibility_bridge.sql'), 'utf8');
+  assert.match(sql, /source_payload_sha256\s*=\s*encode\(extensions\.digest\(convert_to\(i\.raw_message,'UTF8'\),'sha256'\),'hex'\)/i);
+  assert.match(sql, /pc\.production_count=1\s+AND\s+sc\.shadow_count=1/i);
+  assert.match(sql, /s\.exact_child_text_sha256=s\.parent_raw_text_sha256/i);
+  assert.match(sql, /s\.raw_is_bundle='false'/i);
+  assert.match(sql, /p\.raw_message=s\.immutable_raw_text/i);
+  assert.doesNotMatch(sql, /\b(?:reference|model|dealer|filename|similarity)\s*=/i);
+  assert.doesNotMatch(sql, /\b(?:UPDATE|DELETE|TRUNCATE)\s+(?:public\.)?curated_luxury_current_listings_shadow/i);
+  assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+(?:INTO\s+|FROM\s+)?(?:public\.)?(?:raw_messages|raw_message_versions|staging\.listings)/i);
+});
+
 test('customer APIs opt in only through the new selectors', () => {
   const market = fs.readFileSync(path.join(root, 'api/reviewed-market-inventory.js'), 'utf8');
   const price = fs.readFileSync(path.join(root, 'api/price-research.js'), 'utf8');
