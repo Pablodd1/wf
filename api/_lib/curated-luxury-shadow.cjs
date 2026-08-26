@@ -38,6 +38,9 @@ function mapCard(row) {
   const sourceCurrency = row.source_currency || null;
   const verifiedUsd = row.price_verified === true && Number(row.price_usd) > 0
     ? Number(row.price_usd) : null;
+  const sourceIdentityName = row.source_identity_key
+    ? `Poster ${String(row.source_identity_key).slice(0, 12)}${row.source_platform ? ` · ${row.source_platform}` : ''}`
+    : null;
   return {
     id: row.id,
     brand: row.brand,
@@ -74,7 +77,7 @@ function mapCard(row) {
     image_url: images[0] || null,
     image_urls: images,
     image_state: images.length ? 'VERIFIED_CHILD_IMAGE' : 'NO_VERIFIED_CHILD_IMAGE',
-    image_evidence_type: images.length ? 'EXACT_CHILD_IMAGE' : 'NO_VERIFIED_CHILD_IMAGE',
+    image_evidence_type: images.length ? 'SELLER_LISTING_IMAGE' : 'NO_VERIFIED_CHILD_IMAGE',
     image_evidence_label: images.length ? 'Source-supplied listing image' : null,
     region: row.country_code || null,
     location: row.country_code || null,
@@ -85,6 +88,7 @@ function mapCard(row) {
     raw_message_evidence_type: 'SOURCE_RAW_MESSAGE',
     seller_name: row.dealer_name || null,
     posted_by: row.dealer_name || null,
+    source_identity_name: sourceIdentityName,
     seller_phone: null,
     contact_publication_approved: row.contact_publication_approved === true,
     seller_rating: row.dealer_rating == null ? null : Number(row.dealer_rating),

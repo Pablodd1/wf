@@ -24,7 +24,7 @@ test('Trading Floor distinguishes currency-unconfirmed evidence from no supplied
   assert.match(trading, /if \(sourceText\) return ambiguousPriceDisplay/);
   assert.match(trading, /if \(!currency\) return ambiguousPriceDisplay/);
   assert.doesNotMatch(trading, /if \(!currency\) return `USD /);
-  assert.match(trading, /: 'Price not supplied'/);
+  assert.match(trading, /: \(sourcePrice \|\| ambiguousPriceDisplay\)/);
 });
 
 test('Trading Floor never relabels AP, RM, or Cartier bare-dollar amounts as USD', () => {

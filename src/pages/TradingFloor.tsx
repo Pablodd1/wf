@@ -132,6 +132,8 @@ interface ListingRecord {
   raw_line?: string | null;
   description?: string | null;
   raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
+  current_status?: 'CURRENT_ACTIVE' | 'CURRENT_LATEST_STATE' | string | null;
+  cohort_status?: 'CONFIRMED_CURRENT' | 'LATEST_OBSERVED' | string | null;
   raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
   raw_message_truncated?: boolean;
   seller_name?: string | null;
@@ -149,6 +151,7 @@ interface ListingRecord {
   location?: string | null;
   seller_country?: string | null;
   posted_by?: string | null;
+  source_identity_name?: string | null;
   phone_number?: string | null;
   'Posted By'?: string | null;
   'Phone Number'?: string | null;
@@ -1369,6 +1372,11 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
           />
         </button>
       )}
+      {!cardHasImage && (
+        <button type="button" onClick={onSelect} className="flex h-[340px] w-full items-center justify-center rounded-md border border-[#E5DACB] bg-[#F6F0E7] text-xs font-bold uppercase tracking-[0.14em] text-[#8B95A2]">
+          NO IMAGE
+        </button>
+      )}
 
       {/* 2. Category & Intent (e.g. WATCH · FOR SALE) */}
       <div className="mt-4">
@@ -1409,7 +1417,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         </div>
         <div className="text-xs font-medium text-[#7A8699]">
           {benchmark?.unavailable ? (
-            <span>Price rating unavailable</span>
+            <span>Open for rating</span>
           ) : priceRating ? (
             <span
               className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
@@ -1423,7 +1431,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
               {priceRating.label}
             </span>
           ) : (
-            <span>Price rating: <span className="text-[#8E9AAF]">Not rated</span></span>
+            <span>Open for rating</span>
           )}
         </div>
       </div>
@@ -1434,11 +1442,9 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
           <Globe2 size={12} className="text-[#6B7280]" />
           {meta.region}
         </span>}
-        {meta.postedDate && (
-          <span className="inline-flex items-center rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
-            Posted {meta.postedDate}
-          </span>
-        )}
+        <span className="inline-flex items-center rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
+          Posted {meta.postedDate || 'Posting date requires review'}
+        </span>
       </div>
 
       {/* 7. Posted by Section */}
@@ -1446,11 +1452,11 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         <div className="text-[#6B7280]">Posted by</div>
         {listing.dealer_profile_path && postingIdentity ? (
           <Link to={listing.dealer_profile_path} className="mt-0.5 block text-sm font-semibold text-[#1C1917] hover:text-[#8A5826]">
-            {postingIdentity}
+            {postingIdentity || 'Posting identity requires review'}
           </Link>
         ) : (
           <div className="text-sm font-semibold text-[#1C1917] mt-0.5">
-            {postingIdentity}
+            {postingIdentity || 'Posting identity requires review'}
           </div>
         )}
         <div className="mt-0.5">
@@ -1464,6 +1470,11 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
 
       {/* 8. Direct WhatsApp Contact Action */}
       <div className="mt-auto pt-4 flex flex-col gap-2">
+        <div className="text-center text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+          {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
+            ? 'LATEST OBSERVED · CHECK AVAILABILITY'
+            : 'CONFIRMED CURRENT'}
+        </div>
         <button
           type="button"
           onClick={onSelect}
@@ -1666,6 +1677,11 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
             )}
           </div>
         )}
+        {availableImages.length === 0 && (
+          <div className="flex min-h-[340px] items-center justify-center rounded-lg border border-[#EBE3D5] bg-[#F6F0E7] text-xs font-bold uppercase tracking-[0.14em] text-[#8B95A2]">
+            NO IMAGE
+          </div>
+        )}
 
         {/* Right Column: 3 Cards */}
         <div className="flex flex-col gap-4">
@@ -1684,6 +1700,11 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
             </div>
 
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+            <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+              {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
+                ? 'LATEST OBSERVED · CHECK AVAILABILITY'
+                : 'CONFIRMED CURRENT'}
+            </div>
 
             {messageEvidence && (
               <details className="group mt-5 border-t border-stone-100 pt-4">
@@ -1703,18 +1724,16 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
               ))}
             </div>
 
-            {meta.postedDate && (
-              <div className="mt-4 text-xs font-medium text-stone-600">
-                <span className="text-[#8A5826]">Posted on</span> {meta.postedDate}
-              </div>
-            )}
+            <div className="mt-4 text-xs font-medium text-stone-600">
+              <span className="text-[#8A5826]">Posted on</span> {meta.postedDate || 'Posting date requires review'}
+            </div>
           </div>
 
           {/* Card 2: Price Rating */}
           <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
             <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">PRICE RATING</div>
             <div className="mt-2 text-lg font-bold text-[#1C1917]">
-              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.label || 'Calculating...')}
+              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.label || 'Open for rating')}
             </div>
             <div className="mt-1 text-xs text-[#8B95A2]">
               {benchmark.loading ? 'Calculating...' : (benchmark.rating?.reason || 'Comparing against verified dealer observations.')}
@@ -1728,11 +1747,11 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
               <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source-supplied contact</div>
               {listing.dealer_profile_path && postingIdentity ? (
                 <Link to={listing.dealer_profile_path} className="mt-2 block text-base font-bold text-[#1C1917] hover:text-[#8A5826]">
-                  {postingIdentity}
+                  {postingIdentity || 'Posting identity requires review'}
                 </Link>
               ) : (
                 <div className="mt-2 text-base font-bold text-[#1C1917]">
-                  {postingIdentity}
+                  {postingIdentity || 'Posting identity requires review'}
                 </div>
               )}
               <div className="mt-0.5">
@@ -1895,7 +1914,7 @@ function getListingMeta(listing: ListingRecord) {
     ? formatUsdPrice(verifiedUsd)
     : displayUsd !== null && displayUsd > 0
       ? formatUsdPrice(displayUsd)
-      : (sourcePrice || 'Price not supplied');
+      : (sourcePrice || ambiguousPriceDisplay);
 
   const foreignLabel = verifiedUsd !== null && isForeignCurrency && rawAmount !== null
     ? `(${currency} ${rawAmount.toLocaleString('en-US')})`
@@ -1903,7 +1922,7 @@ function getListingMeta(listing: ListingRecord) {
 
   const priceEvidenceLabel = verifiedUsd !== null
     ? (listing.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED' ? 'Verified USD conversion' : 'USD verified price')
-    : sourcePrice ? 'Source price' : 'Price not supplied';
+    : sourcePrice ? 'Source price' : ambiguousPriceDisplay;
 
   const title = buildListingTitle(listing);
 
@@ -2098,7 +2117,9 @@ function listingMessageEvidence(listing: ListingRecord) {
   const rawLine = cleanValue(listing.raw_line);
   if (rawLine) return { label: 'SOURCE LISTING LINE', text: rawLine };
   const description = cleanValue(listing.description);
-  return description ? { label: 'LISTING DESCRIPTION', text: description } : null;
+  return description
+    ? { label: 'LISTING DESCRIPTION', text: description }
+    : { label: 'Original raw message', text: 'Original message requires review' };
 }
 
 function displayDial(value: string | null | undefined) {

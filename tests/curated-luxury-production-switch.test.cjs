@@ -29,6 +29,7 @@ test('card projection preserves availability, original currency, and evidence ga
     verified_child_media: ['https://example.test/watch.jpg'],
     image_state: 'VERIFIED_CHILD_IMAGE', has_images: true,
     country_code: 'HK', dealer_name: null, dealer_rating: null,
+    source_identity_key: 'abcdef0123456789', source_platform: 'WHATSAPP',
   });
   assert.equal(card.price_raw, 100000);
   assert.equal(card.currency, 'HKD');
@@ -37,9 +38,11 @@ test('card projection preserves availability, original currency, and evidence ga
   assert.equal(card.current_status, 'CURRENT_LATEST_STATE');
   assert.equal(card.cohort_status, 'LATEST_OBSERVED');
   assert.equal(card.seller_name, null);
+  assert.equal(card.source_identity_name, 'Poster abcdef012345 · WHATSAPP');
   assert.equal(card.seller_rating, null);
   assert.deepEqual(card.image_urls, ['https://example.test/watch.jpg']);
   assert.equal(card.image_state, 'VERIFIED_CHILD_IMAGE');
+  assert.equal(card.image_evidence_type, 'SELLER_LISTING_IMAGE');
 });
 
 test('card projection never inherits raw parent media and fails closed without a bridge URL', () => {

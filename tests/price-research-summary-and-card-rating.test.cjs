@@ -337,7 +337,7 @@ test('Trading Floor prefers selected-dial evidence and safely falls back to exac
   assert.doesNotMatch(floor, /Not rated · \$\{availableComparableCount\}\/2 qualified/);
   assert.doesNotMatch(floor, /Not rated · evidence unavailable/);
   assert.doesNotMatch(floor, /No exact directory match/);
-  assert.match(fs.readFileSync(path.join(root, 'src', 'components', 'ListingDealerEvidence.tsx'), 'utf8'), /Dealer rating not available/);
+  assert.match(fs.readFileSync(path.join(root, 'src', 'components', 'ListingDealerEvidence.tsx'), 'utf8'), />Not rated<\/span>/);
   assert.match(floor, /rateMarketPrice\(ratingUsdPrice\(listing\)/);
-  assert.match(floor, /listing\.dealer_profile_path \? \(/);
+  assert.match(floor, /listing\.dealer_profile_path && postingIdentity \? \(/);
 });
