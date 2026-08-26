@@ -9,6 +9,7 @@ const {
   canonicalReferenceKey,
   contract,
   postingIdentityStatus,
+  referenceIdentityDisposition,
   resolvePostingIdentity,
 } = require('../../api/_lib/global-customer-data-contract.cjs');
 
@@ -35,8 +36,11 @@ function hasImage(row) {
 }
 
 function hasRating(row) {
-  return positive(row.dealer_rating ?? row.seller_rating ?? row.rating) !== null
-    || ['SOURCE_SUPPLIED', 'SOURCE_FEEDBACK_COUNT'].includes(exact(row.seller_rating_evidence_status).toUpperCase());
+  const status = exact(row.seller_rating_evidence_status).toUpperCase();
+  if (status === 'SOURCE_FEEDBACK_COUNT') return positive(row.review_count ?? row.seller_review_count) !== null;
+  return status === 'SOURCE_SUPPLIED'
+    && positive(row.dealer_rating ?? row.seller_rating ?? row.rating) !== null
+    && positive(row.review_count ?? row.seller_review_count) !== null;
 }
 
 function passesCustomerPublicationSafety(row) {
@@ -45,7 +49,6 @@ function passesCustomerPublicationSafety(row) {
   if (row.data_quality_review_required === true) return false;
   if (row.multi_listing === true && row.multi_listing_release_approved !== true) return false;
   if (exact(row.reference_invalid_reason)) return false;
-  if (!resolvePostingIdentity(row)) return false;
   const blockedState = [
     row.listing_status,
     row.publication_state,
@@ -92,6 +95,7 @@ function productionReferencePopulation({ brand, rows, catalogRows, conflicts, sn
   const values = new Set();
   const exactPublished = new Set();
   const customerSafeCanonical = new Set();
+  const customerSafeObservedOnly = new Set();
   const unresolved = new Set();
   const partial = new Set();
   const invalid = new Set();
@@ -113,6 +117,8 @@ function productionReferencePopulation({ brand, rows, catalogRows, conflicts, sn
       invalid.add(reference);
     } else if (searchKey.length >= 4 && catalogSearchKeys.some(candidate => candidate.startsWith(searchKey))) {
       partial.add(reference);
+    } else if (referenceIdentityDisposition(row) === 'OBSERVED_ONLY') {
+      if (passesCustomerPublicationSafety(row)) customerSafeObservedOnly.add(reference);
     } else {
       unresolved.add(reference);
     }
@@ -125,6 +131,14 @@ function productionReferencePopulation({ brand, rows, catalogRows, conflicts, sn
     catalog_nonconflicting_reference_count: brandCatalog.filter(row => !conflicts.has(row.key)).length,
     customer_safe_canonical_reference_count: authoritative(customerSafeCanonical.size),
     observed_customer_safe_canonical_reference_count: customerSafeCanonical.size,
+    customer_safe_observed_only_reference_count: authoritative(customerSafeObservedOnly.size),
+    observed_customer_safe_observed_only_reference_count: customerSafeObservedOnly.size,
+    customer_safe_publishable_reference_count: authoritative(new Set([
+      ...customerSafeCanonical, ...customerSafeObservedOnly,
+    ]).size),
+    observed_customer_safe_publishable_reference_count: new Set([
+      ...customerSafeCanonical, ...customerSafeObservedOnly,
+    ]).size,
     production_reference_value_count: authoritative(values.size),
     exact_published_reference_count: authoritative(exactPublished.size),
     unresolved_reference_count: authoritative(unresolved.size),
@@ -141,6 +155,8 @@ function productionReferencePopulation({ brand, rows, catalogRows, conflicts, sn
     observed_production_reference_values: [...values].sort(),
     customer_safe_canonical_references: snapshotComplete ? [...customerSafeCanonical].sort() : null,
     observed_customer_safe_canonical_references: [...customerSafeCanonical].sort(),
+    customer_safe_observed_only_references: snapshotComplete ? [...customerSafeObservedOnly].sort() : null,
+    observed_customer_safe_observed_only_references: [...customerSafeObservedOnly].sort(),
   };
 }
 
@@ -156,7 +172,6 @@ function localCatalog() {
 function completionStatus({ snapshotsComplete, identityConflict, priceRow, trading }) {
   if (!snapshotsComplete) return 'AUDIT_INCOMPLETE';
   if (identityConflict || priceRow?.error) return 'REVIEW_REQUIRED';
-  if ((trading?.dealer_identity_review_required || 0) > 0) return 'REVIEW_REQUIRED';
   if (!trading?.trading_floor_listings && !priceRow?.source_observation_count) return 'NO_PUBLISHED_LISTINGS';
   return 'COVERAGE_RECONCILED';
 }
@@ -405,9 +420,11 @@ function build({
       authoritative_phase7b_reference_census_complete: Boolean(phase7Summary),
       trading_floor_cursor_snapshot_complete: tradingReport?.snapshot_complete === true,
       exact_reference_identity: !references.some(row => row.reference_identity !== 'VALID_EXACT_REFERENCE'),
-      no_released_reference_outside_catalog: tradingSummary?.released_references_outside_catalog === 0,
+      catalog_membership_optional: contract.customer_publication.catalog_membership_required === false,
+      observed_only_references_allowed: contract.reference_identity.catalog_statuses.includes('OBSERVED_ONLY'),
       no_duplicate_listing_ids: tradingSummary?.duplicate_ids === 0,
-      posting_identity_resolved: brandTradingComplete && dealerIdentityReviewRequired === 0,
+      dealer_identity_not_fabricated: contract.dealer_identity.fabrication_allowed === false,
+      dealer_rating_source_backed: contract.dealer_identity.rating_requires_source_evidence === true,
       price_research_accounting_reconciles: phase7Summary ? true : priceReport?.coverage_accounting_reconciles === true,
       raw_and_historical_data_unchanged: phase7Summary
         ? Number(phase7bAudit.production_mutations) === 0
@@ -423,6 +440,12 @@ function build({
       catalog_nonconflicting_reference_count: referencePopulation.catalog_nonconflicting_reference_count,
       customer_safe_canonical_reference_count: referencePopulation.customer_safe_canonical_reference_count,
       observed_customer_safe_canonical_reference_count: referencePopulation.observed_customer_safe_canonical_reference_count,
+      customer_safe_observed_only_reference_count: referencePopulation.customer_safe_observed_only_reference_count,
+      observed_customer_safe_observed_only_reference_count:
+        referencePopulation.observed_customer_safe_observed_only_reference_count,
+      customer_safe_publishable_reference_count: referencePopulation.customer_safe_publishable_reference_count,
+      observed_customer_safe_publishable_reference_count:
+        referencePopulation.observed_customer_safe_publishable_reference_count,
       production_reference_value_count: referencePopulation.production_reference_value_count,
       exact_published_reference_count: referencePopulation.exact_published_reference_count,
       unresolved_reference_count: referencePopulation.unresolved_reference_count,
@@ -480,6 +503,10 @@ function build({
       .map(brand => [brand, brandLedgers[brand].customer_safe_canonical_reference_count])),
     observed_customer_safe_canonical_reference_counts: Object.fromEntries(contract.brands
       .map(brand => [brand, brandLedgers[brand].observed_customer_safe_canonical_reference_count])),
+    customer_safe_publishable_reference_counts: Object.fromEntries(contract.brands
+      .map(brand => [brand, brandLedgers[brand].customer_safe_publishable_reference_count])),
+    observed_customer_safe_publishable_reference_counts: Object.fromEntries(contract.brands
+      .map(brand => [brand, brandLedgers[brand].observed_customer_safe_publishable_reference_count])),
     source_checksums: {
       price_research: priceReport?.checksums || null,
       trading_floor: tradingReport?.checksums || null,

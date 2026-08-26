@@ -5,6 +5,7 @@ const test = require('node:test');
 const {
   build,
   groupTradingRows,
+  hasRating,
   passesCustomerPublicationSafety,
 } = require('../tools/audit/build-global-six-brand-completion-ledgers.cjs');
 const { build: buildTechnicalReport } = require('../tools/audit/build-global-six-brand-technical-report.cjs');
@@ -33,12 +34,21 @@ test('generic dealer placeholders never count as resolved posting identities', (
   assert.equal(row.dealer_identity_review_required, 3);
 });
 
-test('customer publication safety excludes review, pending, multi-listing and unresolved dealer rows', () => {
+test('customer publication excludes unsafe states but does not require a fabricated dealer identity', () => {
   assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Dealer A' }), true);
   assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Dealer A', data_quality_review_required: true }), false);
   assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Dealer A', publication_state: 'PENDING_VERIFICATION' }), false);
   assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Dealer A', multi_listing: true }), false);
-  assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Source poster' }), false);
+  assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS', seller_name: 'Source poster' }), true);
+  assert.equal(passesCustomerPublicationSafety({ listing_type: 'WTS' }), true);
+});
+
+test('dealer ratings require explicit source evidence and review support', () => {
+  assert.equal(hasRating({ dealer_rating: 4.9, review_count: 20 }), false);
+  assert.equal(hasRating({ dealer_rating: 4.9, review_count: 20,
+    seller_rating_evidence_status: 'SOURCE_SUPPLIED' }), true);
+  assert.equal(hasRating({ review_count: 20, seller_rating_evidence_status: 'SOURCE_FEEDBACK_COUNT' }), true);
+  assert.equal(hasRating({ seller_rating_evidence_status: 'SOURCE_FEEDBACK_COUNT' }), false);
 });
 
 test('incomplete snapshots fail closed and preserve unknown Price Research fields', () => {
@@ -52,7 +62,7 @@ test('incomplete snapshots fail closed and preserve unknown Price Research field
   assert.equal(JSON.stringify(built).includes('"raw_message":'), false);
 });
 
-test('missing source-backed posting identity blocks a completed brand gate', () => {
+test('missing posting identity remains unresolved without blocking an otherwise valid listing', () => {
   const built = build({
     priceReport: {
       snapshot_complete: true,
@@ -68,9 +78,10 @@ test('missing source-backed posting identity blocks a completed brand gate', () 
     },
     tradingCheckpoint: { brand_state: { Rolex: { rows: [{ brand: 'Rolex', reference: '126000', listing_type: 'WTS' }] } } },
   });
-  assert.equal(built.brandLedgers.Rolex.acceptance_gates.posting_identity_resolved, false);
+  assert.equal(built.brandLedgers.Rolex.acceptance_gates.dealer_identity_not_fabricated, true);
+  assert.equal(built.brandLedgers.Rolex.acceptance_gates.dealer_rating_source_backed, true);
   assert.equal(built.brandLedgers.Rolex.deployment_decision, 'NOT_READY');
-  assert.equal(built.brandLedgers.Rolex.references[0].completion_status, 'REVIEW_REQUIRED');
+  assert.equal(built.brandLedgers.Rolex.references[0].completion_status, 'COVERAGE_RECONCILED');
   assert.equal(built.brandLedgers.Rolex.references[0].dealer_identity_status, 'DEALER_IDENTITY_REVIEW_REQUIRED');
 });
 
@@ -113,6 +124,8 @@ test('every brand ledger separates canonical, production, exact, unresolved, par
             { brand: 'Rolex', reference: '1265', seller_name: 'Dealer B' },
             { brand: 'Rolex', reference: 'BRACELET', reference_invalid_reason: 'COMPONENT', seller_name: 'Dealer C' },
             { brand: 'Rolex', reference: 'FREE TEXT', seller_name: 'Dealer D' },
+            { brand: 'Rolex', reference: 'ZOMBIE', listing_type: 'WTS', live_source_verified: true,
+              raw_occurrence_key: 'raw-zombie', exact_child_text_sha256: 'child-zombie' },
           ],
         },
       },
@@ -123,11 +136,13 @@ test('every brand ledger separates canonical, production, exact, unresolved, par
   assert.equal(ledger.catalog_nonconflicting_reference_count, 2);
   assert.equal(ledger.customer_safe_canonical_reference_count, 1);
   assert.equal(ledger.observed_customer_safe_canonical_reference_count, 1);
-  assert.equal(ledger.production_reference_value_count, 4);
+  assert.equal(ledger.production_reference_value_count, 5);
   assert.equal(ledger.exact_published_reference_count, 1);
   assert.equal(ledger.partial_reference_count, 1);
   assert.equal(ledger.invalid_reference_count, 1);
   assert.equal(ledger.unresolved_reference_count, 1);
+  assert.equal(ledger.customer_safe_observed_only_reference_count, 1);
+  assert.equal(ledger.customer_safe_publishable_reference_count, 2);
   for (const brandLedger of Object.values(built.brandLedgers)) {
     assert.equal(brandLedger.deployment_decision, 'NOT_READY');
   }

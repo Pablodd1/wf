@@ -4,7 +4,11 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const test = require('node:test');
-const { postingIdentityStatus, resolvePostingIdentity } = require('../api/_lib/global-customer-data-contract.cjs');
+const {
+  postingIdentityStatus,
+  referenceIdentityDisposition,
+  resolvePostingIdentity,
+} = require('../api/_lib/global-customer-data-contract.cjs');
 
 const root = path.resolve(__dirname, '..');
 const contract = JSON.parse(fs.readFileSync(
@@ -25,8 +29,13 @@ test('one global evidence contract owns exactly the six requested brands', () =>
     'Rolex', 'Patek Philippe', 'Tudor', 'Zenith', 'Cartier', 'TAG Heuer',
   ]);
   assert.equal(contract.canonical_project_ref, 'qnsafosakvonzgfcsphh');
-  assert.equal(contract.reference_identity.match, 'exact_brand_and_canonical_reference');
+  assert.equal(contract.reference_identity.match, 'exact_brand_and_observed_reference');
+  assert.deepEqual(contract.reference_identity.catalog_statuses, ['CATALOG_CONFIRMED', 'OBSERVED_ONLY']);
+  assert.equal(contract.reference_identity.catalog_match_required_for_publication, false);
+  assert.equal(contract.reference_identity.catalog_match_required_for_price_research, false);
   assert.equal(contract.price_research.intent, 'WTS');
+  assert.equal(contract.price_research.requires_exact_observed_reference, true);
+  assert.equal(contract.price_research.catalog_membership_required, false);
   assert.equal(contract.price_research.wtb_affects_price_analytics, false);
   assert.equal(contract.listing_counts.independent_of_price_research, true);
   assert.equal(
@@ -37,6 +46,24 @@ test('one global evidence contract owns exactly the six requested brands', () =>
   assert.equal(contract.listing_counts.incomplete_customer_safe_count, null);
   assert.equal(contract.customer_publication.preserve_raw_message, true);
   assert.equal(contract.customer_publication.preserve_existing_historical_normalized_data, true);
+  assert.equal(contract.customer_publication.catalog_membership_required, false);
+});
+
+test('source-backed observed-only references are publishable without catalog membership', () => {
+  assert.equal(referenceIdentityDisposition({
+    observed_reference: 'Dealer nickname reference',
+    catalog_status: 'OBSERVED_ONLY',
+    raw_occurrence_key: 'raw-1',
+    exact_child_text_sha256: 'child-1',
+  }), 'OBSERVED_ONLY');
+  assert.equal(referenceIdentityDisposition({
+    observed_reference: '126334',
+    catalog_status: 'CATALOG_CONFIRMED',
+  }), 'CATALOG_CONFIRMED');
+  assert.equal(referenceIdentityDisposition({
+    observed_reference: '1263',
+    reference_identity_classification: 'PARTIAL_REFERENCE',
+  }), 'REVIEW_ONLY');
 });
 
 test('ambiguous price/currency evidence remains review-only', () => {
@@ -53,6 +80,7 @@ test('ambiguous price/currency evidence remains review-only', () => {
   }
   assert.equal(contract.dealer_identity.fabrication_allowed, false);
   assert.equal(contract.dealer_identity.rating_requires_source_evidence, true);
+  assert.equal(contract.dealer_identity.missing_identity_blocks_listing, false);
 });
 
 test('forbidden customer literals cannot appear in customer-facing source', () => {
