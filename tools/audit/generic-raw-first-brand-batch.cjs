@@ -55,8 +55,12 @@ function rawSourceSql(bounds, lastId = null, limit = 2000) {
   ) rv ON true ORDER BY p.id;`;
 }
 
-function currentSourceSql(bounds, lastId = null, limit = 2000) {
+function currentSourceSql(_bounds, lastId = null, limit = 2000, shard = 0, shardCount = 16) {
   const size = pageSize(limit);
+  const shardNumber = Number(shard);
+  const shards = Number(shardCount);
+  if (!Number.isInteger(shardNumber) || !Number.isInteger(shards) || shards < 1
+    || shardNumber < 0 || shardNumber >= shards) throw new Error('Invalid current-source shard');
   return `SELECT i.id::text,i.source_record_id,
     COALESCE(i.canonical_brand,i.supplied_brand,i.brand_scope) AS brand,
     i.normalized_reference,i.listing_type,i.raw_message,i.source_payload_sha256,
@@ -65,7 +69,8 @@ function currentSourceSql(bounds, lastId = null, limit = 2000) {
   WHERE COALESCE(i.canonical_brand,i.supplied_brand,i.brand_scope) IN ('Tudor','Zenith','Cartier','TAG Heuer')
     AND upper(COALESCE(i.listing_type,'')) IN ('WTS','WTB')
     AND upper(COALESCE(i.verification_status,'')) NOT IN ('REJECTED','HIDDEN','DELETED','ARCHIVED')
-    AND ${cursorClause('i.id', bounds, lastId)}
+    AND mod(('x'||substr(md5(i.id),1,8))::bit(32)::bigint,${shards})=${shardNumber}
+    ${lastId ? `AND i.id>${sqlLiteral(lastId)}` : ''}
   ORDER BY i.id LIMIT ${size};`;
 }
 
@@ -271,7 +276,8 @@ async function scanDataset({ name, query, sanitize, shardCount, size, outputDir,
     const bounds = uuidShard(shard, shardCount);
     let lastId = null;
     for (let page = 1; ; page += 1) {
-      const rows = await managementQuery(query(bounds, lastId, size), `${name}-${shard}-${page}`, { token });
+      const rows = await managementQuery(query(bounds, lastId, size, shard, shardCount),
+        `${name}-${shard}-${page}`, { token });
       const sanitized = rows.map(sanitize).filter(Boolean);
       const relative = `${name}-${String(shard).padStart(3, '0')}-${String(page).padStart(6, '0')}.json.gz`;
       const file = path.join(outputDir, 'pages', relative);
