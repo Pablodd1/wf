@@ -80,6 +80,14 @@ test('explicit foreign-brand evidence vetoes parent-brand fallback', () => {
     observed_brand: 'Patek Philippe', exact_observed_reference: 'RM65-01',
     raw_child_text: 'RM65-01 USD 250000',
   })), 'REVIEW_REQUIRED');
+  assert.equal(effectiveChildClassification(observation({
+    observed_brand: 'Rolex', exact_observed_reference: 'W4BB0023',
+    raw_child_text: 'W4BB0023 USD 9000',
+  })), 'REVIEW_REQUIRED');
+  assert.equal(effectiveChildClassification(observation({
+    observed_brand: 'Patek Philippe', exact_observed_reference: 'WT100022',
+    raw_child_text: 'WT100022 USD 12000',
+  })), 'REVIEW_REQUIRED');
 });
 
 test('withdrawn latest state yields no current family', () => {
