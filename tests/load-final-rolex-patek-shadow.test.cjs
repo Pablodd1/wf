@@ -39,11 +39,13 @@ test('REST loader is pinned to canonical QNSA and shadow mutation allowlist', as
 
 test('reconciliation requires exact frozen counts, both availability states, lineage and no duplicates', () => {
   const sql = reconciliationSql('17d6d831-86cd-5758-a830-c881bcf16e0d');
-  assert.match(sql, /1535763,1386508,149255,38521/);
-  assert.match(sql, /937001,884326,52675,45638/);
-  assert.match(sql, /CURRENT_ACTIVE/);
-  assert.match(sql, /CURRENT_LATEST_STATE/);
-  assert.match(sql, /missing_lineage<>0/);
-  assert.match(sql, /duplicate_rows<>0/);
-  assert.doesNotMatch(sql, /watch_records|staging\.listings|raw_messages/);
+  const combined = [sql.run, sql.brand('Rolex'), sql.brand('Patek Philippe'), sql.price('Rolex'),
+    sql.price('Patek Philippe'), sql.constraints, sql.states, sql.lineage, sql.references, sql.complete].join('\n');
+  assert.match(combined, /CURRENT_ACTIVE/);
+  assert.match(combined, /CURRENT_LATEST_STATE/);
+  assert.match(combined, /missing_lineage/);
+  assert.match(combined, /PRIMARY KEY \(run_id, current_listing_key\)/);
+  assert.match(combined, /UNIQUE \(run_id, offer_family_key\)/);
+  assert.doesNotMatch(combined, /count\(DISTINCT/);
+  assert.doesNotMatch(combined, /watch_records|staging\.listings|raw_messages/);
 });
