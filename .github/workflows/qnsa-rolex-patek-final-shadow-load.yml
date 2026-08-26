@@ -47,9 +47,9 @@ jobs:
       actions: read
       contents: read
     env:
-      FINAL_FREEZE_ARTIFACT: ${{ runner.temp }}/final-freeze
-      CURRENT_INVENTORY_SOURCE_ARTIFACT: ${{ runner.temp }}/current-inventory-source
-      SHADOW_LOAD_OUTPUT: ${{ runner.temp }}/shadow-load
+      FINAL_FREEZE_ARTIFACT: ${{ github.workspace }}/.shadow-load/final-freeze
+      CURRENT_INVENTORY_SOURCE_ARTIFACT: ${{ github.workspace }}/.shadow-load/current-inventory-source
+      SHADOW_LOAD_OUTPUT: ${{ github.workspace }}/.shadow-load/output
       PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
