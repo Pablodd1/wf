@@ -33,7 +33,7 @@ on:
         type: string
 
 concurrency:
-  group: qnsa-rolex-patek-final-shadow-load
+  group: qnsa-rolex-patek-final-shadow-load-${{ inputs.mode }}
   cancel-in-progress: false
 
 jobs:
