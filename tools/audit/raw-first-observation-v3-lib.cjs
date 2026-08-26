@@ -79,9 +79,10 @@ function evidenceFlags(child, rawData = {}) {
     has_dial_or_color: /\b(?:dial|black|white|blue|green|red|silver|gold|champagne|salmon|panda|grey|gray|brown)\b/i.test(text),
     has_year: /\b(?:19|20)\d{2}\b/.test(text),
     has_box_papers: /\b(?:box|papers?|certificate|card|full\s+set|watch\s+only)\b/i.test(text),
-    has_watch_descriptor: /\b(?:rolex|patek|philippe|watch|daytona|submariner|gmt|datejust|aquanaut|nautilus|calatrava|complication)\b/i.test(text),
+    has_watch_descriptor: /\b(?:rolex|patek|philippe|tudor|zenith|cartier|tag\s*heuer|heuer|watch|daytona|submariner|gmt|datejust|aquanaut|nautilus|calatrava|complication)\b/i.test(text),
     quantity: quantityMarker(text),
     serial: serialMarker(text),
+    explicit_line_intent: explicitLineIntent,
     intent,
   };
 }
@@ -96,7 +97,7 @@ function validityClassification(child, rawData = {}) {
   }
   const parsedAgain = segmentDealerMessage(text);
   if (parsedAgain.length > 1) return { classification: 'AMBIGUOUS_CHILD_BOUNDARY', flags };
-  const offerEvidence = flags.has_price || flags.has_currency || flags.has_condition
+  const offerEvidence = flags.explicit_line_intent || flags.has_price || flags.has_currency || flags.has_condition
     || flags.has_dial_or_color || flags.has_year || flags.has_box_papers
     || flags.has_watch_descriptor || flags.quantity || flags.serial;
   if (!offerEvidence) return { classification: 'FIELD_ONLY_FRAGMENT', flags };

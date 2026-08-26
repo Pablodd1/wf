@@ -1,0 +1,90 @@
+name: QNSA Generic Raw-First Next Four
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RUN_GENERIC_RAW_FIRST_NEXT_4
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qnsa-generic-raw-first-next-four
+  cancel-in-progress: false
+
+jobs:
+  canonical-read-only-census:
+    if: ${{ inputs.confirmation == 'RUN_GENERIC_RAW_FIRST_NEXT_4' }}
+    runs-on: ubuntu-latest
+    environment: Production
+    timeout-minutes: 300
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      GENERIC_RAW_FIRST_SHARDS: 16
+      GENERIC_RAW_FIRST_PAGE_SIZE: 2000
+      GENERIC_RAW_FIRST_OUTPUT: audit-output/generic-raw-first-next-4-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate dispatch, target, and SELECT-only contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test '${{ inputs.confirmation }}' = 'RUN_GENERIC_RAW_FIRST_NEXT_4'
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          node tools/audit/generic-raw-first-brand-batch.cjs --validate-only
+          node --test tests/generic-raw-first-brand-batch.test.cjs \
+            tests/raw-first-rolex-patek-audit.test.cjs \
+            tests/raw-first-observation-v3.test.cjs
+
+      - name: Execute canonical bounded census
+        id: census
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/audit/generic-raw-first-brand-batch.cjs
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = process.env.GENERIC_RAW_FIRST_OUTPUT;
+          const summary = JSON.parse(fs.readFileSync(path.join(root, 'summary.json'), 'utf8'));
+          if (summary.canonical_project_ref !== 'qnsafosakvonzgfcsphh' || summary.read_only !== true ||
+              summary.production_writes !== 0 || summary.raw_mutations !== 0 ||
+              summary.endpoint_switches !== 0 || summary.rolex_patek_changes !== 0) {
+            throw new Error('Safety reconciliation failed');
+          }
+          const expected = ['Tudor','Zenith','Cartier','TAG Heuer'];
+          if (JSON.stringify(Object.keys(summary.brands)) !== JSON.stringify(expected)) {
+            throw new Error('Brand scope drift');
+          }
+          process.stdout.write(`${summary.decision}\n`);
+          NODE
+
+      - name: Remove private raw-page artifacts
+        if: always()
+        shell: bash
+        run: rm -rf "$GENERIC_RAW_FIRST_OUTPUT/pages"
+
+      - name: Upload aggregate evidence only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-generic-raw-first-next-four-${{ github.run_id }}
+          path: |
+            ${{ env.GENERIC_RAW_FIRST_OUTPUT }}/summary.json
+            ${{ env.GENERIC_RAW_FIRST_OUTPUT }}/checkpoint.json
+            ${{ env.GENERIC_RAW_FIRST_OUTPUT }}/manifest-sha256.json
+          if-no-files-found: error
+          retention-days: 30

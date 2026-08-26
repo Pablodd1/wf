@@ -11,6 +11,17 @@ const {
 } = require('../../api/_lib/normalization-v4.cjs');
 
 const BRANDS = ['Rolex', 'Patek Philippe'];
+const GENERIC_WATCH_BRANDS = ['Rolex', 'Patek Philippe', 'Tudor', 'Zenith', 'Cartier', 'TAG Heuer'];
+const BRAND_HEADER_ALIASES = [
+  ['Patek Philippe', /^(?:patek(?: philippe)?|philippe patek|pp)$/],
+  ['Audemars Piguet', /^(?:audemars(?: piguet)?|ap)$/],
+  ['Vacheron Constantin', /^(?:vacheron(?: constantin)?|vc)$/],
+  ['Richard Mille', /^(?:richard mille|rm)$/],
+  ['Rolex', /^rolex$/], ['Tudor', /^tudor$/], ['Zenith', /^zenith$/],
+  ['Cartier', /^cartier$/], ['TAG Heuer', /^(?:tag heuer|tagheuer|heuer)$/],
+  ['Omega', /^omega$/], ['Hublot', /^hublot$/], ['Chopard', /^chopard$/],
+  ['Panerai', /^panerai$/], ['IWC', /^iwc$/], ['Jaeger-LeCoultre', /^(?:jlc|jaeger lecoultre)$/],
+];
 const POST_CLASSES = [
   'SINGLE_WATCH',
   'MULTI_WATCH_SAFE_TO_SPLIT',
@@ -37,6 +48,10 @@ function normalizeBrand(value) {
   const key = String(value ?? '').normalize('NFKC').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   if (/^rolex$/.test(key)) return 'Rolex';
   if (/^(?:patek|patek philippe|philippe patek)$/.test(key)) return 'Patek Philippe';
+  if (/^tudor$/.test(key)) return 'Tudor';
+  if (/^zenith$/.test(key)) return 'Zenith';
+  if (/^cartier$/.test(key)) return 'Cartier';
+  if (/^(?:tag|tag heuer|heuer)$/.test(key)) return 'TAG Heuer';
   return null;
 }
 
@@ -44,6 +59,10 @@ function explicitBrandInText(value) {
   const text = String(value ?? '');
   if (/(?:^|[^\p{L}\p{N}])rolex(?:$|[^\p{L}\p{N}])/iu.test(text)) return 'Rolex';
   if (/(?:^|[^\p{L}\p{N}])(?:patek(?:\s+philippe)?|philippe\s+patek)(?:$|[^\p{L}\p{N}])/iu.test(text)) return 'Patek Philippe';
+  if (/(?:^|[^\p{L}\p{N}])tudor(?:$|[^\p{L}\p{N}])/iu.test(text)) return 'Tudor';
+  if (/(?:^|[^\p{L}\p{N}])zenith(?:$|[^\p{L}\p{N}])/iu.test(text)) return 'Zenith';
+  if (/(?:^|[^\p{L}\p{N}])cartier(?:$|[^\p{L}\p{N}])/iu.test(text)) return 'Cartier';
+  if (/(?:^|[^\p{L}\p{N}])(?:tag\s+heuer|tagheuer|heuer)(?:$|[^\p{L}\p{N}])/iu.test(text)) return 'TAG Heuer';
   return null;
 }
 
@@ -55,6 +74,25 @@ function observedReference(value) {
   const text = clean(value);
   if (!text || /^(?:unknown|null|n\/?a|none|[-–—])$/i.test(text)) return null;
   return text;
+}
+
+function brandHeaderForLine(value) {
+  const key = String(value ?? '').normalize('NFKC').toLowerCase()
+    .replace(/^[^a-z0-9]+|[^a-z0-9]+$/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  return BRAND_HEADER_ALIASES.find(([, pattern]) => pattern.test(key))?.[0] || null;
+}
+
+function observedReferenceForBrand(value, brand) {
+  const text = String(value ?? '');
+  if (brand === 'Zenith') {
+    const match = text.match(/(?<![A-Z0-9])(?:\d{2}\.\d{4}\.\d{3,4}(?:\/[A-Z0-9.]+)?)(?![A-Z0-9])/i);
+    if (match) return match[0];
+  }
+  if (brand === 'TAG Heuer') {
+    const match = text.match(/(?<![A-Z0-9])(?:[A-Z]{2,5}\d[A-Z0-9]{2,7}(?:[.-][A-Z0-9]{2,10})+)(?![A-Z0-9])/i);
+    if (match) return match[0];
+  }
+  return observedReference(extractReference(text));
 }
 
 function referenceKey(value) {
@@ -136,7 +174,7 @@ function normalizedCountry(value) {
 function lineIsContextOnly(line) {
   const text = String(line ?? '').trim();
   if (!text) return true;
-  if (/^(?:wts|wtb|sale|search|new|used|unworn|prices?\s+in\s+[a-z$]+|rolex|patek(?:\s+philippe)?)\s*:?[\s-]*$/i.test(text)) return true;
+  if (/^(?:wts|wtb|sale|search|new|used|unworn|prices?\s+in\s+[a-z$]+|rolex|patek(?:\s+philippe)?|tudor|zenith|cartier|tag\s*heuer|heuer)\s*:?[\s-]*$/i.test(text)) return true;
   return !extractReference(text) && text.length <= 30 && /^(?:[\p{L}\s:/$-]+)$/u.test(text);
 }
 
@@ -252,6 +290,50 @@ function classifyRawPost(row, options = {}) {
   };
 }
 
+function classifyRawPostGeneric(row, options = {}) {
+  const targetBrands = new Set(options.targetBrands || GENERIC_WATCH_BRANDS);
+  const base = classifyRawPost(row, options);
+  const rawData = row.raw_data || {};
+  const sourcePhone = normalizePhone(rawData.from_number || row.sender_phone);
+  const dealer = sourcePhone ? options.dealerByPhone?.get(sourcePhone) || null : null;
+  const country = normalizedCountry(rawData.region || row.group_id);
+  let contextBrand = normalizeBrand(rawData.brand);
+  let index = 0;
+  const children = [];
+  for (const line of splitMessageLines(row.raw_text)) {
+    const header = brandHeaderForLine(line);
+    if (header) {
+      contextBrand = header;
+      continue;
+    }
+    if (!targetBrands.has(contextBrand)) continue;
+    const reference = observedReferenceForBrand(line, contextBrand);
+    if (!reference) continue;
+    index += 1;
+    children.push(childFromCandidate({ rawLine: line, reference,
+      context: { brand_context: contextBrand, intent_context: base.parent.intent } },
+    contextBrand, base.parent, index, dealer, country));
+  }
+  if (!children.length && targetBrands.has(normalizeBrand(rawData.brand)) && !base.parent.is_multi) {
+    const child = singleCandidate(base.parent, normalizeBrand(rawData.brand), dealer, country);
+    children.push(child);
+  }
+  const headerBrands = splitMessageLines(row.raw_text).map(brandHeaderForLine)
+    .filter(brand => targetBrands.has(brand));
+  const rawBrand = normalizeBrand(rawData.brand);
+  const brands = [...new Set([...children.map(child => child.brand), ...headerBrands,
+    targetBrands.has(rawBrand) ? rawBrand : null].filter(brand => targetBrands.has(brand)))];
+  return {
+    parent: base.parent,
+    brand: brands.length === 1 ? brands[0] : null,
+    brands,
+    classification: children.length ? (children.length === 1 && !base.parent.is_multi
+      ? 'SINGLE_WATCH' : 'MULTI_WATCH_SAFE_TO_SPLIT') : 'MULTI_WATCH_UNSPLITTABLE',
+    children,
+    review_reasons: children.length ? [] : ['NO_EXACT_TARGET_CHILD_BOUNDARIES'],
+  };
+}
+
 function priceResearchEligible(child, disposition = {}) {
   if (child.intent !== 'WTS' || !child.observed_reference_key) return false;
   if (disposition.duplicate || disposition.withdrawn || disposition.superseded) return false;
@@ -261,8 +343,11 @@ function priceResearchEligible(child, disposition = {}) {
 
 module.exports = {
   BRANDS,
+  GENERIC_WATCH_BRANDS,
   POST_CLASSES,
+  brandHeaderForLine,
   classifyRawPost,
+  classifyRawPostGeneric,
   clean,
   explicitBrandInText,
   normalizeBrand,
@@ -270,6 +355,7 @@ module.exports = {
   normalizedCountry,
   observedBrand,
   observedReference,
+  observedReferenceForBrand,
   priceEvidence,
   priceResearchEligible,
   referenceKey,
