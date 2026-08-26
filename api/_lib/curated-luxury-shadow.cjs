@@ -31,7 +31,10 @@ function urlsFromMedia(value, found = new Set()) {
 }
 
 function mapCard(row) {
-  const images = row.has_images === true ? urlsFromMedia(row.raw_media) : [];
+  // Only the immutable exact-hash child bridge may supply customer images.
+  // Raw parent/version media is lineage evidence, never an image fallback.
+  const images = row.image_state === 'VERIFIED_CHILD_IMAGE'
+    ? urlsFromMedia(row.verified_child_media) : [];
   const sourceCurrency = row.source_currency || null;
   const verifiedUsd = row.price_verified === true && Number(row.price_usd) > 0
     ? Number(row.price_usd) : null;
@@ -70,7 +73,8 @@ function mapCard(row) {
     thumbnail_url: images[0] || null,
     image_url: images[0] || null,
     image_urls: images,
-    image_evidence_type: images.length ? 'SOURCE_LINKED_IMAGE' : 'NO_IMAGE',
+    image_state: images.length ? 'VERIFIED_CHILD_IMAGE' : 'NO_VERIFIED_CHILD_IMAGE',
+    image_evidence_type: images.length ? 'EXACT_CHILD_IMAGE' : 'NO_VERIFIED_CHILD_IMAGE',
     image_evidence_label: images.length ? 'Source-supplied listing image' : null,
     region: row.country_code || null,
     location: row.country_code || null,

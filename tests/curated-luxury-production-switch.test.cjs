@@ -25,8 +25,10 @@ test('card projection preserves availability, original currency, and evidence ga
     source_price_amount: 100000, source_currency: 'HKD', price_usd: 12820,
     price_verified: true, created_at: '2026-08-01T00:00:00Z',
     current_status: 'CURRENT_LATEST_STATE', cohort_status: 'LATEST_OBSERVED',
-    raw_message: 'source evidence', raw_media: [{ url: 'https://example.test/watch.jpg' }],
-    has_images: true, country_code: 'HK', dealer_name: null, dealer_rating: null,
+    raw_message: 'source evidence', raw_media: [{ url: 'https://unsafe-parent.test/watch.jpg' }],
+    verified_child_media: ['https://example.test/watch.jpg'],
+    image_state: 'VERIFIED_CHILD_IMAGE', has_images: true,
+    country_code: 'HK', dealer_name: null, dealer_rating: null,
   });
   assert.equal(card.price_raw, 100000);
   assert.equal(card.currency, 'HKD');
@@ -37,6 +39,20 @@ test('card projection preserves availability, original currency, and evidence ga
   assert.equal(card.seller_name, null);
   assert.equal(card.seller_rating, null);
   assert.deepEqual(card.image_urls, ['https://example.test/watch.jpg']);
+  assert.equal(card.image_state, 'VERIFIED_CHILD_IMAGE');
+});
+
+test('card projection never inherits raw parent media and fails closed without a bridge URL', () => {
+  const card = shadow.mapCard({
+    id: 'listing-2', brand: 'Patek Philippe', reference: '5712/1A', listing_type: 'WTS',
+    raw_media: [{ url: 'https://unsafe-parent.test/bundle.jpg', verified_for_child_listing: false }],
+    verified_child_media: [], image_state: 'NO_VERIFIED_CHILD_IMAGE', has_images: false,
+  });
+  assert.equal(card.has_images, false);
+  assert.equal(card.thumbnail_url, null);
+  assert.deepEqual(card.image_urls, []);
+  assert.equal(card.image_state, 'NO_VERIFIED_CHILD_IMAGE');
+  assert.equal(card.image_evidence_type, 'NO_VERIFIED_CHILD_IMAGE');
 });
 
 test('projection migration is read-only over raw/source tables and COMPLETE gated', () => {
@@ -48,6 +64,19 @@ test('projection migration is read-only over raw/source tables and COMPLETE gate
   assert.match(sql, /raw_message_versions/i);
   assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+(?:INTO\s+|FROM\s+)?(?:public\.)?(?:raw_messages|raw_message_versions|staging\.listings)/i);
   assert.match(sql, /REVOKE ALL[\s\S]*GRANT EXECUTE[\s\S]*service_role/i);
+});
+
+test('child image bridge is exact-hash, immutable to customers, and used after key selection', () => {
+  const sql = fs.readFileSync(path.join(root,
+    'supabase/migrations/20260826220000_curated_luxury_child_image_evidence_bridge.sql'), 'utf8');
+  assert.match(sql, /source_image_key\s*=\s*encode\(extensions\.digest\(convert_to\(source_url,'UTF8'\),'sha256'\),'hex'\)/i);
+  assert.match(sql, /raw_occurrence_key=c\.latest_raw_occurrence_key/i);
+  assert.match(sql, /'NO_VERIFIED_CHILD_IMAGE'/);
+  assert.match(sql, /verified_child_media/);
+  assert.match(sql, /GRANT SELECT,INSERT[\s\S]*service_role/i);
+  assert.doesNotMatch(sql, /GRANT (?:ALL|UPDATE|DELETE)[^;]*child_image/i);
+  assert.doesNotMatch(sql, /\b(?:UPDATE|DELETE|TRUNCATE)\s+(?:public\.)?curated_luxury_current_listings_shadow/i);
+  assert.doesNotMatch(sql, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+(?:INTO\s+|FROM\s+)?(?:public\.)?(?:raw_messages|raw_message_versions|staging\.listings)/i);
 });
 
 test('customer APIs opt in only through the new selectors', () => {
