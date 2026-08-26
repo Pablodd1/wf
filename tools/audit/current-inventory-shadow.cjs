@@ -175,8 +175,8 @@ function catalogSets() {
 
 function compactObservation({ occurrence, parent, artifactRecord, sourcePage, origin, dealer, sourceStatus,
   sourceImageKey, priceEvidenceClassification, modelAsPosted }) {
-  const classification = effectiveChildClassification(occurrence);
   const brand = occurrence.observed_brand || parent.brand || artifactRecord.brand;
+  const classification = effectiveChildClassification({ ...occurrence, brand });
   if (classification !== 'UNIQUE_MARKET_OBSERVATION' || !BRANDS.includes(brand)) {
     return { classification, brand: BRANDS.includes(brand) ? brand : artifactRecord.brand, row: null };
   }

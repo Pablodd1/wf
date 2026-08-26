@@ -71,6 +71,17 @@ test('only the six review classifications may survive the child gate', () => {
   assert.equal(effectiveChildClassification(observation({ classification: 'UNKNOWN_PARSER_LABEL' })), 'REVIEW_REQUIRED');
 });
 
+test('explicit foreign-brand evidence vetoes parent-brand fallback', () => {
+  assert.equal(effectiveChildClassification(observation({
+    observed_brand: 'Rolex', exact_observed_reference: 'RM07-01WG',
+    raw_child_text: 'Richard Mille RM07-01 WG USD 180000',
+  })), 'REVIEW_REQUIRED');
+  assert.equal(effectiveChildClassification(observation({
+    observed_brand: 'Patek Philippe', exact_observed_reference: 'RM65-01',
+    raw_child_text: 'RM65-01 USD 250000',
+  })), 'REVIEW_REQUIRED');
+});
+
 test('withdrawn latest state yields no current family', () => {
   const row = observation({ source_status: 'WITHDRAWN' });
   assert.equal(classifyOfferFamily([row]).current_status, 'WITHDRAWN');

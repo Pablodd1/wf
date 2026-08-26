@@ -60,11 +60,43 @@ function specificFragmentClassification(occurrence) {
   return null;
 }
 
+const EXPLICIT_BRAND_PATTERNS = [
+  ['Rolex', /\brolex\b/i],
+  ['Patek Philippe', /\b(?:patek(?:\s+philippe)?|philippe\s+patek)\b/i],
+  ['Richard Mille', /\brichard\s+mille\b/i],
+  ['Audemars Piguet', /\baudemars\s+piguet\b/i],
+  ['Omega', /\bomega\b/i],
+  ['Cartier', /\bcartier\b/i],
+  ['Tudor', /\btudor\b/i],
+  ['Zenith', /\bzenith\b/i],
+  ['TAG Heuer', /\btag\s+heuer\b/i],
+  ['Vacheron Constantin', /\bvacheron(?:\s+constantin)?\b/i],
+  ['Panerai', /\bpanerai\b/i],
+  ['IWC', /\biwc\b/i],
+  ['Breitling', /\bbreitling\b/i],
+  ['Hublot', /\bhublot\b/i],
+  ['Bulgari', /\b(?:bulgari|bvlgari)\b/i],
+  ['Franck Muller', /\bfranck\s+muller\b/i],
+  ['Jaeger-LeCoultre', /\bjaeger[\s-]*lecoultre\b/i],
+  ['A. Lange & Sohne', /\b(?:a\.?\s*)?lange\s*(?:&|and)?\s*sohne\b/i],
+];
+
+function explicitBrandConflict(occurrence) {
+  const assigned = String(occurrence.observed_brand || occurrence.brand || '').trim();
+  const text = String(occurrence.raw_child_text || '');
+  const named = EXPLICIT_BRAND_PATTERNS.filter(([, pattern]) => pattern.test(text)).map(([brand]) => brand);
+  if (named.length && !named.includes(assigned)) return true;
+  const reference = String(occurrence.exact_observed_reference || occurrence.observed_reference || '')
+    .trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return ['Rolex', 'Patek Philippe'].includes(assigned) && /^RM\d/.test(reference);
+}
+
 function effectiveChildClassification(occurrence) {
   if (occurrence.classification && occurrence.classification !== 'UNIQUE_MARKET_OBSERVATION') {
     return INVALID_CHILD_CLASSIFICATIONS.has(occurrence.classification)
       ? occurrence.classification : 'REVIEW_REQUIRED';
   }
+  if (explicitBrandConflict(occurrence)) return 'REVIEW_REQUIRED';
   return specificFragmentClassification(occurrence) || 'UNIQUE_MARKET_OBSERVATION';
 }
 
@@ -205,6 +237,7 @@ module.exports = {
   createObservationIdentity,
   displayTier,
   effectiveChildClassification,
+  explicitBrandConflict,
   explicitActiveStatus,
   familyIdentityMaterial,
   identityText,
