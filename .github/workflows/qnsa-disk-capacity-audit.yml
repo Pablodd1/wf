@@ -39,6 +39,14 @@ on:
         description: Completed private V3 artifact run ID for the read-only current-inventory shadow
         required: false
         type: string
+      final_freeze_source_run_id:
+        description: Completed current-inventory private artifact run for artifact-only final freeze
+        required: false
+        type: string
+      final_freeze_source_head_sha:
+        description: Exact completed current-inventory source commit SHA
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -50,7 +58,7 @@ concurrency:
 
 jobs:
   canonical-read-only-audit:
-    if: ${{ inputs.validate_artifact_run_id == '' && inputs.v3_artifact_run_id == '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' }}
+    if: ${{ inputs.validate_artifact_run_id == '' && inputs.v3_artifact_run_id == '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' && inputs.final_freeze_source_run_id == '' }}
     name: Canonical QNSA SELECT-only audit
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -209,7 +217,7 @@ jobs:
         run: exit 1
 
   validate-existing-child-counts:
-    if: ${{ inputs.validate_artifact_run_id != '' && inputs.v3_artifact_run_id == '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' }}
+    if: ${{ inputs.validate_artifact_run_id != '' && inputs.v3_artifact_run_id == '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' && inputs.final_freeze_source_run_id == '' }}
     name: Validate existing sanitized child counts
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -268,7 +276,7 @@ jobs:
           path: audit-output/raw-first-child-validation/*.json
 
   targeted-observation-census-v3:
-    if: ${{ inputs.v3_artifact_run_id != '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' }}
+    if: ${{ inputs.v3_artifact_run_id != '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' && inputs.final_freeze_source_run_id == '' }}
     name: Targeted evidence-enriched observation census V3
     runs-on: ubuntu-latest
     timeout-minutes: 180
@@ -516,3 +524,154 @@ jobs:
             ${{ env.CURRENT_INVENTORY_OUTPUT }}/offer-partitions/**/*.jsonl.gz
             ${{ env.CURRENT_INVENTORY_OUTPUT }}/current-pages/**/*.json.gz
             ${{ env.CURRENT_INVENTORY_OUTPUT }}/family-pages/**/*.json.gz
+
+  final-rolex-patek-rescue-freeze:
+    if: ${{ inputs.final_freeze_source_run_id != '' || inputs.final_freeze_source_head_sha != '' }}
+    name: Artifact-only LATEST_OBSERVED rescue and freeze
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      FINAL_SOURCE_RUN_ID: ${{ inputs.final_freeze_source_run_id }}
+      FINAL_SOURCE_HEAD_SHA: ${{ inputs.final_freeze_source_head_sha }}
+      FINAL_SOURCE_ARTIFACT: audit-final-source
+      FINAL_FREEZE_OUTPUT: audit-output/rolex-patek-final-${{ github.run_id }}
+      FINAL_FREEZE_VERSION: curated-luxury-rolex-patek-final-${{ github.run_id }}
+      FINAL_COMMIT_SHA: ${{ github.sha }}
+      FINAL_PR_URL: https://github.com/Pablodd1/wf/pull/775
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - name: Validate exact frozen source and no-re-census dispatch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "FREEZE_ROLEX_PATEK_FINAL_V1"
+          test "$FINAL_SOURCE_RUN_ID" = "32934432129"
+          test "$FINAL_SOURCE_HEAD_SHA" = "0bdc7f710eb3d28ba329582d379f41f602a53d3e"
+          actual_head="$(gh api "repos/Pablodd1/wf/actions/runs/$FINAL_SOURCE_RUN_ID" --jq .head_sha)"
+          actual_status="$(gh api "repos/Pablodd1/wf/actions/runs/$FINAL_SOURCE_RUN_ID" --jq '.status + ":" + .conclusion')"
+          test "$actual_head" = "$FINAL_SOURCE_HEAD_SHA"
+          test "$actual_status" = "completed:success"
+
+      - name: Check out final freeze candidate only
+        uses: actions/checkout@v4
+        with:
+          ref: codex/rolex-patek-current-inventory-shadow
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run focused final-freeze tests
+        run: node --test tests/final-rolex-patek-freeze.test.cjs tests/current-inventory-shadow-lib.test.cjs
+
+      - name: Download exact completed private shadow artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.final_freeze_source_run_id }}
+          name: PRIVATE-qnsa-current-inventory-shadow-${{ inputs.final_freeze_source_run_id }}
+          path: ${{ env.FINAL_SOURCE_ARTIFACT }}
+
+      - name: Run one deterministic LATEST_OBSERVED rescue pass
+        id: freeze
+        shell: bash
+        run: |
+          set +e
+          npm run freeze:rolex-patek-final
+          freeze_exit=$?
+          set -e
+          test -f "$FINAL_FREEZE_OUTPUT/freeze.json"
+          decision="$(node -e "process.stdout.write(require('./' + process.env.FINAL_FREEZE_OUTPUT + '/freeze.json').decision)")"
+          case "$decision" in
+            CURATED_LUXURY_ROLEX_PATEK_FINAL_READY|NOT_READY_FINAL_COHORT) ;;
+            *) exit 1 ;;
+          esac
+          if [[ "$freeze_exit" -ne 0 && "$freeze_exit" -ne 2 ]]; then exit "$freeze_exit"; fi
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+
+      - name: Verify final freeze contract and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const root = process.env.FINAL_FREEZE_OUTPUT;
+          const freeze = JSON.parse(fs.readFileSync(path.join(root, 'freeze.json'), 'utf8'));
+          const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest-sha256.json'), 'utf8'));
+          const canary = JSON.parse(fs.readFileSync(path.join(root, 'canary-evidence.json'), 'utf8')).canary;
+          const checksum = file => crypto.createHash('sha256').update(fs.readFileSync(file).toString('base64')).digest('hex');
+          if (freeze.source_artifact_run_id !== '32934432129' || freeze.source_partitions_verified !== 256) {
+            throw new Error('wrong frozen source');
+          }
+          if (!freeze.read_only || freeze.production_writes !== 0 || freeze.raw_mutations !== 0
+            || freeze.production_source_switch !== false || freeze.destructive_overwrites !== 0
+            || freeze.no_broad_recensus !== true) throw new Error('mutation or recensus boundary failed');
+          if (freeze.brands.Rolex.confirmed_current !== 221830
+            || freeze.brands['Patek Philippe'].confirmed_current !== 108890) throw new Error('baseline loss');
+          for (const brand of ['Rolex', 'Patek Philippe']) {
+            const row = freeze.brands[brand];
+            if (row.final_publishable !== row.confirmed_current + row.latest_observed_rescued
+              || row.final_publishable !== row.wts + row.wtb) throw new Error(`${brand} final count mismatch`);
+          }
+          if (!freeze.protection.confirmed_current_baseline_preserved
+            || !freeze.protection.final_counts_above_website_floors) throw new Error('existing inventory protection failed');
+          if (freeze.canary.failed !== 0 || freeze.canary.passed !== freeze.canary.requested
+            || canary.some(row => row.status !== 'VERIFIED_FINAL_FROZEN_COHORT')) throw new Error('canary failed');
+          if (canary.some(row => /^(?:RM\d|W[A-Z0-9]|Q\d{6,})/i.test(String(row.observed_reference || '').replace(/[^A-Z0-9]/gi, '')))) {
+            throw new Error('foreign reference canary');
+          }
+          if (manifest.files.length !== freeze.manifest.files
+            || new Set(manifest.files.map(row => row.relative)).size !== manifest.files.length) throw new Error('manifest mismatch');
+          for (const row of manifest.files) {
+            const file = path.join(root, row.relative);
+            if (!fs.existsSync(file) || fs.statSync(file).size !== row.bytes || checksum(file) !== row.sha256) {
+              throw new Error(`artifact mismatch: ${row.relative}`);
+            }
+          }
+          if (checksum(path.join(root, 'manifest-sha256.json')) !== freeze.manifest_sha256) {
+            throw new Error('manifest SHA mismatch');
+          }
+          NODE
+
+      - name: Upload compact final freeze decision
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-patek-final-freeze-${{ github.run_id }}-${{ steps.freeze.outputs.decision || 'INCOMPLETE' }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            ${{ env.FINAL_FREEZE_OUTPUT }}/freeze.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/canary-evidence.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/price-research-summary.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/manifest-sha256.json
+
+      - name: Upload private frozen cohort
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRIVATE-qnsa-rolex-patek-final-cohort-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          path: |
+            ${{ env.FINAL_FREEZE_OUTPUT }}/freeze.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/canary-evidence.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/price-research-summary.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/manifest-sha256.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/cohort-pages/**/*.json.gz
+
+      - name: Preserve fail-closed final decision
+        if: ${{ always() && steps.freeze.outputs.decision == 'NOT_READY_FINAL_COHORT' }}
+        run: exit 1
