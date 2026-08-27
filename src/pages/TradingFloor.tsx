@@ -133,6 +133,7 @@ interface ListingRecord {
   region: string | null;
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
+  listing_source_shape?: 'SINGLE_INPUT' | 'DETERMINISTIC_MULTI_CHILD';
   multi_listing?: boolean;
   is_unbundled_child?: boolean;
   raw_message?: string | null;
@@ -179,10 +180,11 @@ interface TradingFloorResponse {
 }
 
 interface RandomAllInventoryCursor {
-  v: 1;
+  v: 2;
   page: number;
   seed: number;
   scope: string;
+  listingLane: 'single' | 'multi';
   brandCursors: Record<string, string | null>;
   brandTotals: Record<string, number>;
   exhausted: Record<string, boolean>;
@@ -199,8 +201,9 @@ function decodeRandomAllInventoryCursor(value: string | null): RandomAllInventor
   try {
     const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
     const decoded = JSON.parse(window.atob(padded)) as RandomAllInventoryCursor;
-    if (decoded?.v !== 1 || !Number.isSafeInteger(decoded.page) || decoded.page < 2
+    if (decoded?.v !== 2 || !Number.isSafeInteger(decoded.page) || decoded.page < 2
       || !Number.isSafeInteger(decoded.seed) || decoded.seed < 0 || typeof decoded.scope !== 'string'
+      || !['single', 'multi'].includes(decoded.listingLane)
       || !decoded.brandCursors || !decoded.brandTotals || !decoded.exhausted) return null;
     return decoded;
   } catch {
@@ -228,10 +231,26 @@ function newestObservedTime(listing: ListingRecord) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function listingSourceLane(listing: ListingRecord) {
+  return listing.listing_source_shape === 'DETERMINISTIC_MULTI_CHILD'
+    || listing.multi_listing === true || listing.is_unbundled_child === true ? 1 : 0;
+}
+
 function newestObservedOrder(left: ListingRecord, right: ListingRecord) {
+  const bySourceLane = listingSourceLane(left) - listingSourceLane(right);
+  if (bySourceLane !== 0) return bySourceLane;
   const byTime = newestObservedTime(right) - newestObservedTime(left);
   if (byTime !== 0) return byTime;
   return String(right.id).localeCompare(String(left.id));
+}
+
+function discoveryOrderWithinSourceLanes(records: ListingRecord[], seed: number, page: number) {
+  const singles = records.filter(record => listingSourceLane(record) === 0);
+  const multiChildren = records.filter(record => listingSourceLane(record) === 1);
+  return [
+    ...seededPageShuffle(singles, seed, page),
+    ...seededPageShuffle(multiChildren, seed ^ 0x6d756c74, page),
+  ];
 }
 
 async function loadRandomAllInventory({
@@ -260,6 +279,7 @@ async function loadRandomAllInventory({
   if (cursor && (!decoded || decoded.scope !== scope)) return { status: 'error' };
   const page = decoded?.page || 1;
   const stableSeed = decoded?.seed ?? seed;
+  const listingLane = decoded?.listingLane || 'single';
   const perBrandPageSize = Math.max(12, Math.ceil(pageSize / RANDOM_ALL_INVENTORY_BRANDS.length));
   const responses = await Promise.all(RANDOM_ALL_INVENTORY_BRANDS.map(async brand => {
     if (decoded?.exhausted?.[brand]) {
@@ -279,6 +299,7 @@ async function loadRandomAllInventory({
     if (imagesOnly) params.set('images', 'true');
     if (pricedOnly) params.set('priced', 'true');
     if (countries.length > 0) params.set('region', countries.join(','));
+    params.set('sourceShape', listingLane);
     const brandCursor = decoded?.brandCursors?.[brand];
     if (brandCursor) params.set('cursor', brandCursor);
     const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal });
@@ -296,28 +317,32 @@ async function loadRandomAllInventory({
   let total = 0;
   for (const { brand, payload } of responses) {
     records.push(...(payload.records || []));
-    brandTotals[brand] = Number(payload.total) || 0;
+    brandTotals[brand] = payload.total != null
+      ? Number(payload.total) || 0 : decoded?.brandTotals?.[brand] || 0;
     total += brandTotals[brand];
     brandCursors[brand] = payload.nextCursor || null;
     exhausted[brand] = !payload.hasMore || !payload.nextCursor;
   }
-  const hasMore = RANDOM_ALL_INVENTORY_BRANDS.some(brand => !exhausted[brand]);
+  const laneHasMore = RANDOM_ALL_INVENTORY_BRANDS.some(brand => !exhausted[brand]);
+  const hasMore = laneHasMore || listingLane === 'single';
+  const nextListingLane = !laneHasMore && listingLane === 'single' ? 'multi' : listingLane;
   return {
     status: 'ok',
     records: sort === 'discovery'
-      ? seededPageShuffle(records, stableSeed, page)
+      ? discoveryOrderWithinSourceLanes(records, stableSeed, page)
       : [...records].sort(newestObservedOrder),
     total,
     totalIsEstimate: false,
     hasMore,
     nextCursor: hasMore ? encodeRandomAllInventoryCursor({
-      v: 1,
+      v: 2,
       page: page + 1,
       seed: stableSeed,
       scope,
-      brandCursors,
+      listingLane: nextListingLane,
+      brandCursors: nextListingLane === listingLane ? brandCursors : {},
       brandTotals,
-      exhausted,
+      exhausted: nextListingLane === listingLane ? exhausted : {},
     }) : null,
     publicationBrands: [...RANDOM_ALL_INVENTORY_BRANDS],
   };
@@ -483,7 +508,7 @@ export default function TradingFloor() {
   const visibleListings = useMemo(() => {
     if (sortMode === 'newest') return [...listings].sort(newestObservedOrder);
     if (combinedFeedActive) return listings;
-    return seededPageShuffle(listings, 0x57fa2c1d, cursorHistory.length + 1);
+    return discoveryOrderWithinSourceLanes(listings, 0x57fa2c1d, cursorHistory.length + 1);
   }, [combinedFeedActive, cursorHistory.length, listings, sortMode]);
 
   const activeFilterChips = useMemo(() => {

@@ -19,7 +19,7 @@ test('production selectors are isolated to Rolex and Patek', () => {
   assert.deepEqual(shadow.countryCodes('__NO_MATCH__'), ['__NO_MATCH__']);
 });
 
-test('card projection preserves availability, original currency, and evidence gates', () => {
+test('card projection preserves availability and exposes verified USD only', () => {
   const card = shadow.mapCard({
     id: 'listing-1', brand: 'Rolex', reference: '116500LN', listing_type: 'WTS',
     source_price_amount: 100000, source_currency: 'HKD', price_usd: 12820,
@@ -31,8 +31,8 @@ test('card projection preserves availability, original currency, and evidence ga
     country_code: 'HK', dealer_name: null, dealer_rating: null,
     source_identity_key: 'abcdef0123456789', source_platform: 'WHATSAPP',
   });
-  assert.equal(card.price_raw, 100000);
-  assert.equal(card.currency, 'HKD');
+  assert.equal(card.price_raw, null);
+  assert.equal(card.currency, 'USD');
   assert.equal(card.price_usd, 12820);
   assert.equal(card.price_evidence_status, 'DATED_VERIFIED_FX');
   assert.equal(card.current_status, 'CURRENT_LATEST_STATE');
@@ -129,7 +129,8 @@ test('shadow inventory uses bounded key/card RPCs, exact facets, and a scoped ke
     if (name === 'curated_luxury_shadow_customer_cards_v3') {
       return { data: [{ id: 'a'.repeat(64), brand: 'Rolex' }], error: null };
     }
-    return { data: { keys: ['a'.repeat(64)], has_more: true,
+    return { data: { keys: ['a'.repeat(64)], key_lanes: { ['a'.repeat(64)]: 0 }, has_more: true,
+      next_lane: 0,
       next_timestamp: '2026-08-01T00:00:00.000Z', next_key: 'b'.repeat(64),
       next_timestamp_is_null: false }, error: null };
   } };
@@ -139,8 +140,9 @@ test('shadow inventory uses bounded key/card RPCs, exact facets, and a scoped ke
   assert.equal(first.total, 1535763);
   assert.equal(first.totalIsEstimate, false);
   assert.equal(first.hasMore, true);
+  assert.equal(first.records[0].listing_source_shape, 'SINGLE_INPUT');
   assert.deepEqual(calls.map(call => call.name), [
-    'curated_luxury_shadow_customer_page_keys_v3', 'curated_luxury_shadow_customer_count_v2',
+    'curated_luxury_shadow_customer_page_keys_v4', 'curated_luxury_shadow_customer_count_v2',
     'curated_luxury_shadow_customer_cards_v3',
   ]);
   assert.equal(Object.hasOwn(calls[0].args, 'p_offset'), false);
@@ -148,11 +150,12 @@ test('shadow inventory uses bounded key/card RPCs, exact facets, and a scoped ke
   const parsed = inventoryApi.parseInventoryCursor(first.nextCursor, 24);
   assert.equal(parsed.page, 2);
   assert.equal(parsed.shadowKeyset.currentListingKey, 'b'.repeat(64));
+  assert.equal(parsed.shadowKeyset.listingLane, 0);
   calls.length = 0;
   const second = await shadow.loadInventory(client, { ...options, page: 2, cursor: parsed.shadowKeyset });
   assert.equal(second.total, null);
   assert.deepEqual(calls.map(call => call.name), [
-    'curated_luxury_shadow_customer_page_keys_v3', 'curated_luxury_shadow_customer_cards_v3',
+    'curated_luxury_shadow_customer_page_keys_v4', 'curated_luxury_shadow_customer_cards_v3',
   ]);
   assert.equal(calls[0].args.p_after_key, 'b'.repeat(64));
 });

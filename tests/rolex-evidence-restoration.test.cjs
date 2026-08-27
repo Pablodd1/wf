@@ -104,6 +104,20 @@ test('exact child hash resolves only its own multi-line segment', () => {
   assert.equal(resolved.scope, 'EXACT_CHILD_SEGMENT');
 });
 
+test('multi-watch parent text cannot leak one price into multiple children', async () => {
+  const raw = 'WTS x2 Rolex 116500LN USD 25,000';
+  const evidence = await restoration.buildPriceEvidence(row({
+    raw_message: raw,
+    exact_child_text_sha256: restoration.sha256(raw),
+    parent_raw_text_sha256: restoration.sha256(raw),
+    raw_is_bundle: true,
+    parent_child_count: 2,
+  }), null);
+  assert.equal(evidence.decision, 'REVIEW_REQUIRED');
+  assert.equal(evidence.review_reason, 'NON_SINGLETON_PARENT_PRICE_SCOPE');
+  assert.equal(evidence.price_research_eligible, false);
+});
+
 test('images require deterministic singleton seller media and preserve multiple images', () => {
   const safe = row({ raw_version_media: [
     { url: 'https://images.example.test/one.jpg', image_evidence_type: 'SELLER_LISTING_IMAGE' },
@@ -136,14 +150,34 @@ test('restored Rolex card is USD-only publicly and separates display from analyt
   assert.equal(card.price_research_eligible, false);
 });
 
-test('Patek card projection remains byte-contract compatible for new Rolex fields', () => {
-  const card = shadow.mapCard({ id: 'patek-1', brand: 'Patek Philippe', listing_type: 'WTS',
-    price_usd: null, price_verified: false, verified_child_media: [], image_state: 'NO_VERIFIED_CHILD_IMAGE' });
-  assert.equal(Object.hasOwn(card, 'price_display_verified'), false);
-  assert.equal(Object.hasOwn(card, 'price_requires_review'), false);
+test('Patek customer price is verified USD-only and WTB remains outside analytics', () => {
+  const card = shadow.mapCard({ id: 'patek-1', brand: 'Patek Philippe', listing_type: 'WTB',
+    source_price_amount: 100000, source_currency: 'HKD', price_usd: 12820,
+    price_verified: true, verified_child_media: [], image_state: 'NO_VERIFIED_CHILD_IMAGE' });
+  assert.equal(card.price_usd, 12820);
+  assert.equal(card.currency, 'USD');
+  assert.equal(card.source_price_amount, null);
+  assert.equal(card.source_currency, null);
+  assert.equal(card.price_display_verified, true);
+  assert.equal(card.price_research_eligible, false);
+  assert.equal(card.price_requires_review, false);
 });
 
-test('Rolex v4 is opt-in and Patek remains on v3', async () => {
+test('Patek Price Research rows expose normalized USD, not the foreign source amount', async () => {
+  const client = { rpc: async () => ({ data: {
+    stats: { count: 1, avg: 12820, q1: 12820, median: 12820, q3: 12820, min: 12820, max: 12820 },
+    wtb_count: 0,
+    rows: [{ id: 'state-1', source_price_amount: 100000, source_currency: 'HKD',
+      price_usd: 12820, created_at: '2026-08-20T00:00:00Z' }],
+  }, error: null }) };
+  const result = await shadow.loadPriceResearch(client, 'Patek Philippe', '5712/1A', {});
+  assert.equal(result.rows[0].price_usd, 12820);
+  assert.equal(result.rows[0].currency, 'USD');
+  assert.equal(result.rows[0].source_price_amount, null);
+  assert.equal(result.rows[0].source_currency, null);
+});
+
+test('Rolex v5 is opt-in and Patek uses source-lane v4', async () => {
   const prior = process.env.CURATED_ROLEX_EVIDENCE_SOURCE;
   process.env.CURATED_ROLEX_EVIDENCE_SOURCE = shadow.ROLEX_EVIDENCE_SELECTOR;
   const calls = [];
@@ -157,11 +191,11 @@ test('Rolex v4 is opt-in and Patek remains on v3', async () => {
     search: null, reference: null, page: 1, pageSize: 24, cursor: null };
   try {
     await shadow.loadInventory(client, { ...base, brand: 'Rolex' });
-    assert.deepEqual(calls, ['curated_luxury_rolex_customer_page_keys_v4',
+    assert.deepEqual(calls, ['curated_luxury_rolex_customer_page_keys_v5',
       'curated_luxury_rolex_customer_count_v3']);
     calls.length = 0;
     await shadow.loadInventory(client, { ...base, brand: 'Patek Philippe' });
-    assert.deepEqual(calls, ['curated_luxury_shadow_customer_page_keys_v3',
+    assert.deepEqual(calls, ['curated_luxury_shadow_customer_page_keys_v4',
       'curated_luxury_shadow_customer_count_v2']);
   } finally {
     if (prior === undefined) delete process.env.CURATED_ROLEX_EVIDENCE_SOURCE;
@@ -177,6 +211,8 @@ test('migration is append-only, duplicate-safe, Rolex-only, and source-table rea
   assert.match(migration, /image_evidence_type='SELLER_LISTING_IMAGE'/);
   assert.match(migration, /count\(DISTINCT l\.current_listing_key\)/i);
   assert.match(migration, /row_number\(\) OVER\(PARTITION BY offer_state_key/i);
+  assert.doesNotMatch(migration, /ORDER BY \(e\.decision='VERIFIED'\) DESC/i);
+  assert.match(migration, /ORDER BY e\.created_at DESC,e\.evidence_version DESC LIMIT 1[\s\S]*p\.decision='VERIFIED'/i);
   assert.doesNotMatch(migration, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+(?:INTO\s+|FROM\s+)?public\.(?:raw_messages|raw_message_versions|curated_luxury_current_listings_shadow)/i);
   assert.doesNotMatch(migration, /brand='Patek Philippe'/);
 });
