@@ -51,6 +51,7 @@ jobs:
       EXPECTED_ORDERING_MIGRATION_SHA256: a30ac1237dda203df82cf80ba06d1b67c0747929252adfa84a6191870707d76f
       EXPECTED_PERFORMANCE_MIGRATION_SHA256: e53229fffb078f172f0c3d00289516290518384947b52a1521dfda294495d901
       EXPECTED_SCALAR_PAGE_MIGRATION_SHA256: 35a23350310e042a6bd93214d79aaac83acafc4d9dde40706cac321efcd5e2aa
+      EXPECTED_IMAGE_PAGE_MIGRATION_SHA256: 4ec3179836566613ce59271fbc4683814d278e59e6f24e997f6a65269779759e
     steps:
       - uses: actions/checkout@v4
 
@@ -111,7 +112,15 @@ jobs:
           if ($scalarPageSha -cne $env:EXPECTED_SCALAR_PAGE_MIGRATION_SHA256) {
             throw 'Pinned Rolex/Patek scalar-page migration SHA-256 mismatch.'
           }
-          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='15min';`n$migration`n$orderingMigration`n$performanceMigration`n$scalarPageMigration`nCOMMIT;"
+          $imagePagePath = 'supabase/migrations/20260827200000_curated_luxury_verified_image_lane_page.sql'
+          $imagePageMigration = (Get-Content -LiteralPath $imagePagePath -Raw).Replace("`r`n", "`n")
+          $imagePageSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($imagePageMigration))
+          ).ToLowerInvariant()
+          if ($imagePageSha -cne $env:EXPECTED_IMAGE_PAGE_MIGRATION_SHA256) {
+            throw 'Pinned Rolex/Patek image-page migration SHA-256 mismatch.'
+          }
+          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='15min';`n$migration`n$orderingMigration`n$performanceMigration`n$scalarPageMigration`n$imagePageMigration`nCOMMIT;"
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
           Invoke-RestMethod -Method Post `

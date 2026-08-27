@@ -12,6 +12,8 @@ const performanceMigration = fs.readFileSync(path.join(root,
   'supabase/migrations/20260827180000_curated_luxury_single_input_first_performance.sql'), 'utf8');
 const scalarPageMigration = fs.readFileSync(path.join(root,
   'supabase/migrations/20260827190000_curated_luxury_scalar_brand_lane_page.sql'), 'utf8');
+const imagePageMigration = fs.readFileSync(path.join(root,
+  'supabase/migrations/20260827200000_curated_luxury_verified_image_lane_page.sql'), 'utf8');
 const shadowApi = fs.readFileSync(path.join(root, 'api/_lib/curated-luxury-shadow.cjs'), 'utf8');
 const inventoryApi = fs.readFileSync(path.join(root, 'api/reviewed-market-inventory.js'), 'utf8');
 const tradingFloor = fs.readFileSync(path.join(root, 'src/pages/TradingFloor.tsx'), 'utf8');
@@ -54,13 +56,24 @@ test('guarded QNSA schema workflow pins and installs the ordering contract atomi
   assert.match(workflow, /EXPECTED_ORDERING_MIGRATION_SHA256: [0-9a-f]{64}/);
   assert.match(workflow, /EXPECTED_PERFORMANCE_MIGRATION_SHA256: [0-9a-f]{64}/);
   assert.match(workflow, /EXPECTED_SCALAR_PAGE_MIGRATION_SHA256: [0-9a-f]{64}/);
+  assert.match(workflow, /EXPECTED_IMAGE_PAGE_MIGRATION_SHA256: [0-9a-f]{64}/);
   assert.match(workflow, /20260827170000_curated_luxury_single_input_first\.sql/);
   assert.match(workflow, /20260827180000_curated_luxury_single_input_first_performance\.sql/);
   assert.match(workflow, /20260827190000_curated_luxury_scalar_brand_lane_page\.sql/);
+  assert.match(workflow, /20260827200000_curated_luxury_verified_image_lane_page\.sql/);
   assert.match(workflow,
-    /BEGIN;[\s\S]*\$migration[\s\S]*\$orderingMigration[\s\S]*\$performanceMigration[\s\S]*\$scalarPageMigration[\s\S]*COMMIT;/);
+    /BEGIN;[\s\S]*\$migration[\s\S]*\$orderingMigration[\s\S]*\$performanceMigration[\s\S]*\$scalarPageMigration[\s\S]*\$imagePageMigration[\s\S]*COMMIT;/);
   assert.doesNotMatch(workflow, /ROLEX_EVIDENCE_OUTPUT:\s*\$\{\{\s*runner\.temp\s*\}\}/);
   assert.match(workflow, /ROLEX_EVIDENCE_OUTPUT:\s*\/tmp\/rolex-evidence-restoration\.json/);
+});
+
+test('image-only paging starts from exact customer-safe seller image evidence', () => {
+  assert.match(imagePageMigration, /verified_images AS MATERIALIZED/);
+  assert.match(imagePageMigration, /l\.image_evidence_type='SELLER_LISTING_IMAGE'/);
+  assert.match(imagePageMigration, /a\.customer_safe/);
+  assert.match(imagePageMigration, /c\.latest_raw_occurrence_key=image\.raw_occurrence_key/);
+  assert.match(imagePageMigration, /IF NOT p_images_only THEN[\s\S]*customer_page_keys_v6/);
+  assert.doesNotMatch(imagePageMigration, /\bOFFSET\b/i);
 });
 
 test('customer page RPC binds one scalar brand to the ordered partial-index stream', () => {
