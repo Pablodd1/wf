@@ -160,6 +160,18 @@ test('shadow inventory uses bounded key/card RPCs, exact facets, and a scoped ke
   assert.equal(calls[0].args.p_after_key, 'b'.repeat(64));
 });
 
+test('shadow inventory labels page-selection failures without exposing credentials', async () => {
+  const client = { rpc: async name => name.includes('page_keys')
+    ? { data: null, error: { message: 'canceling statement due to statement timeout' } }
+    : { data: null, error: null } };
+  await assert.rejects(
+    shadow.loadInventory(client, { brand: 'Patek Philippe', listingType: '', countries: [],
+      pricedOnly: false, imagesOnly: false, search: null, reference: null,
+      listingLane: 0, page: 1, pageSize: 24, cursor: null }),
+    /Curated shadow page selection failed: canceling statement due to statement timeout/,
+  );
+});
+
 test('performance migration selects keys before enrichment and contains no OFFSET hot path', () => {
   const sql = fs.readFileSync(path.join(root,
     'supabase/migrations/20260826180000_curated_luxury_shadow_read_performance.sql'), 'utf8');
