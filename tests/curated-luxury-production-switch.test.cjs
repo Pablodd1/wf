@@ -30,19 +30,36 @@ test('card projection preserves availability and exposes verified USD only', () 
     image_state: 'VERIFIED_CHILD_IMAGE', has_images: true,
     country_code: 'HK', dealer_name: null, dealer_rating: null,
     source_identity_key: 'abcdef0123456789', source_platform: 'WHATSAPP',
+    source_poster_name: 'Actual source poster', model: 'Daytona',
+    model_evidence_type: 'FROZEN_SOURCE_MODEL_AS_POSTED',
   });
-  assert.equal(card.price_raw, null);
+  assert.equal(card.price_raw, 100000);
   assert.equal(card.currency, 'USD');
   assert.equal(card.price_usd, 12820);
   assert.equal(card.price_evidence_status, 'DATED_VERIFIED_FX');
   assert.equal(card.current_status, 'CURRENT_LATEST_STATE');
   assert.equal(card.cohort_status, 'LATEST_OBSERVED');
-  assert.equal(card.seller_name, null);
-  assert.equal(card.source_identity_name, 'Poster abcdef012345 · WHATSAPP');
+  assert.equal(card.source_price_amount, 100000);
+  assert.equal(card.source_currency, 'HKD');
+  assert.equal(card.model, 'Daytona');
+  assert.equal(card.seller_name, 'Actual source poster');
+  assert.equal(card.source_identity_name, 'Actual source poster');
   assert.equal(card.seller_rating, null);
   assert.deepEqual(card.image_urls, ['https://example.test/watch.jpg']);
   assert.equal(card.image_state, 'VERIFIED_CHILD_IMAGE');
   assert.equal(card.image_evidence_type, 'SELLER_LISTING_IMAGE');
+});
+
+test('card projection never fabricates a poster or model from immutable hashes', () => {
+  const card = shadow.mapCard({ id: 'listing-unresolved', brand: 'Rolex',
+    reference: 'OBSERVED-ONLY-X', source_identity_key: 'abcdef0123456789',
+    source_platform: 'WHATSAPP', verified_child_media: [] });
+  assert.equal(card.model, null);
+  assert.equal(card.model_requires_review, true);
+  assert.equal(card.source_identity_name, null);
+  assert.equal(card.posted_by, null);
+  assert.ok(card.data_quality_issues.includes('MODEL_REQUIRES_REVIEW'));
+  assert.ok(card.data_quality_issues.includes('POSTER_REQUIRES_REVIEW'));
 });
 
 test('card projection never inherits raw parent media and fails closed without a bridge URL', () => {

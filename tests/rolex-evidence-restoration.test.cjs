@@ -136,7 +136,7 @@ test('images require deterministic singleton seller media and preserve multiple 
     raw_version_media: [{ url: 'https://images.example.test/unverified.jpg', verified_for_child_listing: false }] }).length, 0);
 });
 
-test('restored Rolex card is USD-only publicly and separates display from analytics', () => {
+test('restored Rolex card uses USD as primary display and preserves original source price evidence', () => {
   const card = shadow.mapCard({
     id: 'listing-1', brand: 'Rolex', reference: '116500LN', listing_type: 'WTB',
     source_price_amount: 100000, source_currency: 'HKD', price_usd: 12820,
@@ -146,37 +146,48 @@ test('restored Rolex card is USD-only publicly and separates display from analyt
   });
   assert.equal(card.price_usd, 12820);
   assert.equal(card.currency, 'USD');
-  assert.equal(card.source_currency, null);
-  assert.equal(card.source_price_amount, null);
+  assert.equal(card.source_currency, 'HKD');
+  assert.equal(card.source_price_amount, 100000);
   assert.equal(card.price_display_verified, true);
   assert.equal(card.price_research_eligible, false);
 });
 
-test('Patek customer price is verified USD-only and WTB remains outside analytics', () => {
+test('Patek customer price uses verified USD and preserves original foreign evidence', () => {
   const card = shadow.mapCard({ id: 'patek-1', brand: 'Patek Philippe', listing_type: 'WTB',
     source_price_amount: 100000, source_currency: 'HKD', price_usd: 12820,
     price_verified: true, verified_child_media: [], image_state: 'NO_VERIFIED_CHILD_IMAGE' });
   assert.equal(card.price_usd, 12820);
   assert.equal(card.currency, 'USD');
-  assert.equal(card.source_price_amount, null);
-  assert.equal(card.source_currency, null);
+  assert.equal(card.source_price_amount, 100000);
+  assert.equal(card.source_currency, 'HKD');
   assert.equal(card.price_display_verified, true);
   assert.equal(card.price_research_eligible, false);
   assert.equal(card.price_requires_review, false);
 });
 
 test('Patek Price Research rows expose normalized USD, not the foreign source amount', async () => {
-  const client = { rpc: async () => ({ data: {
+  const prior = process.env.CURATED_LUXURY_CARD_EVIDENCE_SOURCE;
+  process.env.CURATED_LUXURY_CARD_EVIDENCE_SOURCE = shadow.CARD_EVIDENCE_SELECTOR;
+  const calls = [];
+  const client = { rpc: async (name, args) => { calls.push([name, args]); return ({ data: {
     stats: { count: 1, avg: 12820, q1: 12820, median: 12820, q3: 12820, min: 12820, max: 12820 },
     wtb_count: 0,
     rows: [{ id: 'state-1', source_price_amount: 100000, source_currency: 'HKD',
       price_usd: 12820, created_at: '2026-08-20T00:00:00Z' }],
-  }, error: null }) };
-  const result = await shadow.loadPriceResearch(client, 'Patek Philippe', '5712/1A', {});
-  assert.equal(result.rows[0].price_usd, 12820);
-  assert.equal(result.rows[0].currency, 'USD');
-  assert.equal(result.rows[0].source_price_amount, null);
-  assert.equal(result.rows[0].source_currency, null);
+  }, error: null }); } };
+  try {
+    const result = await shadow.loadPriceResearch(client, { brand: 'Patek Philippe', reference: '5712/1A' });
+    assert.equal(calls[0][0], 'curated_luxury_shadow_price_research_v3');
+    assert.equal(calls[0][1].p_brand, 'Patek Philippe');
+    assert.equal(calls[0][1].p_reference_key, '57121A');
+    assert.equal(result.rows[0].price_usd, 12820);
+    assert.equal(result.rows[0].currency, 'USD');
+    assert.equal(result.rows[0].source_price_amount, null);
+    assert.equal(result.rows[0].source_currency, null);
+  } finally {
+    if (prior === undefined) delete process.env.CURATED_LUXURY_CARD_EVIDENCE_SOURCE;
+    else process.env.CURATED_LUXURY_CARD_EVIDENCE_SOURCE = prior;
+  }
 });
 
 test('Rolex restoration keeps its count sidecar while both brands use the scalar image-safe v7 page lane', async () => {

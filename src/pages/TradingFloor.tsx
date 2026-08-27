@@ -161,6 +161,8 @@ interface ListingRecord {
   seller_country?: string | null;
   posted_by?: string | null;
   source_identity_name?: string | null;
+  model_evidence_type?: string | null;
+  model_requires_review?: boolean;
   phone_number?: string | null;
   'Posted By'?: string | null;
   'Phone Number'?: string | null;
@@ -1723,6 +1725,9 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         >
           {meta.title}
         </button>
+        {listing.model_requires_review === true && (
+          <div className="mt-1 text-[11px] font-medium text-[#7A8699]">Model requires review</div>
+        )}
       </div>
 
       {/* 4. Original source evidence, collapsed by default */}
@@ -1769,10 +1774,10 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
 
       {/* 6. Badges (Location & Date) */}
       <div className="mt-3.5 flex flex-wrap gap-2">
-        {meta.region && <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
           <Globe2 size={12} className="text-[#6B7280]" />
-          {meta.region}
-        </span>}
+          {meta.region || 'Location not provided'}
+        </span>
         <span className="inline-flex items-center rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
           Posted {meta.postedDate || 'Posting date requires review'}
         </span>
@@ -2029,8 +2034,12 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
                 <X size={18} />
               </button>
             </div>
+            {listing.model_requires_review === true && (
+              <div className="mt-1 text-xs font-medium text-[#7A8699]">Model requires review</div>
+            )}
 
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+            {meta.foreignLabel && <div className="mt-1 text-xs font-medium text-[#7A8699]">{meta.foreignLabel}</div>}
             <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
               {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
                 ? 'LATEST OBSERVED · CHECK AVAILABILITY'
@@ -2102,10 +2111,10 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
                   <ContactMetric label="Want to buy" value={sellerAnalytics?.wtb_posts || 0} />
                 </div>
               )}
-              {meta.region && <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-600">
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-600">
                 <Globe2 size={13} className="text-[#8A5826]" />
-                <span>{meta.region}</span>
-              </div>}
+                <span>{meta.region || 'Location not provided'}</span>
+              </div>
             </div>
 
             <p className="mt-5 text-xs leading-relaxed text-[#6B7280]">
@@ -2238,16 +2247,15 @@ function getListingMeta(listing: ListingRecord) {
     : (typeof listing.price_raw === 'number' && listing.price_raw > 0 ? listing.price_raw : null);
 
   const verifiedUsd = verifiedUsdPrice(listing);
-  const displayUsd = verifiedUsd ?? displayUsdPrice(listing);
   const sourcePrice = formatSourcePrice(listing);
 
-  const priceLabel = verifiedUsd !== null
-    ? formatUsdPrice(verifiedUsd)
-    : displayUsd !== null && displayUsd > 0
-      ? formatUsdPrice(displayUsd)
-      : (sourcePrice || ambiguousPriceDisplay);
+  // USD is the only primary customer price. A preserved foreign source amount
+  // remains visible as evidence, but never impersonates a verified USD value.
+  const priceLabel = verifiedUsd !== null ? formatUsdPrice(verifiedUsd) : ambiguousPriceDisplay;
 
-  const foreignLabel = null;
+  const foreignLabel = isForeignCurrency && rawAmount !== null
+    ? `Original source price: ${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(rawAmount)}`
+    : null;
 
   const priceEvidenceLabel = verifiedUsd !== null
     ? (listing.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED' ? 'Verified USD conversion' : 'USD verified price')
@@ -2279,9 +2287,6 @@ function buildListingTitle(listing: ListingRecord) {
     brand,
     model,
     cleanValue(listing.reference),
-    cleanValue(listing.condition),
-    listing.year ? String(listing.year) : '',
-    displayDial(listing.dial_color),
   ].filter(Boolean);
   return parts.length ? parts.join(' ') : `${listingKindLabel(listing)} listing`;
 }
@@ -2340,10 +2345,6 @@ function TradingFloorQuickScroll() {
       <button type="button" title="Bottom" aria-label="Scroll to bottom of Trading Floor" onClick={() => scrollTo(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight))} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronDown size={18} /></button>
     </nav>
   );
-}
-
-function displayUsdPrice(listing: ListingRecord) {
-  return verifiedUsdPrice(listing);
 }
 
 function ratingUsdPrice(listing: ListingRecord) {
