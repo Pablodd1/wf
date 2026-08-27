@@ -9,7 +9,7 @@ const { readFileSync } = require('fs');
 const { resolve } = require('path');
 const { normalizeCanonicalModel } = require('./catalog-taxonomy');
 
-const PUBLIC_DIR = resolve(process.cwd(), 'public');
+const PUBLIC_DIR = resolve(__dirname, '..', '..', 'public');
 
 let _catalog = null;
 let _enriched = null;
@@ -116,7 +116,7 @@ function loadCuration() {
   _curationOverrides = new Map();
   _curationAliases = new Map();
   try {
-    const curation = JSON.parse(readFileSync(resolve(process.cwd(), 'api/dictionaries/catalog-curation.json'), 'utf8'));
+    const curation = JSON.parse(readFileSync(resolve(__dirname, '..', 'dictionaries', 'catalog-curation.json'), 'utf8'));
     for (const item of curation.overrides || []) {
       if (item?.brand && item?.reference) _curationOverrides.set(curationKey(item.brand, item.reference), item);
     }
