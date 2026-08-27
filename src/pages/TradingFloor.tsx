@@ -773,7 +773,10 @@ export default function TradingFloor() {
 
         if (data.status === 'ok' && Array.isArray(data.records)) {
           if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
-            setReleaseBrands([...new Set([...MASTER_BRAND_LIST, ...(data.publicationBrands || [])])]);
+            const validBrandStrings = data.publicationBrands
+              .map((b: any) => typeof b === 'string' ? b : (typeof b?.brand === 'string' ? b.brand : ''))
+              .filter(Boolean);
+            setReleaseBrands([...new Set([...MASTER_BRAND_LIST, ...validBrandStrings])]);
           } else {
             setReleaseBrands(MASTER_BRAND_LIST);
           }
