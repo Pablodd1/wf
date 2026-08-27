@@ -16,17 +16,24 @@ test('All inventory combines the complete Rolex and Patek shadow feeds', () => {
   assert.doesNotMatch(floor, /records\.slice\(0,\s*(?:12|24|50)\)/);
 });
 
-test('random landing pages preserve an independent cursor for every full feed', () => {
+test('combined landing pages preserve an independent cursor for every full feed', () => {
   assert.match(floor, /brandCursors: Record<string, string \| null>/);
   assert.match(floor, /brandTotals: Record<string, number>/);
   assert.match(floor, /exhausted: Record<string, boolean>/);
   assert.match(floor, /if \(brandCursor\) params\.set\('cursor', brandCursor\)/);
   assert.match(floor, /nextCursor: hasMore \? encodeRandomAllInventoryCursor/);
-  assert.match(floor, /seededPageShuffle\(records, stableSeed, page\)/);
+  assert.match(floor, /sort === 'discovery'[\s\S]*seededPageShuffle\(records, stableSeed, page\)[\s\S]*newestObservedOrder/);
+  assert.match(floor, /scope: string/);
+  assert.match(floor, /decoded\.scope !== scope/);
 });
 
-test('brand, search, and filter requests retain the established API path', () => {
-  assert.match(floor, /const randomAllInventory = categoryFilter === 'all'[\s\S]*!imagesOnly && !pricedOnly/);
-  assert.match(floor, /if \(randomAllInventory\) \{[\s\S]*loadRandomAllInventory/);
+test('combined inventory applies supported filters to both brand streams', () => {
+  assert.match(floor, /const combinedFeedActive = \['all', 'watches'\]\.includes\(categoryFilter\)[\s\S]*!brandFilter && !modelFilter && !search/);
+  assert.match(floor, /const combinedAllInventory = combinedFeedActive/);
+  assert.match(floor, /if \(intent\) params\.set\('type', intent\)/);
+  assert.match(floor, /if \(imagesOnly\) params\.set\('images', 'true'\)/);
+  assert.match(floor, /if \(pricedOnly\) params\.set\('priced', 'true'\)/);
+  assert.match(floor, /if \(countries\.length > 0\) params\.set\('region', countries\.join\(','\)\)/);
+  assert.match(floor, /if \(combinedAllInventory\) \{[\s\S]*loadRandomAllInventory/);
   assert.match(floor, /else \{[\s\S]*fetch\(`\$\{endpoint\}\?\$\{params\.toString\(\)\}`/);
 });
