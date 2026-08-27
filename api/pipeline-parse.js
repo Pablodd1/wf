@@ -1038,6 +1038,10 @@ async function analyzeOne(chunk, ctx) {
   if (needsAi && ctx.kimiKey) {
     try {
       const ai = await aiParse(ctx.kimiKey, chunk, parsed);
+      if (ai.brand && ai.brand.toLowerCase() === 'richard mille' && ai.reference) {
+        const rmMatch = ai.reference.match(/^(RM\d{2,3}-\d{2})/i);
+        if (rmMatch) ai.reference = rmMatch[1].toUpperCase();
+      }
       parsed = {
         brand: ai.brand || parsed.brand,
         ref: ai.reference || parsed.ref,
