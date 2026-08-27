@@ -177,11 +177,15 @@ function stage1Parse(rawMsg) {
 
   // Reference
   let ref = null;
-  const rmM = text.match(/\bRM\s?\d{2}[-\s]?\d{2}[A-Z]?\b/i);
+  const rmM = text.match(/\bRM\s?\d{2,3}(?:[-\s]?\d{2})?[A-Z]*\b/i);
   const ppM = text.match(/\b[45]\d{3}[A-Z]?\/\d{1,4}[A-Z]{0,4}(?:-\d{3})?\b/i);
   const apM = text.match(/\b\d{5}[A-Z]{2,4}\b/i);
   const rolexM = text.match(/\b\d{6}[A-Z]{0,4}\b/i);
   const shortPP = text.match(/\b[345]\d{3}[A-Z]\b/i);  // 5270P, 5303R etc.
+  const omegaM = text.match(/\b\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3}\b/);
+  const cartierM = text.match(/\bW[A-Z0-9]{7}\b/i);
+  const tudorM = text.match(/\b(?:M)?(?:7|2|4|8|9)\d{4}[A-Z]{0,2}(?:-\d{4})?\b/i);
+  const tagM = text.match(/\b[A-Z]{3,4}\d{4}[A-Z]?[-.][A-Z0-9]+\b/i);
 
   if (rmM) ref = rmM[0].toUpperCase().replace(/\s/g, '');
   else if (ppM) ref = ppM[0].toUpperCase();
@@ -189,6 +193,10 @@ function stage1Parse(rawMsg) {
   else if (shortPP) ref = shortPP[0].toUpperCase();
   else if (apM) ref = apM[0].toUpperCase();
   else if (rolexM) ref = rolexM[0].toUpperCase();
+  else if (omegaM) ref = omegaM[0];
+  else if (cartierM) ref = cartierM[0].toUpperCase();
+  else if (tudorM) ref = tudorM[0].toUpperCase();
+  else if (tagM) ref = tagM[0].toUpperCase();
 
   // Brand inference from ref if not found explicitly
   if (!brand && ref) {
@@ -270,14 +278,15 @@ async function stage4DeepSeek(rawMsg, currentGuess, apiKey) {
 Your job: extract structured watch data from a raw dealer message and return ONLY valid JSON.
 
 Extract these fields:
-- brand: "Patek Philippe" | "Audemars Piguet" | "Rolex" | "Richard Mille" | "Vacheron Constantin" | "Breguet" | "Omega" | "Cartier" | "Unknown"
-- reference: canonical reference number (e.g. "5712/1A-010", "15400ST.OO.1220ST.01", "RM07-01", "126334")
+- brand: "Patek Philippe" | "Audemars Piguet" | "Rolex" | "Richard Mille" | "Vacheron Constantin" | "Breguet" | "Omega" | "Cartier" | "Tudor" | "TAG Heuer" | "Unknown"
+- reference: canonical reference number (e.g. "5712/1A-010", "15400ST.OO.1220ST.01", "RM07-01", "126334", "310.30.42.50.01.001", "79030N", "CAZ1010")
 - dialColor: "Blue" | "Black" | "Green" | "Brown" | "Grey" | "White" | "Silver" | "Pink" | "Purple" | "Red" | "Orange" | "Yellow" | "Champagne" | "MOP" | "Meteorite" | "Tiffany" | "Panda" | "Zebra" | "Unknown"
 - condition: "New" | "Used" | "Like New" | "Unknown"
 - year: integer year or null
 - price: numeric only (no currency symbol)
 - currency: "HKD" | "USD" | "USDT" | "EUR" | "GBP" | "CHF" | "SGD" | "Unknown"
 - confidence: 0-100 integer
+- image_urls: Array of image HTTP links found in the text
 
 IMPORTANT RULES:
 1. Blue-circle emoji (🔵) at start = Patek Philippe listing in this channel
@@ -341,14 +350,15 @@ async function stage4DeepSeekBatch(batchItems, apiKey) {
 Your job: extract structured watch data from raw dealer messages and return ONLY a valid JSON object with a single key "results" whose value is an array of exactly ${n} objects — one per watch, in the same order as the input.
 
 Each object must have these fields:
-- brand: "Patek Philippe" | "Audemars Piguet" | "Rolex" | "Richard Mille" | "Vacheron Constantin" | "Breguet" | "Omega" | "Cartier" | "Unknown"
-- reference: canonical reference number (e.g. "5712/1A-010", "15400ST.OO.1220ST.01", "RM07-01", "126334")
+- brand: "Patek Philippe" | "Audemars Piguet" | "Rolex" | "Richard Mille" | "Vacheron Constantin" | "Breguet" | "Omega" | "Cartier" | "Tudor" | "TAG Heuer" | "Unknown"
+- reference: canonical reference number (e.g. "5712/1A-010", "15400ST.OO.1220ST.01", "RM07-01", "126334", "310.30.42.50.01.001", "79030N", "CAZ1010")
 - dialColor: "Blue" | "Black" | "Green" | "Brown" | "Grey" | "White" | "Silver" | "Pink" | "Purple" | "Red" | "Orange" | "Yellow" | "Champagne" | "MOP" | "Meteorite" | "Tiffany" | "Panda" | "Zebra" | "Unknown"
 - condition: "New" | "Used" | "Like New" | "Unknown"
 - year: integer year or null
 - price: numeric only (no currency symbol)
 - currency: "HKD" | "USD" | "USDT" | "EUR" | "GBP" | "CHF" | "SGD" | "Unknown"
 - confidence: 0-100 integer
+- image_urls: Array of image HTTP links found in the text
 
 IMPORTANT RULES:
 1. Blue-circle emoji (🔵) at start = Patek Philippe listing in this channel
