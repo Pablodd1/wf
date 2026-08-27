@@ -136,7 +136,7 @@ test('images require deterministic singleton seller media and preserve multiple 
     raw_version_media: [{ url: 'https://images.example.test/unverified.jpg', verified_for_child_listing: false }] }).length, 0);
 });
 
-test('restored Rolex card is USD-only publicly and separates display from analytics', () => {
+test('restored Rolex card uses USD as primary display and preserves original source price evidence', () => {
   const card = shadow.mapCard({
     id: 'listing-1', brand: 'Rolex', reference: '116500LN', listing_type: 'WTB',
     source_price_amount: 100000, source_currency: 'HKD', price_usd: 12820,
@@ -146,20 +146,20 @@ test('restored Rolex card is USD-only publicly and separates display from analyt
   });
   assert.equal(card.price_usd, 12820);
   assert.equal(card.currency, 'USD');
-  assert.equal(card.source_currency, null);
-  assert.equal(card.source_price_amount, null);
+  assert.equal(card.source_currency, 'HKD');
+  assert.equal(card.source_price_amount, 100000);
   assert.equal(card.price_display_verified, true);
   assert.equal(card.price_research_eligible, false);
 });
 
-test('Patek customer price is verified USD-only and WTB remains outside analytics', () => {
+test('Patek customer price uses verified USD and preserves original foreign evidence', () => {
   const card = shadow.mapCard({ id: 'patek-1', brand: 'Patek Philippe', listing_type: 'WTB',
     source_price_amount: 100000, source_currency: 'HKD', price_usd: 12820,
     price_verified: true, verified_child_media: [], image_state: 'NO_VERIFIED_CHILD_IMAGE' });
   assert.equal(card.price_usd, 12820);
   assert.equal(card.currency, 'USD');
-  assert.equal(card.source_price_amount, null);
-  assert.equal(card.source_currency, null);
+  assert.equal(card.source_price_amount, 100000);
+  assert.equal(card.source_currency, 'HKD');
   assert.equal(card.price_display_verified, true);
   assert.equal(card.price_research_eligible, false);
   assert.equal(card.price_requires_review, false);

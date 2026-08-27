@@ -1,0 +1,129 @@
+name: Prepare Rolex Patek card evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Install additive schema, aggregate dry-run, or materialize immutable evidence files
+        required: true
+        type: choice
+        options: [schema_only, dry-run, materialize]
+        default: dry-run
+      confirmation:
+        description: Exact mode-specific confirmation
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: qnsa-rolex-patek-card-evidence-${{ inputs.mode }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    environment: production
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      FINAL_FREEZE_ARTIFACT: ${{ github.workspace }}/.card-evidence/final-freeze
+      CARD_EVIDENCE_OUTPUT: ${{ github.workspace }}/.card-evidence/output
+      CARD_EVIDENCE_FX_FILE: ${{ github.workspace }}/.card-evidence/ecb-rates.json
+      CARD_EVIDENCE_FX_OUTPUT: ${{ github.workspace }}/.card-evidence/ecb-rates.json
+      CARD_EVIDENCE_FX_START_DATE: '2010-01-01'
+      CARD_EVIDENCE_FX_END_DATE: '2026-08-27'
+      CARD_EVIDENCE_MODE: ${{ inputs.mode }}
+      EXPECTED_CARD_EVIDENCE_MIGRATION_SHA256: 470153e2d9ca134d743c3b5392a444c6856367effeef6af3b29d715221f42090
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Validate scope and authorization
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$PROJECT_REF" = 'qnsafosakvonzgfcsphh'
+          case "${{ inputs.mode }}:${{ inputs.confirmation }}" in
+            schema_only:INSTALL_QNSA_CARD_EVIDENCE_SCHEMA_V1) ;;
+            dry-run:DRY_RUN_QNSA_CARD_EVIDENCE_V1) ;;
+            materialize:MATERIALIZE_QNSA_CARD_EVIDENCE_V1) ;;
+            *) echo 'Exact mode-specific confirmation is required.' >&2; exit 1 ;;
+          esac
+
+      - name: Verify and install additive schema
+        if: ${{ inputs.mode == 'schema_only' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $migrationPath = 'supabase/migrations/20260827210000_curated_luxury_card_evidence_contract.sql'
+          $migration = (Get-Content -LiteralPath $migrationPath -Raw).Replace("`r`n", "`n")
+          $actualSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($migration))
+          ).ToLowerInvariant()
+          if ($actualSha -cne $env:EXPECTED_CARD_EVIDENCE_MIGRATION_SHA256) {
+            throw 'Pinned card-evidence migration SHA-256 mismatch.'
+          }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $body = @{ query = "BEGIN; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='15min'; $migration COMMIT;"; read_only = $false } | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Download exact immutable frozen cohort
+        if: ${{ inputs.mode != 'schema_only' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: '32953447624'
+          name: PRIVATE-qnsa-rolex-patek-final-cohort-32953447624
+          path: ${{ env.FINAL_FREEZE_ARTIFACT }}
+
+      - name: Fetch dated ECB evidence
+        if: ${{ inputs.mode != 'schema_only' }}
+        run: npm run fetch:rolex-patek-card-fx
+
+      - name: Build aggregate or sharded evidence manifest
+        if: ${{ inputs.mode != 'schema_only' }}
+        run: npm run build:rolex-patek-card-evidence
+
+      - name: Verify no source switch or cohort mutation
+        if: ${{ inputs.mode != 'schema_only' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '
+            .source_freeze_run_id == "32953447624" and
+            .source_freeze_manifest_sha256 == "17d6d83186cd8e675830c881bcf16e0d3c011ba1835eecf90710a4c665e4472a" and
+            .shadow_run_id == "17d6d831-86cd-5e67-9830-c881bcf16e0d" and
+            .counts.Rolex.total == 1535763 and
+            .counts["Patek Philippe"].total == 937001 and
+            .raw_source_mutated == false and .frozen_cohort_mutated == false and
+            .production_selector_changed == false
+          ' "$CARD_EVIDENCE_OUTPUT/card-evidence-manifest.json"
+
+      - name: Upload aggregate-only report
+        if: ${{ inputs.mode == 'dry-run' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-patek-card-evidence-dry-run-${{ github.run_id }}
+          path: ${{ env.CARD_EVIDENCE_OUTPUT }}/card-evidence-manifest.json
+          retention-days: 90
+
+      - name: Upload private sharded evidence
+        if: ${{ inputs.mode == 'materialize' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRIVATE-qnsa-rolex-patek-card-evidence-${{ github.run_id }}
+          path: ${{ env.CARD_EVIDENCE_OUTPUT }}
+          retention-days: 30
