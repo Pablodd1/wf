@@ -28,7 +28,7 @@ async function run() {
     const rawMessage = record[8] + " [REPROCESS:" + runId + "]";
     
     try {
-      const res = await fetch("http://localhost:3000/api/ingest", {
+      const res = await fetch("https://watchfacts-poc.vercel.app/api/ingest", {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${token}`,
