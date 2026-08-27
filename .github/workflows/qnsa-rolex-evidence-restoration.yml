@@ -43,7 +43,10 @@ jobs:
       ROLEX_EVIDENCE_RUN_ID: 17d6d831-86cd-5e67-9830-c881bcf16e0d
       ROLEX_EVIDENCE_CONFIRMATION: ${{ inputs.confirmation }}
       ROLEX_EVIDENCE_CANARY_LIMIT: ${{ inputs.canary_limit }}
-      ROLEX_EVIDENCE_OUTPUT: ${{ runner.temp }}/rolex-evidence-restoration.json
+      # Job-level env expressions cannot use the runner context. Keep the
+      # aggregate manifest in a fixed runner-local path so workflow_dispatch
+      # remains valid and the schema-only recovery can execute.
+      ROLEX_EVIDENCE_OUTPUT: /tmp/rolex-evidence-restoration.json
       EXPECTED_MIGRATION_SHA256: 08f6fa4293cca2e58d081b0723877202e9611f6fd07ad116ef695fa18d24d3b0
       EXPECTED_ORDERING_MIGRATION_SHA256: 186a701bd2c3725c99695b3a003e47c169f9e761978fbec5235479dc650c6aa1
     steps:
