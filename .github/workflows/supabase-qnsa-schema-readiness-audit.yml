@@ -19,7 +19,8 @@ jobs:
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
-      QNSA_COMPLETION_AUDIT_OUTPUT: ${{ runner.temp }}/qnsa-rolex-patek-completion-audit.json
+      # Job-level env expressions cannot use the runner context.
+      QNSA_COMPLETION_AUDIT_OUTPUT: /tmp/qnsa-rolex-patek-completion-audit.json
     steps:
       - uses: actions/checkout@v5
 
