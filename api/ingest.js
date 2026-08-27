@@ -10,6 +10,8 @@
 
 'use strict';
 
+const OpenAI = require('openai');
+const { lookupCatalog } = require('./_lib/catalog.js');
 const path = require('node:path');
 const fs = require('node:fs');
 const {
@@ -1106,38 +1108,14 @@ function scoreConfidence(bundle, assertions) {
 
   let catalogConf = 0;
   if (bundle.brand && bundle.reference) {
-    const catalogEntries = MASTER_CATALOG[bundle.reference] || MASTER_CATALOG[bundle.reference.replace(/-/g, '')];
-    if (catalogEntries && catalogEntries.length > 0) {
-      const brandMatch = catalogEntries.some(entry => entry.brand.toLowerCase().includes(bundle.brand.toLowerCase()));
-      if (brandMatch) {
-        let exactVariantMatched = false;
-        let conflictDetected = false;
-
-        if (bundle.dial || bundle.material) {
-          let anyVariantMatch = false;
-          for (const entry of catalogEntries) {
-            const dialMatch = !bundle.dial || !entry.dial || entry.dial.toLowerCase().includes(bundle.dial.toLowerCase());
-            const matMatch = !bundle.material || !entry.material || entry.material.toLowerCase().includes(bundle.material.toLowerCase());
-            if (dialMatch && matMatch) { anyVariantMatch = true; break; }
-          }
-          if (!anyVariantMatch) conflictDetected = true;
-          else exactVariantMatched = true;
-        }
-
-        if (conflictDetected) {
-          bundle.catalog_match_status = 'CATALOG_VARIANT_CONFLICT';
-          catalogConf = 0;
-          bundle.review_reasons.push('CATALOG_VARIANT_CONFLICT');
-        } else if (exactVariantMatched) {
-          bundle.catalog_match_status = 'CATALOG_EXACT_MATCH';
-          catalogConf = 100;
-        } else {
-          bundle.catalog_match_status = 'CATALOG_REFERENCE_FOUND_VARIANT_UNCONFIRMED';
-          catalogConf = 80;
-        }
+    const match = lookupCatalog(bundle.reference, bundle.brand);
+    if (match && match.found) {
+      if (match.matchType === 'exact' || match.matchType === 'exact_alias' || match.matchType === 'collapsed') {
+        bundle.catalog_match_status = 'CATALOG_EXACT_MATCH';
+        catalogConf = 100;
       } else {
-        bundle.catalog_match_status = 'CATALOG_BRAND_OVERRIDE';
-        catalogConf = 60;
+        bundle.catalog_match_status = 'CATALOG_REFERENCE_FOUND_VARIANT_UNCONFIRMED';
+        catalogConf = 80;
       }
     } else {
       bundle.catalog_match_status = 'CATALOG_NOT_FOUND';
