@@ -764,6 +764,11 @@ function compareInventoryForDisplay(left, right) {
   if (releasedMultiDifference !== 0) return releasedMultiDifference;
   const imageDifference = Number(hasExactSourceImage(right)) - Number(hasExactSourceImage(left));
   if (imageDifference !== 0) return imageDifference;
+
+  const rightDate = Date.parse(right?.listing_date || right?.created_at || '') || 0;
+  const leftDate = Date.parse(left?.listing_date || left?.created_at || '') || 0;
+  if (rightDate !== leftDate) return rightDate - leftDate;
+
   // Keep buyer demand visibly separate from sell inventory inside both the
   // image-backed and no-image lanes. This remains page-local and cannot alter
   // cursor membership or suppress a valid listing.
@@ -776,9 +781,7 @@ function compareInventoryForDisplay(left, right) {
   if (priceDifference !== 0) return priceDifference;
   const completenessDifference = listingCompletenessScore(right) - listingCompletenessScore(left);
   if (completenessDifference !== 0) return completenessDifference;
-  const rightDate = Date.parse(right?.listing_date || right?.created_at || '') || 0;
-  const leftDate = Date.parse(left?.listing_date || left?.created_at || '') || 0;
-  if (rightDate !== leftDate) return rightDate - leftDate;
+
   return String(right?.id || '').localeCompare(String(left?.id || ''));
 }
 
