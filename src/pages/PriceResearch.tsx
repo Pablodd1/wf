@@ -9,6 +9,7 @@ import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating'
 import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShortcuts';
 import { DealerRatingBadge, ListingDealerEvidence, type DealerRatingEvidenceStatus } from '../components/ListingDealerEvidence';
 import { loadPriceResearchBatchSummaries } from '../utils/priceResearchBatchSummary';
+import { isHeldRolexPatekBrand } from '../utils/rolexPatekPublication';
 
 function referenceEvidenceKey(brand: string, reference: string) {
   return `${brand.trim().toLowerCase()}|${reference.trim().toUpperCase()}`;
@@ -491,7 +492,8 @@ const RED = '#dc3545';
 const BLUE = '#0d6efd';
 const WTB_LISTING_PAGE_SIZE = 24;
 const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
-const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega', 'Tudor'];
+const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega', 'Tudor']
+  .filter(brand => !isHeldRolexPatekBrand(brand));
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 const displayCatalogModel = (model: string) => model === REFERENCE_ONLY_MODEL ? 'Other exact references' : model;
 
@@ -610,7 +612,7 @@ const DEFAULT_RESEARCH_BRANDS: { brand: string }[] = [
   'F.P. Journe', 'Franck Muller', 'Girard-Perregaux', 'Glashütte Original',
   'H. Moser & Cie', 'Jacob & Co', 'Longines', 'Seiko', 'Tissot',
   'Ulysse Nardin', 'Bell & Ross'
-].map(brand => ({ brand }));
+].filter(brand => !isHeldRolexPatekBrand(brand)).map(brand => ({ brand }));
 
   // ── Drill-down picker state (brand → model → reference) ──
   const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>(DEFAULT_RESEARCH_BRANDS);

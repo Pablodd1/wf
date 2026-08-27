@@ -28,11 +28,26 @@ const { loadReviewedWorkbookListing } = require('./_lib/reviewed-workbook-analyt
 const { ROLEX_PATEK_MULTI_PARENT_ID } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
 const { loadEffectiveDetail } = require('./_lib/four-brand-field-enrichment.cjs');
 const {
+  BACKGROUND_HOLD_SOURCE,
+  isRolexPatekBrand,
+  isRolexPatekPublicationHeld,
+} = require('./_lib/rolex-patek-publication-hold.cjs');
+const {
   applyConfirmedFiveWatchPublication,
   frozenFiveDefinition,
 } = require('./_lib/five-watch-publication.cjs');
 
 const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source';
+
+function rejectHeldRolexPatek(res, brand) {
+  if (!isRolexPatekPublicationHeld() || !isRolexPatekBrand(brand)) return false;
+  res.status(404).json({
+    error: 'Listing is temporarily unavailable while background verification continues',
+    release_status: 'BACKGROUND_VERIFICATION',
+    source: BACKGROUND_HOLD_SOURCE,
+  });
+  return true;
+}
 
 function isMissingQnsaDetailSource(error) {
   return /42P01|PGRST205|relation .* does not exist|could not find the table/i
@@ -238,7 +253,10 @@ module.exports = async function handler(req, res) {
     } catch (qnsaDetailError) {
       console.warn('[price-research-listing] QNSA detail source unavailable; checking legacy release sources:', qnsaDetailError.message);
     }
-    if (qnsaListing) return res.status(200).json(qnsaListingResponse(qnsaListing));
+    if (qnsaListing) {
+      if (rejectHeldRolexPatek(res, qnsaListing.brand)) return undefined;
+      return res.status(200).json(qnsaListingResponse(qnsaListing));
+    }
 
     const strictResult = await client
       .from('price_research_verified_source')
@@ -250,6 +268,7 @@ module.exports = async function handler(req, res) {
     if (!strictGate) {
       const workbookListing = await loadReviewedWorkbookListing(client, id);
       if (workbookListing) {
+        if (rejectHeldRolexPatek(res, workbookListing.brand)) return undefined;
         const publicSource = redactPublicSource(workbookListing.raw_message).trim();
         const workbookImageProvenance = publicImageProvenance(workbookListing);
         const workbookHasPublicSourceImage = [
@@ -372,6 +391,7 @@ module.exports = async function handler(req, res) {
           image_urls: verified?.image_urls || [],
         }
       : data;
+    if (rejectHeldRolexPatek(res, resolvedData.brand)) return undefined;
     if (!isPublicationBrandAllowed(resolvedData.brand) || !isReleaseListingEligible(resolvedData)) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }

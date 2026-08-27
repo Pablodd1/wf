@@ -7,6 +7,11 @@ const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/tradin
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
+  BACKGROUND_HOLD_SOURCE,
+  isRolexPatekBrand,
+  isRolexPatekPublicationHeld,
+} = require('./_lib/rolex-patek-publication-hold.cjs');
+const {
   MIN_RELEASE_CONFIDENCE,
   REVIEWED_ZENITH_RECORD_PREFIX,
   REVIEWED_ZENITH_SOURCE,
@@ -70,6 +75,13 @@ module.exports = async function handler(req, res) {
       }
     }
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
+    if (isRolexPatekPublicationHeld() && isRolexPatekBrand(publicListing.brand)) {
+      return res.status(404).json({
+        error: 'Listing is temporarily unavailable while background verification continues',
+        release_status: 'BACKGROUND_VERIFICATION',
+        source: BACKGROUND_HOLD_SOURCE,
+      });
+    }
     const verifiedListing = publicListing;
 
     const { data, error } = await client.from('watch_records')

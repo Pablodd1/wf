@@ -44,6 +44,11 @@ const {
   loadSummary,
   resolvePageWindow,
 } = require('./reviewed-workbook-inventory.js');
+const {
+  backgroundHoldResponse,
+  isRolexPatekBrand,
+  isRolexPatekPublicationHeld,
+} = require('./_lib/rolex-patek-publication-hold.cjs');
 
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGE_SIZE = 100;
@@ -1954,6 +1959,18 @@ module.exports = async function handler(req, res) {
     const requestedItem = cleanExactText(req.query?.item, 20).toLowerCase();
     const itemCategories = { all: 'ALL', watches: 'WATCH', handbags: 'HANDBAG', jewelry: 'JEWELRY', accessories: 'ACCESSORY', other: 'OTHER' };
     const itemCategory = requestedItem ? itemCategories[requestedItem] : 'ALL';
+    if (isRolexPatekPublicationHeld()) {
+      const heldBrandRequested = requestedBrands.some(isRolexPatekBrand);
+      const broadWatchRequest = requestedBrands.length === 0
+        && (itemCategory === 'ALL' || itemCategory === 'WATCH');
+      if (heldBrandRequested || broadWatchRequest) {
+        return res.status(200).json(backgroundHoldResponse({
+          page,
+          pageSize,
+          publicationBrands: [],
+        }));
+      }
+    }
     const requestedRegions = (Array.isArray(req.query?.region) ? req.query.region : [req.query?.region])
       .flatMap(value => String(value || '').split(','))
       .map(value => cleanExactText(value, 100))

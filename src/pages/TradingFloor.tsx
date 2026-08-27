@@ -18,6 +18,7 @@ import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
+import { isHeldRolexPatekBrand, ROLEX_PATEK_PUBLICATION_HELD } from '../utils/rolexPatekPublication';
 import { ambiguousPriceDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
 import {
   loadPriceResearchBatchSummaries,
@@ -69,7 +70,7 @@ const MASTER_BRAND_LIST = [
   "Zenith", "Chopard", "Jaeger-LeCoultre", "Breitling", "Grand Seiko",
   "H. Moser & Cie", "Jacob & Co", "Longines", "Franck Muller", "Ulysse Nardin",
   "Girard-Perregaux", "Glashütte Original", "Tissot", "Bell & Ross", "Seiko"
-];
+].filter(brand => !isHeldRolexPatekBrand(brand));
 
 const CATEGORY_OPTIONS = [
   { label: 'All inventory', value: 'all' },
@@ -171,12 +172,15 @@ interface ListingRecord {
 interface TradingFloorResponse {
   status: string;
   error?: string;
+  count?: number;
   records?: ListingRecord[];
   total?: number | null;
   totalIsEstimate?: boolean;
   nextCursor?: string | null;
   hasMore?: boolean;
   publicationBrands?: string[];
+  release_status?: string;
+  source?: string;
 }
 
 interface RandomAllInventoryCursor {
@@ -190,7 +194,9 @@ interface RandomAllInventoryCursor {
   exhausted: Record<string, boolean>;
 }
 
-const RANDOM_ALL_INVENTORY_BRANDS = ['Rolex', 'Patek Philippe'] as const;
+const RANDOM_ALL_INVENTORY_BRANDS = (ROLEX_PATEK_PUBLICATION_HELD
+  ? []
+  : ['Rolex', 'Patek Philippe']) as readonly string[];
 
 function encodeRandomAllInventoryCursor(cursor: RandomAllInventoryCursor) {
   return window.btoa(JSON.stringify(cursor)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
@@ -274,6 +280,18 @@ async function loadRandomAllInventory({
   countries: string[];
   signal: AbortSignal;
 }): Promise<TradingFloorResponse> {
+  if (RANDOM_ALL_INVENTORY_BRANDS.length === 0) {
+    return {
+      status: 'ok',
+      count: 0,
+      total: 0,
+      records: [],
+      hasMore: false,
+      source: 'curated_luxury_rolex_patek_background_hold_v1',
+      release_status: 'BACKGROUND_VERIFICATION',
+      publicationBrands: [],
+    };
+  }
   const decoded = decodeRandomAllInventoryCursor(cursor);
   const scope = JSON.stringify({ sort, intent, imagesOnly, pricedOnly, countries: [...countries].sort() });
   if (cursor && (!decoded || decoded.scope !== scope)) return { status: 'error' };
