@@ -86,6 +86,11 @@ const INTENT_OPTIONS = [
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
+const SORT_OPTIONS = [
+  { label: 'Newest observed', value: 'newest' },
+  { label: 'Discovery mix', value: 'discovery' },
+] as const;
+
 import { MarketTickerBanner } from '../components/MarketTickerBanner';
 
 interface ListingRecord {
@@ -175,6 +180,7 @@ interface RandomAllInventoryCursor {
   v: 1;
   page: number;
   seed: number;
+  scope: string;
   brandCursors: Record<string, string | null>;
   brandTotals: Record<string, number>;
   exhausted: Record<string, boolean>;
@@ -192,7 +198,7 @@ function decodeRandomAllInventoryCursor(value: string | null): RandomAllInventor
     const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
     const decoded = JSON.parse(window.atob(padded)) as RandomAllInventoryCursor;
     if (decoded?.v !== 1 || !Number.isSafeInteger(decoded.page) || decoded.page < 2
-      || !Number.isSafeInteger(decoded.seed) || decoded.seed < 0
+      || !Number.isSafeInteger(decoded.seed) || decoded.seed < 0 || typeof decoded.scope !== 'string'
       || !decoded.brandCursors || !decoded.brandTotals || !decoded.exhausted) return null;
     return decoded;
   } catch {
@@ -214,19 +220,42 @@ function seededPageShuffle(records: ListingRecord[], seed: number, page: number)
   return shuffled;
 }
 
+function newestObservedTime(listing: ListingRecord) {
+  const value = listing.listing_date || listing.created_at;
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function newestObservedOrder(left: ListingRecord, right: ListingRecord) {
+  const byTime = newestObservedTime(right) - newestObservedTime(left);
+  if (byTime !== 0) return byTime;
+  return String(right.id).localeCompare(String(left.id));
+}
+
 async function loadRandomAllInventory({
   pageSize,
   cursor,
   seed,
+  sort,
+  intent,
+  imagesOnly,
+  pricedOnly,
+  countries,
   signal,
 }: {
   pageSize: number;
   cursor: string | null;
   seed: number;
+  sort: SortMode;
+  intent: IntentFilter;
+  imagesOnly: boolean;
+  pricedOnly: boolean;
+  countries: string[];
   signal: AbortSignal;
 }): Promise<TradingFloorResponse> {
   const decoded = decodeRandomAllInventoryCursor(cursor);
-  if (cursor && !decoded) return { status: 'error' };
+  const scope = JSON.stringify({ sort, intent, imagesOnly, pricedOnly, countries: [...countries].sort() });
+  if (cursor && (!decoded || decoded.scope !== scope)) return { status: 'error' };
   const page = decoded?.page || 1;
   const stableSeed = decoded?.seed ?? seed;
   const perBrandPageSize = Math.max(12, Math.ceil(pageSize / RANDOM_ALL_INVENTORY_BRANDS.length));
@@ -244,6 +273,10 @@ async function loadRandomAllInventory({
       pageSize: String(perBrandPageSize),
       pagination: 'cursor',
     });
+    if (intent) params.set('type', intent);
+    if (imagesOnly) params.set('images', 'true');
+    if (pricedOnly) params.set('priced', 'true');
+    if (countries.length > 0) params.set('region', countries.join(','));
     const brandCursor = decoded?.brandCursors?.[brand];
     if (brandCursor) params.set('cursor', brandCursor);
     const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal });
@@ -269,7 +302,9 @@ async function loadRandomAllInventory({
   const hasMore = RANDOM_ALL_INVENTORY_BRANDS.some(brand => !exhausted[brand]);
   return {
     status: 'ok',
-    records: seededPageShuffle(records, stableSeed, page),
+    records: sort === 'discovery'
+      ? seededPageShuffle(records, stableSeed, page)
+      : [...records].sort(newestObservedOrder),
     total,
     totalIsEstimate: false,
     hasMore,
@@ -277,6 +312,7 @@ async function loadRandomAllInventory({
       v: 1,
       page: page + 1,
       seed: stableSeed,
+      scope,
       brandCursors,
       brandTotals,
       exhausted,
@@ -323,6 +359,7 @@ interface ReviewedSellerSummaryResponse {
 type ViewMode = 'grid' | 'list';
 type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
+type SortMode = typeof SORT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
 function getListingImageSrc(listing: ListingRecord): string | null {
@@ -370,12 +407,14 @@ export default function TradingFloor() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedCategory = searchParams.get('item');
   const requestedIntent = searchParams.get('type')?.toUpperCase();
+  const requestedSort = searchParams.get('sort');
   const categoryFilter = CATEGORY_OPTIONS.some(option => option.value === requestedCategory)
     ? requestedCategory as CategoryFilter
     : 'all';
   const intentFilter = ['all', 'watches'].includes(categoryFilter) && INTENT_OPTIONS.some(option => option.value === requestedIntent)
     ? requestedIntent as IntentFilter
     : '';
+  const sortMode: SortMode = requestedSort === 'discovery' ? 'discovery' : 'newest';
   const search = searchParams.get('q') || '';
   const requestedBrand = searchParams.get('brand') || '';
   const modelFilter = searchParams.get('model') || '';
@@ -399,6 +438,7 @@ export default function TradingFloor() {
   const searchBoxRef = useRef<HTMLDivElement | null>(null);
   const [ratingsCache, setRatingsCache] = useState<Record<string, ListingBenchmarkData>>({});
   const [listings, setListings] = useState<ListingRecord[]>([]);
+  const [discoveredLocations, setDiscoveredLocations] = useState<string[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [totalIsEstimate, setTotalIsEstimate] = useState(false);
@@ -415,7 +455,7 @@ export default function TradingFloor() {
   const listScrollPositionRef = useRef<number | null>(null);
   const inventoryRequestIdRef = useRef(0);
   const randomAllInventorySeedRef = useRef(0);
-  const viewKey = [brandFilter, modelFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, requestedLocationParam].join('\u001f');
+  const viewKey = [brandFilter, modelFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, requestedLocationParam, sortMode].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
@@ -425,19 +465,43 @@ export default function TradingFloor() {
     imagesOnly,
     pricedOnly,
     locationFilters.length > 0,
+    sortMode !== 'newest',
   ].filter(Boolean).length;
   const locationOptions = useMemo(() => {
     const countries = listings
       .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
       .filter((value): value is string => Boolean(value));
-    return [...new Set([...locationFilters, ...countries])].sort((a, b) => a.localeCompare(b));
-  }, [listings, locationFilters]);
+    return [...new Set([...locationFilters, ...discoveredLocations, ...countries])].sort((a, b) => a.localeCompare(b));
+  }, [discoveredLocations, listings, locationFilters]);
+  const combinedFeedActive = ['all', 'watches'].includes(categoryFilter)
+    && !brandFilter && !modelFilter && !search;
 
   const dynamicDisplayTotal = total !== null && total >= 0 ? total : null;
 
   const visibleListings = useMemo(() => {
-    return listings;
-  }, [listings]);
+    if (sortMode === 'newest') return [...listings].sort(newestObservedOrder);
+    if (combinedFeedActive) return listings;
+    return seededPageShuffle(listings, 0x57fa2c1d, cursorHistory.length + 1);
+  }, [combinedFeedActive, cursorHistory.length, listings, sortMode]);
+
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{ key: string; label: string; updates: Record<string, string | null> }> = [];
+    if (search) chips.push({ key: 'search', label: `Search: ${search}`, updates: { q: null } });
+    if (brandFilter) chips.push({ key: 'brand', label: brandFilter, updates: { brand: null, model: null } });
+    if (modelFilter) chips.push({ key: 'model', label: modelFilter, updates: { model: null } });
+    if (intentFilter) chips.push({ key: 'intent', label: intentFilter === 'WTS' ? 'For sale' : 'Want to buy', updates: { type: null } });
+    if (imagesOnly) chips.push({ key: 'images', label: 'Verified images', updates: { images: null } });
+    if (pricedOnly) chips.push({ key: 'priced', label: 'Price supplied', updates: { priced: null } });
+    for (const location of locationFilters) {
+      const remaining = locationFilters.filter(value => value !== location);
+      chips.push({
+        key: `location-${location}`,
+        label: location,
+        updates: { location: remaining.length ? remaining.join(',') : null },
+      });
+    }
+    return chips;
+  }, [brandFilter, imagesOnly, intentFilter, locationFilters, modelFilter, pricedOnly, search]);
 
   const resetResults = useCallback(() => {
     setCursor(null);
@@ -671,12 +735,10 @@ export default function TradingFloor() {
           params.delete('type');
         }
         const endpoint = usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest';
-        const randomAllInventory = categoryFilter === 'all'
-          && !brandFilter && !modelFilter && !intentFilter && !search
-          && !imagesOnly && !pricedOnly && locationFilters.length === 0;
+        const combinedAllInventory = combinedFeedActive;
         let data: TradingFloorResponse;
         try {
-          if (randomAllInventory) {
+          if (combinedAllInventory) {
             if (randomAllInventorySeedRef.current === 0) {
               const randomSeed = new Uint32Array(1);
               window.crypto.getRandomValues(randomSeed);
@@ -686,6 +748,11 @@ export default function TradingFloor() {
               pageSize,
               cursor,
               seed: randomAllInventorySeedRef.current,
+              sort: sortMode,
+              intent: intentFilter,
+              imagesOnly,
+              pricedOnly,
+              countries: locationFilters,
               signal: controller.signal,
             });
           } else {
@@ -720,6 +787,12 @@ export default function TradingFloor() {
         }
 
         setListings(nextListings);
+        const nextCountries = nextListings
+          .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
+          .filter((value): value is string => Boolean(value));
+        if (nextCountries.length > 0) {
+          setDiscoveredLocations(current => [...new Set([...current, ...nextCountries])].sort((a, b) => a.localeCompare(b)));
+        }
         setTotal(totalCount !== null && Number.isFinite(totalCount) ? totalCount : null);
         if (!cursor) setSelectedListing(null);
       } catch (caught) {
@@ -736,7 +809,7 @@ export default function TradingFloor() {
       controller.abort();
       if (inventoryRequestIdRef.current === requestId) inventoryRequestIdRef.current += 1;
     };
-  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, locationFilters, modelFilter, pageSize, pricedOnly, search]);
+  }, [brandFilter, categoryFilter, combinedFeedActive, cursor, imagesOnly, intentFilter, locationFilters, modelFilter, pageSize, pricedOnly, search, sortMode]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -791,7 +864,7 @@ export default function TradingFloor() {
                     }
                   }
                 }}
-                placeholder="Search item, model, reference, message, or seller"
+                placeholder="Search exact reference, model, message, or poster"
                 className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
                 role="combobox"
@@ -848,6 +921,33 @@ export default function TradingFloor() {
             </button>
           </div>
 
+          <div className="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs" style={{ color: MUTED }}>
+            <span>Search observed references directly; catalog match is optional.</span>
+            {!search && !brandFilter && ['all', 'watches'].includes(categoryFilter) && (
+              <div className="flex flex-wrap gap-1.5" aria-label="Search help">
+                {([
+                  { label: 'Rolex', updates: { brand: 'Rolex' } },
+                  { label: 'Patek Philippe', updates: { brand: 'Patek Philippe' } },
+                  { label: 'For sale', updates: { type: 'WTS' } },
+                  { label: 'Want to buy', updates: { type: 'WTB' } },
+                ] as Array<{ label: string; updates: Record<string, string | null> }>).map(item => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => {
+                      resetResults();
+                      updateViewParams(item.updates);
+                    }}
+                    className="rounded-full border bg-white px-2.5 py-1 font-medium hover:border-[#9A7127] hover:text-[#7B5719]"
+                    style={{ borderColor: BORDER }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Category & Intent Tabs */}
           <div className="flex flex-col gap-3 pt-1">
             {/* Category Tabs */}
@@ -900,6 +1000,27 @@ export default function TradingFloor() {
           </div>
 
           <CurrencyConverter compact />
+
+          <div className="flex flex-wrap items-center gap-2" aria-label="Current search and filters">
+            <span className="inline-flex min-h-8 items-center rounded-full border bg-[#211B15] px-3 text-xs font-semibold text-[#F3ECDF]">
+              {sortMode === 'newest' ? 'Newest observed' : 'Discovery mix'}
+            </span>
+            {activeFilterChips.map(chip => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={() => {
+                  resetResults();
+                  updateViewParams(chip.updates, !Object.prototype.hasOwnProperty.call(chip.updates, 'location'));
+                }}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border bg-white px-3 text-xs font-medium"
+                style={{ borderColor: BORDER, color: INK }}
+                aria-label={`Remove ${chip.label} filter`}
+              >
+                {chip.label}<X size={12} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -911,6 +1032,7 @@ export default function TradingFloor() {
           models={modelOptions}
           category={categoryFilter}
           intent={intentFilter}
+          sort={sortMode}
           imagesOnly={imagesOnly}
           pricedOnly={pricedOnly}
           selectedLocations={locationFilters}
@@ -923,6 +1045,7 @@ export default function TradingFloor() {
               model: next.brand === brandFilter ? next.model || null : null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
+              sort: next.sort === 'newest' ? null : next.sort,
               images: next.imagesOnly ? 'true' : null,
               priced: next.pricedOnly ? 'true' : null,
               location: next.locations.length ? next.locations.join(',') : null,
@@ -963,6 +1086,7 @@ export default function TradingFloor() {
                 models={modelOptions}
                 category={categoryFilter}
                 intent={intentFilter}
+                sort={sortMode}
                 imagesOnly={imagesOnly}
                 pricedOnly={pricedOnly}
                 selectedLocations={locationFilters}
@@ -1100,6 +1224,7 @@ function DesktopFilters({
   models,
   category,
   intent,
+  sort,
   imagesOnly,
   pricedOnly,
   selectedLocations,
@@ -1112,6 +1237,7 @@ function DesktopFilters({
   models: CatalogModelOption[];
   category: CategoryFilter;
   intent: IntentFilter;
+  sort: SortMode;
   imagesOnly: boolean;
   pricedOnly: boolean;
   selectedLocations: string[];
@@ -1138,7 +1264,7 @@ function DesktopFilters({
     onChange({ location: updated.length ? updated.join(',') : null });
   };
 
-  const hasActiveFilters = Boolean(brand || model || category !== 'all' || intent || imagesOnly || pricedOnly || selectedLocations.length > 0);
+  const hasActiveFilters = Boolean(brand || model || category !== 'all' || intent || imagesOnly || pricedOnly || selectedLocations.length > 0 || sort !== 'newest');
 
   return (
     <div className="space-y-5">
@@ -1147,7 +1273,7 @@ function DesktopFilters({
           <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
           {hasActiveFilters && (
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#9A7127] text-white">
-              {[Boolean(brand), Boolean(model), category !== 'all', Boolean(intent), imagesOnly, pricedOnly, selectedLocations.length > 0].filter(Boolean).length}
+              {[Boolean(brand), Boolean(model), category !== 'all', Boolean(intent), imagesOnly, pricedOnly, selectedLocations.length > 0, sort !== 'newest'].filter(Boolean).length}
             </span>
           )}
         </div>
@@ -1155,7 +1281,7 @@ function DesktopFilters({
           {hasActiveFilters && (
             <button
               type="button"
-              onClick={() => onChange({ brand: null, model: null, item: null, type: null, images: null, priced: null, location: null })}
+              onClick={() => onChange({ brand: null, model: null, item: null, type: null, images: null, priced: null, location: null, sort: null })}
               className="text-xs font-semibold text-[#7B5719] hover:underline"
             >
               Clear
@@ -1175,6 +1301,27 @@ function DesktopFilters({
 
       {!isCollapsed ? (
         <div className="space-y-6 transition-all duration-200">
+          <fieldset>
+            <label htmlFor="sort-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Order</label>
+            <select
+              id="sort-filter"
+              value={sort}
+              onChange={event => onChange({ sort: event.target.value === 'newest' ? null : event.target.value })}
+              className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs"
+              style={{ borderColor: BORDER, color: INK }}
+            >
+              {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Newest observed is the default. Discovery mix changes order only.</p>
+          </fieldset>
+
+          <fieldset>
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Listing type</legend>
+            {INTENT_OPTIONS.map(option => (
+              <FilterCheck key={option.value || 'all'} checked={intent === option.value} label={option.label} onChange={() => onChange({ type: option.value || null })} />
+            ))}
+          </fieldset>
+
           <fieldset>
             <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Brand ({releaseBrands.length})</label>
             <select
@@ -1202,19 +1349,6 @@ function DesktopFilters({
               <option value="">All models</option>
               {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
             </select>
-          </fieldset>
-
-          <fieldset>
-            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Listing type</legend>
-            {INTENT_OPTIONS.map(option => (
-              <FilterCheck key={option.value || 'all'} checked={intent === option.value} label={option.label} onChange={() => onChange({ type: option.value || null })} />
-            ))}
-          </fieldset>
-
-          <fieldset>
-            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Availability</legend>
-            <FilterCheck checked={imagesOnly} label="Source image only" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
-            <FilterCheck checked={pricedOnly} label="Price supplied" onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
           </fieldset>
 
           <fieldset>
@@ -1274,7 +1408,13 @@ function DesktopFilters({
                 ))}
               </div>
             )}
-            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Select the posting country for these listings.</p>
+            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Choose one or several posting countries. Countries are shown only from source-backed listing or poster data.</p>
+          </fieldset>
+
+          <fieldset>
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Evidence</legend>
+            <FilterCheck checked={imagesOnly} label="Verified source image only" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
+            <FilterCheck checked={pricedOnly} label="Price supplied" onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
           </fieldset>
         </div>
       ) : (
@@ -1293,6 +1433,7 @@ function MobileFilterSheet({
   models,
   category,
   intent,
+  sort,
   imagesOnly,
   pricedOnly,
   selectedLocations,
@@ -1306,17 +1447,19 @@ function MobileFilterSheet({
   models: CatalogModelOption[];
   category: CategoryFilter;
   intent: IntentFilter;
+  sort: SortMode;
   imagesOnly: boolean;
   pricedOnly: boolean;
   selectedLocations: string[];
   locations: string[];
-  onApply: (filters: { brand: BrandFilter; model: string; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; locations: string[] }) => void;
+  onApply: (filters: { brand: BrandFilter; model: string; category: CategoryFilter; intent: IntentFilter; sort: SortMode; imagesOnly: boolean; pricedOnly: boolean; locations: string[] }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftModel, setDraftModel] = useState(model);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
+  const [draftSort, setDraftSort] = useState(sort);
   const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
   const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
   const [draftLocations, setDraftLocations] = useState<string[]>(selectedLocations);
@@ -1356,6 +1499,17 @@ function MobileFilterSheet({
         </header>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
+          <FilterGroup label="Order">
+            {SORT_OPTIONS.map(option => (
+              <FilterChoice key={option.value} active={draftSort === option.value} label={option.label} onClick={() => setDraftSort(option.value)} />
+            ))}
+            <p className="w-full text-xs leading-5" style={{ color: MUTED }}>Newest observed is the default. Discovery mix changes order only.</p>
+          </FilterGroup>
+          <FilterGroup label="Listing type">
+            {INTENT_OPTIONS.map(option => (
+              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
+            ))}
+          </FilterGroup>
           <FilterGroup label={`Brands (${releaseBrands.length})`}>
             {releaseBrands.length > 0 && (
               <FilterChoice active={!draftBrand} label="All brands" onClick={() => { setDraftBrand(''); setDraftModel(''); }} />
@@ -1376,15 +1530,6 @@ function MobileFilterSheet({
               <option value="">All models</option>
               {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
             </select>
-          </FilterGroup>
-          <FilterGroup label="Availability">
-            <FilterCheck checked={draftImagesOnly} label="Source image only" onChange={() => setDraftImagesOnly(value => !value)} />
-            <FilterCheck checked={draftPricedOnly} label="Price supplied" onChange={() => setDraftPricedOnly(value => !value)} />
-          </FilterGroup>
-          <FilterGroup label="Intent">
-            {INTENT_OPTIONS.map(option => (
-              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
-            ))}
           </FilterGroup>
           <FilterGroup label={`Locations (${draftLocations.length || 'All'})`}>
             {draftLocations.length > 0 && (
@@ -1430,6 +1575,11 @@ function MobileFilterSheet({
                 onChange={() => toggleLocation(value)}
               />
             ))}
+            <p className="w-full text-xs leading-5" style={{ color: MUTED }}>Choose several countries to match any selected country. Country must be source-backed.</p>
+          </FilterGroup>
+          <FilterGroup label="Evidence">
+            <FilterCheck checked={draftImagesOnly} label="Verified source image only" onChange={() => setDraftImagesOnly(value => !value)} />
+            <FilterCheck checked={draftPricedOnly} label="Price supplied" onChange={() => setDraftPricedOnly(value => !value)} />
           </FilterGroup>
           {!['all', 'watches'].includes(draftCategory) && (
             <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
@@ -1441,11 +1591,12 @@ function MobileFilterSheet({
             setDraftBrand('');
             setDraftCategory('all');
             setDraftIntent('');
+            setDraftSort('newest');
             setDraftImagesOnly(false);
             setDraftPricedOnly(false);
             setDraftLocations([]);
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, model: draftModel, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, locations: draftLocations })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, model: draftModel, category: draftCategory, intent: draftIntent, sort: draftSort, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, locations: draftLocations })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
         </footer>
       </section>
     </div>
