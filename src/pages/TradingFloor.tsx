@@ -1696,7 +1696,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
       {/* 5. Price & Price Rating Row */}
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
         <div>
-          <div className="text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+          <div className="text-[22px] font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
           {meta.foreignLabel && (
             <div className="text-[11px] font-semibold text-[#8B95A2] mt-0.5">{meta.foreignLabel}</div>
           )}
@@ -2202,9 +2202,7 @@ function getListingMeta(listing: ListingRecord) {
       ? formatUsdPrice(displayUsd)
       : (sourcePrice || ambiguousPriceDisplay);
 
-  const foreignLabel = verifiedUsd !== null && isForeignCurrency && rawAmount !== null
-    ? `(${currency} ${rawAmount.toLocaleString('en-US')})`
-    : null;
+  const foreignLabel = null;
 
   const priceEvidenceLabel = verifiedUsd !== null
     ? (listing.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED' ? 'Verified USD conversion' : 'USD verified price')
@@ -2254,7 +2252,7 @@ function listingKindLabel(listing: ListingRecord) {
 
 function verifiedUsdPrice(listing: ListingRecord) {
   if (listing.price_research_eligible !== true) return null;
-  if (!['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX'].includes(
+  if (!['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX', 'OWNER_ASSUMED_USD'].includes(
     String(listing.price_evidence_status || '').toUpperCase(),
   )) return null;
   const value = Number(listing.price_usd);

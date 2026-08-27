@@ -7,7 +7,7 @@ const FROZEN_FIVE = Object.freeze({
     originalAmount: 7170,
     originalCurrency: null,
     sourcePriceText: "7,170$",
-    usdAmount: null,
+    usdAmount: 7170,
     priceStatus: "BARE_DOLLAR_CURRENCY_UNVERIFIED",
     rawPattern: /(?:^|\D)7,?170\$(?!\w)/i,
   }),

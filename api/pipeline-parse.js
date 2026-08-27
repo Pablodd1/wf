@@ -857,7 +857,7 @@ Analyze the provided raw message and extract:
 - year: The 4-digit year of the watch (if mentioned).
 - price: The numeric price (if mentioned).
 - currency: The currency code (USD, HKD, EUR, etc.).
-- confidence: Your confidence 0-100.
+- confidence: Your confidence 0-100.\n- image_urls: Array of image HTTP links found in the text.
 
 Rules:
 1. If the brand is omitted, return null. Catalog reconciliation may validate the reference later.
@@ -867,7 +867,7 @@ Rules:
 
 ${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}
 
-Output MUST be a valid JSON object with these exact keys: reference, brand, dialColor, condition, year, price, currency, confidence.`;
+Output MUST be a valid JSON object with these exact keys: reference, brand, dialColor, condition, year, price, currency, confidence, image_urls.`;
 
   const userPrompt = `Regex guess: ${JSON.stringify(currentGuess || {})}\nRaw message:\n"""\n${rawMessage}\n"""\nReturn ONLY valid JSON:`;
 
@@ -1038,8 +1038,9 @@ async function analyzeOne(chunk, ctx) {
         dial: ai.dialColor || parsed.dial,
         condition: ai.condition || parsed.condition,
         year: ai.year ?? parsed.year,
-        price: parsed.price,
-        currency: parsed.currency,
+        price: ai.price ?? parsed.price,
+        currency: ai.currency || parsed.currency,
+        image_urls: ai.image_urls || parsed.image_urls || [],
         confidence: Math.min(ai.confidence ?? confidence, 100),
       };
       aiAssisted = true;
@@ -1147,7 +1148,7 @@ async function analyzeOne(chunk, ctx) {
 
   return {
     input: chunk,
-    parsed: { brand, reference, family, dialColor, condition, year, price: originalPrice, currency, priceUSD, materials },
+    parsed: { brand, reference, family, dialColor, condition, year, price: originalPrice, currency, priceUSD, materials, image_urls: parsed.image_urls || [] },
     confidence: Math.round(confidence),
     verdict,
     reason,
