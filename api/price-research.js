@@ -1124,11 +1124,7 @@ module.exports = async function handler(req, res) {
     // workbook cohort, query the bounded approved watch-record lane directly;
     // the legacy release view is not needed to rediscover an identity already
     // proven by the catalog. Partial references never enter this path.
-    let sourceTable = configuredSourceTable || (!exactReviewedWorkbookRelease
-      && exactKnownReference
-      && directWatchRecordBrand
-      ? 'watch_records'
-      : 'price_research_verified_source');
+    let sourceTable = configuredSourceTable || QNSA_PRICE_RESEARCH_SOURCE;
 
     // Resolve exact stored spellings only. Prefix matches are suggestions for
     // an explicit customer choice; they must never silently become a specific
