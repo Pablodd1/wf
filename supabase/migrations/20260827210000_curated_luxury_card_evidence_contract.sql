@@ -40,12 +40,14 @@ CREATE TABLE IF NOT EXISTS public.curated_luxury_card_price_evidence_shadow (
   latest_raw_occurrence_key text NOT NULL,
   exact_child_text_sha256 text NOT NULL CHECK (exact_child_text_sha256~'^[0-9a-f]{64}$'),
   evidence_version text NOT NULL,
-  source_price_amount numeric NOT NULL CHECK (source_price_amount>0),
-  source_currency text NOT NULL,
-  normalized_usd_amount numeric NOT NULL CHECK (normalized_usd_amount>0),
-  price_evidence_classification text NOT NULL CHECK (price_evidence_classification IN
+  decision text NOT NULL CHECK (decision IN ('VERIFIED','REVIEW_REQUIRED')),
+  review_reason text,
+  source_price_amount numeric CHECK (source_price_amount>0),
+  source_currency text,
+  normalized_usd_amount numeric CHECK (normalized_usd_amount>0),
+  price_evidence_classification text CHECK (price_evidence_classification IN
     ('SOURCE_EXPLICIT_USD_MATCH','SOURCE_EXPLICIT_USD_USDT','DATED_VERIFIED_FX')),
-  display_price_verified boolean NOT NULL CHECK (display_price_verified),
+  display_price_verified boolean NOT NULL DEFAULT false,
   price_research_eligible boolean NOT NULL DEFAULT false,
   fx_provider text,
   fx_source_url text,
@@ -54,19 +56,39 @@ CREATE TABLE IF NOT EXISTS public.curated_luxury_card_price_evidence_shadow (
   fx_lookback_days integer,
   fx_rate_direction text,
   fx_rate numeric,
+  source_artifact_id text NOT NULL,
+  source_artifact_sha256 text NOT NULL CHECK (source_artifact_sha256~'^[0-9a-f]{64}$'),
   evidence_checksum text NOT NULL CHECK (evidence_checksum~'^[0-9a-f]{64}$'),
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (run_id,current_listing_key,latest_raw_occurrence_key,evidence_version),
   FOREIGN KEY (run_id,current_listing_key)
     REFERENCES public.curated_luxury_current_listings_shadow(run_id,current_listing_key),
-  CHECK (price_evidence_classification<>'DATED_VERIFIED_FX' OR (
+  CHECK ((decision='VERIFIED' AND display_price_verified AND source_price_amount>0
+    AND source_currency IS NOT NULL AND normalized_usd_amount>0
+    AND price_evidence_classification IS NOT NULL)
+    OR (decision='REVIEW_REQUIRED' AND NOT display_price_verified
+      AND NOT price_research_eligible AND normalized_usd_amount IS NULL)),
+  CHECK (price_evidence_classification IS NULL OR price_evidence_classification<>'DATED_VERIFIED_FX' OR (
     fx_provider='ECB' AND fx_source_url LIKE 'https://data-api.ecb.europa.eu/%'
     AND fx_applicable_date IS NOT NULL AND fx_effective_date IS NOT NULL
     AND fx_lookback_days BETWEEN 0 AND 7
     AND fx_rate_direction='USD_PER_SOURCE_UNIT' AND fx_rate>0
   )),
-  CHECK (price_evidence_classification='DATED_VERIFIED_FX'
+  CHECK (price_evidence_classification IS NULL OR price_evidence_classification='DATED_VERIFIED_FX'
     OR upper(source_currency) IN ('USD','USDT'))
+);
+
+CREATE TABLE IF NOT EXISTS public.curated_luxury_card_poster_evidence_shadow (
+  run_id uuid NOT NULL,
+  version_key text NOT NULL,
+  raw_version_id uuid NOT NULL,
+  poster_name text NOT NULL CHECK (btrim(poster_name)<>''),
+  poster_evidence_type text NOT NULL CHECK (poster_evidence_type IN
+    ('RAW_VERSION_FROM_NAME','RAW_VERSION_USER_NAME','RAW_VERSION_SELLER_NAME')),
+  evidence_version text NOT NULL,
+  evidence_checksum text NOT NULL CHECK (evidence_checksum~'^[0-9a-f]{64}$'),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (run_id,version_key,raw_version_id,evidence_version)
 );
 
 CREATE INDEX IF NOT EXISTS curated_luxury_card_model_evidence_latest_idx
@@ -78,17 +100,23 @@ CREATE INDEX IF NOT EXISTS curated_luxury_card_price_evidence_latest_idx
 CREATE INDEX IF NOT EXISTS curated_luxury_card_price_evidence_pr_idx
   ON public.curated_luxury_card_price_evidence_shadow
   (run_id,offer_state_key,created_at DESC)
-  WHERE price_research_eligible;
+  WHERE decision='VERIFIED' AND price_research_eligible;
+CREATE INDEX IF NOT EXISTS curated_luxury_card_poster_evidence_latest_idx
+  ON public.curated_luxury_card_poster_evidence_shadow
+  (run_id,version_key,created_at DESC,evidence_version DESC);
 
 ALTER TABLE public.curated_luxury_card_model_evidence_shadow ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.curated_luxury_historical_fx_rates_shadow ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.curated_luxury_card_price_evidence_shadow ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.curated_luxury_card_poster_evidence_shadow ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.curated_luxury_card_model_evidence_shadow FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON public.curated_luxury_historical_fx_rates_shadow FROM PUBLIC,anon,authenticated,service_role;
 REVOKE ALL ON public.curated_luxury_card_price_evidence_shadow FROM PUBLIC,anon,authenticated,service_role;
+REVOKE ALL ON public.curated_luxury_card_poster_evidence_shadow FROM PUBLIC,anon,authenticated,service_role;
 GRANT SELECT,INSERT ON public.curated_luxury_card_model_evidence_shadow TO service_role;
 GRANT SELECT,INSERT ON public.curated_luxury_historical_fx_rates_shadow TO service_role;
 GRANT SELECT,INSERT ON public.curated_luxury_card_price_evidence_shadow TO service_role;
+GRANT SELECT,INSERT ON public.curated_luxury_card_poster_evidence_shadow TO service_role;
 
 CREATE OR REPLACE FUNCTION public.curated_luxury_reject_evidence_mutation_v1()
 RETURNS trigger LANGUAGE plpgsql SET search_path=public AS $$
@@ -112,6 +140,11 @@ DROP TRIGGER IF EXISTS curated_luxury_card_price_evidence_append_only
 CREATE TRIGGER curated_luxury_card_price_evidence_append_only
   BEFORE UPDATE OR DELETE ON public.curated_luxury_card_price_evidence_shadow
   FOR EACH ROW EXECUTE FUNCTION public.curated_luxury_reject_evidence_mutation_v1();
+DROP TRIGGER IF EXISTS curated_luxury_card_poster_evidence_append_only
+  ON public.curated_luxury_card_poster_evidence_shadow;
+CREATE TRIGGER curated_luxury_card_poster_evidence_append_only
+  BEFORE UPDATE OR DELETE ON public.curated_luxury_card_poster_evidence_shadow
+  FOR EACH ROW EXECUTE FUNCTION public.curated_luxury_reject_evidence_mutation_v1();
 
 CREATE OR REPLACE VIEW public.curated_luxury_latest_card_model_evidence_v1
 WITH (security_invoker=true) AS
@@ -129,10 +162,72 @@ SELECT * FROM (
   FROM public.curated_luxury_card_price_evidence_shadow e
 ) ranked WHERE evidence_rank=1;
 
+CREATE OR REPLACE VIEW public.curated_luxury_latest_card_poster_evidence_v1
+WITH (security_invoker=true) AS
+SELECT * FROM (
+  SELECT e.*,row_number() OVER (PARTITION BY run_id,version_key
+    ORDER BY created_at DESC,evidence_version DESC,raw_version_id DESC) evidence_rank
+  FROM public.curated_luxury_card_poster_evidence_shadow e
+) ranked WHERE evidence_rank=1;
+
 REVOKE ALL ON public.curated_luxury_latest_card_model_evidence_v1 FROM PUBLIC,anon,authenticated;
 REVOKE ALL ON public.curated_luxury_latest_card_price_evidence_v1 FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON public.curated_luxury_latest_card_poster_evidence_v1 FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON public.curated_luxury_latest_card_model_evidence_v1 TO service_role;
 GRANT SELECT ON public.curated_luxury_latest_card_price_evidence_v1 TO service_role;
+GRANT SELECT ON public.curated_luxury_latest_card_poster_evidence_v1 TO service_role;
+
+CREATE OR REPLACE FUNCTION public.curated_luxury_materialize_card_poster_evidence_v1(
+  p_run_id uuid,p_evidence_version text,p_confirmation text
+)
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,extensions AS $$
+DECLARE inserted_count bigint;
+BEGIN
+  IF p_run_id<>'17d6d831-86cd-5e67-9830-c881bcf16e0d'::uuid
+    OR p_confirmation<>'MATERIALIZE_QNSA_CARD_POSTER_EVIDENCE_V1'
+    OR nullif(btrim(p_evidence_version),'') IS NULL THEN
+    RAISE EXCEPTION 'Pinned run, evidence version, and exact confirmation are required';
+  END IF;
+
+  INSERT INTO public.curated_luxury_card_poster_evidence_shadow(
+    run_id,version_key,raw_version_id,poster_name,poster_evidence_type,
+    evidence_version,evidence_checksum)
+  SELECT p_run_id,candidate.version_key,candidate.raw_version_id,candidate.poster_name,
+    candidate.poster_evidence_type,p_evidence_version,
+    encode(extensions.digest(convert_to(concat_ws('|',p_run_id::text,candidate.version_key,
+      candidate.raw_version_id::text,candidate.poster_name,candidate.poster_evidence_type,
+      p_evidence_version),'UTF8'),'sha256'),'hex')
+  FROM (
+    SELECT DISTINCT ON (c.version_key) c.version_key,rv.id raw_version_id,
+      chosen.poster_name,chosen.poster_evidence_type
+    FROM public.curated_luxury_current_listings_shadow c
+    JOIN public.curated_luxury_raw_version_lineage_shadow bridge ON bridge.version_key=c.version_key
+    JOIN public.raw_message_versions rv ON rv.id=bridge.raw_version_id
+    CROSS JOIN LATERAL (
+      SELECT value poster_name,evidence_type poster_evidence_type
+      FROM (VALUES
+        (nullif(btrim(rv.raw_payload#>>'{raw_data,from_name}'),''),'RAW_VERSION_FROM_NAME',1),
+        (nullif(btrim(rv.raw_payload#>>'{raw_data,user_name}'),''),'RAW_VERSION_USER_NAME',2),
+        (nullif(btrim(rv.raw_payload#>>'{raw_data,seller_name}'),''),'RAW_VERSION_SELLER_NAME',3)
+      ) proposed(value,evidence_type,priority)
+      WHERE value IS NOT NULL AND length(value)<=150
+        AND value!~*'^[0-9a-f]{32,}$'
+        AND regexp_replace(value,'[^0-9]','','g')!~'^[0-9]{8,15}$'
+        AND lower(regexp_replace(value,'[^a-z0-9]+',' ','g'))!~
+          '^(unknown|anonymous|seller|dealer|poster|posting user|not available|unavailable)$'
+      ORDER BY priority LIMIT 1
+    ) chosen
+    WHERE c.run_id=p_run_id AND c.brand IN ('Rolex','Patek Philippe')
+      AND c.current_status IN ('CURRENT_ACTIVE','CURRENT_LATEST_STATE')
+    ORDER BY c.version_key,rv.id
+  ) candidate
+  ON CONFLICT DO NOTHING;
+  GET DIAGNOSTICS inserted_count=ROW_COUNT;
+  RETURN jsonb_build_object('inserted',inserted_count,'run_id',p_run_id,
+    'evidence_version',p_evidence_version,'raw_source_mutated',false,
+    'frozen_cohort_mutated',false,'production_selector_changed',false);
+END;
+$$;
 
 CREATE OR REPLACE FUNCTION public.curated_luxury_shadow_customer_cards_v5(
   p_run_id uuid,p_listing_keys text[]
@@ -161,20 +256,18 @@ SET plan_cache_mode='force_custom_plan' AS $$
     'reference',c.observed_reference,'reference_key',c.observed_reference_key,
     'listing_type',c.intent,'condition',c.condition_as_observed,
     'dial_color',c.dial_or_color_as_observed,'created_at',c.source_timestamp,
-    'source_price_amount',coalesce(p.source_price_amount,c.source_price_amount),
-    'source_currency',coalesce(p.source_currency,c.source_currency),
-    'price_usd',CASE WHEN c.price_verified THEN c.normalized_usd_amount ELSE p.normalized_usd_amount END,
-    'price_verified',(c.price_verified OR coalesce(p.display_price_verified,false)),
-    'price_display_verified',(c.price_verified OR coalesce(p.display_price_verified,false)),
-    'price_evidence_classification',CASE WHEN c.price_verified THEN
-      CASE WHEN upper(coalesce(c.source_currency,''))='USDT' THEN 'SOURCE_EXPLICIT_USD_USDT'
-        WHEN upper(coalesce(c.source_currency,''))='USD' THEN 'SOURCE_EXPLICIT_USD_MATCH'
-        ELSE 'DATED_VERIFIED_FX' END ELSE p.price_evidence_classification END,
-    'price_requires_review',(NOT c.price_verified AND p.current_listing_key IS NULL),
+    'source_price_amount',CASE WHEN p.decision='VERIFIED' THEN p.source_price_amount END,
+    'source_currency',CASE WHEN p.decision='VERIFIED' THEN p.source_currency END,
+    'price_usd',CASE WHEN p.decision='VERIFIED' THEN p.normalized_usd_amount END,
+    'price_verified',coalesce(p.decision='VERIFIED' AND p.display_price_verified,false),
+    'price_display_verified',coalesce(p.decision='VERIFIED' AND p.display_price_verified,false),
+    'price_evidence_classification',CASE WHEN p.decision='VERIFIED'
+      THEN p.price_evidence_classification END,
+    'price_requires_review',coalesce(p.decision<>'VERIFIED',true),
     'price_research_eligible',(c.intent='WTS' AND c.observed_reference_key IS NOT NULL
-      AND (c.price_verified OR coalesce(p.price_research_eligible,false))),
+      AND coalesce(p.decision='VERIFIED' AND p.price_research_eligible,false)),
     'raw_message',coalesce(rv.raw_text,rm.raw_text),
-    'source_poster_name',poster.name,
+    'source_poster_name',poster.poster_name,
     'verified_child_media',coalesce(images.urls,'[]'::jsonb),
     'image_state',CASE WHEN coalesce(jsonb_array_length(images.urls)>0,false)
       THEN 'VERIFIED_CHILD_IMAGE' ELSE 'NO_VERIFIED_CHILD_IMAGE' END,
@@ -206,19 +299,8 @@ SET plan_cache_mode='force_custom_plan' AS $$
     JOIN public.raw_message_versions rv ON rv.id=b.raw_version_id
     WHERE b.version_key=c.version_key AND rv.raw_message_id=rm.id LIMIT 1
   ) rv ON true
-  LEFT JOIN LATERAL (
-    SELECT candidate.name
-    FROM (SELECT coalesce(
-      nullif(btrim(rv.raw_payload#>>'{raw_data,from_name}'),''),
-      nullif(btrim(rv.raw_payload#>>'{raw_data,user_name}'),''),
-      nullif(btrim(rv.raw_payload#>>'{raw_data,seller_name}'),'')) name) candidate
-    WHERE candidate.name IS NOT NULL AND length(candidate.name)<=150
-      AND candidate.name!~*'^[0-9a-f]{32,}$'
-      AND regexp_replace(candidate.name,'[^0-9]','','g')!~'^[0-9]{8,15}$'
-      AND lower(regexp_replace(candidate.name,'[^a-z0-9]+',' ','g'))!~
-        '^(unknown|anonymous|seller|dealer|poster|posting user|not available|unavailable)$'
-    LIMIT 1
-  ) poster ON true
+  LEFT JOIN public.curated_luxury_latest_card_poster_evidence_v1 poster
+    ON poster.run_id=c.run_id AND poster.version_key=c.version_key
   LEFT JOIN LATERAL (
     SELECT d.* FROM public.curated_luxury_dealer_lineage_shadow b
     JOIN public.dealers d ON d.id=b.dealer_id WHERE b.dealer_key=c.dealer_key LIMIT 1
@@ -251,11 +333,12 @@ SET plan_cache_mode='force_custom_plan' AS $$
     AND (p_countries IS NULL OR c.country_code=ANY(p_countries))
     AND (p_reference_key IS NULL OR c.observed_reference_key=p_reference_key)
     AND (NULLIF(btrim(p_search),'') IS NULL OR upper(c.search_text) LIKE '%'||upper(btrim(p_search))||'%')
-    AND (NOT p_priced_only OR c.price_verified OR EXISTS (
+    AND (NOT p_priced_only OR EXISTS (
       SELECT 1 FROM public.curated_luxury_latest_card_price_evidence_v1 p
       WHERE p.run_id=c.run_id AND p.current_listing_key=c.current_listing_key
         AND p.latest_raw_occurrence_key=c.latest_raw_occurrence_key
-        AND p.exact_child_text_sha256=c.exact_child_text_sha256 AND p.display_price_verified))
+        AND p.exact_child_text_sha256=c.exact_child_text_sha256
+        AND p.decision='VERIFIED' AND p.display_price_verified))
     AND (NOT p_images_only OR EXISTS (
       SELECT 1 FROM public.curated_luxury_child_image_links_shadow l
       JOIN public.curated_luxury_child_image_assets_shadow a USING(source_image_key)
@@ -291,7 +374,7 @@ BEGIN
     WITH priced AS MATERIALIZED (
       SELECT p.current_listing_key,p.latest_raw_occurrence_key
       FROM public.curated_luxury_latest_card_price_evidence_v1 p
-      WHERE p.run_id=p_run_id AND p.display_price_verified
+      WHERE p.run_id=p_run_id AND p.decision='VERIFIED' AND p.display_price_verified
     ), candidates AS MATERIALIZED (
       SELECT c.current_listing_key,c.source_timestamp,
         CASE WHEN c.parent_raw_text_sha256 IS NOT NULL
@@ -301,7 +384,7 @@ BEGIN
         AND p.latest_raw_occurrence_key=c.latest_raw_occurrence_key
       WHERE c.run_id=p_run_id AND c.brand=p_brand AND p_brand IN ('Rolex','Patek Philippe')
         AND c.current_status IN ('CURRENT_ACTIVE','CURRENT_LATEST_STATE')
-        AND (c.price_verified OR p.current_listing_key IS NOT NULL)
+        AND p.current_listing_key IS NOT NULL
         AND (p_listing_lane IS NULL OR p_listing_lane=CASE WHEN c.parent_raw_text_sha256 IS NOT NULL
           AND c.exact_child_text_sha256=c.parent_raw_text_sha256 THEN 0 ELSE 1 END)
         AND EXISTS (SELECT 1 FROM public.curated_luxury_shadow_runs r
@@ -361,22 +444,16 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,extens
   WITH permitted AS (
     SELECT 1 FROM public.curated_luxury_shadow_runs
     WHERE run_id=p_run_id AND status='COMPLETE'
-  ), existing AS (
-    SELECT o.offer_state_key,o.source_price_amount,o.source_currency,o.normalized_usd_amount,
-      o.last_seen,o.occurrence_count,o.repost_same_offer_count,0 priority
-    FROM public.curated_luxury_offer_states_shadow o,permitted
-    WHERE o.run_id=p_run_id AND o.brand=p_brand AND p_brand IN ('Rolex','Patek Philippe')
-      AND o.observed_reference_key=p_reference_key AND o.qualified_price_research
-      AND o.normalized_usd_amount>0
-  ), restored AS (
+  ), all_prices AS MATERIALIZED (
     SELECT c.offer_state_key,p.source_price_amount,p.source_currency,p.normalized_usd_amount,
-      c.source_timestamp last_seen,1::bigint occurrence_count,0::bigint repost_same_offer_count,1 priority
+      c.source_timestamp last_seen,1::bigint occurrence_count,0::bigint repost_same_offer_count
     FROM public.curated_luxury_current_listings_shadow c
     JOIN public.curated_luxury_latest_card_price_evidence_v1 p
       ON p.run_id=c.run_id AND p.current_listing_key=c.current_listing_key
      AND p.latest_raw_occurrence_key=c.latest_raw_occurrence_key
      AND p.exact_child_text_sha256=c.exact_child_text_sha256
-     AND p.price_research_eligible
+     AND p.decision='VERIFIED' AND p.price_research_eligible
+    CROSS JOIN permitted
     WHERE c.run_id=p_run_id AND c.brand=p_brand AND p_brand IN ('Rolex','Patek Philippe')
       AND c.current_status IN ('CURRENT_ACTIVE','CURRENT_LATEST_STATE')
       AND c.intent='WTS' AND c.observed_reference_key=p_reference_key
@@ -387,12 +464,23 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,extens
           AND duplicate.current_listing_key<c.current_listing_key
           AND (duplicate.offer_state_key=c.offer_state_key
             OR duplicate.unique_observation_key=c.unique_observation_key))
-  ), ranked AS (
-    SELECT *,row_number() OVER (PARTITION BY offer_state_key ORDER BY priority,last_seen DESC) price_rank
-    FROM (SELECT * FROM existing UNION ALL SELECT * FROM restored) prices
-  ), all_prices AS MATERIALIZED (SELECT * FROM ranked WHERE price_rank=1),
+  ), quartiles AS (
+    SELECT count(*)::bigint pre_filter_count,
+      percentile_cont(.25) WITHIN GROUP(ORDER BY normalized_usd_amount) q1,
+      percentile_cont(.75) WITHIN GROUP(ORDER BY normalized_usd_amount) q3
+    FROM all_prices
+  ), classified AS MATERIALIZED (
+    SELECT p.*,q.pre_filter_count,q.q1,q.q3,
+      CASE WHEN q.pre_filter_count>=4 THEN
+        p.normalized_usd_amount<greatest(0,q.q1-(3*(q.q3-q.q1)))
+        OR p.normalized_usd_amount>q.q3+(3*(q.q3-q.q1))
+      ELSE false END is_outlier
+    FROM all_prices p CROSS JOIN quartiles q
+  ), retained AS MATERIALIZED (
+    SELECT * FROM classified WHERE NOT is_outlier
+  ),
   page_prices AS MATERIALIZED (
-    SELECT * FROM all_prices ORDER BY last_seen DESC,offer_state_key DESC
+    SELECT * FROM retained ORDER BY last_seen DESC,offer_state_key DESC
     LIMIT least(greatest(coalesce(p_limit,100),1),100) OFFSET greatest(coalesce(p_offset,0),0)
   ), stats AS (
     SELECT count(*)::bigint count,avg(normalized_usd_amount) avg,
@@ -400,12 +488,22 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,extens
       percentile_cont(.5) WITHIN GROUP(ORDER BY normalized_usd_amount) median,
       percentile_cont(.75) WITHIN GROUP(ORDER BY normalized_usd_amount) q3,
       min(normalized_usd_amount) min,max(normalized_usd_amount) max,
-      coalesce(sum(repost_same_offer_count),0)::bigint repost_count FROM all_prices
+      coalesce(sum(repost_same_offer_count),0)::bigint repost_count,
+      (SELECT pre_filter_count FROM quartiles) pre_filter_count,
+      (SELECT count(*)::bigint FROM classified WHERE is_outlier) outlier_count
+    FROM retained
   ), demand AS (
     SELECT count(DISTINCT c.offer_state_key)::bigint count
     FROM public.curated_luxury_current_listings_shadow c,permitted
     WHERE c.run_id=p_run_id AND c.brand=p_brand AND c.observed_reference_key=p_reference_key
       AND c.intent='WTB' AND c.current_status IN ('CURRENT_ACTIVE','CURRENT_LATEST_STATE')
+      AND NOT EXISTS (
+        SELECT 1 FROM public.curated_luxury_current_listings_shadow duplicate
+        WHERE duplicate.run_id=c.run_id AND duplicate.brand=c.brand
+          AND duplicate.current_status IN ('CURRENT_ACTIVE','CURRENT_LATEST_STATE')
+          AND duplicate.current_listing_key<c.current_listing_key
+          AND (duplicate.offer_state_key=c.offer_state_key
+            OR duplicate.unique_observation_key=c.unique_observation_key))
   )
   SELECT jsonb_build_object('stats',to_jsonb(stats),'wtb_count',demand.count,
     'rows',coalesce((SELECT jsonb_agg(jsonb_build_object(
@@ -417,6 +515,81 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,extens
   FROM stats CROSS JOIN demand;
 $$;
 
+CREATE OR REPLACE FUNCTION public.curated_luxury_card_evidence_reconciliation_v1(p_run_id uuid)
+RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,extensions AS $$
+  WITH current_rows AS MATERIALIZED (
+    SELECT c.* FROM public.curated_luxury_current_listings_shadow c
+    WHERE c.run_id=p_run_id AND c.brand IN ('Rolex','Patek Philippe')
+      AND c.current_status IN ('CURRENT_ACTIVE','CURRENT_LATEST_STATE')
+      AND EXISTS (SELECT 1 FROM public.curated_luxury_shadow_runs r
+        WHERE r.run_id=p_run_id AND r.status='COMPLETE')
+  ), per_brand AS (
+    SELECT c.brand,count(*)::bigint total,
+      count(*) FILTER (WHERE c.intent='WTS')::bigint wts,
+      count(*) FILTER (WHERE c.intent='WTB')::bigint wtb,
+      count(*) FILTER (WHERE c.current_status='CURRENT_ACTIVE')::bigint confirmed_current,
+      count(*) FILTER (WHERE c.current_status='CURRENT_LATEST_STATE')::bigint latest_observed,
+      count(*) FILTER (WHERE EXISTS (
+        SELECT 1 FROM public.curated_luxury_latest_card_model_evidence_v1 m
+        WHERE m.run_id=c.run_id AND m.current_listing_key=c.current_listing_key
+          AND m.latest_raw_occurrence_key=c.latest_raw_occurrence_key
+          AND m.exact_child_text_sha256=c.exact_child_text_sha256))::bigint model_verified,
+      count(*) FILTER (WHERE EXISTS (
+        SELECT 1 FROM public.curated_luxury_latest_card_price_evidence_v1 p
+        WHERE p.run_id=c.run_id AND p.current_listing_key=c.current_listing_key
+          AND p.latest_raw_occurrence_key=c.latest_raw_occurrence_key
+          AND p.exact_child_text_sha256=c.exact_child_text_sha256
+          AND p.decision='VERIFIED' AND p.display_price_verified))::bigint price_verified,
+      count(*) FILTER (WHERE EXISTS (
+        SELECT 1 FROM public.curated_luxury_latest_card_poster_evidence_v1 poster
+        WHERE poster.run_id=c.run_id AND poster.version_key=c.version_key))::bigint poster_verified,
+      count(*) FILTER (WHERE c.dealer_key IS NOT NULL)::bigint dealer_linked,
+      count(*) FILTER (WHERE EXISTS (
+        SELECT 1 FROM public.curated_luxury_child_image_links_shadow l
+        JOIN public.curated_luxury_child_image_assets_shadow a USING(source_image_key)
+        WHERE l.run_id=c.run_id AND l.current_listing_key=c.current_listing_key
+          AND l.raw_occurrence_key=c.latest_raw_occurrence_key
+          AND l.image_evidence_type='SELLER_LISTING_IMAGE' AND a.customer_safe))::bigint image_verified,
+      count(*) FILTER (WHERE c.parent_key IS NULL OR c.version_key IS NULL
+        OR c.latest_raw_occurrence_key IS NULL OR c.exact_child_text_sha256 IS NULL)::bigint missing_lineage
+    FROM current_rows c GROUP BY c.brand
+  ), duplicate_keys AS (
+    SELECT
+      coalesce((SELECT sum(n-1) FROM (
+        SELECT count(*) n FROM current_rows GROUP BY brand,current_listing_key HAVING count(*)>1
+      ) duplicated),0)::bigint duplicate_current_listing_keys,
+      coalesce((SELECT sum(n-1) FROM (
+        SELECT count(*) n FROM current_rows GROUP BY brand,offer_family_key HAVING count(*)>1
+      ) duplicated),0)::bigint duplicate_offer_family_keys,
+      coalesce((SELECT sum(n-1) FROM (
+        SELECT count(*) n FROM current_rows GROUP BY brand,offer_state_key HAVING count(*)>1
+      ) duplicated),0)::bigint duplicate_offer_state_keys,
+      coalesce((SELECT sum(n-1) FROM (
+        SELECT count(*) n FROM current_rows GROUP BY brand,unique_observation_key HAVING count(*)>1
+      ) duplicated),0)::bigint duplicate_unique_observation_keys
+  ), invalid AS (
+    SELECT count(*)::bigint count FROM public.curated_luxury_current_listings_shadow c
+    WHERE c.run_id=p_run_id AND c.brand IN ('Rolex','Patek Philippe')
+      AND c.current_status NOT IN ('CURRENT_ACTIVE','CURRENT_LATEST_STATE')
+      AND c.cohort_status IN ('CONFIRMED_CURRENT','LATEST_OBSERVED')
+  )
+  SELECT jsonb_build_object('run_id',p_run_id,'brands',coalesce((SELECT jsonb_object_agg(
+    brand,jsonb_build_object('total',total,'wts',wts,'wtb',wtb,
+      'confirmed_current',confirmed_current,'latest_observed',latest_observed,
+      'model_verified',model_verified,'model_unresolved',total-model_verified,
+      'price_verified',price_verified,'price_unresolved',total-price_verified,
+      'poster_verified',poster_verified,'poster_unresolved',total-poster_verified,
+      'dealer_linked',dealer_linked,'image_verified',image_verified,
+      'missing_lineage',missing_lineage)) FROM per_brand),'{}'::jsonb),
+    'duplicate_current_listing_keys',(SELECT duplicate_current_listing_keys FROM duplicate_keys),
+    'duplicate_offer_family_keys',(SELECT duplicate_offer_family_keys FROM duplicate_keys),
+    'duplicate_offer_state_keys',(SELECT duplicate_offer_state_keys FROM duplicate_keys),
+    'duplicate_unique_observation_keys',(SELECT duplicate_unique_observation_keys FROM duplicate_keys),
+    'invalid_availability',(SELECT count FROM invalid),
+    'raw_source_mutated',false,'frozen_cohort_mutated',false,
+    'production_selector_changed',false);
+$$;
+
 REVOKE ALL ON FUNCTION public.curated_luxury_shadow_customer_cards_v5(uuid,text[]) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.curated_luxury_shadow_customer_count_v4(
   uuid,text,text[],text[],boolean,boolean,text,text) FROM PUBLIC;
@@ -425,6 +598,9 @@ REVOKE ALL ON FUNCTION public.curated_luxury_shadow_customer_page_keys_v8(
   timestamptz,text,boolean,integer) FROM PUBLIC;
 REVOKE ALL ON FUNCTION public.curated_luxury_shadow_price_research_v3(
   uuid,text,text,integer,integer) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.curated_luxury_materialize_card_poster_evidence_v1(
+  uuid,text,text) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.curated_luxury_card_evidence_reconciliation_v1(uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.curated_luxury_shadow_customer_cards_v5(uuid,text[]) TO service_role;
 GRANT EXECUTE ON FUNCTION public.curated_luxury_shadow_customer_count_v4(
   uuid,text,text[],text[],boolean,boolean,text,text) TO service_role;
@@ -433,5 +609,8 @@ GRANT EXECUTE ON FUNCTION public.curated_luxury_shadow_customer_page_keys_v8(
   timestamptz,text,boolean,integer) TO service_role;
 GRANT EXECUTE ON FUNCTION public.curated_luxury_shadow_price_research_v3(
   uuid,text,text,integer,integer) TO service_role;
+GRANT EXECUTE ON FUNCTION public.curated_luxury_materialize_card_poster_evidence_v1(
+  uuid,text,text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.curated_luxury_card_evidence_reconciliation_v1(uuid) TO service_role;
 
 NOTIFY pgrst,'reload schema';

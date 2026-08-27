@@ -38,9 +38,14 @@ Read-only audit of final freeze run `32953447624` and shadow run `17d6d831-86cd-
 | Deterministic verified model | 962,942 | 434,770 |
 | Model unresolved; safe Brand + Reference title | 572,821 | 502,231 |
 | Explicit source amount and currency | 1,050,855 | 804,433 |
-| Direct verified USD/USDT | 36,865 | 45,153 |
-| Dated-FX-capable upper bound, including direct USD/USDT | 1,047,434 | 804,112 |
-| Explicit price withheld because currency is outside current ECB contract | 3,421 | 321 |
+| Direct verified USD/USDT after deterministic child-price gate | 36,723 | 45,012 |
+| Verified USD display evidence, including dated ECB FX | 1,046,251 | 803,636 |
+| Price evidence unresolved | 489,512 | 133,365 |
+| Explicit price withheld for unsupported FX currency | 3,421 | 321 |
+| Explicit price withheld for ambiguous child association | 1,190 | 476 |
+| Qualified unique WTS Price Research observations after 3.0x IQR | 900,850 | 735,923 |
+| Price Research outliers excluded | 72,340 | 39,197 |
+| Price Rating-ready observed references | 10,153 | 6,699 |
 | Exact customer-safe seller image | 255 | 0 |
 | Existing exact dealer link | 9,951 | 1,297 |
 | Existing source-backed country | 9,951 | 1,297 |
@@ -49,3 +54,11 @@ Read-only audit of final freeze run `32953447624` and shadow run `17d6d831-86cd-
 The model gate rejected 70,592 Rolex and 177,713 Patek raw model claims that were foreign-brand, reference-only, or otherwise outside the same-brand canonical taxonomy. Rejection leaves the listing valid and prevents a fabricated model.
 
 The frozen artifact does not contain a customer-safe human-readable poster field. Poster-name recovery must therefore read the already-linked immutable raw version payload, reject phone/hash/generic values, and be reconciled separately before publication. No poster coverage count is claimed until that read-only source audit runs.
+
+The corrected price figures come from a complete offline pass over all 256 verified freeze partitions. Every foreign conversion is tied to a dated ECB rate record and source-response hash. The lower direct USD/USDT counts supersede the earlier snapshot because the deterministic child-price gate now withholds multi-quantity and ambiguous bundle evidence instead of treating it as listing-specific.
+
+## Publication gate
+
+The repository now contains the append-only model, price, poster, and image evidence contract; the deterministic offline materializer; an idempotent QNSA loader; and reconciliation checks for frozen totals, lineage, duplicate identities, availability, and source-table mutation. This does not itself authorize publication.
+
+Rolex and Patek remain `NOT_READY_FOR_PUBLICATION` until an authorized QNSA execution materializes these sidecars against the pinned COMPLETE shadow run, the poster audit reports its real coverage, reconciliation passes without raw/source/cohort mutation, and actual rendered-card canaries pass. The production hold and rollback selector remain unchanged.

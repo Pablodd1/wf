@@ -56,7 +56,8 @@ function mapCard(row) {
   const verifiedUsd = row.price_verified === true && Number(row.price_usd) > 0
     ? Number(row.price_usd) : null;
   const sourceIdentityName = row.source_poster_name || null;
-  const sourceAmount = Number(row.source_price_amount) > 0 ? Number(row.source_price_amount) : null;
+  const sourceAmount = verifiedUsd !== null && Number(row.source_price_amount) > 0
+    ? Number(row.source_price_amount) : null;
   return {
     id: row.id,
     brand: row.brand,
@@ -71,7 +72,7 @@ function mapCard(row) {
     price_raw: sourceAmount,
     currency: verifiedUsd === null ? null : 'USD',
     source_price_amount: sourceAmount,
-    source_currency: sourceCurrency,
+    source_currency: verifiedUsd === null ? null : sourceCurrency,
     price_evidence_status: verifiedUsd === null ? null
       : row.price_evidence_classification
         || (['USD', 'USDT'].includes(String(sourceCurrency).toUpperCase())
@@ -329,24 +330,26 @@ async function loadPriceResearch(client, { brand, reference, evidencePage = 1, e
   const rows = rawRows.map(row => mapPriceRow(row, brand, reference, { usdOnly: true }));
   const stats = percentileStats(data?.stats);
   const total = Number(data?.stats?.count || 0);
+  const preFilterTotal = Number(data?.stats?.pre_filter_count ?? total);
+  const outliers = Number(data?.stats?.outlier_count || 0);
   const wtb = Number(data?.wtb_count || 0);
   const reposts = Number(data?.stats?.repost_count || 0);
   return {
     success: true, brand, reference, resolvedRef: null, model: null, collection: null, dialColors: null,
     analytics_source: restoredCards ? CARD_EVIDENCE_SELECTOR
       : restoredRolex ? ROLEX_EVIDENCE_SELECTOR : PRICE_SELECTOR,
-    total_tracked_listings: total + wtb,
+    total_tracked_listings: preFilterTotal + wtb,
     wts_eligible_analytics_count: total, wtb_demand_count: wtb,
     reference_qualified_wts_count: total, reference_analytics_ready: total >= 2,
     demand_scope: 'EXACT_REFERENCE_ALL_DIALS', demand_rows: [],
-    excluded_count: 0, excluded_breakdown: { unpriced: 0, outliers: 0, unsplit_bundles: 0 },
-    reconciliation: { total_tracked_listings: total + wtb, wts_eligible_analytics_count: total,
-      wtb_demand_count: wtb, reference_qualified_wts_count: total, excluded_count: 0,
-      wts_loaded_count: total, excluded_breakdown: { unpriced: 0, outliers: 0, unsplit_bundles: 0 } },
+    excluded_count: outliers, excluded_breakdown: { unpriced: 0, outliers, unsplit_bundles: 0 },
+    reconciliation: { total_tracked_listings: preFilterTotal + wtb, wts_eligible_analytics_count: total,
+      wtb_demand_count: wtb, reference_qualified_wts_count: total, excluded_count: outliers,
+      wts_loaded_count: preFilterTotal, excluded_breakdown: { unpriced: 0, outliers, unsplit_bundles: 0 } },
     totalListings: total, reference_listing_count: total, eligible_observation_count: total,
     unique_offer_count: total, repost_count: reposts, sampledListings: rows.length,
     sampleCapped: rows.length < total, count: rows.length, rawCount: total,
-    outliersRemoved: 0, excludedEvidenceCount: 0, retained_evidence_count: total,
+    outliersRemoved: outliers, excludedEvidenceCount: outliers, retained_evidence_count: total,
     analytics_ready: total >= 2, sample_quality: total >= 20 ? 'robust' : total >= 2 ? 'provisional' : 'observational',
     selected_cohort: { condition: 'All conditions', dial_color: 'Unspecified', count: total },
     cohorts: [], dial_groups: [], dial_analysis: [], stats, liquidity: {
@@ -357,9 +360,9 @@ async function loadPriceResearch(client, { brand, reference, evidencePage = 1, e
       comparable_page: evidencePage, comparable_page_size: evidencePageSize,
       comparable_pages: Math.max(1, Math.ceil(total / evidencePageSize)), retained_returned: rows.length,
       retained_total: total, retained_pages: Math.max(1, Math.ceil(total / evidencePageSize)),
-      outliers_returned: 0, outliers_total: 0, truncated: rows.length < total },
+      outliers_returned: 0, outliers_total: outliers, truncated: rows.length < total },
     methodology: { method: 'IQR_3_0', minimum_sample: 2, included_count: total,
-      excluded_count: 0, formula: 'Q1 - 3.0×IQR to Q3 + 3.0×IQR', iqr_multiplier: 3,
+      excluded_count: outliers, formula: 'Q1 - 3.0×IQR to Q3 + 3.0×IQR', iqr_multiplier: 3,
       repost_excluded_count: reposts, unsplit_bundle_excluded_count: 0,
       lower_fence: stats?.lower_fence ?? null, upper_fence: stats?.upper_fence ?? null },
     source: restoredCards ? CARD_EVIDENCE_SELECTOR

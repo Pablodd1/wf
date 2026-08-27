@@ -8,6 +8,7 @@ const test = require('node:test');
 const evidence = require('../tools/audit/curated-luxury-card-evidence-lib.cjs');
 const ecb = require('../tools/audit/fetch-ecb-card-fx-rates.cjs');
 const shadow = require('../api/_lib/curated-luxury-shadow.cjs');
+const manifestBuilder = require('../tools/audit/build-curated-luxury-card-evidence-manifest.cjs');
 const root = path.resolve(__dirname, '..');
 
 function row(overrides = {}) {
@@ -66,6 +67,16 @@ test('duplicates and non-current rows receive no evidence', () => {
   assert.equal(evidence.buildPriceEvidence(row({ current_status: 'SUPPRESSED_EXACT_DUPLICATE' })), null);
 });
 
+test('multi-quantity price evidence fails closed even when the structured amount says verified', () => {
+  assert.equal(evidence.buildPriceEvidence(row({
+    source_price_amount: 25000, source_currency: 'USD', quantity: 2,
+    quantity_marker: 'x2', parent_classification: 'MULTI_WATCH_SAFE_TO_SPLIT',
+  })), null);
+  assert.deepEqual(evidence.deterministicPriceAssociation(row({ quantity: 2 })), {
+    accepted: false, reason: 'MULTI_QUANTITY_PRICE_REQUIRES_REVIEW',
+  });
+});
+
 test('direct USD and USDT are verified without FX and WTB stays outside Price Research', () => {
   const usd = evidence.buildPriceEvidence(row({ source_price_amount: 25000, source_currency: 'USD' }));
   assert.equal(usd.normalized_usd_amount, 25000);
@@ -111,6 +122,14 @@ test('ECB cross-rate conversion uses USD per EUR divided by source units per EUR
   assert.ok(Math.abs(weekend.usd_per_source_unit - (1.2 / 9.36)) < 1e-12);
 });
 
+test('offline Price Research reconciliation applies the same 3x IQR gate', () => {
+  const summary = manifestBuilder.priceResearchSummary(new Map([
+    ['116500LN', [10000, 10000, 10000, 10000, 10000, 100000000]],
+    ['OBSERVEDONLY', [25000, 26000]],
+  ]));
+  assert.deepEqual(summary, { preFilter: 8, qualified: 7, outliers: 1, ratingReady: 2, distinct: 2 });
+});
+
 test('unsupported peg currencies and missing dates remain unresolved', () => {
   const fx = {
     provider: 'ECB', source_url: 'https://data-api.ecb.europa.eu/service/data/EXR/',
@@ -133,14 +152,25 @@ test('migration is additive, append-only, lineage-bound, and source-table read-o
   assert.match(sql, /exact_child_text_sha256=c\.exact_child_text_sha256/);
   assert.match(sql, /fx_provider='ECB'/);
   assert.match(sql, /fx_lookback_days BETWEEN 0 AND 7/);
+  assert.match(sql, /decision IN \('VERIFIED','REVIEW_REQUIRED'\)/);
+  assert.match(sql, /p\.decision='VERIFIED'/);
+  assert.doesNotMatch(sql, /CASE WHEN c\.price_verified THEN c\.normalized_usd_amount/);
   assert.match(sql, /BEFORE UPDATE OR DELETE[\s\S]*reject_evidence_mutation/i);
   assert.match(sql, /image_evidence_type='SELLER_LISTING_IMAGE'/);
   assert.match(sql, /count\(DISTINCT c\.current_listing_key\)/i);
+  assert.match(sql, /curated_luxury_card_poster_evidence_shadow/);
+  assert.match(sql, /RAW_VERSION_FROM_NAME/);
+  assert.match(sql, /pre_filter_count>=4[\s\S]*3\*\(q\.q3-q\.q1\)/i);
+  assert.match(sql, /outlier_count/);
+  assert.match(sql, /duplicate_current_listing_keys/);
+  assert.match(sql, /duplicate_offer_family_keys/);
+  assert.match(sql, /duplicate_offer_state_keys/);
+  assert.match(sql, /duplicate_unique_observation_keys/);
   assert.doesNotMatch(sql,
     /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+(?:INTO\s+|FROM\s+)?public\.(?:raw_messages|raw_message_versions|curated_luxury_current_listings_shadow)/i);
 });
 
-test('manual evidence workflow is freeze-pinned and cannot load or switch customer sources', () => {
+test('manual evidence workflow is freeze-pinned and loads only append-only evidence sidecars', () => {
   const workflow = fs.readFileSync(path.join(root,
     '.github/workflows/qnsa-rolex-patek-card-evidence.yml'), 'utf8');
   assert.match(workflow, /run-id: '32953447624'/);
@@ -151,7 +181,14 @@ test('manual evidence workflow is freeze-pinned and cannot load or switch custom
   const migrationSha = crypto.createHash('sha256').update(migration).digest('hex');
   assert.match(workflow, new RegExp(migrationSha));
   assert.doesNotMatch(workflow, /CURATED_SHADOW_MARKET_SOURCE|CURATED_SHADOW_PRICE_SOURCE|ROLEX_PATEK_PUBLICATION_MODE/);
-  assert.doesNotMatch(workflow, /load.*card.*evidence/i);
+  assert.match(workflow, /LOAD_QNSA_CARD_EVIDENCE_CANARY_V1/);
+  assert.match(workflow, /LOAD_QNSA_CARD_EVIDENCE_FULL_V1/);
+  const loader = fs.readFileSync(path.join(root,
+    'tools/audit/load-curated-luxury-card-evidence.cjs'), 'utf8');
+  assert.match(loader, /qnsafosakvonzgfcsphh/);
+  assert.match(loader, /resolution=ignore-duplicates,return=minimal/);
+  assert.match(loader, /curated_luxury_card_evidence_reconciliation_v1/);
+  assert.doesNotMatch(loader, /raw_messages|raw_message_versions|current_listings_shadow/);
 });
 
 test('mandatory display fallbacks stay visible without inventing evidence', () => {

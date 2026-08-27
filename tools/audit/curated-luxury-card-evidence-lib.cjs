@@ -105,6 +105,22 @@ function canonicalCurrent(row) {
     && row?.disposition?.duplicate !== true;
 }
 
+function deterministicPriceAssociation(row) {
+  if (!clean(row?.exact_child_text_sha256) || !clean(row?.latest_raw_occurrence_key ?? row?.raw_occurrence_key)) {
+    return { accepted: false, reason: 'PRICE_LINEAGE_INCOMPLETE' };
+  }
+  const quantity = Number(row?.quantity);
+  if ((Number.isFinite(quantity) && quantity > 1) || clean(row?.quantity_marker)) {
+    return { accepted: false, reason: 'MULTI_QUANTITY_PRICE_REQUIRES_REVIEW' };
+  }
+  const parentClass = clean(row?.parent_classification);
+  if (parentClass && !['SINGLE_WATCH', 'MULTI_WATCH_SAFE_TO_SPLIT',
+    'MULTI_WATCH_PARTIALLY_SPLITTABLE'].includes(parentClass)) {
+    return { accepted: false, reason: 'AMBIGUOUS_CHILD_PRICE_BOUNDARY' };
+  }
+  return { accepted: true, reason: null };
+}
+
 function buildModelEvidence(row, evidenceVersion = 'card-model-evidence-v1') {
   if (!canonicalCurrent(row)) return null;
   const resolution = resolveModelEvidence(row);
@@ -136,6 +152,8 @@ function isValidFxEvidence(fx, currency, applicableDate) {
 
 function buildPriceEvidence(row, fx = null, evidenceVersion = 'card-price-evidence-v1') {
   if (!canonicalCurrent(row)) return null;
+  const association = deterministicPriceAssociation(row);
+  if (!association.accepted) return null;
   const amount = Number(row?.source_price_amount);
   const currency = clean(row?.source_currency)?.toUpperCase() || null;
   const sourceClassification = clean(row?.price_evidence_classification)?.toUpperCase() || null;
@@ -161,6 +179,7 @@ function buildPriceEvidence(row, fx = null, evidenceVersion = 'card-price-eviden
     offer_state_key: clean(row.offer_state_key),
     latest_raw_occurrence_key: clean(row.latest_raw_occurrence_key ?? row.raw_occurrence_key),
     exact_child_text_sha256: clean(row.exact_child_text_sha256), evidence_version: evidenceVersion,
+    decision: 'VERIFIED', review_reason: null,
     source_price_amount: amount, source_currency: currency,
     normalized_usd_amount: normalizedUsd, price_evidence_classification: classification,
     display_price_verified: true,
@@ -172,6 +191,8 @@ function buildPriceEvidence(row, fx = null, evidenceVersion = 'card-price-eviden
     fx_lookback_days: classification === 'DATED_VERIFIED_FX' ? fx.lookback_days : null,
     fx_rate_direction: classification === 'DATED_VERIFIED_FX' ? fx.rate_direction : null,
     fx_rate: classification === 'DATED_VERIFIED_FX' ? Number(fx.usd_per_source_unit) : null,
+    source_artifact_id: clean(row.source_artifact_id),
+    source_artifact_sha256: clean(row.source_artifact_sha256),
   };
   evidence.evidence_checksum = sha256(JSON.stringify(evidence));
   return evidence;
@@ -179,6 +200,6 @@ function buildPriceEvidence(row, fx = null, evidenceVersion = 'card-price-eviden
 
 module.exports = {
   BRANDS, DIRECT_USD_CURRENCIES, ECB_CURRENCIES, buildModelEvidence, buildPriceEvidence,
-  canonicalCurrent, frozenModelClaim, isValidFxEvidence, referenceKey, resolveModelEvidence,
+  canonicalCurrent, deterministicPriceAssociation, frozenModelClaim, isValidFxEvidence, referenceKey, resolveModelEvidence,
   sha256, stripBrandPrefix,
 };

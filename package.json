@@ -42,6 +42,7 @@
     "restore:rolex-evidence": "node tools/audit/restore-rolex-price-image-evidence.cjs",
     "build:rolex-patek-card-evidence": "node tools/audit/build-curated-luxury-card-evidence-manifest.cjs",
     "fetch:rolex-patek-card-fx": "node tools/audit/fetch-ecb-card-fx-rates.cjs",
+    "load:rolex-patek-card-evidence": "node tools/audit/load-curated-luxury-card-evidence.cjs",
     "test:rolex-evidence": "node --test tests/rolex-evidence-restoration.test.cjs tests/curated-luxury-production-switch.test.cjs",
     "audit:all-price-research": "node tools/price-quality/audit-all-price-research-cohorts.cjs",
     "audit:source-price-cohorts": "node tools/price-quality/audit-source-price-cohorts.cjs",
