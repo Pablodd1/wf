@@ -15,10 +15,6 @@
     "api/*.js": {
       "maxDuration": 60,
       "includeFiles": "public/**"
-    },
-    "api/**/*": {
-      "maxDuration": 60,
-      "includeFiles": "public/**"
     }
   },
   "headers": [
