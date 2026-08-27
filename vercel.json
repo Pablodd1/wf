@@ -13,7 +13,8 @@
       "maxDuration": 120
     },
     "api/*.js": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "public/**"
     }
   },
   "headers": [

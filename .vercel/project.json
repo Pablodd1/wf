@@ -1,1 +1,16 @@
-{"projectId":"prj_VV6SU5XtuhMnQwRRd14SjDXI4HxL","orgId":"team_xrMOKza08y8Otqc35AFNvaVf","projectName":"watchfacts-poc"}
+{
+  "projectId": "prj_VV6SU5XtuhMnQwRRd14SjDXI4HxL",
+  "orgId": "team_xrMOKza08y8Otqc35AFNvaVf",
+  "projectName": "watchfacts-poc",
+  "settings": {
+    "createdAt": 1780357891950,
+    "framework": null,
+    "devCommand": "cd frontend && npm run dev",
+    "installCommand": "npm install",
+    "buildCommand": "npm install && npm run build",
+    "outputDirectory": "dist",
+    "rootDirectory": null,
+    "directoryListing": false,
+    "nodeVersion": "24.x"
+  }
+}
