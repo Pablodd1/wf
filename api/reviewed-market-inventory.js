@@ -65,7 +65,7 @@ const ALLOWED_MARKET_SOURCE_VIEWS = new Set([
 const requestedMarketSourceView = String(process.env.TRADING_FLOOR_SOURCE_VIEW || '').trim();
 const MARKET_SOURCE_VIEW = ALLOWED_MARKET_SOURCE_VIEWS.has(requestedMarketSourceView)
   ? requestedMarketSourceView
-  : 'reviewed_workbook_market_source_v2';
+  : 'qnsa_rolex_patek_trading_floor_source';
 const MULTIPLE_LISTING_IDENTITY_VALUES = ['multiple', 'multi', 'mixed'];
 const MIN_PUBLIC_WORKBOOK_PRICE_USD = 1_000;
 const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
@@ -2082,18 +2082,12 @@ module.exports = async function handler(req, res) {
         })
       : null;
     let fourBrandCountOptions = null;
-    const vacheronOverseasRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
-      && brand === 'Vacheron Constantin' && ['ALL', 'WATCH'].includes(itemCategory);
-    const omegaRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
-      && brand === 'Omega' && ['ALL', 'WATCH'].includes(itemCategory);
-    const tudorRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
-      && brand === 'Tudor' && ['ALL', 'WATCH'].includes(itemCategory);
-    const cartierRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
-      && brand === 'Cartier' && ['ALL', 'WATCH'].includes(itemCategory);
-    const fourBrandEffectiveScope = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
-      && isFourBrand(brand) && ['ALL', 'WATCH'].includes(itemCategory);
-    const zenithModelRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
-      && brand === 'Zenith' && requestedModel && ['ALL', 'WATCH'].includes(itemCategory);
+    const vacheronOverseasRelease = brand === 'Vacheron Constantin' && ['ALL', 'WATCH'].includes(itemCategory);
+    const omegaRelease = brand === 'Omega' && ['ALL', 'WATCH'].includes(itemCategory);
+    const tudorRelease = brand === 'Tudor' && ['ALL', 'WATCH'].includes(itemCategory);
+    const cartierRelease = brand === 'Cartier' && ['ALL', 'WATCH'].includes(itemCategory);
+    const fourBrandEffectiveScope = isFourBrand(brand) && ['ALL', 'WATCH'].includes(itemCategory);
+    const zenithModelRelease = brand === 'Zenith' && requestedModel && ['ALL', 'WATCH'].includes(itemCategory);
     const controlledBrandRelease = vacheronOverseasRelease || omegaRelease || cartierRelease || tudorRelease;
     if (controlledBrandRelease
       && !search && !requestedModel && !reference && !requestedDial && !condition
