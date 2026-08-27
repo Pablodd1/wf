@@ -62,6 +62,9 @@ const QUERIES = Object.freeze({
       'image_assets_table',to_regclass('public.curated_luxury_child_image_assets_shadow') IS NOT NULL,
       'image_links_table',to_regclass('public.curated_luxury_child_image_links_shadow') IS NOT NULL,
       'rolex_price_evidence_table',to_regclass('public.curated_luxury_rolex_price_evidence_shadow') IS NOT NULL,
+      'current_model_column',EXISTS (SELECT 1 FROM information_schema.columns
+        WHERE table_schema='public' AND table_name='curated_luxury_current_listings_shadow'
+          AND column_name='model'),
       'page_keys_v7',to_regprocedure('public.curated_luxury_shadow_customer_page_keys_v7(uuid,text,text[],text[],boolean,boolean,text,text,smallint,smallint,timestamptz,text,boolean,integer)') IS NOT NULL,
       'cards_v3',to_regprocedure('public.curated_luxury_shadow_customer_cards_v3(uuid,text[])') IS NOT NULL,
       'rolex_cards_v4',to_regprocedure('public.curated_luxury_rolex_customer_cards_v4(uuid,text[])') IS NOT NULL
@@ -71,7 +74,12 @@ const QUERIES = Object.freeze({
     SELECT jsonb_build_object(
       'run_id',run_id,'contract',contract,'status',status,'decision',decision,
       'created_at',created_at,'completed_at',completed_at,
-      'reconciliation',reconciliation
+      'reconciliation_counts',reconciliation->'counts',
+      'reconciliation_canary',reconciliation->'canary',
+      'reference_rows',reconciliation->'reference_rows',
+      'source_switch',reconciliation->'source_switch',
+      'customer_endpoints_changed',reconciliation->'customer_endpoints_changed',
+      'production_source_tables_mutated',reconciliation->'production_source_tables_mutated'
     ) AS evidence
     FROM public.curated_luxury_shadow_runs
     WHERE run_id='${RUN_ID}'::uuid;`,
@@ -289,38 +297,63 @@ const QUERIES = Object.freeze({
          AND c.parent_raw_text_sha256 IS NOT NULL
          AND c.exact_child_text_sha256=c.parent_raw_text_sha256
        ORDER BY c.source_timestamp DESC NULLS LAST,c.current_listing_key DESC LIMIT 24)
-    ), key_sets AS (
-      SELECT brand,array_agg(current_listing_key ORDER BY source_timestamp DESC NULLS LAST,
-        current_listing_key DESC) AS listing_keys
-      FROM selected GROUP BY brand
-    ), cards AS (
-      SELECT keys.brand,card.value AS card
-      FROM key_sets keys
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE WHEN keys.brand='Rolex'
-          THEN public.curated_luxury_rolex_customer_cards_v4('${RUN_ID}'::uuid,keys.listing_keys)
-          ELSE public.curated_luxury_shadow_customer_cards_v3('${RUN_ID}'::uuid,keys.listing_keys)
-        END
-      ) card
+    ), cards AS MATERIALIZED (
+      SELECT c.brand,c.observed_reference,c.intent,c.source_timestamp,c.source_price_amount,
+        c.source_currency,c.normalized_usd_amount,c.price_verified,c.current_status,c.cohort_status,
+        c.source_identity_key,coalesce(rv.raw_text,rm.raw_text) AS raw_message,
+        rm.sender_phone,rm.external_message_id,rv.source_record_id,
+        d.id AS dealer_id,coalesce(d.display_name,d.company_name) AS dealer_name,
+        CASE WHEN c.dealer_rating_qualified AND d.status='VERIFIED' AND d.review_count>0
+          THEN d.rating ELSE NULL END AS dealer_rating,
+        CASE WHEN c.dealer_rating_qualified AND d.status='VERIFIED' AND d.review_count>0
+          THEN d.review_count ELSE NULL END AS dealer_review_count,
+        EXISTS (SELECT 1 FROM public.curated_luxury_child_image_links_shadow l
+          JOIN public.curated_luxury_child_image_assets_shadow a USING(source_image_key)
+          WHERE l.run_id=c.run_id AND l.current_listing_key=c.current_listing_key
+            AND l.raw_occurrence_key=c.latest_raw_occurrence_key
+            AND l.image_evidence_type='SELLER_LISTING_IMAGE' AND a.customer_safe) AS verified_image
+      FROM selected s
+      JOIN public.curated_luxury_current_listings_shadow c
+        ON c.run_id='${RUN_ID}'::uuid AND c.current_listing_key=s.current_listing_key
+      LEFT JOIN public.curated_luxury_raw_parent_lineage_shadow parent_bridge
+        ON parent_bridge.parent_key=c.parent_key
+      LEFT JOIN public.raw_messages rm ON rm.id=parent_bridge.raw_message_id
+      LEFT JOIN public.curated_luxury_raw_version_lineage_shadow version_bridge
+        ON version_bridge.version_key=c.version_key
+      LEFT JOIN public.raw_message_versions rv
+        ON rv.id=version_bridge.raw_version_id AND rv.raw_message_id=rm.id
+      LEFT JOIN public.curated_luxury_dealer_lineage_shadow dealer_bridge
+        ON dealer_bridge.dealer_key=c.dealer_key
+      LEFT JOIN public.dealers d ON d.id=dealer_bridge.dealer_id
     )
     SELECT coalesce(jsonb_agg(to_jsonb(summary) ORDER BY brand),'[]'::jsonb) AS evidence
     FROM (
       SELECT brand,count(*)::bigint AS returned_cards,
-        count(*) FILTER (WHERE nullif(btrim(card->>'reference'),'') IS NULL)::bigint AS missing_reference,
-        count(*) FILTER (WHERE nullif(btrim(card->>'listing_type'),'') IS NULL)::bigint AS missing_intent,
-        count(*) FILTER (WHERE nullif(btrim(card->>'created_at'),'') IS NULL)::bigint AS missing_posting_date,
-        count(*) FILTER (WHERE nullif(btrim(card->>'raw_message'),'') IS NULL)::bigint AS missing_raw_message,
-        count(*) FILTER (WHERE nullif(btrim(card->>'source_identity_key'),'') IS NULL
-          AND nullif(btrim(card->>'dealer_name'),'') IS NULL)::bigint AS missing_poster_or_dealer_evidence,
-        count(*) FILTER (WHERE (card->>'price_verified')::boolean
-          AND ((card->>'price_usd') IS NULL OR (card->>'price_usd')::numeric<=0))::bigint AS invalid_verified_price,
-        count(*) FILTER (WHERE card->>'current_status' NOT IN
+        count(*) FILTER (WHERE nullif(btrim(observed_reference),'') IS NULL)::bigint AS missing_reference,
+        count(*) FILTER (WHERE nullif(btrim(intent),'') IS NULL)::bigint AS missing_intent,
+        count(*) FILTER (WHERE source_timestamp IS NULL)::bigint AS missing_posting_date,
+        count(*) FILTER (WHERE nullif(btrim(raw_message),'') IS NULL)::bigint AS missing_raw_message,
+        count(*) FILTER (WHERE nullif(btrim(source_identity_key),'') IS NULL
+          AND nullif(btrim(dealer_name),'') IS NULL
+          AND nullif(btrim(sender_phone),'') IS NULL
+          AND nullif(btrim(external_message_id),'') IS NULL
+          AND nullif(btrim(source_record_id),'') IS NULL)::bigint AS missing_poster_or_dealer_evidence,
+        count(*) FILTER (WHERE dealer_name IS NOT NULL)::bigint AS canonical_dealer_resolved,
+        count(*) FILTER (WHERE sender_phone IS NOT NULL OR external_message_id IS NOT NULL
+          OR source_record_id IS NOT NULL)::bigint AS source_poster_identity_available,
+        count(*) FILTER (WHERE price_verified
+          AND (normalized_usd_amount IS NULL OR normalized_usd_amount<=0))::bigint AS invalid_verified_price,
+        count(*) FILTER (WHERE price_verified AND (source_price_amount IS NULL
+          OR source_price_amount<=0 OR nullif(btrim(source_currency),'') IS NULL))::bigint AS verified_price_missing_original,
+        count(*) FILTER (WHERE current_status NOT IN
           ('CURRENT_ACTIVE','CURRENT_LATEST_STATE'))::bigint AS invalid_availability,
-        count(*) FILTER (WHERE card->>'image_state'='VERIFIED_CHILD_IMAGE'
-          AND jsonb_array_length(coalesce(card->'verified_child_media','[]'::jsonb))=0)::bigint AS invalid_verified_image_state,
-        count(*) FILTER (WHERE (card->>'dealer_rating') IS NOT NULL
-          AND ((card->>'dealer_review_count') IS NULL
-            OR (card->>'dealer_review_count')::integer<=0))::bigint AS invalid_dealer_rating
+        count(*) FILTER (WHERE cohort_status='CONFIRMED_CURRENT'
+          AND current_status<>'CURRENT_ACTIVE')::bigint AS invalid_confirmed_mapping,
+        count(*) FILTER (WHERE cohort_status='LATEST_OBSERVED'
+          AND current_status<>'CURRENT_LATEST_STATE')::bigint AS invalid_latest_mapping,
+        count(*) FILTER (WHERE verified_image)::bigint AS verified_image_cards,
+        count(*) FILTER (WHERE dealer_rating IS NOT NULL
+          AND (dealer_review_count IS NULL OR dealer_review_count<=0))::bigint AS invalid_dealer_rating
       FROM cards GROUP BY brand
     ) summary;`,
 });
@@ -340,6 +373,8 @@ function numeric(value) {
 
 function assess(results) {
   const blockers = [];
+  const contracts = results.contracts?.evidence;
+  if (!contracts?.current_model_column) blockers.push('MODEL_FIELD_NOT_AVAILABLE_IN_SHADOW');
   const run = results.run_state?.evidence;
   if (!run || run.status !== 'COMPLETE') blockers.push('SHADOW_RUN_NOT_COMPLETE');
 
@@ -398,7 +433,8 @@ function assess(results) {
     if (numeric(row.returned_cards) !== 24) blockers.push(`${row.brand}:CARD_CANARY_SHORT_PAGE`);
     for (const field of ['missing_reference', 'missing_intent', 'missing_posting_date',
       'missing_raw_message', 'missing_poster_or_dealer_evidence', 'invalid_verified_price',
-      'invalid_availability', 'invalid_verified_image_state', 'invalid_dealer_rating']) {
+      'verified_price_missing_original', 'invalid_availability', 'invalid_confirmed_mapping',
+      'invalid_latest_mapping', 'invalid_dealer_rating']) {
       if (numeric(row[field]) !== 0) blockers.push(`${row.brand}:CARD_${field.toUpperCase()}`);
     }
   }
