@@ -89,11 +89,14 @@ test('assessment fails closed on missing evidence and accepts a fully reconciled
     missing_raw_message: 0,
     missing_poster_or_dealer_evidence: 0,
     invalid_verified_price: 0,
+    verified_price_missing_original: 0,
     invalid_availability: 0,
-    invalid_verified_image_state: 0,
+    invalid_confirmed_mapping: 0,
+    invalid_latest_mapping: 0,
     invalid_dealer_rating: 0,
   }));
   const clean = {
+    contracts: { evidence: { current_model_column: true } },
     run_state: { evidence: { status: 'COMPLETE' } },
     inventory_coverage: { evidence: inventory },
     price_research: { evidence: priceResearch },
