@@ -2295,7 +2295,7 @@ module.exports = async function handler(req, res) {
           canonical_listings: Number(admissionCount || 0),
           brands: [{ brand, canonical_listings: Number(admissionCount || 0) }],
         },
-        publicationBrands: [{ brand, listing_count: Number(admissionCount || 0) }],
+        publicationBrands: [brand],
         evidenceContract: EVIDENCE_CONTRACT,
         coverage: summarizeCoverage(records),
         displayPolicy: {
