@@ -1,4 +1,4 @@
-name: Supabase QNSA schema readiness audit
+name: Supabase QNSA Rolex Patek completion audit
 
 on:
   workflow_dispatch:
@@ -9,100 +9,38 @@ on:
         type: string
 
 jobs:
-  audit-schema:
+  audit-completion:
     if: ${{ inputs.confirmation == 'AUDIT_QNSA_SCHEMA_READINESS' }}
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 15
+    timeout-minutes: 30
     permissions:
       contents: read
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      # Job-level env expressions cannot use the runner context.
+      QNSA_COMPLETION_AUDIT_OUTPUT: /tmp/qnsa-rolex-patek-completion-audit.json
     steps:
-      - name: Inspect only the pinned pipeline project
-        shell: powershell
+      - uses: actions/checkout@v5
+
+      - name: Verify read-only audit contract
+        shell: bash
         run: |
-          $ErrorActionPreference = 'Stop'
-          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
-          $sql = @'
-          WITH required_view_columns(view_name, column_name) AS (
-            VALUES
-              ('reviewed_workbook_market_source_v2', 'location'),
-              ('reviewed_workbook_market_source_v2', 'reference_search_key'),
-              ('reviewed_workbook_market_source_v2', 'seller_name'),
-              ('reviewed_workbook_market_source_v2', 'seller_phone'),
-              ('reviewed_workbook_market_source_v2', 'has_exact_source_image'),
-              ('price_research_verified_source', 'listing_type'),
-              ('price_research_verified_source', 'price_usd'),
-              ('price_research_verified_source', 'raw_message')
-          ), view_column_evidence AS (
-            SELECT
-              required.view_name,
-              required.column_name,
-              columns.column_name IS NOT NULL AS present
-            FROM required_view_columns AS required
-            LEFT JOIN information_schema.columns AS columns
-              ON columns.table_schema = 'public'
-              AND columns.table_name = required.view_name
-              AND columns.column_name = required.column_name
-          ), required_staging_columns(column_name) AS (
-            VALUES
-              ('normalization_run_key'),
-              ('source_record_id'),
-              ('raw_message_version_id'),
-              ('source_hash'),
-              ('source_candidate_hash'),
-              ('public_image_eligible'),
-              ('publication_review_status')
-          ), staging_column_evidence AS (
-            SELECT
-              required.column_name,
-              columns.column_name IS NOT NULL AS present
-            FROM required_staging_columns AS required
-            LEFT JOIN information_schema.columns AS columns
-              ON columns.table_schema = 'staging'
-              AND columns.table_name = 'listings'
-              AND columns.column_name = required.column_name
-          )
-          SELECT jsonb_build_object(
-            'project_ref', 'qnsafosakvonzgfcsphh',
-            'audited_at', statement_timestamp(),
-            'read_only', true,
-            'database_bytes', pg_database_size(current_database()),
-            'server_version', current_setting('server_version'),
-            'migration_ledger_present', to_regclass('supabase_migrations.schema_migrations') IS NOT NULL,
-            'raw_control_plane', jsonb_build_object(
-              'raw_messages', to_regclass('public.raw_messages') IS NOT NULL,
-              'raw_message_versions', to_regclass('public.raw_message_versions') IS NOT NULL,
-              'checkpoints', to_regclass('public.mariadb_raw_import_checkpoints') IS NOT NULL,
-              'batches', to_regclass('public.mariadb_raw_import_batches') IS NOT NULL,
-              'ingest_rpc', to_regprocedure('public.ingest_mariadb_raw_batch(text,text,text,text,text,text,text,jsonb)') IS NOT NULL,
-              'complete_rpc', to_regprocedure('public.complete_mariadb_raw_import(text,bigint,text,text)') IS NOT NULL
-            ),
-            'normalized_staging_control_plane', jsonb_build_object(
-              'checkpoints', to_regclass('staging.mariadb_normalization_import_checkpoints') IS NOT NULL,
-              'batches', to_regclass('staging.mariadb_normalization_import_batches') IS NOT NULL,
-              'ingest_rpc', to_regprocedure('public.ingest_mariadb_normalization_batch(text,text,text,text,text,bigint,bigint,jsonb)') IS NOT NULL,
-              'complete_rpc', to_regprocedure('public.complete_mariadb_normalization_import(text,bigint,bigint,bigint)') IS NOT NULL,
-              'columns', (SELECT jsonb_agg(to_jsonb(staging_column_evidence) ORDER BY column_name) FROM staging_column_evidence)
-            ),
-            'public_contracts', jsonb_build_object(
-              'trading_floor_view', to_regclass('public.reviewed_workbook_market_source_v2') IS NOT NULL,
-              'price_research_view', to_regclass('public.price_research_verified_source') IS NOT NULL,
-              'columns', (SELECT jsonb_agg(to_jsonb(view_column_evidence) ORDER BY view_name, column_name) FROM view_column_evidence)
-            ),
-            'raw_checkpoint', (
-              SELECT to_jsonb(checkpoint_row) - 'run_key'
-              FROM public.mariadb_raw_import_checkpoints AS checkpoint_row
-              ORDER BY updated_at DESC
-              LIMIT 1
-            )
-          ) AS schema_readiness;
-          '@
-          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
-          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
-          if (-not $result -or -not $result[0].schema_readiness) {
-            throw 'QNSA schema readiness audit returned no evidence.'
-          }
-          $result[0].schema_readiness | ConvertTo-Json -Depth 10
+          set -euo pipefail
+          test "$SUPABASE_PROJECT_REF" = 'qnsafosakvonzgfcsphh'
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          node --version
+          node --test tests/qnsa-rolex-patek-completion-audit.test.cjs
+
+      - name: Audit aggregate Rolex Patek completion evidence
+        run: node tools/audit/qnsa-rolex-patek-completion-audit.cjs
+
+      - name: Upload aggregate-only audit evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-patek-completion-audit-${{ github.run_id }}
+          path: ${{ env.QNSA_COMPLETION_AUDIT_OUTPUT }}
+          retention-days: 30
+          if-no-files-found: error
