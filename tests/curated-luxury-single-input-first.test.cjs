@@ -50,4 +50,6 @@ test('guarded QNSA schema workflow pins and installs the ordering contract atomi
   assert.match(workflow, /EXPECTED_ORDERING_MIGRATION_SHA256: [0-9a-f]{64}/);
   assert.match(workflow, /20260827170000_curated_luxury_single_input_first\.sql/);
   assert.match(workflow, /BEGIN;[\s\S]*\$migration[\s\S]*\$orderingMigration[\s\S]*COMMIT;/);
+  assert.doesNotMatch(workflow, /ROLEX_EVIDENCE_OUTPUT:\s*\$\{\{\s*runner\.temp\s*\}\}/);
+  assert.match(workflow, /ROLEX_EVIDENCE_OUTPUT:\s*\/tmp\/rolex-evidence-restoration\.json/);
 });
