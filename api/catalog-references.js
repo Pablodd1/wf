@@ -26,6 +26,7 @@ const {
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
+const { buildReleaseBrowseIndex } = require('./_lib/release-catalog-browse.cjs');
 
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
@@ -359,31 +360,56 @@ module.exports = async function handler(req, res) {
         : canonicalBrand === 'Tudor' ? 'qnsa_tudor_reference_index' : 'qnsa_omega_reference_index';
       const { data: observedRows, error: observedError } = await client.rpc(releaseIndexRpc);
       if (observedError) throw observedError;
-      const scopedObserved = (observedRows || []).filter(row =>
-        String(row.model || '').trim().toLowerCase() === model.toLowerCase());
-      const merged = mergeVacheronReleaseReferences(
-        listCanonicalCatalogReferences(canonicalBrand, model), scopedObserved);
+      const browse = buildReleaseBrowseIndex(canonicalBrand, observedRows || []);
+      const references = browse.references.filter(row => row.model.toLowerCase() === model.toLowerCase());
+      const canonicalModel = references[0]?.model || model;
+      const unresolved = browse.unresolvedByModel[canonicalModel] || { listing_count: 0, priced_wts_count: 0 };
       const payload = {
         success: true,
         brand: canonicalBrand,
         model,
-        reference_count: merged.references.length,
-        observed_listing_count: merged.references.reduce((sum, item) => sum + Number(item.listing_count || 0), 0),
-        unresolved_reference_listing_count: merged.unresolvedReferenceListingCount,
-        unresolved_reference_priced_wts_count: merged.unresolvedReferencePricedWtsCount,
-        references: merged.references,
+        reference_count: references.length,
+        observed_listing_count: references.reduce((sum, item) => sum + Number(item.listing_count || 0), 0),
+        unresolved_reference_listing_count: unresolved.listing_count,
+        unresolved_reference_priced_wts_count: unresolved.priced_wts_count,
+        references,
         identity_source: 'CATALOG_PLUS_EXACT_RELEASE_MANIFEST',
         evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
         sample_capped: false,
+        suppressed_model_conflict_count: browse.modelConflicts.length,
+        suppressed_partial_reference_count: browse.suppressedPartialReferenceCount,
       };
       _cache.set(cacheKey, { at: Date.now(), payload });
       return res.status(200).json(payload);
     }
     if (isReviewedWorkbookBrowseBrand(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
-      if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      if (!rows.length && brand.toLowerCase() !== 'tag heuer') {
+        return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      }
       if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe reference browsing' });
-      const out = summarizeReviewedWorkbookReferences(rows, model, false);
+      let out = summarizeReviewedWorkbookReferences(rows, model, false);
+      if (brand.toLowerCase() === 'tag heuer') {
+        const merged = new Map(listCanonicalCatalogReferences('TAG Heuer', model).map(entry => [
+          referenceKey(entry.reference),
+          {
+            reference: entry.reference,
+            listing_count: 0,
+            eligible_observation_count: 0,
+            analytics_ready: false,
+            sample_capped: false,
+            avg_price: null,
+            dial_colors: [],
+            identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+            evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+          },
+        ]));
+        for (const item of out) merged.set(referenceKey(item.reference), item);
+        out = [...merged.values()].sort((left, right) => (
+          Number(right.listing_count || 0) - Number(left.listing_count || 0)
+          || left.reference.localeCompare(right.reference)
+        ));
+      }
       const payload = {
         success: true,
         brand,
@@ -392,7 +418,9 @@ module.exports = async function handler(req, res) {
         observed_listing_count: out.reduce((sum, item) => sum + item.listing_count, 0),
         eligible_observation_count: out.reduce((sum, item) => sum + item.eligible_observation_count, 0),
         references: out,
-        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        identity_source: brand.toLowerCase() === 'tag heuer'
+          ? 'CATALOG_PLUS_POSITIVE_OWNER_REVIEWED_WORKBOOK'
+          : 'OWNER_REVIEWED_WORKBOOK',
         evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
         sample_capped: false,
       };

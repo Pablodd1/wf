@@ -13,8 +13,15 @@ const { classifyWatchPartListing } = require('./_lib/watch-item-classification.c
 const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
+  MARKET_SELECTOR: CURATED_SHADOW_MARKET_SOURCE,
+  isShadowBrand,
+  loadInventory: loadCuratedShadowInventory,
+  shadowCursorMatches,
+} = require('./_lib/curated-luxury-shadow.cjs');
+const {
   isFourBrand,
   isMissingEffectiveRpcError,
+  isTransientEffectiveRpcTimeout,
   loadEffectiveCount,
   loadEffectiveEnrichments,
 } = require('./_lib/four-brand-field-enrichment.cjs');
@@ -53,6 +60,7 @@ const MULTI_PARENT_PUBLICATION_LANE = 'OWNER_MULTI_PARENT_SOURCE_LINEAGE_V1';
 const ALLOWED_MARKET_SOURCE_VIEWS = new Set([
   'reviewed_workbook_market_source_v2',
   'qnsa_rolex_patek_trading_floor_source',
+  CURATED_SHADOW_MARKET_SOURCE,
 ]);
 const requestedMarketSourceView = String(process.env.TRADING_FLOOR_SOURCE_VIEW || '').trim();
 const MARKET_SOURCE_VIEW = ALLOWED_MARKET_SOURCE_VIEWS.has(requestedMarketSourceView)
@@ -422,17 +430,87 @@ function locationSearchPattern(value) {
 }
 
 function locationMatches(value, query) {
-  const normalizedValue = cleanExactText(value, 100)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  const normalizedQuery = cleanExactText(query, 100)
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return Boolean(normalizedQuery) && normalizedValue.includes(normalizedQuery);
+  return postingCountryName(value) !== null
+    && postingCountryName(value) === postingCountryName(query);
+}
+
+function deduplicateRecordsById(records) {
+  const seen = new Set();
+  let duplicateCount = 0;
+  const uniqueRecords = (records || []).filter(record => {
+    const id = String(record?.id);
+    if (seen.has(id)) {
+      duplicateCount += 1;
+      return false;
+    }
+    seen.add(id);
+    return true;
+  });
+  return { records: uniqueRecords, duplicateCount };
+}
+
+const POSTING_COUNTRY_NAMES = (() => {
+  const countries = {};
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    for (let first = 65; first <= 90; first += 1) {
+      for (let second = 65; second <= 90; second += 1) {
+        const code = String.fromCharCode(first, second);
+        if (['EU', 'EZ', 'UN', 'XA', 'XB'].includes(code)) continue;
+        const name = displayNames.of(code);
+        if (name && name !== code && !/^Unknown Region/i.test(name)) {
+          countries[code] = name;
+          countries[name.toUpperCase()] = name;
+        }
+      }
+    }
+  } catch {}
+  return Object.freeze({
+    ...countries,
+    US: 'United States', USA: 'United States', 'UNITED STATES': 'United States',
+    GB: 'United Kingdom', GBR: 'United Kingdom', UK: 'United Kingdom', 'UNITED KINGDOM': 'United Kingdom',
+    HK: 'Hong Kong', HKG: 'Hong Kong', 'HONG KONG': 'Hong Kong',
+    AE: 'United Arab Emirates', ARE: 'United Arab Emirates', UAE: 'United Arab Emirates', 'UNITED ARAB EMIRATES': 'United Arab Emirates',
+  });
+})();
+
+const CURRENT_ISO_ALPHA2_CODES = new Set((
+  'AD AE AF AG AI AL AM AO AQ AR AS AT AU AW AX AZ BA BB BD BE BF BG BH BI BJ BL BM BN BO BQ BR BS BT BV BW BY BZ ' +
+  'CA CC CD CF CG CH CI CK CL CM CN CO CR CU CV CW CX CY CZ DE DJ DK DM DO DZ EC EE EG EH ER ES ET FI FJ FK FM FO FR ' +
+  'GA GB GD GE GF GG GH GI GL GM GN GP GQ GR GS GT GU GW GY HK HM HN HR HT HU ID IE IL IM IN IO IQ IR IS IT JE JM JO JP ' +
+  'KE KG KH KI KM KN KP KR KW KY KZ LA LB LC LI LK LR LS LT LU LV LY MA MC MD ME MF MG MH MK ML MM MN MO MP MQ MR MS MT ' +
+  'MU MV MW MX MY MZ NA NC NE NF NG NI NL NO NP NR NU NZ OM PA PE PF PG PH PK PL PM PN PR PS PT PW PY QA RE RO RS RU RW ' +
+  'SA SB SC SD SE SG SH SI SJ SK SL SM SN SO SR SS ST SV SX SY SZ TC TD TF TG TH TJ TK TL TM TN TO TR TT TV TW TZ UA UG ' +
+  'UM US UY UZ VA VC VE VG VI VN VU WF WS YE YT ZA ZM ZW'
+).split(' '));
+
+// The frozen shadow preserves its observed location tokens. Translate only
+// proven customer aliases; an unsupported country must fail closed to no rows.
+const CURATED_SHADOW_COUNTRY_TOKENS = Object.freeze({
+  'United States': 'USA',
+  'Hong Kong': 'HKG',
+});
+
+function postingCountryName(value) {
+  const raw = cleanExactText(value, 100);
+  if (!raw) return null;
+  const candidate = raw.split(',').at(-1).trim().toUpperCase();
+  return POSTING_COUNTRY_NAMES[candidate] || null;
+}
+
+function databasePostingCountryToken(country) {
+  const canonical = postingCountryName(country);
+  const tokens = {
+    'United States': ', US',
+    'United Kingdom': ', UK',
+    'Hong Kong': 'Hong Kong',
+    'United Arab Emirates': 'UAE',
+  };
+  if (!canonical) return null;
+  if (tokens[canonical]) return tokens[canonical];
+  const alpha2 = Object.entries(POSTING_COUNTRY_NAMES)
+    .find(([key, name]) => CURRENT_ISO_ALPHA2_CODES.has(key) && name === canonical)?.[0];
+  return alpha2 ? `, ${alpha2}` : null;
 }
 
 const DATE_WINDOWS = Object.freeze({
@@ -579,7 +657,7 @@ function hasUsableSourcePrice(record) {
 function hasExactSourceImage(record) {
   if (record?.multi_listing === true || record?.is_unbundled_child === true) return false;
   const evidence = cleanExactText(record?.image_evidence_type, 40).toUpperCase();
-  const sourceBacked = ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(evidence)
+  const sourceBacked = ['SELLER_LISTING_IMAGE', 'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(evidence)
     || record?.has_exact_source_image === true;
   const urls = [record?.thumbnail_url, ...(Array.isArray(record?.image_urls) ? record.image_urls : [])];
   return sourceBacked && urls.some(value => exactHttpUrl(value));
@@ -1070,11 +1148,11 @@ function mapReviewedRecord(row) {
   );
   // Inspect all candidate image URL fields from source/view data
   const candidateImageUrl = row.user_image_url
-    || row.final_image_url
-    || row.display_image_url
-    || row.image_url
-    || row.thumbnail_url
-    || (Array.isArray(row.image_urls) ? row.image_urls.find(u => Boolean(u && /^https?:\/\/[^\s]+$/i.test(String(u).trim()))) : null)
+    || (row.has_exact_source_image === true ? (
+      row.image_url
+      || row.thumbnail_url
+      || (Array.isArray(row.image_urls) ? row.image_urls.find(u => Boolean(u && /^https?:\/\/[^\s]+$/i.test(String(u).trim()))) : null)
+    ) : null)
     || null;
   const hasExactSourceImage = Boolean(candidateImageUrl)
     && String(candidateImageUrl).trim().length > 0
@@ -1153,7 +1231,7 @@ function mapReviewedRecord(row) {
   const exactReviewedMultiParent = isExactRolexPatekMultiParent(row);
   const isUnbundledChild = evidenceValuePresent(row.parent_id)
     || evidenceValuePresent(row.parent_source_message_id);
-  const publicImageUrl = multiListing ? null : exactImageUrl;
+  const publicImageUrl = multiListing || isUnbundledChild ? null : exactImageUrl;
   const tradingIntent = resolveTradingIntent({
     rawMessage: row.raw_message,
     structuredIntent: row.listing_type,
@@ -1173,7 +1251,6 @@ function mapReviewedRecord(row) {
   });
   const displayPriceUsd = publicVerifiedUsd ?? ownerAssumedUsd;
   const priceEligible = itemCategory === 'WATCH' && hasCompleteIdentity && publicVerifiedUsd !== null;
->>>>>>> origin/main
   const publicImageEvidenceType = publicImageUrl
     ? (String(row.image_evidence_type || '').toUpperCase() === 'SELLER_LISTING_IMAGE'
       ? 'SELLER_LISTING_IMAGE'
@@ -1364,6 +1441,25 @@ function parseInventoryCursor(value, pageSize) {
   }
   try {
     const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
+    if (decoded?.v === 3) {
+      const page = Number(decoded.p);
+      const timestampIsNull = decoded.n === true;
+      const timestamp = timestampIsNull ? null : new Date(decoded.t || '');
+      const currentListingKey = String(decoded.k || '');
+      const scope = String(decoded.s || '');
+      if (!Number.isSafeInteger(page) || page < 2
+        || (!timestampIsNull && Number.isNaN(timestamp.getTime()))
+        || !/^[0-9a-f]{64}$/i.test(currentListingKey)
+        || !/^[0-9a-f]{64}$/i.test(scope)
+        || Object.keys(decoded).some(key => !['v', 'p', 't', 'n', 'k', 's'].includes(key))) return null;
+      return {
+        lane: 'images', offset: 0, page,
+        shadowKeyset: {
+          sourceTimestamp: timestampIsNull ? null : timestamp.toISOString(),
+          currentListingKey, timestampIsNull, scope,
+        },
+      };
+    }
     if (decoded?.v !== 1 && decoded?.v !== 2) return null;
     const lane = decoded?.l === 'i' ? 'images' : decoded?.l === 'n' ? 'no-images' : null;
     const offset = Number(decoded?.o);
@@ -1842,7 +1938,24 @@ module.exports = async function handler(req, res) {
     const requestedItem = cleanExactText(req.query?.item, 20).toLowerCase();
     const itemCategories = { all: 'ALL', watches: 'WATCH', handbags: 'HANDBAG', jewelry: 'JEWELRY', accessories: 'ACCESSORY', other: 'OTHER' };
     const itemCategory = requestedItem ? itemCategories[requestedItem] : 'ALL';
-    const region = cleanExactText(req.query?.region, 100);
+    const requestedRegions = (Array.isArray(req.query?.region) ? req.query.region : [req.query?.region])
+      .flatMap(value => String(value || '').split(','))
+      .map(value => cleanExactText(value, 100))
+      .filter(Boolean);
+    const resolvedRegions = requestedRegions.map(postingCountryName);
+    const shadowMarketRequest = MARKET_SOURCE_VIEW === CURATED_SHADOW_MARKET_SOURCE
+      && isShadowBrand(requestedBrand);
+    if (requestedRegions.length && resolvedRegions.some(value => !value)) {
+      return res.status(400).json({ status: 'error', error: 'Location filters must be a recognized posting country' });
+    }
+    if (resolvedRegions.length > 1 && !shadowMarketRequest) {
+      return res.status(400).json({ status: 'error', error: 'Multiple location filters are unavailable for this source' });
+    }
+    const region = resolvedRegions[0] || '';
+    const requestedRegion = requestedRegions.join(',');
+    const databaseRegion = databasePostingCountryToken(region);
+    const shadowCountryCodes = resolvedRegions.map(country =>
+      CURATED_SHADOW_COUNTRY_TOKENS[country] || '__NO_MATCH__');
     const rating = cleanExactText(req.query?.rating, 12).toLowerCase();
     const dateWindow = cleanExactText(req.query?.date, 4).toUpperCase();
     const postedAfter = dateWindowStart(dateWindow);
@@ -1893,6 +2006,31 @@ module.exports = async function handler(req, res) {
       });
     }
 
+    if (shadowMarketRequest && ['ALL', 'WATCH'].includes(itemCategory)) {
+      const client = getClient();
+      const shadowOptions = {
+        brand: requestedBrand,
+        listingType,
+        countries: shadowCountryCodes,
+        pricedOnly,
+        imagesOnly,
+        search: requestedReference || search || requestedModel || requestedDial || null,
+        reference: requestedReference || null,
+        page,
+        pageSize,
+        cursor: inventoryCursor?.shadowKeyset || null,
+      };
+      if ((cursorProvided && !inventoryCursor?.shadowKeyset)
+        || !shadowCursorMatches(inventoryCursor?.shadowKeyset || null, shadowOptions)) {
+        return res.status(400).json({ status: 'error', error: 'Invalid or stale shadow cursor' });
+      }
+      if (page > 1 && !inventoryCursor?.shadowKeyset) {
+        return res.status(400).json({ status: 'error', error: 'Shadow pagination requires a cursor after page one' });
+      }
+      const result = await loadCuratedShadowInventory(client, shadowOptions);
+      return res.status(200).json(result);
+    }
+
     const client = getClient();
     // The high-volume six-brand lane remains on the bounded QNSA feed. Newly
     // admitted owner-reviewed brands live in the reviewed-workbook source and
@@ -1901,6 +2039,8 @@ module.exports = async function handler(req, res) {
     // while making the approved cohort visible after import.
     const activeMarketSourceView = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       && requestedBrand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(requestedBrand)
+      && !isRolexPatekOverlayBrand(requestedBrand)
+      && !isFourBrand(requestedBrand)
       ? 'reviewed_workbook_market_source_v2'
       : MARKET_SOURCE_VIEW;
     // Summary and authenticated direct-post reads are independent of the
@@ -2002,7 +2142,7 @@ module.exports = async function handler(req, res) {
         imagesOnly,
         pricedOnly,
         postedAfter,
-        region: region || null,
+        region: databaseRegion || null,
         rating: rating || null,
       };
       publicInventoryTotal = null;
@@ -2039,7 +2179,10 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)) {
+    if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)
+      && !fourBrandEffectiveScope
+      && !(activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
+        && isRolexPatekOverlayBrand(brand))) {
       const admissionSearch = safeSearchTerm(search);
       const admissionColumns = [
         'id,source_file,source_row_number,source_record_id,source_message_id,parent_source_message_id,posting_date,posted_by,phone_number',
@@ -2052,9 +2195,16 @@ module.exports = async function handler(req, res) {
         .from('reviewed_workbook_inventory')
         .select(admissionColumns, { count: 'exact' })
         .eq('brand_scope', brand)
-        .not('verification_status', 'in', '("REJECTED","HIDDEN","DELETED","ARCHIVED")')
-        .in('listing_type', ['WTS', 'WTB', 'MULTI']);
-      if (listingType) admissionQuery = admissionQuery.eq('listing_type', listingType);
+        .in('verification_status', [
+          'APPROVED_SINGLE_CANDIDATE',
+          MULTI_PARENT_VERIFICATION_STATUS,
+        ])
+        .eq('confidence', 100);
+      if (databaseListingType) {
+        admissionQuery = admissionQuery.eq('listing_type', databaseListingType);
+      } else {
+        admissionQuery = admissionQuery.or('listing_type.in.(WTS,WTB,MULTI,OTHER,UNKNOWN),listing_type.is.null');
+      }
       if (requestedReference) {
         admissionQuery = admissionQuery.in('normalized_reference', listEquivalentReferences(requestedReference, brand));
       }
@@ -2362,18 +2512,50 @@ module.exports = async function handler(req, res) {
             p_images_only: imagesOnly,
             p_priced_only: pricedOnly,
             p_posted_after: postedAfter,
-            p_region: region || null,
+            p_region: databaseRegion || null,
             p_rating: rating || null,
           }),
         });
         if (!response.ok) {
           const body = await response.text();
           const rpcError = { status: response.status, message: body };
-          if (isMissingEffectiveRpcError(rpcError)) {
+          if (isMissingEffectiveRpcError(rpcError) || isTransientEffectiveRpcTimeout(rpcError)) {
             // Zero-outage schema-first compatibility. Until the migration is
-            // installed, preserve the pre-existing release route and do not
-            // claim that missing-field enrichment was applied.
-            console.warn('[reviewed-market-inventory] four-brand effective RPC unavailable; preserving base release path');
+            // installed, or while the aggregate page RPC exceeds its hosted
+            // statement budget, preserve the bounded base release route. The
+            // returned page is still passed through per-row effective
+            // enrichment below; unrelated RPC failures remain fail-closed.
+            console.warn('[reviewed-market-inventory] four-brand effective RPC unavailable or timed out; preserving bounded base release path');
+            const releaseRpc = cartierRelease ? 'qnsa_cartier_page_rows'
+              : omegaRelease ? 'qnsa_omega_page_rows'
+              : tudorRelease ? 'qnsa_tudor_page_rows' : null;
+            const controlledModelRpc = requestedModel && releaseRpc
+              ? 'qnsa_controlled_model_page_rows'
+              : releaseRpc;
+            if (controlledModelRpc) {
+              const fallbackResponse = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${controlledModelRpc}`, {
+                method: 'POST',
+                headers: { ...headers, 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  p_limit: qnsaBrandScanLimit,
+                  p_offset: requestedOffset,
+                  p_listing_type: ['WTS', 'WTB'].includes(listingType)
+                    ? listingType : databaseListingType,
+                  p_reference: requestedReference || null,
+                  ...(requestedModel
+                    ? { p_brand: brand, p_model: requestedModel }
+                    : {}),
+                }),
+              });
+              if (!fallbackResponse.ok) {
+                const fallbackBody = await fallbackResponse.text();
+                throw new Error(`QNSA controlled brand fallback page failed: ${fallbackResponse.status} ${fallbackBody.slice(0, 200)}`);
+              }
+              preloadedQnsaResponse = new Response(JSON.stringify(await fallbackResponse.json()), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              });
+            }
           } else {
             throw new Error(`QNSA four-brand effective page failed: ${response.status} ${body.slice(0, 200)}`);
           }
@@ -2502,7 +2684,7 @@ module.exports = async function handler(req, res) {
               p_offset: requestedOffset,
               p_listing_type: databaseListingType,
               p_images_only: imagesOnly,
-              p_location: region || null,
+              p_location: databaseRegion || null,
               p_posted_after: postedAfter,
             }),
       });
@@ -2518,7 +2700,7 @@ module.exports = async function handler(req, res) {
             p_offset: requestedOffset,
             p_listing_type: databaseListingType,
             p_images_only: imagesOnly,
-            p_location: region || null,
+            p_location: databaseRegion || null,
             p_posted_after: postedAfter,
           }),
         });
@@ -3095,7 +3277,9 @@ module.exports = async function handler(req, res) {
     const publicationBrands = publicationBrandsFromSummary(summary);
     const publicBaseRecords = (reviewedOverlayLaneActive ? [] : records)
       .map(applyConfirmedFiveWatchPublication);
-    const combinedPageRecords = [...publicBaseRecords, ...reviewedOverlayRecords];
+    const deduplicatedPage = deduplicateRecordsById([...publicBaseRecords, ...reviewedOverlayRecords]);
+    const combinedPageRecords = deduplicatedPage.records;
+    const combinedPageDuplicateCount = deduplicatedPage.duplicateCount;
     // Serialize the cohort-wide count after the bounded page has been fetched,
     // mapped and filtered. Running both cold scans in parallel caused avoidable
     // database contention; count metadata remains advisory and fail-open.
@@ -3110,7 +3294,7 @@ module.exports = async function handler(req, res) {
     const combinedInventoryTotal = combineInventoryTotal(
       publicInventoryTotal,
       reviewedOverlayTotal,
-      reviewedOverlayCountHasUnsupportedFilter || reviewedOverlayDuplicateCount > 0,
+      reviewedOverlayCountHasUnsupportedFilter || reviewedOverlayDuplicateCount > 0 || combinedPageDuplicateCount > 0,
     );
 
     return res.status(200).json({
@@ -3123,7 +3307,7 @@ module.exports = async function handler(req, res) {
       totalStatus: combinedInventoryTotal === null ? 'withheld_for_unsupported_filter' : 'available_from_market_feed_plus_reviewed_overlay_counts',
       hasMore,
       nextCursor,
-      records: publicBaseRecords,
+      records: combinedPageRecords,
       reviewedOverlayRecords,
       reviewedOverlay: {
         source: 'reviewed_workbook_inventory',
@@ -3136,6 +3320,7 @@ module.exports = async function handler(req, res) {
         reviewed_single_total: reviewedOverlayCountHasUnsupportedFilter ? null : reviewedOverlaySingleTotal,
         structured_multi_parent_total: reviewedOverlayCountHasUnsupportedFilter ? null : reviewedOverlayMultiParentTotal,
         exact_lineage_duplicates_held: reviewedOverlayDuplicateCount,
+        exact_listing_id_duplicates_held: combinedPageDuplicateCount,
       },
       summary,
       publicationBrands,
@@ -3204,6 +3389,9 @@ module.exports.isAuditedFourBrandEffectiveSingle = isAuditedFourBrandEffectiveSi
 module.exports.safeSearchTerm = safeSearchTerm;
 module.exports.locationSearchPattern = locationSearchPattern;
 module.exports.locationMatches = locationMatches;
+module.exports.postingCountryName = postingCountryName;
+module.exports.databasePostingCountryToken = databasePostingCountryToken;
+module.exports.deduplicateRecordsById = deduplicateRecordsById;
 module.exports.dateWindowStart = dateWindowStart;
 module.exports.isSourceBackedRatedDealer = isSourceBackedRatedDealer;
 module.exports.ratingMatches = ratingMatches;

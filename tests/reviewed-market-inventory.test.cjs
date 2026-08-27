@@ -94,7 +94,7 @@ test('bounded Trading Floor page rank is evidence-first and never fabricates spa
 });
 
 test('admitted workbook brands are globally ordered in Postgres before cursor range', () => {
-  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand))");
+  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)");
   const branch = source.slice(branchStart, source.indexOf('if (admissionError) throw admissionError;', branchStart));
   assert.match(branch, /\.from\('reviewed_workbook_inventory'\)/);
   const imageOrder = branch.indexOf(".order('has_image', { ascending: false })");
@@ -137,7 +137,7 @@ test('reviewed-workbook multi parent requires its exact status and source-lineag
 });
 
 test('admission query keeps missing-intent singles for post-map resolution and orders parents last', () => {
-  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand))");
+  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)");
   const branch = source.slice(branchStart, source.indexOf('if (admissionError) throw admissionError;', branchStart));
   assert.match(branch, /'APPROVED_SINGLE_CANDIDATE',[\s\S]*MULTI_PARENT_VERIFICATION_STATUS/);
   assert.match(branch, /listing_type\.in\.\(WTS,WTB,MULTI,OTHER,UNKNOWN\),listing_type\.is\.null/);
@@ -291,10 +291,10 @@ test('reviewed direct submissions support category, intent, image, price, and lo
   });
   assert.equal(record.seller_phone, null);
   assert.equal(record.contact_publication_approved, false);
-  assert.equal(api.directSubmissionMatches(record, { itemCategory: 'HANDBAG', listingType: 'WTS', imagesOnly: true, pricedOnly: true, region: 'Miami, US' }), true);
+  assert.equal(api.directSubmissionMatches(record, { itemCategory: 'HANDBAG', listingType: 'WTS', imagesOnly: true, pricedOnly: true, region: 'United States' }), true);
   assert.equal(api.directSubmissionMatches(record, { itemCategory: 'JEWELRY' }), false);
   assert.equal(api.directSubmissionMatches(record, { search: 'MIAMI' }), true);
-  assert.equal(api.directSubmissionMatches(record, { region: 'miami' }), true);
+  assert.equal(api.directSubmissionMatches(record, { region: 'miami' }), false);
 });
 
 test('reviewed direct submission contact requires the stored explicit consent snapshot', () => {
@@ -310,11 +310,33 @@ test('reviewed direct submission contact requires the stored explicit consent sn
   assert.equal(record.contact_publication_approved, true);
 });
 
-test('location filters are case-insensitive and preserve punctuation boundaries', () => {
-  assert.equal(api.locationSearchPattern(' Miami, US '), '*Miami*US*');
-  assert.equal(api.locationMatches('Miami, US', 'miami'), true);
-  assert.equal(api.locationMatches('New York, United States', 'NEW YORK'), true);
-  assert.equal(api.locationMatches('Hong Kong', 'Miami'), false);
+test('location filters match posting countries only', () => {
+  assert.equal(api.locationSearchPattern(' United States '), '*United*States*');
+  assert.equal(api.locationMatches('Miami, US', 'United States'), true);
+  assert.equal(api.locationMatches('New York, United States', 'US'), true);
+  assert.equal(api.locationMatches('Miami, US', 'Miami'), false);
+  assert.equal(api.locationMatches('Europe', 'Europe'), false);
+  assert.equal(api.locationMatches('Hong Kong', 'United States'), false);
+});
+
+test('posting-country normalization supports ISO countries and safe database suffix tokens', () => {
+  assert.equal(api.postingCountryName('Paris, FR'), 'France');
+  assert.equal(api.postingCountryName('Brazil'), 'Brazil');
+  assert.equal(api.postingCountryName('Europe'), null);
+  assert.equal(api.databasePostingCountryToken('United States'), ', US');
+  assert.equal(api.databasePostingCountryToken('France'), ', FR');
+  assert.equal(api.databasePostingCountryToken('Germany'), ', DE');
+});
+
+test('combined Trading Floor lanes suppress exact listing-ID duplicates without taking the page offline', () => {
+  const result = api.deduplicateRecordsById([
+    { id: 'listing-1', source: 'base' },
+    { id: 'listing-1', source: 'overlay' },
+    { id: 'listing-2', source: 'overlay' },
+  ]);
+  assert.deepEqual(result.records.map(record => record.id), ['listing-1', 'listing-2']);
+  assert.equal(result.records[0].source, 'base');
+  assert.equal(result.duplicateCount, 1);
 });
 
 test('free-text search is case-insensitive and matches all terms without requiring adjacency', () => {

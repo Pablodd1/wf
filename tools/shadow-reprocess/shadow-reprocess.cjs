@@ -100,10 +100,7 @@ function analyzeRecord(record, options = {}) {
   );
   const proposed = candidates.map(candidate => {
     let parsedPrices = candidate.prices || [];
-    const defaultedUsd = parsedPrices.find(price => price.currency_evidence === 'usd_defaulted_by_policy');
-    const sourceCurrencyPrice = defaultedUsd && record.currency
-      ? sourceCurrencyTextObservation(candidate, record)
-      : parsedPrices.length ? null : sourceCurrencyTextObservation(candidate, record);
+    const sourceCurrencyPrice = parsedPrices.length ? null : sourceCurrencyTextObservation(candidate, record);
     if (sourceCurrencyPrice) parsedPrices = [];
     // A collapsed parent price cannot be assigned to an arbitrary child. Only
     // retain a structured source price when the message resolves to one watch.
@@ -143,6 +140,8 @@ function analyzeRecord(record, options = {}) {
       dial_ambiguous: dial.ambiguous,
       dial_reason: dial.reason,
       prices,
+      price_candidates: candidate.price_candidates || [],
+      price_review_reasons: candidate.price_review_reasons || [],
       emoji_price_ambiguous: candidate.emoji_price_ambiguous === true,
     };
   });
@@ -161,9 +160,8 @@ function analyzeRecord(record, options = {}) {
     if (next.dial_ambiguous) flags.add('DIAL_AMBIGUOUS');
     if (next.dial_color && comparisonKey(next.dial_color) !== comparisonKey(sourceDial.value)) flags.add('DIAL_CHANGED');
 
-    // Product policy defaults bare dollar and unlabelled numeric asking prices
-    // to USD. The currency_evidence field preserves that distinction for audit.
-    if (!next.price_raw && record.price_raw != null) flags.add('PRICE_PARSE_FAILED');
+    if (next.price_review_reasons.length) flags.add('PRICE_REVIEW_REQUIRED');
+    if (!next.price_raw && record.price_raw != null && !next.price_review_reasons.length) flags.add('PRICE_PARSE_FAILED');
     if (next.listing_type !== 'WTB' && next.emoji_price_ambiguous) flags.add('EMOJI_PRICE_AMBIGUOUS');
   }
   const changeFlags = [...flags];

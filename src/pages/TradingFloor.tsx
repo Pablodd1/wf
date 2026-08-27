@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
@@ -17,6 +17,14 @@ import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating'
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
+import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
+import { ambiguousPriceDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
+import {
+  loadPriceResearchBatchSummaries,
+  priceResearchSummaryKey,
+  type PriceResearchBatchPair,
+  type PriceResearchBatchSummary,
+} from '../utils/priceResearchBatchSummary';
 
 interface CatalogSuggestion {
   brand: string;
@@ -31,10 +39,17 @@ interface CatalogSuggestionsResponse {
   suggestions?: CatalogSuggestion[];
 }
 
+interface CatalogModelOption {
+  model: string;
+  reference_count: number;
+  listing_count: number;
+}
+
 interface ListingBenchmarkData {
   stats: MarketBenchmark | null;
   count: number;
   analytics_ready?: boolean;
+  unavailable?: boolean;
 }
 
 const GOLD = '#9A7127';
@@ -73,76 +88,6 @@ const INTENT_OPTIONS = [
 
 import { MarketTickerBanner } from '../components/MarketTickerBanner';
 
-const BRAND_TOTALS: Record<string, number> = {
-  "Rolex": 936237,
-  "Patek Philippe": 704460,
-  "Audemars Piguet": 364377,
-  "Richard Mille": 213216,
-  "Cartier": 131053,
-  "TAG Heuer": 97438,
-  "Omega": 71189,
-  "Tudor": 69903,
-  "Vacheron Constantin": 58104,
-  "Breguet": 55568,
-  "Hublot": 51974,
-  "A. Lange & Söhne": 41154,
-  "Blancpain": 30378,
-  "Bulgari": 28446,
-  "Panerai": 28213,
-  "IWC": 25156,
-  "F.P. Journe": 24670,
-  "Zenith": 17431,
-  "Chopard": 16199,
-  "Jaeger-LeCoultre": 15003,
-  "Breitling": 14481,
-  "Grand Seiko": 14202,
-  "H. Moser & Cie": 9966,
-  "Jacob & Co": 9437,
-  "Longines": 7811,
-  "Franck Muller": 4807,
-  "Ulysse Nardin": 3328,
-  "Girard-Perregaux": 1858,
-  "Glashütte Original": 1153,
-  "Tissot": 516,
-  "Bell & Ross": 362,
-  "Seiko": 10
-};
-
-const FX_RATES_TO_USD: Record<string, number> = {
-  USD: 1.0,
-  $: 1.0,
-  HKD: 0.128,   // 125,000 HKD -> $16,000 USD
-  EUR: 1.085,   // 10,000 EUR -> $10,850 USD
-  GBP: 1.285,   // 10,000 GBP -> $12,850 USD
-  CHF: 1.135,   // 10,000 CHF -> $11,350 USD
-  JPY: 0.0067,  // 2,000,000 JPY -> $13,400 USD
-  SGD: 0.745,   // 20,000 SGD -> $14,900 USD
-  AED: 0.272,   // 50,000 AED -> $13,600 USD
-  CAD: 0.735,
-  AUD: 0.655,
-  CNY: 0.138,
-};
-
-function convertToUsd(amount: number | null, currency: string | null): number | null {
-  if (amount == null || isNaN(amount) || amount <= 0) return null;
-  const curr = (currency || 'USD').toUpperCase().trim();
-  const rate = FX_RATES_TO_USD[curr] ?? 1.0;
-  return Math.round(amount * rate);
-}
-
-function extractLocationFromMessage(raw: string, curr: string): string {
-  const text = (raw || '').toUpperCase();
-  if (text.includes('HK') || text.includes('HONG KONG') || curr === 'HKD') return 'Hong Kong';
-  if (text.includes('USA') || text.includes('US ') || text.includes('MIAMI') || text.includes('NY') || text.includes('LA')) return 'United States';
-  if (text.includes('UK') || text.includes('LONDON') || text.includes('GB') || curr === 'GBP') return 'United Kingdom';
-  if (text.includes('DUBAI') || text.includes('UAE') || curr === 'AED') return 'Dubai';
-  if (text.includes('JAPAN') || text.includes('TOKYO') || curr === 'JPY') return 'Japan';
-  if (text.includes('SINGAPORE') || text.includes('SG') || curr === 'SGD') return 'Singapore';
-  if (text.includes('EU') || text.includes('GERMANY') || text.includes('ITALY') || text.includes('SPAIN') || text.includes('PARIS') || curr === 'EUR') return 'Europe';
-  if (text.includes('CHF') || text.includes('GENEVA') || text.includes('SWITZERLAND')) return 'Switzerland';
-  return 'GLOBAL';
-}
-
 interface ListingRecord {
   id: string;
   brand: string;
@@ -175,30 +120,38 @@ interface ListingRecord {
   thumbnail_url: string | null;
   image_url?: string | null;
   image_urls?: string[];
-  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
   image_evidence_notice?: string | null;
   region: string | null;
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
   multi_listing?: boolean;
+  is_unbundled_child?: boolean;
   raw_message?: string | null;
   raw_line?: string | null;
   description?: string | null;
   raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
+  current_status?: 'CURRENT_ACTIVE' | 'CURRENT_LATEST_STATE' | string | null;
+  cohort_status?: 'CONFIRMED_CURRENT' | 'LATEST_OBSERVED' | string | null;
   raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
   raw_message_truncated?: boolean;
   seller_name?: string | null;
   seller_phone?: string | null;
+  contact_publication_approved?: boolean;
   from_number?: string | null;
   seller_avatar_url?: string | null;
   seller_rating?: number | null;
   seller_review_count?: number | null;
   seller_group_count?: number | null;
   seller_credential_status?: string | null;
+  seller_rating_evidence_status?: 'SOURCE_SUPPLIED' | 'SOURCE_FEEDBACK_COUNT' | 'UNAVAILABLE' | null;
+  dealer_profile_path?: string | null;
+  dealer_id?: string | null;
   location?: string | null;
   seller_country?: string | null;
   posted_by?: string | null;
+  source_identity_name?: string | null;
   phone_number?: string | null;
   'Posted By'?: string | null;
   'Phone Number'?: string | null;
@@ -218,6 +171,120 @@ interface TradingFloorResponse {
   publicationBrands?: string[];
 }
 
+interface RandomAllInventoryCursor {
+  v: 1;
+  page: number;
+  seed: number;
+  brandCursors: Record<string, string | null>;
+  brandTotals: Record<string, number>;
+  exhausted: Record<string, boolean>;
+}
+
+const RANDOM_ALL_INVENTORY_BRANDS = ['Rolex', 'Patek Philippe'] as const;
+
+function encodeRandomAllInventoryCursor(cursor: RandomAllInventoryCursor) {
+  return window.btoa(JSON.stringify(cursor)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodeRandomAllInventoryCursor(value: string | null): RandomAllInventoryCursor | null {
+  if (!value) return null;
+  try {
+    const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+    const decoded = JSON.parse(window.atob(padded)) as RandomAllInventoryCursor;
+    if (decoded?.v !== 1 || !Number.isSafeInteger(decoded.page) || decoded.page < 2
+      || !Number.isSafeInteger(decoded.seed) || decoded.seed < 0
+      || !decoded.brandCursors || !decoded.brandTotals || !decoded.exhausted) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+function seededPageShuffle(records: ListingRecord[], seed: number, page: number) {
+  const shuffled = [...records];
+  let state = (seed ^ Math.imul(page, 0x9e3779b1)) >>> 0;
+  const random = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
+  }
+  return shuffled;
+}
+
+async function loadRandomAllInventory({
+  pageSize,
+  cursor,
+  seed,
+  signal,
+}: {
+  pageSize: number;
+  cursor: string | null;
+  seed: number;
+  signal: AbortSignal;
+}): Promise<TradingFloorResponse> {
+  const decoded = decodeRandomAllInventoryCursor(cursor);
+  if (cursor && !decoded) return { status: 'error' };
+  const page = decoded?.page || 1;
+  const stableSeed = decoded?.seed ?? seed;
+  const perBrandPageSize = Math.max(12, Math.ceil(pageSize / RANDOM_ALL_INVENTORY_BRANDS.length));
+  const responses = await Promise.all(RANDOM_ALL_INVENTORY_BRANDS.map(async brand => {
+    if (decoded?.exhausted?.[brand]) {
+      return {
+        brand,
+        payload: {
+          status: 'ok', records: [], total: decoded.brandTotals[brand] || 0, hasMore: false,
+        } as TradingFloorResponse,
+      };
+    }
+    const params = new URLSearchParams({
+      brand,
+      pageSize: String(perBrandPageSize),
+      pagination: 'cursor',
+    });
+    const brandCursor = decoded?.brandCursors?.[brand];
+    if (brandCursor) params.set('cursor', brandCursor);
+    const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal });
+    const payload = response.ok ? await response.json() as TradingFloorResponse : { status: 'error' };
+    return { brand, payload };
+  }));
+  if (responses.some(({ payload }) => payload.status !== 'ok' || !Array.isArray(payload.records))) {
+    return { status: 'error' };
+  }
+
+  const brandCursors: Record<string, string | null> = {};
+  const brandTotals: Record<string, number> = {};
+  const exhausted: Record<string, boolean> = {};
+  const records: ListingRecord[] = [];
+  let total = 0;
+  for (const { brand, payload } of responses) {
+    records.push(...(payload.records || []));
+    brandTotals[brand] = Number(payload.total) || 0;
+    total += brandTotals[brand];
+    brandCursors[brand] = payload.nextCursor || null;
+    exhausted[brand] = !payload.hasMore || !payload.nextCursor;
+  }
+  const hasMore = RANDOM_ALL_INVENTORY_BRANDS.some(brand => !exhausted[brand]);
+  return {
+    status: 'ok',
+    records: seededPageShuffle(records, stableSeed, page),
+    total,
+    totalIsEstimate: false,
+    hasMore,
+    nextCursor: hasMore ? encodeRandomAllInventoryCursor({
+      v: 1,
+      page: page + 1,
+      seed: stableSeed,
+      brandCursors,
+      brandTotals,
+      exhausted,
+    }) : null,
+    publicationBrands: [...RANDOM_ALL_INVENTORY_BRANDS],
+  };
+}
+
 interface ListingContact {
   contact_available: boolean;
   dealer_name?: string;
@@ -225,6 +292,8 @@ interface ListingContact {
   contact_source?: string;
   whatsapp_url?: string;
   reason?: string;
+  contact_channels?: { whatsapp?: string; telegram?: string };
+  stats?: ReviewedSellerAnalytics | null;
 }
 
 interface ReviewedSellerAnalytics {
@@ -257,16 +326,13 @@ type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
 function getListingImageSrc(listing: ListingRecord): string | null {
+  if (isBundleListing(listing) || listing.is_unbundled_child === true) return null;
+  if (!hasAllowedImageEvidence(listing)) return null;
   const direct = listing.thumbnail_url || listing.image_url || (Array.isArray(listing.image_urls) ? listing.image_urls.find(Boolean) : null);
   if (direct && typeof direct === 'string' && direct.trim().startsWith('http')) {
     return direct.trim();
   }
   return null;
-}
-
-function hasConfirmedSourceImage(listing: ListingRecord): boolean {
-  if (isBundleListing(listing) || listing.multi_listing) return false;
-  return Boolean(getListingImageSrc(listing));
 }
 
 function hasListingImage(listing: ListingRecord): boolean {
@@ -284,6 +350,21 @@ function isBundleListing(listing: ListingRecord) {
 /** Plausible price range for luxury watches */
 const MIN_PLAUSIBLE_PRICE_USD = 500;
 const MAX_PLAUSIBLE_PRICE_USD = 50_000_000;
+const PRICE_SUMMARY_BATCH_SIZE = 4;
+
+function benchmarkFromSummary(summary: PriceResearchBatchSummary): ListingBenchmarkData {
+  const useDial = Boolean(summary.selected_dial && summary.analytics_ready && summary.stats);
+  return {
+    stats: useDial ? summary.stats : summary.reference_stats,
+    count: useDial ? summary.selected_dial_qualified_count : summary.reference_qualified_wts_count,
+    analytics_ready: useDial ? summary.analytics_ready : summary.reference_analytics_ready,
+  };
+}
+
+function hasAllowedImageEvidence(listing: ListingRecord) {
+  return ['SELLER_LISTING_IMAGE', 'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
+    .includes(String(listing.image_evidence_type || '').toUpperCase());
+}
 
 export default function TradingFloor() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -297,6 +378,7 @@ export default function TradingFloor() {
     : '';
   const search = searchParams.get('q') || '';
   const requestedBrand = searchParams.get('brand') || '';
+  const modelFilter = searchParams.get('model') || '';
   const imagesOnly = searchParams.get('images') === 'true';
   const pricedOnly = searchParams.get('priced') === 'true';
   const requestedLocationParam = searchParams.get('location') || '';
@@ -306,6 +388,7 @@ export default function TradingFloor() {
   }, [requestedLocationParam]);
 
   const [releaseBrands, setReleaseBrands] = useState<string[]>(MASTER_BRAND_LIST);
+  const [modelOptions, setModelOptions] = useState<CatalogModelOption[]>([]);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
@@ -330,29 +413,27 @@ export default function TradingFloor() {
   const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 50);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, requestedLocationParam].join('\u001f');
+  const inventoryRequestIdRef = useRef(0);
+  const randomAllInventorySeedRef = useRef(0);
+  const viewKey = [brandFilter, modelFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, requestedLocationParam].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
+    Boolean(modelFilter),
     categoryFilter !== 'all',
     Boolean(intentFilter),
     imagesOnly,
     pricedOnly,
     locationFilters.length > 0,
   ].filter(Boolean).length;
-  const DEFAULT_LOCATIONS = ['GLOBAL', 'Hong Kong', 'United States', 'Europe', 'United Kingdom', 'Dubai', 'Japan', 'Singapore', 'Switzerland'];
   const locationOptions = useMemo(() => {
-    const listLocs = listings.map(listing => cleanValue(listing.location || listing.seller_country || listing.region)).filter(Boolean);
-    return [...new Set([...DEFAULT_LOCATIONS, ...listLocs])].sort((a, b) => a.localeCompare(b));
-  }, [listings]);
+    const countries = listings
+      .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
+      .filter((value): value is string => Boolean(value));
+    return [...new Set([...locationFilters, ...countries])].sort((a, b) => a.localeCompare(b));
+  }, [listings, locationFilters]);
 
-  const dynamicDisplayTotal = useMemo(() => {
-    if (total !== null && total > 0) return total;
-    if (brandFilter && BRAND_TOTALS[brandFilter]) return BRAND_TOTALS[brandFilter];
-    return 3527754; // Master dataset: 3,527,754 total listings
-  }, [total, brandFilter]);
-
-  const globalInventoryTotal = 3527754;
+  const dynamicDisplayTotal = total !== null && total >= 0 ? total : null;
 
   const visibleListings = useMemo(() => {
     return listings;
@@ -368,14 +449,31 @@ export default function TradingFloor() {
     listScrollPositionRef.current = null;
   }, []);
 
-  const updateViewParams = useCallback((updates: Record<string, string | null>) => {
+  const updateViewParams = useCallback((updates: Record<string, string | null>, replace = true) => {
     const next = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(updates)) {
       if (value) next.set(key, value);
       else next.delete(key);
     }
-    setSearchParams(next, { replace: true });
+    setSearchParams(next, { replace });
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!brandFilter) {
+      setModelOptions([]);
+      return () => controller.abort();
+    }
+    fetch(`/api/catalog-models?brand=${encodeURIComponent(brandFilter)}`, { signal: controller.signal })
+      .then(async response => response.ok ? response.json() : null)
+      .then(payload => {
+        if (!controller.signal.aborted) setModelOptions(Array.isArray(payload?.models) ? payload.models : []);
+      })
+      .catch(error => {
+        if (error?.name !== 'AbortError') setModelOptions([]);
+      });
+    return () => controller.abort();
+  }, [brandFilter]);
 
   const openListing = useCallback((listing: ListingRecord) => {
     listScrollPositionRef.current = window.scrollY;
@@ -476,19 +574,53 @@ export default function TradingFloor() {
     document.addEventListener('mousedown', handleOutsideClick);
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
-  // Load comprehensive price comp benchmarks for all reference models
+  const visiblePricePairs = useMemo(() => {
+    const unique = new Map<string, PriceResearchBatchPair>();
+    for (const listing of visibleListings) {
+      if (!listing.brand || !listing.reference || String(listing.listing_type).toUpperCase() !== 'WTS') continue;
+      const pair = { brand: listing.brand, reference: listing.reference, dial: cleanValue(listing.dial_color) || null };
+      unique.set(priceResearchSummaryKey(pair), pair);
+    }
+    return [...unique.values()];
+  }, [visibleListings]);
+  const visiblePricePairKey = visiblePricePairs.map(priceResearchSummaryKey).sort().join('\u001e');
+
+  // Price cards and Price Research share the same canonical exact-reference service.
   useEffect(() => {
     const controller = new AbortController();
-    fetch('/price_benchmarks.json', { signal: controller.signal })
-      .then(res => res.ok ? res.json() : null)
-      .then(data => {
-        if (data && typeof data === 'object') {
-          setRatingsCache(data);
+    setRatingsCache({});
+    void (async () => {
+      for (let offset = 0; offset < visiblePricePairs.length && !controller.signal.aborted; offset += PRICE_SUMMARY_BATCH_SIZE) {
+        const batch = visiblePricePairs.slice(offset, offset + PRICE_SUMMARY_BATCH_SIZE);
+        try {
+          const summaries = await loadPriceResearchBatchSummaries(batch, controller.signal);
+          if (!controller.signal.aborted) {
+            const returned = new Set(summaries.map(summary => summary.key));
+            setRatingsCache(current => ({
+              ...current,
+              ...Object.fromEntries(summaries.map(summary => [summary.key, benchmarkFromSummary(summary)])),
+              ...Object.fromEntries(batch
+                .map(pair => priceResearchSummaryKey(pair))
+                .filter(key => !returned.has(key))
+                .map(key => [key, { stats: null, count: 0, analytics_ready: false, unavailable: true }])),
+            }));
+          }
+        } catch (error) {
+          if ((error as { name?: string })?.name === 'AbortError') return;
+          setRatingsCache(current => ({
+            ...current,
+            ...Object.fromEntries(batch.map(pair => [
+              priceResearchSummaryKey(pair),
+              { stats: null, count: 0, analytics_ready: false, unavailable: true },
+            ])),
+          }));
         }
-      })
-      .catch(() => {});
+      }
+    })();
     return () => controller.abort();
-  }, []);
+  // The serialized exact identities change only when the visible page changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visiblePricePairKey]);
 
   useEffect(() => {
     if (previousViewKeyRef.current === viewKey) return;
@@ -512,6 +644,7 @@ export default function TradingFloor() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const requestId = ++inventoryRequestIdRef.current;
 
     async function load() {
       setLoading(true);
@@ -521,6 +654,7 @@ export default function TradingFloor() {
         const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
         if (cursor) params.set('cursor', cursor);
         if (brandFilter) params.set('brand', brandFilter);
+        if (modelFilter) params.set('model', modelFilter);
         if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
         if (imagesOnly) params.set('images', 'true');
@@ -533,25 +667,44 @@ export default function TradingFloor() {
           params.set('item', categoryFilter);
           params.delete('priced');
           params.delete('brand');
+          params.delete('model');
           params.delete('type');
         }
         const endpoint = usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest';
+        const randomAllInventory = categoryFilter === 'all'
+          && !brandFilter && !modelFilter && !intentFilter && !search
+          && !imagesOnly && !pricedOnly && locationFilters.length === 0;
         let data: TradingFloorResponse;
         try {
-          const response = await fetch(`${endpoint}?${params.toString()}`, { signal: controller.signal });
-          if (response.ok) {
-            data = await response.json() as TradingFloorResponse;
+          if (randomAllInventory) {
+            if (randomAllInventorySeedRef.current === 0) {
+              const randomSeed = new Uint32Array(1);
+              window.crypto.getRandomValues(randomSeed);
+              randomAllInventorySeedRef.current = randomSeed[0] || 1;
+            }
+            data = await loadRandomAllInventory({
+              pageSize,
+              cursor,
+              seed: randomAllInventorySeedRef.current,
+              signal: controller.signal,
+            });
           } else {
-            data = { status: 'error' };
+            const response = await fetch(`${endpoint}?${params.toString()}`, { signal: controller.signal });
+            if (response.ok) {
+              data = await response.json() as TradingFloorResponse;
+            } else {
+              data = { status: 'error' };
+            }
           }
         } catch {
           data = { status: 'error' };
         }
+        if (inventoryRequestIdRef.current !== requestId) return;
 
         let nextListings: ListingRecord[] = [];
         let totalCount: number | null = null;
 
-        if (data.status === 'ok' && Array.isArray(data.records) && data.records.length > 0) {
+        if (data.status === 'ok' && Array.isArray(data.records)) {
           if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
             setReleaseBrands([...new Set([...MASTER_BRAND_LIST, ...(data.publicationBrands || [])])]);
           } else {
@@ -563,191 +716,27 @@ export default function TradingFloor() {
           setNextCursor(data.nextCursor || null);
           setHasMore(Boolean(data.hasMore && data.nextCursor));
         } else {
-          // Fast manifest check for immediate instant counter display
-          try {
-            const manifestRes = await fetch('/inventory_manifest.json', { signal: controller.signal });
-            if (manifestRes.ok) {
-              const manifest = await manifestRes.json();
-              if (manifest) {
-                if (brandFilter && manifest.brands && manifest.brands[brandFilter]) {
-                  totalCount = Number(manifest.brands[brandFilter]);
-                } else if (!brandFilter) {
-                  totalCount = Number(manifest.total_listings || 3527754);
-                }
-                if (Array.isArray(manifest.brand_list) && manifest.brand_list.length > 0) {
-                  setReleaseBrands(manifest.brand_list);
-                }
-              }
-            }
-          } catch {}
-
-          // Graceful fallback to parsedWatches.json (3.52M master dataset)
-          try {
-            let refImageMap: Record<string, string> = {};
-            try {
-              const imgMapRes = await fetch('/reference_images.json', { signal: controller.signal });
-              if (imgMapRes.ok) {
-                refImageMap = await imgMapRes.json();
-              }
-            } catch {}
-
-
-
-            const staticRes = await fetch('/parsedWatches.json', { signal: controller.signal });
-            if (staticRes.ok) {
-              const allRows: any[][] = await staticRes.json();
-              let textListings: ListingRecord[] = allRows.map(row => {
-                const brand = String(row[1] || 'Unknown');
-                const reference = row[2] ? String(row[2]) : null;
-                const dial_color = row[3] ? String(row[3]) : null;
-                const price_raw = typeof row[4] === 'number' ? row[4] : (typeof row[5] === 'number' ? row[5] : null);
-                const currency = row[6] ? String(row[6]).toUpperCase().trim() : 'USD';
-                const price_usd = convertToUsd(price_raw, currency);
-                const condition = row[7] ? String(row[7]) : null;
-                const raw_message = row[8] ? String(row[8]) : '';
-                const year = typeof row[12] === 'number' ? row[12] : null;
-                const model = row[13] ? String(row[13]) : `${brand} ${reference || ''}`.trim();
-                const intent = raw_message.toUpperCase().includes('WTB') ? 'WTB' : 'WTS';
-                const region = extractLocationFromMessage(raw_message, currency);
-
-                // Authentic DigitalOcean Spaces reference image lookup
-                const brandLower = brand.toLowerCase();
-                const refClean = (reference || '').toLowerCase().trim();
-                const brandRefKey = `${brandLower}|${refClean}`;
-                const rawMsgLower = raw_message.toLowerCase();
-
-                let realImageUrl: string | null = row[14] ? String(row[14]) : null;
-                if (!realImageUrl && refImageMap) {
-                  realImageUrl = refImageMap[brandRefKey] || refImageMap[refClean] || null;
-                  if (!realImageUrl) {
-                    const tokens = rawMsgLower.match(/\b[0-9]{4,6}[a-z0-9\-\.\/]*\b/g);
-                    if (tokens) {
-                      for (const t of tokens) {
-                        const directMatch = refImageMap[`${brandLower}|${t}`] || refImageMap[t];
-                        if (directMatch) {
-                          realImageUrl = directMatch;
-                          break;
-                        }
-                      }
-                    }
-                  }
-                }
-
-                return {
-                  id: String(row[0]),
-                  brand,
-                  model,
-                  reference,
-                  price_usd,
-                  price_raw,
-                  currency,
-                  source_price_amount: price_raw,
-                  source_currency: currency,
-                  price_evidence_status: price_usd ? 'SOURCE_EXPLICIT_USD_MATCH' : null,
-                  price_research_eligible: Boolean(price_usd && price_usd > 0),
-                  dial_color,
-                  condition,
-                  year,
-                  intent,
-                  listing_type: intent,
-                  verdict: 'APPROVED',
-                  source: 'WATCH_FACTS_COMMUNITY',
-                  source_type: 'COMMUNITY',
-                  item_category: 'WATCH' as const,
-                  listing_date: '2026-08-18',
-                  listing_status: 'ACTIVE',
-                  created_at: '2026-08-18',
-                  confidence: typeof row[9] === 'number' ? row[9] : 95,
-                  has_images: Boolean(realImageUrl),
-                  thumbnail_url: realImageUrl,
-                  image_url: realImageUrl,
-                  image_urls: realImageUrl ? [realImageUrl] : [],
-                  region,
-                  raw_message,
-                  seller_name: 'Ben VTT',
-                  seller_rating: 5.0,
-                  seller_review_count: 24,
-                  data_quality_issues: [],
-                  data_quality_review_required: false,
-                };
-              });
-
-              let combined = [...textListings];
-
-              if (brandFilter) {
-                const bNorm = brandFilter.toLowerCase().replace(/[\s\.\-\_]/g, '');
-                combined = combined.filter(r => {
-                  const rbNorm = (r.brand || '').toLowerCase().replace(/[\s\.\-\_]/g, '');
-                  return rbNorm.includes(bNorm) || bNorm.includes(rbNorm);
-                });
-              }
-              if (intentFilter) {
-                const iUpper = intentFilter.toUpperCase().trim();
-                combined = combined.filter(r => (r.listing_type || '').toUpperCase().trim() === iUpper);
-              }
-              if (search) {
-                const qLower = search.toLowerCase().trim();
-                combined = combined.filter(r => 
-                  (r.brand || '').toLowerCase().includes(qLower) ||
-                  (r.reference || '').toLowerCase().includes(qLower) ||
-                  (r.model || '').toLowerCase().includes(qLower) ||
-                  (r.raw_message || '').toLowerCase().includes(qLower)
-                );
-              }
-              if (imagesOnly) {
-                combined = combined.filter(r => hasConfirmedSourceImage(r));
-              }
-              if (pricedOnly) {
-                combined = combined.filter(r => r.price_usd != null && Number(r.price_usd) > 0);
-              }
-              if (locationFilters.length > 0) {
-                combined = combined.filter(r => {
-                  const loc = (r.region || r.location || '').toLowerCase().trim();
-                  return locationFilters.some(lf => {
-                    const lfLower = lf.toLowerCase().trim();
-                    return loc === lfLower || loc.includes(lfLower) || lfLower.includes(loc);
-                  });
-                });
-              }
-
-              // Prioritize listings with images first
-              combined.sort((a, b) => {
-                const aHasImage = hasConfirmedSourceImage(a);
-                const bHasImage = hasConfirmedSourceImage(b);
-                if (aHasImage && !bHasImage) return -1;
-                if (!aHasImage && bHasImage) return 1;
-                return 0;
-              });
-
-              totalCount = combined.length;
-              const pageIdx = cursor ? parseInt(cursor, 10) || 1 : 1;
-              const startIdx = (pageIdx - 1) * pageSize;
-              nextListings = combined.slice(startIdx, startIdx + pageSize);
-              setTotalIsEstimate(false);
-              const hasNext = startIdx + pageSize < combined.length;
-              setNextCursor(hasNext ? String(pageIdx + 1) : null);
-              setHasMore(hasNext);
-            }
-          } catch (e) {
-            console.error('Static fallback load failed:', e);
-          }
+          setError('Some listing data could not load because the source query could not complete.');
         }
 
         setListings(nextListings);
         setTotal(totalCount !== null && Number.isFinite(totalCount) ? totalCount : null);
         if (!cursor) setSelectedListing(null);
       } catch (caught) {
-        if ((caught as Error).name !== 'AbortError') {
+        if ((caught as Error).name !== 'AbortError' && inventoryRequestIdRef.current === requestId) {
           setError((caught as Error).message || 'Failed to load listings');
         }
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && inventoryRequestIdRef.current === requestId) setLoading(false);
       }
     }
 
     void load();
-    return () => controller.abort();
-  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, locationFilters, pageSize, pricedOnly, search]);
+    return () => {
+      controller.abort();
+      if (inventoryRequestIdRef.current === requestId) inventoryRequestIdRef.current += 1;
+    };
+  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, locationFilters, modelFilter, pageSize, pricedOnly, search]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
@@ -758,7 +747,7 @@ export default function TradingFloor() {
             <div>
               <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
               <p className="mt-1 text-sm font-medium" style={{ color: MUTED }}>
-                {dynamicDisplayTotal.toLocaleString()} verified listings{dynamicDisplayTotal < globalInventoryTotal ? ` · ${globalInventoryTotal.toLocaleString()} global inventory` : ''}
+                {dynamicDisplayTotal === null ? 'Listing total unavailable' : `${dynamicDisplayTotal.toLocaleString()} verified listings`}
               </p>
             </div>
 
@@ -918,6 +907,8 @@ export default function TradingFloor() {
         <MobileFilterSheet
           brand={brandFilter}
           releaseBrands={releaseBrands}
+          model={modelFilter}
+          models={modelOptions}
           category={categoryFilter}
           intent={intentFilter}
           imagesOnly={imagesOnly}
@@ -929,12 +920,13 @@ export default function TradingFloor() {
             resetResults();
             updateViewParams({
               brand: next.brand || null,
+              model: next.brand === brandFilter ? next.model || null : null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
               images: next.imagesOnly ? 'true' : null,
               priced: next.pricedOnly ? 'true' : null,
               location: next.locations.length ? next.locations.join(',') : null,
-            });
+            }, false);
           }}
           onClose={() => setFiltersOpen(false)}
         />
@@ -943,7 +935,7 @@ export default function TradingFloor() {
       <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-6">
         <div className="mb-5 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
-            Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong> on this page of <strong style={{ color: INK }}>{dynamicDisplayTotal.toLocaleString()}</strong> listings
+            Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong> on this page{dynamicDisplayTotal === null ? ' · total unavailable' : <> of <strong style={{ color: INK }}>{dynamicDisplayTotal.toLocaleString()}</strong> listings</>}
           </span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
@@ -953,8 +945,11 @@ export default function TradingFloor() {
             key={selectedListing.id}
             listing={selectedListing}
             benchmark={
-              ratingsCache[`${(selectedListing.brand || '').toLowerCase().trim()}|${(selectedListing.reference || '').toLowerCase().trim()}`] ||
-              ratingsCache[(selectedListing.reference || '').toLowerCase().trim()]
+              ratingsCache[priceResearchSummaryKey({
+                brand: selectedListing.brand,
+                reference: selectedListing.reference || '',
+                dial: cleanValue(selectedListing.dial_color) || null,
+              })]
             }
             onClose={closeListing}
           />
@@ -964,13 +959,18 @@ export default function TradingFloor() {
               <DesktopFilters
                 brand={brandFilter}
                 releaseBrands={releaseBrands}
+                model={modelFilter}
+                models={modelOptions}
                 category={categoryFilter}
                 intent={intentFilter}
                 imagesOnly={imagesOnly}
                 pricedOnly={pricedOnly}
                 selectedLocations={locationFilters}
                 locations={locationOptions}
-                onChange={updates => { resetResults(); updateViewParams(updates); }}
+                onChange={updates => {
+                  resetResults();
+                  updateViewParams(updates, !Object.prototype.hasOwnProperty.call(updates, 'location'));
+                }}
               />
             </aside>
             {loading && listings.length === 0 ? (
@@ -990,11 +990,12 @@ export default function TradingFloor() {
                 : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}
               >
                 {visibleListings.map(listing => {
-                  const bClean = (listing.brand || '').toLowerCase().trim();
-                  const rClean = (listing.reference || '').toLowerCase().trim();
-                  const ratingKey = `${bClean}|${rClean}`;
-                  const fallbackKey = rClean;
-                  const benchmark = ratingsCache[ratingKey] || (rClean ? ratingsCache[fallbackKey] : undefined);
+                  const ratingKey = priceResearchSummaryKey({
+                    brand: listing.brand,
+                    reference: listing.reference || '',
+                    dial: cleanValue(listing.dial_color) || null,
+                  });
+                  const benchmark = ratingsCache[ratingKey];
                   return (
                     <ListingCard
                       key={listing.id}
@@ -1043,6 +1044,7 @@ export default function TradingFloor() {
         )}
 
       </div>
+      <TradingFloorQuickScroll />
       <Footer />
     </main>
   );
@@ -1094,6 +1096,8 @@ function FilterCheck({ checked, disabled = false, label, onChange }: { checked: 
 function DesktopFilters({
   brand,
   releaseBrands,
+  model,
+  models,
   category,
   intent,
   imagesOnly,
@@ -1104,6 +1108,8 @@ function DesktopFilters({
 }: {
   brand: BrandFilter;
   releaseBrands: string[];
+  model: string;
+  models: CatalogModelOption[];
   category: CategoryFilter;
   intent: IntentFilter;
   imagesOnly: boolean;
@@ -1126,16 +1132,13 @@ function DesktopFilters({
       onChange({ location: null });
       return;
     }
-    let updated: string[];
-    if (selectedLocations.includes(loc)) {
-      updated = selectedLocations.filter(l => l !== loc);
-    } else {
-      updated = [...selectedLocations, loc];
-    }
+    const updated = selectedLocations.includes(loc)
+      ? selectedLocations.filter(value => value !== loc)
+      : [...selectedLocations, loc];
     onChange({ location: updated.length ? updated.join(',') : null });
   };
 
-  const hasActiveFilters = Boolean(brand || category !== 'all' || intent || imagesOnly || pricedOnly || selectedLocations.length > 0);
+  const hasActiveFilters = Boolean(brand || model || category !== 'all' || intent || imagesOnly || pricedOnly || selectedLocations.length > 0);
 
   return (
     <div className="space-y-5">
@@ -1144,7 +1147,7 @@ function DesktopFilters({
           <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
           {hasActiveFilters && (
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#9A7127] text-white">
-              {[Boolean(brand), category !== 'all', Boolean(intent), imagesOnly, pricedOnly, selectedLocations.length > 0].filter(Boolean).length}
+              {[Boolean(brand), Boolean(model), category !== 'all', Boolean(intent), imagesOnly, pricedOnly, selectedLocations.length > 0].filter(Boolean).length}
             </span>
           )}
         </div>
@@ -1152,7 +1155,7 @@ function DesktopFilters({
           {hasActiveFilters && (
             <button
               type="button"
-              onClick={() => onChange({ brand: null, item: null, type: null, images: null, priced: null, location: null })}
+              onClick={() => onChange({ brand: null, model: null, item: null, type: null, images: null, priced: null, location: null })}
               className="text-xs font-semibold text-[#7B5719] hover:underline"
             >
               Clear
@@ -1177,12 +1180,27 @@ function DesktopFilters({
             <select
               id="brand-filter"
               value={brand}
-              onChange={event => onChange({ brand: event.target.value || null })}
+              onChange={event => onChange({ brand: event.target.value || null, model: null })}
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs"
               style={{ borderColor: BORDER, color: INK }}
             >
               <option value="">All brands</option>
               {releaseBrands.map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </fieldset>
+
+          <fieldset>
+            <label htmlFor="model-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Model ({models.length})</label>
+            <select
+              id="model-filter"
+              value={model}
+              disabled={!brand || models.length === 0}
+              onChange={event => onChange({ model: event.target.value || null })}
+              className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs disabled:opacity-45"
+              style={{ borderColor: BORDER, color: INK }}
+            >
+              <option value="">All models</option>
+              {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
             </select>
           </fieldset>
 
@@ -1206,6 +1224,22 @@ function DesktopFilters({
                 <button type="button" onClick={() => toggleLocation('')} className="text-[10px] font-semibold text-[#7B5719] hover:underline">Clear</button>
               )}
             </div>
+            {selectedLocations.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Selected locations">
+                {selectedLocations.map(value => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleLocation(value)}
+                    aria-label={`Remove ${value} location`}
+                    className="inline-flex min-h-7 items-center gap-1 rounded-full border bg-white px-2 text-[11px] font-medium"
+                    style={{ borderColor: BORDER, color: INK }}
+                  >
+                    {value}<X size={11} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            )}
             <div className="relative mb-2">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
               <input
@@ -1240,7 +1274,7 @@ function DesktopFilters({
                 ))}
               </div>
             )}
-            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Select one or multiple locations to filter listings.</p>
+            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Select the posting country for these listings.</p>
           </fieldset>
         </div>
       ) : (
@@ -1255,6 +1289,8 @@ function DesktopFilters({
 function MobileFilterSheet({
   brand,
   releaseBrands,
+  model,
+  models,
   category,
   intent,
   imagesOnly,
@@ -1266,16 +1302,19 @@ function MobileFilterSheet({
 }: {
   brand: BrandFilter;
   releaseBrands: string[];
+  model: string;
+  models: CatalogModelOption[];
   category: CategoryFilter;
   intent: IntentFilter;
   imagesOnly: boolean;
   pricedOnly: boolean;
   selectedLocations: string[];
   locations: string[];
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; locations: string[] }) => void;
+  onApply: (filters: { brand: BrandFilter; model: string; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean; pricedOnly: boolean; locations: string[] }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
+  const [draftModel, setDraftModel] = useState(model);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
   const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
@@ -1294,11 +1333,9 @@ function MobileFilterSheet({
       setDraftLocations([]);
       return;
     }
-    if (draftLocations.includes(loc)) {
-      setDraftLocations(prev => prev.filter(l => l !== loc));
-    } else {
-      setDraftLocations(prev => [...prev, loc]);
-    }
+    setDraftLocations(current => current.includes(loc)
+      ? current.filter(value => value !== loc)
+      : [...current, loc]);
   };
 
   return (
@@ -1321,11 +1358,24 @@ function MobileFilterSheet({
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
           <FilterGroup label={`Brands (${releaseBrands.length})`}>
             {releaseBrands.length > 0 && (
-              <FilterChoice active={!draftBrand} label="All brands" onClick={() => setDraftBrand('')} />
+              <FilterChoice active={!draftBrand} label="All brands" onClick={() => { setDraftBrand(''); setDraftModel(''); }} />
             )}
             {releaseBrands.map(value => (
-              <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
+              <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => { setDraftBrand(value); setDraftModel(''); }} />
             ))}
+          </FilterGroup>
+          <FilterGroup label={`Models (${models.length})`}>
+            <select
+              id="mobile-model-filter"
+              value={draftModel}
+              disabled={!draftBrand || models.length === 0}
+              onChange={event => setDraftModel(event.target.value)}
+              className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-45"
+              style={{ borderColor: BORDER, color: INK }}
+            >
+              <option value="">All models</option>
+              {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
+            </select>
           </FilterGroup>
           <FilterGroup label="Availability">
             <FilterCheck checked={draftImagesOnly} label="Source image only" onChange={() => setDraftImagesOnly(value => !value)} />
@@ -1337,6 +1387,23 @@ function MobileFilterSheet({
             ))}
           </FilterGroup>
           <FilterGroup label={`Locations (${draftLocations.length || 'All'})`}>
+            {draftLocations.length > 0 && (
+              <div className="mb-2 flex w-full flex-wrap gap-1.5" aria-label="Selected locations">
+                {draftLocations.map(value => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleLocation(value)}
+                    aria-label={`Remove ${value} location`}
+                    className="inline-flex min-h-8 items-center gap-1 rounded-full border bg-white px-2.5 text-xs font-medium"
+                    style={{ borderColor: BORDER, color: INK }}
+                  >
+                    {value}<X size={12} aria-hidden="true" />
+                  </button>
+                ))}
+                <button type="button" onClick={() => toggleLocation('')} className="min-h-8 px-1 text-xs font-semibold text-[#7B5719] hover:underline">Clear locations</button>
+              </div>
+            )}
             <div className="relative mb-2 w-full">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
               <input
@@ -1378,7 +1445,7 @@ function MobileFilterSheet({
             setDraftPricedOnly(false);
             setDraftLocations([]);
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, locations: draftLocations })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, model: draftModel, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, locations: draftLocations })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
         </footer>
       </section>
     </div>
@@ -1410,28 +1477,15 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
 function ListingCard({ listing, selected, onSelect, benchmark }: { listing: ListingRecord; selected: boolean; onSelect: () => void; benchmark?: ListingBenchmarkData }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const imageUrl = getListingImageSrc(listing);
-  const rawMsg = listing.raw_message || listing.raw_line || listing.description || '';
+  const [imageAvailable, setImageAvailable] = useState(true);
+  const cardHasImage = Boolean(imageUrl && imageAvailable);
+  const messageEvidence = listingMessageEvidence(listing);
+  const postingIdentity = strongestPostingIdentity(listing);
 
   const priceRating = useMemo(() => {
-    if (benchmark && benchmark.stats && benchmark.count >= 2) {
-      return rateMarketPrice(listing.price_usd, benchmark.stats, benchmark.count);
-    }
-    return null;
-  }, [listing.price_usd, benchmark]);
-
-  const ratingDisplay = useMemo(() => {
-    const rating = listing.seller_rating;
-    const reviews = listing.seller_review_count;
-    if (reviews != null && reviews > 0) {
-      return rating != null
-        ? `★ ${Number(rating).toFixed(1)} (${reviews} ${reviews === 1 ? 'review' : 'reviews'})`
-        : `Rated · ${reviews} ${reviews === 1 ? 'review' : 'reviews'}`;
-    }
-    if (rating != null) {
-      return `★ ${Number(rating).toFixed(1)} (Verified)`;
-    }
-    return 'Verified seller';
-  }, [listing.seller_rating, listing.seller_review_count]);
+    const price = ratingUsdPrice(listing);
+    return price ? rateMarketPrice(price, benchmark?.stats || null, benchmark?.count || 0) : null;
+  }, [listing, benchmark]);
 
   return (
     <article
@@ -1439,14 +1493,20 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
       style={{ borderColor: selected ? GOLD : '#EBE3D5' }}
     >
       {/* 1. Watch Image — only rendered when a real source URL exists */}
-      {imageUrl && (
+      {cardHasImage && (
         <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
           <img
-            src={imageUrl}
+            src={imageUrl || undefined}
             alt={meta.title}
             className="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]"
             loading="lazy"
+            onError={() => setImageAvailable(false)}
           />
+        </button>
+      )}
+      {!cardHasImage && (
+        <button type="button" onClick={onSelect} className="flex h-[340px] w-full items-center justify-center rounded-md border border-[#E5DACB] bg-[#F6F0E7] text-xs font-bold uppercase tracking-[0.14em] text-[#8B95A2]">
+          NO IMAGE
         </button>
       )}
 
@@ -1466,16 +1526,17 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         </button>
       </div>
 
-      {/* 4. Full Original Untouched Raw Message */}
-      {rawMsg && (
-        <div className="mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-[#8A5826] mb-1">
-            ORIGINAL RAW MESSAGE
+      {/* 4. Original source evidence, collapsed by default */}
+      {messageEvidence && (
+        <details className="group mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" className="transition-transform group-open:rotate-90">▶</span>
+            <span>{messageEvidence.label}</span>
+          </summary>
+          <div className="mt-2.5 max-h-72 overflow-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
+            {messageEvidence.text}
           </div>
-          <div className="font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
-            {rawMsg}
-          </div>
-        </div>
+        </details>
       )}
 
       {/* 5. Price & Price Rating Row */}
@@ -1487,7 +1548,9 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
           )}
         </div>
         <div className="text-xs font-medium text-[#7A8699]">
-          {priceRating ? (
+          {benchmark?.unavailable ? (
+            <span>Open for rating</span>
+          ) : priceRating ? (
             <span
               className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
               style={{
@@ -1500,45 +1563,50 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
               {priceRating.label}
             </span>
           ) : (
-            <span>Price rating: <span className="text-[#8E9AAF]">Open for rating</span></span>
+            <span>Open for rating</span>
           )}
         </div>
       </div>
 
       {/* 6. Badges (Location & Date) */}
       <div className="mt-3.5 flex flex-wrap gap-2">
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
+        {meta.region && <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
           <Globe2 size={12} className="text-[#6B7280]" />
-          {listing.region || listing.location || listing.seller_country || 'North America'}
+          {meta.region}
+        </span>}
+        <span className="inline-flex items-center rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
+          Posted {meta.postedDate || 'Posting date requires review'}
         </span>
-        {meta.postedDate && (
-          <span className="inline-flex items-center rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
-            Posted {meta.postedDate}
-          </span>
-        )}
       </div>
 
       {/* 7. Posted by Section */}
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
         <div className="text-[#6B7280]">Posted by</div>
-        <div className="text-sm font-semibold text-[#1C1917] mt-0.5">
-          {cleanValue(listing.seller_name) || listing['Posted By'] || 'Ben VTT'}
+        {listing.dealer_profile_path && postingIdentity ? (
+          <Link to={listing.dealer_profile_path} className="mt-0.5 block text-sm font-semibold text-[#1C1917] hover:text-[#8A5826]">
+            {postingIdentity || 'Posting identity requires review'}
+          </Link>
+        ) : (
+          <div className="text-sm font-semibold text-[#1C1917] mt-0.5">
+            {postingIdentity || 'Posting identity requires review'}
+          </div>
+        )}
+        <div className="mt-0.5">
+          <DealerRatingBadge
+            rating={listing.seller_rating}
+            reviewCount={listing.seller_review_count}
+            ratingEvidenceStatus={listing.seller_rating_evidence_status}
+          />
         </div>
-        <div className="text-[#8A5826] font-medium text-xs mt-0.5">{ratingDisplay}</div>
       </div>
 
       {/* 8. Direct WhatsApp Contact Action */}
       <div className="mt-auto pt-4 flex flex-col gap-2">
-        <a
-          href={`https://wa.me/${String(listing.from_number || listing.seller_phone || '19174552555').replace(/[^0-9]/g, '')}?text=${encodeURIComponent(`Hi, I saw your listing for ${meta.title} (${listing.reference || ''}) on Curated Luxury. Is this still available?`)}`}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex w-full items-center justify-center gap-2 rounded-full border border-[#25D366] bg-[#25D366]/10 py-2.5 text-xs font-bold uppercase tracking-wider text-[#128C7E] transition hover:bg-[#25D366]/20"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <MessageCircle size={15} className="text-[#25D366]" />
-          DIRECT WHATSAPP
-        </a>
+        <div className="text-center text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+          {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
+            ? 'LATEST OBSERVED · CHECK AVAILABILITY'
+            : 'CONFIRMED CURRENT'}
+        </div>
         <button
           type="button"
           onClick={onSelect}
@@ -1561,15 +1629,18 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const mainImage = getListingImageSrc(listing);
   const images = useMemo(() => {
-    const directImages = (listing.image_urls || []).filter(u => Boolean(u && !u.includes('unsplash.com')));
+    if (!hasAllowedImageEvidence(listing) || isBundleListing(listing) || listing.is_unbundled_child === true) return [];
+    const directImages = (listing.image_urls || []).filter(u => Boolean(u && /^https?:\/\/[^\s]+$/i.test(u)));
     if (directImages.length > 0) return directImages;
     if (mainImage && !mainImage.includes('unsplash.com')) return [mainImage];
     return [];
   }, [listing, mainImage]);
+  const availableImages = images.filter(url => !failedImages.has(url));
 
-  const visibleImageIndex = activeImage < images.length ? activeImage : 0;
-  const rawSourceMessage = listing.raw_message ?? listing.raw_line ?? listing.description ?? '';
+  const visibleImageIndex = activeImage < availableImages.length ? activeImage : 0;
+  const messageEvidence = listingMessageEvidence(listing);
   const normalizedIntent = String(listing.intent || listing.listing_type || '').toUpperCase();
+  const postingIdentity = strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name });
 
   const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS');
   const [benchmark, setBenchmark] = useState<{
@@ -1583,19 +1654,34 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
         loading: false,
         count: initialBenchmark.count,
         stats: initialBenchmark.stats,
-        rating: rateMarketPrice(listing.price_usd, initialBenchmark.stats, initialBenchmark.count),
+        rating: rateMarketPrice(ratingUsdPrice(listing), initialBenchmark.stats, initialBenchmark.count),
       };
     }
     return {
       loading: canLoadBenchmark,
       count: 0,
       stats: null,
-      rating: rateMarketPrice(listing.price_usd, null, 0),
+      rating: rateMarketPrice(ratingUsdPrice(listing), null, 0),
     };
   });
 
   useEffect(() => {
     const controller = new AbortController();
+
+    const contactParams = new URLSearchParams({
+      id: listing.id,
+      surface: 'trading-floor',
+      brand: listing.brand,
+      reference: listing.reference || '',
+    });
+    fetch(`/api/listing-contact?${contactParams.toString()}`, { signal: controller.signal })
+      .then(async response => response.ok ? response.json() as Promise<ListingContact> : null)
+      .then(payload => {
+        if (!payload) return;
+        setContact(payload);
+        if (payload.stats) setSellerAnalytics(payload.stats);
+      })
+      .catch(error => { if (error?.name !== 'AbortError') setContact(sourcePosterContact(listing)); });
     
     // Fetch seller analytics
     fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
@@ -1622,13 +1708,12 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
           loading: true,
           count: 0,
           stats: null,
-          rating: rateMarketPrice(listing.price_usd, null, 0),
+          rating: rateMarketPrice(ratingUsdPrice(listing), null, 0),
         });
       }
 
       const reference = listing.reference as string;
       const params = new URLSearchParams({ reference, brand: listing.brand });
-      if (listing.condition) params.set('condition', listing.condition);
       if (listing.dial_color) params.set('dial', listing.dial_color);
 
       fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })
@@ -1640,7 +1725,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
                 loading: false,
                 count: initialBenchmark.count,
                 stats: initialBenchmark.stats,
-                rating: rateMarketPrice(listing.price_usd, initialBenchmark.stats, initialBenchmark.count),
+                rating: rateMarketPrice(ratingUsdPrice(listing), initialBenchmark.stats, initialBenchmark.count),
               });
             }
             return;
@@ -1651,7 +1736,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
             loading: false,
             count,
             stats,
-            rating: rateMarketPrice(listing.price_usd, stats, count),
+            rating: rateMarketPrice(ratingUsdPrice(listing), stats, count),
           });
         })
         .catch(error => {
@@ -1661,14 +1746,14 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
                 loading: false,
                 count: initialBenchmark.count,
                 stats: initialBenchmark.stats,
-                rating: rateMarketPrice(listing.price_usd, initialBenchmark.stats, initialBenchmark.count),
+                rating: rateMarketPrice(ratingUsdPrice(listing), initialBenchmark.stats, initialBenchmark.count),
               });
             } else {
               setBenchmark({
                 loading: false,
                 count: 0,
                 stats: null,
-                rating: rateMarketPrice(listing.price_usd, null, 0),
+                rating: rateMarketPrice(ratingUsdPrice(listing), null, 0),
               });
             }
           }
@@ -1688,28 +1773,28 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
   return (
     <section className="mb-8 flex flex-col gap-3.5" aria-label="Selected listing">
       {/* Top Banner Link */}
-      <a
-        href={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}`}
+      <Link
+        to={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}`}
         className="w-full rounded border border-[#E8DECF] bg-[#F6EFE5] py-2 text-center text-xs font-semibold text-[#653E23] transition hover:bg-[#EFE5D8] block"
       >
         Open full price research
-      </a>
+      </Link>
 
-      <div className={`grid gap-6 ${images.length > 0 ? 'lg:grid-cols-[minmax(320px,460px)_1fr]' : ''}`}>
+      <div className={`grid gap-6 ${availableImages.length > 0 ? 'lg:grid-cols-[minmax(320px,460px)_1fr]' : ''}`}>
         {/* Left Column: Watch Image — only when real source images exist */}
-        {images.length > 0 && (
+        {availableImages.length > 0 && (
           <div className="rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-3 shadow-xs flex flex-col justify-center">
-            {images[visibleImageIndex] ? (
+            {availableImages[visibleImageIndex] ? (
               <img
-                src={images[visibleImageIndex]}
+                src={availableImages[visibleImageIndex]}
                 alt={`${meta.title} source listing image`}
                 className="h-[520px] w-full rounded-md object-contain lg:h-[620px]"
-                onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
+                onError={() => setFailedImages(current => new Set(current).add(availableImages[visibleImageIndex]))}
               />
             ) : null}
-            {images.length > 1 && (
+            {availableImages.length > 1 && (
               <div className="mt-3 flex gap-2 overflow-x-auto">
-                {images.map((url, index) => (
+                {availableImages.map((url, index) => (
                   <button
                     type="button"
                     key={url}
@@ -1722,6 +1807,11 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
                 ))}
               </div>
             )}
+          </div>
+        )}
+        {availableImages.length === 0 && (
+          <div className="flex min-h-[340px] items-center justify-center rounded-lg border border-[#EBE3D5] bg-[#F6F0E7] text-xs font-bold uppercase tracking-[0.14em] text-[#8B95A2]">
+            NO IMAGE
           </div>
         )}
 
@@ -1742,13 +1832,23 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
             </div>
 
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
-
-            <div className="mt-5 border-t border-stone-100 pt-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5826]">ORIGINAL RAW MESSAGE</div>
-              <div className="mt-2.5 rounded bg-[#FBF9F6] p-3 font-mono text-xs leading-relaxed text-stone-800 whitespace-pre-wrap">
-                {rawSourceMessage || 'Original source text is unavailable.'}
-              </div>
+            <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+              {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
+                ? 'LATEST OBSERVED · CHECK AVAILABILITY'
+                : 'CONFIRMED CURRENT'}
             </div>
+
+            {messageEvidence && (
+              <details className="group mt-5 border-t border-stone-100 pt-4">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+                  <span aria-hidden="true" className="transition-transform group-open:rotate-90">▶</span>
+                  <span>{messageEvidence.label}</span>
+                </summary>
+                <div className="mt-2.5 max-h-96 overflow-auto rounded bg-[#FBF9F6] p-3 font-mono text-xs leading-relaxed text-stone-800 whitespace-pre-wrap break-words">
+                  {messageEvidence.text}
+                </div>
+              </details>
+            )}
 
             <div className="mt-4 flex flex-wrap gap-2">
               {[displayDial(detailListing.dial_color), cleanValue(detailListing.condition), detailListing.year ? String(detailListing.year) : ''].filter(Boolean).map(value => (
@@ -1756,18 +1856,16 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
               ))}
             </div>
 
-            {meta.postedDate && (
-              <div className="mt-4 text-xs font-medium text-stone-600">
-                <span className="text-[#8A5826]">Posted on</span> {meta.postedDate}
-              </div>
-            )}
+            <div className="mt-4 text-xs font-medium text-stone-600">
+              <span className="text-[#8A5826]">Posted on</span> {meta.postedDate || 'Posting date requires review'}
+            </div>
           </div>
 
           {/* Card 2: Price Rating */}
           <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
             <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">PRICE RATING</div>
             <div className="mt-2 text-lg font-bold text-[#1C1917]">
-              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.label || 'Calculating...')}
+              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.label || 'Open for rating')}
             </div>
             <div className="mt-1 text-xs text-[#8B95A2]">
               {benchmark.loading ? 'Calculating...' : (benchmark.rating?.reason || 'Comparing against verified dealer observations.')}
@@ -1778,30 +1876,61 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
           <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
             <h3 className="text-base font-bold text-[#1C1917]">Posted by</h3>
             <div className="mt-4 border-t border-stone-100 pt-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">SOURCE-SUPPLIED CONTACT</div>
-              <div className="mt-2 text-base font-bold text-[#1C1917]">
-                {contact?.dealer_name || listing['Posted By'] || listing.seller_name || 'Ben VTT'}
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source-supplied contact</div>
+              {listing.dealer_profile_path && postingIdentity ? (
+                <Link to={listing.dealer_profile_path} className="mt-2 block text-base font-bold text-[#1C1917] hover:text-[#8A5826]">
+                  {postingIdentity || 'Posting identity requires review'}
+                </Link>
+              ) : (
+                <div className="mt-2 text-base font-bold text-[#1C1917]">
+                  {postingIdentity || 'Posting identity requires review'}
+                </div>
+              )}
+              <div className="mt-0.5">
+                <ListingDealerEvidence
+                  sellerName={contact?.dealer_name || listing.seller_name}
+                  sellerPhone={listing.seller_phone}
+                  contactPublicationApproved={listing.contact_publication_approved === true}
+                  rating={listing.seller_rating ?? sellerReputation?.rating}
+                  reviewCount={listing.seller_review_count ?? sellerReputation?.review_count}
+                  ratingEvidenceStatus={listing.seller_rating_evidence_status}
+                  showSellerName={false}
+                />
               </div>
-              <div className="text-xs text-[#8B95A2] mt-0.5">Not rated</div>
-              <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-600">
+              {sellerAnalytics && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <ContactMetric label="For sale" value={sellerAnalytics?.wts_posts || 0} />
+                  <ContactMetric label="Want to buy" value={sellerAnalytics?.wtb_posts || 0} />
+                </div>
+              )}
+              {meta.region && <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-600">
                 <Globe2 size={13} className="text-[#8A5826]" />
-                <span>{listing.location || listing.seller_country || listing.region || 'North America'}</span>
-              </div>
+                <span>{meta.region}</span>
+              </div>}
             </div>
 
             <p className="mt-5 text-xs leading-relaxed text-[#6B7280]">
-              Direct poster contact is not published. Curated Luxury can help route this listing inquiry without displaying a private number.
+              Direct poster contact is not published. Please help connect me with the poster through a verified channel without displaying a private number.
             </p>
 
-            <a
-              href={`https://wa.me/?text=${encodeURIComponent(`Hi, I am inquiring about the listing: ${meta.title} (${listing.id}) on Curated Luxury Trading Floor.`)}`}
+            {contact?.contact_channels?.whatsapp ? <a
+              href={contact.contact_channels.whatsapp}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#00D757] py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#00c34f]"
             >
               <MessageCircle size={18} />
               Ask Curated Luxury on WhatsApp
-            </a>
+            </a> : null}
+            {contact?.contact_channels?.telegram ? <a
+              href={contact.contact_channels.telegram}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#8A5826] bg-[#F6F0E7] py-3 text-sm font-bold text-[#653E23] transition hover:bg-[#EFE5D8]"
+            >
+              <MessageCircle size={18} />
+              Continue on Telegram
+            </a> : null}
           </div>
         </div>
       </div>
@@ -1826,6 +1955,7 @@ function MarketStat({ label, value }: { label: string; value: number }) {
 }
 
 function sourcePosterContact(listing: ListingRecord): ListingContact | null {
+  if (listing.contact_publication_approved !== true) return null;
   const phone = String(listing.seller_phone || listing['Phone Number'] || listing.phone_number || '').trim();
   const name = cleanValue(listing.seller_name || listing['Posted By'] || listing.posted_by);
   if (!phone && !name) return null;
@@ -1900,29 +2030,31 @@ function isPricePlausible(price: number | null) {
 }
 
 function getListingMeta(listing: ListingRecord) {
-  const region = normalizeRegion(listing.region || listing.location || null);
+  const region = postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
-  const currency = (cleanValue(listing.source_currency) || cleanValue(listing.currency) || 'USD').toUpperCase();
+  const currency = (cleanValue(listing.source_currency) || cleanValue(listing.currency)).toUpperCase();
   const isForeignCurrency = Boolean(currency && currency !== 'USD' && currency !== '$');
   const rawAmount = typeof listing.source_price_amount === 'number' && listing.source_price_amount > 0
     ? listing.source_price_amount
     : (typeof listing.price_raw === 'number' && listing.price_raw > 0 ? listing.price_raw : null);
 
-  const usdAmount = typeof listing.price_usd === 'number' && listing.price_usd > 0
-    ? listing.price_usd
-    : convertToUsd(rawAmount, currency);
+  const verifiedUsd = verifiedUsdPrice(listing);
+  const displayUsd = verifiedUsd ?? displayUsdPrice(listing);
+  const sourcePrice = formatSourcePrice(listing);
 
-  const priceLabel = usdAmount !== null && usdAmount > 0
-    ? formatUsdPrice(usdAmount)
-    : (rawAmount !== null ? formatUsdPrice(rawAmount) : 'Price not supplied');
+  const priceLabel = verifiedUsd !== null
+    ? formatUsdPrice(verifiedUsd)
+    : displayUsd !== null && displayUsd > 0
+      ? formatUsdPrice(displayUsd)
+      : (sourcePrice || ambiguousPriceDisplay);
 
-  const foreignLabel = isForeignCurrency && rawAmount !== null
+  const foreignLabel = verifiedUsd !== null && isForeignCurrency && rawAmount !== null
     ? `(${currency} ${rawAmount.toLocaleString('en-US')})`
     : null;
 
-  const priceEvidenceLabel = usdAmount !== null
-    ? (isForeignCurrency ? `Converted to USD from ${currency}` : 'USD verified price')
-    : 'Price not supplied';
+  const priceEvidenceLabel = verifiedUsd !== null
+    ? (listing.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED' ? 'Verified USD conversion' : 'USD verified price')
+    : sourcePrice ? 'Source price' : ambiguousPriceDisplay;
 
   const title = buildListingTitle(listing);
 
@@ -1967,10 +2099,58 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function verifiedUsdPrice(listing: ListingRecord) {
-  // Relaxing strict evidence check: if price_usd is populated by the API, it has been converted
   if (listing.price_research_eligible !== true) return null;
+  if (!['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX'].includes(
+    String(listing.price_evidence_status || '').toUpperCase(),
+  )) return null;
   const value = Number(listing.price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function TradingFloorQuickScroll() {
+  const [progress, setProgress] = useState(0);
+  const [scrollable, setScrollable] = useState(false);
+  useEffect(() => {
+    const update = () => {
+      const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      const maximum = Math.max(0, documentHeight - window.innerHeight);
+      setScrollable(maximum > 8);
+      setProgress(maximum > 0 ? Math.max(0, Math.min(1, window.scrollY / maximum)) : 0);
+    };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    observer?.observe(document.documentElement);
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+  const scrollTo = (top: number) => window.scrollTo({ top, behavior: 'smooth' });
+  if (!scrollable) return null;
+  return (
+    <nav
+      aria-label="Quick Trading Floor scroll"
+      className="fixed right-20 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center rounded-full border bg-white/95 p-1 shadow-lg max-lg:right-2 sm:max-lg:right-4 sm:p-1.5 lg:p-2"
+      style={{ borderColor: BORDER }}
+    >
+      <button type="button" title="Top" aria-label="Scroll to top of Trading Floor" onClick={() => scrollTo(0)} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronUp size={18} /></button>
+      <div role="progressbar" aria-label="Trading Floor scroll position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)} className="my-1 h-16 w-1.5 overflow-hidden rounded-full sm:h-24 lg:h-28" style={{ background: PANEL }}>
+        <div className="w-full rounded-full" style={{ height: `${Math.max(8, progress * 100)}%`, background: GOLD }} />
+      </div>
+      <button type="button" title="Bottom" aria-label="Scroll to bottom of Trading Floor" onClick={() => scrollTo(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight))} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronDown size={18} /></button>
+    </nav>
+  );
+}
+
+function displayUsdPrice(listing: ListingRecord) {
+  return verifiedUsdPrice(listing);
+}
+
+function ratingUsdPrice(listing: ListingRecord) {
+  return verifiedUsdPrice(listing);
 }
 
 function reviewedWorkbookUsdPrice(listing: ListingRecord) {
@@ -1997,10 +2177,11 @@ function formatSourcePrice(listing: ListingRecord) {
   if (sourceText && currency) {
     return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (sourceText) return sourceText;
+  if (sourceText) return ambiguousPriceDisplay;
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
-  if (!currency || !Number.isFinite(amount) || amount <= 0) return '';
+  if (!Number.isFinite(amount) || amount <= 0) return '';
+  if (!currency) return ambiguousPriceDisplay;
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 
@@ -2019,13 +2200,36 @@ function formatListingDate(dateStr: string | null) {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 }
 
-function normalizeRegion(region: string | null) {
+const POSTING_COUNTRY_NAMES: Record<string, string> = (() => {
+  const countries: Record<string, string> = {};
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    for (let first = 65; first <= 90; first += 1) {
+      for (let second = 65; second <= 90; second += 1) {
+        const code = String.fromCharCode(first, second);
+        if (['EU', 'EZ', 'UN', 'XA', 'XB'].includes(code)) continue;
+        const name = displayNames.of(code);
+        if (name && name !== code && !/^Unknown Region/i.test(name)) {
+          countries[code] = name;
+          countries[name.toUpperCase()] = name;
+        }
+      }
+    }
+  } catch {}
+  return {
+    ...countries,
+    US: 'United States', USA: 'United States', 'UNITED STATES': 'United States',
+    GB: 'United Kingdom', GBR: 'United Kingdom', UK: 'United Kingdom', 'UNITED KINGDOM': 'United Kingdom',
+    HK: 'Hong Kong', HKG: 'Hong Kong', 'HONG KONG': 'Hong Kong',
+    AE: 'United Arab Emirates', ARE: 'United Arab Emirates', UAE: 'United Arab Emirates', 'UNITED ARAB EMIRATES': 'United Arab Emirates',
+  };
+})();
+
+function postingCountry(region: string | null | undefined) {
   const value = cleanValue(region);
   if (!value) return null;
-  if (/north.?america|usa|us|canada/i.test(value)) return 'North America';
-  if (/europe|uk|germany|france|italy|swiss/i.test(value)) return 'Europe';
-  if (/asia|hong|china|japan|singapore|hk/i.test(value)) return 'Asia';
-  return value;
+  const candidate = value.split(',').at(-1)?.trim().toUpperCase() || '';
+  return POSTING_COUNTRY_NAMES[candidate] || null;
 }
 
 function cleanValue(value: string | number | null | undefined) {
@@ -2033,6 +2237,21 @@ function cleanValue(value: string | number | null | undefined) {
   const text = String(value).trim();
   if (!text || /^unknown$/i.test(text) || /^null$/i.test(text)) return '';
   return text;
+}
+
+function listingMessageEvidence(listing: ListingRecord) {
+  const scope = String(listing.raw_message_scope || '').toLowerCase();
+  if (listing.raw_message_scope === 'normalized_summary') {
+    return { label: 'SOURCE TEXT', text: 'Unverified workbook summary text is withheld from the customer view.' };
+  }
+  const rawMessage = cleanValue(listing.raw_message);
+  if (rawMessage && scope !== 'unavailable') return { label: 'Original raw message', text: rawMessage };
+  const rawLine = cleanValue(listing.raw_line);
+  if (rawLine) return { label: 'SOURCE LISTING LINE', text: rawLine };
+  const description = cleanValue(listing.description);
+  return description
+    ? { label: 'LISTING DESCRIPTION', text: description }
+    : { label: 'Original raw message', text: 'Original message requires review' };
 }
 
 function displayDial(value: string | null | undefined) {

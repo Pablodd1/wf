@@ -13,6 +13,8 @@ const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   loadReviewedWorkbookBrandRows,
   isReviewedWorkbookBrowseBrand,
+  rowModel,
+  rowReference,
   summarizeReviewedWorkbookModels,
 } = require('./_lib/reviewed-workbook-browse.cjs');
 const {
@@ -51,6 +53,7 @@ const FOREIGN_BRAND_NAMES = [
 ];
 
 const { normalizeCanonicalModel } = require('./_lib/catalog-taxonomy');
+const { buildReleaseBrowseIndex } = require('./_lib/release-catalog-browse.cjs');
 
 function reviewedWorkbookModel(row, brand) {
   const catalog = lookupCatalog(row.reference, brand);
@@ -146,27 +149,17 @@ module.exports = async function handler(req, res) {
         : canonicalBrand === 'Tudor' ? 'qnsa_tudor_reference_index' : 'qnsa_omega_reference_index';
       const { data: observedRows, error: observedError } = await client.rpc(releaseIndexRpc);
       if (observedError) throw observedError;
-      const grouped = new Map();
-      for (const row of observedRows || []) {
-        const model = String(row.model || canonicalBrand).trim() || canonicalBrand;
-        const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
-        if (row.reference) current.references.add(String(row.reference));
-        current.listing_count += Number(row.listing_count || 0);
-        grouped.set(model, current);
-      }
-      const models = [...grouped.entries()].map(([model, value]) => ({
-        model,
-        reference_count: value.references.size,
-        listing_count: value.listing_count,
-      })).sort((a, b) => b.listing_count - a.listing_count || a.model.localeCompare(b.model));
+      const browse = buildReleaseBrowseIndex(canonicalBrand, observedRows || []);
+      const models = browse.models;
       const payload = {
         success: true,
         brand: canonicalBrand,
         model_count: models.length,
-        catalog_reference_count: models.reduce((sum, item) => sum + item.reference_count, 0),
+        catalog_reference_count: browse.references.length,
         models,
         identity_source: 'EXACT_RELEASE_MANIFEST',
         evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+        suppressed_model_conflict_count: browse.modelConflicts.length,
       };
       _cache.set(brand, { at: Date.now(), payload });
       return res.status(200).json(payload);
@@ -189,9 +182,35 @@ module.exports = async function handler(req, res) {
     }
     if (isReviewedWorkbookBrowseBrand(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(getClient(), brand);
-      if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      if (!rows.length && brand.toLowerCase() !== 'tag heuer') {
+        return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      }
       if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe model browsing' });
-      const out = summarizeReviewedWorkbookModels(rows);
+      let out = summarizeReviewedWorkbookModels(rows);
+      if (brand.toLowerCase() === 'tag heuer') {
+        const grouped = new Map();
+        const exactReferenceKey = value => String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        for (const entry of listCanonicalCatalogReferences('TAG Heuer')) {
+          const model = normalizeCanonicalModel(entry.model, 'TAG Heuer');
+          const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
+          current.references.add(exactReferenceKey(entry.reference));
+          grouped.set(model, current);
+        }
+        for (const row of rows) {
+          const model = rowModel(row);
+          const reference = rowReference(row);
+          if (!model || !reference) continue;
+          const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
+          current.references.add(exactReferenceKey(reference));
+          current.listing_count += 1;
+          grouped.set(model, current);
+        }
+        out = [...grouped.entries()].map(([model, value]) => ({
+          model,
+          reference_count: value.references.size,
+          listing_count: value.listing_count,
+        })).sort((left, right) => right.listing_count - left.listing_count || left.model.localeCompare(right.model));
+      }
       const payload = {
         success: true,
         brand,
@@ -199,7 +218,9 @@ module.exports = async function handler(req, res) {
         catalog_reference_count: out.reduce((sum, item) => sum + item.reference_count, 0),
         observed_listing_count: out.reduce((sum, item) => sum + item.listing_count, 0),
         models: out,
-        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        identity_source: brand.toLowerCase() === 'tag heuer'
+          ? 'CATALOG_PLUS_POSITIVE_OWNER_REVIEWED_WORKBOOK'
+          : 'OWNER_REVIEWED_WORKBOOK',
         sample_capped: false,
       };
       _cache.set(brand, { at: Date.now(), payload });

@@ -6,6 +6,7 @@ const path = require('node:path');
 const test = require('node:test');
 const {
   isReviewedWorkbookBrowseBrand,
+  removeTagReferenceModelConflicts,
   summarizeReviewedWorkbookModels,
   summarizeReviewedWorkbookReferences,
 } = require('../api/_lib/reviewed-workbook-browse.cjs');
@@ -34,6 +35,34 @@ test('foreign brands, dates, and numeric tokens never become customer model name
   ]);
 });
 
+test('TAG Heuer browse fails cross-brand residual models closed', () => {
+  const tagRows = [
+    { brand_scope: 'TAG Heuer', model: 'Carrera', normalized_reference: 'CBS2210.FC6534' },
+    { brand_scope: 'TAG Heuer', model: 'GMT-Master', normalized_reference: '126710BLRO' },
+    { brand_scope: 'TAG Heuer', model: 'RM 72-01', normalized_reference: 'RM7201' },
+    { brand_scope: 'TAG Heuer', model: 'Monaco', normalized_reference: 'RM7201' },
+    { brand_scope: 'TAG Heuer', model: 'Carrera', normalized_reference: '116508' },
+    { brand_scope: 'TAG Heuer', model: 'Calatrava Pointer Date', normalized_reference: '6000' },
+    { brand_scope: 'TAG Heuer', model: '', normalized_reference: '6000' },
+    { brand_scope: 'TAG Heuer', model: 'Grand Complications', normalized_reference: '5270P-001' },
+    { brand_scope: 'TAG Heuer', model: 'Saxonia', normalized_reference: '219.032' },
+  ];
+  assert.deepEqual(summarizeReviewedWorkbookModels(tagRows), [
+    { model: 'Carrera', reference_count: 1, listing_count: 1 },
+  ]);
+  assert.deepEqual(summarizeReviewedWorkbookReferences(tagRows, 'GMT-Master'), []);
+});
+
+test('TAG Heuer browse excludes an uncatalogued reference claimed by multiple models', () => {
+  const rows = [
+    { brand_scope: 'TAG Heuer', model: 'Carrera', normalized_reference: 'CAZ1011.BA0842' },
+    { brand_scope: 'TAG Heuer', model: 'Formula 1', normalized_reference: 'CAZ1011BA0842' },
+    { brand_scope: 'TAG Heuer', model: 'Monaco', normalized_reference: 'CBL2111.FC6453' },
+  ];
+  assert.deepEqual(removeTagReferenceModelConflicts(rows, 'TAG Heuer'), [rows[2]]);
+  assert.equal(removeTagReferenceModelConflicts(rows, 'Omega').length, 3);
+});
+
 test('reviewed workbook references keep unverified prices out of analytics', () => {
   const references = summarizeReviewedWorkbookReferences(rows, 'PanoMaticInverse');
   assert.equal(references.length, 1);
@@ -53,7 +82,7 @@ test('Price Research opens a supplied brand and Trading Floor hides internal evi
   assert.match(research, /if \(initialBrand && !initialReference\) void loadModels\(initialBrand\)/);
   assert.match(research, /onChange=\{event => void loadModels\(event\.target\.value\)\}/);
   assert.doesNotMatch(floor, /aria-label="Listing evidence"|EvidenceIndicators|Source contact supplied|Source-supplied listing image/);
-  assert.match(floor, /cardHasImage \? 'min-h-\[620px\]' : 'min-h-\[320px\]'/);
+  assert.match(floor, /const cardHasImage = Boolean\(imageUrl && imageAvailable\)/);
   assert.match(floor, /\{cardHasImage && \(/);
 });
 
@@ -77,6 +106,9 @@ test('new admission brands use observed workbook evidence for browse counts', ()
     assert.match(source, /observed_listing_count/);
     assert.match(source, /OWNER_REVIEWED_WORKBOOK/);
   }
+  assert.match(modelsApi, /CATALOG_PLUS_POSITIVE_OWNER_REVIEWED_WORKBOOK/);
+  assert.match(modelsApi, /exactReferenceKey/);
+  assert.match(referencesApi, /listCanonicalCatalogReferences\('TAG Heuer', model\)/);
   assert.match(referencesApi, /eligible_observation_count/);
   assert.match(referencesApi, /EXACT_REFERENCE_ON_SELECTION/);
 });
@@ -86,7 +118,7 @@ test('Trading Floor reads admitted brands from approved inventory instead of the
   assert.match(source, /REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set/);
   assert.match(source, /'Glashütte Original'/);
   assert.match(source, /'Ulysse Nardin'/);
-  assert.match(source, /if \(brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS\.has\(brand\)\)/);
+  assert.match(source, /if \(brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS\.has\(brand\)[\s\S]*qnsa_rolex_patek_trading_floor_source[\s\S]*isRolexPatekOverlayBrand\(brand\)/);
   assert.match(source, /\.from\('reviewed_workbook_inventory'\)/);
   assert.match(source, /\.in\('verification_status', \[[\s\S]*'APPROVED_SINGLE_CANDIDATE',[\s\S]*MULTI_PARENT_VERIFICATION_STATUS/);
   assert.match(source, /available_from_approved_admission_inventory/);
@@ -95,11 +127,11 @@ test('Trading Floor reads admitted brands from approved inventory instead of the
 test('reviewed model calculations keep WTB separate and use only verified WTS prices', () => {
   const { workbookModelStats } = require('../api/model-stats.js');
   const summary = workbookModelStats([
-    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'A', listing_type: 'WTS', has_verified_usd_price: true, verified_price_usd: 5000, posting_date: '2026-01-01' },
-    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'B', listing_type: 'WTS', price_evidence_status: 'EXPLICIT_SOURCE_FX_CONVERTED', verified_price_usd: 7000, posting_date: '2026-02-01' },
-    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'C', listing_type: 'WTB', has_verified_usd_price: true, verified_price_usd: 9000, posting_date: '2026-03-01' },
-    { brand_scope: 'TAG Heuer', model: 'Carrera', public_reference: 'D', listing_type: 'WTS', verified_price_usd: 11000, posting_date: '2026-04-01' },
-  ], 'Carrera');
+    { brand_scope: 'Hublot', model: 'Big Bang', public_reference: 'A', listing_type: 'WTS', has_verified_usd_price: true, verified_price_usd: 5000, posting_date: '2026-01-01' },
+    { brand_scope: 'Hublot', model: 'Big Bang', public_reference: 'B', listing_type: 'WTS', price_evidence_status: 'EXPLICIT_SOURCE_FX_CONVERTED', verified_price_usd: 7000, posting_date: '2026-02-01' },
+    { brand_scope: 'Hublot', model: 'Big Bang', public_reference: 'C', listing_type: 'WTB', has_verified_usd_price: true, verified_price_usd: 9000, posting_date: '2026-03-01' },
+    { brand_scope: 'Hublot', model: 'Big Bang', public_reference: 'D', listing_type: 'WTS', verified_price_usd: 11000, posting_date: '2026-04-01' },
+  ], 'Big Bang');
   assert.equal(summary.total, 4);
   assert.equal(summary.wts, 3);
   assert.equal(summary.wtb, 1);

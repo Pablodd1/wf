@@ -42,6 +42,11 @@ const { applyEffectivePrice } = require('./_lib/corrected-price-source.cjs');
 const { recoverRecordPrices } = require('./_lib/runtime-price-recovery.cjs');
 const { enrichRowsWithExactDealerEvidence } = require('./_lib/listing-dealer-evidence.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
+const {
+  PRICE_SELECTOR: CURATED_SHADOW_PRICE_SOURCE,
+  isShadowBrand,
+  loadPriceResearch: loadCuratedShadowPriceResearch,
+} = require('./_lib/curated-luxury-shadow.cjs');
 const { isFourBrand, loadEffectivePage } = require('./_lib/four-brand-field-enrichment.cjs');
 const { applyConfirmedFiveWatchPublication } = require('./_lib/five-watch-publication.cjs');
 // ponytail: authorizeDealer no longer gates this public endpoint (see handler
@@ -104,6 +109,9 @@ async function loadQnsaPriceRpcRows(client, args) {
 function configuredReviewedPriceSource(brand) {
   const requested = String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim();
   const normalizedBrand = String(brand || '').trim().toLowerCase();
+  if (requested === CURATED_SHADOW_PRICE_SOURCE && isShadowBrand(brand)) {
+    return CURATED_SHADOW_PRICE_SOURCE;
+  }
   return requested === QNSA_PRICE_RESEARCH_SOURCE
     && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin', 'omega', 'tudor'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
@@ -134,7 +142,9 @@ function qnsaReferenceRowToMarketRow(row) {
     seller_name: source.seller_name,
     seller_phone: contactApproved ? (source.seller_phone || null) : null,
     price_raw: source.source_price_amount,
-    price_usd: source.workbook_price_usd || source.verified_price_usd || null,
+    price_usd: source.has_verified_usd_price === true
+      ? (source.workbook_price_usd || source.verified_price_usd || null)
+      : null,
     currency: source.source_currency,
     source_price_amount: source.source_price_amount,
     source_currency: source.source_currency,
@@ -788,7 +798,11 @@ async function lookupDemand(client, sourceTable, brand, referenceVariants, catal
     // Select only physical watch_records columns. phone_number, posted_by,
     // image_url, and display_image_url are view aliases and make PostgREST
     // reject the entire base-table request when selected here.
-    const columns = 'id,brand,model,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at,listing_date,listing_status';
+    // Production watch_records predates the optional catalog-model column on
+    // some projects. Demand identity reviews supply the canonical model after
+    // the bounded base-table read, so selecting model here is unnecessary and
+    // turns an otherwise valid exact-reference request into HTTP 500.
+    const columns = 'id,brand,reference,dial_color,condition,listing_type,verdict,confidence,raw_message,flags,dealer_id,source,seller_name,seller_phone,thumbnail_url,image_urls,has_images,price_raw,price_usd,currency,created_at';
     try {
       const verifiedDemand = await loadVerifiedDemandIdentityRows(client, {
         brand,
@@ -1042,6 +1056,21 @@ module.exports = async function handler(req, res) {
   // brand/reference even when an older deployment allowlist has not yet been
   // expanded. Price qualification remains a separate downstream gate.
   const client = getClient();
+  if (String(process.env.PRICE_RESEARCH_SOURCE_VIEW || '').trim() === CURATED_SHADOW_PRICE_SOURCE
+    && isShadowBrand(brand)) {
+    try {
+      const result = await loadCuratedShadowPriceResearch(client, {
+        brand,
+        reference: rawRef,
+        evidencePage,
+        evidencePageSize,
+      });
+      return res.status(200).json(result);
+    } catch (error) {
+      console.error('[price-research] curated shadow unavailable:', error.message || error);
+      return res.status(503).json({ error: 'Curated Luxury Price Research is temporarily unavailable' });
+    }
+  }
   const configuredSourceTable = configuredReviewedPriceSource(brand);
   if (isPendingQnsaBrandRelease(brand)) {
     return res.status(404).json({
@@ -1066,21 +1095,22 @@ module.exports = async function handler(req, res) {
   const preloadedReviewedWorkbookRows = preloadedReviewedWorkbookEvidenceRows
     .filter(row => String(row.listing_type || '').toUpperCase() === 'WTS');
   const exactReviewedWorkbookRelease = preloadedReviewedWorkbookEvidenceRows.length > 0;
+  const requestedCatalogHit = lookupCatalog(rawRef, brand || null);
+  const exactCatalogReference = Boolean(
+    requestedCatalogHit?.found
+    && requestedCatalogHit.matchType !== 'partial'
+    && requestedCatalogHit.reference
+  );
   if (!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationBrandAllowed(brand)) {
     return res.status(404).json({ error: 'Brand is not included in this release' });
   }
-  if (!configuredSourceTable && !exactReviewedWorkbookRelease && !isPublicationReferenceAllowed(brand, rawRef)) {
+  if (!configuredSourceTable && !exactReviewedWorkbookRelease && !exactCatalogReference
+    && !isPublicationReferenceAllowed(brand, rawRef)) {
     return res.status(404).json({ error: 'Reference is not included in this release' });
   }
 
   try {
     const controlledPaneraiRelease = brand.toLowerCase() === 'panerai';
-    const requestedCatalogHit = lookupCatalog(rawRef, brand || null);
-    const exactCatalogReference = Boolean(
-      requestedCatalogHit?.found
-      && requestedCatalogHit.matchType !== 'partial'
-      && requestedCatalogHit.reference
-    );
     const exactReviewedReleaseReference = isReviewedReleaseReference(brand, rawRef);
     const exactKnownReference = exactCatalogReference || exactReviewedReleaseReference;
     const directWatchRecordBrand = ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith']
@@ -1199,6 +1229,13 @@ module.exports = async function handler(req, res) {
     const pageSize = 1000;
     const sampleLimit = 10000;
     const columns = 'id,brand,model,reference,price_raw,price_usd,currency,raw_message,flags,created_at,listing_date,condition,source,dial_color,year,listing_type,dealer_id,seller_name,seller_phone,confidence,verdict,listing_status,thumbnail_url,image_urls,has_images';
+    // The legacy watch_records table is an evidence source, not the catalog
+    // model authority. Some production projects have not applied the optional
+    // model-column migration, so use only its proven physical contract and
+    // decorate the response from the versioned catalog downstream.
+    const watchRecordColumns = columns.split(',')
+      .filter(column => !['model', 'listing_date', 'listing_status'].includes(column))
+      .join(',');
     // ponytail: admit all records for analytics. classifyResearchEligibility
     // applies per-row quality gates downstream (missing price/brand/dial,
     // catalog mismatch, reference-as-price). Pre-filtering on verdict/confidence
@@ -1211,7 +1248,7 @@ module.exports = async function handler(req, res) {
     const buildRowsQuery = table => {
       let query = client
         .from(table)
-        .select(columns)
+        .select(table === 'watch_records' ? watchRecordColumns : columns)
         .eq('brand', brand)
         .eq('listing_type', 'WTS');
       query = table === QNSA_PRICE_RESEARCH_SOURCE && familyPrefix
@@ -1262,7 +1299,12 @@ module.exports = async function handler(req, res) {
       });
     } else {
       let result = await buildRowsQuery(sourceTable);
-      if (!configuredSourceTable && (result.error || !(result.data || []).length)) {
+      // An exact catalog reference with no verified-source rows is a valid
+      // zero-observation cohort. Do not reinterpret that empty result as a
+      // reason to query the obsolete raw watch_records schema. The legacy
+      // fallback remains available only while resolving a non-catalog identity.
+      if (!configuredSourceTable && !exactKnownReference && !exactReviewedWorkbookRelease
+        && (result.error || !(result.data || []).length)) {
         sourceTable = 'watch_records';
         result = await buildRowsQuery(sourceTable);
       }
@@ -1339,58 +1381,6 @@ module.exports = async function handler(req, res) {
     const sourceSampleCapped = exactEvidenceRecoveryCapped || (usingReviewedWorkbook
       ? baseSampleCount >= sampleLimit
       : baseSampleCount >= pageSize);
-
-    if (!rows || rows.length === 0) {
-      try {
-        const fs = require('fs');
-        const path = require('path');
-        const candidateFiles = [
-          path.join(process.cwd(), 'public', 'parsedWatches.json'),
-          path.join(process.cwd(), 'public', 'top_watches_trading_floor.json'),
-        ];
-        for (const filePath of candidateFiles) {
-          if (fs.existsSync(filePath)) {
-            const rawContent = fs.readFileSync(filePath, 'utf-8');
-            const data = JSON.parse(rawContent);
-            if (Array.isArray(data)) {
-              const normTarget = normRef(targetRef);
-              const matched = data.filter(r => {
-                const rRef = Array.isArray(r) ? r[2] : (r.reference || r.formData?.description || '');
-                return normRef(String(rRef || '')) === normTarget;
-              });
-              if (matched.length > 0) {
-                rows = matched.map((r, idx) => {
-                  if (Array.isArray(r)) {
-                    return {
-                      id: String(r[0] || `local_${idx}`),
-                      brand: String(r[1] || brand || 'Unknown'),
-                      reference: String(r[2] || targetRef),
-                      dial_color: String(r[3] || ''),
-                      price_raw: typeof r[4] === 'number' ? r[4] : null,
-                      price_usd: typeof r[5] === 'number' ? r[5] : (typeof r[4] === 'number' ? r[4] : null),
-                      currency: String(r[6] || 'USD'),
-                      condition: String(r[7] || 'New'),
-                      raw_message: String(r[8] || ''),
-                      listing_type: String(r[8] || '').toUpperCase().includes('WTB') ? 'WTB' : 'WTS',
-                      year: typeof r[12] === 'number' ? r[12] : null,
-                      model: String(r[13] || `${brand} ${targetRef}`),
-                      image_url: r[14] ? String(r[14]) : null,
-                      thumbnail_url: r[14] ? String(r[14]) : null,
-                      created_at: '2026-08-18',
-                      listing_date: '2026-08-18',
-                    };
-                  }
-                  return r;
-                });
-                break;
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[price-research] local fallback load failed:', e.message);
-      }
-    }
 
     if ((!rows || rows.length === 0) && preloadedReviewedWorkbookEvidenceRows.length === 0) {
       const emptyReconciliation = {
@@ -1736,6 +1726,7 @@ module.exports = async function handler(req, res) {
     // Use the same scope for the denominator so a stored indicator ratio can
     // never conflict with the cards and buyer count shown to the customer.
     const referenceQualifiedWtsCount = marketRows.length;
+    const referenceMarketSummary = summarizeComparableRows(marketRows).summary;
     const exactReferenceDemandRatio = referenceQualifiedWtsCount > 0
       ? demand.demand_count / referenceQualifiedWtsCount
       : null;
@@ -1745,6 +1736,8 @@ module.exports = async function handler(req, res) {
       source: 'live_exact_reference',
       demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
       reference_qualified_wts_count: referenceQualifiedWtsCount,
+      reference_analytics_ready: referenceMarketSummary.analytics_ready,
+      reference_stats: referenceMarketSummary.analytics_ready ? referenceMarketSummary.stats : null,
       demand_score: demand.demand_count,
       wtb_fs_ratio: exactReferenceDemandRatio,
     };
@@ -1856,6 +1849,8 @@ module.exports = async function handler(req, res) {
       wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
       wtb_demand_count: wtbDemandCount,
       reference_qualified_wts_count: referenceQualifiedWtsCount,
+      reference_analytics_ready: referenceMarketSummary.analytics_ready,
+      reference_stats: referenceMarketSummary.analytics_ready ? referenceMarketSummary.stats : null,
       demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
       excluded_count: excludedTotalCount,
       excluded_breakdown: {
@@ -1890,6 +1885,8 @@ module.exports = async function handler(req, res) {
       wts_eligible_analytics_count: wtsEligibleAnalyticsCount,
       wtb_demand_count: wtbDemandCount,
       reference_qualified_wts_count: referenceQualifiedWtsCount,
+      reference_analytics_ready: referenceMarketSummary.analytics_ready,
+      reference_stats: referenceMarketSummary.analytics_ready ? referenceMarketSummary.stats : null,
       demand_scope: 'EXACT_REFERENCE_ALL_DIALS',
       demand_rows: demand?.demand_rows || [],
       demand_evidence: {

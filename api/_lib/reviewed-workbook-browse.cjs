@@ -62,17 +62,39 @@ function clean(value) {
 }
 
 const { normalizeCanonicalModel } = require('./catalog-taxonomy');
+const { listCanonicalCatalogReferences } = require('./catalog');
+
+const TAG_HEUER_MODEL_PATTERN = /^(?:Aquaracer|Autavia|Carrera|Connected|Formula\s*1|Grand\s+Carrera|Heuer[-\s]?0[12]|Heritage|Link|Mikrograph|Monaco|Montreal|Monza|Professional)\b/i;
+const TAG_HEUER_UNCATALOGUED_REFERENCE_PATTERN = /^(?:C[A-Z]{1,3}|W[A-Z]{1,3}|S[A-Z]{1,3})\d/i;
+const tagReferenceKey = value => clean(value).toUpperCase().replace(/[^A-Z0-9]/g, '');
+const TAG_HEUER_CATALOG_BY_REFERENCE = new Map(listCanonicalCatalogReferences('TAG Heuer')
+  .map(entry => [tagReferenceKey(entry.reference), entry]));
 
 function rowModel(row) {
+  const ownerBrand = clean(row.brand_scope).toLowerCase();
+  const reference = rowReference(row);
+  if (ownerBrand === 'tag heuer') {
+    const catalog = TAG_HEUER_CATALOG_BY_REFERENCE.get(tagReferenceKey(reference));
+    if (catalog?.model) {
+      return normalizeCanonicalModel(catalog.model, 'TAG Heuer');
+    }
+  }
   const claimed = clean(row.catalog_model) || clean(row.model);
   if (!claimed || /^\d+$/.test(claimed) || /^\d{4}[/-]\d{1,2}$/.test(claimed)) {
-    return REFERENCE_ONLY_MODEL;
+    return ownerBrand === 'tag heuer' ? '' : REFERENCE_ONLY_MODEL;
   }
-  const ownerBrand = clean(row.brand_scope).toLowerCase();
   const foreignBrand = KNOWN_WATCH_BRANDS.some(brand => (
     brand.toLowerCase() !== ownerBrand
     && claimed.toLowerCase().includes(brand.toLowerCase())
   ));
+  // TAG Heuer's reviewed workbook contains confirmed cross-brand residuals
+  // whose claimed models (for example GMT-Master and RM 72-01) do not contain
+  // a foreign brand name.  Uncatalogued TAG rows therefore need a positive
+  // TAG collection identity before they may enter model/reference browsing.
+  if (ownerBrand === 'tag heuer') {
+    if (!TAG_HEUER_MODEL_PATTERN.test(claimed)
+      || !TAG_HEUER_UNCATALOGUED_REFERENCE_PATTERN.test(reference)) return '';
+  }
   const rawResult = foreignBrand ? REFERENCE_ONLY_MODEL : claimed;
   return normalizeCanonicalModel(rawResult, row.brand_scope || row.brand);
 }
@@ -86,6 +108,27 @@ function rowReference(row) {
 
 function isReviewedWorkbookBrowseBrand(value) {
   return REVIEWED_WORKBOOK_BROWSE_BRANDS.has(clean(value).toLowerCase());
+}
+
+function removeTagReferenceModelConflicts(rows, brand) {
+  if (clean(brand).toLowerCase() !== 'tag heuer') return rows;
+  const modelsByReference = new Map();
+  for (const row of rows) {
+    const model = rowModel(row);
+    const key = tagReferenceKey(rowReference(row));
+    if (!model || !key) continue;
+    const models = modelsByReference.get(key) || new Set();
+    models.add(model);
+    modelsByReference.set(key, models);
+  }
+  const conflicts = new Set([...modelsByReference.entries()]
+    .filter(([, models]) => models.size > 1)
+    .map(([key]) => key));
+  return rows.filter(row => {
+    const model = rowModel(row);
+    const key = tagReferenceKey(rowReference(row));
+    return Boolean(model && key && !conflicts.has(key));
+  });
 }
 
 async function loadReviewedWorkbookBrandRows(client, brand) {
@@ -131,9 +174,11 @@ async function loadReviewedWorkbookBrandRows(client, brand) {
         ? Number(row.workbook_price_usd) || null
         : null,
     } : row));
-    if (!data || data.length < PAGE_SIZE) return { rows, truncated: false };
+    if (!data || data.length < PAGE_SIZE) {
+      return { rows: removeTagReferenceModelConflicts(rows, brand), truncated: false };
+    }
   }
-  return { rows, truncated: true };
+  return { rows: removeTagReferenceModelConflicts(rows, brand), truncated: true };
 }
 
 async function loadReviewedWorkbookBrandCount(client, brand) {
@@ -155,6 +200,7 @@ function summarizeReviewedWorkbookModels(rows) {
     const reference = rowReference(row);
     if (!reference) continue;
     const model = rowModel(row);
+    if (!model) continue;
     const current = models.get(model) || { references: new Set(), listing_count: 0 };
     current.references.add(reference);
     current.listing_count += 1;
@@ -215,6 +261,7 @@ module.exports = {
   isReviewedWorkbookBrowseBrand,
   loadReviewedWorkbookBrandCount,
   loadReviewedWorkbookBrandRows,
+  removeTagReferenceModelConflicts,
   rowModel,
   rowReference,
   summarizeReviewedWorkbookModels,

@@ -1,55 +1,681 @@
-name: QNSA read-only disk capacity audit
+# Branch-only registration shim: this path is already registered on the default
+# branch, while this dedicated definition runs only when this audit ref is
+# selected manually.
+name: QNSA Raw-First Rolex Patek Canonical Audit
 
 on:
   workflow_dispatch:
     inputs:
       confirmation:
-        description: Type AUDIT_QNSA_DISK_READ_ONLY
+        description: Type RUN_QNSA_RAW_FIRST_ROLEX_PATEK_AUDIT
         required: true
         type: string
-      minimum_headroom_gib:
-        description: Required free filesystem headroom in GiB
-        required: true
-        default: '0.25'
+      resume_run_id:
+        description: Optional prior V2 run ID whose sanitized checkpoint should be resumed
+        required: false
+        type: string
+      validate_artifact_run_id:
+        description: Optional completed V2 run ID to validate without querying QNSA
+        required: false
+        type: string
+      sample_high_cardinality:
+        description: Also run ten bounded read-only source samples after artifact validation
+        required: false
+        default: false
+        type: boolean
+      v3_artifact_run_id:
+        description: Completed V2 artifact run ID for targeted observation census V3
+        required: false
+        type: string
+      v3_resume_run_id:
+        description: Optional prior V3 run ID containing a private resumable checkpoint
+        required: false
+        type: string
+      current_inventory_v2_run_id:
+        description: Completed V2 artifact run ID for the read-only current-inventory shadow
+        required: false
+        type: string
+      current_inventory_v3_run_id:
+        description: Completed private V3 artifact run ID for the read-only current-inventory shadow
+        required: false
+        type: string
+      final_freeze_source_run_id:
+        description: Completed current-inventory private artifact run for artifact-only final freeze
+        required: false
+        type: string
+      final_freeze_source_head_sha:
+        description: Exact completed current-inventory source commit SHA
+        required: false
         type: string
 
+permissions:
+  contents: read
+  actions: read
+
 concurrency:
-  group: qnsa-read-only-disk-capacity-audit
+  group: qnsa-raw-first-rolex-patek-canonical-audit
   cancel-in-progress: false
 
 jobs:
-  audit:
-    if: ${{ inputs.confirmation == 'AUDIT_QNSA_DISK_READ_ONLY' }}
+  canonical-read-only-audit:
+    if: ${{ inputs.validate_artifact_run_id == '' && inputs.v3_artifact_run_id == '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' && inputs.final_freeze_source_run_id == '' }}
+    name: Canonical QNSA SELECT-only audit
     runs-on: ubuntu-latest
-    environment: production
-    timeout-minutes: 10
-    permissions:
-      contents: read
+    timeout-minutes: 180
+    environment: Production
     env:
+      CANONICAL_PROJECT_REF: qnsafosakvonzgfcsphh
+      RAW_FIRST_SHARDS: 16
+      RAW_FIRST_PAGE_SIZE: 2000
+      RAW_FIRST_PREFLIGHT_PAGE_SIZE: 100
+      RAW_FIRST_OUTPUT: audit-output/raw-first-rolex-patek-run-${{ github.run_id }}
+      RAW_FIRST_RESUME_DIR: audit-resume-input
+      RAW_FIRST_PREFLIGHT_OUTPUT: audit-output/raw-first-rolex-patek-preflight-${{ github.run_id }}.json
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
-      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
-      MINIMUM_HEADROOM_GIB: ${{ inputs.minimum_headroom_gib }}
-      DISK_AUDIT_PATH: qnsa-disk-capacity-audit.json
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Validate dispatch and canonical target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "RUN_QNSA_RAW_FIRST_ROLEX_PATEK_AUDIT"
+          test "$CANONICAL_PROJECT_REF" = "qnsafosakvonzgfcsphh"
+          test -n "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Check out audit candidate only
+        uses: actions/checkout@v4
+        with:
+          ref: codex/raw-first-rolex-patek-audit
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate read-only audit authorization
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate every statement as SELECT-only
+        run: node tools/audit/raw-first-rolex-patek-audit.cjs --validate-only
+
+      - name: Verify canonical Management API target before audit queries
+        shell: bash
         run: |
-          test "$SUPABASE_PROJECT_REF" = "$EXPECTED_PROJECT_REF"
-          test -n "$SUPABASE_ACCESS_TOKEN"
-          test "$MINIMUM_HEADROOM_GIB" != ""
-      - name: Read configured disk, utilization, and autoscale state
-        run: node tools/supabase/audit-disk-capacity.cjs
-      - name: Enforce minimum filesystem headroom
-        run: node -e "const a=require('./qnsa-disk-capacity-audit.json'); if(!a.gate.headroom_satisfied) throw new Error('QNSA disk headroom gate failed')"
-      - name: Upload sanitized disk evidence
+          set -euo pipefail
+          payload='{"query":"SELECT '\''qnsafosakvonzgfcsphh'\''::text AS project_ref;","read_only":true}'
+          response="$(curl --fail-with-body --silent --show-error \
+            --request POST \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header 'Content-Type: application/json' \
+            --data "$payload" \
+            "https://api.supabase.com/v1/projects/qnsafosakvonzgfcsphh/database/query")"
+          node -e "const rows=JSON.parse(process.argv[1]);if(rows?.[0]?.project_ref!=='qnsafosakvonzgfcsphh')process.exit(1)" "$response"
+
+      - name: Preflight bounded current and Trading Floor pages
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/audit/raw-first-rolex-patek-audit.cjs --preflight > "$RAW_FIRST_PREFLIGHT_OUTPUT"
+          node -e "const p=require('./' + process.env.RAW_FIRST_PREFLIGHT_OUTPUT);if(p.decision!=='PREFLIGHT_OK'||p.page_size>500)process.exit(1)"
+
+      - name: Download sanitized resume checkpoint
+        if: ${{ inputs.resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.resume_run_id }}
+          pattern: qnsa-raw-first-rolex-patek-${{ inputs.resume_run_id }}-*
+          merge-multiple: true
+          path: ${{ env.RAW_FIRST_RESUME_DIR }}
+
+      - name: Execute or resume canonical bounded census
+        id: audit
+        shell: bash
+        run: |
+          set +e
+          node tools/audit/raw-first-rolex-patek-audit.cjs
+          audit_exit=$?
+          set -e
+          if [[ ! -f "$RAW_FIRST_OUTPUT/summary.json" ]]; then
+            node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = path.resolve(process.env.RAW_FIRST_OUTPUT);
+          const checkpointPath = path.join(root, 'checkpoint.json');
+          const checkpoint = JSON.parse(fs.readFileSync(checkpointPath, 'utf8'));
+          checkpoint.status = 'INCOMPLETE';
+          checkpoint.decision = 'AUDIT_INCOMPLETE_TECHNICAL';
+          checkpoint.failure = { message: 'Audit process terminated before final summary; sanitized checkpoint preserved' };
+          fs.writeFileSync(checkpointPath, `${JSON.stringify(checkpoint, null, 2)}\n`);
+          fs.writeFileSync(path.join(root, 'summary.json'), `${JSON.stringify({
+            contract: checkpoint.contract,
+            decision: checkpoint.decision,
+            generated_at: new Date().toISOString(),
+            canonical_project_ref: checkpoint.canonical_project_ref,
+            read_only: true,
+            production_writes: 0,
+            raw_mutations: 0,
+            phase7b_rerun: false,
+            error: checkpoint.failure.message,
+            completed_pages: checkpoint.completed_pages,
+          }, null, 2)}\n`);
+          NODE
+          fi
+          decision="$(node -e "const fs=require('node:fs'); const path=require('node:path'); process.stdout.write(JSON.parse(fs.readFileSync(path.resolve(process.env.RAW_FIRST_OUTPUT, 'summary.json'),'utf8')).decision)")"
+          case "$decision" in
+            RAW_FIRST_READY|NOT_READY_RAW_SOURCE_GAPS|AUDIT_INCOMPLETE_QUERY_TIMEOUT|AUDIT_INCOMPLETE_TECHNICAL) ;;
+            *) exit 1 ;;
+          esac
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+          echo "audit_exit=$audit_exit" >> "$GITHUB_OUTPUT"
+
+      - name: Verify sanitized evidence contract
+        if: ${{ always() && steps.audit.outputs.decision != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = process.env.RAW_FIRST_OUTPUT;
+          const summary = JSON.parse(fs.readFileSync(path.join(root, 'summary.json'), 'utf8'));
+          if (summary.canonical_project_ref !== 'qnsafosakvonzgfcsphh') throw new Error('wrong project');
+          for (const key of ['production_writes', 'raw_mutations', 'endpoint_switches', 'ui_changes', 'catalog_changes']) {
+            if (summary[key] !== 0) throw new Error(`${key} must be zero`);
+          }
+          if (summary.phase7b_rerun !== false || summary.read_only !== true) throw new Error('read-only contract failed');
+          for (const name of ['summary.json', 'checkpoint.json']) {
+            if (!fs.existsSync(path.join(root, name))) throw new Error(`missing ${name}`);
+          }
+          if (!summary.decision.startsWith('AUDIT_INCOMPLETE_')) {
+            for (const name of ['manifest-sha256.json', 'sanitized-exact-deltas.json.gz']) {
+              if (!fs.existsSync(path.join(root, name))) throw new Error(`missing ${name}`);
+            }
+          }
+          NODE
+
+      - name: Upload sanitized audit evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: qnsa-read-only-disk-audit-${{ github.run_id }}
-          path: qnsa-disk-capacity-audit.json
+          name: qnsa-raw-first-rolex-patek-${{ github.run_id }}-${{ steps.audit.outputs.decision || 'AUDIT_INCOMPLETE_TECHNICAL' }}
           if-no-files-found: error
           retention-days: 30
+          path: |
+            ${{ env.RAW_FIRST_PREFLIGHT_OUTPUT }}
+            ${{ env.RAW_FIRST_OUTPUT }}/summary.json
+            ${{ env.RAW_FIRST_OUTPUT }}/checkpoint.json
+            ${{ env.RAW_FIRST_OUTPUT }}/manifest-sha256.json
+            ${{ env.RAW_FIRST_OUTPUT }}/sanitized-exact-deltas.json.gz
+            ${{ env.RAW_FIRST_OUTPUT }}/resume-pages/**/*.json.gz
+
+      - name: Preserve technical outcome after artifact upload
+        if: ${{ always() && startsWith(steps.audit.outputs.decision, 'AUDIT_INCOMPLETE_') }}
+        shell: bash
+        run: exit 1
+
+  validate-existing-child-counts:
+    if: ${{ inputs.validate_artifact_run_id != '' && inputs.v3_artifact_run_id == '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' && inputs.final_freeze_source_run_id == '' }}
+    name: Validate existing sanitized child counts
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: Production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ inputs.sample_high_cardinality && secrets.SUPABASE_ACCESS_TOKEN || '' }}
+    steps:
+      - name: Validate artifact-only dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "VALIDATE_QNSA_RAW_FIRST_CHILD_COUNTS"
+          [[ "${{ inputs.validate_artifact_run_id }}" =~ ^[0-9]+$ ]]
+
+      - name: Check out validation candidate only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Download completed sanitized artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.validate_artifact_run_id }}
+          pattern: qnsa-raw-first-rolex-patek-${{ inputs.validate_artifact_run_id }}-*
+          merge-multiple: true
+          path: audit-resume-input
+
+      - name: Validate identities, paging, and parent cardinality
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-resume-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          artifact_root="$(dirname "$checkpoint")"
+          mkdir -p audit-output/raw-first-child-validation
+          node tools/audit/validate-raw-first-child-counts.cjs \
+            "$artifact_root" \
+            audit-output/raw-first-child-validation/report.json
+
+          if [[ "${{ inputs.sample_high_cardinality }}" = "true" ]]; then
+            test -n "$SUPABASE_ACCESS_TOKEN"
+            node tools/audit/sample-raw-first-high-cardinality.cjs \
+              "$artifact_root" \
+              audit-output/raw-first-child-validation/report.json \
+              audit-output/raw-first-child-validation/high-cardinality-sample.json
+          fi
+
+      - name: Upload compact child-count validation
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-raw-first-child-validation-${{ inputs.validate_artifact_run_id }}-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          path: audit-output/raw-first-child-validation/*.json
+
+  targeted-observation-census-v3:
+    if: ${{ inputs.v3_artifact_run_id != '' && inputs.current_inventory_v2_run_id == '' && inputs.current_inventory_v3_run_id == '' && inputs.final_freeze_source_run_id == '' }}
+    name: Targeted evidence-enriched observation census V3
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    environment: Production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      RAW_FIRST_V3_OUTPUT: audit-output/raw-first-observation-v3-${{ github.run_id }}
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - name: Validate V3 dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "RUN_QNSA_RAW_FIRST_OBSERVATION_CENSUS_V3"
+          [[ "${{ inputs.v3_artifact_run_id }}" =~ ^[0-9]+$ ]]
+          test -n "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Check out V3 candidate only
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate V3 SELECT-only target contract
+        run: node tools/audit/raw-first-observation-census-v3.cjs --validate-only
+
+      - name: Download completed V2 sanitized artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.v3_artifact_run_id }}
+          pattern: qnsa-raw-first-rolex-patek-${{ inputs.v3_artifact_run_id }}-*
+          merge-multiple: true
+          path: audit-v2-input
+
+      - name: Resolve completed V2 artifact root
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-v2-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          echo "RAW_FIRST_V2_ARTIFACT=$(dirname "$checkpoint")" >> "$GITHUB_ENV"
+
+      - name: Download optional private V3 resume evidence
+        if: ${{ inputs.v3_resume_run_id != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.v3_resume_run_id }}
+          pattern: PRIVATE-qnsa-raw-first-observation-v3-${{ inputs.v3_resume_run_id }}
+          merge-multiple: true
+          path: audit-v3-resume-input
+
+      - name: Resolve optional V3 resume root
+        if: ${{ inputs.v3_resume_run_id != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-v3-resume-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          echo "RAW_FIRST_V3_RESUME_DIR=$(dirname "$checkpoint")" >> "$GITHUB_ENV"
+
+      - name: Run targeted bounded observation census
+        id: census
+        shell: bash
+        run: |
+          set +e
+          node tools/audit/raw-first-observation-census-v3.cjs
+          census_exit=$?
+          set -e
+          test -f "$RAW_FIRST_V3_OUTPUT/summary.json"
+          decision="$(node -e "process.stdout.write(require('./' + process.env.RAW_FIRST_V3_OUTPUT + '/summary.json').decision)")"
+          case "$decision" in
+            RAW_FIRST_OBSERVATION_CENSUS_READY|NOT_READY_OBSERVATION_IDENTITY_GAPS) ;;
+            *) exit 1 ;;
+          esac
+          if [[ "$census_exit" -ne 0 && "$census_exit" -ne 2 ]]; then exit "$census_exit"; fi
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+
+      - name: Upload compact V3 summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-raw-first-observation-v3-summary-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ env.RAW_FIRST_V3_OUTPUT }}/summary.json
+            ${{ env.RAW_FIRST_V3_OUTPUT }}/checkpoint.json
+
+      - name: Upload private resumable V3 lineage evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRIVATE-qnsa-raw-first-observation-v3-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          path: |
+            ${{ env.RAW_FIRST_V3_OUTPUT }}/summary.json
+            ${{ env.RAW_FIRST_V3_OUTPUT }}/checkpoint.json
+            ${{ env.RAW_FIRST_V3_OUTPUT }}/v3-pages/**/*.json.gz
+
+  current-inventory-shadow:
+    if: ${{ inputs.current_inventory_v2_run_id != '' || inputs.current_inventory_v3_run_id != '' }}
+    name: Evidence-backed current-inventory shadow
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    environment: Production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      CURRENT_INVENTORY_OUTPUT: audit-output/current-inventory-shadow-${{ github.run_id }}
+      V2_ARTIFACT_RUN_ID: ${{ inputs.current_inventory_v2_run_id }}
+      V3_ARTIFACT_RUN_ID: ${{ inputs.current_inventory_v3_run_id }}
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - name: Validate current-inventory dispatch
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "RUN_QNSA_CURRENT_INVENTORY_SHADOW_V1"
+          [[ "${{ inputs.current_inventory_v2_run_id }}" =~ ^[0-9]+$ ]]
+          [[ "${{ inputs.current_inventory_v3_run_id }}" =~ ^[0-9]+$ ]]
+          test -n "$SUPABASE_ACCESS_TOKEN"
+
+      - name: Check out current-inventory candidate only
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Validate SELECT-only worker contract
+        run: node tools/audit/current-inventory-shadow.cjs --validate-only
+
+      - name: Download completed V2 sanitized evidence
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.current_inventory_v2_run_id }}
+          pattern: qnsa-raw-first-rolex-patek-${{ inputs.current_inventory_v2_run_id }}-*
+          merge-multiple: true
+          path: audit-current-v2-input
+
+      - name: Resolve completed V2 root
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-current-v2-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          echo "RAW_FIRST_V2_ARTIFACT=$(dirname "$checkpoint")" >> "$GITHUB_ENV"
+
+      - name: Download completed private V3 evidence
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.current_inventory_v3_run_id }}
+          pattern: PRIVATE-qnsa-raw-first-observation-v3-${{ inputs.current_inventory_v3_run_id }}
+          merge-multiple: true
+          path: audit-current-v3-input
+
+      - name: Resolve completed V3 root
+        shell: bash
+        run: |
+          set -euo pipefail
+          checkpoint="$(find audit-current-v3-input -type f -name checkpoint.json -print -quit)"
+          test -n "$checkpoint"
+          echo "RAW_FIRST_V3_ARTIFACT=$(dirname "$checkpoint")" >> "$GITHUB_ENV"
+
+      - name: Build read-only shadow inventory and canary evidence
+        id: shadow
+        shell: bash
+        run: |
+          set +e
+          node tools/audit/current-inventory-shadow.cjs
+          shadow_exit=$?
+          set -e
+          test -f "$CURRENT_INVENTORY_OUTPUT/summary.json"
+          decision="$(node -e "process.stdout.write(require('./' + process.env.CURRENT_INVENTORY_OUTPUT + '/summary.json').decision)")"
+          case "$decision" in
+            CURATED_LUXURY_ROLEX_PATEK_CANARY_READY|NOT_READY_CURRENT_INVENTORY_GAPS) ;;
+            *) exit 1 ;;
+          esac
+          if [[ "$shadow_exit" -ne 0 && "$shadow_exit" -ne 2 ]]; then exit "$shadow_exit"; fi
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+
+      - name: Verify fail-closed shadow contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const root = process.env.CURRENT_INVENTORY_OUTPUT;
+          const summary = JSON.parse(fs.readFileSync(path.join(root, 'summary.json'), 'utf8'));
+          if (summary.canonical_project_ref !== 'qnsafosakvonzgfcsphh') throw new Error('wrong project');
+          if (!summary.read_only || summary.production_writes !== 0 || summary.raw_mutations !== 0
+            || summary.production_source_switch !== false || summary.ui_changes !== 0) throw new Error('mutation boundary failed');
+          if (!['CURATED_LUXURY_ROLEX_PATEK_CANARY_READY', 'NOT_READY_CURRENT_INVENTORY_GAPS'].includes(summary.decision)) {
+            throw new Error('invalid decision');
+          }
+          for (const name of ['checkpoint.json', 'canary-evidence.json', 'manifest-sha256.json', 'observed-reference-registry.json.gz']) {
+            if (!fs.existsSync(path.join(root, name))) throw new Error(`missing ${name}`);
+          }
+          NODE
+
+      - name: Upload compact current-inventory decision
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-current-inventory-shadow-summary-${{ github.run_id }}-${{ steps.shadow.outputs.decision || 'INCOMPLETE' }}
+          if-no-files-found: error
+          retention-days: 30
+          path: |
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/summary.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/checkpoint.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/canary-evidence.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/manifest-sha256.json
+
+      - name: Upload private shadow lineage foundation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRIVATE-qnsa-current-inventory-shadow-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+          path: |
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/summary.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/checkpoint.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/canary-evidence.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/manifest-sha256.json
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/observed-reference-registry.json.gz
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/offer-partitions/**/*.jsonl.gz
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/current-pages/**/*.json.gz
+            ${{ env.CURRENT_INVENTORY_OUTPUT }}/family-pages/**/*.json.gz
+
+  final-rolex-patek-rescue-freeze:
+    if: ${{ inputs.final_freeze_source_run_id != '' || inputs.final_freeze_source_head_sha != '' }}
+    name: Artifact-only LATEST_OBSERVED rescue and freeze
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      FINAL_SOURCE_RUN_ID: ${{ inputs.final_freeze_source_run_id }}
+      FINAL_SOURCE_HEAD_SHA: ${{ inputs.final_freeze_source_head_sha }}
+      FINAL_SOURCE_ARTIFACT: audit-final-source
+      FINAL_FREEZE_OUTPUT: audit-output/rolex-patek-final-${{ github.run_id }}
+      FINAL_FREEZE_VERSION: curated-luxury-rolex-patek-final-${{ github.run_id }}
+      FINAL_COMMIT_SHA: ${{ github.sha }}
+      FINAL_PR_URL: https://github.com/Pablodd1/wf/pull/775
+      NODE_OPTIONS: --max-old-space-size=6144
+    steps:
+      - name: Validate exact frozen source and no-re-census dispatch
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "${{ inputs.confirmation }}" = "FREEZE_ROLEX_PATEK_FINAL_V1"
+          test "$FINAL_SOURCE_RUN_ID" = "32934432129"
+          test "$FINAL_SOURCE_HEAD_SHA" = "0bdc7f710eb3d28ba329582d379f41f602a53d3e"
+          actual_head="$(gh api "repos/Pablodd1/wf/actions/runs/$FINAL_SOURCE_RUN_ID" --jq .head_sha)"
+          actual_status="$(gh api "repos/Pablodd1/wf/actions/runs/$FINAL_SOURCE_RUN_ID" --jq '.status + ":" + .conclusion')"
+          test "$actual_head" = "$FINAL_SOURCE_HEAD_SHA"
+          test "$actual_status" = "completed:success"
+
+      - name: Check out final freeze candidate only
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Run focused final-freeze tests
+        run: node --test tests/final-rolex-patek-freeze.test.cjs tests/current-inventory-shadow-lib.test.cjs
+
+      - name: Download exact completed private shadow artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.final_freeze_source_run_id }}
+          name: PRIVATE-qnsa-current-inventory-shadow-${{ inputs.final_freeze_source_run_id }}
+          path: ${{ env.FINAL_SOURCE_ARTIFACT }}
+
+      - name: Run one deterministic LATEST_OBSERVED rescue pass
+        id: freeze
+        shell: bash
+        run: |
+          set +e
+          npm run freeze:rolex-patek-final
+          freeze_exit=$?
+          set -e
+          test -f "$FINAL_FREEZE_OUTPUT/freeze.json"
+          decision="$(node -e "process.stdout.write(require('./' + process.env.FINAL_FREEZE_OUTPUT + '/freeze.json').decision)")"
+          case "$decision" in
+            CURATED_LUXURY_ROLEX_PATEK_FINAL_READY|NOT_READY_FINAL_COHORT) ;;
+            *) exit 1 ;;
+          esac
+          if [[ "$freeze_exit" -ne 0 && "$freeze_exit" -ne 2 ]]; then exit "$freeze_exit"; fi
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+
+      - name: Verify final freeze contract and manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const root = process.env.FINAL_FREEZE_OUTPUT;
+          const freeze = JSON.parse(fs.readFileSync(path.join(root, 'freeze.json'), 'utf8'));
+          const manifest = JSON.parse(fs.readFileSync(path.join(root, 'manifest-sha256.json'), 'utf8'));
+          const canary = JSON.parse(fs.readFileSync(path.join(root, 'canary-evidence.json'), 'utf8')).canary;
+          const checksum = file => {
+            const hash = crypto.createHash('sha256');
+            hash.end(fs.readFileSync(file).toString('base64'));
+            return hash.digest('hex');
+          };
+          if (freeze.source_artifact_run_id !== '32934432129' || freeze.source_partitions_verified !== 256) {
+            throw new Error('wrong frozen source');
+          }
+          if (!freeze.read_only || freeze.production_writes !== 0 || freeze.raw_mutations !== 0
+            || freeze.production_source_switch !== false || freeze.destructive_overwrites !== 0
+            || freeze.no_broad_recensus !== true) throw new Error('mutation or recensus boundary failed');
+          if (freeze.brands.Rolex.confirmed_current !== 221830
+            || freeze.brands['Patek Philippe'].confirmed_current !== 108890) throw new Error('baseline loss');
+          for (const brand of ['Rolex', 'Patek Philippe']) {
+            const row = freeze.brands[brand];
+            if (row.final_publishable !== row.confirmed_current + row.latest_observed_rescued
+              || row.final_publishable !== row.wts + row.wtb) throw new Error(`${brand} final count mismatch`);
+          }
+          if (!freeze.protection.confirmed_current_baseline_preserved
+            || !freeze.protection.final_counts_above_website_floors) throw new Error('existing inventory protection failed');
+          if (freeze.canary.failed !== 0 || freeze.canary.passed !== freeze.canary.requested
+            || canary.some(row => row.status !== 'VERIFIED_FINAL_FROZEN_COHORT')) throw new Error('canary failed');
+          if (canary.some(row => /^(?:RM\d|W[A-Z0-9]|Q\d{6,})/i.test(String(row.observed_reference || '').replace(/[^A-Z0-9]/gi, '')))) {
+            throw new Error('foreign reference canary');
+          }
+          if (manifest.files.length !== freeze.manifest.files
+            || new Set(manifest.files.map(row => row.relative)).size !== manifest.files.length) throw new Error('manifest mismatch');
+          for (const row of manifest.files) {
+            const file = path.join(root, row.relative);
+            if (!fs.existsSync(file) || fs.statSync(file).size !== row.bytes || checksum(file) !== row.sha256) {
+              throw new Error(`artifact mismatch: ${row.relative}`);
+            }
+          }
+          if (checksum(path.join(root, 'manifest-sha256.json')) !== freeze.manifest_sha256) {
+            throw new Error('manifest SHA mismatch');
+          }
+          NODE
+
+      - name: Upload compact final freeze decision
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-patek-final-freeze-${{ github.run_id }}-${{ steps.freeze.outputs.decision || 'INCOMPLETE' }}
+          if-no-files-found: error
+          retention-days: 90
+          path: |
+            ${{ env.FINAL_FREEZE_OUTPUT }}/freeze.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/canary-evidence.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/price-research-summary.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/manifest-sha256.json
+
+      - name: Upload private frozen cohort
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: PRIVATE-qnsa-rolex-patek-final-cohort-${{ github.run_id }}
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
+          path: |
+            ${{ env.FINAL_FREEZE_OUTPUT }}/freeze.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/canary-evidence.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/price-research-summary.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/manifest-sha256.json
+            ${{ env.FINAL_FREEZE_OUTPUT }}/cohort-pages/**/*.json.gz
+
+      - name: Preserve fail-closed final decision
+        if: ${{ always() && steps.freeze.outputs.decision == 'NOT_READY_FINAL_COHORT' }}
+        run: exit 1

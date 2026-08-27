@@ -261,6 +261,17 @@ test("four-brand effective pages use one offset stream and never inherit six-bra
   );
 });
 
+test("four-brand effective page timeouts fail over without swallowing unrelated errors", () => {
+  const { isTransientEffectiveRpcTimeout } = require('../api/_lib/four-brand-field-enrichment.cjs');
+  assert.equal(isTransientEffectiveRpcTimeout({ code: '57014', message: 'canceling statement due to statement timeout' }), true);
+  assert.equal(isTransientEffectiveRpcTimeout({ status: 500, message: 'canceling statement due to statement timeout' }), true);
+  assert.equal(isTransientEffectiveRpcTimeout({ status: 503, message: 'statement timeout' }), true);
+  assert.equal(isTransientEffectiveRpcTimeout({ status: 500, message: 'permission denied' }), false);
+  assert.equal(isTransientEffectiveRpcTimeout({ status: 500, message: 'canceling statement due to user request' }), false);
+  assert.equal(isTransientEffectiveRpcTimeout({ status: 503, message: 'canceling statement during shutdown' }), false);
+  assert.match(inventorySource, /isTransientEffectiveRpcTimeout\(rpcError\)/);
+});
+
 test("forward count shares every effective-page eligibility and customer filter", () => {
   assert.match(forwardReadMigration, /qnsa_four_brand_effective_row_count/);
   for (const predicate of [

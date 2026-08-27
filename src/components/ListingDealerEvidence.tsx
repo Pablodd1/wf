@@ -1,5 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- the shared evidence classifier must stay identical across both exported renderers */
 import { Link } from 'react-router-dom';
+import { strongestPostingIdentity } from '../lib/customerEvidence';
 
 export type DealerRatingEvidenceStatus = 'SOURCE_SUPPLIED' | 'SOURCE_FEEDBACK_COUNT' | 'UNAVAILABLE';
 
@@ -12,6 +13,7 @@ type DealerEvidence = {
   ratingEvidenceStatus?: DealerRatingEvidenceStatus | null;
   groupCount?: number | null;
   profilePath?: string | null;
+  showSellerName?: boolean;
 };
 
 export function sourceBackedDealerRating(evidence: Pick<DealerEvidence, 'rating' | 'reviewCount' | 'ratingEvidenceStatus'>) {
@@ -35,7 +37,7 @@ export function DealerRatingBadge({
   showUnrated = true,
 }: Pick<DealerEvidence, 'rating' | 'reviewCount' | 'ratingEvidenceStatus'> & { showUnrated?: boolean }) {
   const evidence = sourceBackedDealerRating({ rating, reviewCount, ratingEvidenceStatus });
-  if (!evidence) return showUnrated ? <span className="text-xs font-medium text-[#6B7280]">Dealer rating not available</span> : null;
+  if (!evidence) return showUnrated ? <span className="text-xs font-medium text-[#6B7280]">Not rated</span> : null;
   const accessibleLabel = evidence.kind === 'score'
     ? `Dealer rating ${evidence.rating.toFixed(1)} from ${evidence.reviewCount} reviews`
     : `Rated dealer with ${evidence.reviewCount} positive feedback records`;
@@ -55,11 +57,13 @@ export function ListingDealerEvidence({
   ratingEvidenceStatus,
   groupCount,
   profilePath,
+  showSellerName = true,
 }: DealerEvidence) {
   const publishedGroupCount = Number(groupCount);
+  const postingIdentity = strongestPostingIdentity({ seller_name: sellerName });
   return (
     <div className="space-y-1">
-      <div>{sellerName || 'Seller not supplied'}</div>
+      {showSellerName && <div>{postingIdentity}</div>}
       <DealerRatingBadge
         rating={rating}
         reviewCount={reviewCount}

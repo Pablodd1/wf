@@ -280,6 +280,95 @@ async function loadSourceRows(client, pairs, options = {}) {
   };
 }
 
+function canonicalSummaryFromPayload(pair, payload) {
+  const reconciliation = payload?.reconciliation || {};
+  return {
+    key: pair.key,
+    brand: pair.brand,
+    reference: pair.reference,
+    source_observation_count: Number(payload?.total_tracked_listings || 0),
+    wts_observation_count: Number(reconciliation.wts_loaded_count ?? payload?.market_listings_count ?? 0),
+    wtb_observation_count: Number(payload?.wtb_demand_count || 0),
+    reference_qualified_wts_count: Number(payload?.reference_qualified_wts_count || 0),
+    reference_analytics_ready: payload?.reference_analytics_ready === true,
+    reference_stats: payload?.reference_stats || null,
+    selected_dial: pair.dial,
+    selected_dial_qualified_count: pair.dial ? Number(payload?.count || 0) : 0,
+    analytics_ready: Boolean(pair.dial && payload?.analytics_ready === true),
+    stats: pair.dial && payload?.analytics_ready === true ? payload.stats : null,
+    representative_image_url: null,
+    source_scope: payload?.analytics_source || 'CANONICAL_PRICE_RESEARCH_ENDPOINT',
+    sample_capped: payload?.sampleCapped === true || payload?.demand_evidence?.sample_capped === true,
+    count_semantics: {
+      source_observation_count: 'Exact-reference tracked listings reported by the canonical customer Price Research endpoint.',
+      wts_observation_count: 'Exact-reference WTS rows loaded by the canonical customer Price Research endpoint.',
+      wtb_observation_count: 'Deduplicated exact-reference WTB demand reported by the canonical customer Price Research endpoint.',
+      reference_qualified_wts_count: 'Canonical exact-reference WTS rows passing identity, price, currency, bundle and repost gates.',
+      reference_stats: 'Canonical exact-reference market statistics across all qualified dials.',
+      selected_dial_qualified_count: 'Canonical qualified WTS rows for the explicitly requested dial only.',
+    },
+  };
+}
+
+async function invokeCanonicalPriceResearch(pair, handler = canonicalPriceResearch) {
+  let statusCode = 200;
+  let body;
+  const req = {
+    method: 'GET',
+    query: {
+      brand: pair.brand,
+      reference: pair.reference,
+      ...(pair.dial ? { dial: pair.dial } : {}),
+      evidence_page: '1',
+      evidence_page_size: '1',
+      demand_page: '1',
+      demand_page_size: '1',
+    },
+    headers: {},
+  };
+  const res = {
+    setHeader() {},
+    status(value) { statusCode = value; return this; },
+    json(value) { body = value; return this; },
+    end() { return this; },
+  };
+  await handler(req, res);
+  if (statusCode < 200 || statusCode >= 300 || !body?.success) {
+    const error = new Error(body?.error || `Canonical Price Research returned HTTP ${statusCode}`);
+    error.statusCode = statusCode;
+    throw error;
+  }
+  return body;
+}
+
+async function loadCanonicalSummaries(pairs, options = {}) {
+  const handler = options.handler || canonicalPriceResearch;
+  return mapWithConcurrency(pairs, 2, async pair => {
+    const payload = await invokeCanonicalPriceResearch(pair, handler);
+    return canonicalSummaryFromPayload(pair, payload);
+  });
+}
+
+async function loadCanonicalSummaryResults(pairs, options = {}) {
+  const handler = options.handler || canonicalPriceResearch;
+  const results = await mapWithConcurrency(pairs, 2, async pair => {
+    try {
+      const payload = await invokeCanonicalPriceResearch(pair, handler);
+      return { summary: canonicalSummaryFromPayload(pair, payload), withheld: null };
+    } catch (error) {
+      console.warn('[price-research-batch-summary] canonical pair withheld:', pair.brand, pair.reference, error.message);
+      return {
+        summary: null,
+        withheld: { key: pair.key, brand: pair.brand, reference: pair.reference, reason: 'CANONICAL_PAIR_UNAVAILABLE' },
+      };
+    }
+  });
+  return {
+    summaries: results.map(result => result.summary).filter(Boolean),
+    withheld: results.map(result => result.withheld).filter(Boolean),
+  };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=30');
   if (req.method === 'OPTIONS') return res.status(200).end();
@@ -289,15 +378,16 @@ module.exports = async function handler(req, res) {
 
   const cacheKey = pairs.map(pair => pair.key).sort().join('\u001e');
   const cachedResult = getOrCreateCachedValue(cacheKey, async () => {
-    const source = await loadSourceRows(getClient(), pairs);
+    const canonical = await loadCanonicalSummaryResults(pairs);
+    const summaries = canonical.summaries;
     return {
       success: true,
-      summaries: buildBatchSummaries(pairs, source.rows, source.capped),
+      summaries,
       requested_pair_count: pairs.length,
-      source_row_count: source.rows.length,
-      source_sample_capped: source.capped.size > 0,
-      capped_pair_count: source.capped.size,
-      withheld: source.withheld,
+      source_row_count: summaries.reduce((sum, summary) => sum + summary.source_observation_count, 0),
+      source_sample_capped: summaries.some(summary => summary.sample_capped),
+      capped_pair_count: summaries.filter(summary => summary.sample_capped).length,
+      withheld: canonical.withheld,
       cache_ttl_seconds: CACHE_TTL_MS / 1000,
     };
   });
@@ -313,6 +403,10 @@ module.exports = async function handler(req, res) {
 module.exports.buildBatchSummaries = buildBatchSummaries;
 module.exports.exactRepresentativeImage = exactRepresentativeImage;
 module.exports.loadSourceRows = loadSourceRows;
+module.exports.canonicalSummaryFromPayload = canonicalSummaryFromPayload;
+module.exports.invokeCanonicalPriceResearch = invokeCanonicalPriceResearch;
+module.exports.loadCanonicalSummaries = loadCanonicalSummaries;
+module.exports.loadCanonicalSummaryResults = loadCanonicalSummaryResults;
 module.exports.loadCanonicalPairRows = loadCanonicalPairRows;
 module.exports.mapWithConcurrency = mapWithConcurrency;
 module.exports.normalizePairs = normalizePairs;

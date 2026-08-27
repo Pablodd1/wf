@@ -21,10 +21,10 @@ test('forward view labels retained bare-dollar evidence without promoting it to 
 });
 
 test('Trading Floor distinguishes currency-unconfirmed evidence from no supplied price', () => {
-  assert.match(trading, /if \(sourceText\) return `\$\{sourceText\} · currency unverified`/);
-  assert.match(trading, /if \(!currency\) return `Source amount \$\{new Intl\.NumberFormat[\s\S]*?· currency unverified`/);
+  assert.match(trading, /if \(sourceText\) return ambiguousPriceDisplay/);
+  assert.match(trading, /if \(!currency\) return ambiguousPriceDisplay/);
   assert.doesNotMatch(trading, /if \(!currency\) return `USD /);
-  assert.match(trading, /: 'Price not supplied'/);
+  assert.match(trading, /: \(sourcePrice \|\| ambiguousPriceDisplay\)/);
 });
 
 test('Trading Floor never relabels AP, RM, or Cartier bare-dollar amounts as USD', () => {
@@ -43,8 +43,9 @@ test('Trading Floor never relabels AP, RM, or Cartier bare-dollar amounts as USD
   };
   const formatter = Function(
     'cleanValue',
+    'ambiguousPriceDisplay',
     `'use strict'; ${sourceTextIncludesCurrency}; ${formatSourcePrice}; return formatSourcePrice;`,
-  )(cleanValue);
+  )(cleanValue, 'Price requires review');
 
   for (const fixture of [
     { brand: 'Audemars Piguet', reference: '14370', source_price_amount: 6490, raw_message: '... $6,490' },
@@ -58,10 +59,7 @@ test('Trading Floor never relabels AP, RM, or Cartier bare-dollar amounts as USD
       currency: null,
       price_raw: fixture.source_price_amount,
     });
-    assert.equal(
-      displayed,
-      `Source amount ${fixture.source_price_amount.toLocaleString('en-US')} · currency unverified`,
-    );
+    assert.equal(displayed, 'Price requires review');
     assert.doesNotMatch(displayed, /\bUSD\b/);
   }
 });

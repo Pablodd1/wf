@@ -1,0 +1,101 @@
+name: QNSA Phase 7B Verified Price Shadow
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RUN_QNSA_PHASE7B_VERIFIED_PRICE_SHADOW
+        required: true
+        type: string
+      run_key:
+        description: Resumable run key beginning phase7b-
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qnsa-phase7b-verified-price-shadow
+  cancel-in-progress: false
+
+jobs:
+  shadow-rebuild:
+    environment: Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PHASE7B_RUN_KEY: ${{ inputs.run_key }}
+      PHASE7B_REPORT_DIR: audit-output/phase7b-verified-price-shadow
+      EXPECTED_NORMALIZED_LF_MIGRATION_SHA256: 2e3a439743ae5aad2a87c5742e8e375acb9dd5ea71acbd0033f97b3e965687aa
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate explicit authorization and pinned target
+        shell: pwsh
+        env:
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:INPUT_CONFIRMATION -cne 'RUN_QNSA_PHASE7B_VERIFIED_PRICE_SHADOW') {
+            throw 'Exact Phase 7B confirmation is required.'
+          }
+          if ($env:PROJECT_REF -cne 'qnsafosakvonzgfcsphh') { throw 'Workflow is pinned to canonical QNSA.' }
+          if ($env:PHASE7B_RUN_KEY -cnotmatch '^phase7b-[a-z0-9][a-z0-9._-]{5,100}$') {
+            throw 'run_key must satisfy the immutable Phase 7B run-key contract.'
+          }
+          foreach ($name in 'SUPABASE_URL','SUPABASE_ACCESS_TOKEN') {
+            if (-not (Get-Item -LiteralPath "Env:$name").Value) { throw "$name is unavailable." }
+          }
+          if (([Uri]$env:SUPABASE_URL).Host -cne "$($env:PROJECT_REF).supabase.co") {
+            throw 'SUPABASE_URL does not target canonical QNSA.'
+          }
+
+      - name: Resolve the current canonical QNSA service key without exposing it
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $keys = Invoke-RestMethod -Method Get `
+            -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/api-keys" `
+            -Headers $headers
+          $service = @($keys | Where-Object {
+            $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret')
+          }) | Select-Object -First 1
+          if (-not $service.api_key) { throw 'Current canonical QNSA service key is unavailable.' }
+          Write-Output "::add-mask::$($service.api_key)"
+          "SUPABASE_SERVICE_ROLE_KEY=$($service.api_key)" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - run: npm ci
+
+      - name: Verify and atomically install the private shadow schema
+        shell: pwsh
+        run: ./tools/audit/install-phase7b-shadow.ps1
+
+      - name: Run bounded checkpointed immutable-evidence shadow rebuild
+        env:
+          PHASE7B_OUTPUT: ${{ runner.temp }}/phase7b-worker.json
+        run: npm run audit:phase7b-price-shadow
+
+      - name: Build sanitized technical report and analytical artifact
+        env:
+          PHASE7B_INPUT: ${{ runner.temp }}/phase7b-worker.json
+        run: node tools/audit/build-phase7b-verified-price-report.cjs
+
+      - name: Upload sanitized Phase 7B evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-phase7b-verified-price-shadow-${{ github.run_id }}
+          path: audit-output/phase7b-verified-price-shadow/*
+          if-no-files-found: error
+          retention-days: 30

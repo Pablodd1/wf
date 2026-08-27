@@ -314,36 +314,30 @@ test('pages make one batch request and client rejects cross-reference summaries'
   assert.doesNotMatch(research, /summaryOnly: 'true'/);
   assert.doesNotMatch(floor, /loadExactMarketSummary/);
   assert.match(research, /loadPriceResearchBatchSummaries\(pending\.map/);
-  assert.match(floor, /loadPriceResearchBatchSummaries\(visiblePricePairs\)/);
+  assert.match(floor, /loadPriceResearchBatchSummaries\(batch, controller\.signal\)/);
   assert.match(client, /requested\.has\(summary\.key\)/);
   assert.match(research, /bounded source observations|observed/);
   assert.match(research, /qualified WTS/);
 });
 
-test('Rolex Trading Floor resolves price ratings progressively with bounded pair concurrency', () => {
-  assert.match(floor, /ROLEX_PRICE_SUMMARY_CONCURRENCY = 2/);
-  assert.match(floor, /isRolexOnlyPriceSummaryPage/);
-  assert.match(floor, /loadPriceResearchBatchSummaries\(\[pair\], signal\)/);
-  assert.match(floor, /name === 'AbortError' && attempt === 0/);
-  assert.match(floor, /setSettledPriceSummaryKeys\(current => new Set\(current\)\.add\(key\)\)/);
-  assert.match(floor, /settledPriceSummaryKeys\.has\(priceResearchSummaryKey/);
+test('Trading Floor resolves card ratings progressively in safe bounded batches', () => {
+  assert.match(floor, /PRICE_SUMMARY_BATCH_SIZE = 4/);
+  assert.match(floor, /offset \+= PRICE_SUMMARY_BATCH_SIZE/);
+  assert.match(floor, /loadPriceResearchBatchSummaries\(batch, controller\.signal\)/);
+  assert.match(floor, /setRatingsCache\(current => \(\{/);
 });
 
-test('Trading Floor uses selected-dial evidence by default and shows concise ratings for Zenith, Cartier, Omega, and Tudor', () => {
-  assert.match(floor, /displayedCardPriceRating\.rating\.label/);
-  assert.match(floor, /Boolean\(listing\.brand && listing\.reference && \(listing\.dial_color \|\| exactReferenceRating\)\)/);
-  assert.doesNotMatch(floor, /canRatePrice[\s\S]{0,180}price_research_eligible/);
+test('Trading Floor prefers selected-dial evidence and safely falls back to exact-reference evidence', () => {
+  assert.match(floor, /priceRating\.label/);
+  assert.match(floor, /const useDial = Boolean\(summary\.selected_dial && summary\.analytics_ready && summary\.stats\)/);
   assert.match(floor, /selected_dial_qualified_count/);
-  assert.match(floor, /usesExactReferencePriceBenchmark/);
-  assert.match(floor, /\['zenith', 'cartier', 'omega', 'tudor'\]/);
   assert.match(floor, /reference_qualified_wts_count/);
   assert.match(floor, /reference_stats/);
   assert.doesNotMatch(floor, /Ref avg/);
   assert.doesNotMatch(floor, /Not rated · \$\{availableComparableCount\}\/2 qualified/);
   assert.doesNotMatch(floor, /Not rated · evidence unavailable/);
   assert.doesNotMatch(floor, /No exact directory match/);
-  assert.match(floor, /Dealer rating not available/);
-  assert.match(floor, /comparableCount >= 2 \? benchmarkStats : null/);
-  assert.doesNotMatch(floor, /displayedCardPriceRating\.rating\.code === 'NOT_RATED'/);
-  assert.match(floor, /<ListingDealerEvidence/);
+  assert.match(fs.readFileSync(path.join(root, 'src', 'components', 'ListingDealerEvidence.tsx'), 'utf8'), />Not rated<\/span>/);
+  assert.match(floor, /rateMarketPrice\(ratingUsdPrice\(listing\)/);
+  assert.match(floor, /listing\.dealer_profile_path && postingIdentity \? \(/);
 });
