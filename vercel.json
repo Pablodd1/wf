@@ -16,7 +16,7 @@
       "maxDuration": 60,
       "includeFiles": "public/**"
     },
-    "api/**/*.js": {
+    "api/**/*": {
       "maxDuration": 60,
       "includeFiles": "public/**"
     }
