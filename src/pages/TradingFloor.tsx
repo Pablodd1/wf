@@ -107,6 +107,8 @@ interface ListingRecord {
   source_price_text?: string | null;
   source_currency?: string | null;
   price_evidence_status?: string | null;
+  price_display_verified?: boolean;
+  price_requires_review?: boolean;
   price_research_eligible?: boolean;
   dial_color: string | null;
   condition: string | null;
@@ -2251,8 +2253,8 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function verifiedUsdPrice(listing: ListingRecord) {
-  if (listing.price_research_eligible !== true) return null;
-  if (!['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX', 'OWNER_ASSUMED_USD'].includes(
+  if (listing.price_display_verified !== true && listing.price_research_eligible !== true) return null;
+  if (!['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX'].includes(
     String(listing.price_evidence_status || '').toUpperCase(),
   )) return null;
   const value = Number(listing.price_usd);
