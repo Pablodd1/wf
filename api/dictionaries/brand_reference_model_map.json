@@ -1,7 +1,7 @@
 {
   "TAG Heuer": {
     "CAZ1010": {
-      "model": "Formula 1",
+      "model": "Formula 1 Chronograph",
       "dial_colors": [
         "Black"
       ]
@@ -31,9 +31,9 @@
       ]
     },
     "CAZ1014": {
-      "model": "Formula 1",
+      "model": "Formula 1 Chronograph",
       "dial_colors": [
-        "Red"
+        "Blue"
       ]
     },
     "CAZ1015": {
@@ -103,13 +103,13 @@
       ]
     },
     "CAW2111": {
-      "model": "Carrera",
+      "model": "Monaco Calibre 12",
       "dial_colors": [
-        "Silver"
+        "Blue"
       ]
     },
     "CV2010": {
-      "model": "Carrera",
+      "model": "Carrera Calibre 16",
       "dial_colors": [
         "Black"
       ]
@@ -145,16 +145,15 @@
       ]
     },
     "WAY2110": {
-      "model": "Aquaracer",
+      "model": "Aquaracer Calibre 5",
       "dial_colors": [
-        "Blue"
+        "Black"
       ]
     },
     "WAY201A": {
-      "model": "Aquaracer",
+      "model": "Aquaracer 300M",
       "dial_colors": [
-        "Black",
-        "Blue"
+        "Black"
       ]
     },
     "WAY201C": {
@@ -182,9 +181,10 @@
       ]
     },
     "CAW211B": {
-      "model": "Monaco",
+      "model": "Monaco Calibre 11",
       "dial_colors": [
-        "Blue"
+        "Grey",
+        "Silver"
       ]
     },
     "CAW2111M": {
@@ -200,13 +200,13 @@
       ]
     },
     "WW2111": {
-      "model": "Monaco",
+      "model": "Monaco Vintage",
       "dial_colors": [
-        "Black"
+        "Blue"
       ]
     },
     "CBN2010": {
-      "model": "Carrera",
+      "model": "Carrera Elegance Chronograph",
       "dial_colors": [
         "Black"
       ]
@@ -237,6 +237,120 @@
     },
     "WBE5111": {
       "model": "Aquaracer",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "CAW211P": {
+      "model": "Monaco Calibre 11",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "CBL2111": {
+      "model": "Monaco Heuer 02",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "CBL2113": {
+      "model": "Monaco Heuer 02",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "CAL5113": {
+      "model": "Monaco Linear System",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "CV2013": {
+      "model": "Carrera Calibre 16",
+      "dial_colors": [
+        "Brown"
+      ]
+    },
+    "CV2015": {
+      "model": "Carrera Calibre 16",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "CBK2110": {
+      "model": "Carrera Calibre 16",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "CBK2112": {
+      "model": "Carrera Calibre 16",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "CBN2A1A": {
+      "model": "Carrera Sport Chronograph",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "CBN2A1B": {
+      "model": "Carrera Sport Chronograph",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "CBS2210": {
+      "model": "Carrera Glassbox",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "CBS2212": {
+      "model": "Carrera Glassbox",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "WAS2110": {
+      "model": "Carrera Heritage",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "WBP201A": {
+      "model": "Aquaracer Professional 300",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "WBP201B": {
+      "model": "Aquaracer Professional 300",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "WAY201B": {
+      "model": "Aquaracer 300M",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "WAY2112": {
+      "model": "Aquaracer Calibre 5",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "WAZ1010": {
+      "model": "Formula 1",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "CBE2110": {
+      "model": "Autavia Heritage",
       "dial_colors": [
         "Black"
       ]
@@ -315,6 +429,20 @@
         "Black"
       ]
     },
+    "91210": {
+      "model": "North Flag",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "91550": {
+      "model": "1926",
+      "dial_colors": [
+        "White",
+        "Silver",
+        "Black"
+      ]
+    },
     "79230N": {
       "model": "Black Bay",
       "dial_colors": [
@@ -348,6 +476,7 @@
     "79360N": {
       "model": "Black Bay Chrono",
       "dial_colors": [
+        "White",
         "Black"
       ]
     },
@@ -364,7 +493,7 @@
       ]
     },
     "79030N": {
-      "model": "Black Bay 58",
+      "model": "Black Bay Fifty-Eight",
       "dial_colors": [
         "Black"
       ]
@@ -376,27 +505,29 @@
       ]
     },
     "79030B": {
-      "model": "Black Bay 58",
+      "model": "Black Bay Fifty-Eight",
       "dial_colors": [
         "Blue"
       ]
     },
     "79012M": {
-      "model": "Black Bay 58 Bronze",
+      "model": "Black Bay Fifty-Eight Bronze",
       "dial_colors": [
         "Brown"
       ]
     },
     "79010SG": {
-      "model": "Black Bay 58 925",
+      "model": "Black Bay Fifty-Eight 925",
       "dial_colors": [
-        "Grey"
+        "Grey",
+        "Taupe"
       ]
     },
     "79830RB": {
       "model": "Black Bay GMT",
       "dial_colors": [
-        "Black"
+        "Black",
+        "White"
       ]
     },
     "M79030": {
@@ -476,25 +607,63 @@
       "dial_colors": [
         "Black"
       ]
+    },
+    "M79733N": {
+      "model": "Black Bay S&G",
+      "dial_colors": [
+        "Black",
+        "Champagne"
+      ]
+    },
+    "79363N": {
+      "model": "Black Bay Chrono S&G",
+      "dial_colors": [
+        "Black",
+        "Champagne"
+      ]
+    },
+    "79210CNU": {
+      "model": "Black Bay Ceramic",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "25707B": {
+      "model": "Pelagos FXD",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "25707N": {
+      "model": "Pelagos FXD",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "25407N": {
+      "model": "Pelagos 39",
+      "dial_colors": [
+        "Black"
+      ]
     }
   },
   "Cartier": {
     "WSSA0018": {
-      "model": "Santos",
+      "model": "Santos de Cartier",
       "dial_colors": [
         "Silver"
       ]
     },
     "WSSA0029": {
-      "model": "Santos",
+      "model": "Santos de Cartier",
       "dial_colors": [
         "Silver"
       ]
     },
     "WSSA0030": {
-      "model": "Santos",
+      "model": "Santos de Cartier",
       "dial_colors": [
-        "Black"
+        "Blue"
       ]
     },
     "WSSA0039": {
@@ -504,9 +673,11 @@
       ]
     },
     "WSSA0047": {
-      "model": "Santos",
+      "model": "Santos de Cartier",
       "dial_colors": [
-        "Silver"
+        "Silver",
+        "Black",
+        "White"
       ]
     },
     "WSSA0048": {
@@ -516,9 +687,10 @@
       ]
     },
     "WSSA0061": {
-      "model": "Santos",
+      "model": "Santos de Cartier",
       "dial_colors": [
-        "Black"
+        "Black",
+        "Green"
       ]
     },
     "WSSA0062": {
@@ -614,13 +786,15 @@
     "WSTA0028": {
       "model": "Tank Must",
       "dial_colors": [
-        "Silver"
+        "Silver",
+        "White"
       ]
     },
     "WSTA0041": {
-      "model": "Tank Solo",
+      "model": "Tank Must",
       "dial_colors": [
-        "Silver"
+        "Silver",
+        "White"
       ]
     },
     "WSTA0073": {
@@ -682,23 +856,104 @@
       "dial_colors": [
         "Silver"
       ]
+    },
+    "WSSA0071": {
+      "model": "Santos de Cartier",
+      "dial_colors": [
+        "Blue",
+        "Black"
+      ]
+    },
+    "WGBA0045": {
+      "model": "Baignoire Mini",
+      "dial_colors": [
+        "Silver",
+        "White",
+        "Pink"
+      ]
+    },
+    "WSSA0023": {
+      "model": "Santos-Dumont",
+      "dial_colors": [
+        "Silver",
+        "White",
+        "Ivory"
+      ]
+    },
+    "WSTA0042": {
+      "model": "Tank Must",
+      "dial_colors": [
+        "White",
+        "Silver"
+      ]
+    },
+    "W5200024": {
+      "model": "Tank Solo",
+      "dial_colors": [
+        "White",
+        "Silver"
+      ]
+    },
+    "WSSA0046": {
+      "model": "Santos-Dumont",
+      "dial_colors": [
+        "Silver",
+        "Blue",
+        "Black"
+      ]
+    },
+    "WSPN0015": {
+      "model": "Panthère de Cartier",
+      "dial_colors": [
+        "Silver",
+        "White",
+        "Green"
+      ]
+    },
+    "WSSA0022": {
+      "model": "Santos-Dumont",
+      "dial_colors": [
+        "Silver",
+        "White"
+      ]
+    },
+    "WSSA0032": {
+      "model": "Santos-Dumont XL",
+      "dial_colors": [
+        "Silver",
+        "White",
+        "Pink"
+      ]
+    },
+    "WSSA0063": {
+      "model": "Santos de Cartier",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "WSSA0037": {
+      "model": "Santos de Cartier",
+      "dial_colors": [
+        "Grey",
+        "Black"
+      ]
     }
   },
   "Omega": {
     "310.30.42.50.01.001": {
-      "model": "Speedmaster Moonwatch",
+      "model": "Speedmaster Moonwatch Hesalite",
       "dial_colors": [
         "Black"
       ]
     },
     "310.30.42.50.01.002": {
-      "model": "Speedmaster Moonwatch",
+      "model": "Speedmaster Moonwatch Sapphire",
       "dial_colors": [
         "Black"
       ]
     },
     "310.32.42.50.02.001": {
-      "model": "Speedmaster Silver Snoopy",
+      "model": "Speedmaster Silver Snoopy 50th",
       "dial_colors": [
         "Silver",
         "Blue"
@@ -717,7 +972,7 @@
       ]
     },
     "311.30.42.30.01.006": {
-      "model": "Speedmaster Moonwatch",
+      "model": "Speedmaster Moonwatch Sapphire",
       "dial_colors": [
         "Black"
       ]
@@ -783,7 +1038,7 @@
       ]
     },
     "220.10.41.21.01.001": {
-      "model": "Seamaster Aqua Terra",
+      "model": "Seamaster Aqua Terra 150M",
       "dial_colors": [
         "Black"
       ]
@@ -859,6 +1114,125 @@
       "model": "De Ville Hour Vision",
       "dial_colors": [
         "Silver"
+      ]
+    },
+    "310.30.42.50.04.001": {
+      "model": "Speedmaster Moonwatch White Dial",
+      "dial_colors": [
+        "White"
+      ]
+    },
+    "210.92.44.20.01.003": {
+      "model": "Seamaster Planet Ocean Dark Side",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "210.90.42.20.01.001": {
+      "model": "Seamaster Diver 300M 007 Edition",
+      "dial_colors": [
+        "Brown",
+        "Black"
+      ]
+    },
+    "210.30.42.20.06.001": {
+      "model": "Seamaster Diver 300M",
+      "dial_colors": [
+        "Grey",
+        "Silver"
+      ]
+    },
+    "210.30.42.20.10.001": {
+      "model": "Seamaster Diver 300M",
+      "dial_colors": [
+        "Green"
+      ]
+    },
+    "210.32.42.20.03.001": {
+      "model": "Seamaster Diver 300M",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "210.32.42.20.04.001": {
+      "model": "Seamaster Diver 300M",
+      "dial_colors": [
+        "White"
+      ]
+    },
+    "210.32.42.20.06.001": {
+      "model": "Seamaster Diver 300M",
+      "dial_colors": [
+        "Grey"
+      ]
+    },
+    "210.30.42.20.03.002": {
+      "model": "Seamaster Diver 300M Summer Blue",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "310.30.40.50.06.001": {
+      "model": "Speedmaster First Omega in Space",
+      "dial_colors": [
+        "Blue",
+        "Grey"
+      ]
+    },
+    "311.30.40.30.01.001": {
+      "model": "Speedmaster Calibre 321 Ed White",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "311.32.40.30.02.001": {
+      "model": "Speedmaster CK2998",
+      "dial_colors": [
+        "Silver",
+        "Blue"
+      ]
+    },
+    "326.30.40.50.01.001": {
+      "model": "Speedmaster Racing",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "3510.50.00": {
+      "model": "Speedmaster Reduced",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "220.10.43.22.03.001": {
+      "model": "Seamaster Aqua Terra Worldtimer",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "220.10.41.21.03.001": {
+      "model": "Seamaster Aqua Terra 150M",
+      "dial_colors": [
+        "Blue"
+      ]
+    },
+    "220.10.41.21.02.001": {
+      "model": "Seamaster Aqua Terra 150M",
+      "dial_colors": [
+        "Silver",
+        "White"
+      ]
+    },
+    "220.10.41.21.10.001": {
+      "model": "Seamaster Aqua Terra 150M",
+      "dial_colors": [
+        "Green"
+      ]
+    },
+    "220.10.41.21.06.001": {
+      "model": "Seamaster Aqua Terra 150M",
+      "dial_colors": [
+        "Grey"
       ]
     }
   },
@@ -1307,6 +1681,94 @@
       "model": "Overseas Tourbillon",
       "dial_colors": [
         "Blue"
+      ]
+    }
+  },
+  "Zenith": {
+    "03.2040.400": {
+      "model": "Chronomaster El Primero",
+      "dial_colors": [
+        "Silver",
+        "Black",
+        "Blue"
+      ]
+    },
+    "03.3100.3600": {
+      "model": "Chronomaster Sport",
+      "dial_colors": [
+        "White",
+        "Black"
+      ]
+    },
+    "03.3100.3600/69.M3100": {
+      "model": "Chronomaster Sport",
+      "dial_colors": [
+        "White"
+      ]
+    },
+    "03.3100.3600/21.M3100": {
+      "model": "Chronomaster Sport",
+      "dial_colors": [
+        "Black"
+      ]
+    },
+    "03.2150.400": {
+      "model": "El Primero 36,000 VPH",
+      "dial_colors": [
+        "Silver",
+        "Black"
+      ]
+    },
+    "95.9000.670": {
+      "model": "Defy Classic",
+      "dial_colors": [
+        "Blue",
+        "Skeleton"
+      ]
+    },
+    "49.9000.670": {
+      "model": "Defy Classic Ceramic",
+      "dial_colors": [
+        "Skeleton",
+        "Black"
+      ]
+    },
+    "03.A384.400": {
+      "model": "Chronomaster Revival A384",
+      "dial_colors": [
+        "White",
+        "Panda"
+      ]
+    },
+    "03.A386.400": {
+      "model": "Chronomaster Revival A386",
+      "dial_colors": [
+        "White",
+        "Tri-Color"
+      ]
+    },
+    "03.9300.3620": {
+      "model": "Defy Skyline",
+      "dial_colors": [
+        "Blue",
+        "Black",
+        "Silver"
+      ]
+    },
+    "03.9400.3620": {
+      "model": "Defy Skyline Chronograph",
+      "dial_colors": [
+        "Blue",
+        "Black",
+        "Silver"
+      ]
+    },
+    "95.9002.9004": {
+      "model": "Defy 21",
+      "dial_colors": [
+        "Skeleton",
+        "Blue",
+        "Black"
       ]
     }
   }

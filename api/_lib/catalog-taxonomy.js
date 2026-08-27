@@ -123,6 +123,19 @@ const GENERAL_MODEL_ROLLUPS = {
     { pattern: /^heuer[\s\-]?02\b/i, canonical: 'Heuer-02' },
     { pattern: /^mikrograph\b/i, canonical: 'Mikrograph' },
     { pattern: /^professional\b/i, canonical: 'Professional' }
+  ],
+  'Zenith': [
+    { pattern: /^chronomaster\s*sport\b/i, canonical: 'Chronomaster Sport' },
+    { pattern: /^chronomaster\s*revival\b/i, canonical: 'Chronomaster Revival' },
+    { pattern: /^chronomaster\b/i, canonical: 'Chronomaster' },
+    { pattern: /^defy\s*skyline\b/i, canonical: 'Defy Skyline' },
+    { pattern: /^defy\s*classic\b/i, canonical: 'Defy Classic' },
+    { pattern: /^defy\s*21\b/i, canonical: 'Defy 21' },
+    { pattern: /^defy\s*extreme\b/i, canonical: 'Defy Extreme' },
+    { pattern: /^defy\b/i, canonical: 'Defy' },
+    { pattern: /^el\s*primero\b/i, canonical: 'El Primero' },
+    { pattern: /^pilot\b/i, canonical: 'Pilot' },
+    { pattern: /^elite\b/i, canonical: 'Elite' }
   ]
 };
 

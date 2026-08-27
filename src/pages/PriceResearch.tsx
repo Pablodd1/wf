@@ -602,8 +602,18 @@ export default function PriceResearch() {
   const referenceSearchBoxRef = useRef<HTMLDivElement | null>(null);
   const loadedDeepLinkRef = useRef('');
 
+const DEFAULT_RESEARCH_BRANDS: { brand: string }[] = [
+  'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier',
+  'Omega', 'Tudor', 'TAG Heuer', 'Zenith', 'Vacheron Constantin', 'IWC',
+  'Breitling', 'Hublot', 'Panerai', 'Jaeger-LeCoultre', 'Grand Seiko',
+  'A. Lange & Söhne', 'Blancpain', 'Breguet', 'Bulgari', 'Chopard',
+  'F.P. Journe', 'Franck Muller', 'Girard-Perregaux', 'Glashütte Original',
+  'H. Moser & Cie', 'Jacob & Co', 'Longines', 'Seiko', 'Tissot',
+  'Ulysse Nardin', 'Bell & Ross'
+].map(brand => ({ brand }));
+
   // ── Drill-down picker state (brand → model → reference) ──
-  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>([]);
+  const [pBrands, setPBrands] = useState<{ brand: string; model_count?: number; reference_count?: number; listing_count?: number }[]>(DEFAULT_RESEARCH_BRANDS);
   const [pBrand, setPBrand] = useState(initialBrand);
   const [pModels, setPModels] = useState<{ model: string; reference_count: number; listing_count?: number }[]>([]);
   const [modelQuery, setModelQuery] = useState('');
