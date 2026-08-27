@@ -53,6 +53,11 @@ const { applyConfirmedFiveWatchPublication } = require('./_lib/five-watch-public
 // below). Import removed — dealer-auth.cjs is still used by other endpoints.
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
+  BACKGROUND_HOLD_SOURCE,
+  isRolexPatekBrand,
+  isRolexPatekPublicationHeld,
+} = require('./_lib/rolex-patek-publication-hold.cjs');
+const {
   MIN_RELEASE_CONFIDENCE,
   REVIEWED_PANERAI_RECORD_IDS,
   REVIEWED_PANERAI_REFERENCES,
@@ -1055,6 +1060,13 @@ module.exports = async function handler(req, res) {
         hint: 'Brand auto-resolution failed. Provide the brand explicitly.'
       });
     }
+  }
+  if (isRolexPatekPublicationHeld() && isRolexPatekBrand(brand)) {
+    return res.status(404).json({
+      error: 'Brand is temporarily unavailable while background verification continues',
+      release_status: 'BACKGROUND_VERIFICATION',
+      source: BACKGROUND_HOLD_SOURCE,
+    });
   }
   const familyPrefix = reviewedFamilyPrefix(brand, rawRef);
   // Approved single-item workbook evidence may authorize its exact
