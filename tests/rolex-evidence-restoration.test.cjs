@@ -12,6 +12,8 @@ const worker = require('../tools/audit/restore-rolex-price-image-evidence.cjs');
 const root = path.resolve(__dirname, '..');
 const migration = fs.readFileSync(path.join(root,
   'supabase/migrations/20260827150000_rolex_evidence_restoration_v1.sql'), 'utf8');
+const forwardOrderingMigration = fs.readFileSync(path.join(root,
+  'supabase/migrations/20260827170000_curated_luxury_single_input_first.sql'), 'utf8');
 
 function row(overrides = {}) {
   const raw = overrides.raw_message || 'WTS Rolex 116500LN USD 25,000';
@@ -211,8 +213,11 @@ test('migration is append-only, duplicate-safe, Rolex-only, and source-table rea
   assert.match(migration, /image_evidence_type='SELLER_LISTING_IMAGE'/);
   assert.match(migration, /count\(DISTINCT l\.current_listing_key\)/i);
   assert.match(migration, /row_number\(\) OVER\(PARTITION BY offer_state_key/i);
-  assert.doesNotMatch(migration, /ORDER BY \(e\.decision='VERIFIED'\) DESC/i);
-  assert.match(migration, /ORDER BY e\.created_at DESC,e\.evidence_version DESC LIMIT 1[\s\S]*p\.decision='VERIFIED'/i);
+  assert.match(forwardOrderingMigration, /curated_luxury_rolex_latest_price_evidence_v2/);
+  assert.match(forwardOrderingMigration,
+    /ORDER BY e\.created_at DESC,e\.evidence_version DESC[\s\S]*WHERE ranked\.evidence_rank=1/i);
+  assert.match(forwardOrderingMigration,
+    /latest_price_evidence_v2 p[\s\S]*p\.decision='VERIFIED' AND p\.price_research_eligible/i);
   assert.doesNotMatch(migration, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+(?:INTO\s+|FROM\s+)?public\.(?:raw_messages|raw_message_versions|curated_luxury_current_listings_shadow)/i);
   assert.doesNotMatch(migration, /brand='Patek Philippe'/);
 });

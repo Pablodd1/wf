@@ -152,11 +152,7 @@ BEGIN
       SELECT 1 FROM public.curated_luxury_rolex_price_evidence_shadow p
       WHERE p.run_id=c.run_id AND p.current_listing_key=c.current_listing_key
         AND p.latest_raw_occurrence_key=c.latest_raw_occurrence_key
-        AND p.decision='VERIFIED' AND p.display_price_verified
-        AND NOT EXISTS (SELECT 1 FROM public.curated_luxury_rolex_price_evidence_shadow newer
-          WHERE newer.run_id=p.run_id AND newer.current_listing_key=p.current_listing_key
-            AND newer.latest_raw_occurrence_key=p.latest_raw_occurrence_key
-            AND (newer.created_at,newer.evidence_version)>(p.created_at,p.evidence_version)))) price_verified,
+        AND p.decision='VERIFIED' AND p.display_price_verified)) price_verified,
       EXISTS (
       SELECT 1 FROM public.curated_luxury_child_image_links_shadow l
       JOIN public.curated_luxury_child_image_assets_shadow a USING(source_image_key)
@@ -254,11 +250,7 @@ SET plan_cache_mode='force_custom_plan' AS $$
         SELECT 1 FROM public.curated_luxury_rolex_price_evidence_shadow p
         WHERE p.run_id=c.run_id AND p.current_listing_key=c.current_listing_key
           AND p.latest_raw_occurrence_key=c.latest_raw_occurrence_key
-          AND p.decision='VERIFIED' AND p.display_price_verified
-          AND NOT EXISTS (SELECT 1 FROM public.curated_luxury_rolex_price_evidence_shadow newer
-            WHERE newer.run_id=p.run_id AND newer.current_listing_key=p.current_listing_key
-              AND newer.latest_raw_occurrence_key=p.latest_raw_occurrence_key
-              AND (newer.created_at,newer.evidence_version)>(p.created_at,p.evidence_version))))
+          AND p.decision='VERIFIED' AND p.display_price_verified))
       AND (NOT p_images_only OR EXISTS (
         SELECT 1 FROM public.curated_luxury_child_image_links_shadow l
         JOIN public.curated_luxury_child_image_assets_shadow a USING(source_image_key)
@@ -315,11 +307,7 @@ BEGIN
       SELECT 1 FROM public.curated_luxury_rolex_price_evidence_shadow p
       WHERE p.run_id=c.run_id AND p.current_listing_key=c.current_listing_key
         AND p.latest_raw_occurrence_key=c.latest_raw_occurrence_key
-        AND p.decision='VERIFIED' AND p.display_price_verified
-        AND NOT EXISTS (SELECT 1 FROM public.curated_luxury_rolex_price_evidence_shadow newer
-          WHERE newer.run_id=p.run_id AND newer.current_listing_key=p.current_listing_key
-            AND newer.latest_raw_occurrence_key=p.latest_raw_occurrence_key
-            AND (newer.created_at,newer.evidence_version)>(p.created_at,p.evidence_version))))
+        AND p.decision='VERIFIED' AND p.display_price_verified))
     AND (NOT p_images_only OR EXISTS (
       SELECT 1 FROM public.curated_luxury_child_image_links_shadow l
       JOIN public.curated_luxury_child_image_assets_shadow a USING(source_image_key)
@@ -377,7 +365,7 @@ SET plan_cache_mode='force_custom_plan' AS $$
     SELECT e.* FROM public.curated_luxury_rolex_price_evidence_shadow e
     WHERE e.run_id=c.run_id AND e.current_listing_key=c.current_listing_key
       AND e.latest_raw_occurrence_key=c.latest_raw_occurrence_key
-    ORDER BY e.created_at DESC,e.evidence_version DESC LIMIT 1
+    ORDER BY (e.decision='VERIFIED') DESC,e.created_at DESC,e.evidence_version DESC LIMIT 1
   ) p ON true
   LEFT JOIN LATERAL (
     SELECT rm.id,rm.raw_text,rm.source_platform
@@ -421,8 +409,9 @@ RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path=public,extens
       SELECT e.* FROM public.curated_luxury_rolex_price_evidence_shadow e
       WHERE e.run_id=c.run_id AND e.current_listing_key=c.current_listing_key
         AND e.latest_raw_occurrence_key=c.latest_raw_occurrence_key
+        AND e.decision='VERIFIED' AND e.price_research_eligible
       ORDER BY e.created_at DESC,e.evidence_version DESC LIMIT 1
-    ) p ON p.decision='VERIFIED' AND p.price_research_eligible
+    ) p ON true
     WHERE c.run_id=p_run_id AND c.intent='WTS' AND c.observed_reference_key=p_reference_key
   ), ranked AS (
     SELECT *,row_number() OVER(PARTITION BY offer_state_key ORDER BY priority,last_seen DESC) rank
