@@ -1449,8 +1449,10 @@ function parseInventoryCursor(value, pageSize) {
   }
   try {
     const decoded = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8'));
-    if (decoded?.v === 3) {
+    if (decoded?.v === 3 || decoded?.v === 4) {
       const page = Number(decoded.p);
+      const listingLane = decoded.v === 4 && (decoded.l === 0 || decoded.l === 1)
+        ? decoded.l : null;
       const timestampIsNull = decoded.n === true;
       const timestamp = timestampIsNull ? null : new Date(decoded.t || '');
       const currentListingKey = String(decoded.k || '');
@@ -1459,11 +1461,12 @@ function parseInventoryCursor(value, pageSize) {
         || (!timestampIsNull && Number.isNaN(timestamp.getTime()))
         || !/^[0-9a-f]{64}$/i.test(currentListingKey)
         || !/^[0-9a-f]{64}$/i.test(scope)
-        || Object.keys(decoded).some(key => !['v', 'p', 't', 'n', 'k', 's'].includes(key))) return null;
+        || (decoded.v === 4 && listingLane === null)
+        || Object.keys(decoded).some(key => !['v', 'p', 'l', 't', 'n', 'k', 's'].includes(key))) return null;
       return {
         lane: 'images', offset: 0, page,
         shadowKeyset: {
-          sourceTimestamp: timestampIsNull ? null : timestamp.toISOString(),
+          listingLane, sourceTimestamp: timestampIsNull ? null : timestamp.toISOString(),
           currentListingKey, timestampIsNull, scope,
         },
       };
@@ -1941,6 +1944,11 @@ module.exports = async function handler(req, res) {
       : [];
     const imagesOnly = String(req.query?.images || '').toLowerCase() === 'true';
     const pricedOnly = String(req.query?.priced || '').toLowerCase() === 'true';
+    const sourceShape = cleanExactText(req.query?.sourceShape, 12).toLowerCase();
+    const listingLane = sourceShape === 'single' ? 0 : sourceShape === 'multi' ? 1 : null;
+    if (sourceShape && listingLane === null) {
+      return res.status(400).json({ status: 'error', error: 'Invalid listing source shape' });
+    }
     const listingType = cleanExactText(req.query?.type, 12).toUpperCase();
     const condition = cleanExactText(req.query?.condition, 80);
     const requestedItem = cleanExactText(req.query?.item, 20).toLowerCase();
@@ -2024,6 +2032,7 @@ module.exports = async function handler(req, res) {
         imagesOnly,
         search: requestedReference || search || requestedModel || requestedDial || null,
         reference: requestedReference || null,
+        listingLane,
         page,
         pageSize,
         cursor: inventoryCursor?.shadowKeyset || null,

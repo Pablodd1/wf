@@ -44,7 +44,8 @@ jobs:
       ROLEX_EVIDENCE_CONFIRMATION: ${{ inputs.confirmation }}
       ROLEX_EVIDENCE_CANARY_LIMIT: ${{ inputs.canary_limit }}
       ROLEX_EVIDENCE_OUTPUT: ${{ runner.temp }}/rolex-evidence-restoration.json
-      EXPECTED_MIGRATION_SHA256: 08f6fa4293cca2e58d081b0723877202e9611f6fd07ad116ef695fa18d24d3b0
+      EXPECTED_MIGRATION_SHA256: cd90b816c081874f458e88cf493c06bf6f60aa646b5ae085c1460dcaa43f7103
+      EXPECTED_ORDERING_MIGRATION_SHA256: 88b916bde76f41c873c757ae445ccb5dbb60136482200d23006fc5db065efac5
     steps:
       - uses: actions/checkout@v4
 
@@ -81,7 +82,15 @@ jobs:
             [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($migration))
           ).ToLowerInvariant()
           if ($actualSha -cne $env:EXPECTED_MIGRATION_SHA256) { throw 'Pinned migration SHA-256 mismatch.' }
-          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='15min';`n$migration`nCOMMIT;"
+          $orderingPath = 'supabase/migrations/20260827170000_curated_luxury_single_input_first.sql'
+          $orderingMigration = (Get-Content -LiteralPath $orderingPath -Raw).Replace("`r`n", "`n")
+          $orderingSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($orderingMigration))
+          ).ToLowerInvariant()
+          if ($orderingSha -cne $env:EXPECTED_ORDERING_MIGRATION_SHA256) {
+            throw 'Pinned Rolex/Patek ordering migration SHA-256 mismatch.'
+          }
+          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='15min';`n$migration`n$orderingMigration`nCOMMIT;"
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
           Invoke-RestMethod -Method Post `

@@ -94,6 +94,10 @@ async function buildPriceEvidence(row, resolver) {
   if (!isCanonicalCurrent(row)) return reviewEvidence(row, null, 'NON_CANONICAL_OR_NON_CURRENT');
   const child = exactChildText(row);
   if (!child.text) return reviewEvidence(row, child, child.reason);
+  if (child.scope === 'EXACT_SINGLE_SOURCE_MESSAGE'
+    && (row.raw_is_bundle === true || Number(row.parent_child_count) !== 1)) {
+    return reviewEvidence(row, child, 'NON_SINGLETON_PARENT_PRICE_SCOPE');
+  }
   const candidates = approvedAskPrices(child.text);
   if (candidates.length !== 1) {
     return reviewEvidence(row, child, candidates.length ? 'MULTIPLE_EXPLICIT_ASK_PRICES' : 'NO_EXACT_EXPLICIT_PRICE');
