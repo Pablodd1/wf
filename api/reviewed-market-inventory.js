@@ -3360,7 +3360,7 @@ module.exports = async function handler(req, res) {
     res.setHeader('Cache-Control', 'private, no-store, max-age=0');
     return res.status(503).json({
       status: 'error',
-      error: 'Reviewed market inventory is temporarily unavailable',
+      error: error.stack,
     });
   }
 };
