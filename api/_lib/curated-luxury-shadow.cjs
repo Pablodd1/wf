@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const RUN_ID = '17d6d831-86cd-5e67-9830-c881bcf16e0d';
 const MARKET_SELECTOR = 'curated_luxury_current_shadow_v1';
 const PRICE_SELECTOR = 'curated_luxury_price_research_shadow_v1';
+const ROLEX_EVIDENCE_SELECTOR = 'curated_luxury_rolex_evidence_v1';
 const BRANDS = new Set(['Rolex', 'Patek Philippe']);
 
 function normalizedReference(value) {
@@ -13,6 +14,10 @@ function normalizedReference(value) {
 
 function isShadowBrand(brand) {
   return BRANDS.has(String(brand || '').trim());
+}
+
+function rolexEvidenceEnabled() {
+  return String(process.env.CURATED_ROLEX_EVIDENCE_SOURCE || '').trim() === ROLEX_EVIDENCE_SELECTOR;
 }
 
 function urlsFromMedia(value, found = new Set()) {
@@ -35,6 +40,7 @@ function mapCard(row) {
   // Raw parent/version media is lineage evidence, never an image fallback.
   const images = row.image_state === 'VERIFIED_CHILD_IMAGE'
     ? urlsFromMedia(row.verified_child_media) : [];
+  const restoredRolex = row.brand === 'Rolex' && typeof row.price_display_verified === 'boolean';
   const sourceCurrency = row.source_currency || null;
   const verifiedUsd = row.price_verified === true && Number(row.price_usd) > 0
     ? Number(row.price_usd) : null;
@@ -48,21 +54,29 @@ function mapCard(row) {
     reference: row.reference || null,
     price_usd: verifiedUsd,
     workbook_price_usd: null,
-    price_raw: row.source_price_amount == null ? null : Number(row.source_price_amount),
-    currency: sourceCurrency,
-    source_price_amount: row.source_price_amount == null ? null : Number(row.source_price_amount),
-    source_currency: sourceCurrency,
+    price_raw: restoredRolex ? null
+      : row.source_price_amount == null ? null : Number(row.source_price_amount),
+    currency: restoredRolex ? (verifiedUsd === null ? null : 'USD') : sourceCurrency,
+    source_price_amount: restoredRolex ? null
+      : row.source_price_amount == null ? null : Number(row.source_price_amount),
+    source_currency: restoredRolex ? null : sourceCurrency,
     price_evidence_status: verifiedUsd === null ? null
-      : ['USD', 'USDT'].includes(String(sourceCurrency).toUpperCase())
-        ? 'SOURCE_EXPLICIT_USD_MATCH' : 'DATED_VERIFIED_FX',
-    price_research_eligible: verifiedUsd !== null && row.listing_type === 'WTS',
+      : row.price_evidence_classification
+        || (['USD', 'USDT'].includes(String(sourceCurrency).toUpperCase())
+          ? 'SOURCE_EXPLICIT_USD_MATCH' : 'DATED_VERIFIED_FX'),
+    ...(restoredRolex ? {
+      price_display_verified: row.price_display_verified === true,
+      price_requires_review: row.price_requires_review === true,
+    } : {}),
+    price_research_eligible: restoredRolex ? row.price_research_eligible === true
+      : verifiedUsd !== null && row.listing_type === 'WTS',
     dial_color: row.dial_color || null,
     condition: row.condition || null,
     year: null,
     intent: row.listing_type || null,
     listing_type: row.listing_type || null,
     verdict: 'SOURCE_BACKED_CURRENT',
-    source: 'CURATED_LUXURY_SHADOW_V1',
+    source: restoredRolex ? 'CURATED_LUXURY_ROLEX_EVIDENCE_V1' : 'CURATED_LUXURY_SHADOW_V1',
     source_type: 'immutable_raw_observation',
     item_category: 'WATCH',
     listing_date: row.created_at || null,
@@ -136,6 +150,7 @@ function encodeShadowCursor({ sourceTimestamp, currentListingKey, timestampIsNul
 }
 
 async function loadInventory(client, options) {
+  const restoredRolex = options.brand === 'Rolex' && rolexEvidenceEnabled();
   const intents = ['WTS', 'WTB'].includes(options.listingType) ? [options.listingType] : null;
   const countries = countryCodes(options.countries);
   const args = {
@@ -151,22 +166,35 @@ async function loadInventory(client, options) {
   const cursor = options.cursor || null;
   if (!shadowCursorMatches(cursor, options)) throw new Error('Shadow cursor scope mismatch');
   const firstPage = !cursor;
-  const pageRequest = client.rpc('curated_luxury_shadow_customer_page_keys_v3', {
-    ...args,
+  const rolexArgs = {
+    p_run_id: RUN_ID,
+    p_intents: intents,
+    p_countries: countries,
+    p_priced_only: options.pricedOnly === true,
+    p_images_only: options.imagesOnly === true,
+    p_search: options.reference ? null : (options.search || null),
+    p_reference_key: options.reference ? normalizedReference(options.reference) : null,
+  };
+  const pageRequest = client.rpc(restoredRolex
+    ? 'curated_luxury_rolex_customer_page_keys_v4'
+    : 'curated_luxury_shadow_customer_page_keys_v3', {
+    ...(restoredRolex ? rolexArgs : args),
     p_after_timestamp: cursor?.sourceTimestamp || null,
     p_after_key: cursor?.currentListingKey || null,
     p_after_timestamp_is_null: cursor?.timestampIsNull === true,
     p_limit: options.pageSize,
   });
   const countRequest = firstPage
-    ? client.rpc('curated_luxury_shadow_customer_count_v2', args)
+    ? client.rpc(restoredRolex ? 'curated_luxury_rolex_customer_count_v3'
+      : 'curated_luxury_shadow_customer_count_v2', restoredRolex ? rolexArgs : args)
     : Promise.resolve({ data: null, error: null });
   const [{ data: page, error: pageError }, { data: countData, error: countError }] =
     await Promise.all([pageRequest, countRequest]);
   if (pageError) throw pageError;
   const listingKeys = Array.isArray(page?.keys) ? page.keys : [];
   const { data: cardData, error: cardError } = listingKeys.length
-    ? await client.rpc('curated_luxury_shadow_customer_cards_v3', {
+    ? await client.rpc(restoredRolex ? 'curated_luxury_rolex_customer_cards_v4'
+      : 'curated_luxury_shadow_customer_cards_v3', {
       p_run_id: RUN_ID, p_listing_keys: listingKeys,
     })
     : { data: [], error: null };
@@ -190,7 +218,7 @@ async function loadInventory(client, options) {
       page: options.page + 1,
     }) : null,
     records: rows.map(mapCard), publicationBrands: [...BRANDS],
-    source: MARKET_SELECTOR, run_id: RUN_ID,
+    source: restoredRolex ? ROLEX_EVIDENCE_SELECTOR : MARKET_SELECTOR, run_id: RUN_ID,
     evidenceContract: {
       identity: 'Source-backed observed identity; catalog enrichment is optional.',
       price: 'Only explicit USD/USDT or verified normalized FX may populate USD analytics.',
@@ -214,41 +242,54 @@ function percentileStats(stats) {
     lower_fence: Math.max(0, q1 - (3 * iqr)), upper_fence: q3 + (3 * iqr), iqr_multiplier: 3 };
 }
 
-function mapPriceRow(row, brand, reference) {
+function mapPriceRow(row, brand, reference, options = {}) {
   const images = urlsFromMedia(row.raw_media);
+  const usdOnly = options.usdOnly === true;
   return {
     id: row.id, brand, reference, listing_type: 'WTS',
-    price_raw: row.source_price_amount == null ? null : Number(row.source_price_amount),
-    source_price_amount: row.source_price_amount == null ? null : Number(row.source_price_amount),
-    source_currency: row.source_currency || null, currency: row.source_currency || null,
+    price_raw: usdOnly ? null : row.source_price_amount == null ? null : Number(row.source_price_amount),
+    source_price_amount: usdOnly ? null
+      : row.source_price_amount == null ? null : Number(row.source_price_amount),
+    source_currency: usdOnly ? null : row.source_currency || null,
+    currency: usdOnly ? 'USD' : row.source_currency || null,
     price_usd: Number(row.price_usd), analytics_price_usd: Number(row.price_usd),
-    price_evidence_status: ['USD', 'USDT'].includes(String(row.source_currency).toUpperCase())
-      ? 'SOURCE_EXPLICIT_USD_MATCH' : 'DATED_VERIFIED_FX',
+    price_evidence_status: String(row.source_currency).toUpperCase() === 'USDT'
+      ? 'SOURCE_EXPLICIT_USD_USDT'
+      : String(row.source_currency).toUpperCase() === 'USD'
+        ? 'SOURCE_EXPLICIT_USD_MATCH' : 'DATED_VERIFIED_FX',
     raw_message: row.raw_message || null, created_at: row.created_at || null,
     listing_date: row.created_at || null, condition: row.condition || null,
     dial_color: row.dial_color || null, region: row.country_code || null,
     current_status: row.current_status || null, cohort_status: row.cohort_status || null,
     thumbnail_url: images[0] || null, image_url: images[0] || null, image_urls: images,
-    has_images: images.length > 0, source: 'CURATED_LUXURY_SHADOW_V1',
+    has_images: images.length > 0,
+    source: usdOnly ? 'CURATED_LUXURY_ROLEX_EVIDENCE_V1' : 'CURATED_LUXURY_SHADOW_V1',
   };
 }
 
 async function loadPriceResearch(client, { brand, reference, evidencePage = 1, evidencePageSize = 100 }) {
   const referenceKey = normalizedReference(reference);
-  const { data, error } = await client.rpc('curated_luxury_shadow_price_research', {
+  const restoredRolex = brand === 'Rolex' && rolexEvidenceEnabled();
+  const { data, error } = await client.rpc(restoredRolex
+    ? 'curated_luxury_rolex_price_research_v2'
+    : 'curated_luxury_shadow_price_research', restoredRolex ? {
+    p_run_id: RUN_ID, p_reference_key: referenceKey,
+    p_limit: evidencePageSize, p_offset: (evidencePage - 1) * evidencePageSize,
+  } : {
     p_run_id: RUN_ID, p_brand: brand, p_reference_key: referenceKey,
     p_limit: evidencePageSize, p_offset: (evidencePage - 1) * evidencePageSize,
   });
   if (error) throw error;
   const rawRows = Array.isArray(data?.rows) ? data.rows : [];
-  const rows = rawRows.map(row => mapPriceRow(row, brand, reference));
+  const rows = rawRows.map(row => mapPriceRow(row, brand, reference, { usdOnly: restoredRolex }));
   const stats = percentileStats(data?.stats);
   const total = Number(data?.stats?.count || 0);
   const wtb = Number(data?.wtb_count || 0);
   const reposts = Number(data?.stats?.repost_count || 0);
   return {
     success: true, brand, reference, resolvedRef: null, model: null, collection: null, dialColors: null,
-    analytics_source: PRICE_SELECTOR, total_tracked_listings: total + wtb,
+    analytics_source: restoredRolex ? ROLEX_EVIDENCE_SELECTOR : PRICE_SELECTOR,
+    total_tracked_listings: total + wtb,
     wts_eligible_analytics_count: total, wtb_demand_count: wtb,
     reference_qualified_wts_count: total, reference_analytics_ready: total >= 2,
     demand_scope: 'EXACT_REFERENCE_ALL_DIALS', demand_rows: [],
@@ -275,10 +316,11 @@ async function loadPriceResearch(client, { brand, reference, evidencePage = 1, e
       excluded_count: 0, formula: 'Q1 - 3.0×IQR to Q3 + 3.0×IQR', iqr_multiplier: 3,
       repost_excluded_count: reposts, unsplit_bundle_excluded_count: 0,
       lower_fence: stats?.lower_fence ?? null, upper_fence: stats?.upper_fence ?? null },
-    source: PRICE_SELECTOR, run_id: RUN_ID,
+    source: restoredRolex ? ROLEX_EVIDENCE_SELECTOR : PRICE_SELECTOR, run_id: RUN_ID,
   };
 }
 
-module.exports = { BRANDS, MARKET_SELECTOR, PRICE_SELECTOR, RUN_ID, countryCodes, isShadowBrand,
+module.exports = { BRANDS, MARKET_SELECTOR, PRICE_SELECTOR, ROLEX_EVIDENCE_SELECTOR, RUN_ID,
+  countryCodes, isShadowBrand, rolexEvidenceEnabled,
   encodeShadowCursor, loadInventory, loadPriceResearch, mapCard, normalizedReference,
   shadowCursorMatches, shadowScope, urlsFromMedia };
