@@ -43,8 +43,15 @@ jobs:
       ROLEX_EVIDENCE_RUN_ID: 17d6d831-86cd-5e67-9830-c881bcf16e0d
       ROLEX_EVIDENCE_CONFIRMATION: ${{ inputs.confirmation }}
       ROLEX_EVIDENCE_CANARY_LIMIT: ${{ inputs.canary_limit }}
-      ROLEX_EVIDENCE_OUTPUT: ${{ runner.temp }}/rolex-evidence-restoration.json
-      EXPECTED_MIGRATION_SHA256: 08f6fa4293cca2e58d081b0723877202e9611f6fd07ad116ef695fa18d24d3b0
+      # Job-level env expressions cannot use the runner context. Keep the
+      # aggregate manifest in a fixed runner-local path so workflow_dispatch
+      # remains valid and the schema-only recovery can execute.
+      ROLEX_EVIDENCE_OUTPUT: /tmp/rolex-evidence-restoration.json
+      EXPECTED_MIGRATION_SHA256: cd90b816c081874f458e88cf493c06bf6f60aa646b5ae085c1460dcaa43f7103
+      EXPECTED_ORDERING_MIGRATION_SHA256: a30ac1237dda203df82cf80ba06d1b67c0747929252adfa84a6191870707d76f
+      EXPECTED_PERFORMANCE_MIGRATION_SHA256: e53229fffb078f172f0c3d00289516290518384947b52a1521dfda294495d901
+      EXPECTED_SCALAR_PAGE_MIGRATION_SHA256: 35a23350310e042a6bd93214d79aaac83acafc4d9dde40706cac321efcd5e2aa
+      EXPECTED_IMAGE_PAGE_MIGRATION_SHA256: 4ec3179836566613ce59271fbc4683814d278e59e6f24e997f6a65269779759e
     steps:
       - uses: actions/checkout@v4
 
@@ -81,7 +88,39 @@ jobs:
             [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($migration))
           ).ToLowerInvariant()
           if ($actualSha -cne $env:EXPECTED_MIGRATION_SHA256) { throw 'Pinned migration SHA-256 mismatch.' }
-          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='15min';`n$migration`nCOMMIT;"
+          $orderingPath = 'supabase/migrations/20260827170000_curated_luxury_single_input_first.sql'
+          $orderingMigration = (Get-Content -LiteralPath $orderingPath -Raw).Replace("`r`n", "`n")
+          $orderingSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($orderingMigration))
+          ).ToLowerInvariant()
+          if ($orderingSha -cne $env:EXPECTED_ORDERING_MIGRATION_SHA256) {
+            throw 'Pinned Rolex/Patek ordering migration SHA-256 mismatch.'
+          }
+          $performancePath = 'supabase/migrations/20260827180000_curated_luxury_single_input_first_performance.sql'
+          $performanceMigration = (Get-Content -LiteralPath $performancePath -Raw).Replace("`r`n", "`n")
+          $performanceSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($performanceMigration))
+          ).ToLowerInvariant()
+          if ($performanceSha -cne $env:EXPECTED_PERFORMANCE_MIGRATION_SHA256) {
+            throw 'Pinned Rolex/Patek performance migration SHA-256 mismatch.'
+          }
+          $scalarPagePath = 'supabase/migrations/20260827190000_curated_luxury_scalar_brand_lane_page.sql'
+          $scalarPageMigration = (Get-Content -LiteralPath $scalarPagePath -Raw).Replace("`r`n", "`n")
+          $scalarPageSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($scalarPageMigration))
+          ).ToLowerInvariant()
+          if ($scalarPageSha -cne $env:EXPECTED_SCALAR_PAGE_MIGRATION_SHA256) {
+            throw 'Pinned Rolex/Patek scalar-page migration SHA-256 mismatch.'
+          }
+          $imagePagePath = 'supabase/migrations/20260827200000_curated_luxury_verified_image_lane_page.sql'
+          $imagePageMigration = (Get-Content -LiteralPath $imagePagePath -Raw).Replace("`r`n", "`n")
+          $imagePageSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($imagePageMigration))
+          ).ToLowerInvariant()
+          if ($imagePageSha -cne $env:EXPECTED_IMAGE_PAGE_MIGRATION_SHA256) {
+            throw 'Pinned Rolex/Patek image-page migration SHA-256 mismatch.'
+          }
+          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='15min';`n$migration`n$orderingMigration`n$performanceMigration`n$scalarPageMigration`n$imagePageMigration`nCOMMIT;"
           $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
           $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
           Invoke-RestMethod -Method Post `
