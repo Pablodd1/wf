@@ -761,6 +761,7 @@ function regexExtract(text) {
   if (cartierMatch) candidates.push({ ref: cartierMatch[0].toUpperCase(), source: 'cartier' });
   if (tudorMatch) candidates.push({ ref: tudorMatch[0].toUpperCase(), source: 'tudor' });
   if (tagMatch) candidates.push({ ref: tagMatch[0].toUpperCase(), source: 'tag' });
+    if (zenithMatch) candidates.push({ ref: zenithMatch[0].toUpperCase(), source: 'zenith' });
 
   // Filter: reject candidates that are just the explicit price or K-price
   const validCandidates = candidates.filter(c => {
