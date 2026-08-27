@@ -1038,13 +1038,14 @@ async function analyzeOne(chunk, ctx) {
   if (needsAi && ctx.kimiKey) {
     try {
       const ai = await aiParse(ctx.kimiKey, chunk, parsed);
+      if (ai.dialColor && !/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|mop|mother\s*of\s*pearl|meteorite|diamond|gemset|rainbow|multi[\s-]?color|panda|hulk|tiffany|onyx|root\s*beer|cognac|ice\s*blue)\b/i.test(ai.dialColor)) ai.dialColor = null;
       if (ai.brand && ai.brand.toLowerCase() === 'richard mille' && ai.reference) {
         const rmMatch = ai.reference.match(/^(RM\d{2,3}-\d{2})/i);
         if (rmMatch) ai.reference = rmMatch[1].toUpperCase();
       }
       parsed = {
         brand: ai.brand || parsed.brand,
-        ref: ai.reference || parsed.ref,
+        ref: (ai.brand && ai.brand.toLowerCase() === 'zenith' ? chunk.match(/\b(\d{2}\.\d{4}\.\d{3,4}\/\d{2}\.[A-Z0-9]+)\b/i)?.[1] || ai.reference : ai.reference) || parsed.ref,
         dial: ai.dialColor || parsed.dial,
         condition: ai.condition || parsed.condition,
         year: ai.year ?? parsed.year,
