@@ -142,9 +142,10 @@ test('shadow inventory uses bounded key/card RPCs, exact facets, and a scoped ke
   assert.equal(first.hasMore, true);
   assert.equal(first.records[0].listing_source_shape, 'SINGLE_INPUT');
   assert.deepEqual(calls.map(call => call.name), [
-    'curated_luxury_shadow_customer_page_keys_v4', 'curated_luxury_shadow_customer_count_v2',
+    'curated_luxury_shadow_customer_page_keys_v7', 'curated_luxury_shadow_customer_count_v2',
     'curated_luxury_shadow_customer_cards_v3',
   ]);
+  assert.equal(calls[0].args.p_brand, 'Rolex');
   assert.equal(Object.hasOwn(calls[0].args, 'p_offset'), false);
 
   const parsed = inventoryApi.parseInventoryCursor(first.nextCursor, 24);
@@ -155,9 +156,21 @@ test('shadow inventory uses bounded key/card RPCs, exact facets, and a scoped ke
   const second = await shadow.loadInventory(client, { ...options, page: 2, cursor: parsed.shadowKeyset });
   assert.equal(second.total, null);
   assert.deepEqual(calls.map(call => call.name), [
-    'curated_luxury_shadow_customer_page_keys_v4', 'curated_luxury_shadow_customer_cards_v3',
+    'curated_luxury_shadow_customer_page_keys_v7', 'curated_luxury_shadow_customer_cards_v3',
   ]);
   assert.equal(calls[0].args.p_after_key, 'b'.repeat(64));
+});
+
+test('shadow inventory labels page-selection failures without exposing credentials', async () => {
+  const client = { rpc: async name => name.includes('page_keys')
+    ? { data: null, error: { message: 'canceling statement due to statement timeout' } }
+    : { data: null, error: null } };
+  await assert.rejects(
+    shadow.loadInventory(client, { brand: 'Patek Philippe', listingType: '', countries: [],
+      pricedOnly: false, imagesOnly: false, search: null, reference: null,
+      listingLane: 0, page: 1, pageSize: 24, cursor: null }),
+    /Curated shadow page selection failed: canceling statement due to statement timeout/,
+  );
 });
 
 test('performance migration selects keys before enrichment and contains no OFFSET hot path', () => {

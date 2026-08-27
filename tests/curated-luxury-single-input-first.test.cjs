@@ -8,6 +8,12 @@ const test = require('node:test');
 const root = path.resolve(__dirname, '..');
 const migration = fs.readFileSync(path.join(root,
   'supabase/migrations/20260827170000_curated_luxury_single_input_first.sql'), 'utf8');
+const performanceMigration = fs.readFileSync(path.join(root,
+  'supabase/migrations/20260827180000_curated_luxury_single_input_first_performance.sql'), 'utf8');
+const scalarPageMigration = fs.readFileSync(path.join(root,
+  'supabase/migrations/20260827190000_curated_luxury_scalar_brand_lane_page.sql'), 'utf8');
+const imagePageMigration = fs.readFileSync(path.join(root,
+  'supabase/migrations/20260827200000_curated_luxury_verified_image_lane_page.sql'), 'utf8');
 const shadowApi = fs.readFileSync(path.join(root, 'api/_lib/curated-luxury-shadow.cjs'), 'utf8');
 const inventoryApi = fs.readFileSync(path.join(root, 'api/reviewed-market-inventory.js'), 'utf8');
 const tradingFloor = fs.readFileSync(path.join(root, 'src/pages/TradingFloor.tsx'), 'utf8');
@@ -48,6 +54,46 @@ test('ordering migration is projection-only and does not rewrite cohort or raw/s
 
 test('guarded QNSA schema workflow pins and installs the ordering contract atomically', () => {
   assert.match(workflow, /EXPECTED_ORDERING_MIGRATION_SHA256: [0-9a-f]{64}/);
+  assert.match(workflow, /EXPECTED_PERFORMANCE_MIGRATION_SHA256: [0-9a-f]{64}/);
+  assert.match(workflow, /EXPECTED_SCALAR_PAGE_MIGRATION_SHA256: [0-9a-f]{64}/);
+  assert.match(workflow, /EXPECTED_IMAGE_PAGE_MIGRATION_SHA256: [0-9a-f]{64}/);
   assert.match(workflow, /20260827170000_curated_luxury_single_input_first\.sql/);
-  assert.match(workflow, /BEGIN;[\s\S]*\$migration[\s\S]*\$orderingMigration[\s\S]*COMMIT;/);
+  assert.match(workflow, /20260827180000_curated_luxury_single_input_first_performance\.sql/);
+  assert.match(workflow, /20260827190000_curated_luxury_scalar_brand_lane_page\.sql/);
+  assert.match(workflow, /20260827200000_curated_luxury_verified_image_lane_page\.sql/);
+  assert.match(workflow,
+    /BEGIN;[\s\S]*\$migration[\s\S]*\$orderingMigration[\s\S]*\$performanceMigration[\s\S]*\$scalarPageMigration[\s\S]*\$imagePageMigration[\s\S]*COMMIT;/);
+  assert.doesNotMatch(workflow, /ROLEX_EVIDENCE_OUTPUT:\s*\$\{\{\s*runner\.temp\s*\}\}/);
+  assert.match(workflow, /ROLEX_EVIDENCE_OUTPUT:\s*\/tmp\/rolex-evidence-restoration\.json/);
+});
+
+test('image-only paging starts from exact customer-safe seller image evidence', () => {
+  assert.match(imagePageMigration, /verified_images AS MATERIALIZED/);
+  assert.match(imagePageMigration, /l\.image_evidence_type='SELLER_LISTING_IMAGE'/);
+  assert.match(imagePageMigration, /a\.customer_safe/);
+  assert.match(imagePageMigration, /c\.latest_raw_occurrence_key=image\.raw_occurrence_key/);
+  assert.match(imagePageMigration, /IF NOT p_images_only THEN[\s\S]*customer_page_keys_v6/);
+  assert.doesNotMatch(imagePageMigration, /\bOFFSET\b/i);
+});
+
+test('customer page RPC binds one scalar brand to the ordered partial-index stream', () => {
+  assert.match(scalarPageMigration, /p_brand text/);
+  assert.match(scalarPageMigration, /c\.run_id=p_run_id AND c\.brand=p_brand/);
+  assert.match(scalarPageMigration, /p_brand IN \('Rolex','Patek Philippe'\)/);
+  assert.match(scalarPageMigration, /curated_luxury_shadow_customer_page_keys_v6/);
+  assert.doesNotMatch(scalarPageMigration, /c\.brand=ANY\(/);
+  assert.doesNotMatch(scalarPageMigration, /\bOFFSET\b/i);
+  assert.doesNotMatch(scalarPageMigration,
+    /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+(?:INTO\s+|FROM\s+)?(?:public\.)?(?:curated_luxury_current_listings_shadow|raw_messages|raw_message_versions)/i);
+});
+
+test('source-lane hot path uses bounded partial-index streams instead of a full expression sort', () => {
+  assert.match(performanceMigration, /curated_luxury_current_shadow_single_input_feed_v1_idx/i);
+  assert.match(performanceMigration, /curated_luxury_current_shadow_multi_child_feed_v1_idx/i);
+  assert.match(performanceMigration, /single_candidates AS MATERIALIZED/i);
+  assert.match(performanceMigration, /multi_candidates AS MATERIALIZED/i);
+  assert.match(performanceMigration, /UNION ALL/i);
+  assert.doesNotMatch(performanceMigration, /\bOFFSET\b/i);
+  assert.doesNotMatch(performanceMigration,
+    /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+(?:INTO\s+|FROM\s+)?(?:public\.)?(?:curated_luxury_current_listings_shadow|raw_messages|raw_message_versions)/i);
 });

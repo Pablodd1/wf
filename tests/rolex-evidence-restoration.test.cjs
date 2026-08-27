@@ -12,6 +12,8 @@ const worker = require('../tools/audit/restore-rolex-price-image-evidence.cjs');
 const root = path.resolve(__dirname, '..');
 const migration = fs.readFileSync(path.join(root,
   'supabase/migrations/20260827150000_rolex_evidence_restoration_v1.sql'), 'utf8');
+const forwardOrderingMigration = fs.readFileSync(path.join(root,
+  'supabase/migrations/20260827170000_curated_luxury_single_input_first.sql'), 'utf8');
 
 function row(overrides = {}) {
   const raw = overrides.raw_message || 'WTS Rolex 116500LN USD 25,000';
@@ -177,7 +179,7 @@ test('Patek Price Research rows expose normalized USD, not the foreign source am
   assert.equal(result.rows[0].source_currency, null);
 });
 
-test('Rolex v5 is opt-in and Patek uses source-lane v4', async () => {
+test('Rolex restoration keeps its count sidecar while both brands use the scalar image-safe v7 page lane', async () => {
   const prior = process.env.CURATED_ROLEX_EVIDENCE_SOURCE;
   process.env.CURATED_ROLEX_EVIDENCE_SOURCE = shadow.ROLEX_EVIDENCE_SELECTOR;
   const calls = [];
@@ -191,11 +193,11 @@ test('Rolex v5 is opt-in and Patek uses source-lane v4', async () => {
     search: null, reference: null, page: 1, pageSize: 24, cursor: null };
   try {
     await shadow.loadInventory(client, { ...base, brand: 'Rolex' });
-    assert.deepEqual(calls, ['curated_luxury_rolex_customer_page_keys_v5',
+    assert.deepEqual(calls, ['curated_luxury_shadow_customer_page_keys_v7',
       'curated_luxury_rolex_customer_count_v3']);
     calls.length = 0;
     await shadow.loadInventory(client, { ...base, brand: 'Patek Philippe' });
-    assert.deepEqual(calls, ['curated_luxury_shadow_customer_page_keys_v4',
+    assert.deepEqual(calls, ['curated_luxury_shadow_customer_page_keys_v7',
       'curated_luxury_shadow_customer_count_v2']);
   } finally {
     if (prior === undefined) delete process.env.CURATED_ROLEX_EVIDENCE_SOURCE;
@@ -213,6 +215,11 @@ test('migration is append-only, duplicate-safe, Rolex-only, and source-table rea
   assert.match(migration, /row_number\(\) OVER\(PARTITION BY offer_state_key/i);
   assert.doesNotMatch(migration, /ORDER BY \(e\.decision='VERIFIED'\) DESC/i);
   assert.match(migration, /ORDER BY e\.created_at DESC,e\.evidence_version DESC LIMIT 1[\s\S]*p\.decision='VERIFIED'/i);
+  assert.match(forwardOrderingMigration, /curated_luxury_rolex_latest_price_evidence_v2/);
+  assert.match(forwardOrderingMigration,
+    /ORDER BY e\.created_at DESC,e\.evidence_version DESC[\s\S]*WHERE ranked\.evidence_rank=1/i);
+  assert.match(forwardOrderingMigration,
+    /latest_price_evidence_v2 p[\s\S]*p\.decision='VERIFIED' AND p\.price_research_eligible/i);
   assert.doesNotMatch(migration, /\b(?:INSERT|UPDATE|DELETE|TRUNCATE)\s+(?:INTO\s+|FROM\s+)?public\.(?:raw_messages|raw_message_versions|curated_luxury_current_listings_shadow)/i);
   assert.doesNotMatch(migration, /brand='Patek Philippe'/);
 });

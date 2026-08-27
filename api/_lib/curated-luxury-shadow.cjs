@@ -184,10 +184,9 @@ async function loadInventory(client, options) {
     p_search: options.reference ? null : (options.search || null),
     p_reference_key: options.reference ? normalizedReference(options.reference) : null,
   };
-  const pageRequest = client.rpc(restoredRolex
-    ? 'curated_luxury_rolex_customer_page_keys_v5'
-    : 'curated_luxury_shadow_customer_page_keys_v4', {
-    ...(restoredRolex ? rolexArgs : args),
+  const pageRequest = client.rpc('curated_luxury_shadow_customer_page_keys_v7', {
+    ...rolexArgs,
+    p_brand: options.brand,
     p_listing_lane: normalizedListingLane(options.listingLane),
     p_after_lane: normalizedListingLane(cursor?.listingLane),
     p_after_timestamp: cursor?.sourceTimestamp || null,
@@ -201,7 +200,9 @@ async function loadInventory(client, options) {
     : Promise.resolve({ data: null, error: null });
   const [{ data: page, error: pageError }, { data: countData, error: countError }] =
     await Promise.all([pageRequest, countRequest]);
-  if (pageError) throw pageError;
+  if (pageError) {
+    throw new Error(`Curated shadow page selection failed: ${pageError.message || 'unknown database error'}`);
+  }
   const listingKeys = Array.isArray(page?.keys) ? page.keys : [];
   const { data: cardData, error: cardError } = listingKeys.length
     ? await client.rpc(restoredRolex ? 'curated_luxury_rolex_customer_cards_v4'
@@ -209,7 +210,9 @@ async function loadInventory(client, options) {
       p_run_id: RUN_ID, p_listing_keys: listingKeys,
     })
     : { data: [], error: null };
-  if (cardError) throw cardError;
+  if (cardError) {
+    throw new Error(`Curated shadow card enrichment failed: ${cardError.message || 'unknown database error'}`);
+  }
   const rows = Array.isArray(cardData) ? cardData : [];
   const rowsByKey = new Map(rows.map(row => [row.id, row]));
   const orderedRows = listingKeys.map(key => rowsByKey.get(key)).filter(Boolean);
