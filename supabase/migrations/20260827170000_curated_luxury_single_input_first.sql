@@ -154,7 +154,7 @@ SET search_path=public,extensions SET plan_cache_mode='force_custom_plan' AS $$
             SELECT 1 FROM public.curated_luxury_rolex_price_evidence_shadow newer
             WHERE newer.run_id=p.run_id AND newer.current_listing_key=p.current_listing_key
               AND newer.latest_raw_occurrence_key=p.latest_raw_occurrence_key
-              AND (newer.created_at,newer.evidence_version)>(p.created_at,p.evidence_version)))))
+              AND (newer.created_at,newer.evidence_version)>(p.created_at,p.evidence_version))))
       AND (NOT p_images_only OR EXISTS (
         SELECT 1 FROM public.curated_luxury_child_image_links_shadow l
         JOIN public.curated_luxury_child_image_assets_shadow a USING(source_image_key)
