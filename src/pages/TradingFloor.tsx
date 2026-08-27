@@ -171,6 +171,120 @@ interface TradingFloorResponse {
   publicationBrands?: string[];
 }
 
+interface RandomAllInventoryCursor {
+  v: 1;
+  page: number;
+  seed: number;
+  brandCursors: Record<string, string | null>;
+  brandTotals: Record<string, number>;
+  exhausted: Record<string, boolean>;
+}
+
+const RANDOM_ALL_INVENTORY_BRANDS = ['Rolex', 'Patek Philippe'] as const;
+
+function encodeRandomAllInventoryCursor(cursor: RandomAllInventoryCursor) {
+  return window.btoa(JSON.stringify(cursor)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodeRandomAllInventoryCursor(value: string | null): RandomAllInventoryCursor | null {
+  if (!value) return null;
+  try {
+    const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+    const decoded = JSON.parse(window.atob(padded)) as RandomAllInventoryCursor;
+    if (decoded?.v !== 1 || !Number.isSafeInteger(decoded.page) || decoded.page < 2
+      || !Number.isSafeInteger(decoded.seed) || decoded.seed < 0
+      || !decoded.brandCursors || !decoded.brandTotals || !decoded.exhausted) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+function seededPageShuffle(records: ListingRecord[], seed: number, page: number) {
+  const shuffled = [...records];
+  let state = (seed ^ Math.imul(page, 0x9e3779b1)) >>> 0;
+  const random = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
+  }
+  return shuffled;
+}
+
+async function loadRandomAllInventory({
+  pageSize,
+  cursor,
+  seed,
+  signal,
+}: {
+  pageSize: number;
+  cursor: string | null;
+  seed: number;
+  signal: AbortSignal;
+}): Promise<TradingFloorResponse> {
+  const decoded = decodeRandomAllInventoryCursor(cursor);
+  if (cursor && !decoded) return { status: 'error' };
+  const page = decoded?.page || 1;
+  const stableSeed = decoded?.seed ?? seed;
+  const perBrandPageSize = Math.max(12, Math.ceil(pageSize / RANDOM_ALL_INVENTORY_BRANDS.length));
+  const responses = await Promise.all(RANDOM_ALL_INVENTORY_BRANDS.map(async brand => {
+    if (decoded?.exhausted?.[brand]) {
+      return {
+        brand,
+        payload: {
+          status: 'ok', records: [], total: decoded.brandTotals[brand] || 0, hasMore: false,
+        } as TradingFloorResponse,
+      };
+    }
+    const params = new URLSearchParams({
+      brand,
+      pageSize: String(perBrandPageSize),
+      pagination: 'cursor',
+    });
+    const brandCursor = decoded?.brandCursors?.[brand];
+    if (brandCursor) params.set('cursor', brandCursor);
+    const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal });
+    const payload = response.ok ? await response.json() as TradingFloorResponse : { status: 'error' };
+    return { brand, payload };
+  }));
+  if (responses.some(({ payload }) => payload.status !== 'ok' || !Array.isArray(payload.records))) {
+    return { status: 'error' };
+  }
+
+  const brandCursors: Record<string, string | null> = {};
+  const brandTotals: Record<string, number> = {};
+  const exhausted: Record<string, boolean> = {};
+  const records: ListingRecord[] = [];
+  let total = 0;
+  for (const { brand, payload } of responses) {
+    records.push(...(payload.records || []));
+    brandTotals[brand] = Number(payload.total) || 0;
+    total += brandTotals[brand];
+    brandCursors[brand] = payload.nextCursor || null;
+    exhausted[brand] = !payload.hasMore || !payload.nextCursor;
+  }
+  const hasMore = RANDOM_ALL_INVENTORY_BRANDS.some(brand => !exhausted[brand]);
+  return {
+    status: 'ok',
+    records: seededPageShuffle(records, stableSeed, page),
+    total,
+    totalIsEstimate: false,
+    hasMore,
+    nextCursor: hasMore ? encodeRandomAllInventoryCursor({
+      v: 1,
+      page: page + 1,
+      seed: stableSeed,
+      brandCursors,
+      brandTotals,
+      exhausted,
+    }) : null,
+    publicationBrands: [...RANDOM_ALL_INVENTORY_BRANDS],
+  };
+}
+
 interface ListingContact {
   contact_available: boolean;
   dealer_name?: string;
@@ -300,6 +414,7 @@ export default function TradingFloor() {
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
   const inventoryRequestIdRef = useRef(0);
+  const randomAllInventorySeedRef = useRef(0);
   const viewKey = [brandFilter, modelFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, requestedLocationParam].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
@@ -556,13 +671,30 @@ export default function TradingFloor() {
           params.delete('type');
         }
         const endpoint = usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest';
+        const randomAllInventory = categoryFilter === 'all'
+          && !brandFilter && !modelFilter && !intentFilter && !search
+          && !imagesOnly && !pricedOnly && locationFilters.length === 0;
         let data: TradingFloorResponse;
         try {
-          const response = await fetch(`${endpoint}?${params.toString()}`, { signal: controller.signal });
-          if (response.ok) {
-            data = await response.json() as TradingFloorResponse;
+          if (randomAllInventory) {
+            if (randomAllInventorySeedRef.current === 0) {
+              const randomSeed = new Uint32Array(1);
+              window.crypto.getRandomValues(randomSeed);
+              randomAllInventorySeedRef.current = randomSeed[0] || 1;
+            }
+            data = await loadRandomAllInventory({
+              pageSize,
+              cursor,
+              seed: randomAllInventorySeedRef.current,
+              signal: controller.signal,
+            });
           } else {
-            data = { status: 'error' };
+            const response = await fetch(`${endpoint}?${params.toString()}`, { signal: controller.signal });
+            if (response.ok) {
+              data = await response.json() as TradingFloorResponse;
+            } else {
+              data = { status: 'error' };
+            }
           }
         } catch {
           data = { status: 'error' };
