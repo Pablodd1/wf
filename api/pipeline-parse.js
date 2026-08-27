@@ -1040,21 +1040,35 @@ async function analyzeOne(chunk, ctx) {
     try {
       const ai = await aiParse(ctx.kimiKey, chunk, parsed);
       if (ai.dialColor && !/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|mop|mother\s*of\s*pearl|meteorite|diamond|gemset|rainbow|multi[\s-]?color|panda|hulk|tiffany|onyx|root\s*beer|cognac|ice\s*blue)\b/i.test(ai.dialColor)) ai.dialColor = null;
-      if (ai.brand && ai.brand.toLowerCase() === 'richard mille' && ai.reference) {
-        const rmMatch = ai.reference.match(/^(RM\d{2,3}-\d{2})/i);
-        if (rmMatch) ai.reference = rmMatch[1].toUpperCase();
-      }
-      parsed = {
-        brand: ai.brand || parsed.brand,
-        ref: (ai.brand && ai.brand.toLowerCase() === 'zenith' ? chunk.match(/\b(\d{2}\.\d{4}\.\d{3,4}\/\d{2}\.[A-Z0-9]+)\b/i)?.[1] || ai.reference : ai.reference) || parsed.ref,
-        dial: ai.dialColor || parsed.dial,
-        condition: ai.condition || parsed.condition,
-        year: ai.year ?? parsed.year,
-        price: ai.price ?? parsed.price,
-        currency: ai.currency || parsed.currency,
-        image_urls: ai.image_urls || parsed.image_urls || [],
-        confidence: Math.min(ai.confidence ?? confidence, 100),
-      };
+      
+        let finalBrand = ai.brand || parsed.brand;
+        let finalRef = ai.reference || parsed.ref;
+        let finalBrandLower = (finalBrand || '').toLowerCase();
+        
+        if (finalBrandLower === 'richard mille' || finalBrandLower === 'rm') {
+            if (finalRef) {
+                const rmMatch = finalRef.match(/^(RM\d{2,3}-\d{2})/i);
+                if (rmMatch) finalRef = rmMatch[1].toUpperCase();
+            }
+        }
+        
+        if (finalBrandLower === 'zenith') {
+            const zMatch = chunk.match(/\b(\d{2}\.\d{4}\.\d{3,4}\/\d{2}\.[A-Z0-9]+)\b/i);
+            if (zMatch) finalRef = zMatch[1].toUpperCase();
+        }
+        
+        parsed = {
+          brand: finalBrand,
+          ref: finalRef,
+          dial: ai.dialColor || parsed.dial,
+          condition: ai.condition || parsed.condition,
+          year: ai.year ?? parsed.year,
+          price: ai.price ?? parsed.price,
+          currency: ai.currency || parsed.currency,
+          image_urls: ai.image_urls || parsed.image_urls || [],
+          confidence: Math.min(ai.confidence ?? confidence, 100),
+        };
+
       aiAssisted = true;
       confidence = parsed.confidence;
       stages.push({ stage: 'AI_TEXT', engine: 'kimi-k2.6', confidence, data: { ...parsed }, note: 'AI parsed messy text' });
