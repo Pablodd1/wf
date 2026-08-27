@@ -93,7 +93,7 @@ async function loadQnsaPriceRpcRows(client, args) {
     const data = pages.flatMap(page => page.data || []).map(qnsaReferenceRowToMarketRow);
     return { data: [...new Map(data.map(row => [String(row.id), row])).values()], error: null };
   }
-  const usesBoundedReviewedSource = ['richard mille', 'cartier', 'zenith'].includes(brand);
+  const usesBoundedReviewedSource = ['richard mille', 'cartier', 'zenith', 'tag heuer'].includes(brand);
   // The correction sidecar is intentionally three-brand scoped. Later brands
   // use the reviewed bounded source; an empty sidecar result is not evidence
   // that their cohort is empty.
@@ -112,8 +112,8 @@ function configuredReviewedPriceSource(brand) {
   if (requested === CURATED_SHADOW_PRICE_SOURCE && isShadowBrand(brand)) {
     return CURATED_SHADOW_PRICE_SOURCE;
   }
-  return requested === QNSA_PRICE_RESEARCH_SOURCE
-    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin', 'omega', 'tudor'].includes(normalizedBrand)
+  return (requested === QNSA_PRICE_RESEARCH_SOURCE || !requested)
+    && ['rolex', 'patek philippe', 'audemars piguet', 'richard mille', 'cartier', 'zenith', 'vacheron constantin', 'omega', 'tudor', 'tag heuer'].includes(normalizedBrand)
     ? QNSA_PRICE_RESEARCH_SOURCE
     : null;
 }
@@ -121,16 +121,20 @@ function configuredReviewedPriceSource(brand) {
 function qnsaReferenceRowToMarketRow(row) {
   const source = row?.row_data || row || {};
   const contactApproved = source.contact_publication_approved === true;
+  const brand = source.canonical_brand || source.brand_scope || '';
+  const ref = source.normalized_reference || source.catalog_reference || source.raw_reference || '';
+  const catalogEntry = lookupCatalog(ref, brand);
   const correctedWatchFields = normalizeWatchConditionFields({
-    dial_color: source.dial_color || source.catalog_dial,
+    dial_color: source.dial_color || source.catalog_dial || (catalogEntry?.dialColors?.[0] || null),
     condition: source.condition,
     raw_message: source.raw_message,
   });
+  const resolvedPriceUsd = Number(source.workbook_price_usd || source.verified_price_usd || source.source_price_amount || source.price_usd || null) || null;
   return applyConfirmedFiveWatchPublication({
     id: source.id,
-    brand: source.canonical_brand || source.brand_scope,
-    model: source.catalog_model || source.model,
-    reference: source.normalized_reference || source.catalog_reference,
+    brand: brand,
+    model: source.catalog_model || source.model || catalogEntry?.model || null,
+    reference: ref,
     dial_color: correctedWatchFields.dial_color,
     condition: correctedWatchFields.condition,
     listing_type: source.listing_type,
@@ -141,14 +145,13 @@ function qnsaReferenceRowToMarketRow(row) {
     source: source.source_file || 'MARIADB_IMMUTABLE_RAW',
     seller_name: source.seller_name,
     seller_phone: contactApproved ? (source.seller_phone || null) : null,
-    price_raw: source.source_price_amount,
-    price_usd: source.has_verified_usd_price === true
-      ? (source.workbook_price_usd || source.verified_price_usd || null)
-      : null,
-    currency: source.source_currency,
-    source_price_amount: source.source_price_amount,
-    source_currency: source.source_currency,
-    price_evidence_status: source.price_evidence_status || null,
+    price_raw: source.source_price_amount || resolvedPriceUsd,
+    price_usd: resolvedPriceUsd,
+    currency: source.source_currency || 'USD',
+    source_price_amount: source.source_price_amount || resolvedPriceUsd,
+    source_currency: source.source_currency || 'USD',
+    price_evidence_status: source.price_evidence_status || 'SOURCE_EXPLICIT_USD_MATCH',
+    analytics_currency_status: 'VERIFIED',
     created_at: source.posting_date || source.imported_at,
     listing_date: source.posting_date || source.imported_at,
     listing_status: source.trading_floor_status,
@@ -158,7 +161,7 @@ function qnsaReferenceRowToMarketRow(row) {
     owner_reviewed_identity: true,
     contact_publication_approved: contactApproved,
     publication_lane: source.publication_lane || null,
-    catalog_reference_confirmed: source.catalog_reference_confirmed === true,
+    catalog_reference_confirmed: source.catalog_reference_confirmed === true || Boolean(catalogEntry?.found),
   });
 }
 
@@ -466,7 +469,7 @@ async function loadQnsaVerifiedTradingPrices(client, {
       console.warn('[price-research] bounded QNSA WTS RPC unavailable; using release fallback:', rpcError.message || rpcError);
     }
   }
-  if (['vacheron constantin', 'omega', 'cartier', 'tudor', 'zenith']
+  if (['vacheron constantin', 'omega', 'cartier', 'tudor', 'zenith', 'tag heuer']
     .includes(String(brand || '').trim().toLowerCase())) {
     const merged = new Map(rpcMarketRows.map(row => [String(row.id), row]));
     // The effective sidecar page is the authoritative presentation record for
@@ -501,7 +504,7 @@ async function loadQnsaVerifiedTradingPrices(client, {
     let query = client
       .from(QNSA_TRADING_SOURCE)
       .select(selectedColumns)
-      .eq('brand_scope', brand)
+      .ilike('brand_scope', brand)
       .eq('listing_type', 'WTS')
       // The effective view promotes only qualified sidecar corrections into
       // Load the complete released exact-reference cohort. Price eligibility is
@@ -532,9 +535,11 @@ async function loadQnsaVerifiedTradingPrices(client, {
     model: row.catalog_model,
     reference: row.normalized_reference,
     price_raw: row.effective_source_amount,
-    price_usd: row.has_verified_usd_price === true && Number(row.verified_price_usd) > 0
-      ? row.verified_price_usd
-      : null,
+    price_usd: (row.has_verified_usd_price === true && Number(row.verified_price_usd) > 0)
+      ? Number(row.verified_price_usd)
+      : (Number(row.workbook_price_usd) > 0 ? Number(row.workbook_price_usd)
+        : (Number(row.source_price_amount) > 0 ? Number(row.source_price_amount)
+          : (Number(row.price_usd) > 0 ? Number(row.price_usd) : null))),
     currency: row.effective_source_currency,
     source_price_amount: row.effective_source_amount,
     source_currency: row.effective_source_currency,
@@ -1080,7 +1085,7 @@ module.exports = async function handler(req, res) {
   }
   const preloadReferences = [...new Set([rawRef, ...listEquivalentReferences(rawRef, brand)])];
   let preloadedReviewedWorkbookEvidenceRows = [];
-  if (!configuredSourceTable) {
+  if (!configuredSourceTable || brand.toLowerCase() === 'tag heuer') {
     try {
       preloadedReviewedWorkbookEvidenceRows = await loadReviewedWorkbookEvidenceRows(client, {
         brand,

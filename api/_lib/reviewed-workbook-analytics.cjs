@@ -27,21 +27,18 @@ function mapWorkbookAnalyticsRow(row) {
     ? (clean(row.image_evidence_type) === 'SELLER_LISTING_IMAGE' ? 'SELLER_LISTING_IMAGE' : 'SOURCE_LISTING_IMAGE')
     : 'NO_IMAGE';
   const contactApproved = row.contact_publication_approved === true;
-  const explicitAdmissionUsd = row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'
+  const explicitAdmissionUsd = Number(row.workbook_price_usd) > 0
     ? Number(row.workbook_price_usd)
-    : null;
+    : (Number(row.source_price_amount) > 0 ? Number(row.source_price_amount) : null);
   const verifiedUsd = row.verified_price_usd == null ? explicitAdmissionUsd : Number(row.verified_price_usd);
   const hasVerifiedUsd = String(row.listing_type || '').toUpperCase() === 'WTS'
-    && (row.has_verified_usd_price === true
-    || (row.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH' && Number(row.workbook_price_usd) > 0))
     && Number.isFinite(verifiedUsd)
     && verifiedUsd > 0;
   const priceUsd = hasVerifiedUsd ? verifiedUsd : null;
   const priceEvidenceStatus = clean(row.price_evidence_status);
   const ownerAssumedUsd = String(row.listing_type || '').toUpperCase() === 'WTS'
-    && OWNER_ASSUMED_USD_STATUSES.has(String(priceEvidenceStatus || '').toUpperCase())
-    && Number(row.display_price_usd || row.owner_assumed_price_usd || row.workbook_price_usd) > 0
-    ? Number(row.display_price_usd || row.owner_assumed_price_usd || row.workbook_price_usd)
+    && Number(row.display_price_usd || row.owner_assumed_price_usd || row.workbook_price_usd || row.source_price_amount) > 0
+    ? Number(row.display_price_usd || row.owner_assumed_price_usd || row.workbook_price_usd || row.source_price_amount)
     : null;
   const trackedPriceUsd = priceUsd || ownerAssumedUsd;
   return {

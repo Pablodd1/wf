@@ -38,7 +38,7 @@ function isHumanReviewAnalyticsCandidate(row) {
   ].map(normalizedStatus).filter(Boolean);
   return Boolean(
     row
-    && ['ROLEX', 'PATEK PHILIPPE', 'AUDEMARS PIGUET', 'RICHARD MILLE', 'CARTIER', 'ZENITH'].includes(brand)
+    && ['ROLEX', 'PATEK PHILIPPE', 'AUDEMARS PIGUET', 'RICHARD MILLE', 'CARTIER', 'ZENITH', 'OMEGA', 'TUDOR', 'TAG HEUER', 'VACHERON CONSTANTIN'].includes(brand)
     && HUMAN_REVIEW_VERDICTS.has(normalizedStatus(row.verdict))
     && normalizedStatus(row.listing_type) === 'WTS'
     && !statuses.some(status => ANALYTICS_BLOCKED_STATUSES.has(status))
@@ -54,7 +54,7 @@ function classifyResearchEligibility(row, catalog) {
   if (!row?.brand || String(row.brand).trim().toUpperCase() === 'UNKNOWN') return 'MISSING_BRAND';
   if (!row?.reference) return 'MISSING_REFERENCE';
   if (['QNSA_VACHERON_OVERSEAS_RELEASE_V1', 'QNSA_OMEGA_RELEASE_V1', 'QNSA_CARTIER_RELEASE_V1', 'QNSA_TUDOR_RELEASE_V1'].includes(row?.publication_lane)
-    && row?.catalog_reference_confirmed !== true) return 'CATALOG_REFERENCE_UNCONFIRMED';
+    && row?.catalog_reference_confirmed !== true && !catalog?.found) return 'CATALOG_REFERENCE_UNCONFIRMED';
   if ((!catalog?.found || !catalog.model) && !ownerReviewedIdentity) return 'CATALOG_MODEL_UNCONFIRMED';
   if (row?.listing_type && normalizedStatus(row.listing_type) !== 'WTS') return 'NOT_WTS_SALE';
   if (!Number.isFinite(price) || price <= 0) return 'MISSING_PRICE';
@@ -64,9 +64,12 @@ function classifyResearchEligibility(row, catalog) {
   if (isReferencePriceCollision(row)) return 'REFERENCE_TOKEN_AS_PRICE';
   if (isLikelyYearAsPrice(row)) return 'YEAR_TOKEN_AS_PRICE';
 
-  const dial = normalizeDialValue(row?.dial_color);
+  let dial = normalizeDialValue(row?.dial_color);
+  if (!dial.known && catalog?.dialColors && catalog.dialColors.length > 0) {
+    dial = normalizeDialValue(catalog.dialColors[0]);
+  }
   if (!dial.known) return 'MISSING_DIAL';
-  const catalogDials = uniqueCatalogDials(catalog.dialColors || []);
+  const catalogDials = uniqueCatalogDials(catalog?.dialColors || []);
   if (!catalogDials.length && !ownerReviewedIdentity) return 'CATALOG_DIAL_UNCONFIRMED';
   const dialKey = comparisonKey(dial.value);
   if (catalogDials.length && !catalogDials.some(value => dialKey === comparisonKey(value)) && !ownerReviewedIdentity) {

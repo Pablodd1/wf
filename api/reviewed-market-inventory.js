@@ -71,6 +71,7 @@ const MIN_PUBLIC_WORKBOOK_PRICE_USD = 1_000;
 const MAX_PUBLIC_WORKBOOK_PRICE_USD = 100_000_000;
 const SIX_REVIEWED_WATCH_BRANDS = [
   'Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier', 'Zenith',
+  'Omega', 'Tudor', 'TAG Heuer', 'Vacheron Constantin',
 ];
 const SIX_REVIEWED_BRAND_CURSOR_CODES = Object.freeze({
   Rolex: 'r',
@@ -79,6 +80,10 @@ const SIX_REVIEWED_BRAND_CURSOR_CODES = Object.freeze({
   'Richard Mille': 'm',
   Cartier: 'c',
   Zenith: 'z',
+  Omega: 'o',
+  Tudor: 't',
+  'TAG Heuer': 'th',
+  'Vacheron Constantin': 'v',
 });
 const REVIEWED_WORKBOOK_ADMISSION_BRANDS = new Set([
   'A. Lange & Söhne', 'Audemars Piguet', 'Bell & Ross', 'Blancpain', 'Breguet', 'Breitling',
@@ -2090,7 +2095,7 @@ module.exports = async function handler(req, res) {
     const zenithModelRelease = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'
       && brand === 'Zenith' && requestedModel && ['ALL', 'WATCH'].includes(itemCategory);
     const controlledBrandRelease = vacheronOverseasRelease || omegaRelease || cartierRelease || tudorRelease;
-    if (controlledBrandRelease && !fourBrandEffectiveScope
+    if (controlledBrandRelease
       && !search && !requestedModel && !reference && !requestedDial && !condition
       && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
       const releaseCountRpc = cartierRelease ? 'qnsa_cartier_release_count'
@@ -2129,7 +2134,7 @@ module.exports = async function handler(req, res) {
     const firstEffectiveCountPage = pagination === 'cursor'
       ? !cursorProvided && page === 1 && (inventoryCursor?.offset || 0) === 0
       : page === 1;
-    if (fourBrandEffectiveScope && firstEffectiveCountPage) {
+    if (fourBrandEffectiveScope && firstEffectiveCountPage && publicInventoryTotal === null) {
       fourBrandCountOptions = {
         brand,
         listingType: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
@@ -2146,7 +2151,7 @@ module.exports = async function handler(req, res) {
         rating: rating || null,
       };
       publicInventoryTotal = null;
-    } else if (fourBrandEffectiveScope) {
+    } else if (fourBrandEffectiveScope && publicInventoryTotal === null) {
       // Cursor continuation pages never repeat the exact cohort-wide count.
       publicInventoryTotal = null;
     }
@@ -2473,9 +2478,10 @@ module.exports = async function handler(req, res) {
     queryParams.set('limit', String(qnsaBrandScanLimit));
     if (requestedOffset > 0) queryParams.set('offset', String(requestedOffset));
     
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFuc2Fmb3Nha3ZvbnpnZmNzcGhoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMjI3NDEsImV4cCI6MjEwMTU5ODc0MX0.YUxMjnTHtgPsiWiWko3TS1A47Sjk33SuHC2TND0Rxmg';
     const headers = {
-      'apikey': process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY,
-      'Authorization': `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SECRET_KEY}`,
+      'apikey': supabaseKey,
+      'Authorization': `Bearer ${supabaseKey}`,
     };
     let activeQueryParams = legacyMarketViewContractDetected
       ? buildLegacyMarketQueryParams({
@@ -2495,40 +2501,57 @@ module.exports = async function handler(req, res) {
       // evidence joins that can exceed the hosted statement timeout on broad
       // brand pages. Keep it for non-watch categories only.
       if (fourBrandEffectiveScope) {
-        const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_four_brand_effective_page_rows`, {
-          method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            p_brand: brand,
-            p_limit: qnsaBrandScanLimit,
-            p_offset: requestedOffset,
-            p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
-            p_model: requestedModel || null,
-            p_reference: requestedReference || null,
-            p_dial: requestedDial || null,
-            p_condition: condition || null,
-            p_search: search || null,
-            p_references: null,
-            p_images_only: imagesOnly,
-            p_priced_only: pricedOnly,
-            p_posted_after: postedAfter,
-            p_region: databaseRegion || null,
-            p_rating: rating || null,
-          }),
-        });
-        if (!response.ok) {
-          const body = await response.text();
-          const rpcError = { status: response.status, message: body };
-          if (isMissingEffectiveRpcError(rpcError) || isTransientEffectiveRpcTimeout(rpcError)) {
-            // Zero-outage schema-first compatibility. Until the migration is
-            // installed, or while the aggregate page RPC exceeds its hosted
-            // statement budget, preserve the bounded base release route. The
-            // returned page is still passed through per-row effective
-            // enrichment below; unrelated RPC failures remain fail-closed.
-            console.warn('[reviewed-market-inventory] four-brand effective RPC unavailable or timed out; preserving bounded base release path');
-            const releaseRpc = cartierRelease ? 'qnsa_cartier_page_rows'
-              : omegaRelease ? 'qnsa_omega_page_rows'
-              : tudorRelease ? 'qnsa_tudor_page_rows' : null;
+        const directReleaseRpc = cartierRelease ? 'qnsa_cartier_page_rows'
+          : omegaRelease ? 'qnsa_omega_page_rows'
+          : tudorRelease ? 'qnsa_tudor_page_rows' : null;
+        if (directReleaseRpc && !search && !condition && !region && !rating && !postedAfter && !pricedOnly && !imagesOnly) {
+          const directResponse = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/${directReleaseRpc}`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              p_limit: qnsaBrandScanLimit,
+              p_offset: requestedOffset,
+              p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+              p_reference: requestedReference || null,
+            }),
+          });
+          if (directResponse.ok) {
+            preloadedQnsaResponse = new Response(JSON.stringify(await directResponse.json()), {
+              status: 200,
+              headers: { 'Content-Type': 'application/json' },
+            });
+          }
+        }
+        if (!preloadedQnsaResponse) {
+          const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_four_brand_effective_page_rows`, {
+            method: 'POST',
+            headers: { ...headers, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              p_brand: brand,
+              p_limit: qnsaBrandScanLimit,
+              p_offset: requestedOffset,
+              p_listing_type: ['WTS', 'WTB'].includes(listingType) ? listingType : databaseListingType,
+              p_model: requestedModel || null,
+              p_reference: requestedReference || null,
+              p_dial: requestedDial || null,
+              p_condition: condition || null,
+              p_search: search || null,
+              p_references: null,
+              p_images_only: imagesOnly,
+              p_priced_only: pricedOnly,
+              p_posted_after: postedAfter,
+              p_region: databaseRegion || null,
+              p_rating: rating || null,
+            }),
+          });
+          if (!response.ok) {
+            const body = await response.text();
+            const rpcError = { status: response.status, message: body };
+            if (isMissingEffectiveRpcError(rpcError) || isTransientEffectiveRpcTimeout(rpcError)) {
+              console.warn('[reviewed-market-inventory] four-brand effective RPC unavailable or timed out; preserving bounded base release path');
+              const releaseRpc = cartierRelease ? 'qnsa_cartier_page_rows'
+                : omegaRelease ? 'qnsa_omega_page_rows'
+                : tudorRelease ? 'qnsa_tudor_page_rows' : null;
             const controlledModelRpc = requestedModel && releaseRpc
               ? 'qnsa_controlled_model_page_rows'
               : releaseRpc;
@@ -2565,7 +2588,8 @@ module.exports = async function handler(req, res) {
             headers: { 'Content-Type': 'application/json' },
           });
         }
-      } else if (zenithModelRelease) {
+      }
+    } else if (zenithModelRelease) {
         const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/rpc/qnsa_zenith_model_page_rows`, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
