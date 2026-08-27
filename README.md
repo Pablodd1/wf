@@ -72,6 +72,55 @@
 
 ---
 
+## Mandatory Trading Floor Card Contract
+
+This is a customer-surface release contract, not an optional design example. Every valid
+watch listing must render every area below. Missing evidence produces the stated safe
+display state; it must never remove the area or the valid listing.
+
+| Order | Mandatory area | Proven evidence | Required safe state when evidence is missing |
+|---:|---|---|---|
+| 1 | Image | Exact `SELLER_LISTING_IMAGE` belonging to the listing/child | Standard **NO IMAGE** placeholder |
+| 2 | Category and intent | Watch plus exact WTS/WTB source intent | Hold for intent review; never guess |
+| 3 | Title | Brand, model when proven, and exact observed reference | Brand plus exact observed reference; unresolved values are labeled, not invented |
+| 4 | Original raw message | Untouched source message or exact immutable child segment | Visible **Raw message unavailable** state and release review |
+| 5 | Price | Verified USD/USDT or dated verified FX conversion to USD | **Price requires review** |
+| 5 | Price Rating | Qualified unique WTS comparables for the exact observed reference | **Open for rating** |
+| 6 | Location | Proven source-user/dealer country | **Location not available** |
+| 6 | Posting date | Actual source timestamp | Visible **Posting date unavailable** state and release review |
+| 7 | Posted by | Proven canonical dealer or real source poster/user | **Posting user unavailable**; never synthesize a person/dealer name |
+| 7 | User/dealer rating | Evidence-backed rating and review count | **Not rated** |
+| 8 | Availability | `CONFIRMED_CURRENT` or `LATEST_OBSERVED` lineage state | Unresolved state is withheld from publication |
+
+Availability labels must preserve their meaning:
+
+- `CONFIRMED_CURRENT` renders as **CONFIRMED CURRENT**.
+- `LATEST_OBSERVED` renders as **LATEST OBSERVED** and prominently requires
+  **CHECK AVAILABILITY**. It must never be relabeled as confirmed active.
+
+Additional non-negotiable rules:
+
+- Never use catalog/reference imagery, ambiguous bundle media, adjacent-child media,
+  visual similarity, or filename similarity as listing-image proof.
+- Never assume USD. Preserve the original amount/currency in immutable evidence and use
+  only verified USD/USDT or dated verified FX for customer USD and analytics.
+- Never fabricate a dealer, poster, rating, review count, location, model, reference,
+  price, image, or availability state.
+- Exact duplicates and unchanged reposts never render or inflate counts/Price Research;
+  their immutable raw evidence remains preserved behind the canonical survivor.
+- Missing image, price, rating, dealer rating, or location evidence does not invalidate
+  an otherwise valid unique listing; the mandatory safe state renders instead.
+
+Rolex and Patek are currently **background-only** under
+`curated_luxury_rolex_patek_background_hold_v1`. Their completed cohorts remain stored,
+but Trading Floor, Price Research, broad watch inventory, and customer detail reads must
+not publish them until a separate evidence-backed release decision.
+
+The dated evidence-coverage report is
+[`docs/audits/ROLEX_PATEK_MANDATORY_CARD_COVERAGE_2026-08-27.md`](docs/audits/ROLEX_PATEK_MANDATORY_CARD_COVERAGE_2026-08-27.md).
+
+---
+
 ## 🛠 Tech Stack
 
 | Layer | Technology |
