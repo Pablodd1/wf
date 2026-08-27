@@ -726,7 +726,7 @@ function regexExtract(text) {
   else if (/\bf\.p\.\s*journe\b|fpj\b/.test(lower)) brand = 'F.P. Journe';
   else if (/\bmb&f\b|maximilian/.test(lower)) brand = 'MB&F';
 
-  const rmMatch = text.match(/\bRM\s?\d{2}[-\s]?\d{2}[A-Z]?\b/i);
+  const rmMatch = text.match(/\bRM\s?\d{2,3}(?:[-\s]?\d{2})?[A-Z]*\b/i);
   const ppMatch = text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i);
   // AP: handle 'AP26650ti' (no space) and '26650ti' (with word boundary)
   const apMatch = text.match(/\b(?:AP)?\s*(\d{5}[A-Z]{2,4})\b/i);
@@ -735,6 +735,10 @@ function regexExtract(text) {
   const jlcMatch = text.match(/\bQ?\d{6}[A-Z]{0,4}\b/i);
   // VC: 4-5 digits + optional letters (e.g., 82035, 4300V)
   const vcMatch = text.match(/\b\d{4,5}[A-Z]{0,2}\b/i);
+  const omegaMatch = text.match(/\b\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3}\b/);
+  const cartierMatch = text.match(/\bW[A-Z0-9]{7}\b/i);
+  const tudorMatch = text.match(/\b(?:M)?(?:7|2|4|8|9)\d{4}[A-Z]{0,2}(?:-\d{4})?\b/i);
+  const tagMatch = text.match(/\b[A-Z]{3,4}\d{4}[A-Z]?[-.][A-Z0-9]+\b/i);
 
   // Price detection FIRST — so we can exclude price-looking numbers from ref candidates
   const kM = text.match(/\b(\d{1,3}(?:\.\d{1,2})?)\s?[kK]\b/);
@@ -753,6 +757,10 @@ function regexExtract(text) {
   if (rolexMatch) candidates.push({ ref: rolexMatch[0].toUpperCase(), source: 'rolex' });
   if (jlcMatch) candidates.push({ ref: jlcMatch[0].toUpperCase(), source: 'jlc' });
   if (vcMatch && brand === 'Vacheron Constantin') candidates.push({ ref: vcMatch[0].toUpperCase(), source: 'vc' });
+  if (omegaMatch) candidates.push({ ref: omegaMatch[0], source: 'omega' });
+  if (cartierMatch) candidates.push({ ref: cartierMatch[0].toUpperCase(), source: 'cartier' });
+  if (tudorMatch) candidates.push({ ref: tudorMatch[0].toUpperCase(), source: 'tudor' });
+  if (tagMatch) candidates.push({ ref: tagMatch[0].toUpperCase(), source: 'tag' });
 
   // Filter: reject candidates that are just the explicit price or K-price
   const validCandidates = candidates.filter(c => {
@@ -847,11 +855,9 @@ function regexExtract(text) {
 
 // ─── AI Parse ───
 async function aiParse(kimiKey, rawMessage, currentGuess) {
-  const systemPrompt = `You are an expert luxury watch cataloging assistant. Parse unstructured dealer chat messages and extract structured watch metadata.
-
-Analyze the provided raw message and extract:
-- reference: The clean, uppercase reference number (e.g., '126710GRNR', 'PFC914-1020001-100182').
-- brand: The standardized brand name (e.g., 'Rolex', 'Patek Philippe', 'Parmigiani Fleurier').
+  const systemPrompt = `You are an expert luxury watch cataloging assistant. Analyze the provided raw message and extract:
+- reference: The clean, uppercase reference number (e.g., '126710GRNR', 'PFC914-1020001-100182', 'RM11-03', '310.30.42.50.01.001', 'WSSA0039', '79030N', 'CAZ1010').
+- brand: The standardized brand name (e.g., 'Rolex', 'Patek Philippe', 'Richard Mille', 'Omega', 'Cartier', 'Tudor', 'TAG Heuer').
 - dialColor: The dial color (e.g., 'Green', 'Silver', 'White').
 - condition: Standardized condition (e.g., 'New', 'Unworn', 'Used').
 - year: The 4-digit year of the watch (if mentioned).
@@ -861,7 +867,7 @@ Analyze the provided raw message and extract:
 
 Rules:
 1. If the brand is omitted, return null. Catalog reconciliation may validate the reference later.
-2. Map abbreviations: 'VC' -> 'Vacheron Constantin', 'AP' -> 'Audemars Piguet', 'PP' -> 'Patek Philippe', 'JLC' -> 'Jaeger-LeCoultre', 'AL&S' or 'Lange' -> 'A. Lange & Sohne'.
+2. Map abbreviations: 'VC' -> 'Vacheron Constantin', 'AP' -> 'Audemars Piguet', 'PP' -> 'Patek Philippe', 'JLC' -> 'Jaeger-LeCoultre', 'AL&S' or 'Lange' -> 'A. Lange & Sohne', 'RM' -> 'Richard Mille', 'Tag' -> 'TAG Heuer'.
 3. If the message is just generic noise (e.g., 'Brand New Rolex' with no model/reference), return null for reference.
 4. Do not infer dial from a reference suffix. Return null unless the raw message states the dial.
 
