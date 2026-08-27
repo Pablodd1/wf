@@ -2042,7 +2042,7 @@ module.exports = async function handler(req, res) {
     // must not be sent to the six-brand RPC merely because production selects
     // QNSA as its default source. This preserves strict single-item admission
     // while making the approved cohort visible after import.
-    const activeMarketSourceView = MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
+    const activeMarketSourceView = MARKET_SOURCE_VIEW === CURATED_SHADOW_MARKET_SOURCE ? 'qnsa_rolex_patek_trading_floor_source' : MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'
       && requestedBrand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(requestedBrand)
       && !isRolexPatekOverlayBrand(requestedBrand)
       && !isFourBrand(requestedBrand)
