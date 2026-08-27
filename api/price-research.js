@@ -1254,8 +1254,10 @@ module.exports = async function handler(req, res) {
       let query = client
         .from(table)
         .select(table === 'watch_records' ? watchRecordColumns : columns)
-        .eq('brand', brand)
-        .eq('listing_type', 'WTS');
+        .eq('brand', brand);
+      if (table !== 'watch_records') {
+        query = query.eq('listing_type', 'WTS');
+      }
       query = table === QNSA_PRICE_RESEARCH_SOURCE && familyPrefix
         ? query.like('reference', `${familyPrefix}%`)
         : query.in('reference', referenceVariants);
