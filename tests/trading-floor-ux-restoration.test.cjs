@@ -22,7 +22,22 @@ test('multi-location URL changes create history entries and preserve selected UR
   assert.match(source, /setSearchParams\(next, \{ replace \}\)/);
   assert.match(source, /updateViewParams\(updates, !Object\.prototype\.hasOwnProperty\.call\(updates, 'location'\)\)/);
   assert.match(source, /location: next\.locations\.length \? next\.locations\.join\(','\) : null,[\s\S]*\}, false\)/);
-  assert.match(source, /new Set\(\[\.\.\.locationFilters, \.\.\.countries\]\)/);
+  assert.match(source, /new Set\(\[\.\.\.locationFilters, \.\.\.discoveredLocations, \.\.\.countries\]\)/);
+});
+
+test('newest observed is the default and discovery is an explicit presentation option', () => {
+  assert.match(source, /const sortMode: SortMode = requestedSort === 'discovery' \? 'discovery' : 'newest'/);
+  assert.match(source, /\{ label: 'Newest observed', value: 'newest' \}/);
+  assert.match(source, /\{ label: 'Discovery mix', value: 'discovery' \}/);
+  assert.match(source, /sort === 'newest' \? null : next\.sort/);
+  assert.match(source, /Discovery mix changes order only/);
+});
+
+test('search help preserves observed-only lookup and exposes removable filter chips', () => {
+  assert.match(source, /placeholder="Search exact reference, model, message, or poster"/);
+  assert.match(source, /Search observed references directly; catalog match is optional/);
+  assert.match(source, /aria-label="Current search and filters"/);
+  assert.match(source, /aria-label=\{`Remove \$\{chip\.label\} filter`\}/);
 });
 
 test('source evidence disclosures are collapsed by default and preserve exact line breaks', () => {
