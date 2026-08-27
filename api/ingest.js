@@ -10,7 +10,6 @@
 
 'use strict';
 
-const OpenAI = require('openai');
 const { lookupCatalog } = require('./_lib/catalog.js');
 const path = require('node:path');
 const fs = require('node:fs');
