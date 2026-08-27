@@ -754,31 +754,20 @@ function inventoryIntentRank(record) {
 }
 
 function compareInventoryForDisplay(left, right) {
-  // This is deliberately a page-local presentation rank inside the already-bounded
-  // server page. Cursor/keyset membership and advancement remain controlled
-  // by the database source, so sparse cards are never discarded or skipped.
-  // It is not a global ordering guarantee. QNSA globally guarantees only its
-  // indexed image lanes; dealer enrichment happens after the bounded read.
-  const releasedMultiDifference = Number(left?.multi_listing_release_approved === true)
-    - Number(right?.multi_listing_release_approved === true);
-  if (releasedMultiDifference !== 0) return releasedMultiDifference;
-  const imageDifference = Number(hasExactSourceImage(right)) - Number(hasExactSourceImage(left));
-  if (imageDifference !== 0) return imageDifference;
-  // Keep buyer demand visibly separate from sell inventory inside both the
-  // image-backed and no-image lanes. This remains page-local and cannot alter
-  // cursor membership or suppress a valid listing.
-  const intentDifference = inventoryIntentRank(right) - inventoryIntentRank(left);
-  if (intentDifference !== 0) return intentDifference;
-  const dealerDifference = dealerEvidenceRank(right) - dealerEvidenceRank(left);
-  if (dealerDifference !== 0) return dealerDifference;
-  const priceDifference = Number(hasVerifiedExplicitPrice(right))
-    - Number(hasVerifiedExplicitPrice(left));
-  if (priceDifference !== 0) return priceDifference;
-  const completenessDifference = listingCompletenessScore(right) - listingCompletenessScore(left);
-  if (completenessDifference !== 0) return completenessDifference;
+  const leftHasImage = left?.exactImageUrl !== null && left?.exactImageUrl !== undefined;
+  const rightHasImage = right?.exactImageUrl !== null && right?.exactImageUrl !== undefined;
+  
+  if (leftHasImage !== rightHasImage) {
+    return leftHasImage ? -1 : 1;
+  }
+  
   const rightDate = Date.parse(right?.listing_date || right?.created_at || '') || 0;
   const leftDate = Date.parse(left?.listing_date || left?.created_at || '') || 0;
-  if (rightDate !== leftDate) return rightDate - leftDate;
+  
+  if (rightDate !== leftDate) {
+    return rightDate - leftDate;
+  }
+  
   return String(right?.id || '').localeCompare(String(left?.id || ''));
 }
 
