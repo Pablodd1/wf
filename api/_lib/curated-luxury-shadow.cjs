@@ -184,10 +184,9 @@ async function loadInventory(client, options) {
     p_search: options.reference ? null : (options.search || null),
     p_reference_key: options.reference ? normalizedReference(options.reference) : null,
   };
-  const pageRequest = client.rpc(restoredRolex
-    ? 'curated_luxury_rolex_customer_page_keys_v5'
-    : 'curated_luxury_shadow_customer_page_keys_v4', {
-    ...(restoredRolex ? rolexArgs : args),
+  const pageRequest = client.rpc('curated_luxury_shadow_customer_page_keys_v6', {
+    ...rolexArgs,
+    p_brand: options.brand,
     p_listing_lane: normalizedListingLane(options.listingLane),
     p_after_lane: normalizedListingLane(cursor?.listingLane),
     p_after_timestamp: cursor?.sourceTimestamp || null,

@@ -142,9 +142,10 @@ test('shadow inventory uses bounded key/card RPCs, exact facets, and a scoped ke
   assert.equal(first.hasMore, true);
   assert.equal(first.records[0].listing_source_shape, 'SINGLE_INPUT');
   assert.deepEqual(calls.map(call => call.name), [
-    'curated_luxury_shadow_customer_page_keys_v4', 'curated_luxury_shadow_customer_count_v2',
+    'curated_luxury_shadow_customer_page_keys_v6', 'curated_luxury_shadow_customer_count_v2',
     'curated_luxury_shadow_customer_cards_v3',
   ]);
+  assert.equal(calls[0].args.p_brand, 'Rolex');
   assert.equal(Object.hasOwn(calls[0].args, 'p_offset'), false);
 
   const parsed = inventoryApi.parseInventoryCursor(first.nextCursor, 24);
@@ -155,7 +156,7 @@ test('shadow inventory uses bounded key/card RPCs, exact facets, and a scoped ke
   const second = await shadow.loadInventory(client, { ...options, page: 2, cursor: parsed.shadowKeyset });
   assert.equal(second.total, null);
   assert.deepEqual(calls.map(call => call.name), [
-    'curated_luxury_shadow_customer_page_keys_v4', 'curated_luxury_shadow_customer_cards_v3',
+    'curated_luxury_shadow_customer_page_keys_v6', 'curated_luxury_shadow_customer_cards_v3',
   ]);
   assert.equal(calls[0].args.p_after_key, 'b'.repeat(64));
 });
