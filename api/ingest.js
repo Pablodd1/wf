@@ -1206,19 +1206,35 @@ function parseJass5(text, context, referenceHint = null) {
   }
   const cardDate = extractCardDate(text);
 
-  const assertions = {
-    brand: brandAssertion,
-    reference: refAssertion,
-    model: modelAssertion,
-    dial: dialAssertion,
-    material: materialAssertion,
-    bracelet: braceletAssertion,
-    bezel: bezelAssertion,
-    condition: conditionAssertion,
-    set_status: setStatusAssertion,
-    card_month: cardDate.card_month,
-    card_year: cardDate.card_year
-  };
+  
+    if (brandAssertion.normalized_value && (brandAssertion.normalized_value.toUpperCase() === 'RICHARD MILLE' || brandAssertion.normalized_value.toUpperCase() === 'RM') && refAssertion.normalized_value) {
+        const rmMatch = refAssertion.normalized_value.match(/^(RM\s*\d{2,3}(?:-\d{2})?)/i);
+        if (rmMatch) {
+            refAssertion.normalized_value = rmMatch[1].toUpperCase().replace(/\s+/, '');
+        }
+    }
+    
+    if (brandAssertion.normalized_value && brandAssertion.normalized_value.toUpperCase() === 'ZENITH') {
+        const zMatch = text.match(/\b(\d{2}\.\d{4}\.\d{3,4}\/\d{2}\.[A-Z0-9]+)\b/i);
+        if (zMatch) {
+            refAssertion.normalized_value = zMatch[1].toUpperCase();
+        }
+    }
+
+    const assertions = {
+      brand: brandAssertion,
+      reference: refAssertion,
+      model: modelAssertion,
+      dial: dialAssertion,
+      material: materialAssertion,
+      bracelet: braceletAssertion,
+      bezel: bezelAssertion,
+      condition: conditionAssertion,
+      set_status: setStatusAssertion,
+      card_month: cardDate.card_month,
+      card_year: cardDate.card_year
+    };
+
 
   const prices = extractPriceObservations(text, context);
 
@@ -1388,7 +1404,21 @@ async function processMessage(rawMessage, channelId, source, supabaseUrl, servic
       try {
         const llm = await llmEnrich(cand.rawLine, parsed, deepseekKey);
         if (llm.brand && llm.brand !== 'Unknown') parsed.brand = llm.brand;
-        if (llm.reference) parsed.ref = llm.reference;
+        
+          if (llm.reference) parsed.ref = llm.reference;
+          
+          let finalBrandLower = (parsed.brand || '').toLowerCase();
+          if (finalBrandLower === 'richard mille' || finalBrandLower === 'rm') {
+              if (parsed.ref) {
+                  const rmMatch = parsed.ref.match(/^(RM\s*\d{2,3}(?:-\d{2})?)/i);
+                  if (rmMatch) parsed.ref = rmMatch[1].toUpperCase().replace(/\s+/, '');
+              }
+          }
+          if (finalBrandLower === 'zenith') {
+              const zMatch = cand.rawLine.match(/\b(\d{2}\.\d{4}\.\d{3,4}\/\d{2}\.[A-Z0-9]+)\b/i);
+              if (zMatch) parsed.ref = zMatch[1].toUpperCase();
+          }
+
         if (llm.dialColor) parsed.dial = llm.dialColor;
         if (llm.material) parsed.material = llm.material;
         if (llm.bracelet) parsed.bracelet = llm.bracelet;
