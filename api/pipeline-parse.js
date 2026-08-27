@@ -856,7 +856,7 @@ function regexExtract(text) {
 // ─── AI Parse ───
 async function aiParse(kimiKey, rawMessage, currentGuess) {
   const systemPrompt = `You are an expert luxury watch cataloging assistant. Analyze the provided raw message and extract:
-- reference: The clean, uppercase reference number (e.g., '126710GRNR', 'PFC914-1020001-100182', 'RM11-03', '310.30.42.50.01.001', 'WSSA0039', '79030N', 'CAZ1010').
+- reference: The clean, uppercase reference number. CRITICAL: For Richard Mille, strictly extract ONLY the base reference (e.g. 'RM11-03') and DO NOT append dial colors or nicknames like 'BLUE' or 'SKELETON'. (e.g., '126710GRNR', 'RM11-03', '79030N').
 - brand: The standardized brand name (e.g., 'Rolex', 'Patek Philippe', 'Richard Mille', 'Omega', 'Cartier', 'Tudor', 'TAG Heuer').
 - dialColor: The dial color (e.g., 'Green', 'Silver', 'White').
 - condition: Standardized condition (e.g., 'New', 'Unworn', 'Used').

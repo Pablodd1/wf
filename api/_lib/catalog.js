@@ -311,6 +311,27 @@ function lookupCatalogUncached(reference, expectedBrand = null) {
   const sourceExact = sourceExactMatch(ref, expectedBrand);
   if (sourceExact) return sourceExact;
 
+  function tudorShorthandMatch(ref, expectedBrand) {
+    if (normalizeBrand(expectedBrand) !== 'TUDOR') return null;
+    const collapsed = collapseRef(ref);
+    if (/^[123456789]\d{3,4}[A-Z0-9]*$/.test(collapsed)) {
+       const prefix = `TUDOR|M${collapsed}`;
+       for (const [key, candidates] of _collapsedByBrandReference.entries()) {
+         if (key.startsWith(prefix)) {
+            for (const candidate of candidates) {
+              if (candidate.entry.model) {
+                return found(candidate.entry, 'exact_alias', candidate.reference);
+              }
+            }
+         }
+       }
+    }
+    return null;
+  }
+
+  const tudorMatch = tudorShorthandMatch(ref, expectedBrand);
+  if (tudorMatch) return tudorMatch;
+
   let incompleteExact = null;
   for (const map of [_catalog, _enriched]) {
     const direct = legacyMatch(map, reference, expectedBrand, 'exact');
