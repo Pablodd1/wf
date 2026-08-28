@@ -43,6 +43,24 @@ test('source census fails closed without verified transport', async () => {
         MARIADB_PASSWORD: 'password',
       }
     }),
-    /MariaDB source requires MARIADB_PRIVATE_TUNNEL_VERIFIED=true or MARIADB_TLS_CA_FILE/i,
+    /MariaDB source requires MARIADB_PRIVATE_TUNNEL_VERIFIED=true/i,
+  );
+});
+
+test('source census refuses public IP under MARIADB_PRIVATE_TUNNEL_VERIFIED', async () => {
+  await assert.rejects(
+    async () => runCensus({
+      env: {
+        PGHOST: 'db.bptrvfncppbjnchsaxtb.supabase.co',
+        PGUSER: 'postgres',
+        PGPASSWORD: 'testpassword',
+        PGDATABASE: 'postgres',
+        MARIADB_HOST: '161.35.0.209',
+        MARIADB_USER: 'test',
+        MARIADB_PASSWORD: 'password',
+        MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true',
+      }
+    }),
+    /Transport refusal: Host '161.35.0.209' is a public IP address/i,
   );
 });
