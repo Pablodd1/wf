@@ -3,21 +3,21 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
-const { listCanonicalCatalogReferences } = require('../../api/_lib/catalog.js');
 const {
-  classifyRawPostGeneric, normalizePhone, referenceKey, sha256, withdrawn,
-} = require('./raw-first-rolex-patek-lib.cjs');
+  classifyRawOnlyFiveBrandPost, normalizePhone, referenceKey, sha256, withdrawn,
+} = require('./raw-only-five-brand-lib.cjs');
 const {
   assertReadOnlySql, dealerPageSql, managementQuery, uuidShard,
 } = require('./raw-first-rolex-patek-audit.cjs');
 const {
   evidenceFlags, normalizeStructuralText, validityClassification,
 } = require('./raw-first-observation-v3-lib.cjs');
+const { applicableDate, verifiedUsdPrice } = require('./raw-only-price-evidence-lib.cjs');
 
 const PROJECT_REF = 'qnsafosakvonzgfcsphh';
-const CONTRACT = 'curated-luxury-generic-raw-first-brand-batch-v1';
-const BRANDS = ['Tudor', 'Zenith', 'Cartier', 'TAG Heuer'];
-const DEFAULT_OUTPUT = 'audit-output/generic-raw-first-next-4';
+const CONTRACT = 'curated-luxury-five-brand-raw-only-batch-v1';
+const BRANDS = ['IWC', 'Hublot', 'Seiko', 'Bell & Ross', 'Tissot'];
+const DEFAULT_OUTPUT = 'audit-output/five-brand-raw-only';
 
 function sqlLiteral(value) { return `'${String(value ?? '').replace(/'/g, "''")}'`; }
 function pageSize(value) {
@@ -30,7 +30,9 @@ function cursorClause(column, bounds, lastId) {
   return `${column}${lastId ? '>' : '>='}${sqlLiteral(lower)}::uuid ${bounds.high ? `AND ${column}<${sqlLiteral(bounds.high)}::uuid` : ''}`;
 }
 function targetBrandSql(column) {
-  return `lower(btrim(COALESCE(${column},''))) IN ('tudor','zenith','cartier','tag','tag heuer','tagheuer','heuer')`;
+  return `lower(btrim(COALESCE(${column},''))) IN (
+    'iwc','hublot','seiko','bell ross','bell & ross','bell and ross','bellross','tissot'
+  )`;
 }
 
 function rawSourceSql(bounds, lastId = null, limit = 2000) {
@@ -49,7 +51,7 @@ function rawSourceSql(bounds, lastId = null, limit = 2000) {
     SELECT v.* FROM public.raw_message_versions v
     WHERE v.raw_message_id=p.id AND (
       ${targetBrandSql("v.raw_payload#>>'{raw_data,brand}'")}
-      OR COALESCE(v.raw_text,'') ~* '(^|[^[:alnum:]])(tudor|zenith|cartier|tag[[:space:]]*heuer|tagheuer|heuer)([^[:alnum:]]|$)'
+      OR COALESCE(v.raw_text,'') ~* '(^|[^[:alnum:]])(iwc|hublot|seiko|bell[[:space:]&]*ross|bellross|tissot)([^[:alnum:]]|$)'
     )
     ORDER BY v.observed_at DESC NULLS LAST,v.id DESC LIMIT 1
   ) rv ON true ORDER BY p.id;`;
@@ -66,7 +68,7 @@ function currentSourceSql(_bounds, lastId = null, limit = 2000, shard = 0, shard
     i.normalized_reference,i.listing_type,i.raw_message,i.source_payload_sha256,
     i.user_image_url,i.image_evidence_type,i.verification_status
   FROM public.reviewed_workbook_inventory i
-  WHERE COALESCE(i.canonical_brand,i.supplied_brand,i.brand_scope) IN ('Tudor','Zenith','Cartier','TAG Heuer')
+  WHERE COALESCE(i.canonical_brand,i.supplied_brand,i.brand_scope) IN ('IWC','Hublot','Seiko','Bell & Ross','Tissot')
     AND upper(COALESCE(i.listing_type,'')) IN ('WTS','WTB')
     AND upper(COALESCE(i.verification_status,'')) NOT IN ('REJECTED','HIDDEN','DELETED','ARCHIVED')
     AND mod(('x'||substr(md5(i.id),1,8))::bit(32)::bigint,${shards})=${shardNumber}
@@ -85,6 +87,17 @@ function writeGzip(file, value) {
   fs.writeFileSync(file, zlib.gzipSync(`${JSON.stringify(value)}\n`, { level: 9 }));
 }
 function readGzip(file) { return JSON.parse(zlib.gunzipSync(fs.readFileSync(file)).toString('utf8')); }
+function loadFxMap(file) {
+  if (!file) return new Map();
+  const rows = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const values = new Map();
+  for (const row of rows) {
+    const currency = String(row?.source_currency || '').toUpperCase();
+    const date = applicableDate(row?.applicable_date);
+    if (currency && date) values.set(`${currency}|${date}`, row);
+  }
+  return values;
+}
 function fileSha(file) { return sha256(fs.readFileSync(file).toString('base64')); }
 function increment(target, key, amount = 1) { target[key] = (target[key] || 0) + amount; }
 function timestamp(value) {
@@ -122,13 +135,14 @@ function genericValidity(child, rawData) {
   return sourceBackedOffer ? { classification: 'UNIQUE_MARKET_OBSERVATION', flags } : result;
 }
 
-function initialBrand(catalog = new Set()) {
+function initialBrand() {
   return { raw_parents: new Set(), valid: new Map(), parked: 0, unsplittable: 0,
-    classifications: {}, references: new Set(), catalog, reposts: 0, price_changes: 0 };
+    classifications: {}, references: new Set(), reposts: 0, price_changes: 0 };
 }
 
-function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map()) {
-  const brands = Object.fromEntries(BRANDS.map(brand => [brand, initialBrand(catalogs.get(brand))]));
+function buildSummary(pageFiles, currentRows, dealerByPhone, fxByKey = new Map()) {
+  const brands = Object.fromEntries(BRANDS.map(brand => [brand, initialBrand()]));
+  const materialized = Object.fromEntries(BRANDS.map(brand => [brand, []]));
   const current = new Map();
   for (const row of currentRows) {
     if (!row.raw_message || !/^[0-9a-f]{64}$/.test(String(row.source_payload_sha256 || ''))
@@ -141,7 +155,7 @@ function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map(
   for (const file of pageFiles) {
     for (const row of readGzip(file)) {
       if (!row.id) continue;
-      const classified = classifyRawPostGeneric(row, { targetBrands: BRANDS, dealerByPhone });
+      const classified = classifyRawOnlyFiveBrandPost(row, { targetBrands: BRANDS, dealerByPhone });
       const targetChildren = classified.children.filter(child => BRANDS.includes(child.brand));
       for (const brand of new Set(classified.brands.filter(value => BRANDS.includes(value)))) {
         brands[brand].raw_parents.add(row.raw_message_id);
@@ -172,20 +186,42 @@ function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map(
         seenParent.add(structural);
         const family = offerFamilyKey(classified.parent, child);
         const exactCurrent = current.get(childCurrentMatchKey(row, child)) || [];
+        const exactChildImage = !classified.parent.is_multi
+          ? exactCurrent.map(imageUrl).find(Boolean) || null : null;
+        const currentStatus = exactCurrent.length ? 'CURRENT_ACTIVE' : 'CURRENT_LATEST_STATE';
+        const sourceTimestamp = row.source_created_on || row.observed_at;
+        const fx = fxByKey.get(`${String(child.source_currency || '').toUpperCase()}|${applicableDate(sourceTimestamp)}`);
+        const verifiedPrice = verifiedUsdPrice({ source_price_amount: child.source_price_amount,
+          source_currency: child.source_currency, price_status: child.price_evidence_status,
+          timestamp: sourceTimestamp }, fx);
         const observation = {
-          family, parent_key: sha256(row.raw_message_id), version_key: sha256(row.id),
+          current_listing_key: family, offer_family_key: family,
+          offer_state_key: sha256([family, child.raw_child_sha256, child.intent,
+            child.source_price_amount || '', child.source_currency || ''].join('|')),
+          family, parent_raw_message_id: row.raw_message_id, raw_version_id: row.id,
+          source_record_id: row.source_record_id || null,
+          parent_key: sha256(row.raw_message_id), version_key: sha256(row.id),
           source_key: sha256(row.source_record_id || row.id), raw_occurrence_key: child.child_key,
           brand: child.brand, reference: child.observed_reference,
-          reference_key: child.observed_reference_key, intent: child.intent,
-          timestamp: row.source_created_on || row.observed_at, raw_message_sha256: sha256(row.raw_text),
+          reference_key: child.observed_reference_key, model_as_posted: child.model_as_posted,
+          intent: child.intent, current_status: currentStatus,
+          cohort_status: currentStatus === 'CURRENT_ACTIVE' ? 'CONFIRMED_CURRENT' : 'LATEST_OBSERVED',
+          timestamp: sourceTimestamp, raw_message_sha256: sha256(row.raw_text),
           raw_message_present: typeof row.raw_text === 'string' && row.raw_text.length > 0,
-          raw_child_sha256: child.raw_child_sha256, source_price_amount: child.source_price_amount,
+          exact_child_text_sha256: child.raw_child_sha256, raw_child_sha256: child.raw_child_sha256,
+          source_price_amount: child.source_price_amount,
           source_currency: child.source_currency, price_status: child.price_evidence_status,
+          normalized_usd_amount: verifiedPrice?.normalized_usd_amount || null,
+          price_evidence_classification: verifiedPrice?.price_evidence_classification || null,
+          price_fx: verifiedPrice?.fx || null,
           price_qualified: child.intent === 'WTS' && Boolean(child.observed_reference_key)
-            && ['USD', 'USDT'].includes(child.source_currency)
-            && child.price_evidence_status === 'AUTO_APPROVED' && Number(child.source_price_amount) > 0,
-          dealer_linked: Boolean(child.dealer_id), country_code: child.country_code,
-          image_url: exactCurrent.map(imageUrl).find(Boolean) || null,
+            && Boolean(verifiedPrice?.normalized_usd_amount),
+          dealer_linked: Boolean(child.dealer_id), dealer_id: child.dealer_id,
+          source_poster_name: classified.parent.source_sender_name,
+          country_code: child.country_code, country_name: child.country_name,
+          image_url: exactChildImage,
+          image_state: exactChildImage ? 'VERIFIED_CHILD_IMAGE' : 'NO_VERIFIED_CHILD_IMAGE',
+          image_evidence_type: exactChildImage ? 'SELLER_LISTING_IMAGE' : null,
           confirmed: exactCurrent.length > 0, withdrawn: withdrawn(row.raw_data, row.raw_text),
         };
         const prior = stats.valid.get(family);
@@ -215,8 +251,10 @@ function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map(
     const duplicateFamilies = currentListings.length - new Set(currentListings.map(row => row.family)).size;
     const lineageMissing = currentListings.filter(row => !row.parent_key || !row.version_key || !row.source_key
       || !row.raw_occurrence_key || !row.raw_message_sha256).length;
-    const invalidPrice = pr.filter(row => !['USD', 'USDT'].includes(row.source_currency)
-      || !(Number(row.source_price_amount) > 0)).length;
+    const invalidPrice = pr.filter(row => !(Number(row.source_price_amount) > 0)
+      || !(Number(row.normalized_usd_amount) > 0)
+      || !['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'DATED_VERIFIED_FX']
+        .includes(row.price_evidence_classification)).length;
     const invalidImage = currentListings.filter(row => row.image_url && !/^https?:\/\/\S+$/.test(row.image_url)).length;
     const ordered = [...currentListings].sort((a, b) => timestamp(b.timestamp) - timestamp(a.timestamp)
       || b.raw_occurrence_key.localeCompare(a.raw_occurrence_key));
@@ -237,6 +275,7 @@ function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map(
       && currentListings.every(row => ['WTS', 'WTB'].includes(row.intent) && row.raw_message_present);
     const priceCanary = invalidPrice === 0 && new Set(pr.map(row => row.family)).size === pr.length;
     allCanaries &&= customerCanary && priceCanary;
+    materialized[brand] = currentListings;
     output[brand] = {
       raw_parents: state.raw_parents.size,
       valid_unique_observations: state.valid.size + state.price_changes,
@@ -246,8 +285,9 @@ function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map(
       wts: currentListings.filter(row => row.intent === 'WTS').length,
       wtb: currentListings.filter(row => row.intent === 'WTB').length,
       distinct_observed_references: new Set(currentListings.map(row => row.reference_key).filter(Boolean)).size,
-      observed_only_references: [...new Set(currentListings.map(row => row.reference_key).filter(Boolean))]
-        .filter(reference => !state.catalog.has(reference)).length,
+      // No catalog is read or matched in this batch. Every exact reference is a
+      // source-observed reference and is eligible for customer display on that basis.
+      observed_only_references: new Set(currentListings.map(row => row.reference_key).filter(Boolean)).size,
       verified_priced: currentListings.filter(row => row.price_qualified).length,
       verified_images: currentListings.filter(row => row.image_url).length,
       dealer_linked: currentListings.filter(row => row.dealer_linked).length,
@@ -265,9 +305,10 @@ function buildSummary(pageFiles, currentRows, dealerByPhone, catalogs = new Map(
         filter_failure: Number(filterFailure) },
     };
   }
-  return { contract: CONTRACT, decision: allCanaries ? 'NEXT_4_BRANDS_CANARY_READY' : 'NOT_READY_NEXT_4_BRANDS',
+  return { contract: CONTRACT, decision: allCanaries ? 'FIVE_BRANDS_RAW_ONLY_CANARY_READY' : 'NOT_READY_FIVE_BRANDS_RAW_ONLY',
     generated_at: new Date().toISOString(), canonical_project_ref: PROJECT_REF, read_only: true,
-    production_writes: 0, raw_mutations: 0, endpoint_switches: 0, rolex_patek_changes: 0, brands: output };
+    production_writes: 0, raw_mutations: 0, endpoint_switches: 0, rolex_patek_changes: 0,
+    brands: output, materialized };
 }
 
 async function scanDataset({ name, query, sanitize, shardCount, size, outputDir, token }) {
@@ -323,9 +364,13 @@ async function run(options = {}) {
   const currentRows = currentFiles.flatMap(readGzip);
   const rawFiles = await scanDataset({ name: 'raw', query: rawSourceSql, shardCount, size,
     outputDir, token, sanitize: row => row.id ? row : null });
-  const catalogs = new Map(BRANDS.map(brand => [brand, new Set(listCanonicalCatalogReferences(brand)
-    .map(row => referenceKey(row.reference)).filter(Boolean))]));
-  const summary = buildSummary(rawFiles, currentRows, dealerByPhone, catalogs);
+  const result = buildSummary(rawFiles, currentRows, dealerByPhone,
+    loadFxMap(env.FIVE_BRAND_RAW_ONLY_FX_FILE));
+  const { materialized, ...summary } = result;
+  for (const brand of BRANDS) {
+    writeGzip(path.join(outputDir, 'observations', `${brand.toLowerCase().replace(/[^a-z0-9]+/g, '-')}.json.gz`),
+      materialized[brand]);
+  }
   writeJson(path.join(outputDir, 'summary.json'), summary);
   writeJson(path.join(outputDir, 'manifest-sha256.json'), { contract: CONTRACT,
     summary_sha256: fileSha(path.join(outputDir, 'summary.json')),
@@ -342,4 +387,4 @@ if (require.main === module) {
 }
 
 module.exports = { BRANDS, CONTRACT, PROJECT_REF, buildSummary, currentSourceSql,
-  rawSourceSql, run };
+  loadFxMap, rawSourceSql, run };
