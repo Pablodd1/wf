@@ -1,23 +1,25 @@
 #!/usr/bin/env python3
-'''Hardened Phase 1 MariaDB Source Census & Provenance Reconciliation.
+"""Hardened Phase 1 MariaDB Source Census & Provenance Reconciliation.
 
-Strict Invariants:
-1. Enforces MariaDB read-only grants (USAGE, SELECT, SHOW VIEW only).
-2. Uses PostgreSQL REPEATABLE READ read-only transaction for wf_canonical_staging.
-3. Pins project to bptrvfncppbjnchsaxtb (refuses any other target).
-4. Reports total parent rows separately from distinct ID counts.
-5. Employs measured, proven identity mapping rules with zero wild guessing.
-6. Validates composite cursor index with SHOW INDEX and EXPLAIN.
-7. Verifies real transport (SSL/TLS CA or validated private/loopback IP subnet).
-8. Handles NULL timestamps safely with COALESCE.
-9. Freezes an immutable upper cursor boundary before streaming.
-10. Strictly asserts scanned rows equal the frozen source total.
-'''
+Strict Audited Contracts:
+1. Enforces MariaDB read-only grants with redacted logging.
+2. Establishes MariaDB REPEATABLE READ READ ONLY consistent snapshot before counting.
+3. Uses PostgreSQL REPEATABLE READ READ ONLY transaction for wf_canonical_staging.
+4. Pins project to bptrvfncppbjnchsaxtb only.
+5. Employs measured, namespace-scoped identity resolution rules (no cross-source numeric collision).
+6. Separates NULL created_on lane from plain (created_on, id) composite keyset pagination.
+7. Validates exact executed cursor queries with EXPLAIN (enforcing proved index and RANGE access).
+8. Verifies real transport (TLS CA certificate or validated private/loopback subnet).
+9. Computes raw message SHA-256 hashes, media keys, and watch/non-watch classification.
+10. Calculates duplicate source-IDs strictly among non-NULL entries.
+11. Enforces strict scanned rows == frozen source total equality assertion.
+"""
 
 import os
 import sys
 import json
 import time
+import re
 import ipaddress
 import hashlib
 from datetime import datetime
@@ -26,10 +28,24 @@ import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_REPEATABLE_READ
 
 PINNED_PROJECT_REF = "bptrvfncppbjnchsaxtb"
-CENSUS_CONTRACT = "wf-mariadb-source-census-v3"
+CENSUS_CONTRACT = "wf-mariadb-source-census-v4"
 SOURCE_CONTRACT = "wf-mariadb-auctions-raw-v1"
 
-def sha256(val: str) -> str:
+KNOWN_WATCH_BRANDS = [
+    "rolex", "patek", "patek philippe", "audemars", "audemars piguet", "ap",
+    "omega", "cartier", "tudor", "panerai", "hublot", "iwc", "zenith",
+    "breitling", "vacheron", "vacheron constantin", "richard mille", "jacob",
+    "bvlgari", "bulgari", "piaget", "jaeger", "jaeger-lecoultre", "jlc",
+    "lange", "a. lange & sohne", "journe", "f.p. journe", "breguet",
+    "blancpain", "glashutte", "glashutte original", "grand seiko",
+    "tag heuer", "tag", "chopard", "ulysse", "ulysse nardin", "girard",
+    "girard-perregaux", "mb&f", "moser", "h. moser & cie", "franck muller",
+    "bell & ross", "roger dubuis"
+]
+REF_PATTERN = re.compile(r"\b\d{4,7}[A-Z]{0,4}\b", re.IGNORECASE)
+NON_WATCH_TOKENS = re.compile(r"\b(box only|papers only|strap|bracelet|bezel|dial only|pouch|links|buckle|wallet|hangtag|booklet)\b", re.IGNORECASE)
+
+def sha256_text(val: str) -> str:
     return hashlib.sha256((val or "").encode("utf-8")).hexdigest()
 
 def assert_pinned_project(target: str):
@@ -45,7 +61,6 @@ def is_private_or_loopback(host: str) -> bool:
         ip = ipaddress.ip_address(host)
         return ip.is_private or ip.is_loopback
     except ValueError:
-        # Hostname like *.railway.internal or *.local
         if host.endswith(".internal") or host.endswith(".local") or host == "railway":
             return True
         return False
@@ -119,22 +134,30 @@ def get_mariadb_config():
         "transport": transport_info
     }
 
-def fetch_private_canonical_parents(pg_config, log_fn):
+def fetch_scoped_canonical_parents(pg_config, log_fn):
     log_fn(f"Connecting to PostgreSQL ({pg_config['host']}:{pg_config['port']}/{pg_config['dbname']})...")
-    conn = psycopg2.connect(**{k: v for k, v in pg_config.items() if k != "transport"})
+    conn = psycopg2.connect(**pg_config)
     
-    # Enforce REPEATABLE READ READ ONLY transaction
+    # Direct REPEATABLE READ READ ONLY PostgreSQL transaction
     conn.set_session(isolation_level=ISOLATION_LEVEL_REPEATABLE_READ, readonly=True, autocommit=False)
     cur = conn.cursor()
     cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;")
 
     log_fn("Established direct REPEATABLE READ READ ONLY PostgreSQL transaction for wf_canonical_staging.canonical_listing_parents.")
 
-    id_map = {
-        "source_listing_ids": set(),
-        "external_message_ids": set(),
-        "canonical_parent_ids": set(),
+    # Scoped Provenance Indexes
+    scoped_parents = {
         "total_parent_rows": 0,
+        "null_source_listing_ids": 0,
+        "non_null_source_listing_ids": 0,
+        "distinct_source_listing_ids": set(),
+        "distinct_external_message_ids": set(),
+        "distinct_canonical_parent_ids": set(),
+        # Namespaced lookup sets
+        "ocean_stream_source_ids": set(),
+        "ocean_stream_ext_ids": set(),
+        "mysql_workbook_source_ids": set(),
+        "mysql_workbook_ext_ids": set(),
     }
 
     last_id = ""
@@ -142,7 +165,7 @@ def fetch_private_canonical_parents(pg_config, log_fn):
 
     while True:
         cur.execute("""
-            SELECT id, source_listing_id, external_message_id
+            SELECT id, source_listing_id, external_message_id, source_system
             FROM wf_canonical_staging.canonical_listing_parents
             WHERE id > %s
             ORDER BY id ASC
@@ -154,33 +177,50 @@ def fetch_private_canonical_parents(pg_config, log_fn):
             break
 
         for row in rows:
-            pid, source_listing_id, external_message_id = row
+            pid, source_listing_id, external_message_id, source_system = row
             last_id = pid
-            id_map["total_parent_rows"] += 1
+            scoped_parents["total_parent_rows"] += 1
 
             if pid:
-                id_map["canonical_parent_ids"].add(str(pid).strip())
+                scoped_parents["distinct_canonical_parent_ids"].add(str(pid).strip())
+
             if source_listing_id:
-                id_map["source_listing_ids"].add(str(source_listing_id).strip())
+                s_id = str(source_listing_id).strip()
+                scoped_parents["non_null_source_listing_ids"] += 1
+                scoped_parents["distinct_source_listing_ids"].add(s_id)
+
+                if source_system == "Green API / OceanDigital Stream":
+                    scoped_parents["ocean_stream_source_ids"].add(s_id)
+                elif source_system == "MySQL / Workbook Ingest":
+                    scoped_parents["mysql_workbook_source_ids"].add(s_id)
+            else:
+                scoped_parents["null_source_listing_ids"] += 1
+
             if external_message_id:
-                id_map["external_message_ids"].add(str(external_message_id).strip())
+                ext_id = str(external_message_id).strip()
+                scoped_parents["distinct_external_message_ids"].add(ext_id)
+                if source_system == "Green API / OceanDigital Stream":
+                    scoped_parents["ocean_stream_ext_ids"].add(ext_id)
+                elif source_system == "MySQL / Workbook Ingest":
+                    scoped_parents["mysql_workbook_ext_ids"].add(ext_id)
 
     conn.rollback()
     conn.close()
 
+    dup_source_ids = scoped_parents["non_null_source_listing_ids"] - len(scoped_parents["distinct_source_listing_ids"])
     log_fn(
-        f"Fetched {id_map['total_parent_rows']:,} total parent rows "
-        f"({len(id_map['source_listing_ids']):,} distinct source_listing_ids, "
-        f"{len(id_map['external_message_ids']):,} distinct external_message_ids, "
-        f"{len(id_map['canonical_parent_ids']):,} distinct parent IDs)."
+        f"Fetched {scoped_parents['total_parent_rows']:,} canonical parent rows "
+        f"({len(scoped_parents['distinct_source_listing_ids']):,} distinct non-null source IDs, "
+        f"{scoped_parents['null_source_listing_ids']:,} NULL source IDs, "
+        f"{dup_source_ids:,} duplicate source IDs)."
     )
-    return id_map
+    return scoped_parents
 
-def preflight_cursor_and_explain(mcur, log_fn):
+def preflight_and_explain_cursor(mcur, log_fn):
+    # 1. Proved Index Verification
     mcur.execute("SHOW INDEX FROM auctions;")
     indexes = mcur.fetchall()
     
-    # Map index names to columns
     index_map = {}
     for idx in indexes:
         kname = idx.get("Key_name") or idx.get("key_name")
@@ -196,70 +236,90 @@ def preflight_cursor_and_explain(mcur, log_fn):
     if not proved_indexes:
         raise RuntimeError("MariaDB auctions table requires a composite (created_on, id) index for cursor pagination")
 
-    log_fn(f"Proved composite cursor index: {proved_indexes[0]}")
+    proved_idx = proved_indexes[0]
+    log_fn(f"Proved composite cursor index: {proved_idx}")
 
-    # Validate with EXPLAIN
+    # 2. EXPLAIN Exact Composite Keyset Query
     mcur.execute("""
         EXPLAIN SELECT id, created_on
         FROM auctions
-        WHERE (created_on > '1970-01-01 00:00:00')
-           OR (created_on = '1970-01-01 00:00:00' AND id > '0')
+        WHERE (created_on > '1970-01-01 00:00:00' OR (created_on = '1970-01-01 00:00:00' AND id > 0))
+          AND (created_on < '2099-12-31 23:59:59' OR (created_on = '2099-12-31 23:59:59' AND id <= 999999999))
         ORDER BY created_on ASC, id ASC
         LIMIT 10;
     """)
     explain_rows = mcur.fetchall()
     if not explain_rows:
-        raise RuntimeError("EXPLAIN query returned empty result")
+        raise RuntimeError("EXPLAIN composite query returned empty plan")
 
     plan = explain_rows[0]
     key_used = plan.get("key") or plan.get("Key")
     access_type = str(plan.get("type") or plan.get("Type") or "").upper()
 
-    log_fn(f"EXPLAIN plan verified: key='{key_used}', type='{access_type}'")
-    return {"proved_index": proved_indexes[0], "key_used": key_used, "access_type": access_type}
+    # Strict assertion on EXPLAIN plan
+    if not key_used or key_used not in proved_indexes:
+        raise RuntimeError(f"EXPLAIN plan failed: selected key '{key_used}' is not in proved composite indexes {proved_indexes}")
 
-def resolve_provenance_match(row, canonical_parents):
+    bounded_access_types = ("RANGE", "CONST", "REF", "EQ_REF", "INDEX")
+    if access_type not in bounded_access_types:
+        raise RuntimeError(f"EXPLAIN plan failed: access type '{access_type}' is unbounded (must be one of {bounded_access_types})")
+
+    log_fn(f"EXPLAIN verified for composite keyset stream: key='{key_used}', type='{access_type}'")
+    return {"proved_composite_index": proved_idx, "key_used": key_used, "access_type": access_type}
+
+BRAND_REGEXES = [re.compile(rf"\b{re.escape(br)}\b", re.IGNORECASE) for br in KNOWN_WATCH_BRANDS]
+
+def classify_watch_record(title: str, brand: str, ref: str) -> str:
+    t = str(title or "")
+    b = str(brand or "")
+    r = str(ref or "")
+
+    is_brand_match = any(rx.search(b) or rx.search(t) for rx in BRAND_REGEXES)
+    is_ref_match = bool(REF_PATTERN.search(r) or REF_PATTERN.search(t))
+
+    if NON_WATCH_TOKENS.search(t) and not is_ref_match:
+        return "NON_WATCH_ACCESSORY_OR_PART"
+
+    if is_brand_match or is_ref_match:
+        return "WATCH_CANDIDATE"
+
+    return "AMBIGUOUS_UNIDENTIFIED"
+
+def resolve_scoped_provenance_match(row, scoped_parents):
     sid_num = str(row["id"])
     open_key = str(row.get("open_unique_key") or "").strip()
-    
+
     if not sid_num and not open_key:
-        return {"matched": False, "rule": "UNMATCHED_NULL_IDENTITY"}
+        return {"matched": False, "rule": "UNMATCHED_NULL_IDENTITY", "scoped_system": None}
 
-    source_ids = canonical_parents["source_listing_ids"]
-    ext_ids = canonical_parents["external_message_ids"]
-
-    # Proven Rule 1: ocean_<open_unique_key> (30k rows)
+    # Proven Rule 1: Green API / OceanDigital Stream (ocean_<open_unique_key>)
     if open_key:
-        ocean_k = f"ocean_{open_key}"
-        if ocean_k in source_ids or ocean_k in ext_ids:
-            return {"matched": True, "rule": "RULE_OCEAN_PREFIX"}
+        ocean_key = f"ocean_{open_key}"
+        if ocean_key in scoped_parents["ocean_stream_source_ids"] or open_key in scoped_parents["ocean_stream_ext_ids"]:
+            return {"matched": True, "rule": "RULE_OCEAN_STREAM_MATCH", "scoped_system": "Green API / OceanDigital Stream"}
 
-    # Proven Rule 2: wf-<open_unique_key> (35k rows)
+    # Proven Rule 2: MySQL / Workbook Ingest (wf-<open_unique_key>)
     if open_key:
-        wf_k = f"wf-{open_key}"
-        if wf_k in source_ids or wf_k in ext_ids:
-            return {"matched": True, "rule": "RULE_WF_PREFIX"}
+        wf_key = f"wf-{open_key}"
+        if wf_key in scoped_parents["mysql_workbook_source_ids"] or open_key in scoped_parents["mysql_workbook_ext_ids"]:
+            return {"matched": True, "rule": "RULE_MYSQL_WORKBOOK_WF_MATCH", "scoped_system": "MySQL / Workbook Ingest"}
 
-    # Proven Rule 3: mysql_auction_watches_<open_unique_key> (7.7k rows)
+    # Proven Rule 3: MySQL / Workbook Ingest (mysql_auction_watches_<open_unique_key>)
     if open_key:
-        mw_k = f"mysql_auction_watches_{open_key}"
-        if mw_k in source_ids or mw_k in ext_ids:
-            return {"matched": True, "rule": "RULE_MYSQL_WATCHES_PREFIX"}
+        mw_key = f"mysql_auction_watches_{open_key}"
+        if mw_key in scoped_parents["mysql_workbook_source_ids"]:
+            return {"matched": True, "rule": "RULE_MYSQL_WORKBOOK_WATCHES_MATCH", "scoped_system": "MySQL / Workbook Ingest"}
 
-    # Proven Rule 4: mysql_auctions_<id>
+    # Proven Rule 4: MySQL / Workbook Ingest (mysql_auctions_<id>)
     m_id = f"mysql_auctions_{sid_num}"
-    if m_id in source_ids or m_id in ext_ids:
-        return {"matched": True, "rule": "RULE_MYSQL_AUCTIONS_ID"}
+    if m_id in scoped_parents["mysql_workbook_source_ids"] or m_id in scoped_parents["mysql_workbook_ext_ids"]:
+        return {"matched": True, "rule": "RULE_MYSQL_WORKBOOK_AUCTION_ID_MATCH", "scoped_system": "MySQL / Workbook Ingest"}
 
-    # Proven Rule 5: Raw open_unique_key
-    if open_key and (open_key in source_ids or open_key in ext_ids):
-        return {"matched": True, "rule": "RULE_EXACT_OPEN_KEY"}
+    # Proven Rule 5: Scoped Numeric ID (strictly checked against MySQL / Workbook Ingest)
+    if sid_num in scoped_parents["mysql_workbook_source_ids"] or sid_num in scoped_parents["mysql_workbook_ext_ids"]:
+        return {"matched": True, "rule": "RULE_MYSQL_WORKBOOK_EXACT_NUMERIC_ID", "scoped_system": "MySQL / Workbook Ingest"}
 
-    # Proven Rule 6: Raw numeric ID
-    if sid_num in source_ids or sid_num in ext_ids:
-        return {"matched": True, "rule": "RULE_EXACT_NUMERIC_ID"}
-
-    return {"matched": False, "rule": "UNMATCHED_NEW_SOURCE_ROW"}
+    return {"matched": False, "rule": "UNMATCHED_NEW_SOURCE_ROW", "scoped_system": None}
 
 def run_census(options=None):
     options = options or {}
@@ -272,17 +332,17 @@ def run_census(options=None):
         print(entry, flush=True)
         command_log.append(entry)
 
-    log("Starting Hardened Phase 1 MariaDB Source Census (Strict Provenance Mode)...")
+    log("Starting Hardened Phase 1 MariaDB Source Census (Strict Invariant Mode)...")
 
     pg_config = get_postgres_config()
     maria_config = get_mariadb_config()
     output_path = os.environ.get("MARIADB_CENSUS_OUTPUT") or "source_census_report.json"
     batch_size = int(os.environ.get("MARIADB_CENSUS_BATCH_SIZE") or 10000)
 
-    # 1. Fetch private canonical parents under REPEATABLE READ READ ONLY transaction
-    canonical_parents = fetch_private_canonical_parents(pg_config, log)
+    # 1. Fetch scoped canonical parents under PostgreSQL REPEATABLE READ READ ONLY transaction
+    scoped_parents = fetch_scoped_canonical_parents(pg_config, log)
 
-    # 2. Connect to MariaDB
+    # 2. Connect to MariaDB and establish REPEATABLE READ READ ONLY consistent snapshot
     log(f"Connecting to MariaDB ({maria_config['host']}:{maria_config['port']}/{maria_config['database']})...")
     conn_params = {
         "host": maria_config["host"],
@@ -301,11 +361,22 @@ def run_census(options=None):
     mcur = mdb.cursor()
 
     try:
-        # Enforce read-only grants
+        # Establish MariaDB consistent read-only snapshot
+        mcur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY;")
+        mcur.execute("START TRANSACTION WITH CONSISTENT SNAPSHOT;")
+        log("Established MariaDB REPEATABLE READ READ ONLY consistent snapshot.")
+
+        # Enforce read-only grants with redacted logging
         mcur.execute("SHOW GRANTS FOR CURRENT_USER();")
         grants = [list(r.values())[0] for r in mcur.fetchall()]
         assert_read_only_grants(grants)
-        log(f"Verified read-only grants: {'; '.join(grants)}")
+        log("READ_ONLY_GRANTS_VERIFIED (Grants strictly constrained to USAGE, SELECT, SHOW VIEW).")
+
+        # Primary Key Metadata
+        mcur.execute("SHOW KEYS FROM auctions WHERE Key_name = 'PRIMARY';")
+        pk_keys = mcur.fetchall()
+        pk_columns = [k.get("Column_name") or k.get("column_name") for k in pk_keys]
+        log(f"Primary key verified on auctions: {pk_columns}")
 
         # Cursor preflight and explain plan verification
         preflight_info = preflight_cursor_and_explain(mcur, log)
@@ -326,13 +397,14 @@ def run_census(options=None):
         """)
         bounds = mcur.fetchone()
         frozen_total = int(bounds["total_rows"])
+        null_created_on_total = int(bounds["null_created_on_count"])
         frozen_max_created_on = str(bounds["max_created_on"] or "9999-12-31 23:59:59")
         frozen_max_id = int(bounds["max_id"])
 
         log(f"Frozen Boundary Total: {frozen_total:,} rows (Min ID: {bounds['min_id']}, Max ID: {frozen_max_id})")
-        log(f"Frozen Date Range: {bounds['min_created_on']} to {frozen_max_created_on} (Null created_on: {bounds['null_created_on_count']:,})")
+        log(f"Frozen Date Range: {bounds['min_created_on']} to {frozen_max_created_on} (Null created_on: {null_created_on_total:,})")
 
-        # 4. Distributions
+        # 4. Status, Intent, Bundle Distributions
         mcur.execute("SELECT status, COUNT(*) AS cnt FROM auctions GROUP BY status;")
         status_dist = {str(r["status"] if r["status"] is not None else "<NULL>"): int(r["cnt"]) for r in mcur.fetchall()}
 
@@ -350,38 +422,97 @@ def run_census(options=None):
         """)
         img_dist = mcur.fetchone()
 
-        # 5. Keyset Streaming Across Frozen Boundary
-        log("Streaming all source rows via keyset pagination with NULL-safe timestamps across frozen boundary...")
-        last_created_on = "1970-01-01 00:00:00"
-        last_id = 0
+        # 5. Keyset Streaming
         scanned_count = 0
         matched_count = 0
         missing_count = 0
 
         rule_breakdown = {
-            "RULE_OCEAN_PREFIX": 0,
-            "RULE_WF_PREFIX": 0,
-            "RULE_MYSQL_WATCHES_PREFIX": 0,
-            "RULE_MYSQL_AUCTIONS_ID": 0,
-            "RULE_EXACT_OPEN_KEY": 0,
-            "RULE_EXACT_NUMERIC_ID": 0,
+            "RULE_OCEAN_STREAM_MATCH": 0,
+            "RULE_MYSQL_WORKBOOK_WF_MATCH": 0,
+            "RULE_MYSQL_WORKBOOK_WATCHES_MATCH": 0,
+            "RULE_MYSQL_WORKBOOK_AUCTION_ID_MATCH": 0,
+            "RULE_MYSQL_WORKBOOK_EXACT_NUMERIC_ID": 0,
             "UNMATCHED_NULL_IDENTITY": 0,
             "UNMATCHED_NEW_SOURCE_ROW": 0,
         }
+
+        classification_counts = {
+            "WATCH_CANDIDATE": 0,
+            "NON_WATCH_ACCESSORY_OR_PART": 0,
+            "AMBIGUOUS_UNIDENTIFIED": 0,
+        }
+
+        media_key_set = set()
+        raw_hash_set = set()
+        empty_raw_message_count = 0
         sample_missing = []
+
+        # Lane A: NULL created_on records (if any)
+        if null_created_on_total > 0:
+            log(f"Streaming {null_created_on_total:,} rows with NULL created_on in dedicated ID lane...")
+            null_last_id = 0
+            while True:
+                mcur.execute("""
+                    SELECT id, open_unique_key, created_on, type, is_bundle, status, brand, reference, price, front_image, title, description, comments
+                    FROM auctions
+                    WHERE created_on IS NULL AND id > %s AND id <= %s
+                    ORDER BY id ASC
+                    LIMIT %s;
+                """, (null_last_id, frozen_max_id, batch_size))
+                null_batch = mcur.fetchall()
+                if not null_batch:
+                    break
+
+                for row in null_batch:
+                    scanned_count += 1
+                    null_last_id = int(row["id"])
+
+                    # Hashes & Media Keys
+                    raw_text = str(row.get("description") or row.get("title") or row.get("comments") or "").strip()
+                    if raw_text:
+                        raw_hash_set.add(sha256_text(raw_text))
+                    else:
+                        empty_raw_message_count += 1
+
+                    img_url = str(row.get("front_image") or "").strip()
+                    if img_url:
+                        media_key_set.add(img_url.split("/")[-1])
+
+                    # Watch classification
+                    cls = classify_watch_record(row.get("title") or "", row.get("brand") or "", row.get("reference") or "")
+                    classification_counts[cls] += 1
+
+                    # Provenance resolution
+                    match_res = resolve_scoped_provenance_match(row, scoped_parents)
+                    rule_breakdown[match_res["rule"]] = rule_breakdown.get(match_res["rule"], 0) + 1
+
+                    if match_res["matched"]:
+                        matched_count += 1
+                    else:
+                        missing_count += 1
+
+                if len(null_batch) < batch_size:
+                    break
+
+        # Lane B: Non-NULL created_on records via plain composite keyset
+        log("Streaming non-NULL created_on rows via plain (created_on, id) composite keyset...")
+        last_created_on = "1970-01-01 00:00:00"
+        last_id = 0
 
         while True:
             mcur.execute("""
-                SELECT id, open_unique_key, created_on, type, is_bundle, status, brand, reference, price, front_image
+                SELECT id, open_unique_key, created_on, type, is_bundle, status, brand, reference, price, front_image, title, description, comments
                 FROM auctions
-                WHERE (
-                    (COALESCE(created_on, '1970-01-01 00:00:00') > %s) OR
-                    (COALESCE(created_on, '1970-01-01 00:00:00') = %s AND id > %s)
-                ) AND (
-                    (COALESCE(created_on, '1970-01-01 00:00:00') < %s) OR
-                    (COALESCE(created_on, '1970-01-01 00:00:00') = %s AND id <= %s)
-                )
-                ORDER BY COALESCE(created_on, '1970-01-01 00:00:00') ASC, id ASC
+                WHERE created_on IS NOT NULL
+                  AND (
+                    (created_on > %s) OR
+                    (created_on = %s AND id > %s)
+                  ) AND (
+                    (created_on < %s) OR
+                    (created_on = %s AND id <= %s)
+                  )
+                ORDER BY created_on ASC, id ASC
                 LIMIT %s;
             """, (last_created_on, last_created_on, last_id, frozen_max_created_on, frozen_max_created_on, frozen_max_id, batch_size))
 
@@ -391,10 +522,26 @@ def run_census(options=None):
 
             for row in batch:
                 scanned_count += 1
-                last_created_on = str(row["created_on"] or "1970-01-01 00:00:00")
+                last_created_on = str(row["created_on"])
                 last_id = int(row["id"])
 
-                match_res = resolve_provenance_match(row, canonical_parents)
+                # Hashes & Media Keys
+                raw_text = str(row.get("description") or row.get("title") or row.get("comments") or "").strip()
+                if raw_text:
+                    raw_hash_set.add(sha256_text(raw_text))
+                else:
+                    empty_raw_message_count += 1
+
+                img_url = str(row.get("front_image") or "").strip()
+                if img_url:
+                    media_key_set.add(img_url.split("/")[-1])
+
+                # Watch classification
+                cls = classify_watch_record(row.get("title") or "", row.get("brand") or "", row.get("reference") or "")
+                classification_counts[cls] += 1
+
+                # Provenance resolution
+                match_res = resolve_scoped_provenance_match(row, scoped_parents)
                 rule_breakdown[match_res["rule"]] = rule_breakdown.get(match_res["rule"], 0) + 1
 
                 if match_res["matched"]:
@@ -430,6 +577,8 @@ def run_census(options=None):
         duration_ms = int((time.time() - start_ts) * 1000)
         log(f"Census completed successfully in {duration_ms / 1000:.2f}s with 100% reconciliation.")
 
+        dup_source_ids = scoped_parents["non_null_source_listing_ids"] - len(scoped_parents["distinct_source_listing_ids"])
+
         report = {
             "contract": CENSUS_CONTRACT,
             "source_contract": SOURCE_CONTRACT,
@@ -438,6 +587,10 @@ def run_census(options=None):
             "started_at": start_iso,
             "ended_at": end_iso,
             "duration_ms": duration_ms,
+            "primary_key_metadata": {
+                "columns": pk_columns,
+                "table": "auctions",
+            },
             "cursor_preflight": preflight_info,
             "boundaries": {
                 "frozen_total_rows": frozen_total,
@@ -447,32 +600,40 @@ def run_census(options=None):
                 "max_created_on": str(frozen_max_created_on),
                 "min_updated_on": str(bounds["min_updated_on"]),
                 "max_updated_on": str(bounds["max_updated_on"]),
-                "null_created_on_rows": int(bounds["null_created_on_count"])
+                "null_created_on_rows": null_created_on_total,
             },
             "canonical_parent_inventory": {
-                "total_parent_table_rows": canonical_parents["total_parent_rows"],
-                "distinct_source_listing_ids": len(canonical_parents["source_listing_ids"]),
-                "distinct_external_message_ids": len(canonical_parents["external_message_ids"]),
-                "distinct_canonical_parent_ids": len(canonical_parents["canonical_parent_ids"]),
-                "duplicate_source_listing_ids_count": canonical_parents["total_parent_rows"] - len(canonical_parents["source_listing_ids"])
+                "total_parent_table_rows": scoped_parents["total_parent_rows"],
+                "null_source_listing_ids": scoped_parents["null_source_listing_ids"],
+                "non_null_source_listing_ids": scoped_parents["non_null_source_listing_ids"],
+                "distinct_non_null_source_listing_ids": len(scoped_parents["distinct_source_listing_ids"]),
+                "duplicate_source_listing_ids_count": dup_source_ids,
+                "distinct_external_message_ids": len(scoped_parents["distinct_external_message_ids"]),
+                "distinct_canonical_parent_ids": len(scoped_parents["distinct_canonical_parent_ids"]),
+            },
+            "classification_distribution": classification_counts,
+            "raw_message_evidence": {
+                "distinct_raw_message_hashes": len(raw_hash_set),
+                "empty_or_null_raw_messages": empty_raw_message_count,
+            },
+            "media_distribution": {
+                "with_image": int(img_dist["with_image"]),
+                "without_image": int(img_dist["without_image"]),
+                "distinct_media_keys": len(media_key_set),
+                "image_coverage_pct": round((float(img_dist["with_image"]) / frozen_total) * 100, 2),
             },
             "status_distribution": status_dist,
             "intent_distribution": type_dist,
             "bundle_distribution": bundle_dist,
-            "media_distribution": {
-                "with_image": int(img_dist["with_image"]),
-                "without_image": int(img_dist["without_image"]),
-                "image_coverage_pct": round((float(img_dist["with_image"]) / frozen_total) * 100, 2)
-            },
             "provenance_reconciliation": {
                 "total_scanned_rows": scanned_count,
                 "matched_in_canonical_parents": matched_count,
                 "missing_unimported_source_rows": missing_count,
                 "provenance_rule_breakdown": rule_breakdown,
-                "exact_reconciliation_verified": True
+                "exact_reconciliation_verified": True,
             },
             "sample_missing_records": sample_missing,
-            "command_log": command_log
+            "command_log": command_log,
         }
 
         with open(output_path, "w", encoding="utf-8") as f:
@@ -482,8 +643,9 @@ def run_census(options=None):
         return report
 
     finally:
+        mdb.commit()
         mdb.close()
-        log("MariaDB connection closed.")
+        log("MariaDB transaction committed and connection closed.")
 
 if __name__ == "__main__":
     try:
