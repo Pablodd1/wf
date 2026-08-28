@@ -130,7 +130,8 @@
     "test:dealer-directory": "node --test tests/dealer-directory-import.test.cjs tests/dealers-public-directory.test.cjs tests/ui-accommodation.test.cjs",
     "test:price-review": "node --test tests/price-remediation-review.test.cjs",
     "test:data-recovery": "node --test tests/data-recovery-control-plane.test.cjs",
-    "test:e2e": "node tests/e2e/e2e-test-runner.cjs"
+    "test:e2e": "node tests/e2e/e2e-test-runner.cjs",
+    "mariadb:census": "node tools/mariadb-live/source-census.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
