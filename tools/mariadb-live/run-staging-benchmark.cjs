@@ -43,9 +43,10 @@ async function snapshotPublicLineage(supabase, sourceIds) {
   };
 
   const chunks = [];
-  for (let i = 0; i < sourceIds.length; i += 250) {
-    const chunkIds = sourceIds.slice(i, i + 250);
-    chunks.push(chunkIds.map(id => ('mysql_auctions_' + id)));
+  for (let i = 0; i < sourceIds.length; i += 100) {
+    const chunkIds = sourceIds.slice(i, i + 100);
+    const chunkRecordIds = chunkIds.map(id => ('mysql_auctions_' + id));
+    chunks.push({ chunkIds, chunkRecordIds });
   }
 
   const poolConcurrency = 25;
@@ -53,13 +54,13 @@ async function snapshotPublicLineage(supabase, sourceIds) {
 
   async function queryWorker() {
     while (queue.length > 0) {
-      const chunkRecordIds = queue.shift();
-      if (!chunkRecordIds) break;
+      const item = queue.shift();
+      if (!item) break;
 
       const [resRaw, resVers, resWatch] = await Promise.all([
-        supabase.from('raw_messages').select('id').in('external_message_id', chunkRecordIds),
-        supabase.from('raw_message_versions').select('id').in('source_record_id', chunkRecordIds),
-        supabase.from('watch_records').select('id').in('id', chunkRecordIds)
+        supabase.from('raw_messages').select('id').in('external_message_id', item.chunkRecordIds),
+        supabase.from('raw_message_versions').select('id').in('source_record_id', item.chunkRecordIds),
+        supabase.from('watch_records').select('id').in('id', item.chunkIds)
       ]);
 
       if (resRaw.error) throw new Error('Public raw_messages audit query failed: ' + resRaw.error.message);
@@ -289,7 +290,7 @@ async function run100kBenchmarkSuite() {
     measured_p50_latency_ms: selected.latency_ms.p50,
     measured_p95_latency_ms: selected.latency_ms.p95,
     p95_safety_threshold_ms: P95_SAFETY_THRESHOLD_MS,
-    estimated_1_495m_full_capture_minutes: Number((1495053 / selected.throughput_rows_per_sec / 60).toFixed(1)),
+    estimated_1_495m_full_capture_minutes: Number((1495561 / selected.throughput_rows_per_sec / 60).toFixed(1)),
     objective_elimination_summary: results.map(r => ({
       profile: r.profile,
       throughput_rps: r.throughput_rows_per_sec,

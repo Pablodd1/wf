@@ -1,0 +1,14 @@
+{
+  "source_identities_verified": 100000,
+  "public_matches_before": {
+    "raw_messages_count": 9999,
+    "raw_message_versions_count": 9999,
+    "watch_records_count": 0
+  },
+  "public_matches_after": {
+    "raw_messages_count": 9999,
+    "raw_message_versions_count": 9999,
+    "watch_records_count": 0
+  },
+  "zero_public_delta_verified": true
+}
