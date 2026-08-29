@@ -275,7 +275,35 @@ function verifyDryRunReconciliation(accounting) {
   };
 }
 
+function parseMaxCaptureRows(raw) {
+  if (raw === undefined || raw === null) {
+    return { isBounded: false, limit: null };
+  }
+  if (typeof raw === 'number') {
+    if (!Number.isSafeInteger(raw) || raw < 0) {
+      throw new Error(`Invalid MAX_CAPTURE_ROWS: value must be a non-negative integer (received ${raw})`);
+    }
+    return { isBounded: true, limit: raw };
+  }
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim();
+    if (trimmed === '') {
+      throw new Error('Invalid MAX_CAPTURE_ROWS: empty or whitespace string is not permitted (must be non-negative integer or unset)');
+    }
+    if (!/^\d+$/.test(trimmed)) {
+      throw new Error(`Invalid MAX_CAPTURE_ROWS: invalid non-integer format '${raw}' (negative, fractional, or non-numeric values fail closed)`);
+    }
+    const num = Number(trimmed);
+    if (!Number.isSafeInteger(num) || num < 0) {
+      throw new Error(`Invalid MAX_CAPTURE_ROWS: value out of safe integer range (${raw})`);
+    }
+    return { isBounded: true, limit: num };
+  }
+  throw new Error(`Invalid MAX_CAPTURE_ROWS: unsupported type ${typeof raw}`);
+}
+
 module.exports = {
+  parseMaxCaptureRows,
   computeManifestHash,
   CONTRACT,
   CANONICAL_VERSION,

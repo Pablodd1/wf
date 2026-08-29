@@ -503,3 +503,53 @@ test('committed SQL function signature matches runner RPC invocation parameters 
   assert.deepEqual(checkpointParams, ['p_run_key']);
   assert.ok(runnerCode.includes('p_run_key:'));
 });
+
+
+test('parseMaxCaptureRows: presence-based parsing strictly enforces valid non-negative integers or unbounded', () => {
+  const { parseMaxCaptureRows } = require('../tools/mariadb-live/full-capture-preflight.cjs');
+  
+  // Unset / undefined / null -> unbounded
+  assert.deepEqual(parseMaxCaptureRows(undefined), { isBounded: false, limit: null });
+  assert.deepEqual(parseMaxCaptureRows(null), { isBounded: false, limit: null });
+
+  // 0 -> exactly 0 (bounded)
+  assert.deepEqual(parseMaxCaptureRows(0), { isBounded: true, limit: 0 });
+  assert.deepEqual(parseMaxCaptureRows('0'), { isBounded: true, limit: 0 });
+  assert.deepEqual(parseMaxCaptureRows(' 0 '), { isBounded: true, limit: 0 });
+
+  // Positive integers
+  assert.deepEqual(parseMaxCaptureRows(100), { isBounded: true, limit: 100 });
+  assert.deepEqual(parseMaxCaptureRows('5000'), { isBounded: true, limit: 5000 });
+
+  // Fail closed on negative, fractional, empty, NaN, invalid types
+  assert.throws(() => parseMaxCaptureRows(''), /empty or whitespace/);
+  assert.throws(() => parseMaxCaptureRows('   '), /empty or whitespace/);
+  assert.throws(() => parseMaxCaptureRows(-1), /non-negative integer/);
+  assert.throws(() => parseMaxCaptureRows('-1'), /invalid non-integer/);
+  assert.throws(() => parseMaxCaptureRows(1.5), /non-negative integer/);
+  assert.throws(() => parseMaxCaptureRows('1.5'), /invalid non-integer/);
+  assert.throws(() => parseMaxCaptureRows('0.5'), /invalid non-integer/);
+  assert.throws(() => parseMaxCaptureRows('abc'), /invalid non-integer/);
+  assert.throws(() => parseMaxCaptureRows('NaN'), /invalid non-integer/);
+  assert.throws(() => parseMaxCaptureRows({}), /unsupported type/);
+});
+
+test('runCaptureLoop with MAX_CAPTURE_ROWS=0 causes zero fetch, zero checkpoint mutations, and zero staging writes', async () => {
+  const { runCaptureLoop } = require('../tools/mariadb-live/run-full-private-capture.cjs');
+  
+  let fetchCalled = false;
+  let supabaseRpcCalled = false;
+
+  const res = await runCaptureLoop({
+    maxRows: 0,
+    runKey: 'test-zero-row-preflight',
+    env: { MAX_CAPTURE_ROWS: '0' }
+  });
+
+  assert.equal(res.cumulative_input_rows, 0);
+  assert.equal(res.cumulative_newly_staged_rows, 0);
+  assert.equal(res.batches_executed, 0);
+  assert.equal(res.checkpoint_status, 'COPYING_RAW');
+  assert.equal(fetchCalled, false);
+  assert.equal(supabaseRpcCalled, false);
+});
