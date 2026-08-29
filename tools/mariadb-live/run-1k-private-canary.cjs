@@ -382,8 +382,8 @@ async function run1kPrivateCanary(options = {}) {
     // Check public.watch_records
     const { data: pubWatch, error: watchErr } = await supabase
       .from('watch_records')
-      .select('id, source_id')
-      .in('source_id', chunkIds);
+      .select('id')
+      .in('id', chunkRecordIds);
     if (watchErr) throw new Error('Public watch_records audit query failed: ' + watchErr.message);
     publicMatchCount += pubWatch?.length || 0;
   }

@@ -93,6 +93,15 @@ test('Migration SQL Syntax & Structure Verification (Automated PostgreSQL DDL/RP
   assert.ok(sql.includes("v_canon_version <> 'v1-json-keys-sorted-compact'"), 'SQL must enforce v1-json-keys-sorted-compact version');
 });
 
+test('public pollution audit uses the deployed watch_records primary-key provenance contract', () => {
+  const runnerPath = path.resolve('tools/mariadb-live/run-1k-private-canary.cjs');
+  const runner = fs.readFileSync(runnerPath, 'utf8');
+
+  assert.ok(runner.includes(".from('watch_records')"));
+  assert.ok(runner.includes(".in('id', chunkRecordIds)"));
+  assert.ok(!runner.includes(".in('source_id', chunkIds)"));
+});
+
 test('canonicalizeRawPayload produces deterministic key-sorted JSON representation', () => {
   const payload1 = { brand: 'Rolex', ref: '116500LN', price: 25000, condition: null };
   const payload2 = { condition: null, price: 25000, ref: '116500LN', brand: 'Rolex' };
