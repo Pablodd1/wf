@@ -10,6 +10,15 @@ function text(value) {
   return String(value ?? '').trim();
 }
 
+function childPriceEvidenceScope(row) {
+  const evidence = text(row.currency_evidence).toLowerCase();
+  const hasPrice = Number.isFinite(Number(row.price_raw)) && Number(row.price_raw) > 0;
+  if (!hasPrice) return 'NO_PRICE_EVIDENCE';
+  if (evidence === 'explicit_line_currency') return 'EXPLICIT_CHILD_LINE';
+  if (evidence === 'section_currency') return 'INHERITED_SECTION_CONTEXT';
+  return 'REVIEW_REQUIRED';
+}
+
 function atomicJson(filePath, value) {
   const temporary = `${filePath}.partial`;
   fs.writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`);
@@ -41,6 +50,12 @@ function stagingRow(row, lineage, batchId, sourceLabel = 'MANUAL_UNBUNDLE_BATCH_
   return {
     id: deterministicUuid(`${row.parser_version}:${row.listing_id}`),
     batch_id: batchId,
+    parent_source_id: text(row.source_record_id) || null,
+    source_child_id: text(row.listing_id) || null,
+    source_child_index: Number.isInteger(Number(row.child_index)) ? Number(row.child_index) : null,
+    raw_child_line: text(row.raw_line) || null,
+    price_evidence_scope: childPriceEvidenceScope(row),
+    source_currency_evidence: text(row.currency_evidence) || null,
     raw_message: row.raw_line,
     brand: row.brand,
     reference: row.reference,
@@ -67,6 +82,7 @@ function stagingRow(row, lineage, batchId, sourceLabel = 'MANUAL_UNBUNDLE_BATCH_
       currency_evidence: row.currency_evidence,
       source_record_id: row.source_record_id,
       source_child_id: row.listing_id,
+      source_child_index: Number.isInteger(Number(row.child_index)) ? Number(row.child_index) : null,
       source_created_at: sourceDate,
       dealer_id: lineage?.dealer_id || null,
       seller_name: lineage?.seller_name || null,
@@ -144,4 +160,4 @@ if (require.main === module) main().catch(error => {
   process.exitCode = 1;
 });
 
-module.exports = { loadLineage, prepare, stagingRow };
+module.exports = { childPriceEvidenceScope, loadLineage, prepare, stagingRow };

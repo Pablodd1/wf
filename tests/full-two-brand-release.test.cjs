@@ -51,7 +51,7 @@ test('full-brand Trading Floor uses a service-only deduplicated keyset source', 
   assert.match(ingest, /loadVerifiedPublicListings\([\s\S]*selected\.map\(row => row\.id\)/);
   assert.match(ingest, /select: 'id,raw_message'[\s\S]*raw price evidence read returned/);
   assert.match(ingest, /normalizeMarketRow\(\s*\{\s*\.\.\.resolved,\s*raw_message: verified\?\.raw_message \|\| null/);
-  assert.match(ingest, /order: 'has_images\.desc,price_usd\.desc\.nullslast,created_at\.desc\.nullslast,id\.desc'/);
+  assert.match(ingest, /order: 'has_display_price\.desc,has_source_image\.desc,price_usd\.desc\.nullslast,created_at\.desc\.nullslast,id\.desc'/);
   assert.match(ingest, /Number\.isSafeInteger\(cursor\?\.offset\)/);
   assert.match(ingest, /encodeTradingCursor\(\{ \.\.\.cursorRecord, offset: nextOffset \}\)/);
   assert.match(ingest, /controlledVerifiedById = controlledZenithRelease[\s\S]*loadReviewedZenithPublicRows[\s\S]*has_images: Boolean\(verified\?\.has_images\)[\s\S]*sortTradingItems\(controlledRows/);

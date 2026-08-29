@@ -448,7 +448,7 @@ export default function TradingFloor() {
               ? ' listings'
               : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> listings</>}
           </span>
-          <span>Source-confirmed USD first; other supplied prices next; no-price requests last.</span>
+          <span>Priced listings first; source images next; highest verified USD price within each group.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
