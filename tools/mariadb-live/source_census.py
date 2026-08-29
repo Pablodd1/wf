@@ -108,17 +108,40 @@ def verify_mariadb_transport(host: str):
         if not os.path.exists(ca_path):
             raise ValueError(f"MariaDB TLS CA file does not exist: {ca_path}")
 
-        # Enforce valid DNS hostname for certificate SAN matching (refuse raw IP)
+        # A legacy server may expose only a raw IP and a private self-signed CA.
+        # Permit that case only when the exact CA DER fingerprint is pinned.
         try:
             ipaddress.ip_address(host)
-            raise ValueError(
-                f"MariaDB TLS server identity refusal: Host '{host}' is a raw IP address. "
-                "PyMySQL TLS SAN validation requires connecting via the certificate's actual DNS hostname, not a public IP."
-            )
-        except ValueError as e:
-            if "server identity refusal" in str(e):
-                raise
+            is_ip = True
+        except ValueError:
+            is_ip = False
 
+        if is_ip:
+            allow_pinned_ip = os.environ.get("MARIADB_TLS_ALLOW_IP_WITH_PINNED_CA") == "true"
+            expected = re.sub(r"[^0-9A-Fa-f]", "", os.environ.get("MARIADB_TLS_CA_SHA256") or "").lower()
+            if not allow_pinned_ip or len(expected) != 64:
+                raise ValueError(
+                    f"MariaDB TLS server identity refusal: Host '{host}' is a raw IP address. "
+                    "Set MARIADB_TLS_ALLOW_IP_WITH_PINNED_CA=true and MARIADB_TLS_CA_SHA256 only after independent certificate verification."
+                )
+            try:
+                with open(ca_path, "r", encoding="ascii") as ca_handle:
+                    ca_pem = ca_handle.read()
+                ca_der = ssl.PEM_cert_to_DER_cert(ca_pem)
+                actual = hashlib.sha256(ca_der).hexdigest()
+            except Exception as exc:
+                raise ValueError(f"MariaDB pinned CA validation failed: {exc}") from exc
+            if actual != expected:
+                raise ValueError(
+                    f"MariaDB pinned CA fingerprint mismatch: expected {expected}, got {actual}."
+                )
+            return {
+                "ssl": {"ca": ca_path, "check_hostname": False},
+                "transport": "TLS_PINNED_CA_IP",
+                "ca_sha256": actual,
+            }
+
+        # DNS mode retains full hostname validation.
         return {"ssl": {"ca": ca_path, "check_hostname": True}, "transport": "TLS_CA_VERIFIED"}
 
     tunnel_verified = os.environ.get("MARIADB_PRIVATE_TUNNEL_VERIFIED") == "true"
@@ -238,10 +261,37 @@ def get_available_memory_bytes():
 
     return None
 
+def get_cgroup_available_memory_bytes():
+    """Return remaining cgroup memory when container limits are measurable."""
+    candidates = [
+        ("/sys/fs/cgroup/memory.max", "/sys/fs/cgroup/memory.current"),
+        ("/sys/fs/cgroup/memory/memory.limit_in_bytes", "/sys/fs/cgroup/memory/memory.usage_in_bytes"),
+    ]
+    for limit_path, used_path in candidates:
+        try:
+            if not os.path.exists(limit_path) or not os.path.exists(used_path):
+                continue
+            with open(limit_path, "r", encoding="ascii") as f:
+                raw_limit = f.read().strip()
+            if raw_limit == "max":
+                continue
+            with open(used_path, "r", encoding="ascii") as f:
+                raw_used = f.read().strip()
+            limit = int(raw_limit)
+            used = int(raw_used)
+            if 0 < limit < (1 << 60):
+                return max(0, limit - used)
+        except Exception:
+            continue
+    return None
+
 def check_memory_preflight(estimated_total_rows: int, log_fn):
     """Establishes memory requirements and fails closed if inadequate or unreadable."""
     estimated_bytes = max(1500 * 1024 * 1024, int(estimated_total_rows * 1200))
-    avail_bytes = get_available_memory_bytes()
+    system_available = get_available_memory_bytes()
+    cgroup_available = get_cgroup_available_memory_bytes()
+    measurable = [value for value in (system_available, cgroup_available) if value is not None]
+    avail_bytes = min(measurable) if measurable else None
 
     if avail_bytes is None:
         raise RuntimeError("Memory preflight failed: unable to measure system available memory. Failing closed to prevent OOM.")
@@ -537,20 +587,27 @@ def run_census(options=None):
         print(entry, flush=True)
         command_log.append(entry)
 
-    log("Starting Hardened Phase 1 MariaDB Source Census (Strict Invariant Mode)...")
+    source_only = os.environ.get("MARIADB_SOURCE_ONLY_CENSUS") == "true"
+    execution_mode = "SOURCE_ONLY" if source_only else "SOURCE_AND_TARGET_RECONCILIATION"
+    log(f"Starting Hardened Phase 1 MariaDB Source Census ({execution_mode})...")
 
-    pg_config = get_postgres_config()
+    pg_config = None if source_only else get_postgres_config()
     maria_config = get_mariadb_config()
     output_path = os.environ.get("MARIADB_CENSUS_OUTPUT") or "source_census_report.json"
     batch_size = int(os.environ.get("MARIADB_CENSUS_BATCH_SIZE") or 10000)
 
-    # 1. Early Memory Preflight BEFORE loading canonical parent identities
+    # 1. Early Memory Preflight BEFORE loading any identity sets.
     # Baseline estimate: assume 1.5M records (~1.8 GB RAM threshold) before full scan
     log("Executing early memory preflight...")
     check_memory_preflight(1500000, log)
 
-    # 2. Fetch scoped canonical parents under PostgreSQL REPEATABLE READ READ ONLY transaction
-    scoped_parents = fetch_scoped_canonical_parents(pg_config, log)
+    # 2. Fetch scoped canonical parents only in full reconciliation mode.
+    # Source-only mode must never describe un-compared rows as missing.
+    if source_only:
+        scoped_parents = None
+        log("Supabase target comparison explicitly NOT RUN in source-only mode.")
+    else:
+        scoped_parents = fetch_scoped_canonical_parents(pg_config, log)
 
     # 3. Connect to MariaDB and establish REPEATABLE READ READ ONLY consistent snapshot
     log(f"Connecting to MariaDB ({maria_config['host']}:{maria_config['port']}/{maria_config['database']})...")
@@ -614,7 +671,8 @@ def run_census(options=None):
         log(f"Frozen Date Range: {frozen_min_created_on} to {frozen_max_created_on} (Null created_on: {null_created_on_total:,})")
 
         # Exact Memory Preflight for Frozen Row Count
-        check_memory_preflight(frozen_total + scoped_parents["total_parent_rows"], log)
+        parent_rows_for_memory = 0 if source_only else scoped_parents["total_parent_rows"]
+        check_memory_preflight(frozen_total + parent_rows_for_memory, log)
 
         # 5. Status, Intent, Bundle Distributions
         mcur.execute("SELECT status, COUNT(*) AS cnt FROM auctions GROUP BY status;")
@@ -648,8 +706,8 @@ def run_census(options=None):
 
         # 6. Keyset Streaming
         scanned_count = 0
-        matched_count = 0
-        missing_count = 0
+        matched_count = None if source_only else 0
+        missing_count = None if source_only else 0
 
         rule_breakdown = {
             "RULE_OCEAN_STREAM_MATCH": 0,
@@ -713,13 +771,13 @@ def run_census(options=None):
                     cls = classify_watch_record(row.get("title") or "", row.get("brand") or "", row.get("reference") or "")
                     classification_counts[cls] += 1
 
-                    match_res = resolve_scoped_provenance_match(row, scoped_parents)
-                    rule_breakdown[match_res["rule"]] = rule_breakdown.get(match_res["rule"], 0) + 1
-
-                    if match_res["matched"]:
-                        matched_count += 1
-                    else:
-                        missing_count += 1
+                    if not source_only:
+                        match_res = resolve_scoped_provenance_match(row, scoped_parents)
+                        rule_breakdown[match_res["rule"]] = rule_breakdown.get(match_res["rule"], 0) + 1
+                        if match_res["matched"]:
+                            matched_count += 1
+                        else:
+                            missing_count += 1
 
                 if len(null_batch) < batch_size:
                     break
@@ -790,13 +848,14 @@ def run_census(options=None):
                 cls = classify_watch_record(row.get("title") or "", row.get("brand") or "", row.get("reference") or "")
                 classification_counts[cls] += 1
 
-                match_res = resolve_scoped_provenance_match(row, scoped_parents)
-                rule_breakdown[match_res["rule"]] = rule_breakdown.get(match_res["rule"], 0) + 1
-
-                if match_res["matched"]:
-                    matched_count += 1
-                else:
-                    missing_count += 1
+                if not source_only:
+                    match_res = resolve_scoped_provenance_match(row, scoped_parents)
+                    rule_breakdown[match_res["rule"]] = rule_breakdown.get(match_res["rule"], 0) + 1
+                    if match_res["matched"]:
+                        matched_count += 1
+                    else:
+                        missing_count += 1
+                if not source_only and not match_res["matched"]:
                     if len(sample_missing) < 10:
                         sample_missing.append({
                             "id": row["id"],
@@ -810,7 +869,10 @@ def run_census(options=None):
                         })
 
             if scanned_count % 100000 == 0 or len(batch) < batch_size:
-                log(f"Scanned {scanned_count:,} / {frozen_total:,} | Matched: {matched_count:,} | Missing: {missing_count:,}")
+                if source_only:
+                    log(f"Scanned {scanned_count:,} / {frozen_total:,} source rows")
+                else:
+                    log(f"Scanned {scanned_count:,} / {frozen_total:,} | Matched: {matched_count:,} | Missing: {missing_count:,}")
 
             if len(batch) < batch_size:
                 break
@@ -819,21 +881,22 @@ def run_census(options=None):
         if scanned_count != frozen_total:
             raise RuntimeError(f"CENSUS RECONCILIATION FAILURE: Scanned row count ({scanned_count:,}) != Frozen source total ({frozen_total:,})")
 
-        if matched_count + missing_count != scanned_count:
+        if not source_only and matched_count + missing_count != scanned_count:
             raise RuntimeError(f"CENSUS RECONCILIATION FAILURE: Matched ({matched_count:,}) + Missing ({missing_count:,}) != Scanned ({scanned_count:,})")
 
         end_iso = datetime.utcnow().isoformat() + "Z"
         duration_ms = int((time.time() - start_ts) * 1000)
-        log(f"Census completed successfully in {duration_ms / 1000:.2f}s with 100% reconciliation.")
+        log(f"Census completed successfully in {duration_ms / 1000:.2f}s with exact source reconciliation.")
 
-        dup_source_ids = scoped_parents["non_null_source_listing_ids"] - len(scoped_parents["distinct_source_listing_ids"])
+        dup_source_ids = None if source_only else scoped_parents["non_null_source_listing_ids"] - len(scoped_parents["distinct_source_listing_ids"])
 
         report = {
             "contract": CENSUS_CONTRACT,
             "source_contract": SOURCE_CONTRACT,
+            "execution_mode": execution_mode,
             "pinned_project_ref": PINNED_PROJECT_REF,
             "exact_pinned_pghost": EXACT_PINNED_PGHOST,
-            "status": "COMPLETE_SUCCESS",
+            "status": "COMPLETE_SOURCE_ONLY" if source_only else "COMPLETE_SUCCESS",
             "started_at": start_iso,
             "ended_at": end_iso,
             "duration_ms": duration_ms,
@@ -849,7 +912,7 @@ def run_census(options=None):
                 "max_updated_on": str(bounds["max_updated_on"]),
                 "null_created_on_rows": null_created_on_total,
             },
-            "canonical_parent_inventory": {
+            "canonical_parent_inventory": None if source_only else {
                 "total_parent_table_rows": scoped_parents["total_parent_rows"],
                 "null_source_listing_ids": scoped_parents["null_source_listing_ids"],
                 "non_null_source_listing_ids": scoped_parents["non_null_source_listing_ids"],
@@ -875,12 +938,18 @@ def run_census(options=None):
             "status_distribution": status_dist,
             "intent_distribution": type_dist,
             "bundle_distribution": bundle_dist,
+            "source_reconciliation": {
+                "frozen_source_rows": frozen_total,
+                "total_scanned_rows": scanned_count,
+                "exact_reconciliation_verified": scanned_count == frozen_total,
+            },
             "provenance_reconciliation": {
+                "status": "NOT_RUN" if source_only else "COMPLETE",
                 "total_scanned_rows": scanned_count,
                 "matched_in_canonical_parents": matched_count,
                 "missing_unimported_source_rows": missing_count,
-                "provenance_rule_breakdown": rule_breakdown,
-                "exact_reconciliation_verified": True,
+                "provenance_rule_breakdown": None if source_only else rule_breakdown,
+                "exact_reconciliation_verified": None if source_only else True,
             },
             "sample_missing_records": sample_missing,
             "command_log": command_log,

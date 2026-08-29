@@ -124,6 +124,39 @@ class TestSourceCensusHardeningFull(unittest.TestCase):
             res_priv = verify_mariadb_transport("10.0.1.5")
             self.assertEqual(res_priv["transport"], "PRIVATE_TUNNEL_VERIFIED")
 
+    def test_public_ip_accepts_only_exact_pinned_ca_fingerprint(self):
+        ca_file = os.path.abspath(os.path.join(
+            os.path.dirname(__file__), "..", "tools", "mariadb-live", "certs", "legacy-mariadb-ca.pem"
+        ))
+        expected = "086192b805ed58a33fa57baad161dbce2e6313a42612365260e0619f356b948b"
+        with patch.dict(os.environ, {
+            "MARIADB_TLS_CA_FILE": ca_file,
+            "MARIADB_TLS_ALLOW_IP_WITH_PINNED_CA": "true",
+            "MARIADB_TLS_CA_SHA256": expected,
+        }, clear=True):
+            result = verify_mariadb_transport("161.35.0.209")
+            self.assertEqual(result["transport"], "TLS_PINNED_CA_IP")
+            self.assertFalse(result["ssl"]["check_hostname"])
+            self.assertEqual(result["ca_sha256"], expected)
+
+        with patch.dict(os.environ, {
+            "MARIADB_TLS_CA_FILE": ca_file,
+            "MARIADB_TLS_ALLOW_IP_WITH_PINNED_CA": "true",
+            "MARIADB_TLS_CA_SHA256": "0" * 64,
+        }, clear=True):
+            with self.assertRaises(ValueError) as ctx:
+                verify_mariadb_transport("161.35.0.209")
+            self.assertIn("pinned CA fingerprint mismatch", str(ctx.exception))
+
+    @patch("source_census.get_postgres_config")
+    @patch("source_census.get_mariadb_config")
+    def test_source_only_mode_skips_postgres_configuration(self, mock_maria_config, mock_pg_config):
+        mock_maria_config.side_effect = RuntimeError("maria-sentinel")
+        with patch.dict(os.environ, {"MARIADB_SOURCE_ONLY_CENSUS": "true"}, clear=True):
+            with self.assertRaisesRegex(RuntimeError, "maria-sentinel"):
+                run_census()
+        mock_pg_config.assert_not_called()
+
     def test_mariadb_tls_server_identity_and_dns_hostname_enforcement(self):
         with tempfile.NamedTemporaryFile(suffix=".pem", delete=False) as tf:
             tf.write(b"CERTIFICATE_DATA")

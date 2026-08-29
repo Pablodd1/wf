@@ -61,6 +61,9 @@ function probe({ host, port = 3306, timeoutMs = 10000 }) {
           credentials_sent: false,
           database_queries_executed: 0,
         };
+        if (process.env.TLS_PROBE_INCLUDE_ISSUER_DER === 'true' && issuer?.raw) {
+          result.issuer_der_base64 = issuer.raw.toString('base64');
+        }
         secure.destroy();
         resolve(result);
       });
