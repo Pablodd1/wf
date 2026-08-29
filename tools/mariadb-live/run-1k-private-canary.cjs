@@ -133,12 +133,12 @@ async function checkPostgRestExposureFailClosed(supabaseUrl, serviceKey, customF
     // Body might not be JSON
   }
 
-  const isStrictRejection = profileProbe.status === 406 ||
-                            profileProbe.status === 404 ||
-                            errorBody.code === 'PGRST106';
+  if (profileProbe.ok) {
+    throw new Error('Security Violation: PostgREST accepted Accept-Profile: wf_canonical_staging with HTTP ' + profileProbe.status);
+  }
 
-  if (profileProbe.ok || !isStrictRejection) {
-    throw new Error('Security Violation: PostgREST Accept-Profile: wf_canonical_staging was not strictly rejected. Status=' + profileProbe.status + ', Body=' + JSON.stringify(errorBody));
+  if (errorBody.code !== 'PGRST106') {
+    throw new Error('Security Violation: PostgREST Accept-Profile: wf_canonical_staging returned code ' + (errorBody.code || 'UNKNOWN') + ' (expected PGRST106)');
   }
 
   return {
@@ -185,13 +185,22 @@ function validateSecurityPrivilegeMatrix(privReport) {
     throw new Error('Security Audit Failure: authenticated has EXECUTE on staging RPC functions');
   }
 
-  // 3. Assert service_role has exact required access (and NO mutation on immutable evidence)
+  // 3. Assert service_role has ZERO direct table access (all access mediated exclusively via RPCs)
   if (!sp.service_role_usage) throw new Error('Security Audit Failure: service_role missing USAGE on wf_canonical_staging');
-  if (!tp.mariadb_raw_source_rows?.service_role_select || !tp.mariadb_raw_source_rows?.service_role_insert) {
-    throw new Error('Security Audit Failure: service_role missing SELECT or INSERT on mariadb_raw_source_rows');
-  }
-  if (tp.mariadb_raw_source_rows?.service_role_update || tp.mariadb_raw_source_rows?.service_role_delete || tp.mariadb_raw_source_rows?.service_role_truncate) {
-    throw new Error('Security Audit Failure: service_role must NOT have UPDATE, DELETE, or TRUNCATE on immutable mariadb_raw_source_rows');
+  
+  const tables = ['mariadb_raw_source_rows', 'mariadb_raw_import_checkpoints', 'mariadb_raw_import_batches', 'mariadb_raw_import_errors'];
+  const actions = ['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger'];
+  const roles = ['anon', 'authenticated', 'service_role'];
+
+  for (const tbl of tables) {
+    for (const r of roles) {
+      for (const act of actions) {
+        const prop = r + '_' + act;
+        if (tp[tbl]?.[prop]) {
+          throw new Error('Security Audit Failure: ' + r + ' has direct ' + act.toUpperCase() + ' on ' + tbl + ' (zero direct table access permitted)');
+        }
+      }
+    }
   }
 
   // 4. Assert service_role has required execute privileges on all 4 RPCs

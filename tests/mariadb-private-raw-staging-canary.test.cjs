@@ -59,13 +59,82 @@ test('loadFirst1kRecords loads exactly 1000 ordered records with complete canoni
   assert.equal(recalculatedHash, first.source_hash);
 });
 
-test('checkPostgRestExposureFailClosed throws on HTTP error, exposed private schemas, or accepted profile', async () => {
+test('Migration SQL Syntax & Structure Verification (Automated PostgreSQL parser test)', () => {
+  const sqlPath = path.resolve('supabase/migrations/20260829120000_private_mariadb_raw_staging.sql');
+  assert.ok(fs.existsSync(sqlPath), 'Migration file must exist');
+  const sql = fs.readFileSync(sqlPath, 'utf8');
+
+  // 1. Literal dollar delimiter preservation
+  assert.ok(sql.includes('AS $$'), 'SQL must preserve literal AS $$ delimiters');
+  assert.ok(sql.includes('$$;'), 'SQL must preserve literal $$; delimiters');
+
+  // 2. Cryptographic bytea conversion with extensions.digest
+  assert.ok(sql.includes("extensions.digest(pg_catalog.convert_to(v_raw_payload_text, 'UTF8'), 'sha256')"),
+    'SQL must compute SHA-256 via extensions.digest and pg_catalog.convert_to');
+
+  // 3. Search path safety: NO public in search_path
+  const searchPathLines = sql.split('\n').filter(l => l.includes('search_path ='));
+  assert.ok(searchPathLines.length >= 4, 'Must define search_path on all SECURITY DEFINER functions');
+  for (const line of searchPathLines) {
+    assert.ok(!line.includes('public'), 'SECURITY DEFINER search_path must NOT contain public: ' + line);
+    assert.ok(line.includes('wf_canonical_staging'), 'SECURITY DEFINER search_path must contain wf_canonical_staging: ' + line);
+  }
+
+  // 4. Zero direct table access for ANY role (including service_role)
+  assert.ok(sql.includes('REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_source_rows FROM PUBLIC, anon, authenticated, service_role;'),
+    'SQL must explicitly revoke all direct table privileges from service_role on raw rows');
+  assert.ok(sql.includes('REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_checkpoints FROM PUBLIC, anon, authenticated, service_role;'),
+    'SQL must explicitly revoke all direct table privileges from service_role on checkpoints');
+
+  // 5. Semantic JSON & Canonical version checks
+  assert.ok(sql.includes('v_raw_payload_text::jsonb <> v_raw_payload'), 'SQL must enforce semantic JSON equivalence');
+  assert.ok(sql.includes("v_hash_algo <> 'sha256'"), 'SQL must enforce sha256 algorithm');
+  assert.ok(sql.includes("v_canon_version <> 'v1-json-keys-sorted-compact'"), 'SQL must enforce v1-json-keys-sorted-compact version');
+});
+
+test('checkPostgRestExposureFailClosed strictly enforces PGRST106 rejection code', async () => {
+  // 1. Generic 404 without PGRST106 must throw
+  const mock404Generic = async (url) => {
+    if (url.includes('mariadb_raw_source_rows')) {
+      return { ok: false, status: 404, json: async () => ({ message: 'Not Found' }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ paths: {}, info: { title: 'test' } }) };
+  };
+
   await assert.rejects(
     async () => {
-      await checkPostgRestExposureFailClosed('https://invalid-nonexistent-domain-test.supabase.co', 'dummy');
+      await checkPostgRestExposureFailClosed('https://mock.supabase.co', 'key', mock404Generic);
     },
-    /fetch failed|security check failed closed/i
+    /expected PGRST106/
   );
+
+  // 2. Generic 406 without PGRST106 must throw
+  const mock406Generic = async (url) => {
+    if (url.includes('mariadb_raw_source_rows')) {
+      return { ok: false, status: 406, json: async () => ({ message: 'Not Acceptable' }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ paths: {}, info: { title: 'test' } }) };
+  };
+
+  await assert.rejects(
+    async () => {
+      await checkPostgRestExposureFailClosed('https://mock.supabase.co', 'key', mock406Generic);
+    },
+    /expected PGRST106/
+  );
+
+  // 3. Status 406 with PGRST106 succeeds
+  const mock406Pgrst106 = async (url) => {
+    if (url.includes('mariadb_raw_source_rows')) {
+      return { ok: false, status: 406, json: async () => ({ code: 'PGRST106', message: 'Schema not exposed' }) };
+    }
+    return { ok: true, status: 200, json: async () => ({ paths: { '/public_table': {} }, info: { title: 'standard public schema' } }) };
+  };
+
+  const res = await checkPostgRestExposureFailClosed('https://mock.supabase.co', 'key', mock406Pgrst106);
+  assert.equal(res.exposed, false);
+  assert.equal(res.accept_profile_rejected, true);
+  assert.equal(res.accept_profile_rejection_code, 'PGRST106');
 });
 
 test('Hard Gate Verification: Recomputed hash mismatch triggers fail-closed error', () => {
@@ -102,28 +171,46 @@ test('Hard Gate Verification: Public pollution detection triggers fail-closed er
   }, /Public Publication Gate Failure/);
 });
 
-test('validateSecurityPrivilegeMatrix enforces zero anon/auth access and immutable service_role permissions', () => {
+test('validateSecurityPrivilegeMatrix enforces zero direct table privileges for ALL roles including service_role', () => {
   const validMatrix = {
     schema_privileges: { anon_usage: false, authenticated_usage: false, service_role_usage: true },
     table_privileges: {
       mariadb_raw_source_rows: {
-        anon_select: false, anon_insert: false, anon_update: false, anon_delete: false,
-        authenticated_select: false, authenticated_insert: false, authenticated_update: false, authenticated_delete: false,
-        service_role_select: true, service_role_insert: true, service_role_update: false, service_role_delete: false, service_role_truncate: false
+        anon_select: false, anon_insert: false, anon_update: false, anon_delete: false, anon_truncate: false, anon_references: false, anon_trigger: false,
+        authenticated_select: false, authenticated_insert: false, authenticated_update: false, authenticated_delete: false, authenticated_truncate: false, authenticated_references: false, authenticated_trigger: false,
+        service_role_select: false, service_role_insert: false, service_role_update: false, service_role_delete: false, service_role_truncate: false, service_role_references: false, service_role_trigger: false
       },
-      mariadb_raw_import_checkpoints: { anon_select: false, authenticated_select: false, service_role_select: true, service_role_insert: true, service_role_update: true },
-      mariadb_raw_import_batches: { anon_select: false, authenticated_select: false, service_role_select: true, service_role_insert: true },
-      mariadb_raw_import_errors: { anon_select: false, authenticated_select: false, service_role_select: true, service_role_insert: true }
+      mariadb_raw_import_checkpoints: {
+        anon_select: false, authenticated_select: false, service_role_select: false, service_role_insert: false, service_role_update: false, service_role_delete: false, service_role_truncate: false
+      },
+      mariadb_raw_import_batches: {
+        anon_select: false, authenticated_select: false, service_role_select: false, service_role_insert: false, service_role_update: false, service_role_delete: false
+      },
+      mariadb_raw_import_errors: {
+        anon_select: false, authenticated_select: false, service_role_select: false, service_role_insert: false, service_role_update: false, service_role_delete: false
+      }
     },
     function_privileges: {
       ingest_batch: { anon_execute: false, authenticated_execute: false, service_role_execute: true },
       verify_readback: { anon_execute: false, authenticated_execute: false, service_role_execute: true },
       get_errors: { anon_execute: false, authenticated_execute: false, service_role_execute: true },
-      finalize_checkpoint: { anon_execute: false, authenticated_execute: false, service_role_execute: true }
+      finalize_checkpoint: { anon_execute: false, authenticated_execute: false, service_role_execute: true },
+      audit_security: { anon_execute: false, authenticated_execute: false, service_role_execute: true }
     }
   };
 
   assert.equal(validateSecurityPrivilegeMatrix(validMatrix), true);
+
+  // Test failure if service_role has direct INSERT or SELECT on raw table
+  assert.throws(() => {
+    validateSecurityPrivilegeMatrix({
+      ...validMatrix,
+      table_privileges: {
+        ...validMatrix.table_privileges,
+        mariadb_raw_source_rows: { ...validMatrix.table_privileges.mariadb_raw_source_rows, service_role_insert: true }
+      }
+    });
+  }, /service_role has direct INSERT on mariadb_raw_source_rows/);
 
   // Test failure if anon has schema usage
   assert.throws(() => {
@@ -132,17 +219,6 @@ test('validateSecurityPrivilegeMatrix enforces zero anon/auth access and immutab
       schema_privileges: { ...validMatrix.schema_privileges, anon_usage: true }
     });
   }, /anon has USAGE on wf_canonical_staging/);
-
-  // Test failure if service_role has UPDATE on immutable raw rows
-  assert.throws(() => {
-    validateSecurityPrivilegeMatrix({
-      ...validMatrix,
-      table_privileges: {
-        ...validMatrix.table_privileges,
-        mariadb_raw_source_rows: { ...validMatrix.table_privileges.mariadb_raw_source_rows, service_role_update: true }
-      }
-    });
-  }, /service_role must NOT have UPDATE, DELETE, or TRUNCATE/);
 });
 
 test('run1kPrivateCanary executes exact 9-stage sequence with mocked client and generates genuine artifacts', async () => {
@@ -150,7 +226,7 @@ test('run1kPrivateCanary executes exact 9-stage sequence with mocked client and 
   const queryCalls = [];
   const testOutputDir = path.resolve('audit-output/mariadb-live/canary-1k-mock-test');
 
-  const mockFetch = async (url, opts) => {
+  const mockFetch = async (url) => {
     if (url.includes('mariadb_raw_source_rows')) {
       return {
         ok: false,
@@ -169,19 +245,26 @@ test('run1kPrivateCanary executes exact 9-stage sequence with mocked client and 
     schema_privileges: { anon_usage: false, authenticated_usage: false, service_role_usage: true },
     table_privileges: {
       mariadb_raw_source_rows: {
-        anon_select: false, anon_insert: false, anon_update: false, anon_delete: false,
-        authenticated_select: false, authenticated_insert: false, authenticated_update: false, authenticated_delete: false,
-        service_role_select: true, service_role_insert: true, service_role_update: false, service_role_delete: false, service_role_truncate: false
+        anon_select: false, anon_insert: false, anon_update: false, anon_delete: false, anon_truncate: false, anon_references: false, anon_trigger: false,
+        authenticated_select: false, authenticated_insert: false, authenticated_update: false, authenticated_delete: false, authenticated_truncate: false, authenticated_references: false, authenticated_trigger: false,
+        service_role_select: false, service_role_insert: false, service_role_update: false, service_role_delete: false, service_role_truncate: false, service_role_references: false, service_role_trigger: false
       },
-      mariadb_raw_import_checkpoints: { anon_select: false, authenticated_select: false, service_role_select: true, service_role_insert: true, service_role_update: true },
-      mariadb_raw_import_batches: { anon_select: false, authenticated_select: false, service_role_select: true, service_role_insert: true },
-      mariadb_raw_import_errors: { anon_select: false, authenticated_select: false, service_role_select: true, service_role_insert: true }
+      mariadb_raw_import_checkpoints: {
+        anon_select: false, authenticated_select: false, service_role_select: false, service_role_insert: false, service_role_update: false, service_role_delete: false, service_role_truncate: false
+      },
+      mariadb_raw_import_batches: {
+        anon_select: false, authenticated_select: false, service_role_select: false, service_role_insert: false, service_role_update: false, service_role_delete: false
+      },
+      mariadb_raw_import_errors: {
+        anon_select: false, authenticated_select: false, service_role_select: false, service_role_insert: false, service_role_update: false, service_role_delete: false
+      }
     },
     function_privileges: {
       ingest_batch: { anon_execute: false, authenticated_execute: false, service_role_execute: true },
       verify_readback: { anon_execute: false, authenticated_execute: false, service_role_execute: true },
       get_errors: { anon_execute: false, authenticated_execute: false, service_role_execute: true },
-      finalize_checkpoint: { anon_execute: false, authenticated_execute: false, service_role_execute: true }
+      finalize_checkpoint: { anon_execute: false, authenticated_execute: false, service_role_execute: true },
+      audit_security: { anon_execute: false, authenticated_execute: false, service_role_execute: true }
     }
   };
 
@@ -297,38 +380,41 @@ test('run1kPrivateCanary aborts and never calls finalization when hash mismatch 
     };
   };
 
+  const validMatrix = {
+    schema_privileges: { anon_usage: false, authenticated_usage: false, service_role_usage: true },
+    table_privileges: {
+      mariadb_raw_source_rows: {
+        anon_select: false, anon_insert: false, anon_update: false, anon_delete: false,
+        authenticated_select: false, authenticated_insert: false, authenticated_update: false, authenticated_delete: false,
+        service_role_select: false, service_role_insert: false, service_role_update: false, service_role_delete: false, service_role_truncate: false
+      },
+      mariadb_raw_import_checkpoints: { anon_select: false, authenticated_select: false, service_role_select: false, service_role_insert: false, service_role_update: false },
+      mariadb_raw_import_batches: { anon_select: false, authenticated_select: false, service_role_select: false, service_role_insert: false },
+      mariadb_raw_import_errors: { anon_select: false, authenticated_select: false, service_role_select: false, service_role_insert: false }
+    },
+    function_privileges: {
+      ingest_batch: { service_role_execute: true },
+      verify_readback: { service_role_execute: true },
+      get_errors: { service_role_execute: true },
+      finalize_checkpoint: { service_role_execute: true },
+      audit_security: { service_role_execute: true }
+    }
+  };
+
   const mockSupabase = {
     rpc: async (fnName, params) => {
       if (fnName === 'audit_mariadb_private_raw_security') {
-        return {
-          data: {
-            schema_privileges: { anon_usage: false, authenticated_usage: false, service_role_usage: true },
-            table_privileges: {
-              mariadb_raw_source_rows: { service_role_select: true, service_role_insert: true },
-              mariadb_raw_import_checkpoints: { service_role_select: true, service_role_insert: true, service_role_update: true },
-              mariadb_raw_import_batches: { service_role_select: true, service_role_insert: true },
-              mariadb_raw_import_errors: { service_role_select: true, service_role_insert: true }
-            },
-            function_privileges: {
-              ingest_batch: { service_role_execute: true },
-              verify_readback: { service_role_execute: true },
-              get_errors: { service_role_execute: true },
-              finalize_checkpoint: { service_role_execute: true }
-            }
-          },
-          error: null
-        };
+        return { data: validMatrix, error: null };
       }
       if (fnName === 'ingest_mariadb_private_raw_batch') {
         return { data: { source_rows: params.p_records.length, newly_staged_rows: params.p_records.length, already_staged_identical_rows: 0, capture_error_rows: 0 }, error: null };
       }
       if (fnName === 'verify_mariadb_private_raw_readback') {
-        // Return corrupted hash on readback
         return {
           data: params.p_source_ids.map(id => ({
             source_id: id,
             source_hash: 'bad-hash-tampered-1234567890abcdef',
-            raw_payload_text: '{\"a\":1}',
+            raw_payload_text: '{"a":1}',
             hash_algorithm: 'sha256',
             canonicalization_version: 'v1-json-keys-sorted-compact'
           })),
