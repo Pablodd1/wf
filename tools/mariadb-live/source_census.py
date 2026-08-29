@@ -41,6 +41,11 @@ REQUIRED_SOURCE_COLUMNS = [
     "front_image", "title", "description", "comments"
 ]
 
+SOURCE_ONLY_REQUIRED_COLUMNS = [
+    "id", "created_on", "updated_on", "type", "status", "is_bundle",
+    "front_image", "title", "description", "comments"
+]
+
 ALL_SOURCE_COLUMNS = [
     "id", "open_unique_key", "created_on", "updated_on", "origin", "type", "status",
     "is_bundle", "category_id", "company_id", "from_number", "from_name", "phone_code",
@@ -443,7 +448,7 @@ def fetch_scoped_canonical_parents(pg_config, log_fn):
     )
     return scoped_parents
 
-def verify_source_schema_and_primary_key(mcur, database_name: str, log_fn):
+def verify_source_schema_and_primary_key(mcur, database_name: str, log_fn, required_columns=None, require_primary_key=True):
     """Verifies information_schema columns and asserts strict single primary key ['id']."""
     # 1. Column verification
     mcur.execute("""
@@ -456,27 +461,69 @@ def verify_source_schema_and_primary_key(mcur, database_name: str, log_fn):
         raise RuntimeError(f"Schema verification failed: table 'auctions' not found in database '{database_name}'")
 
     actual_col_names = set(c.get("COLUMN_NAME") or c.get("column_name") for c in cols_meta)
-    missing_required = [c for c in REQUIRED_SOURCE_COLUMNS if c not in actual_col_names]
+    required = required_columns or REQUIRED_SOURCE_COLUMNS
+    missing_required = [c for c in required if c not in actual_col_names]
     if missing_required:
         raise RuntimeError(f"Schema verification failed: missing required columns in auctions table: {missing_required}")
 
     available_source_columns = [c for c in ALL_SOURCE_COLUMNS if c in actual_col_names]
+    missing_tracked_columns = [c for c in ALL_SOURCE_COLUMNS if c not in actual_col_names]
     log_fn(f"Verified auctions schema: {len(actual_col_names)} total columns, {len(available_source_columns)} tracked source columns.")
 
     # 2. Strict Primary Key Assertion
     mcur.execute("SHOW KEYS FROM auctions WHERE Key_name = 'PRIMARY';")
     pk_keys = mcur.fetchall()
     pk_columns = [k.get("Column_name") or k.get("column_name") for k in pk_keys]
-    if pk_columns != ["id"]:
+    if require_primary_key and pk_columns != ["id"]:
         raise RuntimeError(f"Primary key assertion failed on 'auctions': expected exactly ['id'], found: {pk_columns}")
-    log_fn(f"Primary key strictly verified on auctions: {pk_columns}")
+    if pk_columns == ["id"]:
+        log_fn(f"Primary key strictly verified on auctions: {pk_columns}")
+    else:
+        log_fn(f"Legacy schema has no id primary key; recorded actual primary key columns: {pk_columns}")
 
     return {
         "actual_columns": sorted(list(actual_col_names)),
         "available_source_columns": available_source_columns,
         "missing_required": missing_required,
+        "missing_tracked_columns": missing_tracked_columns,
         "primary_key": pk_columns
     }
+
+def preflight_source_only_cursor(mcur, log_fn):
+    """Prove the unique legacy open_unique_key index for one-pass server streaming."""
+    mcur.execute("SHOW INDEX FROM auctions;")
+    indexes = mcur.fetchall()
+    unique_open_key_indexes = []
+    for idx in indexes:
+        name = idx.get("Key_name") or idx.get("key_name")
+        column = str(idx.get("Column_name") or idx.get("column_name") or "").lower()
+        sequence = int(idx.get("Seq_in_index") or idx.get("seq_in_index") or 1)
+        non_unique = int(idx.get("Non_unique") if idx.get("Non_unique") is not None else idx.get("non_unique") or 0)
+        if column == "open_unique_key" and sequence == 1 and non_unique == 0:
+            unique_open_key_indexes.append(name)
+    if not unique_open_key_indexes:
+        raise RuntimeError("Source-only census requires a unique open_unique_key index for exact one-pass streaming")
+
+    proved_idx = unique_open_key_indexes[0]
+    safe_idx = str(proved_idx).replace("`", "``")
+    mcur.execute(f"""
+        EXPLAIN SELECT id, open_unique_key
+        FROM auctions FORCE INDEX (`{safe_idx}`)
+        ORDER BY open_unique_key ASC
+        LIMIT 10;
+    """)
+    plan = mcur.fetchall()
+    if not plan:
+        raise RuntimeError("EXPLAIN returned no plan for source-only open_unique_key stream")
+    key_used = plan[0].get("key") or plan[0].get("Key")
+    access_type = str(plan[0].get("type") or plan[0].get("Type") or "").upper()
+    if key_used != proved_idx or access_type not in {"INDEX", "RANGE", "REF", "EQ_REF", "CONST"}:
+        raise RuntimeError(
+            f"Source-only cursor EXPLAIN refusal: expected key '{proved_idx}' with bounded/index access, "
+            f"got key='{key_used}', type='{access_type}'"
+        )
+    log_fn(f"Source-only cursor verified on unique index '{proved_idx}' with access type '{access_type}'.")
+    return {"proved_unique_index": proved_idx, "key_used": key_used, "access_type": access_type, "stream_mode": "ONE_PASS_SERVER_CURSOR"}
 
 def preflight_and_explain_cursor(mcur, log_fn):
     """Verifies composite index and executes EXPLAIN on exact keyset query plan."""
@@ -640,10 +687,16 @@ def run_census(options=None):
         log("READ_ONLY_GRANTS_VERIFIED (Grants strictly constrained to USAGE, SELECT, SHOW VIEW).")
 
         # Schema & Primary Key Verification
-        schema_info = verify_source_schema_and_primary_key(mcur, maria_config["database"], log)
+        schema_info = verify_source_schema_and_primary_key(
+            mcur,
+            maria_config["database"],
+            log,
+            SOURCE_ONLY_REQUIRED_COLUMNS if source_only else REQUIRED_SOURCE_COLUMNS,
+            require_primary_key=not source_only,
+        )
 
         # Cursor preflight and explain plan verification
-        preflight_info = preflight_and_explain_cursor(mcur, log)
+        preflight_info = preflight_source_only_cursor(mcur, log) if source_only else preflight_and_explain_cursor(mcur, log)
 
         # 4. Freeze Upper Boundary
         log("Freezing upper cursor boundary...")
@@ -664,8 +717,12 @@ def run_census(options=None):
         null_created_on_total = int(bounds["null_created_on_count"] or 0)
         frozen_min_created_on = str(bounds["min_created_on"] or "0000-00-00 00:00:00")
         frozen_max_created_on = str(bounds["max_created_on"] or "9999-12-31 23:59:59")
-        frozen_min_id = int(bounds["min_id"] or 0)
-        frozen_max_id = int(bounds["max_id"] or 0)
+        if source_only:
+            frozen_min_id = str(bounds["min_id"] or "")
+            frozen_max_id = str(bounds["max_id"] or "")
+        else:
+            frozen_min_id = int(bounds["min_id"] or 0)
+            frozen_max_id = int(bounds["max_id"] or 0)
 
         log(f"Frozen Boundary Total: {frozen_total:,} rows (Min ID: {frozen_min_id}, Max ID: {frozen_max_id})")
         log(f"Frozen Date Range: {frozen_min_created_on} to {frozen_max_created_on} (Null created_on: {null_created_on_total:,})")
@@ -733,8 +790,44 @@ def run_census(options=None):
 
         select_cols = ", ".join(schema_info["available_source_columns"])
 
+        # Source-only mode uses a single unbuffered server cursor over the proved
+        # unique open_unique_key index. This avoids OFFSET and does not depend on
+        # the legacy table having a primary key.
+        if source_only:
+            safe_idx = str(preflight_info["proved_unique_index"]).replace("`", "``")
+            log("Streaming all source rows with a one-pass server cursor...")
+            stream_cur = mdb.cursor(pymysql.cursors.SSDictCursor)
+            try:
+                stream_cur.execute(f"""
+                    SELECT {select_cols}
+                    FROM auctions FORCE INDEX (`{safe_idx}`)
+                    ORDER BY open_unique_key ASC;
+                """)
+                while True:
+                    batch = stream_cur.fetchmany(batch_size)
+                    if not batch:
+                        break
+                    for row in batch:
+                        scanned_count += 1
+                        snap_hash = compute_source_row_snapshot_sha256(row, schema_info["available_source_columns"])
+                        source_row_snapshot_hash_set.add(snap_hash)
+                        msg_hash = compute_raw_message_sha256(row)
+                        if msg_hash:
+                            raw_message_hash_set.add(msg_hash)
+                        else:
+                            empty_raw_message_count += 1
+                        img_url = str(row.get("front_image") or "").strip()
+                        if img_url:
+                            media_key_set.add(img_url.split("/")[-1])
+                        cls = classify_watch_record(row.get("title") or "", row.get("brand") or "", row.get("reference") or "")
+                        classification_counts[cls] += 1
+                    if scanned_count % 100000 < len(batch):
+                        log(f"Scanned {scanned_count:,} / {frozen_total:,} source rows")
+            finally:
+                stream_cur.close()
+
         # Lane A: NULL created_on records (if any)
-        if null_created_on_total > 0:
+        if not source_only and null_created_on_total > 0:
             log(f"Streaming {null_created_on_total:,} rows with NULL created_on in dedicated ID lane...")
             null_last_id = 0
             while True:
@@ -783,12 +876,13 @@ def run_census(options=None):
                     break
 
         # Lane B: Non-NULL created_on records starting from frozen minimum (No 1970 lower bound assumption)
-        log(f"Streaming non-NULL created_on rows starting from minimum timestamp '{frozen_min_created_on}'...")
+        if not source_only:
+            log(f"Streaming non-NULL created_on rows starting from minimum timestamp '{frozen_min_created_on}'...")
         last_created_on = frozen_min_created_on
-        last_id = frozen_min_id - 1
+        last_id = None if source_only else frozen_min_id - 1
         is_first_batch = True
 
-        while True:
+        while not source_only:
             if is_first_batch:
                 mcur.execute(f"""
                     SELECT {select_cols}
@@ -933,7 +1027,7 @@ def run_census(options=None):
                 "with_image": int(img_dist["with_image"] or 0),
                 "without_image": int(img_dist["without_image"] or 0),
                 "distinct_media_keys": len(media_key_set),
-                "image_coverage_pct": round((float(img_dist["with_image"] or 0) / frozen_total) * 100, 2) if frozen_total else 0.0,
+                "image_coverage_pct": round((float(img_dist["with_image"] or 0) / frozen_total) * 100, 4) if frozen_total else 0.0,
             },
             "status_distribution": status_dist,
             "intent_distribution": type_dist,

@@ -12,6 +12,7 @@ from source_census import (
     resolve_scoped_provenance_match,
     classify_watch_record,
     preflight_and_explain_cursor,
+    preflight_source_only_cursor,
     verify_postgres_role_permissions,
     verify_source_schema_and_primary_key,
     compute_raw_message_sha256,
@@ -335,6 +336,16 @@ class TestSourceCensusHardeningFull(unittest.TestCase):
         self.assertEqual(res["proved_composite_index"], "idx_created_id")
         self.assertEqual(res["key_used"], "idx_created_id")
         self.assertEqual(res["access_type"], "RANGE")
+
+    def test_source_only_cursor_uses_unique_open_key_index(self):
+        mcur = MagicMock()
+        mcur.fetchall.side_effect = [
+            [{"Key_name": "open_unique_key", "Seq_in_index": 1, "Column_name": "open_unique_key", "Non_unique": 0}],
+            [{"key": "open_unique_key", "type": "index"}],
+        ]
+        result = preflight_source_only_cursor(mcur, lambda _message: None)
+        self.assertEqual(result["proved_unique_index"], "open_unique_key")
+        self.assertEqual(result["stream_mode"], "ONE_PASS_SERVER_CURSOR")
 
     def test_scoped_provenance_isolation(self):
         scoped_parents = {
