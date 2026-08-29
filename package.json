@@ -131,7 +131,8 @@
     "test:price-review": "node --test tests/price-remediation-review.test.cjs",
     "test:data-recovery": "node --test tests/data-recovery-control-plane.test.cjs",
     "test:e2e": "node tests/e2e/e2e-test-runner.cjs",
-    "mariadb:census": "node tools/mariadb-live/source-census.cjs"
+    "mariadb:census": "node tools/mariadb-live/source-census.cjs",
+    "mariadb:capture-benchmark": "node tools/mariadb-live/capture-benchmark.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
