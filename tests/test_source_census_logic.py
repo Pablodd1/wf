@@ -35,28 +35,62 @@ class TestSourceCensusHardeningFull(unittest.TestCase):
             assert_pinned_project("db.bptrvfncppbjnchsaxtb.supabase.co.evil.com")
         self.assertIn("Target refusal", str(ctx.exception))
 
-    def test_postgres_tls_mode_strict_enforcement(self):
-        # Default / verify-full passes
-        with patch.dict(os.environ, {
-            "PGHOST": EXACT_PINNED_PGHOST,
-            "PGUSER": "reader",
-            "PGPASSWORD": "secret",
-            "PGSSLMODE": "verify-full"
-        }, clear=True):
-            cfg = get_postgres_config()
-            self.assertEqual(cfg["sslmode"], "verify-full")
+    def test_postgres_tls_mode_strict_enforcement_and_root_ca(self):
+        with tempfile.NamedTemporaryFile(suffix=".pem", delete=False) as tf:
+            tf.write(b"ROOT_CA_DATA")
+            ca_file = tf.name
 
-        # Downgrade attempts fail closed
-        for weak_mode in ("disable", "prefer", "require", "allow", "verify-ca"):
+        try:
+            # 1. Missing PGSSLROOTCERT fails closed
             with patch.dict(os.environ, {
                 "PGHOST": EXACT_PINNED_PGHOST,
                 "PGUSER": "reader",
                 "PGPASSWORD": "secret",
-                "PGSSLMODE": weak_mode
+                "PGSSLMODE": "verify-full"
             }, clear=True):
                 with self.assertRaises(ValueError) as ctx:
                     get_postgres_config()
-                self.assertIn("PostgreSQL TLS security violation: sslmode must be strictly 'verify-full'", str(ctx.exception))
+                self.assertIn("Missing required PostgreSQL root certificate: PGSSLROOTCERT", str(ctx.exception))
+
+            # 2. Non-existent PGSSLROOTCERT path fails closed
+            with patch.dict(os.environ, {
+                "PGHOST": EXACT_PINNED_PGHOST,
+                "PGUSER": "reader",
+                "PGPASSWORD": "secret",
+                "PGSSLMODE": "verify-full",
+                "PGSSLROOTCERT": "/path/does/not/exist/ca.pem"
+            }, clear=True):
+                with self.assertRaises(ValueError) as ctx:
+                    get_postgres_config()
+                self.assertIn("PostgreSQL SSL root certificate does not exist", str(ctx.exception))
+
+            # 3. Valid PGSSLROOTCERT with verify-full passes
+            with patch.dict(os.environ, {
+                "PGHOST": EXACT_PINNED_PGHOST,
+                "PGUSER": "reader",
+                "PGPASSWORD": "secret",
+                "PGSSLMODE": "verify-full",
+                "PGSSLROOTCERT": ca_file
+            }, clear=True):
+                cfg = get_postgres_config()
+                self.assertEqual(cfg["sslmode"], "verify-full")
+                self.assertEqual(cfg["sslrootcert"], os.path.abspath(ca_file))
+
+            # 4. Downgrade attempts fail closed
+            for weak_mode in ("disable", "prefer", "require", "allow", "verify-ca"):
+                with patch.dict(os.environ, {
+                    "PGHOST": EXACT_PINNED_PGHOST,
+                    "PGUSER": "reader",
+                    "PGPASSWORD": "secret",
+                    "PGSSLMODE": weak_mode,
+                    "PGSSLROOTCERT": ca_file
+                }, clear=True):
+                    with self.assertRaises(ValueError) as ctx:
+                        get_postgres_config()
+                    self.assertIn("PostgreSQL TLS security violation: sslmode must be strictly 'verify-full'", str(ctx.exception))
+        finally:
+            if os.path.exists(ca_file):
+                os.unlink(ca_file)
 
     def test_read_only_grants_assertion_and_redaction(self):
         assert_read_only_grants([
@@ -208,8 +242,23 @@ class TestSourceCensusHardeningFull(unittest.TestCase):
             verify_postgres_role_permissions(cur_mut, lambda m: None)
         self.assertIn("possesses forbidden 'INSERT' privilege", str(ctx.exception))
 
+        # RLS relrowsecurity=True fails closed
+        cur_rls = MagicMock()
+        cur_rls.fetchone.side_effect = [("census_reader", "off"), [True], [True], [False], [False], [False], [False], (True, False)]
+        with self.assertRaises(ValueError) as ctx:
+            verify_postgres_role_permissions(cur_rls, lambda m: None)
+        self.assertIn("PostgreSQL RLS security violation: Row Level Security is ENABLED", str(ctx.exception))
+
+        # RLS relforcerowsecurity=True fails closed
+        cur_rls_force = MagicMock()
+        cur_rls_force.fetchone.side_effect = [("census_reader", "off"), [True], [True], [False], [False], [False], [False], (False, True)]
+        with self.assertRaises(ValueError) as ctx:
+            verify_postgres_role_permissions(cur_rls_force, lambda m: None)
+        self.assertIn("PostgreSQL RLS security violation: Row Level Security is ENABLED", str(ctx.exception))
+
+        # Valid role with RLS disabled passes
         cur_valid = MagicMock()
-        cur_valid.fetchone.side_effect = [("census_reader", "off"), [True], [True], [False], [False], [False], [False]]
+        cur_valid.fetchone.side_effect = [("census_reader", "off"), [True], [True], [False], [False], [False], [False], (False, False)]
         verify_postgres_role_permissions(cur_valid, lambda m: None)
 
     @patch("psycopg2.connect")
@@ -228,6 +277,7 @@ class TestSourceCensusHardeningFull(unittest.TestCase):
             [False],
             [False],
             [False],
+            (False, False),
         ]
         # fetchall returns empty immediately (zero rows returned)
         mock_pg_cur.fetchall.return_value = []
@@ -295,6 +345,7 @@ class TestSourceCensusHardeningFull(unittest.TestCase):
             [False],
             [False],
             [False],
+            (False, False),
         ]
         mock_pg_cur.fetchall.side_effect = [
             [("parent-uuid-1", "mysql_auctions_101", "ext-1", "MySQL / Workbook Ingest")],
@@ -386,12 +437,17 @@ class TestSourceCensusHardeningFull(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as td:
             out_file = os.path.join(td, "source_census_report.json")
+            ca_file = os.path.join(td, "root.crt")
+            with open(ca_file, "w") as f:
+                f.write("DUMMY_ROOT_CERT")
+
             test_env = {
                 "PGHOST": EXACT_PINNED_PGHOST,
                 "PGUSER": "census_reader",
                 "PGPASSWORD": "testpassword",
                 "PGDATABASE": "postgres",
                 "PGSSLMODE": "verify-full",
+                "PGSSLROOTCERT": ca_file,
                 "MARIADB_HOST": "127.0.0.1",
                 "MARIADB_USER": "john",
                 "MARIADB_PASSWORD": "password",

@@ -153,28 +153,28 @@ def get_postgres_config():
     if sslmode != "verify-full":
         raise ValueError(f"PostgreSQL TLS security violation: sslmode must be strictly 'verify-full', got: '{sslmode}'. Downgrades are strictly forbidden.")
 
-    sslrootcert = os.environ.get("PGSSLROOTCERT")
-
     if not pghost or not pguser or not pgpass:
         raise ValueError("Missing required PostgreSQL credentials: PGHOST, PGUSER, PGPASSWORD")
 
     assert_pinned_project(pghost)
+
+    sslrootcert = os.environ.get("PGSSLROOTCERT")
+    if not sslrootcert:
+        raise ValueError("Missing required PostgreSQL root certificate: PGSSLROOTCERT must be set to a verified CA certificate file for sslmode=verify-full")
+    sslrootcert_path = os.path.abspath(sslrootcert)
+    if not os.path.exists(sslrootcert_path):
+        raise ValueError(f"PostgreSQL SSL root certificate does not exist: {sslrootcert_path}")
     
-    cfg = {
+    return {
         "host": pghost,
         "port": pgport,
         "user": pguser,
         "password": pgpass,
         "dbname": pgdb,
         "sslmode": "verify-full",
+        "sslrootcert": sslrootcert_path,
         "connect_timeout": 15
     }
-    if sslrootcert:
-        if not os.path.exists(sslrootcert):
-            raise ValueError(f"PostgreSQL SSL root certificate does not exist: {sslrootcert}")
-        cfg["sslrootcert"] = sslrootcert
-
-    return cfg
 
 def get_mariadb_config():
     host = os.environ.get("MARIADB_HOST") or os.environ.get("MYSQL_HOST")
@@ -281,7 +281,27 @@ def verify_postgres_role_permissions(cur, log_fn):
         if cur.fetchone()[0]:
             raise ValueError(f"PostgreSQL role violation: role '{current_role}' possesses forbidden '{forbidden}' privilege on canonical parent staging table")
 
-    log_fn(f"Verified PostgreSQL role '{current_role}' possesses SELECT/USAGE privileges without mutation permissions.")
+    # Inspect table RLS status in pg_class: relrowsecurity / relforcerowsecurity must be False
+    cur.execute("""
+        SELECT c.relrowsecurity, c.relforcerowsecurity
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'wf_canonical_staging'
+          AND c.relname = 'canonical_listing_parents';
+    """)
+    rls_row = cur.fetchone()
+    if not rls_row:
+        raise RuntimeError("PostgreSQL schema preflight failed: table 'wf_canonical_staging.canonical_listing_parents' not found in pg_class")
+
+    relrowsecurity, relforcerowsecurity = rls_row
+    if relrowsecurity or relforcerowsecurity:
+        raise ValueError(
+            f"PostgreSQL RLS security violation: Row Level Security is ENABLED on 'wf_canonical_staging.canonical_listing_parents' "
+            f"(relrowsecurity={relrowsecurity}, relforcerowsecurity={relforcerowsecurity}). "
+            "Non-bypass census role cannot guarantee complete, unfiltered parent reconciliation. RLS must be disabled on the staging table."
+        )
+
+    log_fn(f"Verified PostgreSQL role '{current_role}' possesses SELECT/USAGE privileges without mutation permissions, and RLS is disabled.")
 
 def fetch_scoped_canonical_parents(pg_config, log_fn):
     log_fn(f"Connecting to PostgreSQL ({pg_config['host']}:{pg_config['port']}/{pg_config['dbname']})...")
