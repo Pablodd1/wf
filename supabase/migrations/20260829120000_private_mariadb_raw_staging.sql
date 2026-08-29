@@ -88,14 +88,23 @@ CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_errors (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 5. Security & Isolation: Revoke public/anon/authenticated access
+-- 5. Object-Specific Privilege Hardening
 REVOKE ALL ON SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON ALL TABLES IN SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated;
-
 GRANT USAGE ON SCHEMA wf_canonical_staging TO service_role;
-GRANT ALL ON ALL TABLES IN SCHEMA wf_canonical_staging TO service_role;
 
--- 6. Ingestion Stored Procedure
+REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_source_rows FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE wf_canonical_staging.mariadb_raw_source_rows TO service_role;
+
+REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_checkpoints FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT, UPDATE ON TABLE wf_canonical_staging.mariadb_raw_import_checkpoints TO service_role;
+
+REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_batches FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT ON TABLE wf_canonical_staging.mariadb_raw_import_batches TO service_role;
+
+REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_errors FROM PUBLIC, anon, authenticated;
+GRANT SELECT, INSERT ON TABLE wf_canonical_staging.mariadb_raw_import_errors TO service_role;
+
+-- 6. Ingestion Stored Procedure with Database-Side Hash Verification
 CREATE OR REPLACE FUNCTION public.ingest_mariadb_private_raw_batch(
   p_run_key TEXT,
   p_batch_token TEXT,
@@ -110,7 +119,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = wf_canonical_staging, public, pg_catalog
-AS $$
+AS 
 DECLARE
   v_checkpoint wf_canonical_staging.mariadb_raw_import_checkpoints%ROWTYPE;
   v_batch wf_canonical_staging.mariadb_raw_import_batches%ROWTYPE;
@@ -130,6 +139,7 @@ DECLARE
   v_raw_payload_text TEXT;
   v_raw_payload JSONB;
   v_source_hash TEXT;
+  v_computed_hash TEXT;
   v_hash_algo TEXT;
   v_canon_version TEXT;
   v_input_rows INTEGER := 0;
@@ -149,7 +159,7 @@ BEGIN
     RAISE EXCEPTION 'Unsupported contract: %', p_contract;
   END IF;
 
-  -- 1. Check if batch was already successfully committed (Idempotency at batch level)
+  -- Check if batch was already applied
   SELECT * INTO v_batch
   FROM wf_canonical_staging.mariadb_raw_import_batches
   WHERE batch_token = p_batch_token;
@@ -166,7 +176,7 @@ BEGIN
     );
   END IF;
 
-  -- 2. Lock checkpoint row
+  -- Lock checkpoint
   SELECT * INTO v_checkpoint
   FROM wf_canonical_staging.mariadb_raw_import_checkpoints
   WHERE run_key = p_run_key
@@ -192,7 +202,7 @@ BEGIN
     END IF;
   END IF;
 
-  -- 3. Process records
+  -- Process records
   FOR v_record IN SELECT * FROM jsonb_array_elements(p_records) LOOP
     v_input_rows := v_input_rows + 1;
 
@@ -224,6 +234,12 @@ BEGIN
         RAISE EXCEPTION 'Missing mandatory identity fields: source_id, source_hash, or raw_payload_text';
       END IF;
 
+      -- Database-Side SHA-256 Verification
+      v_computed_hash := encode(digest(v_raw_payload_text, 'sha256'), 'hex');
+      IF v_computed_hash <> v_source_hash THEN
+        RAISE EXCEPTION 'Database-side hash verification failed: computed %, expected %', v_computed_hash, v_source_hash;
+      END IF;
+
       -- Check for existing identical staged row
       SELECT id INTO v_existing_id
       FROM wf_canonical_staging.mariadb_raw_source_rows
@@ -251,7 +267,6 @@ BEGIN
       END IF;
 
     EXCEPTION WHEN OTHERS THEN
-      -- Record into isolated error ledger
       v_capture_errors := v_capture_errors + 1;
       INSERT INTO wf_canonical_staging.mariadb_raw_import_errors (
         run_key, batch_token, source_id, source_created_on, source_hash,
@@ -264,7 +279,7 @@ BEGIN
     END;
   END LOOP;
 
-  -- 4. Update Checkpoint
+  -- Update Checkpoint
   UPDATE wf_canonical_staging.mariadb_raw_import_checkpoints
   SET last_created_on = p_next_last_created_on,
       last_source_id = p_next_last_source_id,
@@ -275,7 +290,7 @@ BEGIN
       updated_at = now()
   WHERE run_key = p_run_key;
 
-  -- 5. Record Batch Execution
+  -- Record Batch Execution
   v_result := jsonb_build_object(
     'status', 'APPLIED',
     'batch_token', p_batch_token,
@@ -296,9 +311,139 @@ BEGIN
 
   RETURN v_result;
 END;
-$$;
+;
 
 REVOKE ALL ON FUNCTION public.ingest_mariadb_private_raw_batch FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ingest_mariadb_private_raw_batch TO service_role;
+
+-- 7. Verification Readback Stored Procedure (Readback without exposing schema to PostgREST)
+CREATE OR REPLACE FUNCTION public.verify_mariadb_private_raw_readback(
+  p_source_ids TEXT[]
+)
+RETURNS TABLE (
+  source_id TEXT,
+  source_hash TEXT,
+  raw_payload_text TEXT,
+  hash_algorithm TEXT,
+  canonicalization_version TEXT,
+  source_created_on TEXT,
+  source_updated_on TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS 
+BEGIN
+  RETURN QUERY
+  SELECT 
+    r.source_id,
+    r.source_hash,
+    r.raw_payload_text,
+    r.hash_algorithm,
+    r.canonicalization_version,
+    r.source_created_on,
+    r.source_updated_on
+  FROM wf_canonical_staging.mariadb_raw_source_rows r
+  WHERE r.source_id = ANY(p_source_ids);
+END;
+;
+
+REVOKE ALL ON FUNCTION public.verify_mariadb_private_raw_readback FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.verify_mariadb_private_raw_readback TO service_role;
+
+-- 8. Error Ledger Query Stored Procedure
+CREATE OR REPLACE FUNCTION public.get_mariadb_private_raw_errors(
+  p_run_key TEXT
+)
+RETURNS TABLE (
+  id UUID,
+  run_key TEXT,
+  batch_token TEXT,
+  source_id TEXT,
+  source_created_on TEXT,
+  source_hash TEXT,
+  raw_payload_text TEXT,
+  raw_payload JSONB,
+  error_reason TEXT,
+  error_detail JSONB,
+  created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS 
+BEGIN
+  RETURN QUERY
+  SELECT 
+    e.id,
+    e.run_key,
+    e.batch_token,
+    e.source_id,
+    e.source_created_on,
+    e.source_hash,
+    e.raw_payload_text,
+    e.raw_payload,
+    e.error_reason,
+    e.error_detail,
+    e.created_at
+  FROM wf_canonical_staging.mariadb_raw_import_errors e
+  WHERE e.run_key = p_run_key;
+END;
+;
+
+REVOKE ALL ON FUNCTION public.get_mariadb_private_raw_errors FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_mariadb_private_raw_errors TO service_role;
+
+-- 9. Checkpoint Finalization Stored Procedure
+CREATE OR REPLACE FUNCTION public.finalize_mariadb_private_raw_checkpoint(
+  p_run_key TEXT,
+  p_expected_staged_rows BIGINT,
+  p_expected_error_rows BIGINT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS 
+DECLARE
+  v_checkpoint wf_canonical_staging.mariadb_raw_import_checkpoints%ROWTYPE;
+BEGIN
+  SELECT * INTO v_checkpoint
+  FROM wf_canonical_staging.mariadb_raw_import_checkpoints
+  WHERE run_key = p_run_key
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Checkpoint not found for run_key %', p_run_key;
+  END IF;
+
+  IF (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows) <> p_expected_staged_rows THEN
+    RAISE EXCEPTION 'Staged rows mismatch: checkpoint has %, expected %',
+      (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows), p_expected_staged_rows;
+  END IF;
+
+  IF v_checkpoint.capture_error_rows <> p_expected_error_rows THEN
+    RAISE EXCEPTION 'Error rows mismatch: checkpoint has %, expected %',
+      v_checkpoint.capture_error_rows, p_expected_error_rows;
+  END IF;
+
+  UPDATE wf_canonical_staging.mariadb_raw_import_checkpoints
+  SET status = 'RAW_STAGED',
+      completed_at = now(),
+      updated_at = now()
+  WHERE run_key = p_run_key;
+
+  RETURN jsonb_build_object(
+    'status', 'FINALIZED',
+    'run_key', p_run_key,
+    'total_staged_rows', (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows),
+    'capture_error_rows', v_checkpoint.capture_error_rows,
+    'completed_at', now()
+  );
+END;
+;
+
+REVOKE ALL ON FUNCTION public.finalize_mariadb_private_raw_checkpoint FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.finalize_mariadb_private_raw_checkpoint TO service_role;
 
 COMMIT;
