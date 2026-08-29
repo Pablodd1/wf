@@ -96,11 +96,12 @@ async function loadFirst1kRecords(gzPath, limit = 1000) {
   return records;
 }
 
-async function checkPostgRestExposureFailClosed(supabaseUrl, serviceKey) {
+async function checkPostgRestExposureFailClosed(supabaseUrl, serviceKey, customFetch) {
+  const fetchFn = customFetch || fetch;
   const cleanUrl = supabaseUrl.replace(/\/$/, '');
-  
+
   // 1. Standard OpenAPI schema probe
-  const res = await fetch(cleanUrl + '/rest/v1/', {
+  const res = await fetchFn(cleanUrl + '/rest/v1/', {
     headers: {
       'apikey': serviceKey,
       'Authorization': 'Bearer ' + serviceKey
@@ -116,17 +117,28 @@ async function checkPostgRestExposureFailClosed(supabaseUrl, serviceKey) {
     throw new Error('Security Violation: Private staging table is exposed in PostgREST paths: ' + stagingExposed.join(', '));
   }
 
-  // 2. Explicit Accept-Profile probe for wf_canonical_staging (Must be rejected)
-  const profileProbe = await fetch(cleanUrl + '/rest/v1/mariadb_raw_source_rows', {
+  // 2. Explicit Accept-Profile probe for wf_canonical_staging (Must be rejected with HTTP 406 or PGRST106)
+  const profileProbe = await fetchFn(cleanUrl + '/rest/v1/mariadb_raw_source_rows', {
     headers: {
       'apikey': serviceKey,
       'Authorization': 'Bearer ' + serviceKey,
       'Accept-Profile': 'wf_canonical_staging'
     }
   });
-  // Accept-Profile to unexposed schema must return 404, 406, or PGRST106 error
-  if (profileProbe.ok) {
-    throw new Error('Security Violation: PostgREST accepted Accept-Profile: wf_canonical_staging with HTTP ' + profileProbe.status);
+
+  let errorBody = {};
+  try {
+    errorBody = await profileProbe.json();
+  } catch (e) {
+    // Body might not be JSON
+  }
+
+  const isStrictRejection = profileProbe.status === 406 ||
+                            profileProbe.status === 404 ||
+                            errorBody.code === 'PGRST106';
+
+  if (profileProbe.ok || !isStrictRejection) {
+    throw new Error('Security Violation: PostgREST Accept-Profile: wf_canonical_staging was not strictly rejected. Status=' + profileProbe.status + ', Body=' + JSON.stringify(errorBody));
   }
 
   return {
@@ -135,8 +147,59 @@ async function checkPostgRestExposureFailClosed(supabaseUrl, serviceKey) {
     total_paths: paths.length,
     accept_profile_rejected: true,
     accept_profile_status: profileProbe.status,
+    accept_profile_rejection_code: errorBody.code || ('HTTP_' + profileProbe.status),
     postgrest_schema: spec.info?.title || 'standard public schema'
   };
+}
+
+function validateSecurityPrivilegeMatrix(privReport) {
+  if (!privReport || typeof privReport !== 'object') {
+    throw new Error('Security Audit Failure: Missing privilege report object');
+  }
+
+  const sp = privReport.schema_privileges || {};
+  const tp = privReport.table_privileges || {};
+  const fp = privReport.function_privileges || {};
+
+  // 1. Assert anon has zero access
+  if (sp.anon_usage) throw new Error('Security Audit Failure: anon has USAGE on wf_canonical_staging');
+  if (tp.mariadb_raw_source_rows?.anon_select || tp.mariadb_raw_source_rows?.anon_insert || tp.mariadb_raw_source_rows?.anon_update || tp.mariadb_raw_source_rows?.anon_delete) {
+    throw new Error('Security Audit Failure: anon has table privileges on mariadb_raw_source_rows');
+  }
+  if (tp.mariadb_raw_import_checkpoints?.anon_select || tp.mariadb_raw_import_batches?.anon_select || tp.mariadb_raw_import_errors?.anon_select) {
+    throw new Error('Security Audit Failure: anon has table privileges on staging audit ledgers');
+  }
+  if (fp.ingest_batch?.anon_execute || fp.verify_readback?.anon_execute || fp.get_errors?.anon_execute || fp.finalize_checkpoint?.anon_execute) {
+    throw new Error('Security Audit Failure: anon has EXECUTE on staging RPC functions');
+  }
+
+  // 2. Assert authenticated has zero access
+  if (sp.authenticated_usage) throw new Error('Security Audit Failure: authenticated has USAGE on wf_canonical_staging');
+  if (tp.mariadb_raw_source_rows?.authenticated_select || tp.mariadb_raw_source_rows?.authenticated_insert || tp.mariadb_raw_source_rows?.authenticated_update || tp.mariadb_raw_source_rows?.authenticated_delete) {
+    throw new Error('Security Audit Failure: authenticated has table privileges on mariadb_raw_source_rows');
+  }
+  if (tp.mariadb_raw_import_checkpoints?.authenticated_select || tp.mariadb_raw_import_batches?.authenticated_select || tp.mariadb_raw_import_errors?.authenticated_select) {
+    throw new Error('Security Audit Failure: authenticated has table privileges on staging audit ledgers');
+  }
+  if (fp.ingest_batch?.authenticated_execute || fp.verify_readback?.authenticated_execute || fp.get_errors?.authenticated_execute || fp.finalize_checkpoint?.authenticated_execute) {
+    throw new Error('Security Audit Failure: authenticated has EXECUTE on staging RPC functions');
+  }
+
+  // 3. Assert service_role has exact required access (and NO mutation on immutable evidence)
+  if (!sp.service_role_usage) throw new Error('Security Audit Failure: service_role missing USAGE on wf_canonical_staging');
+  if (!tp.mariadb_raw_source_rows?.service_role_select || !tp.mariadb_raw_source_rows?.service_role_insert) {
+    throw new Error('Security Audit Failure: service_role missing SELECT or INSERT on mariadb_raw_source_rows');
+  }
+  if (tp.mariadb_raw_source_rows?.service_role_update || tp.mariadb_raw_source_rows?.service_role_delete || tp.mariadb_raw_source_rows?.service_role_truncate) {
+    throw new Error('Security Audit Failure: service_role must NOT have UPDATE, DELETE, or TRUNCATE on immutable mariadb_raw_source_rows');
+  }
+
+  // 4. Assert service_role has required execute privileges on all 4 RPCs
+  if (!fp.ingest_batch?.service_role_execute || !fp.verify_readback?.service_role_execute || !fp.get_errors?.service_role_execute || !fp.finalize_checkpoint?.service_role_execute) {
+    throw new Error('Security Audit Failure: service_role missing EXECUTE on one or more required staging functions');
+  }
+
+  return true;
 }
 
 async function run1kPrivateCanary(options = {}) {
@@ -150,13 +213,15 @@ async function run1kPrivateCanary(options = {}) {
   const supabaseUrl = options.supabaseUrl || process.env.SUPABASE_URL;
   const supabaseKey = options.supabaseKey || process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required');
+  let supabase = options.supabase;
+  if (!supabase) {
+    if (!supabaseUrl || !supabaseKey) {
+      throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY environment variables are required');
+    }
+    supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false }
+    });
   }
-
-  const supabase = createClient(supabaseUrl, supabaseKey, {
-    auth: { persistSession: false }
-  });
 
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -165,7 +230,7 @@ async function run1kPrivateCanary(options = {}) {
   console.log('[Canary] Loaded exactly ' + records.length + ' records.');
 
   console.log('[Canary] 2. Verifying PostgREST schema privacy & Accept-Profile rejection (fail-closed)...');
-  const securityCheck = await checkPostgRestExposureFailClosed(supabaseUrl, supabaseKey);
+  const securityCheck = await checkPostgRestExposureFailClosed(supabaseUrl || 'https://mock.supabase.co', supabaseKey || 'mock-key', options.fetch);
   console.log('[Canary] PostgREST schema verified private: ' + securityCheck.postgrest_schema + ' (Accept-Profile rejected: HTTP ' + securityCheck.accept_profile_status + ')');
 
   console.log('[Canary] 2b. Performing Live PostgreSQL Security & Privilege Audit...');
@@ -173,14 +238,8 @@ async function run1kPrivateCanary(options = {}) {
   if (privErr) {
     throw new Error('PostgreSQL security audit query failed: ' + privErr.message);
   }
-  if (!dbPrivileges || !dbPrivileges.schema_privileges) {
-    throw new Error('PostgreSQL security audit returned malformed privilege report');
-  }
-
-  // Assert schema usage is revoked for anon and authenticated
-  if (dbPrivileges.schema_privileges.anon_usage || dbPrivileges.schema_privileges.authenticated_usage) {
-    throw new Error('Security Violation: wf_canonical_staging schema usage granted to anon or authenticated');
-  }
+  validateSecurityPrivilegeMatrix(dbPrivileges);
+  console.log('[Canary] PostgreSQL security privilege matrix verified: 100% conformant with least-privilege immutable spec.');
 
   console.log('[Canary] 3. Ingesting ' + records.length + ' records in batches of ' + batchSize + '...');
   let totalInput = 0;
@@ -501,6 +560,7 @@ module.exports = {
   loadFirst1kRecords,
   canonicalizeRawPayload,
   checkPostgRestExposureFailClosed,
+  validateSecurityPrivilegeMatrix,
   stableJson,
   sha256
 };

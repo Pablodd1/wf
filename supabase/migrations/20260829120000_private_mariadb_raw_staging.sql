@@ -88,11 +88,12 @@ CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_errors (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 5. Object-Specific Privilege Hardening (Immutable Evidence is never updateable)
+-- 5. Object-Specific Privilege Hardening (Explicitly Revoke Mutation on Immutable Staging Rows)
 REVOKE ALL ON SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated;
 GRANT USAGE ON SCHEMA wf_canonical_staging TO service_role;
 
 REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_source_rows FROM PUBLIC, anon, authenticated;
+REVOKE UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER ON TABLE wf_canonical_staging.mariadb_raw_source_rows FROM service_role;
 GRANT SELECT, INSERT ON TABLE wf_canonical_staging.mariadb_raw_source_rows TO service_role;
 
 REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_checkpoints FROM PUBLIC, anon, authenticated;
@@ -104,7 +105,7 @@ GRANT SELECT, INSERT ON TABLE wf_canonical_staging.mariadb_raw_import_batches TO
 REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_errors FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT ON TABLE wf_canonical_staging.mariadb_raw_import_errors TO service_role;
 
--- 6. Ingestion Stored Procedure with Database-Side Hash Verification
+-- 6. Ingestion Stored Procedure with Strict Semantic & Cryptographic Verification
 CREATE OR REPLACE FUNCTION public.ingest_mariadb_private_raw_batch(
   p_run_key TEXT,
   p_batch_token TEXT,
@@ -230,11 +231,25 @@ BEGIN
       END IF;
       v_last_source_id := v_source_id;
 
-      IF v_source_id IS NULL OR v_source_hash IS NULL OR v_raw_payload_text IS NULL THEN
-        RAISE EXCEPTION 'Missing mandatory identity fields: source_id, source_hash, or raw_payload_text';
+      IF v_source_id IS NULL OR v_source_hash IS NULL OR v_raw_payload_text IS NULL OR v_raw_payload IS NULL THEN
+        RAISE EXCEPTION 'Missing mandatory identity fields: source_id, source_hash, raw_payload_text, or raw_payload';
       END IF;
 
-      -- Database-Side SHA-256 Verification
+      -- Enforce Supported Algorithm & Canonicalization Version
+      IF v_hash_algo <> 'sha256' THEN
+        RAISE EXCEPTION 'Unsupported hash algorithm: % (expected sha256)', v_hash_algo;
+      END IF;
+
+      IF v_canon_version <> 'v1-json-keys-sorted-compact' THEN
+        RAISE EXCEPTION 'Unsupported canonicalization version: % (expected v1-json-keys-sorted-compact)', v_canon_version;
+      END IF;
+
+      -- Enforce Semantic JSON Equivalence
+      IF v_raw_payload_text::jsonb <> v_raw_payload THEN
+        RAISE EXCEPTION 'Semantic JSON mismatch: raw_payload_text::jsonb does not equal raw_payload JSONB';
+      END IF;
+
+      -- Database-Side Cryptographic SHA-256 Verification
       v_computed_hash := encode(digest(v_raw_payload_text, 'sha256'), 'hex');
       IF v_computed_hash <> v_source_hash THEN
         RAISE EXCEPTION 'Database-side hash verification failed: computed %, expected %', v_computed_hash, v_source_hash;
@@ -260,7 +275,7 @@ BEGIN
         ) VALUES (
           v_source_system, v_source_database, v_source_table, v_source_id, v_source_unique_key,
           v_source_record_id, v_source_created_on, v_source_updated_on, v_captured_at,
-          v_raw_message, v_raw_message_source, v_raw_sha256, v_raw_payload_text, COALESCE(v_raw_payload, '{}'::jsonb),
+          v_raw_message, v_raw_message_source, v_raw_sha256, v_raw_payload_text, v_raw_payload,
           v_source_hash, v_hash_algo, v_canon_version
         );
         v_newly_staged := v_newly_staged + 1;
@@ -394,7 +409,7 @@ END;
 REVOKE ALL ON FUNCTION public.get_mariadb_private_raw_errors FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_mariadb_private_raw_errors TO service_role;
 
--- 9. Checkpoint Finalization Stored Procedure
+-- 9. Checkpoint Finalization Stored Procedure with Full Reconciliation Assertion
 CREATE OR REPLACE FUNCTION public.finalize_mariadb_private_raw_checkpoint(
   p_run_key TEXT,
   p_expected_staged_rows BIGINT,
@@ -422,14 +437,25 @@ BEGIN
     RAISE EXCEPTION 'Checkpoint not found for run_key %', p_run_key;
   END IF;
 
+  -- 1. Invariant: Staged rows match expectation
   IF (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows) <> p_expected_staged_rows THEN
     RAISE EXCEPTION 'Staged rows mismatch: checkpoint has %, expected %',
       (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows), p_expected_staged_rows;
   END IF;
 
+  -- 2. Invariant: Error rows match expectation
   IF v_checkpoint.capture_error_rows <> p_expected_error_rows THEN
     RAISE EXCEPTION 'Error rows mismatch: checkpoint has %, expected %',
       v_checkpoint.capture_error_rows, p_expected_error_rows;
+  END IF;
+
+  -- 3. Independent Core Reconciliation Formula Assertion:
+  -- input_rows = newly_staged_rows + already_staged_identical_rows + capture_error_rows
+  IF v_checkpoint.input_rows <> (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows + v_checkpoint.capture_error_rows) THEN
+    RAISE EXCEPTION 'Reconciliation invariant failed: input_rows (%) <> staged (%) + errors (%)',
+      v_checkpoint.input_rows,
+      (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows),
+      v_checkpoint.capture_error_rows;
   END IF;
 
   UPDATE wf_canonical_staging.mariadb_raw_import_checkpoints
@@ -442,6 +468,7 @@ BEGIN
     'status', 'FINALIZED',
     'run_key', p_run_key,
     'checkpoint_status', p_final_status,
+    'input_rows', v_checkpoint.input_rows,
     'total_staged_rows', (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows),
     'capture_error_rows', v_checkpoint.capture_error_rows,
     'completed_at', now()
@@ -472,25 +499,34 @@ BEGIN
       'mariadb_raw_source_rows', jsonb_build_object(
         'anon_select', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'SELECT'),
         'anon_insert', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'INSERT'),
+        'anon_update', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'UPDATE'),
+        'anon_delete', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'DELETE'),
         'authenticated_select', has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'SELECT'),
+        'authenticated_insert', has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'INSERT'),
+        'authenticated_update', has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'UPDATE'),
+        'authenticated_delete', has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'DELETE'),
         'service_role_select', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'SELECT'),
         'service_role_insert', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'INSERT'),
         'service_role_update', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'UPDATE'),
-        'service_role_delete', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'DELETE')
+        'service_role_delete', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'DELETE'),
+        'service_role_truncate', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'TRUNCATE')
       ),
       'mariadb_raw_import_checkpoints', jsonb_build_object(
         'anon_select', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'SELECT'),
+        'authenticated_select', has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'SELECT'),
         'service_role_select', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'SELECT'),
         'service_role_insert', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'INSERT'),
         'service_role_update', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'UPDATE')
       ),
       'mariadb_raw_import_batches', jsonb_build_object(
         'anon_select', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_batches', 'SELECT'),
+        'authenticated_select', has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_batches', 'SELECT'),
         'service_role_select', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'SELECT'),
         'service_role_insert', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'INSERT')
       ),
       'mariadb_raw_import_errors', jsonb_build_object(
         'anon_select', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_errors', 'SELECT'),
+        'authenticated_select', has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_errors', 'SELECT'),
         'service_role_select', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'SELECT'),
         'service_role_insert', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'INSERT')
       )
@@ -503,14 +539,17 @@ BEGIN
       ),
       'verify_readback', jsonb_build_object(
         'anon_execute', has_function_privilege('anon', 'public.verify_mariadb_private_raw_readback(text[])', 'EXECUTE'),
+        'authenticated_execute', has_function_privilege('authenticated', 'public.verify_mariadb_private_raw_readback(text[])', 'EXECUTE'),
         'service_role_execute', has_function_privilege('service_role', 'public.verify_mariadb_private_raw_readback(text[])', 'EXECUTE')
       ),
       'get_errors', jsonb_build_object(
         'anon_execute', has_function_privilege('anon', 'public.get_mariadb_private_raw_errors(text)', 'EXECUTE'),
+        'authenticated_execute', has_function_privilege('authenticated', 'public.get_mariadb_private_raw_errors(text)', 'EXECUTE'),
         'service_role_execute', has_function_privilege('service_role', 'public.get_mariadb_private_raw_errors(text)', 'EXECUTE')
       ),
       'finalize_checkpoint', jsonb_build_object(
         'anon_execute', has_function_privilege('anon', 'public.finalize_mariadb_private_raw_checkpoint(text,bigint,bigint,text)', 'EXECUTE'),
+        'authenticated_execute', has_function_privilege('authenticated', 'public.finalize_mariadb_private_raw_checkpoint(text,bigint,bigint,text)', 'EXECUTE'),
         'service_role_execute', has_function_privilege('service_role', 'public.finalize_mariadb_private_raw_checkpoint(text,bigint,bigint,text)', 'EXECUTE')
       )
     )
