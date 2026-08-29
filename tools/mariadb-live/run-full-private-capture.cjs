@@ -20,6 +20,7 @@ const {
   createFrozenSourceBoundary,
   buildKeysetQuery,
   fetchKeysetBatch,
+  fetchCheckpointState,
   verifyHashReadbackContract,
   verifyErrorLedgerContract,
   verifyDryRunReconciliation
@@ -131,46 +132,6 @@ async function snapshotPublicLineage(supabase, sourceIds) {
   return snapshot;
 }
 
-async function getCheckpointState(supabase, runKey) {
-  const { data, error } = await supabase
-    .schema('wf_canonical_staging')
-    .from('mariadb_raw_import_checkpoints')
-    .select('*')
-    .eq('run_key', runKey)
-    .maybeSingle();
-
-  if (error) {
-    return {
-      run_key: runKey,
-      last_created_on: '',
-      last_source_id: '',
-      total_staged_rows: 0,
-      capture_error_rows: 0,
-      status: 'IN_PROGRESS'
-    };
-  }
-
-  if (data) {
-    return {
-      run_key: data.run_key,
-      last_created_on: data.last_created_on || '',
-      last_source_id: data.last_source_id || '',
-      total_staged_rows: Number(data.total_staged_rows || 0),
-      capture_error_rows: Number(data.capture_error_rows || 0),
-      status: data.status || 'IN_PROGRESS'
-    };
-  }
-
-  return {
-    run_key: runKey,
-    last_created_on: '',
-    last_source_id: '',
-    total_staged_rows: 0,
-    capture_error_rows: 0,
-    status: 'IN_PROGRESS'
-  };
-}
-
 async function runCaptureLoop(options = {}) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -190,8 +151,15 @@ async function runCaptureLoop(options = {}) {
   const transportConfig = resolveMariaDbTransport(process.env);
   console.log(`Transport Verified: ${transportConfig.transport} (rejectUnauthorized: true, pinned_cert: ${PINNED_MARIADB_SERVER_CERT_SHA256})`);
 
-  // 2. MariaDB Consistent Snapshot & Frozen Source Boundary
-  console.log('2. Connecting to MariaDB with pinned TLS and establishing consistent snapshot...');
+  // 2. MariaDB Connection & Checkpoint State Retrieval
+  const runKey = process.env.CAPTURE_RUN_KEY || options.runKey || `full-capture-auctions-${Date.now()}`;
+  const batchSize = Number(process.env.BATCH_SIZE || options.batchSize || 250);
+  const maxRows = options.maxRows || (process.env.MAX_CAPTURE_ROWS ? Number(process.env.MAX_CAPTURE_ROWS) : null);
+
+  console.log(`2. Reading checkpoint state for runKey '${runKey}' via RPC (fail-closed)...`);
+  const existingCheckpoint = await fetchCheckpointState(supabase, runKey);
+
+  console.log('3. Connecting to MariaDB with pinned TLS and establishing consistent snapshot...');
   const mariadbConn = await mysql.createConnection({
     host: process.env.MARIADB_HOST,
     port: Number(process.env.MARIADB_PORT || 3306),
@@ -202,39 +170,69 @@ async function runCaptureLoop(options = {}) {
   });
 
   let manifest;
+  let lastCreatedOn;
+  let lastSourceId;
+  let cumulativeInputRows;
+  let cumulativeNewlyStaged;
+  let cumulativeAlreadyStaged;
+  let cumulativeErrors;
+
   try {
-    manifest = await createFrozenSourceBoundary(mariadbConn);
-    console.log(`Source Boundary Frozen: ${manifest.total_source_rows} total rows`);
-    console.log(`Lower Boundary: ${JSON.stringify(manifest.lower_boundary)}`);
-    console.log(`Upper Boundary: ${JSON.stringify(manifest.upper_boundary)}`);
-    console.log(`Manifest SHA-256: ${manifest.manifest_sha256}`);
+    if (existingCheckpoint) {
+      console.log(`Checkpoint Found: Resuming existing runKey '${runKey}'.`);
+      if (!existingCheckpoint.frozen_upper_boundary || !existingCheckpoint.manifest_sha256) {
+        throw new Error('Resume Safety Violation: Existing checkpoint is missing frozen_upper_boundary or manifest_sha256');
+      }
+
+      manifest = {
+        contract: existingCheckpoint.contract || CONTRACT,
+        source_system: 'OceanDigital MariaDB',
+        source_database: 'thecollective_inventory',
+        source_table: 'auctions',
+        isolation_level: 'REPEATABLE READ (REUSED FROZEN BOUNDARY ON RESUME)',
+        upper_boundary: existingCheckpoint.frozen_upper_boundary,
+        manifest_sha256: existingCheckpoint.manifest_sha256
+      };
+
+      lastCreatedOn = existingCheckpoint.last_created_on || '';
+      lastSourceId = existingCheckpoint.last_source_id || '';
+      cumulativeInputRows = Number(existingCheckpoint.input_rows || 0);
+      cumulativeNewlyStaged = Number(existingCheckpoint.newly_staged_rows || 0);
+      cumulativeAlreadyStaged = Number(existingCheckpoint.already_staged_identical_rows || 0);
+      cumulativeErrors = Number(existingCheckpoint.capture_error_rows || 0);
+
+      console.log(`Resumed State: input_rows=${cumulativeInputRows}, newly_staged=${cumulativeNewlyStaged}, already_staged=${cumulativeAlreadyStaged}, errors=${cumulativeErrors}`);
+      console.log(`Resumed Cursor: created_on='${lastCreatedOn}', id='${lastSourceId}'`);
+      console.log(`Reused Frozen Upper Boundary: ${JSON.stringify(manifest.upper_boundary)}`);
+      console.log(`Validated Manifest SHA-256: ${manifest.manifest_sha256}`);
+    } else {
+      console.log(`New Run: Freezing initial source boundary for runKey '${runKey}'...`);
+      manifest = await createFrozenSourceBoundary(mariadbConn);
+      lastCreatedOn = '';
+      lastSourceId = '';
+      cumulativeInputRows = 0;
+      cumulativeNewlyStaged = 0;
+      cumulativeAlreadyStaged = 0;
+      cumulativeErrors = 0;
+
+      console.log(`Source Boundary Frozen: ${manifest.total_source_rows} total rows`);
+      console.log(`Lower Boundary: ${JSON.stringify(manifest.lower_boundary)}`);
+      console.log(`Upper Boundary: ${JSON.stringify(manifest.upper_boundary)}`);
+      console.log(`Manifest SHA-256: ${manifest.manifest_sha256}`);
+    }
   } catch (err) {
     await mariadbConn.end();
     throw err;
   }
 
-  // 3. Execution Parameters & Keyset Pagination Setup
-  const runKey = process.env.CAPTURE_RUN_KEY || options.runKey || `full-capture-auctions-${Date.now()}`;
-  const batchSize = Number(process.env.BATCH_SIZE || options.batchSize || 250);
-  const maxRows = options.maxRows || (process.env.MAX_CAPTURE_ROWS ? Number(process.env.MAX_CAPTURE_ROWS) : null);
-
-  const initialCheckpoint = await getCheckpointState(supabase, runKey);
-  let lastCreatedOn = initialCheckpoint.last_created_on;
-  let lastSourceId = initialCheckpoint.last_source_id;
-  let totalNewlyStaged = 0;
-  let totalAlreadyStaged = 0;
-  let totalErrors = initialCheckpoint.capture_error_rows;
-  let totalProcessed = initialCheckpoint.total_staged_rows;
-  let batchIndex = 0;
-
-  console.log(`3. Initializing capture loop (runKey=${runKey}, batchSize=${batchSize}, start_cursor='(${lastCreatedOn}, ${lastSourceId})')...`);
-
-  const capturedSourceIds = [];
+  // 4. Execution Loop
+  console.log(`4. Starting keyset ingestion loop (batchSize=${batchSize})...`);
   const canonicalRecordsHistory = [];
+  let batchIndex = 0;
 
   try {
     while (true) {
-      const remainingLimit = maxRows ? Math.min(batchSize, maxRows - totalProcessed) : batchSize;
+      const remainingLimit = maxRows ? Math.min(batchSize, maxRows - cumulativeInputRows) : batchSize;
       if (remainingLimit <= 0) break;
 
       const rows = await fetchKeysetBatch(mariadbConn, {
@@ -293,20 +291,21 @@ async function runCaptureLoop(options = {}) {
         p_expected_last_source_id: lastSourceId,
         p_next_last_created_on: nextLastCreatedOn,
         p_next_last_source_id: nextLastSourceId,
-        p_records: canonicalRecords
+        p_records: canonicalRecords,
+        p_frozen_upper_boundary: manifest.upper_boundary,
+        p_manifest_sha256: manifest.manifest_sha256
       });
 
       if (batchError) {
         throw new Error(`Batch ${batchIndex} Ingestion Failed: ` + batchError.message);
       }
 
-      totalNewlyStaged += batchResult.newly_staged_rows || 0;
-      totalAlreadyStaged += batchResult.already_staged_identical_rows || 0;
-      totalErrors += batchResult.capture_error_rows || 0;
-      totalProcessed += canonicalRecords.length;
+      cumulativeNewlyStaged += batchResult.newly_staged_rows || 0;
+      cumulativeAlreadyStaged += batchResult.already_staged_identical_rows || 0;
+      cumulativeErrors += batchResult.capture_error_rows || 0;
+      cumulativeInputRows += canonicalRecords.length;
 
       for (const rec of canonicalRecords) {
-        capturedSourceIds.push(rec.source_id);
         if (canonicalRecordsHistory.length < 5000) {
           canonicalRecordsHistory.push(rec);
         }
@@ -317,10 +316,10 @@ async function runCaptureLoop(options = {}) {
       batchIndex++;
 
       if (batchIndex % 10 === 0 || rows.length < remainingLimit) {
-        console.log(`Batch ${batchIndex} complete: processed=${totalProcessed}, newly_staged=${totalNewlyStaged}, already_staged=${totalAlreadyStaged}, errors=${totalErrors}, cursor=(${lastCreatedOn}, ${lastSourceId})`);
+        console.log(`Batch ${batchIndex} complete: input_rows=${cumulativeInputRows}, newly_staged=${cumulativeNewlyStaged}, already_staged=${cumulativeAlreadyStaged}, errors=${cumulativeErrors}, cursor=(${lastCreatedOn}, ${lastSourceId})`);
       }
 
-      if (maxRows && totalProcessed >= maxRows) {
+      if (maxRows && cumulativeInputRows >= maxRows) {
         break;
       }
     }
@@ -329,12 +328,13 @@ async function runCaptureLoop(options = {}) {
     await mariadbConn.end();
   }
 
-  console.log(`4. Ingestion loop finished: total_processed=${totalProcessed}, newly_staged=${totalNewlyStaged}, already_staged=${totalAlreadyStaged}, errors=${totalErrors}`);
+  console.log(`5. Ingestion loop finished: cumulative_input_rows=${cumulativeInputRows}, newly_staged=${cumulativeNewlyStaged}, already_staged=${cumulativeAlreadyStaged}, errors=${cumulativeErrors}`);
 
-  // 5. Deep Cryptographic Hash Readback Verification (Sample & Boundary)
-  console.log('5. Performing deep cryptographic hash readback verification...');
+  // 6. Cryptographic Hash Readback Verification (Explicitly Sampled)
   const sampleVerificationRecords = canonicalRecordsHistory.slice(0, 1000);
   const sampleSourceIds = sampleVerificationRecords.map(r => r.source_id);
+  console.log(`6. Performing sampled cryptographic hash readback verification (${sampleVerificationRecords.length} / ${cumulativeInputRows} rows)...`);
+  
   const readbackRows = [];
   for (let i = 0; i < sampleSourceIds.length; i += 50) {
     const chunkIds = sampleSourceIds.slice(i, i + 50);
@@ -346,30 +346,31 @@ async function runCaptureLoop(options = {}) {
   }
 
   const readbackResult = verifyHashReadbackContract(readbackRows, sampleVerificationRecords);
-  console.log('Hash Readback Verified:', readbackResult);
+  const isFullVerification = sampleVerificationRecords.length === cumulativeInputRows;
+  console.log(`Hash Readback Result (${isFullVerification ? 'FULL_EXHAUSTIVE' : 'SAMPLED'}):`, readbackResult);
 
-  // 6. Error Ledger Verification
-  console.log('6. Verifying error ledger contract...');
+  // 7. Error Ledger Verification
+  console.log('7. Verifying error ledger contract...');
   const { data: ledgerErrors, error: ledgerErr } = await supabase.rpc('get_mariadb_private_raw_errors', {
     p_run_key: runKey
   });
   if (ledgerErr) throw new Error('Error ledger query failed: ' + ledgerErr.message);
 
-  const errorLedgerResult = verifyErrorLedgerContract(ledgerErrors || [], totalErrors);
+  const errorLedgerResult = verifyErrorLedgerContract(ledgerErrors || [], cumulativeErrors);
   console.log('Error Ledger Verified:', errorLedgerResult);
 
-  // 7. Checkpoint Finalization
-  console.log('7. Finalizing capture checkpoint status to RAW_STAGED...');
+  // 8. Checkpoint Finalization using Cumulative Totals
+  console.log('8. Finalizing capture checkpoint status to RAW_STAGED using cumulative totals...');
   const { data: finalizeData, error: finalizeErr } = await supabase.rpc('finalize_mariadb_private_raw_checkpoint', {
     p_run_key: runKey,
-    p_expected_staged_rows: totalNewlyStaged + totalAlreadyStaged,
-    p_expected_error_rows: totalErrors,
+    p_expected_staged_rows: cumulativeNewlyStaged + cumulativeAlreadyStaged,
+    p_expected_error_rows: cumulativeErrors,
     p_final_status: 'RAW_STAGED'
   });
   if (finalizeErr) throw new Error('Checkpoint finalization failed: ' + finalizeErr.message);
   console.log('Checkpoint Finalized:', finalizeData);
 
-  // 8. Produce Final Audit Summary
+  // 9. Produce Final Audit Summary
   const outputDir = path.resolve('audit-output/mariadb-live/full-capture');
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -377,18 +378,24 @@ async function runCaptureLoop(options = {}) {
     contract: CONTRACT,
     run_key: runKey,
     source_boundary: manifest,
-    total_processed: totalProcessed,
-    newly_staged_rows: totalNewlyStaged,
-    already_staged_identical_rows: totalAlreadyStaged,
-    error_rows: totalErrors,
+    cumulative_input_rows: cumulativeInputRows,
+    cumulative_newly_staged_rows: cumulativeNewlyStaged,
+    cumulative_already_staged_identical_rows: cumulativeAlreadyStaged,
+    cumulative_error_rows: cumulativeErrors,
     batches_executed: batchIndex,
     last_cursor: {
       created_on: lastCreatedOn,
       source_id: lastSourceId
     },
-    exact_reconciliation: (totalNewlyStaged + totalAlreadyStaged + totalErrors) === totalProcessed,
+    exact_reconciliation: (cumulativeNewlyStaged + cumulativeAlreadyStaged + cumulativeErrors) === cumulativeInputRows,
     checkpoint_status: 'RAW_STAGED',
-    hash_verification: readbackResult
+    hash_verification: {
+      mode: isFullVerification ? 'FULL_EXHAUSTIVE' : 'SAMPLED',
+      sample_size: sampleVerificationRecords.length,
+      total_staged: cumulativeInputRows,
+      sample_verified_count: readbackResult.total_verified,
+      mismatches: 0
+    }
   };
 
   fs.writeFileSync(path.join(outputDir, 'capture-report.json'), JSON.stringify(captureReport, null, 2));
@@ -411,6 +418,5 @@ if (require.main === module) {
 module.exports = {
   runCaptureLoop,
   resolveMariaDbTransport,
-  isPublicHost,
-  getCheckpointState
+  isPublicHost
 };

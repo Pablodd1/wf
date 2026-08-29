@@ -149,6 +149,19 @@ async function fetchKeysetBatch(mariadbConn, options) {
   return rows || [];
 }
 
+async function fetchCheckpointState(supabase, runKey) {
+  if (!runKey) throw new Error('fetchCheckpointState: runKey is required');
+  const { data, error } = await supabase.rpc('get_mariadb_private_raw_checkpoint', {
+    p_run_key: runKey
+  });
+
+  if (error) {
+    throw new Error(`Checkpoint Read Failure (fail-closed): ${error.message}`);
+  }
+
+  return data || null;
+}
+
 function verifyHashReadbackContract(stagedRows, expectedRecords) {
   const stagedBySourceId = new Map();
   for (const row of stagedRows) {
@@ -250,6 +263,7 @@ module.exports = {
   createFrozenSourceBoundary,
   buildKeysetQuery,
   fetchKeysetBatch,
+  fetchCheckpointState,
   verifyHashReadbackContract,
   verifyErrorLedgerContract,
   verifyDryRunReconciliation

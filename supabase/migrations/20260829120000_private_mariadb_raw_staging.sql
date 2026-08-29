@@ -53,6 +53,8 @@ CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_checkpoints (
   already_staged_identical_rows BIGINT NOT NULL DEFAULT 0,
   capture_error_rows BIGINT NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'COPYING_RAW',
+  frozen_upper_boundary JSONB,
+  manifest_sha256 TEXT,
   started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   completed_at TIMESTAMPTZ,
@@ -96,6 +98,52 @@ REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_source_rows FROM PUBLIC, an
 REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_checkpoints FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_batches FROM PUBLIC, anon, authenticated, service_role;
 REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_errors FROM PUBLIC, anon, authenticated, service_role;
+
+-- 5b. Checkpoint Retrieval Stored Procedure (Service-Role Only)
+CREATE OR REPLACE FUNCTION public.get_mariadb_private_raw_checkpoint(
+  p_run_key TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS $$
+DECLARE
+  v_cp wf_canonical_staging.mariadb_raw_import_checkpoints%ROWTYPE;
+BEGIN
+  IF COALESCE(btrim(p_run_key), '') = '' THEN
+    RAISE EXCEPTION 'run_key is required';
+  END IF;
+
+  SELECT * INTO v_cp
+  FROM wf_canonical_staging.mariadb_raw_import_checkpoints
+  WHERE run_key = p_run_key;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'run_key', v_cp.run_key,
+    'contract', v_cp.contract,
+    'last_created_on', v_cp.last_created_on,
+    'last_source_id', v_cp.last_source_id,
+    'input_rows', v_cp.input_rows,
+    'newly_staged_rows', v_cp.newly_staged_rows,
+    'already_staged_identical_rows', v_cp.already_staged_identical_rows,
+    'capture_error_rows', v_cp.capture_error_rows,
+    'status', v_cp.status,
+    'frozen_upper_boundary', v_cp.frozen_upper_boundary,
+    'manifest_sha256', v_cp.manifest_sha256,
+    'started_at', v_cp.started_at,
+    'updated_at', v_cp.updated_at,
+    'completed_at', v_cp.completed_at
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_mariadb_private_raw_checkpoint(TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_mariadb_private_raw_checkpoint(TEXT) TO service_role;
 
 -- 6. Ingestion Stored Procedure with Strict Semantic & Cryptographic Verification
 CREATE OR REPLACE FUNCTION public.ingest_mariadb_private_raw_batch(
