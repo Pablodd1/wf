@@ -42,32 +42,37 @@ async function snapshotPublicLineage(supabase, sourceIds) {
     watch_records_count: 0
   };
 
+  const chunks = [];
   for (let i = 0; i < sourceIds.length; i += 250) {
     const chunkIds = sourceIds.slice(i, i + 250);
-    const chunkRecordIds = chunkIds.map(id => ('mysql_auctions_' + id));
-
-    const { data: pubRaw, error: rawErr } = await supabase
-      .from('raw_messages')
-      .select('id')
-      .in('external_message_id', chunkRecordIds);
-    if (rawErr) throw new Error('Public raw_messages audit query failed: ' + rawErr.message);
-    snapshot.raw_messages_count += pubRaw?.length || 0;
-
-    const { data: pubVers, error: versErr } = await supabase
-      .from('raw_message_versions')
-      .select('id')
-      .in('source_record_id', chunkRecordIds);
-    if (versErr) throw new Error('Public raw_message_versions audit query failed: ' + versErr.message);
-    snapshot.raw_message_versions_count += pubVers?.length || 0;
-
-    const { data: pubWatch, error: watchErr } = await supabase
-      .from('watch_records')
-      .select('id')
-      .in('id', chunkRecordIds);
-    if (watchErr) throw new Error('Public watch_records audit query failed: ' + watchErr.message);
-    snapshot.watch_records_count += pubWatch?.length || 0;
+    chunks.push(chunkIds.map(id => ('mysql_auctions_' + id)));
   }
 
+  const poolConcurrency = 25;
+  const queue = [...chunks];
+
+  async function queryWorker() {
+    while (queue.length > 0) {
+      const chunkRecordIds = queue.shift();
+      if (!chunkRecordIds) break;
+
+      const [resRaw, resVers, resWatch] = await Promise.all([
+        supabase.from('raw_messages').select('id').in('external_message_id', chunkRecordIds),
+        supabase.from('raw_message_versions').select('id').in('source_record_id', chunkRecordIds),
+        supabase.from('watch_records').select('id').in('id', chunkRecordIds)
+      ]);
+
+      if (resRaw.error) throw new Error('Public raw_messages audit query failed: ' + resRaw.error.message);
+      if (resVers.error) throw new Error('Public raw_message_versions audit query failed: ' + resVers.error.message);
+      if (resWatch.error) throw new Error('Public watch_records audit query failed: ' + resWatch.error.message);
+
+      snapshot.raw_messages_count += resRaw.data?.length || 0;
+      snapshot.raw_message_versions_count += resVers.data?.length || 0;
+      snapshot.watch_records_count += resWatch.data?.length || 0;
+    }
+  }
+
+  await Promise.all(Array.from({ length: poolConcurrency }, () => queryWorker()));
   return snapshot;
 }
 
