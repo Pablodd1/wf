@@ -368,7 +368,6 @@ function sortTradingItems(items) {
       right.resolved?.has_images
       && (right.resolved?.thumbnail_url || right.resolved?.image_urls?.length),
     );
-    if (leftHasImage !== rightHasImage) return Number(rightHasImage) - Number(leftHasImage);
     const leftReviewedWorkbook = isReviewedPaneraiReleaseRecord(left.resolved)
       || isReviewedZenithReleaseRecord(left.resolved);
     const rightReviewedWorkbook = isReviewedPaneraiReleaseRecord(right.resolved)
@@ -379,6 +378,10 @@ function sortTradingItems(items) {
     const rightPrice = String(right.resolved?.currency || '').toUpperCase() === 'USD' || rightReviewedWorkbook
       ? Number(right.resolved?.price_usd) || 0
       : 0;
+    const leftHasPrice = leftPrice > 0;
+    const rightHasPrice = rightPrice > 0;
+    if (leftHasPrice !== rightHasPrice) return Number(rightHasPrice) - Number(leftHasPrice);
+    if (leftHasImage !== rightHasImage) return Number(rightHasImage) - Number(leftHasImage);
     if (leftPrice !== rightPrice) return rightPrice - leftPrice;
     const leftTime = Date.parse(left.resolved?.created_at || '') || Number.NEGATIVE_INFINITY;
     const rightTime = Date.parse(right.resolved?.created_at || '') || Number.NEGATIVE_INFINITY;
@@ -511,6 +514,7 @@ async function loadFullReviewedBrandCursorPage({
     const reviewedReleaseCache = process.env.THREE_BRAND_RELEASE_CACHE === 'true'
       ? 'three_brand_verified_trading_release_cache'
       : 'two_brand_verified_trading_release_cache';
+    const reviewedDisplaySource = reviewedReleaseCache.replace('_release_cache', '_display_source');
     const candidateLimit = Math.min(Math.max(pageSize * 5, 50), 500);
     const start = Number.isSafeInteger(cursor?.offset)
       ? cursor.offset
@@ -521,8 +525,9 @@ async function loadFullReviewedBrandCursorPage({
         'id,brand,model,reference,dial_color,condition,year,price_raw,price_usd,currency',
         'confidence,verdict,source,source_type,listing_type,listing_date,listing_status',
         'created_at,has_images,thumbnail_url,image_urls,region,identity_review_status',
+        'has_display_price,has_source_image',
       ].join(','),
-      order: 'has_images.desc,price_usd.desc.nullslast,created_at.desc.nullslast,id.desc',
+      order: 'has_display_price.desc,has_source_image.desc,price_usd.desc.nullslast,created_at.desc.nullslast,id.desc',
     });
     if (listingType === 'WTB') params.set('listing_type', 'in.(WTB,NTQ)');
     else if (listingType) params.set('listing_type', `eq.${listingType}`);
@@ -535,7 +540,7 @@ async function loadFullReviewedBrandCursorPage({
     if (parsedSearch.brand && !requestedBrand) params.set('brand', `ilike.${parsedSearch.brand}`);
     if (parsedSearch.dial) params.set('dial_color', `ilike.${parsedSearch.dial}`);
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/${reviewedReleaseCache}?${params.toString()}`,
+      `${supabaseUrl}/rest/v1/${reviewedDisplaySource}?${params.toString()}`,
       {
         headers: {
           apikey: readKey,

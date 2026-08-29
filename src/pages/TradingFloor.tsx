@@ -1111,6 +1111,7 @@ export default function TradingFloor() {
           <span>
             Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong> on this page{dynamicDisplayTotal === null ? ' · total unavailable' : <> of <strong style={{ color: INK }}>{dynamicDisplayTotal.toLocaleString()}</strong> listings</>}
           </span>
+          <span>Priced listings first; source images next; highest verified USD price within each group.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
