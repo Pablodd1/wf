@@ -1,0 +1,72 @@
+{
+  "contract": "wf-mariadb-private-raw-staging-v1",
+  "timestamp": "2026-08-29T21:39:29.502Z",
+  "tls_proof": {
+    "verified": true,
+    "transport": "TLS_CA_VERIFIED",
+    "tls_reject_unauthorized": true,
+    "ca_bytes": 2223,
+    "pinned_server_cert_sha256": "07:F7:B9:58:1B:79:C7:42:61:8D:3F:85:91:DC:54:9B:F1:6E:FB:C6:2E:45:0E:FD:9B:56:F7:54:D3:52:E1:97"
+  },
+  "source_boundary": {
+    "contract": "wf-mariadb-private-raw-staging-v1",
+    "source_system": "OceanDigital MariaDB",
+    "source_database": "thecollective_inventory",
+    "source_table": "auctions",
+    "isolation_level": "REPEATABLE READ (CONSISTENT SNAPSHOT, READ ONLY)",
+    "total_source_rows": 1496065,
+    "lower_boundary": {
+      "id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "created_on": "2025-01-08T18:28:49.000Z",
+      "updated_on": null
+    },
+    "upper_boundary": {
+      "id": "d53fc81c-8d90-49d2-97c4-5ec6e215a1e1",
+      "created_on": "2026-08-29T21:39:14.000Z",
+      "updated_on": "2026-08-29T21:39:14.000Z"
+    },
+    "snapshot_timestamp": "2026-08-29T21:39:28.125Z",
+    "manifest_sha256": "2b31056d7f6d247ed8f9b2cafb2a2ad9c8e21b085d4871e5fbe457366a02240f"
+  },
+  "database_security_audit": {
+    "direct_table_privileges_all_false": true,
+    "schema_usage": {
+      "anon": false,
+      "service_role": true,
+      "authenticated": false
+    },
+    "function_privileges": {
+      "get_errors": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "ingest_batch": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "audit_security": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "get_checkpoint": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "verify_readback": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "finalize_checkpoint": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      }
+    }
+  },
+  "launch_gate_status": "READY_FOR_FINAL_AUTHORIZATION"
+}

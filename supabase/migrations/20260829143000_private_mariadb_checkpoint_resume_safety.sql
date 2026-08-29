@@ -1,105 +1,19 @@
--- Forward-only, private staging lane for immutable MariaDB raw source rows.
---
--- This migration DOES NOT write to public.raw_messages, public.raw_message_versions,
--- or public.watch_records. It targets strictly wf_canonical_staging.
+-- Forward-only migration: Checkpoint Resume Safety, Explicit 10-Parameter Ingestion Signature, and Full 84-Action Security Audit
+-- Migration ID: 20260829143000_private_mariadb_checkpoint_resume_safety
 
 BEGIN;
 
-CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
-CREATE SCHEMA IF NOT EXISTS wf_canonical_staging;
+-- 1. Extend Checkpoint Table Schema
+ALTER TABLE wf_canonical_staging.mariadb_raw_import_checkpoints 
+  ADD COLUMN IF NOT EXISTS frozen_manifest JSONB,
+  ADD COLUMN IF NOT EXISTS frozen_upper_boundary JSONB,
+  ADD COLUMN IF NOT EXISTS manifest_sha256 TEXT;
 
--- 1. Private Raw Source Staging Table
-CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_source_rows (
-  id UUID PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
-  source_system TEXT NOT NULL DEFAULT 'OceanDigital MariaDB',
-  source_database TEXT NOT NULL DEFAULT 'thecollective_inventory',
-  source_table TEXT NOT NULL DEFAULT 'auctions',
-  source_id TEXT NOT NULL,
-  source_unique_key TEXT,
-  source_record_id TEXT NOT NULL,
-  source_created_on TEXT,
-  source_updated_on TEXT,
-  captured_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  raw_message TEXT,
-  raw_message_source TEXT,
-  raw_sha256 TEXT,
-  raw_payload_text TEXT NOT NULL,
-  raw_payload JSONB NOT NULL,
-  source_hash TEXT NOT NULL CHECK (source_hash ~ '^[0-9a-f]{64}$'),
-  hash_algorithm TEXT NOT NULL DEFAULT 'sha256',
-  canonicalization_version TEXT NOT NULL DEFAULT 'v1-json-keys-sorted-compact',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT uq_mariadb_raw_staging_provenance_hash 
-    UNIQUE (source_system, source_database, source_table, source_id, source_hash)
-);
+-- 2. Drop any legacy overloads of ingest_mariadb_private_raw_batch
+DROP FUNCTION IF EXISTS public.ingest_mariadb_private_raw_batch(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB);
+DROP FUNCTION IF EXISTS public.ingest_mariadb_private_raw_batch(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, JSONB, JSONB, TEXT);
 
-CREATE INDEX IF NOT EXISTS idx_mariadb_raw_staging_cursor
-  ON wf_canonical_staging.mariadb_raw_source_rows (source_created_on, source_id);
-
-CREATE INDEX IF NOT EXISTS idx_mariadb_raw_staging_source_id
-  ON wf_canonical_staging.mariadb_raw_source_rows (source_id);
-
-CREATE INDEX IF NOT EXISTS idx_mariadb_raw_staging_source_record_id
-  ON wf_canonical_staging.mariadb_raw_source_rows (source_record_id);
-
--- 2. Checkpoint Ledger
-CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_checkpoints (
-  run_key TEXT PRIMARY KEY,
-  contract TEXT NOT NULL DEFAULT 'wf-mariadb-private-raw-staging-v1',
-  last_created_on TEXT NOT NULL,
-  last_source_id TEXT NOT NULL,
-  input_rows BIGINT NOT NULL DEFAULT 0,
-  newly_staged_rows BIGINT NOT NULL DEFAULT 0,
-  already_staged_identical_rows BIGINT NOT NULL DEFAULT 0,
-  capture_error_rows BIGINT NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'COPYING_RAW',
-  frozen_upper_boundary JSONB,
-  manifest_sha256 TEXT,
-  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  completed_at TIMESTAMPTZ,
-  CHECK (status IN ('COPYING_RAW', 'RAW_STAGED', 'FAILED', 'VERIFICATION_COMPLETE'))
-);
-
--- 3. Batch Audit Ledger
-CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_batches (
-  batch_token TEXT PRIMARY KEY CHECK (batch_token ~ '^[0-9a-f]{64}$'),
-  run_key TEXT NOT NULL REFERENCES wf_canonical_staging.mariadb_raw_import_checkpoints(run_key) ON DELETE RESTRICT,
-  first_source_id TEXT,
-  last_source_id TEXT,
-  source_rows INTEGER NOT NULL CHECK (source_rows >= 0),
-  newly_staged_rows INTEGER NOT NULL DEFAULT 0,
-  already_staged_identical_rows INTEGER NOT NULL DEFAULT 0,
-  capture_error_rows INTEGER NOT NULL DEFAULT 0,
-  result JSONB NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- 4. Row-Level Capture Error Ledger
-CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_errors (
-  id UUID PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
-  run_key TEXT NOT NULL,
-  batch_token TEXT,
-  source_id TEXT,
-  source_created_on TEXT,
-  source_hash TEXT,
-  raw_payload_text TEXT NOT NULL,
-  raw_payload JSONB,
-  error_reason TEXT NOT NULL,
-  error_detail JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- 5. Revoke ALL direct table access from ALL roles (access mediated strictly via RPCs)
-REVOKE ALL ON SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated;
-GRANT USAGE ON SCHEMA wf_canonical_staging TO service_role;
-
-REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_source_rows FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_checkpoints FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_batches FROM PUBLIC, anon, authenticated, service_role;
-REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_errors FROM PUBLIC, anon, authenticated, service_role;
-
--- 5b. Checkpoint Retrieval Stored Procedure (Service-Role Only)
+-- 3. Dedicated Checkpoint Retrieval Stored Procedure (Service-Role Only)
 CREATE OR REPLACE FUNCTION public.get_mariadb_private_raw_checkpoint(
   p_run_key TEXT
 )
@@ -133,6 +47,7 @@ BEGIN
     'already_staged_identical_rows', v_cp.already_staged_identical_rows,
     'capture_error_rows', v_cp.capture_error_rows,
     'status', v_cp.status,
+    'frozen_manifest', v_cp.frozen_manifest,
     'frozen_upper_boundary', v_cp.frozen_upper_boundary,
     'manifest_sha256', v_cp.manifest_sha256,
     'started_at', v_cp.started_at,
@@ -145,7 +60,7 @@ $$;
 REVOKE ALL ON FUNCTION public.get_mariadb_private_raw_checkpoint(TEXT) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_mariadb_private_raw_checkpoint(TEXT) TO service_role;
 
--- 6. Ingestion Stored Procedure with Strict Semantic & Cryptographic Verification
+-- 4. Explicit 10-Parameter Ingestion Stored Procedure
 CREATE OR REPLACE FUNCTION public.ingest_mariadb_private_raw_batch(
   p_run_key TEXT,
   p_batch_token TEXT,
@@ -154,7 +69,9 @@ CREATE OR REPLACE FUNCTION public.ingest_mariadb_private_raw_batch(
   p_expected_last_source_id TEXT,
   p_next_last_created_on TEXT,
   p_next_last_source_id TEXT,
-  p_records JSONB
+  p_records JSONB,
+  p_frozen_upper_boundary JSONB,
+  p_manifest_sha256 TEXT
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -191,6 +108,8 @@ DECLARE
   v_first_source_id TEXT := NULL;
   v_last_source_id TEXT := NULL;
   v_result JSONB;
+  v_resolved_upper_boundary JSONB;
+  v_resolved_manifest JSONB;
 BEGIN
   IF COALESCE(btrim(p_run_key), '') = '' OR COALESCE(btrim(p_batch_token), '') = '' THEN
     RAISE EXCEPTION 'run_key and batch_token are required';
@@ -198,6 +117,19 @@ BEGIN
 
   IF p_contract <> 'wf-mariadb-private-raw-staging-v1' THEN
     RAISE EXCEPTION 'Unsupported contract: %', p_contract;
+  END IF;
+
+  IF p_frozen_upper_boundary IS NULL OR p_manifest_sha256 IS NULL THEN
+    RAISE EXCEPTION 'p_frozen_upper_boundary and p_manifest_sha256 are mandatory parameters';
+  END IF;
+
+  -- Resolve upper boundary vs full manifest structure
+  IF p_frozen_upper_boundary ? 'upper_boundary' THEN
+    v_resolved_manifest := p_frozen_upper_boundary;
+    v_resolved_upper_boundary := p_frozen_upper_boundary->'upper_boundary';
+  ELSE
+    v_resolved_manifest := pg_catalog.jsonb_build_object('upper_boundary', p_frozen_upper_boundary);
+    v_resolved_upper_boundary := p_frozen_upper_boundary;
   END IF;
 
   -- Check if batch was already applied
@@ -226,11 +158,23 @@ BEGIN
   IF NOT FOUND THEN
     INSERT INTO wf_canonical_staging.mariadb_raw_import_checkpoints (
       run_key, contract, last_created_on, last_source_id, input_rows,
-      newly_staged_rows, already_staged_identical_rows, capture_error_rows, status
+      newly_staged_rows, already_staged_identical_rows, capture_error_rows, status,
+      frozen_manifest, frozen_upper_boundary, manifest_sha256
     ) VALUES (
       p_run_key, p_contract, COALESCE(p_expected_last_created_on, ''), COALESCE(p_expected_last_source_id, ''), 0,
-      0, 0, 0, 'COPYING_RAW'
+      0, 0, 0, 'COPYING_RAW',
+      v_resolved_manifest, v_resolved_upper_boundary, p_manifest_sha256
     ) RETURNING * INTO v_checkpoint;
+  ELSE
+    -- On subsequent batches, reject any boundary or manifest hash different from checkpoint
+    IF v_checkpoint.manifest_sha256 IS DISTINCT FROM p_manifest_sha256 THEN
+      RAISE EXCEPTION 'Manifest hash mismatch: checkpoint has %, batch provided %',
+        v_checkpoint.manifest_sha256, p_manifest_sha256;
+    END IF;
+    IF v_checkpoint.frozen_upper_boundary IS DISTINCT FROM v_resolved_upper_boundary THEN
+      RAISE EXCEPTION 'Frozen upper boundary mismatch: checkpoint has %, batch provided %',
+        v_checkpoint.frozen_upper_boundary, v_resolved_upper_boundary;
+    END IF;
   END IF;
 
   -- Verify cursor continuity
@@ -368,88 +312,10 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.ingest_mariadb_private_raw_batch FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.ingest_mariadb_private_raw_batch TO service_role;
+REVOKE ALL ON FUNCTION public.ingest_mariadb_private_raw_batch(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,JSONB,JSONB,TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ingest_mariadb_private_raw_batch(TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,TEXT,JSONB,JSONB,TEXT) TO service_role;
 
--- 7. Verification Readback Stored Procedure
-CREATE OR REPLACE FUNCTION public.verify_mariadb_private_raw_readback(
-  p_source_ids TEXT[]
-)
-RETURNS TABLE (
-  source_id TEXT,
-  source_hash TEXT,
-  raw_payload_text TEXT,
-  hash_algorithm TEXT,
-  canonicalization_version TEXT,
-  source_created_on TEXT,
-  source_updated_on TEXT
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = wf_canonical_staging, pg_catalog
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    r.source_id,
-    r.source_hash,
-    r.raw_payload_text,
-    r.hash_algorithm,
-    r.canonicalization_version,
-    r.source_created_on,
-    r.source_updated_on
-  FROM wf_canonical_staging.mariadb_raw_source_rows r
-  WHERE r.source_id = ANY(p_source_ids);
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.verify_mariadb_private_raw_readback FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.verify_mariadb_private_raw_readback TO service_role;
-
--- 8. Error Ledger Query Stored Procedure
-CREATE OR REPLACE FUNCTION public.get_mariadb_private_raw_errors(
-  p_run_key TEXT
-)
-RETURNS TABLE (
-  id UUID,
-  run_key TEXT,
-  batch_token TEXT,
-  source_id TEXT,
-  source_created_on TEXT,
-  source_hash TEXT,
-  raw_payload_text TEXT,
-  raw_payload JSONB,
-  error_reason TEXT,
-  error_detail JSONB,
-  created_at TIMESTAMPTZ
-)
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = wf_canonical_staging, pg_catalog
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    e.id,
-    e.run_key,
-    e.batch_token,
-    e.source_id,
-    e.source_created_on,
-    e.source_hash,
-    e.raw_payload_text,
-    e.raw_payload,
-    e.error_reason,
-    e.error_detail,
-    e.created_at
-  FROM wf_canonical_staging.mariadb_raw_import_errors e
-  WHERE e.run_key = p_run_key;
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.get_mariadb_private_raw_errors FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.get_mariadb_private_raw_errors TO service_role;
-
--- 9. Checkpoint Finalization Stored Procedure with Full Reconciliation Assertion
+-- 5. Checkpoint Finalization Stored Procedure with Strict Totals and Boundary Verification
 CREATE OR REPLACE FUNCTION public.finalize_mariadb_private_raw_checkpoint(
   p_run_key TEXT,
   p_expected_staged_rows BIGINT,
@@ -463,8 +329,9 @@ SET search_path = wf_canonical_staging, pg_catalog
 AS $$
 DECLARE
   v_checkpoint wf_canonical_staging.mariadb_raw_import_checkpoints%ROWTYPE;
+  v_total_source_rows BIGINT;
 BEGIN
-  IF p_final_status NOT IN ('RAW_STAGED', 'VERIFICATION_COMPLETE') THEN
+  IF p_final_status NOT IN ('RAW_STAGED', 'VERIFICATION_COMPLETE', 'PARTIAL') THEN
     RAISE EXCEPTION 'Invalid final status: %', p_final_status;
   END IF;
 
@@ -489,8 +356,7 @@ BEGIN
       v_checkpoint.capture_error_rows, p_expected_error_rows;
   END IF;
 
-  -- 3. Independent Core Reconciliation Formula Assertion:
-  -- input_rows = newly_staged_rows + already_staged_identical_rows + capture_error_rows
+  -- 3. Core Reconciliation Formula Assertion: input_rows = staged + errors
   IF v_checkpoint.input_rows <> (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows + v_checkpoint.capture_error_rows) THEN
     RAISE EXCEPTION 'Reconciliation invariant failed: input_rows (%) <> staged (%) + errors (%)',
       v_checkpoint.input_rows,
@@ -498,6 +364,27 @@ BEGIN
       v_checkpoint.capture_error_rows;
   END IF;
 
+  -- 4. Strict RAW_STAGED Boundary & Full Ingestion Invariants
+  IF p_final_status = 'RAW_STAGED' THEN
+    IF v_checkpoint.frozen_manifest IS NOT NULL AND (v_checkpoint.frozen_manifest ? 'total_source_rows') THEN
+      v_total_source_rows := (v_checkpoint.frozen_manifest->>'total_source_rows')::bigint;
+      IF v_checkpoint.input_rows <> v_total_source_rows THEN
+        RAISE EXCEPTION 'Cannot finalize RAW_STAGED: input_rows (%) <> total_source_rows (%)',
+          v_checkpoint.input_rows, v_total_source_rows;
+      END IF;
+    END IF;
+
+    IF v_checkpoint.frozen_upper_boundary IS NOT NULL THEN
+      IF v_checkpoint.last_source_id <> (v_checkpoint.frozen_upper_boundary->>'id') OR
+         v_checkpoint.last_created_on <> (v_checkpoint.frozen_upper_boundary->>'created_on') THEN
+        RAISE EXCEPTION 'Cannot finalize RAW_STAGED: final cursor (%, %) does not match frozen upper boundary (%, %)',
+          v_checkpoint.last_created_on, v_checkpoint.last_source_id,
+          v_checkpoint.frozen_upper_boundary->>'created_on', v_checkpoint.frozen_upper_boundary->>'id';
+      END IF;
+    END IF;
+  END IF;
+
+  -- Update Checkpoint Final Status
   UPDATE wf_canonical_staging.mariadb_raw_import_checkpoints
   SET status = p_final_status,
       completed_at = pg_catalog.now(),
@@ -508,18 +395,18 @@ BEGIN
     'status', 'FINALIZED',
     'run_key', p_run_key,
     'checkpoint_status', p_final_status,
-    'input_rows', v_checkpoint.input_rows,
     'total_staged_rows', (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows),
     'capture_error_rows', v_checkpoint.capture_error_rows,
+    'input_rows', v_checkpoint.input_rows,
     'completed_at', pg_catalog.now()
   );
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.finalize_mariadb_private_raw_checkpoint FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION public.finalize_mariadb_private_raw_checkpoint TO service_role;
+REVOKE ALL ON FUNCTION public.finalize_mariadb_private_raw_checkpoint(TEXT,BIGINT,BIGINT,TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.finalize_mariadb_private_raw_checkpoint(TEXT,BIGINT,BIGINT,TEXT) TO service_role;
 
--- 10. PostgreSQL Security Audit Stored Procedure (Complete 84-table-action check + 5 RPC executions)
+-- 6. Comprehensive 84-Action Direct Table Security Audit RPC
 CREATE OR REPLACE FUNCTION public.audit_mariadb_private_raw_security()
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -530,12 +417,12 @@ DECLARE
   v_report JSONB;
 BEGIN
   v_report := pg_catalog.jsonb_build_object(
-    'schema_privileges', pg_catalog.jsonb_build_object(
-      'anon_usage', pg_catalog.has_schema_privilege('anon', 'wf_canonical_staging', 'USAGE'),
-      'authenticated_usage', pg_catalog.has_schema_privilege('authenticated', 'wf_canonical_staging', 'USAGE'),
-      'service_role_usage', pg_catalog.has_schema_privilege('service_role', 'wf_canonical_staging', 'USAGE')
+    'schema_usage', pg_catalog.jsonb_build_object(
+      'anon', pg_catalog.has_schema_privilege('anon', 'wf_canonical_staging', 'USAGE'),
+      'authenticated', pg_catalog.has_schema_privilege('authenticated', 'wf_canonical_staging', 'USAGE'),
+      'service_role', pg_catalog.has_schema_privilege('service_role', 'wf_canonical_staging', 'USAGE')
     ),
-    'table_privileges', pg_catalog.jsonb_build_object(
+    'direct_table_privileges', pg_catalog.jsonb_build_object(
       'mariadb_raw_source_rows', pg_catalog.jsonb_build_object(
         'anon_select', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'SELECT'),
         'anon_insert', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'INSERT'),
@@ -630,10 +517,15 @@ BEGIN
       )
     ),
     'function_privileges', pg_catalog.jsonb_build_object(
+      'get_checkpoint', pg_catalog.jsonb_build_object(
+        'anon_execute', pg_catalog.has_function_privilege('anon', 'public.get_mariadb_private_raw_checkpoint(text)', 'EXECUTE'),
+        'authenticated_execute', pg_catalog.has_function_privilege('authenticated', 'public.get_mariadb_private_raw_checkpoint(text)', 'EXECUTE'),
+        'service_role_execute', pg_catalog.has_function_privilege('service_role', 'public.get_mariadb_private_raw_checkpoint(text)', 'EXECUTE')
+      ),
       'ingest_batch', pg_catalog.jsonb_build_object(
-        'anon_execute', pg_catalog.has_function_privilege('anon', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb)', 'EXECUTE'),
-        'authenticated_execute', pg_catalog.has_function_privilege('authenticated', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb)', 'EXECUTE'),
-        'service_role_execute', pg_catalog.has_function_privilege('service_role', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb)', 'EXECUTE')
+        'anon_execute', pg_catalog.has_function_privilege('anon', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb,jsonb,text)', 'EXECUTE'),
+        'authenticated_execute', pg_catalog.has_function_privilege('authenticated', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb,jsonb,text)', 'EXECUTE'),
+        'service_role_execute', pg_catalog.has_function_privilege('service_role', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb,jsonb,text)', 'EXECUTE')
       ),
       'verify_readback', pg_catalog.jsonb_build_object(
         'anon_execute', pg_catalog.has_function_privilege('anon', 'public.verify_mariadb_private_raw_readback(text[])', 'EXECUTE'),

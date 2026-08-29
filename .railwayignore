@@ -1,0 +1,9 @@
+node_modules
+.git
+.env*
+*.xlsx
+*.gz
+audit-output/mariadb-live/benchmark*
+audit-output/mariadb-live/*.json
+public
+scratch

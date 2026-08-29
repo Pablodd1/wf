@@ -1,0 +1,12 @@
+{
+  "contract": "wf-mariadb-private-raw-staging-v1",
+  "canary_run_key": "full-capture-canary-1k-1788027138860",
+  "input_rows": 1000,
+  "newly_staged_rows": 1000,
+  "already_staged_identical_rows": 0,
+  "error_rows": 0,
+  "idempotent_rerun_newly_staged": 0,
+  "idempotent_rerun_already_staged": 1000,
+  "idempotent_rerun_errors": 0,
+  "exact_reconciliation": true
+}
