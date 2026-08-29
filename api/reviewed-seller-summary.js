@@ -2,8 +2,9 @@
 
 const { getClient } = require('./_lib/supabase');
 
-const REVIEWED_ID = /^(?:workbook_[a-f0-9]{64}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
+const REVIEWED_ID = /^(?:cn_[a-z0-9_-]+|workbook_[a-f0-9]{64}|[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12})$/i;
 const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2';
+const CANONICAL_MARKET_SOURCE_VIEW = 'trading_floor_ready_view';
 
 function approvedPhone(listing) {
   if (listing?.contact_publication_approved !== true) return null;
@@ -45,14 +46,41 @@ async function loadVerifiedReputation(client, listing) {
 }
 
 async function loadSellerAnalytics(client, phone) {
+  try {
+    const { data, error } = await client.rpc('reviewed_workbook_seller_activity', {
+      p_phone: phone,
+    });
+    if (!error) {
+      const activity = Array.isArray(data) ? data[0] : data;
+      const totalPosts = Number(activity?.total_posts || 0);
+      if (totalPosts > 0) {
+        const wtsPosts = Number(activity?.wts_posts || 0);
+        const wtbPosts = Number(activity?.wtb_posts || 0);
+        return {
+          total_posts: totalPosts,
+          wts_posts: wtsPosts,
+          wtb_posts: wtbPosts,
+          other_posts: Number(activity?.other_posts || Math.max(0, totalPosts - wtsPosts - wtbPosts)),
+          first_post_at: activity?.first_post_at || null,
+          last_post_at: activity?.last_post_at || null,
+          analytics_scope: 'exact_reviewed_seller_activity',
+          sample_capped: false,
+        };
+      }
+    }
+  } catch {
+    // Continue to a bounded public-view fallback.
+  }
   if (typeof client.from === 'function') {
-    const publicRows = await client
-      .from(MARKET_SOURCE_VIEW)
-      .select('listing_type,posting_date')
-      .eq('phone_number', phone)
-      .limit(10000);
-    if (!publicRows.error && Array.isArray(publicRows.data) && publicRows.data.length) {
-      const activity = publicRows.data;
+    for (const view of [MARKET_SOURCE_VIEW, CANONICAL_MARKET_SOURCE_VIEW]) {
+      const publicRows = await client
+        .from(view)
+        .select('listing_type,posting_date')
+        .eq('phone_number', phone)
+        .limit(10001);
+      if (!publicRows.error && Array.isArray(publicRows.data) && publicRows.data.length) {
+        const sampleCapped = publicRows.data.length > 10000;
+        const activity = publicRows.data.slice(0, 10000);
       const dates = activity.map(row => row.posting_date).filter(Boolean).sort();
       const wtsPosts = activity.filter(row => String(row.listing_type || '').toUpperCase() === 'WTS').length;
       const wtbPosts = activity.filter(row => ['WTB', 'NTQ'].includes(String(row.listing_type || '').toUpperCase())).length;
@@ -63,24 +91,21 @@ async function loadSellerAnalytics(client, phone) {
         other_posts: activity.length - wtsPosts - wtbPosts,
         first_post_at: dates[0] || null,
         last_post_at: dates.at(-1) || null,
+          analytics_scope: view,
+          sample_capped: sampleCapped,
       };
+      }
     }
   }
-  const { data, error } = await client.rpc('reviewed_workbook_seller_activity', {
-    p_phone: phone,
-  });
-  if (error) throw error;
-  const activity = Array.isArray(data) ? data[0] : data;
-  const totalPosts = Number(activity?.total_posts || 0);
-  const wtsPosts = Number(activity?.wts_posts || 0);
-  const wtbPosts = Number(activity?.wtb_posts || 0);
   return {
-    total_posts: totalPosts,
-    wts_posts: wtsPosts,
-    wtb_posts: wtbPosts,
-    other_posts: Number(activity?.other_posts || 0),
-    first_post_at: activity?.first_post_at || null,
-    last_post_at: activity?.last_post_at || null,
+    total_posts: 0,
+    wts_posts: 0,
+    wtb_posts: 0,
+    other_posts: 0,
+    first_post_at: null,
+    last_post_at: null,
+    analytics_scope: 'unavailable',
+    sample_capped: false,
   };
 }
 
@@ -103,6 +128,21 @@ module.exports = async function handler(req, res) {
       .eq('id', id)
       .maybeSingle();
     let listing = marketResult.error ? null : marketResult.data;
+    if (!listing && id.toLowerCase().startsWith('cn_')) {
+      const canonicalResult = await client
+        .from(CANONICAL_MARKET_SOURCE_VIEW)
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (!canonicalResult.error && canonicalResult.data) {
+        const row = canonicalResult.data;
+        listing = {
+          ...row,
+          posted_by: row.posted_by || row.seller_name || row.source_identity_name || null,
+          phone_number: row.phone_number || row.seller_phone || row.from_number || null,
+        };
+      }
+    }
     if (!listing) {
       const legacyResult = await client
         .from('reviewed_workbook_inventory')
