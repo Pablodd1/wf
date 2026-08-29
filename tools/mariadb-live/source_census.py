@@ -2,20 +2,19 @@
 """Hardened Phase 1 MariaDB Source Census & Provenance Reconciliation.
 
 Strict Audited Contracts:
-1. Enforces MariaDB read-only grants with redacted logging.
+1. Enforces MariaDB read-only grants with strictly redacted error logging.
 2. Establishes MariaDB REPEATABLE READ READ ONLY consistent snapshot before counting.
 3. Uses PostgreSQL REPEATABLE READ READ ONLY transaction for wf_canonical_staging.
-4. Pins exact PostgreSQL host db.bptrvfncppbjnchsaxtb.supabase.co with sslmode=verify-full.
+4. Pins exact PostgreSQL host db.bptrvfncppbjnchsaxtb.supabase.co with enforced sslmode=verify-full.
 5. Verifies dedicated read-only PostgreSQL role (SELECT/USAGE, no mutation privileges, non-superuser).
-6. Employs measured, namespace-scoped identity resolution rules (no cross-source numeric collision).
-7. Separates NULL created_on lane from plain (created_on, id) composite keyset pagination.
-8. Validates exact executed cursor queries with EXPLAIN (enforcing proved index and RANGE access).
-9. Verifies real transport (TLS CA certificate with hostname SAN verification, or validated private/loopback subnet).
-10. Computes authoritative full raw source payload SHA-256 hashes and media keys.
-11. Sums bundle distributions deliberately (BUNDLE, SINGLE, UNKNOWN) with zero overwrite risk.
+6. Enforces MariaDB TLS server identity against genuine DNS hostname (refusing raw IP).
+7. Verifies information_schema.columns and strictly asserts primary key ['id'].
+8. Performs memory preflight BEFORE loading any identity sets, failing closed if unreadable.
+9. Separates source-row snapshot hash from immutable raw-message hash.
+10. Sums bundle distributions deliberately (BUNDLE, SINGLE, UNKNOWN) with zero overwrite risk.
+11. Starts pagination from frozen minimum boundary (no hardcoded 1970 lower bound).
 12. Ends all database transactions with rollback() to ensure zero mutation.
-13. Performs memory preflight to verify system RAM before scanning.
-14. Enforces strict scanned rows == frozen source total equality assertion.
+13. Enforces strict scanned rows == frozen source total equality assertion.
 """
 
 import os
@@ -25,6 +24,7 @@ import time
 import re
 import ipaddress
 import hashlib
+import ssl
 from datetime import datetime
 import pymysql
 import psycopg2
@@ -35,7 +35,13 @@ EXACT_PINNED_PGHOST = f"db.{PINNED_PROJECT_REF}.supabase.co"
 CENSUS_CONTRACT = "wf-mariadb-source-census-v4"
 SOURCE_CONTRACT = "wf-mariadb-auctions-raw-v1"
 
-SOURCE_COLUMNS = [
+REQUIRED_SOURCE_COLUMNS = [
+    "id", "open_unique_key", "created_on", "updated_on", "type", "status",
+    "is_bundle", "brand", "model", "reference", "price", "currency",
+    "front_image", "title", "description", "comments"
+]
+
+ALL_SOURCE_COLUMNS = [
     "id", "open_unique_key", "created_on", "updated_on", "origin", "type", "status",
     "is_bundle", "category_id", "company_id", "from_number", "from_name", "phone_code",
     "region", "title", "description", "comments", "brand", "model", "reference",
@@ -65,13 +71,15 @@ BRAND_REGEXES = [re.compile(rf"\b{re.escape(br)}\b", re.IGNORECASE) for br in KN
 def sha256_text(val: str) -> str:
     return hashlib.sha256((val or "").encode("utf-8")).hexdigest()
 
-def compute_authoritative_raw_evidence_sha256(row: dict) -> str:
-    """Deterministic field-labelled combination of all authoritative source evidence."""
-    payload = {
-        k: ("" if row.get(k) is None else str(row[k]))
-        for k in SOURCE_COLUMNS
-        if k in row
-    }
+def compute_raw_message_sha256(row: dict) -> str:
+    """Deterministic hash of authoritative raw text components (description, title, comments)."""
+    raw_text = str(row.get("description") or row.get("title") or row.get("comments") or "").strip()
+    return sha256_text(raw_text) if raw_text else ""
+
+def compute_source_row_snapshot_sha256(row: dict, columns=None) -> str:
+    """Deterministic field-labelled sorted JSON snapshot hash of full source record."""
+    cols = columns or ALL_SOURCE_COLUMNS
+    payload = {k: ("" if row.get(k) is None else str(row[k])) for k in cols if k in row}
     serialized = json.dumps(payload, sort_keys=True, separators=(',', ':'))
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
 
@@ -99,27 +107,19 @@ def verify_mariadb_transport(host: str):
         ca_path = os.path.abspath(ca_file)
         if not os.path.exists(ca_path):
             raise ValueError(f"MariaDB TLS CA file does not exist: {ca_path}")
-        
-        tls_server_name = os.environ.get("MARIADB_TLS_SERVER_NAME")
-        ssl_config = {
-            "ca": ca_path,
-            "check_hostname": True
-        }
+
+        # Enforce valid DNS hostname for certificate SAN matching (refuse raw IP)
         try:
             ipaddress.ip_address(host)
-            if not tls_server_name:
-                raise ValueError(
-                    f"MariaDB TLS server identity refusal: Host '{host}' is an IP address. "
-                    "Host certificate SAN verification requires a valid DNS hostname via MARIADB_TLS_SERVER_NAME or a DNS host."
-                )
-            ssl_config["server_name"] = tls_server_name
+            raise ValueError(
+                f"MariaDB TLS server identity refusal: Host '{host}' is a raw IP address. "
+                "PyMySQL TLS SAN validation requires connecting via the certificate's actual DNS hostname, not a public IP."
+            )
         except ValueError as e:
             if "server identity refusal" in str(e):
                 raise
-            if tls_server_name:
-                ssl_config["server_name"] = tls_server_name
 
-        return {"ssl": ssl_config, "transport": "TLS_CA_VERIFIED"}
+        return {"ssl": {"ca": ca_path, "check_hostname": True}, "transport": "TLS_CA_VERIFIED"}
 
     tunnel_verified = os.environ.get("MARIADB_PRIVATE_TUNNEL_VERIFIED") == "true"
     if tunnel_verified:
@@ -139,7 +139,7 @@ def assert_read_only_grants(grants):
                 norm.startswith("GRANT SELECT ON ") or 
                 norm.startswith("GRANT SELECT, SHOW VIEW ON ") or 
                 norm.startswith("GRANT SHOW VIEW, SELECT ON ")):
-            raise ValueError(f"MariaDB account has privileges beyond read-only SELECT/SHOW VIEW: {grant}")
+            raise ValueError("MariaDB account security violation: account has privileges beyond read-only SELECT/SHOW VIEW. [Privilege text redacted for security]")
 
 def get_postgres_config():
     pghost = os.environ.get("PGHOST") or os.environ.get("POSTGRES_HOST") or os.environ.get("SUPABASE_DB_HOST")
@@ -147,7 +147,12 @@ def get_postgres_config():
     pguser = os.environ.get("PGUSER") or os.environ.get("POSTGRES_USER") or os.environ.get("SUPABASE_DB_USER")
     pgpass = os.environ.get("PGPASSWORD") or os.environ.get("POSTGRES_PASSWORD") or os.environ.get("SUPABASE_DB_PASSWORD")
     pgdb = os.environ.get("PGDATABASE") or os.environ.get("POSTGRES_DB") or os.environ.get("SUPABASE_DB_NAME") or "postgres"
-    sslmode = os.environ.get("PGSSLMODE") or "verify-full"
+    
+    # Enforce strictly verify-full; reject any other mode
+    sslmode = os.environ.get("PGSSLMODE", "verify-full").strip().lower()
+    if sslmode != "verify-full":
+        raise ValueError(f"PostgreSQL TLS security violation: sslmode must be strictly 'verify-full', got: '{sslmode}'. Downgrades are strictly forbidden.")
+
     sslrootcert = os.environ.get("PGSSLROOTCERT")
 
     if not pghost or not pguser or not pgpass:
@@ -161,7 +166,7 @@ def get_postgres_config():
         "user": pguser,
         "password": pgpass,
         "dbname": pgdb,
-        "sslmode": sslmode,
+        "sslmode": "verify-full",
         "connect_timeout": 15
     }
     if sslrootcert:
@@ -191,6 +196,64 @@ def get_mariadb_config():
         "connect_timeout": 15,
         "transport": transport_info
     }
+
+def get_available_memory_bytes():
+    """Returns available system memory in bytes, or None if unmeasurable."""
+    try:
+        import psutil
+        return psutil.virtual_memory().available
+    except (ImportError, Exception):
+        pass
+
+    if sys.platform == "linux" and os.path.exists("/proc/meminfo"):
+        try:
+            with open("/proc/meminfo", "r") as f:
+                for line in f:
+                    if line.startswith("MemAvailable:"):
+                        return int(line.split()[1]) * 1024
+        except Exception:
+            pass
+
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            class MEMORYSTATUSEX(ctypes.Structure):
+                _fields_ = [
+                    ("dwLength", ctypes.c_ulong),
+                    ("dwMemoryLoad", ctypes.c_ulong),
+                    ("ullTotalPhys", ctypes.c_ulonglong),
+                    ("ullAvailPhys", ctypes.c_ulonglong),
+                    ("ullTotalPageFile", ctypes.c_ulonglong),
+                    ("ullAvailPageFile", ctypes.c_ulonglong),
+                    ("ullTotalVirtual", ctypes.c_ulonglong),
+                    ("ullAvailVirtual", ctypes.c_ulonglong),
+                    ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                ]
+            stat = MEMORYSTATUSEX()
+            stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                return stat.ullAvailPhys
+        except Exception:
+            pass
+
+    return None
+
+def check_memory_preflight(estimated_total_rows: int, log_fn):
+    """Establishes memory requirements and fails closed if inadequate or unreadable."""
+    estimated_bytes = max(1500 * 1024 * 1024, int(estimated_total_rows * 1200))
+    avail_bytes = get_available_memory_bytes()
+
+    if avail_bytes is None:
+        raise RuntimeError("Memory preflight failed: unable to measure system available memory. Failing closed to prevent OOM.")
+
+    avail_mb = avail_bytes / (1024 * 1024)
+    req_mb = estimated_bytes / (1024 * 1024)
+    log_fn(f"Memory preflight: {avail_mb:.1f} MB available, {req_mb:.1f} MB required for {estimated_total_rows:,} rows.")
+    
+    if avail_bytes < estimated_bytes:
+        raise MemoryError(
+            f"Memory preflight failed: system has only {avail_mb:.1f} MB available, but {req_mb:.1f} MB is required for {estimated_total_rows:,} rows."
+        )
 
 def verify_postgres_role_permissions(cur, log_fn):
     """Enforce dedicated read-only role: non-superuser, USAGE, SELECT, zero mutations."""
@@ -304,9 +367,43 @@ def fetch_scoped_canonical_parents(pg_config, log_fn):
     )
     return scoped_parents
 
+def verify_source_schema_and_primary_key(mcur, database_name: str, log_fn):
+    """Verifies information_schema columns and asserts strict single primary key ['id']."""
+    # 1. Column verification
+    mcur.execute("""
+        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = %s AND TABLE_NAME = 'auctions';
+    """, (database_name,))
+    cols_meta = mcur.fetchall()
+    if not cols_meta:
+        raise RuntimeError(f"Schema verification failed: table 'auctions' not found in database '{database_name}'")
+
+    actual_col_names = set(c.get("COLUMN_NAME") or c.get("column_name") for c in cols_meta)
+    missing_required = [c for c in REQUIRED_SOURCE_COLUMNS if c not in actual_col_names]
+    if missing_required:
+        raise RuntimeError(f"Schema verification failed: missing required columns in auctions table: {missing_required}")
+
+    available_source_columns = [c for c in ALL_SOURCE_COLUMNS if c in actual_col_names]
+    log_fn(f"Verified auctions schema: {len(actual_col_names)} total columns, {len(available_source_columns)} tracked source columns.")
+
+    # 2. Strict Primary Key Assertion
+    mcur.execute("SHOW KEYS FROM auctions WHERE Key_name = 'PRIMARY';")
+    pk_keys = mcur.fetchall()
+    pk_columns = [k.get("Column_name") or k.get("column_name") for k in pk_keys]
+    if pk_columns != ["id"]:
+        raise RuntimeError(f"Primary key assertion failed on 'auctions': expected exactly ['id'], found: {pk_columns}")
+    log_fn(f"Primary key strictly verified on auctions: {pk_columns}")
+
+    return {
+        "actual_columns": sorted(list(actual_col_names)),
+        "available_source_columns": available_source_columns,
+        "missing_required": missing_required,
+        "primary_key": pk_columns
+    }
+
 def preflight_and_explain_cursor(mcur, log_fn):
     """Verifies composite index and executes EXPLAIN on exact keyset query plan."""
-    # 1. Proved Index Verification
     mcur.execute("SHOW INDEX FROM auctions;")
     indexes = mcur.fetchall()
     
@@ -328,7 +425,6 @@ def preflight_and_explain_cursor(mcur, log_fn):
     proved_idx = proved_indexes[0]
     log_fn(f"Proved composite cursor index: {proved_idx}")
 
-    # 2. EXPLAIN Exact Composite Keyset Query
     mcur.execute("""
         EXPLAIN SELECT id, created_on
         FROM auctions
@@ -345,7 +441,6 @@ def preflight_and_explain_cursor(mcur, log_fn):
     key_used = plan.get("key") or plan.get("Key")
     access_type = str(plan.get("type") or plan.get("Type") or "").upper()
 
-    # Strict assertion on EXPLAIN plan
     if not key_used or key_used not in proved_indexes:
         raise RuntimeError(f"EXPLAIN plan failed: selected key '{key_used}' is not in proved composite indexes {proved_indexes}")
 
@@ -356,59 +451,7 @@ def preflight_and_explain_cursor(mcur, log_fn):
     log_fn(f"EXPLAIN verified for composite keyset stream: key='{key_used}', type='{access_type}'")
     return {"proved_composite_index": proved_idx, "key_used": key_used, "access_type": access_type}
 
-# Function alias for backwards compatibility
 preflight_cursor_and_explain = preflight_and_explain_cursor
-
-def check_memory_preflight(frozen_total_rows: int, log_fn):
-    """Establishes memory requirements and fails before scanning if inadequate."""
-    estimated_bytes = max(1500 * 1024 * 1024, int(frozen_total_rows * 1200))
-    avail_bytes = None
-
-    try:
-        import psutil
-        avail_bytes = psutil.virtual_memory().available
-    except ImportError:
-        if sys.platform == "linux" and os.path.exists("/proc/meminfo"):
-            try:
-                with open("/proc/meminfo", "r") as f:
-                    for line in f:
-                        if line.startswith("MemAvailable:"):
-                            avail_bytes = int(line.split()[1]) * 1024
-                            break
-            except Exception:
-                pass
-        elif sys.platform == "win32":
-            try:
-                import ctypes
-                class MEMORYSTATUSEX(ctypes.Structure):
-                    _fields_ = [
-                        ("dwLength", ctypes.c_ulong),
-                        ("dwMemoryLoad", ctypes.c_ulong),
-                        ("ullTotalPhys", ctypes.c_ulonglong),
-                        ("ullAvailPhys", ctypes.c_ulonglong),
-                        ("ullTotalPageFile", ctypes.c_ulonglong),
-                        ("ullAvailPageFile", ctypes.c_ulonglong),
-                        ("ullTotalVirtual", ctypes.c_ulonglong),
-                        ("ullAvailVirtual", ctypes.c_ulonglong),
-                        ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
-                    ]
-                stat = MEMORYSTATUSEX()
-                stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
-                if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
-                    avail_bytes = stat.ullAvailPhys
-            except Exception:
-                pass
-
-    if avail_bytes is not None:
-        avail_mb = avail_bytes / (1024 * 1024)
-        req_mb = estimated_bytes / (1024 * 1024)
-        log_fn(f"Memory preflight check: {avail_mb:.1f} MB available, {req_mb:.1f} MB estimated required for {frozen_total_rows:,} rows.")
-        if avail_bytes < estimated_bytes:
-            raise MemoryError(
-                f"Memory preflight failed: system has {avail_mb:.1f} MB available, but {req_mb:.1f} MB is required to securely process {frozen_total_rows:,} source rows."
-            )
-    else:
-        log_fn(f"Memory preflight check: system memory stats unreadable; allocated {estimated_bytes / (1024 * 1024):.1f} MB threshold for bounded sets.")
 
 def classify_watch_record(title: str, brand: str, ref: str) -> str:
     t = str(title or "")
@@ -433,30 +476,25 @@ def resolve_scoped_provenance_match(row, scoped_parents):
     if not sid_num and not open_key:
         return {"matched": False, "rule": "UNMATCHED_NULL_IDENTITY", "scoped_system": None}
 
-    # Proven Rule 1: Green API / OceanDigital Stream (ocean_<open_unique_key>)
     if open_key:
         ocean_key = f"ocean_{open_key}"
         if ocean_key in scoped_parents["ocean_stream_source_ids"] or open_key in scoped_parents["ocean_stream_ext_ids"]:
             return {"matched": True, "rule": "RULE_OCEAN_STREAM_MATCH", "scoped_system": "Green API / OceanDigital Stream"}
 
-    # Proven Rule 2: MySQL / Workbook Ingest (wf-<open_unique_key>)
     if open_key:
         wf_key = f"wf-{open_key}"
         if wf_key in scoped_parents["mysql_workbook_source_ids"] or open_key in scoped_parents["mysql_workbook_ext_ids"]:
             return {"matched": True, "rule": "RULE_MYSQL_WORKBOOK_WF_MATCH", "scoped_system": "MySQL / Workbook Ingest"}
 
-    # Proven Rule 3: MySQL / Workbook Ingest (mysql_auction_watches_<open_unique_key>)
     if open_key:
         mw_key = f"mysql_auction_watches_{open_key}"
         if mw_key in scoped_parents["mysql_workbook_source_ids"]:
             return {"matched": True, "rule": "RULE_MYSQL_WORKBOOK_WATCHES_MATCH", "scoped_system": "MySQL / Workbook Ingest"}
 
-    # Proven Rule 4: MySQL / Workbook Ingest (mysql_auctions_<id>)
     m_id = f"mysql_auctions_{sid_num}"
     if m_id in scoped_parents["mysql_workbook_source_ids"] or m_id in scoped_parents["mysql_workbook_ext_ids"]:
         return {"matched": True, "rule": "RULE_MYSQL_WORKBOOK_AUCTION_ID_MATCH", "scoped_system": "MySQL / Workbook Ingest"}
 
-    # Proven Rule 5: Scoped Numeric ID (strictly checked against MySQL / Workbook Ingest)
     if sid_num in scoped_parents["mysql_workbook_source_ids"] or sid_num in scoped_parents["mysql_workbook_ext_ids"]:
         return {"matched": True, "rule": "RULE_MYSQL_WORKBOOK_EXACT_NUMERIC_ID", "scoped_system": "MySQL / Workbook Ingest"}
 
@@ -480,10 +518,15 @@ def run_census(options=None):
     output_path = os.environ.get("MARIADB_CENSUS_OUTPUT") or "source_census_report.json"
     batch_size = int(os.environ.get("MARIADB_CENSUS_BATCH_SIZE") or 10000)
 
-    # 1. Fetch scoped canonical parents under PostgreSQL REPEATABLE READ READ ONLY transaction
+    # 1. Early Memory Preflight BEFORE loading canonical parent identities
+    # Baseline estimate: assume 1.5M records (~1.8 GB RAM threshold) before full scan
+    log("Executing early memory preflight...")
+    check_memory_preflight(1500000, log)
+
+    # 2. Fetch scoped canonical parents under PostgreSQL REPEATABLE READ READ ONLY transaction
     scoped_parents = fetch_scoped_canonical_parents(pg_config, log)
 
-    # 2. Connect to MariaDB and establish REPEATABLE READ READ ONLY consistent snapshot
+    # 3. Connect to MariaDB and establish REPEATABLE READ READ ONLY consistent snapshot
     log(f"Connecting to MariaDB ({maria_config['host']}:{maria_config['port']}/{maria_config['database']})...")
     conn_params = {
         "host": maria_config["host"],
@@ -513,16 +556,13 @@ def run_census(options=None):
         assert_read_only_grants(grants)
         log("READ_ONLY_GRANTS_VERIFIED (Grants strictly constrained to USAGE, SELECT, SHOW VIEW).")
 
-        # Primary Key Metadata
-        mcur.execute("SHOW KEYS FROM auctions WHERE Key_name = 'PRIMARY';")
-        pk_keys = mcur.fetchall()
-        pk_columns = [k.get("Column_name") or k.get("column_name") for k in pk_keys]
-        log(f"Primary key verified on auctions: {pk_columns}")
+        # Schema & Primary Key Verification
+        schema_info = verify_source_schema_and_primary_key(mcur, maria_config["database"], log)
 
         # Cursor preflight and explain plan verification
         preflight_info = preflight_and_explain_cursor(mcur, log)
 
-        # 3. Freeze Upper Boundary
+        # 4. Freeze Upper Boundary
         log("Freezing upper cursor boundary...")
         mcur.execute("""
             SELECT 
@@ -539,16 +579,18 @@ def run_census(options=None):
         bounds = mcur.fetchone()
         frozen_total = int(bounds["total_rows"])
         null_created_on_total = int(bounds["null_created_on_count"] or 0)
+        frozen_min_created_on = str(bounds["min_created_on"] or "0000-00-00 00:00:00")
         frozen_max_created_on = str(bounds["max_created_on"] or "9999-12-31 23:59:59")
-        frozen_max_id = int(bounds["max_id"])
+        frozen_min_id = int(bounds["min_id"] or 0)
+        frozen_max_id = int(bounds["max_id"] or 0)
 
-        log(f"Frozen Boundary Total: {frozen_total:,} rows (Min ID: {bounds['min_id']}, Max ID: {frozen_max_id})")
-        log(f"Frozen Date Range: {bounds['min_created_on']} to {frozen_max_created_on} (Null created_on: {null_created_on_total:,})")
+        log(f"Frozen Boundary Total: {frozen_total:,} rows (Min ID: {frozen_min_id}, Max ID: {frozen_max_id})")
+        log(f"Frozen Date Range: {frozen_min_created_on} to {frozen_max_created_on} (Null created_on: {null_created_on_total:,})")
 
-        # Memory Preflight Check
-        check_memory_preflight(frozen_total, log)
+        # Exact Memory Preflight for Frozen Row Count
+        check_memory_preflight(frozen_total + scoped_parents["total_parent_rows"], log)
 
-        # 4. Status, Intent, Bundle Distributions
+        # 5. Status, Intent, Bundle Distributions
         mcur.execute("SELECT status, COUNT(*) AS cnt FROM auctions GROUP BY status;")
         status_dist = {str(r["status"] if r["status"] is not None else "<NULL>"): int(r["cnt"]) for r in mcur.fetchall()}
 
@@ -578,7 +620,7 @@ def run_census(options=None):
         """)
         img_dist = mcur.fetchone()
 
-        # 5. Keyset Streaming
+        # 6. Keyset Streaming
         scanned_count = 0
         matched_count = 0
         missing_count = 0
@@ -600,11 +642,12 @@ def run_census(options=None):
         }
 
         media_key_set = set()
-        raw_hash_set = set()
+        raw_message_hash_set = set()
+        source_row_snapshot_hash_set = set()
         empty_raw_message_count = 0
         sample_missing = []
 
-        select_cols = ", ".join(SOURCE_COLUMNS)
+        select_cols = ", ".join(schema_info["available_source_columns"])
 
         # Lane A: NULL created_on records (if any)
         if null_created_on_total > 0:
@@ -626,23 +669,24 @@ def run_census(options=None):
                     scanned_count += 1
                     null_last_id = int(row["id"])
 
-                    # Authoritative Raw Evidence SHA-256 Hash
-                    auth_hash = compute_authoritative_raw_evidence_sha256(row)
-                    raw_hash_set.add(auth_hash)
+                    # 1. Source row full snapshot hash
+                    snap_hash = compute_source_row_snapshot_sha256(row, schema_info["available_source_columns"])
+                    source_row_snapshot_hash_set.add(snap_hash)
 
-                    raw_text = str(row.get("description") or row.get("title") or row.get("comments") or "").strip()
-                    if not raw_text:
+                    # 2. Authoritative raw message hash
+                    msg_hash = compute_raw_message_sha256(row)
+                    if msg_hash:
+                        raw_message_hash_set.add(msg_hash)
+                    else:
                         empty_raw_message_count += 1
 
                     img_url = str(row.get("front_image") or "").strip()
                     if img_url:
                         media_key_set.add(img_url.split("/")[-1])
 
-                    # Watch classification
                     cls = classify_watch_record(row.get("title") or "", row.get("brand") or "", row.get("reference") or "")
                     classification_counts[cls] += 1
 
-                    # Provenance resolution
                     match_res = resolve_scoped_provenance_match(row, scoped_parents)
                     rule_breakdown[match_res["rule"]] = rule_breakdown.get(match_res["rule"], 0) + 1
 
@@ -654,26 +698,44 @@ def run_census(options=None):
                 if len(null_batch) < batch_size:
                     break
 
-        # Lane B: Non-NULL created_on records via plain composite keyset
-        log("Streaming non-NULL created_on rows via plain (created_on, id) composite keyset...")
-        last_created_on = "1970-01-01 00:00:00"
-        last_id = 0
+        # Lane B: Non-NULL created_on records starting from frozen minimum (No 1970 lower bound assumption)
+        log(f"Streaming non-NULL created_on rows starting from minimum timestamp '{frozen_min_created_on}'...")
+        last_created_on = frozen_min_created_on
+        last_id = frozen_min_id - 1
+        is_first_batch = True
 
         while True:
-            mcur.execute(f"""
-                SELECT {select_cols}
-                FROM auctions
-                WHERE created_on IS NOT NULL
-                  AND (
-                    (created_on > %s) OR
-                    (created_on = %s AND id > %s)
-                  ) AND (
-                    (created_on < %s) OR
-                    (created_on = %s AND id <= %s)
-                  )
-                ORDER BY created_on ASC, id ASC
-                LIMIT %s;
-            """, (last_created_on, last_created_on, last_id, frozen_max_created_on, frozen_max_created_on, frozen_max_id, batch_size))
+            if is_first_batch:
+                mcur.execute(f"""
+                    SELECT {select_cols}
+                    FROM auctions
+                    WHERE created_on IS NOT NULL
+                      AND (
+                        (created_on > %s) OR
+                        (created_on = %s AND id >= %s)
+                      ) AND (
+                        (created_on < %s) OR
+                        (created_on = %s AND id <= %s)
+                      )
+                    ORDER BY created_on ASC, id ASC
+                    LIMIT %s;
+                """, (frozen_min_created_on, frozen_min_created_on, frozen_min_id, frozen_max_created_on, frozen_max_created_on, frozen_max_id, batch_size))
+                is_first_batch = False
+            else:
+                mcur.execute(f"""
+                    SELECT {select_cols}
+                    FROM auctions
+                    WHERE created_on IS NOT NULL
+                      AND (
+                        (created_on > %s) OR
+                        (created_on = %s AND id > %s)
+                      ) AND (
+                        (created_on < %s) OR
+                        (created_on = %s AND id <= %s)
+                      )
+                    ORDER BY created_on ASC, id ASC
+                    LIMIT %s;
+                """, (last_created_on, last_created_on, last_id, frozen_max_created_on, frozen_max_created_on, frozen_max_id, batch_size))
 
             batch = mcur.fetchall()
             if not batch:
@@ -684,23 +746,24 @@ def run_census(options=None):
                 last_created_on = str(row["created_on"])
                 last_id = int(row["id"])
 
-                # Authoritative Raw Evidence SHA-256 Hash
-                auth_hash = compute_authoritative_raw_evidence_sha256(row)
-                raw_hash_set.add(auth_hash)
+                # 1. Source row full snapshot hash
+                snap_hash = compute_source_row_snapshot_sha256(row, schema_info["available_source_columns"])
+                source_row_snapshot_hash_set.add(snap_hash)
 
-                raw_text = str(row.get("description") or row.get("title") or row.get("comments") or "").strip()
-                if not raw_text:
+                # 2. Authoritative raw message hash
+                msg_hash = compute_raw_message_sha256(row)
+                if msg_hash:
+                    raw_message_hash_set.add(msg_hash)
+                else:
                     empty_raw_message_count += 1
 
                 img_url = str(row.get("front_image") or "").strip()
                 if img_url:
                     media_key_set.add(img_url.split("/")[-1])
 
-                # Watch classification
                 cls = classify_watch_record(row.get("title") or "", row.get("brand") or "", row.get("reference") or "")
                 classification_counts[cls] += 1
 
-                # Provenance resolution
                 match_res = resolve_scoped_provenance_match(row, scoped_parents)
                 rule_breakdown[match_res["rule"]] = rule_breakdown.get(match_res["rule"], 0) + 1
 
@@ -726,7 +789,7 @@ def run_census(options=None):
             if len(batch) < batch_size:
                 break
 
-        # 6. Hard reconciliation assertions
+        # 7. Hard reconciliation assertions
         if scanned_count != frozen_total:
             raise RuntimeError(f"CENSUS RECONCILIATION FAILURE: Scanned row count ({scanned_count:,}) != Frozen source total ({frozen_total:,})")
 
@@ -748,17 +811,14 @@ def run_census(options=None):
             "started_at": start_iso,
             "ended_at": end_iso,
             "duration_ms": duration_ms,
-            "primary_key_metadata": {
-                "columns": pk_columns,
-                "table": "auctions",
-            },
+            "schema_verification": schema_info,
             "cursor_preflight": preflight_info,
             "boundaries": {
                 "frozen_total_rows": frozen_total,
-                "min_id": bounds["min_id"],
+                "min_id": frozen_min_id,
                 "max_id": frozen_max_id,
-                "min_created_on": str(bounds["min_created_on"]),
-                "max_created_on": str(frozen_max_created_on),
+                "min_created_on": frozen_min_created_on,
+                "max_created_on": frozen_max_created_on,
                 "min_updated_on": str(bounds["min_updated_on"]),
                 "max_updated_on": str(bounds["max_updated_on"]),
                 "null_created_on_rows": null_created_on_total,
@@ -774,8 +834,11 @@ def run_census(options=None):
             },
             "classification_distribution": classification_counts,
             "raw_message_evidence": {
-                "distinct_authoritative_raw_hashes": len(raw_hash_set),
+                "distinct_raw_message_hashes": len(raw_message_hash_set),
                 "empty_or_null_raw_messages": empty_raw_message_count,
+            },
+            "source_row_snapshot_evidence": {
+                "distinct_source_row_snapshot_hashes": len(source_row_snapshot_hash_set),
             },
             "media_distribution": {
                 "with_image": int(img_dist["with_image"] or 0),
