@@ -6,7 +6,7 @@
   "scripts": {
     "release:qnsa-vacheron-overseas": "node tools/intake/release-qnsa-vacheron-overseas.cjs",
     "dev": "vite",
-    "build": "node tools/verify-api-syntax.cjs && tsc -b && vite build",
+    "build": "node tools/verify-api-syntax.cjs && node tools/verify-frontend-api-routes.cjs && tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "shadow:progress": "node tools/shadow-reprocess/shadow-progress-report.cjs",

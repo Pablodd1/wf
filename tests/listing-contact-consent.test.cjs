@@ -66,7 +66,8 @@ test('QNSA released listings resolve contact only through an applied dealer link
   assert.match(source, /qnsa_trading_floor_reference_rows/);
   assert.match(source, /from\('dealer_listing_links'\)[\s\S]*\.eq\('listing_id', id\)[\s\S]*\.eq\('link_status', 'APPLIED'\)/);
   assert.match(source, /dealer_id: qnsaDealerLink\?\.dealer_id \|\| null/);
-  assert.match(source, /!qnsaReleaseListing && !isReleaseListingEligible/);
+  assert.match(source, /!qnsaReleaseListing && !canonicalReadyListing && !isReleaseListingEligible/);
+  assert.match(source, /trading_floor_ready_view/);
   assert.match(source, /if \(!qnsaReleaseListing\) \{[\s\S]*seller_listing_lineage_staging/);
 });
 

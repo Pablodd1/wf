@@ -93,8 +93,9 @@ const SORT_OPTIONS = [
 ] as const;
 
 import { MarketTickerBanner } from '../components/MarketTickerBanner';
+import type { ListingDisplayContract } from '../../shared/listing-display-contract.cjs';
 
-interface ListingRecord {
+interface ListingRecord extends Partial<ListingDisplayContract> {
   id: string;
   brand: string;
   model?: string | null;

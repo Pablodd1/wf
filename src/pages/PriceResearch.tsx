@@ -10,6 +10,7 @@ import { PriorityReferenceShortcuts } from '../components/PriorityReferenceShort
 import { DealerRatingBadge, ListingDealerEvidence, type DealerRatingEvidenceStatus } from '../components/ListingDealerEvidence';
 import { loadPriceResearchBatchSummaries } from '../utils/priceResearchBatchSummary';
 import { isHeldRolexPatekBrand } from '../utils/rolexPatekPublication';
+import type { ListingDisplayContract } from '../../shared/listing-display-contract.cjs';
 
 function referenceEvidenceKey(brand: string, reference: string) {
   return `${brand.trim().toLowerCase()}|${reference.trim().toUpperCase()}`;
@@ -23,7 +24,9 @@ function exactSourceImageUrl(record: ReviewedMarketRecord) {
 }
 
 // ── Types ──────────────────────────────────────────────────────
-interface RowData {
+type PriceResearchListingContract = Omit<Partial<ListingDisplayContract>, 'image_urls' | 'price_research_eligible'>;
+
+interface RowData extends PriceResearchListingContract {
   id: string;
   brand?: string | null;
   reference?: string | null;
@@ -54,6 +57,7 @@ interface RowData {
   display_image_url?: string | null;
   thumbnail_url?: string | null;
   image_urls?: string[] | null;
+  price_research_eligible?: boolean;
   has_images?: boolean;
   image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;

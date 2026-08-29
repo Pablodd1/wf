@@ -24,6 +24,7 @@ const {
 } = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
+const { enforceListingDisplayContract } = require('../shared/listing-display-contract.cjs');
 const { loadReviewedWorkbookListing } = require('./_lib/reviewed-workbook-analytics.cjs');
 const { ROLEX_PATEK_MULTI_PARENT_ID } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
 const { loadEffectiveDetail } = require('./_lib/four-brand-field-enrichment.cjs');
@@ -80,7 +81,7 @@ function qnsaListingResponse(listing) {
   const rawMessage = String(listing.raw_message || '').trim();
   return {
     success: true,
-    listing: {
+    listing: enforceListingDisplayContract({
       id: String(listing.id),
       brand: listing.brand,
       model: listing.model || null,
@@ -123,7 +124,7 @@ function qnsaListingResponse(listing) {
       region: listing.location || null,
       data_quality_issues: [],
       data_quality_review_required: false,
-    },
+    }),
   };
 }
 
@@ -302,7 +303,7 @@ module.exports = async function handler(req, res) {
         }
         return res.status(200).json({
           success: true,
-          listing: {
+          listing: enforceListingDisplayContract({
             id: workbookListing.id,
             brand: workbookListing.brand,
             model: workbookListing.model,
@@ -333,7 +334,7 @@ module.exports = async function handler(req, res) {
             data_quality_issues: [],
             data_quality_review_required: false,
             human_review_available: canReview,
-          },
+          }),
         });
       }
       if (!canReview) return res.status(404).json({ error: 'Listing not found' });
@@ -452,7 +453,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      listing: {
+      listing: enforceListingDisplayContract({
         id: customerListing.id,
         brand: customerListing.brand,
         model: customerListing.model,
@@ -487,7 +488,7 @@ module.exports = async function handler(req, res) {
         human_review_available: canReview,
         data_quality_issues: priceIssues,
         data_quality_review_required: priceIssues.length > 0,
-      },
+      }),
     });
   } catch (error) {
     console.error('[price-research-listing] error:', error.message);
