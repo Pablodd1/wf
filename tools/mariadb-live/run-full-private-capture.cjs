@@ -321,15 +321,40 @@ async function runCaptureLoop(options = {}) {
   const errorLedgerResult = verifyErrorLedgerContract(ledgerErrors || [], cumulativeErrors);
   console.log('Error Ledger Verified:', errorLedgerResult);
 
-  // 8. Checkpoint Finalization using Cumulative Totals
-  console.log('8. Finalizing capture checkpoint status to RAW_STAGED using cumulative totals...');
-  const { data: finalizeData, error: finalizeErr } = await supabase.rpc('finalize_mariadb_private_raw_checkpoint', {
-    p_run_key: runKey,
-    p_expected_staged_rows: cumulativeNewlyStaged + cumulativeAlreadyStaged,
-    p_expected_error_rows: cumulativeErrors,
-    p_final_status: 'RAW_STAGED'
-  });
-  if (finalizeErr) throw new Error('Checkpoint finalization failed: ' + finalizeErr.message);
+  // 8. Checkpoint Finalization with Strict Total, Boundary, and Zero-Row Verification
+  let finalStatus = 'RAW_STAGED';
+  let finalizeData = null;
+
+  if (maxRows && cumulativeInputRows < manifest.total_source_rows) {
+    console.log(`8. Bounded run configured (${cumulativeInputRows} < ${manifest.total_source_rows}): Leaving checkpoint status as PARTIAL.`);
+    finalStatus = 'PARTIAL';
+    const { data, error } = await supabase.rpc('finalize_mariadb_private_raw_checkpoint', {
+      p_run_key: runKey,
+      p_expected_staged_rows: cumulativeNewlyStaged + cumulativeAlreadyStaged,
+      p_expected_error_rows: cumulativeErrors,
+      p_final_status: 'PARTIAL'
+    });
+    if (error) throw new Error('Partial finalization failed: ' + error.message);
+    finalizeData = data;
+  } else {
+    // Invariants required before RAW_STAGED finalization
+    if (cumulativeInputRows !== manifest.total_source_rows) {
+      throw new Error(`RAW_STAGED Precondition Failed: cumulative_input_rows (${cumulativeInputRows}) != total_source_rows (${manifest.total_source_rows})`);
+    }
+    if (lastSourceId !== manifest.upper_boundary.id || lastCreatedOn !== manifest.upper_boundary.created_on) {
+      throw new Error(`RAW_STAGED Precondition Failed: final cursor (${lastCreatedOn}, ${lastSourceId}) != upper boundary (${manifest.upper_boundary.created_on}, ${manifest.upper_boundary.id})`);
+    }
+
+    console.log('8. Finalizing capture checkpoint status to RAW_STAGED using cumulative totals...');
+    const { data, error } = await supabase.rpc('finalize_mariadb_private_raw_checkpoint', {
+      p_run_key: runKey,
+      p_expected_staged_rows: cumulativeNewlyStaged + cumulativeAlreadyStaged,
+      p_expected_error_rows: cumulativeErrors,
+      p_final_status: 'RAW_STAGED'
+    });
+    if (error) throw new Error('Checkpoint finalization failed: ' + error.message);
+    finalizeData = data;
+  }
   console.log('Checkpoint Finalized:', finalizeData);
 
   // 9. Produce Final Audit Summary
