@@ -4,17 +4,17 @@
   "source_database": "thecollective_inventory",
   "source_table": "auctions",
   "isolation_level": "REPEATABLE READ (CONSISTENT SNAPSHOT, READ ONLY)",
-  "total_source_rows": 1495680,
+  "total_source_rows": 1495718,
   "lower_boundary": {
     "id": "7534d09b-28b9-4052-8005-228c32f972df",
-    "created_on": "2025-01-08T18:28:49.000Z",
+    "created_on": "2025-01-08T13:28:49.000Z",
     "updated_on": null
   },
   "upper_boundary": {
-    "id": "2fd9aabf-ae50-4fe4-aaa4-e1591ef5d943",
-    "created_on": "2026-08-29T17:59:21.000Z",
+    "id": "bede2fe8-b7d7-43f3-87e3-e7efce01e1ad",
+    "created_on": "2026-08-29T14:11:18.000Z",
     "updated_on": null
   },
-  "snapshot_timestamp": "2026-08-29T17:59:36.725Z",
-  "manifest_sha256": "df7c4faac009ca168601bf049c3d36b39805157f2243c846b58d60c4e5253d78"
+  "snapshot_timestamp": "2026-08-29T18:11:47.991Z",
+  "manifest_sha256": "c698a25c89b64db6b2279eacf3079a2618013bff4b0950982e40a13da0450608"
 }

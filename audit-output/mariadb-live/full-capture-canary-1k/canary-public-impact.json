@@ -1,13 +1,13 @@
 {
   "source_identities_verified": 1000,
   "public_matches_before": {
-    "raw_messages_count": 1000,
-    "raw_message_versions_count": 1000,
+    "raw_messages_count": 0,
+    "raw_message_versions_count": 0,
     "watch_records_count": 0
   },
   "public_matches_after": {
-    "raw_messages_count": 1000,
-    "raw_message_versions_count": 1000,
+    "raw_messages_count": 0,
+    "raw_message_versions_count": 0,
     "watch_records_count": 0
   },
   "zero_public_delta_verified": true

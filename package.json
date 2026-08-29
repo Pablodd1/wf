@@ -131,7 +131,8 @@
     "test:price-review": "node --test tests/price-remediation-review.test.cjs",
     "test:data-recovery": "node --test tests/data-recovery-control-plane.test.cjs",
     "test:e2e": "node tests/e2e/e2e-test-runner.cjs",
-    "mariadb:census": "node tools/mariadb-live/source-census.cjs"
+    "mariadb:census": "node tools/mariadb-live/source-census.cjs",
+    "start": "node tools/mariadb-live/run-full-private-capture.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -213,5 +214,8 @@
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4",
     "vite": "^7.2.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }

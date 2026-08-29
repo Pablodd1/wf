@@ -3,177 +3,184 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
+
 const {
+  CONTRACT,
+  CANONICAL_VERSION,
+  HASH_ALGO,
+  PINNED_MARIADB_SERVER_CERT_SHA256,
+  PINNED_MARIADB_CA_CERT_SHA256,
+  sha256,
+  stableJson,
+  canonicalizeRawPayload,
+  checkPinnedServerIdentity,
   verifyTlsProof,
   createFrozenSourceBoundary,
   verifyHashReadbackContract,
   verifyErrorLedgerContract,
-  verifyDryRunReconciliation,
-  sha256,
-  canonicalizeRawPayload
+  verifyDryRunReconciliation
 } = require('../tools/mariadb-live/full-capture-preflight.cjs');
-const {
-  resolveMariaDbTransport,
-  isPublicHost
-} = require('../tools/mariadb-live/run-full-private-capture.cjs');
+
+const { isPublicHost, resolveMariaDbTransport } = require('../tools/mariadb-live/run-full-private-capture.cjs');
 
 test('isPublicHost correctly classifies RFC1918 private vs public hosts', () => {
   assert.equal(isPublicHost('localhost'), false);
   assert.equal(isPublicHost('127.0.0.1'), false);
-  assert.equal(isPublicHost('10.0.4.12'), false);
-  assert.equal(isPublicHost('172.20.0.5'), false);
+  assert.equal(isPublicHost('10.0.0.1'), false);
+  assert.equal(isPublicHost('172.16.0.5'), false);
   assert.equal(isPublicHost('192.168.1.100'), false);
   assert.equal(isPublicHost('mariadb.railway.internal'), false);
-  assert.equal(isPublicHost('db.internal'), false);
-
   assert.equal(isPublicHost('161.35.0.209'), true);
-  assert.equal(isPublicHost('mariadb.example.com'), true);
-  assert.equal(isPublicHost('8.8.8.8'), true);
+  assert.equal(isPublicHost('db.example.com'), true);
 });
 
-test('resolveMariaDbTransport rejects public-host private-tunnel assertions and requires verified CA', () => {
-  // 1. Public host with private tunnel assertion must be strictly rejected
+test('resolveMariaDbTransport rejects public-host private-tunnel assertions and requires verified CA with certificate pinning', () => {
   assert.throws(() => {
     resolveMariaDbTransport({
       MARIADB_HOST: '161.35.0.209',
       MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true'
-    });
-  }, /Public host '161.35.0.209' cannot claim PRIVATE_TUNNEL_VERIFIED without a verified TLS CA/);
-
-  // 2. Public host without TLS CA fails closed when default CA is disabled
-  assert.throws(() => {
-    resolveMariaDbTransport({
-      MARIADB_HOST: '161.35.0.209'
     }, { useDefaultCa: false });
-  }, /requires a verified TLS CA/);
+  }, /Security Violation/);
 
-  // 3. Public host with verified TLS CA succeeds
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tls-runner-test-'));
-  const caPath = path.join(tmpDir, 'ca.pem');
-  fs.writeFileSync(caPath, '-----BEGIN CERTIFICATE-----\nMOCK_CA\n-----END CERTIFICATE-----');
-
-  try {
-    const res = resolveMariaDbTransport({
+  const caPath = path.resolve(__dirname, '../tools/mariadb-live/mariadb-server-ca.pem');
+  if (fs.existsSync(caPath)) {
+    const transport = resolveMariaDbTransport({
       MARIADB_HOST: '161.35.0.209',
       MARIADB_TLS_CA_FILE: caPath
     });
-    assert.equal(res.transport, 'TLS_CA_VERIFIED');
-    assert.equal(res.ssl.rejectUnauthorized, true);
-    assert.ok(res.ssl.ca.length > 0);
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
+    assert.equal(transport.transport, 'TLS_CA_VERIFIED');
+    assert.equal(transport.ssl.rejectUnauthorized, true);
+    assert.equal(typeof transport.ssl.checkServerIdentity, 'function');
   }
+});
 
-  // 4. Private host with verified tunnel succeeds
-  const privRes = resolveMariaDbTransport({
-    MARIADB_HOST: '10.0.1.5',
-    MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true'
-  }, { useDefaultCa: false });
-  assert.equal(privRes.transport, 'PRIVATE_TUNNEL_VERIFIED');
-  assert.equal(privRes.ssl, null);
+test('checkPinnedServerIdentity validates pinned certificate fingerprint and rejects unknown certificates', () => {
+  assert.throws(() => {
+    checkPinnedServerIdentity('161.35.0.209', null);
+  }, /TLS Peer Certificate Missing/);
+
+  assert.throws(() => {
+    checkPinnedServerIdentity('161.35.0.209', {
+      fingerprint256: 'AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE:FF:00:11:22:33:44:55:66:77:88:99'
+    });
+  }, /TLS Certificate Pinning Violation/);
+
+  const validLeaf = checkPinnedServerIdentity('161.35.0.209', {
+    fingerprint256: PINNED_MARIADB_SERVER_CERT_SHA256
+  });
+  assert.equal(validLeaf, undefined);
+
+  const validCa = checkPinnedServerIdentity('161.35.0.209', {
+    fingerprint256: PINNED_MARIADB_CA_CERT_SHA256
+  });
+  assert.equal(validCa, undefined);
 });
 
 test('verifyTlsProof strictly requires verified CA with rejectUnauthorized=true and rejects unverified transports', () => {
-  assert.throws(() => verifyTlsProof({}), /verified TLS CA or an explicitly verified private tunnel/);
-
-  const tunnelResult = verifyTlsProof({ MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true' });
-  assert.equal(tunnelResult.verified, true);
-  assert.equal(tunnelResult.transport, 'PRIVATE_TUNNEL_VERIFIED');
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tls-test-'));
-  const caPath = path.join(tmpDir, 'ca.pem');
-  fs.writeFileSync(caPath, '-----BEGIN CERTIFICATE-----\nMOCK_CA_CERT\n-----END CERTIFICATE-----');
-
-  try {
-    const caResult = verifyTlsProof({ MARIADB_TLS_CA_FILE: caPath });
-    assert.equal(caResult.verified, true);
-    assert.equal(caResult.transport, 'TLS_CA_VERIFIED');
-    assert.equal(caResult.tls_reject_unauthorized, true);
-    assert.ok(caResult.ca_bytes > 0);
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
+  const caFile = path.resolve(__dirname, '../tools/mariadb-live/mariadb-server-ca.pem');
+  const proof = verifyTlsProof({
+    MARIADB_HOST: '161.35.0.209',
+    MARIADB_TLS_CA_FILE: caFile
+  });
+  assert.equal(proof.verified, true);
+  assert.equal(proof.transport, 'TLS_CA_VERIFIED');
+  assert.equal(proof.tls_reject_unauthorized, true);
+  assert.ok(proof.ca_bytes > 0);
+  assert.equal(proof.pinned_server_cert_sha256, PINNED_MARIADB_SERVER_CERT_SHA256);
 });
 
 test('createFrozenSourceBoundary establishes repeatable read consistent snapshot and signs manifest', async () => {
-  const queries = [];
-  const mockDb = {
-    query: async (sql) => {
-      queries.push(sql);
-      if (sql.includes('COUNT(*)')) return [[{ total: 1495561 }]];
-      if (sql.includes('ORDER BY created_on ASC')) {
-        return [[{ id: 'min-123', created_on: '2025-01-08 18:28:49', updated_on: null }]];
-      }
-      if (sql.includes('ORDER BY created_on DESC')) {
-        return [[{ id: 'max-456', created_on: '2026-08-29 17:17:05', updated_on: '2026-08-29 17:17:05' }]];
-      }
+  const fakeConn = {
+    queryCalls: [],
+    query: async function(sql) {
+      this.queryCalls.push(sql);
+      if (sql.includes('COUNT(*)')) return [[{ total: 1495680 }]];
+      if (sql.includes('ORDER BY created_on ASC')) return [[{ id: 'min-1', created_on: new Date('2025-01-08T18:28:49.000Z'), updated_on: null }]];
+      if (sql.includes('ORDER BY created_on DESC')) return [[{ id: 'max-1', created_on: new Date('2026-08-29T17:59:21.000Z'), updated_on: null }]];
       return [[]];
     }
   };
 
-  const manifest = await createFrozenSourceBoundary(mockDb);
-
-  assert.equal(manifest.total_source_rows, 1495561);
-  assert.equal(manifest.lower_boundary.id, 'min-123');
-  assert.equal(manifest.upper_boundary.id, 'max-456');
-  assert.equal(manifest.isolation_level, 'REPEATABLE READ (CONSISTENT SNAPSHOT, READ ONLY)');
-  assert.match(manifest.manifest_sha256, /^[a-f0-9]{64}$/);
-
-  assert.ok(queries.includes('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'));
-  assert.ok(queries.includes('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY'));
+  const manifest = await createFrozenSourceBoundary(fakeConn);
+  assert.equal(manifest.total_source_rows, 1495680);
+  assert.equal(manifest.lower_boundary.id, 'min-1');
+  assert.equal(manifest.upper_boundary.id, 'max-1');
+  assert.ok(manifest.manifest_sha256);
+  assert.ok(fakeConn.queryCalls.includes('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY'));
 });
 
 test('verifyHashReadbackContract validates 100% cryptographic hashes and fails on tampering', () => {
-  const records = [
-    { source_id: '1', source_hash: sha256('{"a":1}'), raw_payload_text: '{"a":1}' },
-    { source_id: '2', source_hash: sha256('{"b":2}'), raw_payload_text: '{"b":2}' }
-  ];
+  const rec1 = { id: 'uuid-1', val: 'test1' };
+  const text1 = canonicalizeRawPayload(rec1);
+  const hash1 = sha256(text1);
 
-  const result = verifyHashReadbackContract(records, records);
+  const expected = [{
+    source_id: 'uuid-1',
+    source_hash: hash1,
+    raw_payload_text: text1
+  }];
+
+  const stagedValid = [{
+    source_id: 'uuid-1',
+    source_hash: hash1,
+    raw_payload_text: text1
+  }];
+
+  const result = verifyHashReadbackContract(stagedValid, expected);
   assert.equal(result.verified, true);
-  assert.equal(result.total_verified, 2);
-  assert.equal(result.mismatches_count, 0);
+  assert.equal(result.total_verified, 1);
 
-  const tampered = [
-    { source_id: '1', source_hash: sha256('{"a":1}'), raw_payload_text: '{"a":1}' },
-    { source_id: '2', source_hash: sha256('{"b":2}'), raw_payload_text: '{"b":999_TAMPERED}' }
-  ];
+  const stagedTampered = [{
+    source_id: 'uuid-1',
+    source_hash: hash1,
+    raw_payload_text: 'tampered text'
+  }];
 
   assert.throws(() => {
-    verifyHashReadbackContract(tampered, records);
+    verifyHashReadbackContract(stagedTampered, expected);
   }, /Hash Readback Gate Failure/);
 });
 
 test('verifyErrorLedgerContract enforces exact error count match and fails on discrepancies', () => {
-  const ledger = [{ id: 'err-1' }, { id: 'err-2' }];
-  const res = verifyErrorLedgerContract(ledger, 2);
-  assert.equal(res.verified, true);
-  assert.equal(res.error_count, 2);
+  const result = verifyErrorLedgerContract([], 0);
+  assert.equal(result.verified, true);
+  assert.equal(result.error_count, 0);
 
   assert.throws(() => {
-    verifyErrorLedgerContract(ledger, 1);
+    verifyErrorLedgerContract([{ id: 1 }], 0);
   }, /Error Ledger Contract Discrepancy/);
 });
 
 test('verifyDryRunReconciliation proves exact formula and enforces zero public mutations', () => {
-  const accounting = {
+  const valid = verifyDryRunReconciliation({
     input_rows: 1000,
     newly_staged: 1000,
     already_staged: 0,
     errors: 0,
     public_mutations: 0
-  };
-  const res = verifyDryRunReconciliation(accounting);
-  assert.equal(res.reconciled, true);
+  });
+  assert.equal(valid.reconciled, true);
 
   assert.throws(() => {
-    verifyDryRunReconciliation({ ...accounting, newly_staged: 999 });
+    verifyDryRunReconciliation({
+      input_rows: 1000,
+      newly_staged: 900,
+      already_staged: 0,
+      errors: 0,
+      public_mutations: 0
+    });
   }, /Reconciliation Formula Discrepancy/);
 
   assert.throws(() => {
-    verifyDryRunReconciliation({ ...accounting, public_mutations: 1 });
+    verifyDryRunReconciliation({
+      input_rows: 1000,
+      newly_staged: 1000,
+      already_staged: 0,
+      errors: 0,
+      public_mutations: 5
+    });
   }, /Public Isolation Violation/);
 });

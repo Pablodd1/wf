@@ -10,9 +10,12 @@ const {
   CONTRACT,
   CANONICAL_VERSION,
   HASH_ALGO,
+  PINNED_MARIADB_SERVER_CERT_SHA256,
+  PINNED_MARIADB_CA_CERT_SHA256,
   sha256,
   stableJson,
   canonicalizeRawPayload,
+  checkPinnedServerIdentity,
   verifyTlsProof,
   createFrozenSourceBoundary,
   verifyHashReadbackContract,
@@ -46,7 +49,7 @@ function resolveMariaDbTransport(env = process.env, options = {}) {
       ssl: {
         ca: fs.readFileSync(caFile),
         rejectUnauthorized: true,
-        checkServerIdentity: () => undefined
+        checkServerIdentity: checkPinnedServerIdentity
       },
       transport: 'TLS_CA_VERIFIED',
       ca_file: caFile
@@ -58,7 +61,7 @@ function resolveMariaDbTransport(env = process.env, options = {}) {
       ssl: {
         ca: Buffer.from(env.MARIADB_TLS_CA_CERT, 'utf-8'),
         rejectUnauthorized: true,
-        checkServerIdentity: () => undefined
+        checkServerIdentity: checkPinnedServerIdentity
       },
       transport: 'TLS_CA_VERIFIED'
     };
@@ -70,7 +73,7 @@ function resolveMariaDbTransport(env = process.env, options = {}) {
       ssl: {
         ca: fs.readFileSync(defaultCaPath),
         rejectUnauthorized: true,
-        checkServerIdentity: () => undefined
+        checkServerIdentity: checkPinnedServerIdentity
       },
       transport: 'TLS_CA_VERIFIED',
       ca_file: defaultCaPath
@@ -140,13 +143,13 @@ async function runCanary1k(options = {}) {
   console.log('STARTING FULL CAPTURE PREFLIGHT & 1,000-ROW PRIVATE CANARY');
   console.log('============================================================');
 
-  // 1. TLS & Transport Preflight
-  console.log('1. Verifying TLS transport security...');
+  // 1. TLS & Transport Preflight with Certificate Pinning
+  console.log('1. Verifying TLS transport security and certificate pinning...');
   const transportConfig = resolveMariaDbTransport(process.env);
-  console.log(`Transport Verified: ${transportConfig.transport} (rejectUnauthorized: true, CA: ${transportConfig.ca_file || 'INLINE_BUFFER'})`);
+  console.log(`Transport Verified: ${transportConfig.transport} (rejectUnauthorized: true, pinned_cert: ${PINNED_MARIADB_SERVER_CERT_SHA256})`);
 
   // 2. MariaDB Consistent Snapshot
-  console.log('2. Connecting to MariaDB with verified TLS and creating consistent snapshot...');
+  console.log('2. Connecting to MariaDB with pinned TLS and creating consistent snapshot...');
   const mariadbConn = await mysql.createConnection({
     host: process.env.MARIADB_HOST,
     port: Number(process.env.MARIADB_PORT || 3306),
@@ -164,10 +167,11 @@ async function runCanary1k(options = {}) {
     console.log(`Lower Boundary: ${JSON.stringify(manifest.lower_boundary)}`);
     console.log(`Upper Boundary: ${JSON.stringify(manifest.upper_boundary)}`);
 
-    // Extract first 1,000 rows ordered by (created_on ASC, id ASC)
-    console.log('3. Extracting 1,000 ordered canary rows within snapshot...');
+    // Extract 1,000 ordered canary rows absent from previous staging (e.g. created_on >= 2025-08-01)
+    const canaryCohortWhere = process.env.CANARY_COHORT_WHERE || "created_on >= '2025-08-01 00:00:00'";
+    console.log(`3. Extracting 1,000 ordered canary rows absent from private staging (WHERE ${canaryCohortWhere})...`);
     const [rows] = await mariadbConn.query(
-      'SELECT * FROM auctions ORDER BY created_on ASC, id ASC LIMIT 1000'
+      `SELECT * FROM auctions WHERE ${canaryCohortWhere} ORDER BY created_on ASC, id ASC LIMIT 1000`
     );
     sampleRows = rows;
   } finally {
@@ -213,14 +217,33 @@ async function runCanary1k(options = {}) {
 
   const sourceIds = canonicalRecords.map(r => r.source_id);
 
-  // 4. Pre-Ingest Public Lineage Snapshot
-  console.log('4. Capturing pre-ingest public lineage baseline...');
+  // 4. Pre-Ingest Verification: Confirm all 1,000 source identities are absent from staging
+  console.log('4. Verifying that all 1,000 selected canary identities are absent from private staging...');
+  const initialReadbackRows = [];
+  for (let i = 0; i < sourceIds.length; i += 50) {
+    const chunkIds = sourceIds.slice(i, i + 50);
+    const { data, error } = await supabase.rpc('verify_mariadb_private_raw_readback', {
+      p_source_ids: chunkIds
+    });
+    if (error) throw new Error('Initial absence verification RPC failed: ' + error.message);
+    if (data && data.length > 0) {
+      initialReadbackRows.push(...data);
+    }
+  }
+
+  if (initialReadbackRows.length > 0) {
+    throw new Error(`Canary Cohort Invariant Violation: Found ${initialReadbackRows.length} pre-existing rows in staging for selected canary cohort!`);
+  }
+  console.log('Absence Invariant Verified: 0 pre-existing rows in private staging.');
+
+  // 5. Pre-Ingest Public Lineage Snapshot
+  console.log('5. Capturing pre-ingest public lineage baseline...');
   const publicBefore = await snapshotPublicLineage(supabase, sourceIds);
   console.log('Public Baseline:', publicBefore);
 
-  // 5. Ingest 1,000 rows in 4 batches of 250
+  // 6. Ingest 1,000 rows in 4 batches of 250
   const canaryRunKey = `full-capture-canary-1k-${Date.now()}`;
-  console.log(`5. Ingesting 1,000 canary rows into private staging (runKey=${canaryRunKey})...`);
+  console.log(`6. Ingesting 1,000 canary rows into private staging (runKey=${canaryRunKey})...`);
 
   const batchSize = 250;
   let newlyStaged = 0;
@@ -258,8 +281,12 @@ async function runCanary1k(options = {}) {
     console.log(`Batch ${batchIndex + 1}/4 Complete: newly_staged=${data.newly_staged_rows}, already_staged=${data.already_staged_identical_rows}, errors=${data.capture_error_rows}`);
   }
 
-  // 6. Deep Hash Readback Verification via RPC in chunks of 250
-  console.log('6. Performing deep hash readback verification across all 1,000 rows...');
+  if (newlyStaged !== 1000 || alreadyStaged !== 0 || totalErrors !== 0) {
+    throw new Error(`Canary Ingestion Invariant Failure: Expected newly_staged=1000, got newly_staged=${newlyStaged}, already_staged=${alreadyStaged}, errors=${totalErrors}`);
+  }
+
+  // 7. Deep Hash Readback Verification across all 1,000 rows in chunks of 50
+  console.log('7. Performing deep hash readback verification across all 1,000 rows...');
   const readbackRows = [];
   for (let i = 0; i < sourceIds.length; i += 50) {
     const chunkIds = sourceIds.slice(i, i + 50);
@@ -270,12 +297,11 @@ async function runCanary1k(options = {}) {
     if (data) readbackRows.push(...data);
   }
 
-  const targetReadback = (readbackRows && readbackRows.length > 0) ? readbackRows : canonicalRecords;
-  const readbackResult = verifyHashReadbackContract(targetReadback, canonicalRecords);
+  const readbackResult = verifyHashReadbackContract(readbackRows, canonicalRecords);
   console.log('Hash Readback Verified:', readbackResult);
 
-  // 7. Error Ledger Audit
-  console.log('7. Verifying error ledger contract...');
+  // 8. Error Ledger Audit
+  console.log('8. Verifying error ledger contract...');
   const { data: ledgerErrors, error: ledgerErr } = await supabase.rpc('get_mariadb_private_raw_errors', {
     p_run_key: canaryRunKey
   });
@@ -284,11 +310,14 @@ async function runCanary1k(options = {}) {
   const errorLedgerResult = verifyErrorLedgerContract(ledgerErrors || [], totalErrors);
   console.log('Error Ledger Verified:', errorLedgerResult);
 
-  // 8. Idempotent Rerun Verification
-  console.log('8. Testing idempotent rerun verification...');
+  // 9. Idempotent Rerun Verification
+  console.log('9. Testing idempotent rerun verification...');
+  let idempotentNewlyStaged = 0;
   let idempotentAlreadyStaged = 0;
+  let idempotentErrors = 0;
   let rerunLastCreatedOn = '';
   let rerunLastSourceId = '';
+
   for (let i = 0; i < canonicalRecords.length; i += batchSize) {
     const batchRecords = canonicalRecords.slice(i, i + batchSize);
     const batchIndex = Math.floor(i / batchSize);
@@ -309,14 +338,20 @@ async function runCanary1k(options = {}) {
     });
 
     if (rerunErr) throw new Error(`Idempotent rerun batch ${batchIndex} failed: ` + rerunErr.message);
+    idempotentNewlyStaged += rerunData.newly_staged_rows || 0;
     idempotentAlreadyStaged += rerunData.already_staged_identical_rows || 0;
+    idempotentErrors += rerunData.capture_error_rows || 0;
     rerunLastCreatedOn = nextLastCreatedOn;
     rerunLastSourceId = nextLastSourceId;
   }
-  console.log(`Idempotent Rerun Verified: ${idempotentAlreadyStaged}/1,000 existing rows recognized.`);
 
-  // 9. Post-Ingest Public Lineage Verification
-  console.log('9. Checking post-ingest public lineage across all 1,000 source identities...');
+  console.log(`Idempotent Rerun Result: newly_staged=${idempotentNewlyStaged}, already_staged=${idempotentAlreadyStaged}, errors=${idempotentErrors}`);
+  if (idempotentAlreadyStaged !== 1000 || idempotentNewlyStaged !== 0 || idempotentErrors !== 0) {
+    throw new Error(`Idempotent Rerun Invariant Failure: Expected already_staged=1000, got ${idempotentAlreadyStaged} (newly_staged=${idempotentNewlyStaged}, errors=${idempotentErrors})`);
+  }
+
+  // 10. Post-Ingest Public Lineage Verification
+  console.log('10. Checking post-ingest public lineage across all 1,000 source identities...');
   const publicAfter = await snapshotPublicLineage(supabase, sourceIds);
   console.log('Public Post-Canary:', publicAfter);
 
@@ -324,8 +359,8 @@ async function runCanary1k(options = {}) {
     throw new Error('Public Mutation Gate Failure: Public table counts changed during 1k canary execution!');
   }
 
-  // 10. Checkpoint Finalization
-  console.log('10. Finalizing canary checkpoint status to RAW_STAGED...');
+  // 11. Checkpoint Finalization
+  console.log('11. Finalizing canary checkpoint status to RAW_STAGED...');
   const { data: finalizeData, error: finalizeErr } = await supabase.rpc('finalize_mariadb_private_raw_checkpoint', {
     p_run_key: canaryRunKey,
     p_expected_staged_rows: newlyStaged + alreadyStaged,
@@ -335,7 +370,7 @@ async function runCanary1k(options = {}) {
   if (finalizeErr) throw new Error('Checkpoint finalization failed: ' + finalizeErr.message);
   console.log('Canary Checkpoint Finalized:', finalizeData);
 
-  // 11. Write All 6 Artifacts
+  // 12. Write All 6 Artifacts
   const outputDir = path.resolve('audit-output/mariadb-live/full-capture-canary-1k');
   fs.mkdirSync(outputDir, { recursive: true });
 
@@ -346,8 +381,10 @@ async function runCanary1k(options = {}) {
     newly_staged_rows: newlyStaged,
     already_staged_identical_rows: alreadyStaged,
     error_rows: totalErrors,
-    idempotent_rerun_recognized: idempotentAlreadyStaged,
-    exact_reconciliation: (newlyStaged + alreadyStaged + totalErrors) === canonicalRecords.length
+    idempotent_rerun_newly_staged: idempotentNewlyStaged,
+    idempotent_rerun_already_staged: idempotentAlreadyStaged,
+    idempotent_rerun_errors: idempotentErrors,
+    exact_reconciliation: (newlyStaged + alreadyStaged + totalErrors) === canonicalRecords.length && idempotentAlreadyStaged === canonicalRecords.length
   };
 
   const hashVerificationData = {
@@ -356,7 +393,8 @@ async function runCanary1k(options = {}) {
     total_verified: readbackResult.total_verified,
     mismatches: 0,
     canonical_version: CANONICAL_VERSION,
-    hash_algorithm: HASH_ALGO
+    hash_algorithm: HASH_ALGO,
+    pinned_cert_fingerprint: PINNED_MARIADB_SERVER_CERT_SHA256
   };
 
   const errorLedgerData = {

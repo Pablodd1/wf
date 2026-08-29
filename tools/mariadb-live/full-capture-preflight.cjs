@@ -10,6 +10,9 @@ const CONTRACT = 'wf-mariadb-private-raw-staging-v1';
 const CANONICAL_VERSION = 'v1-json-keys-sorted-compact';
 const HASH_ALGO = 'sha256';
 
+const PINNED_MARIADB_SERVER_CERT_SHA256 = '07:F7:B9:58:1B:79:C7:42:61:8D:3F:85:91:DC:54:9B:F1:6E:FB:C6:2E:45:0E:FD:9B:56:F7:54:D3:52:E1:97';
+const PINNED_MARIADB_CA_CERT_SHA256 = '08:61:92:B8:05:ED:58:A3:3F:A5:7B:AA:D1:61:DB:CE:2E:63:13:A4:26:12:36:52:60:E0:61:9F:35:6B:94:8B';
+
 function sha256(data) {
   return crypto.createHash('sha256').update(data, 'utf8').digest('hex');
 }
@@ -24,6 +27,26 @@ function stableJson(obj) {
 
 function canonicalizeRawPayload(rawData) {
   return stableJson(rawData || {});
+}
+
+function checkPinnedServerIdentity(servername, cert) {
+  if (!cert) {
+    throw new Error('TLS Peer Certificate Missing: server did not present a peer certificate');
+  }
+
+  const rawHex = cert.raw ? crypto.createHash('sha256').update(cert.raw).digest('hex').toUpperCase() : null;
+  const fp256 = cert.fingerprint256 || (rawHex ? rawHex.match(/../g).join(':') : null);
+
+  const expectedFps = [
+    PINNED_MARIADB_SERVER_CERT_SHA256,
+    PINNED_MARIADB_CA_CERT_SHA256
+  ];
+
+  if (!fp256 || !expectedFps.includes(fp256.toUpperCase())) {
+    throw new Error(`TLS Certificate Pinning Violation: server certificate fingerprint ${fp256} does not match pinned certificate fingerprint ${PINNED_MARIADB_SERVER_CERT_SHA256}`);
+  }
+
+  return undefined; // Strictly verified and pinned
 }
 
 function verifyTlsProof(env = process.env) {
@@ -42,7 +65,8 @@ function verifyTlsProof(env = process.env) {
     verified: true,
     transport: transport.transport,
     tls_reject_unauthorized: transport.ssl ? transport.ssl.rejectUnauthorized : null,
-    ca_bytes: transport.ssl?.ca ? transport.ssl.ca.length : 0
+    ca_bytes: transport.ssl?.ca ? transport.ssl.ca.length : 0,
+    pinned_server_cert_sha256: PINNED_MARIADB_SERVER_CERT_SHA256
   };
 }
 
@@ -179,9 +203,12 @@ module.exports = {
   CONTRACT,
   CANONICAL_VERSION,
   HASH_ALGO,
+  PINNED_MARIADB_SERVER_CERT_SHA256,
+  PINNED_MARIADB_CA_CERT_SHA256,
   sha256,
   stableJson,
   canonicalizeRawPayload,
+  checkPinnedServerIdentity,
   verifyTlsProof,
   createFrozenSourceBoundary,
   verifyHashReadbackContract,
