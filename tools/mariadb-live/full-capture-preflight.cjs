@@ -1,0 +1,177 @@
+// tools/mariadb-live/full-capture-preflight.cjs
+'use strict';
+
+const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+const { sourceTransport, assertSourceIndex, assertExplainPlan } = require('./source-preflight.cjs');
+
+const CONTRACT = 'wf-mariadb-private-raw-staging-v1';
+const CANONICAL_VERSION = 'v1-json-keys-sorted-compact';
+const HASH_ALGO = 'sha256';
+
+function sha256(data) {
+  return crypto.createHash('sha256').update(data, 'utf8').digest('hex');
+}
+
+function stableJson(obj) {
+  if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
+  if (Array.isArray(obj)) return '[' + obj.map(stableJson).join(',') + ']';
+  const keys = Object.keys(obj).sort();
+  return '{' + keys.map(k => JSON.stringify(k) + ':' + stableJson(obj[k])).join(',') + '}';
+}
+
+function canonicalizeRawPayload(rawData) {
+  return stableJson(rawData || {});
+}
+
+function verifyTlsProof(env = process.env) {
+  const transport = sourceTransport(env);
+  if (transport.transport === 'TLS_CA_VERIFIED') {
+    if (!transport.ssl || transport.ssl.rejectUnauthorized !== true) {
+      throw new Error('TLS Security Violation: rejectUnauthorized must strictly be true');
+    }
+    if (!transport.ssl.ca || transport.ssl.ca.length === 0) {
+      throw new Error('TLS Security Violation: CA certificate buffer must be non-empty');
+    }
+  } else if (transport.transport !== 'PRIVATE_TUNNEL_VERIFIED') {
+    throw new Error('Transport Security Violation: Unknown or untrusted transport: ' + transport.transport);
+  }
+  return {
+    verified: true,
+    transport: transport.transport,
+    tls_reject_unauthorized: transport.ssl ? transport.ssl.rejectUnauthorized : null,
+    ca_bytes: transport.ssl?.ca ? transport.ssl.ca.length : 0
+  };
+}
+
+async function createFrozenSourceBoundary(mariadbConn) {
+  // 1. Establish consistent read-only snapshot
+  await mariadbConn.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+  await mariadbConn.query('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
+
+  // 2. Query total rows and boundaries within consistent snapshot
+  const [countRows] = await mariadbConn.query('SELECT COUNT(*) as total FROM auctions');
+  const [minRows] = await mariadbConn.query('SELECT id, created_on, updated_on FROM auctions ORDER BY created_on ASC, id ASC LIMIT 1');
+  const [maxRows] = await mariadbConn.query('SELECT id, created_on, updated_on FROM auctions ORDER BY created_on DESC, id DESC LIMIT 1');
+
+  const totalRows = countRows[0]?.total || 0;
+  const minBoundary = minRows[0] || null;
+  const maxBoundary = maxRows[0] || null;
+
+  if (totalRows === 0 || !minBoundary || !maxBoundary) {
+    throw new Error('Source Boundary Error: Empty or unreadable source table auctions');
+  }
+
+  const manifest = {
+    contract: CONTRACT,
+    source_system: 'OceanDigital MariaDB',
+    source_database: 'thecollective_inventory',
+    source_table: 'auctions',
+    isolation_level: 'REPEATABLE READ (CONSISTENT SNAPSHOT, READ ONLY)',
+    total_source_rows: totalRows,
+    lower_boundary: {
+      id: minBoundary.id,
+      created_on: minBoundary.created_on,
+      updated_on: minBoundary.updated_on
+    },
+    upper_boundary: {
+      id: maxBoundary.id,
+      created_on: maxBoundary.created_on,
+      updated_on: maxBoundary.updated_on
+    },
+    snapshot_timestamp: new Date().toISOString()
+  };
+
+  const manifestJson = stableJson(manifest);
+  manifest.manifest_sha256 = sha256(manifestJson);
+
+  return manifest;
+}
+
+function verifyHashReadbackContract(stagedRows, expectedRecords) {
+  const expectedMap = new Map(expectedRecords.map(r => [r.source_id, r]));
+  let verifiedCount = 0;
+  const mismatches = [];
+
+  for (const row of stagedRows) {
+    const exp = expectedMap.get(row.source_id);
+    if (!exp) {
+      mismatches.push({ source_id: row.source_id, error: 'Unexpected row in readback' });
+      continue;
+    }
+
+    const recalculated = sha256(row.raw_payload_text);
+    if (recalculated !== exp.source_hash || recalculated !== row.source_hash) {
+      mismatches.push({
+        source_id: row.source_id,
+        expected_hash: exp.source_hash,
+        stored_hash: row.source_hash,
+        recalculated_hash: recalculated
+      });
+    } else {
+      verifiedCount++;
+    }
+  }
+
+  if (mismatches.length > 0 || verifiedCount !== expectedRecords.length) {
+    throw new Error(`Hash Readback Gate Failure: Verified=${verifiedCount}/${expectedRecords.length}, Mismatches=${mismatches.length}`);
+  }
+
+  return {
+    verified: true,
+    total_verified: verifiedCount,
+    mismatches_count: 0
+  };
+}
+
+function verifyErrorLedgerContract(ledgerRows, expectedErrorCount) {
+  if (!Array.isArray(ledgerRows)) {
+    throw new Error('Error Ledger Contract Failure: ledger rows must be an array');
+  }
+  if (ledgerRows.length !== expectedErrorCount) {
+    throw new Error(`Error Ledger Contract Discrepancy: Retrieved ${ledgerRows.length} error rows, expected ${expectedErrorCount}`);
+  }
+  return {
+    verified: true,
+    error_count: ledgerRows.length,
+    reconciled: true
+  };
+}
+
+function verifyDryRunReconciliation(accounting) {
+  const { input_rows, newly_staged, already_staged, errors, public_mutations } = accounting;
+  const sum = (newly_staged || 0) + (already_staged || 0) + (errors || 0);
+
+  if (sum !== input_rows) {
+    throw new Error(`Reconciliation Formula Discrepancy: Input=${input_rows}, Staged+Existing+Errors=${sum}`);
+  }
+
+  if (public_mutations !== 0) {
+    throw new Error(`Public Isolation Violation: Detected ${public_mutations} public table writes`);
+  }
+
+  return {
+    reconciled: true,
+    input_rows,
+    newly_staged,
+    already_staged,
+    errors,
+    public_mutations,
+    formula: 'input_rows = newly_staged + already_staged + errors'
+  };
+}
+
+module.exports = {
+  CONTRACT,
+  CANONICAL_VERSION,
+  HASH_ALGO,
+  sha256,
+  stableJson,
+  canonicalizeRawPayload,
+  verifyTlsProof,
+  createFrozenSourceBoundary,
+  verifyHashReadbackContract,
+  verifyErrorLedgerContract,
+  verifyDryRunReconciliation
+};
