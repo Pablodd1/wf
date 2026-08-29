@@ -1376,6 +1376,7 @@ function mapReviewedRecord(row) {
     seller_rating_source_url: null,
     contact_publication_approved: contactApproved,
     price_usd: displayPriceUsd,
+    price_display_verified: publicVerifiedUsd !== null,
     effective_price_source: publicVerifiedUsd !== null
       ? (row.effective_price_source || 'VERIFIED_USD')
       : ownerAssumedUsd !== null
@@ -3366,6 +3367,9 @@ module.exports = async function handler(req, res) {
       hasMore,
       nextCursor,
       records: combinedPageRecords,
+      availableCountries: [...new Set(combinedPageRecords
+        .map(record => postingCountryName(record.location))
+        .filter(Boolean))].sort((left, right) => left.localeCompare(right)),
       reviewedOverlayRecords,
       reviewedOverlay: {
         source: 'reviewed_workbook_inventory',

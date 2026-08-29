@@ -21,6 +21,13 @@ const NULLABLE_KEYS = [
   'image_evidence_label', 'image_evidence_notice',
 ];
 
+const VERIFIED_USD_EVIDENCE = new Set([
+  'SOURCE_EXPLICIT_USD_MATCH',
+  'SOURCE_EXPLICIT_USD_USDT',
+  'EXPLICIT_SOURCE_FX_CONVERTED',
+  'DATED_VERIFIED_FX',
+]);
+
 function cleanUrl(value) {
   const candidate = String(value || '').trim();
   if (!candidate) return null;
@@ -45,6 +52,12 @@ function enforceListingDisplayContract(input = {}) {
   record.seller_id = record.seller_id || record.dealer_id || null;
   record.contact_publication_approved = record.contact_publication_approved === true;
   record.seller_phone = record.contact_publication_approved === true ? record.seller_phone : null;
+
+  const priceUsd = Number(record.price_usd);
+  const priceEvidence = String(record.price_evidence_status || '').toUpperCase();
+  record.price_display_verified = Number.isFinite(priceUsd)
+    && priceUsd > 0
+    && VERIFIED_USD_EVIDENCE.has(priceEvidence);
 
   const evidence = String(record.image_evidence_type || '').toUpperCase();
   const imageUrls = [
@@ -81,5 +94,6 @@ module.exports = {
   LISTING_DISPLAY_CONTRACT_VERSION,
   NULLABLE_KEYS,
   PUBLIC_IMAGE_EVIDENCE,
+  VERIFIED_USD_EVIDENCE,
   enforceListingDisplayContract,
 };

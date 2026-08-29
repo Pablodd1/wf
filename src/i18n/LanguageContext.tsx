@@ -1,13 +1,14 @@
 /* eslint-disable react-refresh/only-export-components -- provider, hook, and locale options form one localization boundary */
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-export type AppLanguage = 'en' | 'es' | 'pt' | 'zh';
+export type AppLanguage = 'en' | 'es' | 'pt' | 'zh' | 'ja';
 
 export const APP_LANGUAGES: { code: AppLanguage; label: string; shortLabel: string }[] = [
   { code: 'en', label: 'English', shortLabel: 'EN' },
   { code: 'es', label: 'Español', shortLabel: 'ES' },
   { code: 'pt', label: 'Português', shortLabel: 'PT' },
   { code: 'zh', label: '简体中文', shortLabel: '中文' },
+  { code: 'ja', label: '日本語', shortLabel: '日本語' },
 ];
 
 const translations: Record<Exclude<AppLanguage, 'en'>, Record<string, string>> = {
@@ -179,6 +180,33 @@ const translations: Record<Exclude<AppLanguage, 'en'>, Record<string, string>> =
     'Bundle title (optional)': '组合标题（可选）', 'Brand': '品牌', 'Model': '型号', 'Reference': '参考编号', 'Dial color': '表盘颜色', 'Item title': '商品标题', 'Condition': '成色', 'Asking price (optional)': '报价（可选）', 'Currency': '币种', 'Paste the complete original bundle or dealer list': '粘贴完整的原始组合或经销商清单', 'Original listing or request message': '原始出售或求购消息', 'Take or choose the original group photos': '拍摄或选择原始组合照片', 'Take or choose item photos': '拍摄或选择商品照片', 'Cover': '封面', 'Remove photo': '移除照片',
     'Contact': '联系', 'Contact Curated Luxury': '联系 Curated Luxury', 'Email Curated Luxury at': '发送邮件至 Curated Luxury', 'Contact us on WhatsApp': '通过 WhatsApp 联系我们', 'Name': '姓名', 'Email': '电子邮件', 'How can we help?': '我们能为您做什么？', 'Email destination pending': '收件邮箱待确认', 'Community': '社区', 'Join Our Chats': '加入聊天群', 'Be part of our vibrant community by joining our WhatsApp and Telegram groups.': '加入我们的 WhatsApp 和 Telegram 群组，成为社区的一员。', 'Curated Luxury marketplace intelligence for exceptional objects.': 'Curated Luxury 为珍贵物品提供市场情报。', 'Company': '公司', 'All Rights Reserved.': '版权所有。'
   },
+  ja: {
+    'Language': '言語',
+    'TRADING FLOOR': '取引フロア', 'PRICE RESEARCH': '価格調査', 'REFERENCE CHECK': 'リファレンス確認',
+    'WORKSPACE': 'ワークスペース', 'POST IT': '出品', 'ACCOUNT': 'アカウント', 'HIRE FI': 'FIを利用', 'HOME': 'ホーム',
+    'Trading Floor': '取引フロア', 'Filters': 'フィルター', 'Filter inventory': '在庫を絞り込む',
+    'Category': 'カテゴリー', 'All inventory': 'すべての在庫', 'Watches': '腕時計', 'Handbags': 'ハンドバッグ',
+    'Jewelry': 'ジュエリー', 'Accessories': 'アクセサリー', 'Other luxury': 'その他のラグジュアリー',
+    'All activity': 'すべて', 'For sale': '販売', 'Want to buy': '購入希望', 'Listing type': '取引区分',
+    'Order': '並び順', 'Newest observed': '新着順', 'Discovery mix': 'おすすめ順',
+    'Brand': 'ブランド', 'All brands': 'すべてのブランド', 'Model': 'モデル', 'All models': 'すべてのモデル',
+    'Location': '国・地域', 'All locations': 'すべての国・地域', 'No location data available': '国・地域データはありません',
+    'No matching locations': '一致する国・地域はありません', 'Evidence': '根拠',
+    'Verified source image only': '出典確認済み画像のみ', 'Price supplied': '価格あり',
+    'Price not supplied': '価格未記載', 'Original raw message': '元の投稿メッセージ',
+    'Posted by': '投稿者', 'Posted': '投稿日', 'Location not provided': '国・地域未記載',
+    'Check availability': '在庫を確認', 'Open for rating': '評価データ準備中', 'No listings found': '該当する出品はありません',
+    'View results': '結果を見る', 'Clear': 'クリア', 'Close filters': 'フィルターを閉じる',
+    'Search exact reference, model, message, or poster': 'リファレンス、モデル、投稿文、投稿者を検索',
+    'Search locations...': '国・地域を検索...', 'NO IMAGE': '画像なし', 'Posting date requires review': '投稿日確認中',
+    'Currency converter': '通貨換算', 'Live market activity': 'リアルタイム市場情報',
+    'DEALER ACCOUNT': 'ディーラーアカウント', 'Listing total unavailable': '出品総数を取得できません', 'verified listings': '件の確認済み出品',
+    'Grid': 'グリッド', 'List': 'リスト', 'Showing': '表示中', 'on this page': '件（このページ）', 'total unavailable': '総数未取得',
+    'of': '/', 'listings': '件', 'Priced listings first; source images next; highest verified USD price within each group.': '価格確認済みを優先し、次に出典画像、各グループ内では確認済み米ドル価格の高い順に表示します。',
+    'Previous': '前へ', 'Page': 'ページ', 'Loading...': '読み込み中...', 'Next': '次へ',
+    'Newest observed is the default. Discovery mix changes order only.': '初期表示は新着順です。おすすめ順は表示順だけを変更します。',
+    'Contact': 'お問い合わせ', 'Company': '会社情報', 'Community': 'コミュニティ', 'All Rights Reserved.': '無断転載を禁じます。'
+  },
 };
 
 type LanguageContextValue = {
@@ -197,6 +225,7 @@ function detectLanguage(): AppLanguage {
   if (browserLanguage.startsWith('es')) return 'es';
   if (browserLanguage.startsWith('pt')) return 'pt';
   if (browserLanguage.startsWith('zh')) return 'zh';
+  if (browserLanguage.startsWith('ja')) return 'ja';
   return 'en';
 }
 
