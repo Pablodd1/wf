@@ -343,9 +343,14 @@ test('run1kPrivateCanary executes exact 9-stage sequence with mocked client and 
     },
     from: (tableName) => {
       queryCalls.push(tableName);
+      const preexistingRows = {
+        raw_messages: [{ id: 'existing-message', external_message_id: 'existing-source' }],
+        raw_message_versions: [{ id: 'existing-version', source_record_id: 'mysql_auctions_existing-source' }],
+        watch_records: []
+      };
       return {
         select: () => ({
-          in: async () => ({ data: [], error: null })
+          in: async () => ({ data: preexistingRows[tableName] || [], error: null })
         })
       };
     }
@@ -366,6 +371,9 @@ test('run1kPrivateCanary executes exact 9-stage sequence with mocked client and 
   assert.ok(res.securityVerification);
   assert.ok(res.publicImpactVerification);
   assert.ok(res.benchmarkArtifact);
+  assert.equal(res.publicImpactVerification.public_matches_before.raw_messages, 5);
+  assert.equal(res.publicImpactVerification.public_matches_after.raw_messages, 5);
+  assert.equal(res.publicImpactVerification.zero_public_delta_verified, true);
 
   // Assert exact sequence of RPC and query calls
   const rpcNames = rpcCalls.map(c => c.fnName);

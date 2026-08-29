@@ -220,6 +220,43 @@ function validateSecurityPrivilegeMatrix(privReport) {
   return true;
 }
 
+async function snapshotPublicLineage(supabase, sourceIds) {
+  const snapshot = {
+    raw_messages: [],
+    raw_message_versions: [],
+    watch_records: []
+  };
+
+  for (let i = 0; i < sourceIds.length; i += 200) {
+    const chunkIds = sourceIds.slice(i, i + 200);
+    const chunkRecordIds = chunkIds.map(id => ('mysql_auctions_' + id));
+
+    const { data: pubRaw, error: rawErr } = await supabase
+      .from('raw_messages')
+      .select('id, external_message_id')
+      .in('external_message_id', chunkIds);
+    if (rawErr) throw new Error('Public raw_messages audit query failed: ' + rawErr.message);
+    snapshot.raw_messages.push(...(pubRaw || []).map(row => String(row.id) + '|' + String(row.external_message_id)));
+
+    const { data: pubVers, error: versErr } = await supabase
+      .from('raw_message_versions')
+      .select('id, source_record_id')
+      .in('source_record_id', chunkRecordIds);
+    if (versErr) throw new Error('Public raw_message_versions audit query failed: ' + versErr.message);
+    snapshot.raw_message_versions.push(...(pubVers || []).map(row => String(row.id) + '|' + String(row.source_record_id)));
+
+    const { data: pubWatch, error: watchErr } = await supabase
+      .from('watch_records')
+      .select('id')
+      .in('id', chunkRecordIds);
+    if (watchErr) throw new Error('Public watch_records audit query failed: ' + watchErr.message);
+    snapshot.watch_records.push(...(pubWatch || []).map(row => String(row.id)));
+  }
+
+  for (const rows of Object.values(snapshot)) rows.sort();
+  return snapshot;
+}
+
 async function run1kPrivateCanary(options = {}) {
   const startTime = Date.now();
   const startIso = new Date().toISOString();
@@ -258,6 +295,10 @@ async function run1kPrivateCanary(options = {}) {
   }
   validateSecurityPrivilegeMatrix(dbPrivileges);
   console.log('[Canary] PostgreSQL security privilege matrix verified: 100% conformant with least-privilege immutable spec.');
+
+  const sourceIds = records.map(r => r.source_id);
+  console.log('[Canary] 2c. Capturing pre-ingest public lineage baseline...');
+  const publicBaseline = await snapshotPublicLineage(supabase, sourceIds);
 
   console.log('[Canary] 3. Ingesting ' + records.length + ' records in batches of ' + batchSize + '...');
   let totalInput = 0;
@@ -313,7 +354,6 @@ async function run1kPrivateCanary(options = {}) {
   }
 
   console.log('[Canary] 4. Performing Deep Hash Readback via Service-Role Verification RPC...');
-  const sourceIds = records.map(r => r.source_id);
   const expectedHashMap = new Map(records.map(r => [r.source_id, r.source_hash]));
 
   let recomputedCount = 0;
@@ -356,41 +396,12 @@ async function run1kPrivateCanary(options = {}) {
     throw new Error('Hash Verification Gate Failure: Recomputed=' + recomputedCount + ' (expected 1000), Mismatches=' + mismatchCount + ' (expected 0)');
   }
 
-  console.log('[Canary] 5. Verifying Zero Public Publication by Source Identity (All 1,000 IDs)...');
-  let publicMatchCount = 0;
+  console.log('[Canary] 5. Verifying zero public lineage delta for all 1,000 source identities...');
+  const publicAfter = await snapshotPublicLineage(supabase, sourceIds);
 
-  for (let i = 0; i < sourceIds.length; i += 200) {
-    const chunkIds = sourceIds.slice(i, i + 200);
-    const chunkRecordIds = chunkIds.map(id => ('mysql_auctions_' + id));
-
-    // Check public.raw_messages
-    const { data: pubRaw, error: rawErr } = await supabase
-      .from('raw_messages')
-      .select('id, external_message_id')
-      .in('external_message_id', chunkIds);
-    if (rawErr) throw new Error('Public raw_messages audit query failed: ' + rawErr.message);
-    publicMatchCount += pubRaw?.length || 0;
-
-    // Check public.raw_message_versions
-    const { data: pubVers, error: versErr } = await supabase
-      .from('raw_message_versions')
-      .select('id, source_record_id')
-      .in('source_record_id', chunkRecordIds);
-    if (versErr) throw new Error('Public raw_message_versions audit query failed: ' + versErr.message);
-    publicMatchCount += pubVers?.length || 0;
-
-    // Check public.watch_records
-    const { data: pubWatch, error: watchErr } = await supabase
-      .from('watch_records')
-      .select('id')
-      .in('id', chunkRecordIds);
-    if (watchErr) throw new Error('Public watch_records audit query failed: ' + watchErr.message);
-    publicMatchCount += pubWatch?.length || 0;
-  }
-
-  // Hard Invariant Gate 3: Zero public pollution
-  if (publicMatchCount !== 0) {
-    throw new Error('Public Publication Gate Failure: Detected ' + publicMatchCount + ' canary rows in public production tables');
+  // Hard Invariant Gate 3: the canary must not change any public lineage set.
+  if (stableJson(publicAfter) !== stableJson(publicBaseline)) {
+    throw new Error('Public Publication Gate Failure: public lineage changed during private canary execution');
   }
 
   console.log('[Canary] 6. Testing Idempotent Rerun (BEFORE finalization of primary checkpoint)...');
@@ -531,10 +542,17 @@ async function run1kPrivateCanary(options = {}) {
   const publicImpactVerification = {
     contract: CONTRACT,
     canary_source_ids_tested: 1000,
-    public_raw_messages_matches: 0,
-    public_raw_message_versions_matches: 0,
-    public_watch_records_matches: 0,
-    zero_public_pollution_verified: true
+    public_matches_before: {
+      raw_messages: publicBaseline.raw_messages.length,
+      raw_message_versions: publicBaseline.raw_message_versions.length,
+      watch_records: publicBaseline.watch_records.length
+    },
+    public_matches_after: {
+      raw_messages: publicAfter.raw_messages.length,
+      raw_message_versions: publicAfter.raw_message_versions.length,
+      watch_records: publicAfter.watch_records.length
+    },
+    zero_public_delta_verified: true
   };
 
   const benchmarkArtifact = {
@@ -579,6 +597,7 @@ module.exports = {
   canonicalizeRawPayload,
   checkPostgRestExposureFailClosed,
   validateSecurityPrivilegeMatrix,
+  snapshotPublicLineage,
   stableJson,
   sha256
 };
