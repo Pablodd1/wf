@@ -1,11 +1,11 @@
 {
   "$schema": "https://railway.com/railway.schema.json",
   "build": {
-    "builder": "DOCKERFILE"
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "/tools/mariadb-live/Dockerfile.shadow-capture"
   },
   "deploy": {
     "startCommand": "sh -c 'exec ${WF_START_COMMAND:-node tools/shadow-reprocess/railway-worker.cjs}'",
-    "restartPolicyType": "ON_FAILURE",
-    "restartPolicyMaxRetries": 10
+    "restartPolicyType": "NEVER"
   }
 }
