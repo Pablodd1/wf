@@ -161,51 +161,60 @@ function validateSecurityPrivilegeMatrix(privReport) {
   const tp = privReport.table_privileges || {};
   const fp = privReport.function_privileges || {};
 
-  // 1. Assert anon has zero access
-  if (sp.anon_usage) throw new Error('Security Audit Failure: anon has USAGE on wf_canonical_staging');
-  if (tp.mariadb_raw_source_rows?.anon_select || tp.mariadb_raw_source_rows?.anon_insert || tp.mariadb_raw_source_rows?.anon_update || tp.mariadb_raw_source_rows?.anon_delete) {
-    throw new Error('Security Audit Failure: anon has table privileges on mariadb_raw_source_rows');
+  // 1. Validate Schema Usage
+  if (typeof sp.anon_usage !== 'boolean' || sp.anon_usage !== false) {
+    throw new Error('Security Audit Failure: anon_usage must exist and equal false (was ' + sp.anon_usage + ')');
   }
-  if (tp.mariadb_raw_import_checkpoints?.anon_select || tp.mariadb_raw_import_batches?.anon_select || tp.mariadb_raw_import_errors?.anon_select) {
-    throw new Error('Security Audit Failure: anon has table privileges on staging audit ledgers');
+  if (typeof sp.authenticated_usage !== 'boolean' || sp.authenticated_usage !== false) {
+    throw new Error('Security Audit Failure: authenticated_usage must exist and equal false (was ' + sp.authenticated_usage + ')');
   }
-  if (fp.ingest_batch?.anon_execute || fp.verify_readback?.anon_execute || fp.get_errors?.anon_execute || fp.finalize_checkpoint?.anon_execute) {
-    throw new Error('Security Audit Failure: anon has EXECUTE on staging RPC functions');
-  }
-
-  // 2. Assert authenticated has zero access
-  if (sp.authenticated_usage) throw new Error('Security Audit Failure: authenticated has USAGE on wf_canonical_staging');
-  if (tp.mariadb_raw_source_rows?.authenticated_select || tp.mariadb_raw_source_rows?.authenticated_insert || tp.mariadb_raw_source_rows?.authenticated_update || tp.mariadb_raw_source_rows?.authenticated_delete) {
-    throw new Error('Security Audit Failure: authenticated has table privileges on mariadb_raw_source_rows');
-  }
-  if (tp.mariadb_raw_import_checkpoints?.authenticated_select || tp.mariadb_raw_import_batches?.authenticated_select || tp.mariadb_raw_import_errors?.authenticated_select) {
-    throw new Error('Security Audit Failure: authenticated has table privileges on staging audit ledgers');
-  }
-  if (fp.ingest_batch?.authenticated_execute || fp.verify_readback?.authenticated_execute || fp.get_errors?.authenticated_execute || fp.finalize_checkpoint?.authenticated_execute) {
-    throw new Error('Security Audit Failure: authenticated has EXECUTE on staging RPC functions');
+  if (typeof sp.service_role_usage !== 'boolean' || sp.service_role_usage !== true) {
+    throw new Error('Security Audit Failure: service_role_usage must exist and equal true (was ' + sp.service_role_usage + ')');
   }
 
-  // 3. Assert service_role has ZERO direct table access (all access mediated exclusively via RPCs)
-  if (!sp.service_role_usage) throw new Error('Security Audit Failure: service_role missing USAGE on wf_canonical_staging');
-  
-  const tables = ['mariadb_raw_source_rows', 'mariadb_raw_import_checkpoints', 'mariadb_raw_import_batches', 'mariadb_raw_import_errors'];
-  const actions = ['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger'];
+  // 2. Validate All 84 Table Privileges (4 tables * 3 roles * 7 actions must strictly exist and equal false)
+  const tables = [
+    'mariadb_raw_source_rows',
+    'mariadb_raw_import_checkpoints',
+    'mariadb_raw_import_batches',
+    'mariadb_raw_import_errors'
+  ];
   const roles = ['anon', 'authenticated', 'service_role'];
+  const actions = ['select', 'insert', 'update', 'delete', 'truncate', 'references', 'trigger'];
 
   for (const tbl of tables) {
+    if (!tp[tbl] || typeof tp[tbl] !== 'object') {
+      throw new Error('Security Audit Failure: Missing table_privileges object for ' + tbl);
+    }
     for (const r of roles) {
       for (const act of actions) {
         const prop = r + '_' + act;
-        if (tp[tbl]?.[prop]) {
-          throw new Error('Security Audit Failure: ' + r + ' has direct ' + act.toUpperCase() + ' on ' + tbl + ' (zero direct table access permitted)');
+        const val = tp[tbl][prop];
+        if (typeof val !== 'boolean') {
+          throw new Error('Security Audit Failure: Missing required boolean property ' + prop + ' on ' + tbl);
+        }
+        if (val !== false) {
+          throw new Error('Security Audit Failure: ' + r + ' has ' + act.toUpperCase() + ' = ' + val + ' on ' + tbl + ' (must strictly be false)');
         }
       }
     }
   }
 
-  // 4. Assert service_role has required execute privileges on all 4 RPCs
-  if (!fp.ingest_batch?.service_role_execute || !fp.verify_readback?.service_role_execute || !fp.get_errors?.service_role_execute || !fp.finalize_checkpoint?.service_role_execute) {
-    throw new Error('Security Audit Failure: service_role missing EXECUTE on one or more required staging functions');
+  // 3. Validate Function Privileges across all 5 RPCs
+  const functions = ['ingest_batch', 'verify_readback', 'get_errors', 'finalize_checkpoint', 'audit_security'];
+  for (const fn of functions) {
+    if (!fp[fn] || typeof fp[fn] !== 'object') {
+      throw new Error('Security Audit Failure: Missing function_privileges object for ' + fn);
+    }
+    if (typeof fp[fn].anon_execute !== 'boolean' || fp[fn].anon_execute !== false) {
+      throw new Error('Security Audit Failure: anon_execute must exist and equal false on ' + fn + ' (was ' + fp[fn]?.anon_execute + ')');
+    }
+    if (typeof fp[fn].authenticated_execute !== 'boolean' || fp[fn].authenticated_execute !== false) {
+      throw new Error('Security Audit Failure: authenticated_execute must exist and equal false on ' + fn + ' (was ' + fp[fn]?.authenticated_execute + ')');
+    }
+    if (typeof fp[fn].service_role_execute !== 'boolean' || fp[fn].service_role_execute !== true) {
+      throw new Error('Security Audit Failure: service_role_execute must exist and equal true on ' + fn + ' (was ' + fp[fn]?.service_role_execute + ')');
+    }
   }
 
   return true;
