@@ -5,14 +5,17 @@ Strict Audited Contracts:
 1. Enforces MariaDB read-only grants with redacted logging.
 2. Establishes MariaDB REPEATABLE READ READ ONLY consistent snapshot before counting.
 3. Uses PostgreSQL REPEATABLE READ READ ONLY transaction for wf_canonical_staging.
-4. Pins project to bptrvfncppbjnchsaxtb only.
-5. Employs measured, namespace-scoped identity resolution rules (no cross-source numeric collision).
-6. Separates NULL created_on lane from plain (created_on, id) composite keyset pagination.
-7. Validates exact executed cursor queries with EXPLAIN (enforcing proved index and RANGE access).
-8. Verifies real transport (TLS CA certificate or validated private/loopback subnet).
-9. Computes raw message SHA-256 hashes, media keys, and watch/non-watch classification.
-10. Calculates duplicate source-IDs strictly among non-NULL entries.
-11. Enforces strict scanned rows == frozen source total equality assertion.
+4. Pins exact PostgreSQL host db.bptrvfncppbjnchsaxtb.supabase.co with sslmode=verify-full.
+5. Verifies dedicated read-only PostgreSQL role (SELECT/USAGE, no mutation privileges, non-superuser).
+6. Employs measured, namespace-scoped identity resolution rules (no cross-source numeric collision).
+7. Separates NULL created_on lane from plain (created_on, id) composite keyset pagination.
+8. Validates exact executed cursor queries with EXPLAIN (enforcing proved index and RANGE access).
+9. Verifies real transport (TLS CA certificate with hostname SAN verification, or validated private/loopback subnet).
+10. Computes authoritative full raw source payload SHA-256 hashes and media keys.
+11. Sums bundle distributions deliberately (BUNDLE, SINGLE, UNKNOWN) with zero overwrite risk.
+12. Ends all database transactions with rollback() to ensure zero mutation.
+13. Performs memory preflight to verify system RAM before scanning.
+14. Enforces strict scanned rows == frozen source total equality assertion.
 """
 
 import os
@@ -28,8 +31,21 @@ import psycopg2
 from psycopg2.extensions import ISOLATION_LEVEL_REPEATABLE_READ
 
 PINNED_PROJECT_REF = "bptrvfncppbjnchsaxtb"
+EXACT_PINNED_PGHOST = f"db.{PINNED_PROJECT_REF}.supabase.co"
 CENSUS_CONTRACT = "wf-mariadb-source-census-v4"
 SOURCE_CONTRACT = "wf-mariadb-auctions-raw-v1"
+
+SOURCE_COLUMNS = [
+    "id", "open_unique_key", "created_on", "updated_on", "origin", "type", "status",
+    "is_bundle", "category_id", "company_id", "from_number", "from_name", "phone_code",
+    "region", "title", "description", "comments", "brand", "model", "reference",
+    "normalized_reference", "dial_color", "dial_color_source", "condition_id", "year",
+    "box", "papers", "price", "currency", "reserve_price", "min", "max", "avg",
+    "front_image", "report_url", "dealer_rating", "is_from_verified_user",
+    "is_from_paid_user", "is_seller_approved", "catalog_confirmed",
+    "catalog_canonical_confirmed", "are_attributes_extracted", "identification_status",
+    "wf_inspection", "times_posted", "reposted_at"
+]
 
 KNOWN_WATCH_BRANDS = [
     "rolex", "patek", "patek philippe", "audemars", "audemars piguet", "ap",
@@ -44,14 +60,26 @@ KNOWN_WATCH_BRANDS = [
 ]
 REF_PATTERN = re.compile(r"\b\d{4,7}[A-Z]{0,4}\b", re.IGNORECASE)
 NON_WATCH_TOKENS = re.compile(r"\b(box only|papers only|strap|bracelet|bezel|dial only|pouch|links|buckle|wallet|hangtag|booklet)\b", re.IGNORECASE)
+BRAND_REGEXES = [re.compile(rf"\b{re.escape(br)}\b", re.IGNORECASE) for br in KNOWN_WATCH_BRANDS]
 
 def sha256_text(val: str) -> str:
     return hashlib.sha256((val or "").encode("utf-8")).hexdigest()
 
+def compute_authoritative_raw_evidence_sha256(row: dict) -> str:
+    """Deterministic field-labelled combination of all authoritative source evidence."""
+    payload = {
+        k: ("" if row.get(k) is None else str(row[k]))
+        for k in SOURCE_COLUMNS
+        if k in row
+    }
+    serialized = json.dumps(payload, sort_keys=True, separators=(',', ':'))
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
 def assert_pinned_project(target: str):
-    if PINNED_PROJECT_REF not in (target or ""):
+    target_clean = (target or "").strip().lower()
+    if target_clean != EXACT_PINNED_PGHOST:
         raise ValueError(
-            f"Target refusal: PostgreSQL host/URL must contain pinned project ref '{PINNED_PROJECT_REF}', got: '{target}'"
+            f"Target refusal: PostgreSQL host must strictly match exact pinned hostname '{EXACT_PINNED_PGHOST}', got: '{target}'"
         )
 
 def is_private_or_loopback(host: str) -> bool:
@@ -71,7 +99,27 @@ def verify_mariadb_transport(host: str):
         ca_path = os.path.abspath(ca_file)
         if not os.path.exists(ca_path):
             raise ValueError(f"MariaDB TLS CA file does not exist: {ca_path}")
-        return {"ssl": {"ca": ca_path}, "transport": "TLS_CA_VERIFIED"}
+        
+        tls_server_name = os.environ.get("MARIADB_TLS_SERVER_NAME")
+        ssl_config = {
+            "ca": ca_path,
+            "check_hostname": True
+        }
+        try:
+            ipaddress.ip_address(host)
+            if not tls_server_name:
+                raise ValueError(
+                    f"MariaDB TLS server identity refusal: Host '{host}' is an IP address. "
+                    "Host certificate SAN verification requires a valid DNS hostname via MARIADB_TLS_SERVER_NAME or a DNS host."
+                )
+            ssl_config["server_name"] = tls_server_name
+        except ValueError as e:
+            if "server identity refusal" in str(e):
+                raise
+            if tls_server_name:
+                ssl_config["server_name"] = tls_server_name
+
+        return {"ssl": ssl_config, "transport": "TLS_CA_VERIFIED"}
 
     tunnel_verified = os.environ.get("MARIADB_PRIVATE_TUNNEL_VERIFIED") == "true"
     if tunnel_verified:
@@ -82,7 +130,7 @@ def verify_mariadb_transport(host: str):
             )
         return {"ssl": None, "transport": "PRIVATE_TUNNEL_VERIFIED"}
 
-    raise ValueError("MariaDB source requires MARIADB_PRIVATE_TUNNEL_VERIFIED=true on a private/loopback host or MARIADB_TLS_CA_FILE")
+    raise ValueError("MariaDB source requires MARIADB_PRIVATE_TUNNEL_VERIFIED=true on a private/loopback host or MARIADB_TLS_CA_FILE with verified server identity")
 
 def assert_read_only_grants(grants):
     for grant in grants:
@@ -99,19 +147,29 @@ def get_postgres_config():
     pguser = os.environ.get("PGUSER") or os.environ.get("POSTGRES_USER") or os.environ.get("SUPABASE_DB_USER")
     pgpass = os.environ.get("PGPASSWORD") or os.environ.get("POSTGRES_PASSWORD") or os.environ.get("SUPABASE_DB_PASSWORD")
     pgdb = os.environ.get("PGDATABASE") or os.environ.get("POSTGRES_DB") or os.environ.get("SUPABASE_DB_NAME") or "postgres"
+    sslmode = os.environ.get("PGSSLMODE") or "verify-full"
+    sslrootcert = os.environ.get("PGSSLROOTCERT")
 
     if not pghost or not pguser or not pgpass:
         raise ValueError("Missing required PostgreSQL credentials: PGHOST, PGUSER, PGPASSWORD")
 
     assert_pinned_project(pghost)
-    return {
+    
+    cfg = {
         "host": pghost,
         "port": pgport,
         "user": pguser,
         "password": pgpass,
         "dbname": pgdb,
+        "sslmode": sslmode,
         "connect_timeout": 15
     }
+    if sslrootcert:
+        if not os.path.exists(sslrootcert):
+            raise ValueError(f"PostgreSQL SSL root certificate does not exist: {sslrootcert}")
+        cfg["sslrootcert"] = sslrootcert
+
+    return cfg
 
 def get_mariadb_config():
     host = os.environ.get("MARIADB_HOST") or os.environ.get("MYSQL_HOST")
@@ -134,6 +192,34 @@ def get_mariadb_config():
         "transport": transport_info
     }
 
+def verify_postgres_role_permissions(cur, log_fn):
+    """Enforce dedicated read-only role: non-superuser, USAGE, SELECT, zero mutations."""
+    cur.execute("SELECT current_user, current_setting('is_superuser');")
+    role_row = cur.fetchone()
+    current_role = role_row[0]
+    is_super = role_row[1]
+
+    if is_super == "on" or current_role == "postgres":
+        raise ValueError(
+            f"PostgreSQL role violation: active role '{current_role}' is superuser/postgres. "
+            "A dedicated read-only role with SELECT-only privileges is strictly required."
+        )
+
+    cur.execute("SELECT has_schema_privilege(CURRENT_USER, 'wf_canonical_staging', 'USAGE');")
+    if not cur.fetchone()[0]:
+        raise ValueError(f"PostgreSQL role violation: role '{current_role}' missing USAGE on schema 'wf_canonical_staging'")
+
+    cur.execute("SELECT has_table_privilege(CURRENT_USER, 'wf_canonical_staging.canonical_listing_parents', 'SELECT');")
+    if not cur.fetchone()[0]:
+        raise ValueError(f"PostgreSQL role violation: role '{current_role}' missing SELECT on 'wf_canonical_staging.canonical_listing_parents'")
+
+    for forbidden in ("INSERT", "UPDATE", "DELETE", "TRUNCATE"):
+        cur.execute("SELECT has_table_privilege(CURRENT_USER, 'wf_canonical_staging.canonical_listing_parents', %s);", (forbidden,))
+        if cur.fetchone()[0]:
+            raise ValueError(f"PostgreSQL role violation: role '{current_role}' possesses forbidden '{forbidden}' privilege on canonical parent staging table")
+
+    log_fn(f"Verified PostgreSQL role '{current_role}' possesses SELECT/USAGE privileges without mutation permissions.")
+
 def fetch_scoped_canonical_parents(pg_config, log_fn):
     log_fn(f"Connecting to PostgreSQL ({pg_config['host']}:{pg_config['port']}/{pg_config['dbname']})...")
     conn = psycopg2.connect(**pg_config)
@@ -144,6 +230,7 @@ def fetch_scoped_canonical_parents(pg_config, log_fn):
     cur.execute("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;")
 
     log_fn("Established direct REPEATABLE READ READ ONLY PostgreSQL transaction for wf_canonical_staging.canonical_listing_parents.")
+    verify_postgres_role_permissions(cur, log_fn)
 
     # Scoped Provenance Indexes
     scoped_parents = {
@@ -163,49 +250,50 @@ def fetch_scoped_canonical_parents(pg_config, log_fn):
     last_id = ""
     batch_size = 10000
 
-    while True:
-        cur.execute("""
-            SELECT id, source_listing_id, external_message_id, source_system
-            FROM wf_canonical_staging.canonical_listing_parents
-            WHERE id > %s
-            ORDER BY id ASC
-            LIMIT %s;
-        """, (last_id, batch_size))
+    try:
+        while True:
+            cur.execute("""
+                SELECT id, source_listing_id, external_message_id, source_system
+                FROM wf_canonical_staging.canonical_listing_parents
+                WHERE id > %s
+                ORDER BY id ASC
+                LIMIT %s;
+            """, (last_id, batch_size))
 
-        rows = cur.fetchall()
-        if not rows:
-            break
+            rows = cur.fetchall()
+            if not rows:
+                break
 
-        for row in rows:
-            pid, source_listing_id, external_message_id, source_system = row
-            last_id = pid
-            scoped_parents["total_parent_rows"] += 1
+            for row in rows:
+                pid, source_listing_id, external_message_id, source_system = row
+                last_id = pid
+                scoped_parents["total_parent_rows"] += 1
 
-            if pid:
-                scoped_parents["distinct_canonical_parent_ids"].add(str(pid).strip())
+                if pid:
+                    scoped_parents["distinct_canonical_parent_ids"].add(str(pid).strip())
 
-            if source_listing_id:
-                s_id = str(source_listing_id).strip()
-                scoped_parents["non_null_source_listing_ids"] += 1
-                scoped_parents["distinct_source_listing_ids"].add(s_id)
+                if source_listing_id:
+                    s_id = str(source_listing_id).strip()
+                    scoped_parents["non_null_source_listing_ids"] += 1
+                    scoped_parents["distinct_source_listing_ids"].add(s_id)
 
-                if source_system == "Green API / OceanDigital Stream":
-                    scoped_parents["ocean_stream_source_ids"].add(s_id)
-                elif source_system == "MySQL / Workbook Ingest":
-                    scoped_parents["mysql_workbook_source_ids"].add(s_id)
-            else:
-                scoped_parents["null_source_listing_ids"] += 1
+                    if source_system == "Green API / OceanDigital Stream":
+                        scoped_parents["ocean_stream_source_ids"].add(s_id)
+                    elif source_system == "MySQL / Workbook Ingest":
+                        scoped_parents["mysql_workbook_source_ids"].add(s_id)
+                else:
+                    scoped_parents["null_source_listing_ids"] += 1
 
-            if external_message_id:
-                ext_id = str(external_message_id).strip()
-                scoped_parents["distinct_external_message_ids"].add(ext_id)
-                if source_system == "Green API / OceanDigital Stream":
-                    scoped_parents["ocean_stream_ext_ids"].add(ext_id)
-                elif source_system == "MySQL / Workbook Ingest":
-                    scoped_parents["mysql_workbook_ext_ids"].add(ext_id)
-
-    conn.rollback()
-    conn.close()
+                if external_message_id:
+                    ext_id = str(external_message_id).strip()
+                    scoped_parents["distinct_external_message_ids"].add(ext_id)
+                    if source_system == "Green API / OceanDigital Stream":
+                        scoped_parents["ocean_stream_ext_ids"].add(ext_id)
+                    elif source_system == "MySQL / Workbook Ingest":
+                        scoped_parents["mysql_workbook_ext_ids"].add(ext_id)
+    finally:
+        conn.rollback()
+        conn.close()
 
     dup_source_ids = scoped_parents["non_null_source_listing_ids"] - len(scoped_parents["distinct_source_listing_ids"])
     log_fn(
@@ -217,6 +305,7 @@ def fetch_scoped_canonical_parents(pg_config, log_fn):
     return scoped_parents
 
 def preflight_and_explain_cursor(mcur, log_fn):
+    """Verifies composite index and executes EXPLAIN on exact keyset query plan."""
     # 1. Proved Index Verification
     mcur.execute("SHOW INDEX FROM auctions;")
     indexes = mcur.fetchall()
@@ -267,7 +356,59 @@ def preflight_and_explain_cursor(mcur, log_fn):
     log_fn(f"EXPLAIN verified for composite keyset stream: key='{key_used}', type='{access_type}'")
     return {"proved_composite_index": proved_idx, "key_used": key_used, "access_type": access_type}
 
-BRAND_REGEXES = [re.compile(rf"\b{re.escape(br)}\b", re.IGNORECASE) for br in KNOWN_WATCH_BRANDS]
+# Function alias for backwards compatibility
+preflight_cursor_and_explain = preflight_and_explain_cursor
+
+def check_memory_preflight(frozen_total_rows: int, log_fn):
+    """Establishes memory requirements and fails before scanning if inadequate."""
+    estimated_bytes = max(1500 * 1024 * 1024, int(frozen_total_rows * 1200))
+    avail_bytes = None
+
+    try:
+        import psutil
+        avail_bytes = psutil.virtual_memory().available
+    except ImportError:
+        if sys.platform == "linux" and os.path.exists("/proc/meminfo"):
+            try:
+                with open("/proc/meminfo", "r") as f:
+                    for line in f:
+                        if line.startswith("MemAvailable:"):
+                            avail_bytes = int(line.split()[1]) * 1024
+                            break
+            except Exception:
+                pass
+        elif sys.platform == "win32":
+            try:
+                import ctypes
+                class MEMORYSTATUSEX(ctypes.Structure):
+                    _fields_ = [
+                        ("dwLength", ctypes.c_ulong),
+                        ("dwMemoryLoad", ctypes.c_ulong),
+                        ("ullTotalPhys", ctypes.c_ulonglong),
+                        ("ullAvailPhys", ctypes.c_ulonglong),
+                        ("ullTotalPageFile", ctypes.c_ulonglong),
+                        ("ullAvailPageFile", ctypes.c_ulonglong),
+                        ("ullTotalVirtual", ctypes.c_ulonglong),
+                        ("ullAvailVirtual", ctypes.c_ulonglong),
+                        ("sullAvailExtendedVirtual", ctypes.c_ulonglong),
+                    ]
+                stat = MEMORYSTATUSEX()
+                stat.dwLength = ctypes.sizeof(MEMORYSTATUSEX)
+                if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(stat)):
+                    avail_bytes = stat.ullAvailPhys
+            except Exception:
+                pass
+
+    if avail_bytes is not None:
+        avail_mb = avail_bytes / (1024 * 1024)
+        req_mb = estimated_bytes / (1024 * 1024)
+        log_fn(f"Memory preflight check: {avail_mb:.1f} MB available, {req_mb:.1f} MB estimated required for {frozen_total_rows:,} rows.")
+        if avail_bytes < estimated_bytes:
+            raise MemoryError(
+                f"Memory preflight failed: system has {avail_mb:.1f} MB available, but {req_mb:.1f} MB is required to securely process {frozen_total_rows:,} source rows."
+            )
+    else:
+        log_fn(f"Memory preflight check: system memory stats unreadable; allocated {estimated_bytes / (1024 * 1024):.1f} MB threshold for bounded sets.")
 
 def classify_watch_record(title: str, brand: str, ref: str) -> str:
     t = str(title or "")
@@ -379,7 +520,7 @@ def run_census(options=None):
         log(f"Primary key verified on auctions: {pk_columns}")
 
         # Cursor preflight and explain plan verification
-        preflight_info = preflight_cursor_and_explain(mcur, log)
+        preflight_info = preflight_and_explain_cursor(mcur, log)
 
         # 3. Freeze Upper Boundary
         log("Freezing upper cursor boundary...")
@@ -397,12 +538,15 @@ def run_census(options=None):
         """)
         bounds = mcur.fetchone()
         frozen_total = int(bounds["total_rows"])
-        null_created_on_total = int(bounds["null_created_on_count"])
+        null_created_on_total = int(bounds["null_created_on_count"] or 0)
         frozen_max_created_on = str(bounds["max_created_on"] or "9999-12-31 23:59:59")
         frozen_max_id = int(bounds["max_id"])
 
         log(f"Frozen Boundary Total: {frozen_total:,} rows (Min ID: {bounds['min_id']}, Max ID: {frozen_max_id})")
         log(f"Frozen Date Range: {bounds['min_created_on']} to {frozen_max_created_on} (Null created_on: {null_created_on_total:,})")
+
+        # Memory Preflight Check
+        check_memory_preflight(frozen_total, log)
 
         # 4. Status, Intent, Bundle Distributions
         mcur.execute("SELECT status, COUNT(*) AS cnt FROM auctions GROUP BY status;")
@@ -411,8 +555,20 @@ def run_census(options=None):
         mcur.execute("SELECT type, COUNT(*) AS cnt FROM auctions GROUP BY type;")
         type_dist = {str(r["type"] if r["type"] is not None else "<NULL>"): int(r["cnt"]) for r in mcur.fetchall()}
 
-        mcur.execute("SELECT is_bundle, COUNT(*) AS cnt FROM auctions GROUP BY is_bundle;")
-        bundle_dist = {"BUNDLE" if r["is_bundle"] == 1 else "SINGLE": int(r["cnt"]) for r in mcur.fetchall()}
+        # Correct Deliberate Bundle Counting (No overwrite risk)
+        mcur.execute("""
+            SELECT 
+                SUM(CASE WHEN is_bundle = 1 THEN 1 ELSE 0 END) AS bundle_count,
+                SUM(CASE WHEN is_bundle = 0 THEN 1 ELSE 0 END) AS single_count,
+                SUM(CASE WHEN is_bundle IS NULL OR (is_bundle != 0 AND is_bundle != 1) THEN 1 ELSE 0 END) AS unknown_bundle_count
+            FROM auctions;
+        """)
+        b_row = mcur.fetchone()
+        bundle_dist = {
+            "BUNDLE": int(b_row.get("bundle_count") or 0),
+            "SINGLE": int(b_row.get("single_count") or 0),
+            "UNKNOWN": int(b_row.get("unknown_bundle_count") or 0)
+        }
 
         mcur.execute("""
             SELECT 
@@ -448,13 +604,15 @@ def run_census(options=None):
         empty_raw_message_count = 0
         sample_missing = []
 
+        select_cols = ", ".join(SOURCE_COLUMNS)
+
         # Lane A: NULL created_on records (if any)
         if null_created_on_total > 0:
             log(f"Streaming {null_created_on_total:,} rows with NULL created_on in dedicated ID lane...")
             null_last_id = 0
             while True:
-                mcur.execute("""
-                    SELECT id, open_unique_key, created_on, type, is_bundle, status, brand, reference, price, front_image, title, description, comments
+                mcur.execute(f"""
+                    SELECT {select_cols}
                     FROM auctions
                     WHERE created_on IS NULL AND id > %s AND id <= %s
                     ORDER BY id ASC
@@ -468,11 +626,12 @@ def run_census(options=None):
                     scanned_count += 1
                     null_last_id = int(row["id"])
 
-                    # Hashes & Media Keys
+                    # Authoritative Raw Evidence SHA-256 Hash
+                    auth_hash = compute_authoritative_raw_evidence_sha256(row)
+                    raw_hash_set.add(auth_hash)
+
                     raw_text = str(row.get("description") or row.get("title") or row.get("comments") or "").strip()
-                    if raw_text:
-                        raw_hash_set.add(sha256_text(raw_text))
-                    else:
+                    if not raw_text:
                         empty_raw_message_count += 1
 
                     img_url = str(row.get("front_image") or "").strip()
@@ -501,8 +660,8 @@ def run_census(options=None):
         last_id = 0
 
         while True:
-            mcur.execute("""
-                SELECT id, open_unique_key, created_on, type, is_bundle, status, brand, reference, price, front_image, title, description, comments
+            mcur.execute(f"""
+                SELECT {select_cols}
                 FROM auctions
                 WHERE created_on IS NOT NULL
                   AND (
@@ -525,11 +684,12 @@ def run_census(options=None):
                 last_created_on = str(row["created_on"])
                 last_id = int(row["id"])
 
-                # Hashes & Media Keys
+                # Authoritative Raw Evidence SHA-256 Hash
+                auth_hash = compute_authoritative_raw_evidence_sha256(row)
+                raw_hash_set.add(auth_hash)
+
                 raw_text = str(row.get("description") or row.get("title") or row.get("comments") or "").strip()
-                if raw_text:
-                    raw_hash_set.add(sha256_text(raw_text))
-                else:
+                if not raw_text:
                     empty_raw_message_count += 1
 
                 img_url = str(row.get("front_image") or "").strip()
@@ -583,6 +743,7 @@ def run_census(options=None):
             "contract": CENSUS_CONTRACT,
             "source_contract": SOURCE_CONTRACT,
             "pinned_project_ref": PINNED_PROJECT_REF,
+            "exact_pinned_pghost": EXACT_PINNED_PGHOST,
             "status": "COMPLETE_SUCCESS",
             "started_at": start_iso,
             "ended_at": end_iso,
@@ -613,14 +774,14 @@ def run_census(options=None):
             },
             "classification_distribution": classification_counts,
             "raw_message_evidence": {
-                "distinct_raw_message_hashes": len(raw_hash_set),
+                "distinct_authoritative_raw_hashes": len(raw_hash_set),
                 "empty_or_null_raw_messages": empty_raw_message_count,
             },
             "media_distribution": {
-                "with_image": int(img_dist["with_image"]),
-                "without_image": int(img_dist["without_image"]),
+                "with_image": int(img_dist["with_image"] or 0),
+                "without_image": int(img_dist["without_image"] or 0),
                 "distinct_media_keys": len(media_key_set),
-                "image_coverage_pct": round((float(img_dist["with_image"]) / frozen_total) * 100, 2),
+                "image_coverage_pct": round((float(img_dist["with_image"] or 0) / frozen_total) * 100, 2) if frozen_total else 0.0,
             },
             "status_distribution": status_dist,
             "intent_distribution": type_dist,
@@ -643,9 +804,15 @@ def run_census(options=None):
         return report
 
     finally:
-        mdb.commit()
-        mdb.close()
-        log("MariaDB transaction committed and connection closed.")
+        try:
+            mdb.rollback()
+        except Exception:
+            pass
+        try:
+            mdb.close()
+        except Exception:
+            pass
+        log("MariaDB transaction rolled back and connection closed (Zero mutations guaranteed).")
 
 if __name__ == "__main__":
     try:

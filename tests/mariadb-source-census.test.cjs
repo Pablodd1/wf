@@ -26,7 +26,7 @@ test('source census strictly refuses non-bptrvfncppbjnchsaxtb project', async ()
         MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true',
       }
     }),
-    /Target refusal: PostgreSQL host\/URL must contain pinned project ref 'bptrvfncppbjnchsaxtb'/i,
+    /Target refusal: PostgreSQL host must strictly match exact pinned hostname/i,
   );
 });
 
