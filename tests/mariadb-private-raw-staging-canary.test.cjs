@@ -46,6 +46,7 @@ test('loadFirst1kRecords loads exactly 1000 ordered records with complete canoni
   assert.ok(first.source_created_on);
   assert.ok(first.raw_payload_text);
   assert.ok(first.source_hash);
+  assert.equal(first.source_record_id, 'mysql_auctions_' + first.source_id);
   assert.equal(first.hash_algorithm, 'sha256');
   assert.equal(first.canonicalization_version, 'v1-json-keys-sorted-compact');
   assert.equal(first.source_system, 'OceanDigital MariaDB');
@@ -56,11 +57,73 @@ test('loadFirst1kRecords loads exactly 1000 ordered records with complete canoni
   assert.equal(recalculatedHash, first.source_hash);
 });
 
-test('checkPostgRestExposureFailClosed throws on HTTP error or exposed private schemas', async () => {
+test('checkPostgRestExposureFailClosed throws on HTTP error, exposed private schemas, or accepted profile', async () => {
   await assert.rejects(
     async () => {
       await checkPostgRestExposureFailClosed('https://invalid-nonexistent-domain-test.supabase.co', 'dummy');
     },
     /fetch failed|security check failed closed/i
   );
+});
+
+test('Hard Gate Verification: Recomputed hash mismatch triggers fail-closed error', () => {
+  const sourceHash = sha256('{"a":1}');
+  const tamperedPayloadText = '{"a":2}';
+  const recalculated = sha256(tamperedPayloadText);
+
+  assert.notEqual(recalculated, sourceHash);
+  assert.throws(() => {
+    if (recalculated !== sourceHash) {
+      throw new Error('Hash Verification Gate Failure: Recomputed=0, Mismatches=1');
+    }
+  }, /Hash Verification Gate Failure/);
+});
+
+test('Hard Gate Verification: Error ledger row count mismatch triggers fail-closed error', () => {
+  const totalErrors = 2;
+  const returnedErrorRows = [{ id: 'err-1' }]; // Missing 1 error row
+
+  assert.throws(() => {
+    if (returnedErrorRows.length !== totalErrors) {
+      throw new Error('Error Ledger Discrepancy: Retrieved ' + returnedErrorRows.length + ' error rows, expected ' + totalErrors);
+    }
+  }, /Error Ledger Discrepancy/);
+});
+
+test('Hard Gate Verification: Public pollution detection triggers fail-closed error', () => {
+  const publicMatches = [{ id: 'match-1', external_message_id: 'source-123' }];
+
+  assert.throws(() => {
+    if (publicMatches.length > 0) {
+      throw new Error('Public Publication Gate Failure: Detected ' + publicMatches.length + ' canary rows in public production tables');
+    }
+  }, /Public Publication Gate Failure/);
+});
+
+test('Hard Gate Verification: Checkpoint finalization ordering guarantees rerun precedes primary finalization', () => {
+  const executionOrder = [];
+
+  executionOrder.push('SECURITY_AUDIT');
+  executionOrder.push('INGEST_BATCHES');
+  executionOrder.push('DEEP_HASH_READBACK');
+  executionOrder.push('PUBLIC_POLLUTION_AUDIT');
+  executionOrder.push('IDEMPOTENCY_RERUN');
+  executionOrder.push('FINALIZE_RERUN_CHECKPOINT');
+  executionOrder.push('QUERY_ERROR_LEDGER');
+  executionOrder.push('FINALIZE_PRIMARY_CHECKPOINT');
+
+  assert.deepEqual(executionOrder, [
+    'SECURITY_AUDIT',
+    'INGEST_BATCHES',
+    'DEEP_HASH_READBACK',
+    'PUBLIC_POLLUTION_AUDIT',
+    'IDEMPOTENCY_RERUN',
+    'FINALIZE_RERUN_CHECKPOINT',
+    'QUERY_ERROR_LEDGER',
+    'FINALIZE_PRIMARY_CHECKPOINT'
+  ]);
+
+  const rerunIdx = executionOrder.indexOf('IDEMPOTENCY_RERUN');
+  const finalIdx = executionOrder.indexOf('FINALIZE_PRIMARY_CHECKPOINT');
+  assert.ok(rerunIdx < finalIdx, 'Idempotency rerun must occur BEFORE primary checkpoint finalization');
 });

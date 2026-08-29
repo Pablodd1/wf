@@ -1,3 +1,4 @@
+// run-1k-private-canary.cjs
 'use strict';
 
 const crypto = require('node:crypto');
@@ -37,12 +38,12 @@ function resolveBenchmarkGzPath(overridePath) {
     overridePath,
     path.resolve('audit-output/mariadb-live/benchmark-100k-v2/raw-records.jsonl.gz'),
     path.resolve('../wf-source-only-census/audit-output/mariadb-live/benchmark-100k-v2/raw-records.jsonl.gz'),
-    'C:\\Users\\jasme\\Documents\\Codex\\2026-08-29\\wf-source-only-census\\audit-output\\mariadb-live\\benchmark-100k-v2\\raw-records.jsonl.gz'
+    'C:\\\\Users\\\\jasme\\\\Documents\\\\Codex\\\\2026-08-29\\\\wf-source-only-census\\\\audit-output\\\\mariadb-live\\\\benchmark-100k-v2\\\\raw-records.jsonl.gz'
   ];
   for (const c of candidates) {
     if (c && fs.existsSync(c)) return path.resolve(c);
   }
-  throw new Error(`Input artifact does not exist in any candidate location: ${candidates.join(', ')}`);
+  throw new Error('Input artifact does not exist in any candidate location: ' + candidates.join(', '));
 }
 
 async function loadFirst1kRecords(gzPath, limit = 1000) {
@@ -69,7 +70,7 @@ async function loadFirst1kRecords(gzPath, limit = 1000) {
       source_table: item.source_table || 'auctions',
       source_id: item.source_id,
       source_unique_key: item.source_unique_key || null,
-      source_record_id: item.source_record_id || mysql_auctions_,
+      source_record_id: item.source_record_id || ('mysql_auctions_' + item.source_id),
       source_created_on: item.source_created_on || null,
       source_updated_on: rawData.updated_on || null,
       captured_at: item.captured_at || new Date().toISOString(),
@@ -97,6 +98,8 @@ async function loadFirst1kRecords(gzPath, limit = 1000) {
 
 async function checkPostgRestExposureFailClosed(supabaseUrl, serviceKey) {
   const cleanUrl = supabaseUrl.replace(/\/$/, '');
+  
+  // 1. Standard OpenAPI schema probe
   const res = await fetch(cleanUrl + '/rest/v1/', {
     headers: {
       'apikey': serviceKey,
@@ -112,10 +115,26 @@ async function checkPostgRestExposureFailClosed(supabaseUrl, serviceKey) {
   if (stagingExposed.length > 0) {
     throw new Error('Security Violation: Private staging table is exposed in PostgREST paths: ' + stagingExposed.join(', '));
   }
+
+  // 2. Explicit Accept-Profile probe for wf_canonical_staging (Must be rejected)
+  const profileProbe = await fetch(cleanUrl + '/rest/v1/mariadb_raw_source_rows', {
+    headers: {
+      'apikey': serviceKey,
+      'Authorization': 'Bearer ' + serviceKey,
+      'Accept-Profile': 'wf_canonical_staging'
+    }
+  });
+  // Accept-Profile to unexposed schema must return 404, 406, or PGRST106 error
+  if (profileProbe.ok) {
+    throw new Error('Security Violation: PostgREST accepted Accept-Profile: wf_canonical_staging with HTTP ' + profileProbe.status);
+  }
+
   return {
     exposed: false,
     exposed_paths: [],
     total_paths: paths.length,
+    accept_profile_rejected: true,
+    accept_profile_status: profileProbe.status,
     postgrest_schema: spec.info?.title || 'standard public schema'
   };
 }
@@ -145,9 +164,23 @@ async function run1kPrivateCanary(options = {}) {
   const records = await loadFirst1kRecords(gzPath, 1000);
   console.log('[Canary] Loaded exactly ' + records.length + ' records.');
 
-  console.log('[Canary] 2. Verifying PostgREST schema privacy (fail-closed)...');
+  console.log('[Canary] 2. Verifying PostgREST schema privacy & Accept-Profile rejection (fail-closed)...');
   const securityCheck = await checkPostgRestExposureFailClosed(supabaseUrl, supabaseKey);
-  console.log('[Canary] PostgREST schema verified private: ' + securityCheck.postgrest_schema);
+  console.log('[Canary] PostgREST schema verified private: ' + securityCheck.postgrest_schema + ' (Accept-Profile rejected: HTTP ' + securityCheck.accept_profile_status + ')');
+
+  console.log('[Canary] 2b. Performing Live PostgreSQL Security & Privilege Audit...');
+  const { data: dbPrivileges, error: privErr } = await supabase.rpc('audit_mariadb_private_raw_security');
+  if (privErr) {
+    throw new Error('PostgreSQL security audit query failed: ' + privErr.message);
+  }
+  if (!dbPrivileges || !dbPrivileges.schema_privileges) {
+    throw new Error('PostgreSQL security audit returned malformed privilege report');
+  }
+
+  // Assert schema usage is revoked for anon and authenticated
+  if (dbPrivileges.schema_privileges.anon_usage || dbPrivileges.schema_privileges.authenticated_usage) {
+    throw new Error('Security Violation: wf_canonical_staging schema usage granted to anon or authenticated');
+  }
 
   console.log('[Canary] 3. Ingesting ' + records.length + ' records in batches of ' + batchSize + '...');
   let totalInput = 0;
@@ -283,25 +316,7 @@ async function run1kPrivateCanary(options = {}) {
     throw new Error('Public Publication Gate Failure: Detected ' + publicMatchCount + ' canary rows in public production tables');
   }
 
-  console.log('[Canary] 6. Querying Real Error Ledger Rows...');
-  const { data: errorRows, error: errLedgerErr } = await supabase.rpc('get_mariadb_private_raw_errors', {
-    p_run_key: runKey
-  });
-  if (errLedgerErr) {
-    throw new Error('Failed to query error ledger: ' + errLedgerErr.message);
-  }
-
-  console.log('[Canary] 7. Finalizing Checkpoint Status to RAW_STAGED...');
-  const { data: finalization, error: finalErr } = await supabase.rpc('finalize_mariadb_private_raw_checkpoint', {
-    p_run_key: runKey,
-    p_expected_staged_rows: (totalNewlyStaged + totalAlreadyStaged),
-    p_expected_error_rows: totalErrors
-  });
-  if (finalErr) {
-    throw new Error('Checkpoint finalization failed: ' + finalErr.message);
-  }
-
-  console.log('[Canary] 8. Testing Idempotent Rerun (Rerunning same 1,000 rows)...');
+  console.log('[Canary] 6. Testing Idempotent Rerun (BEFORE finalization of primary checkpoint)...');
   const rerunRunKey = runKey + '-rerun';
   let rerunNewlyStaged = 0;
   let rerunAlreadyStaged = 0;
@@ -344,13 +359,48 @@ async function run1kPrivateCanary(options = {}) {
     throw new Error('Idempotent Rerun Gate Failure: NewlyStaged=' + rerunNewlyStaged + ' (expected 0), AlreadyStaged=' + rerunAlreadyStaged + ' (expected 1000)');
   }
 
+  // Finalize rerun checkpoint to VERIFICATION_COMPLETE
+  const { error: rerunFinalErr } = await supabase.rpc('finalize_mariadb_private_raw_checkpoint', {
+    p_run_key: rerunRunKey,
+    p_expected_staged_rows: (rerunNewlyStaged + rerunAlreadyStaged),
+    p_expected_error_rows: rerunErrors,
+    p_final_status: 'VERIFICATION_COMPLETE'
+  });
+  if (rerunFinalErr) {
+    throw new Error('Rerun checkpoint finalization failed: ' + rerunFinalErr.message);
+  }
+
+  console.log('[Canary] 7. Querying Real Error Ledger Rows...');
+  const { data: errorRows, error: errLedgerErr } = await supabase.rpc('get_mariadb_private_raw_errors', {
+    p_run_key: runKey
+  });
+  if (errLedgerErr) {
+    throw new Error('Failed to query error ledger: ' + errLedgerErr.message);
+  }
+
+  // Hard Invariant Gate 5: Assert errorRows.length === totalErrors
+  if (!Array.isArray(errorRows) || errorRows.length !== totalErrors) {
+    throw new Error('Error Ledger Discrepancy: Retrieved ' + (errorRows?.length || 0) + ' error rows, expected ' + totalErrors);
+  }
+
+  console.log('[Canary] 8. Finalizing Primary Checkpoint Status to RAW_STAGED (Last DB Action)...');
+  const { data: finalization, error: finalErr } = await supabase.rpc('finalize_mariadb_private_raw_checkpoint', {
+    p_run_key: runKey,
+    p_expected_staged_rows: (totalNewlyStaged + totalAlreadyStaged),
+    p_expected_error_rows: totalErrors,
+    p_final_status: 'RAW_STAGED'
+  });
+  if (finalErr) {
+    throw new Error('Primary checkpoint finalization failed: ' + finalErr.message);
+  }
+
   const totalDurationMs = Date.now() - startTime;
   const memUsage = process.memoryUsage();
 
   // 9. Generate and Write the 7 Required Genuine Artifacts
   const runManifest = {
     contract: CONTRACT,
-    canary_version: 'v1.1-private-staging-canary-hardened',
+    canary_version: 'v1.2-private-staging-canary-hardened',
     run_key: runKey,
     started_at: startIso,
     ended_at: new Date().toISOString(),
@@ -394,12 +444,11 @@ async function run1kPrivateCanary(options = {}) {
   const securityVerification = {
     contract: CONTRACT,
     schema: 'wf_canonical_staging',
-    postgrest_exposed: false,
-    postgrest_paths: [],
-    anon_access: 'REVOKED',
-    authenticated_access: 'REVOKED',
-    public_access: 'REVOKED',
-    service_role_access: 'GRANTED'
+    postgrest_exposed: securityCheck.exposed,
+    postgrest_paths: securityCheck.exposed_paths,
+    accept_profile_rejected: securityCheck.accept_profile_rejected,
+    accept_profile_status: securityCheck.accept_profile_status,
+    database_privilege_audit: dbPrivileges
   };
 
   const publicImpactVerification = {
@@ -422,7 +471,8 @@ async function run1kPrivateCanary(options = {}) {
       newly_staged_rows: rerunNewlyStaged,
       already_staged_identical_rows: rerunAlreadyStaged,
       capture_error_rows: rerunErrors,
-      idempotency_verified: true
+      idempotency_verified: true,
+      checkpoint_status: 'VERIFICATION_COMPLETE'
     }
   };
 

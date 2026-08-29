@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_checkpoints (
   started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   completed_at TIMESTAMPTZ,
-  CHECK (status IN ('COPYING_RAW', 'RAW_STAGED', 'FAILED'))
+  CHECK (status IN ('COPYING_RAW', 'RAW_STAGED', 'FAILED', 'VERIFICATION_COMPLETE'))
 );
 
 -- 3. Batch Audit Ledger
@@ -88,12 +88,12 @@ CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_errors (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 5. Object-Specific Privilege Hardening
+-- 5. Object-Specific Privilege Hardening (Immutable Evidence is never updateable)
 REVOKE ALL ON SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated;
 GRANT USAGE ON SCHEMA wf_canonical_staging TO service_role;
 
 REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_source_rows FROM PUBLIC, anon, authenticated;
-GRANT SELECT, INSERT, UPDATE ON TABLE wf_canonical_staging.mariadb_raw_source_rows TO service_role;
+GRANT SELECT, INSERT ON TABLE wf_canonical_staging.mariadb_raw_source_rows TO service_role;
 
 REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_checkpoints FROM PUBLIC, anon, authenticated;
 GRANT SELECT, INSERT, UPDATE ON TABLE wf_canonical_staging.mariadb_raw_import_checkpoints TO service_role;
@@ -316,7 +316,7 @@ END;
 REVOKE ALL ON FUNCTION public.ingest_mariadb_private_raw_batch FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.ingest_mariadb_private_raw_batch TO service_role;
 
--- 7. Verification Readback Stored Procedure (Readback without exposing schema to PostgREST)
+-- 7. Verification Readback Stored Procedure
 CREATE OR REPLACE FUNCTION public.verify_mariadb_private_raw_readback(
   p_source_ids TEXT[]
 )
@@ -398,7 +398,8 @@ GRANT EXECUTE ON FUNCTION public.get_mariadb_private_raw_errors TO service_role;
 CREATE OR REPLACE FUNCTION public.finalize_mariadb_private_raw_checkpoint(
   p_run_key TEXT,
   p_expected_staged_rows BIGINT,
-  p_expected_error_rows BIGINT
+  p_expected_error_rows BIGINT,
+  p_final_status TEXT DEFAULT 'RAW_STAGED'
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -408,6 +409,10 @@ AS
 DECLARE
   v_checkpoint wf_canonical_staging.mariadb_raw_import_checkpoints%ROWTYPE;
 BEGIN
+  IF p_final_status NOT IN ('RAW_STAGED', 'VERIFICATION_COMPLETE') THEN
+    RAISE EXCEPTION 'Invalid final status: %', p_final_status;
+  END IF;
+
   SELECT * INTO v_checkpoint
   FROM wf_canonical_staging.mariadb_raw_import_checkpoints
   WHERE run_key = p_run_key
@@ -428,7 +433,7 @@ BEGIN
   END IF;
 
   UPDATE wf_canonical_staging.mariadb_raw_import_checkpoints
-  SET status = 'RAW_STAGED',
+  SET status = p_final_status,
       completed_at = now(),
       updated_at = now()
   WHERE run_key = p_run_key;
@@ -436,6 +441,7 @@ BEGIN
   RETURN jsonb_build_object(
     'status', 'FINALIZED',
     'run_key', p_run_key,
+    'checkpoint_status', p_final_status,
     'total_staged_rows', (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows),
     'capture_error_rows', v_checkpoint.capture_error_rows,
     'completed_at', now()
@@ -445,5 +451,76 @@ END;
 
 REVOKE ALL ON FUNCTION public.finalize_mariadb_private_raw_checkpoint FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.finalize_mariadb_private_raw_checkpoint TO service_role;
+
+-- 10. PostgreSQL Security Audit Stored Procedure
+CREATE OR REPLACE FUNCTION public.audit_mariadb_private_raw_security()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, public, pg_catalog
+AS 
+DECLARE
+  v_report JSONB;
+BEGIN
+  v_report := jsonb_build_object(
+    'schema_privileges', jsonb_build_object(
+      'anon_usage', has_schema_privilege('anon', 'wf_canonical_staging', 'USAGE'),
+      'authenticated_usage', has_schema_privilege('authenticated', 'wf_canonical_staging', 'USAGE'),
+      'service_role_usage', has_schema_privilege('service_role', 'wf_canonical_staging', 'USAGE')
+    ),
+    'table_privileges', jsonb_build_object(
+      'mariadb_raw_source_rows', jsonb_build_object(
+        'anon_select', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'SELECT'),
+        'anon_insert', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'INSERT'),
+        'authenticated_select', has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'SELECT'),
+        'service_role_select', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'SELECT'),
+        'service_role_insert', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'INSERT'),
+        'service_role_update', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'UPDATE'),
+        'service_role_delete', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'DELETE')
+      ),
+      'mariadb_raw_import_checkpoints', jsonb_build_object(
+        'anon_select', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'SELECT'),
+        'service_role_select', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'SELECT'),
+        'service_role_insert', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'INSERT'),
+        'service_role_update', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'UPDATE')
+      ),
+      'mariadb_raw_import_batches', jsonb_build_object(
+        'anon_select', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_batches', 'SELECT'),
+        'service_role_select', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'SELECT'),
+        'service_role_insert', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'INSERT')
+      ),
+      'mariadb_raw_import_errors', jsonb_build_object(
+        'anon_select', has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_errors', 'SELECT'),
+        'service_role_select', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'SELECT'),
+        'service_role_insert', has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'INSERT')
+      )
+    ),
+    'function_privileges', jsonb_build_object(
+      'ingest_batch', jsonb_build_object(
+        'anon_execute', has_function_privilege('anon', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb)', 'EXECUTE'),
+        'authenticated_execute', has_function_privilege('authenticated', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb)', 'EXECUTE'),
+        'service_role_execute', has_function_privilege('service_role', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb)', 'EXECUTE')
+      ),
+      'verify_readback', jsonb_build_object(
+        'anon_execute', has_function_privilege('anon', 'public.verify_mariadb_private_raw_readback(text[])', 'EXECUTE'),
+        'service_role_execute', has_function_privilege('service_role', 'public.verify_mariadb_private_raw_readback(text[])', 'EXECUTE')
+      ),
+      'get_errors', jsonb_build_object(
+        'anon_execute', has_function_privilege('anon', 'public.get_mariadb_private_raw_errors(text)', 'EXECUTE'),
+        'service_role_execute', has_function_privilege('service_role', 'public.get_mariadb_private_raw_errors(text)', 'EXECUTE')
+      ),
+      'finalize_checkpoint', jsonb_build_object(
+        'anon_execute', has_function_privilege('anon', 'public.finalize_mariadb_private_raw_checkpoint(text,bigint,bigint,text)', 'EXECUTE'),
+        'service_role_execute', has_function_privilege('service_role', 'public.finalize_mariadb_private_raw_checkpoint(text,bigint,bigint,text)', 'EXECUTE')
+      )
+    )
+  );
+
+  RETURN v_report;
+END;
+;
+
+REVOKE ALL ON FUNCTION public.audit_mariadb_private_raw_security FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.audit_mariadb_private_raw_security TO service_role;
 
 COMMIT;
