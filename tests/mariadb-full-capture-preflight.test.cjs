@@ -536,20 +536,32 @@ test('parseMaxCaptureRows: presence-based parsing strictly enforces valid non-ne
 
 test('runCaptureLoop with MAX_CAPTURE_ROWS=0 causes zero fetch, zero checkpoint mutations, and zero staging writes', async () => {
   const { runCaptureLoop } = require('../tools/mariadb-live/run-full-private-capture.cjs');
-  
-  let fetchCalled = false;
-  let supabaseRpcCalled = false;
+
+  const forbiddenAccess = (name) => ({
+    enumerable: true,
+    get() {
+      throw new Error(`zero-row execution accessed forbidden dependency: ${name}`);
+    }
+  });
+  const env = {};
+  Object.defineProperties(env, {
+    MAX_CAPTURE_ROWS: { enumerable: true, value: '0' },
+    SUPABASE_URL: forbiddenAccess('SUPABASE_URL'),
+    SUPABASE_SERVICE_ROLE_KEY: forbiddenAccess('SUPABASE_SERVICE_ROLE_KEY'),
+    MARIADB_HOST: forbiddenAccess('MARIADB_HOST'),
+    CAPTURE_OUTPUT_DIR: forbiddenAccess('CAPTURE_OUTPUT_DIR')
+  });
 
   const res = await runCaptureLoop({
-    maxRows: 0,
     runKey: 'test-zero-row-preflight',
-    env: { MAX_CAPTURE_ROWS: '0' }
+    env
   });
 
   assert.equal(res.cumulative_input_rows, 0);
   assert.equal(res.cumulative_newly_staged_rows, 0);
+  assert.equal(res.cumulative_already_staged_identical_rows, 0);
+  assert.equal(res.cumulative_error_rows, 0);
   assert.equal(res.batches_executed, 0);
   assert.equal(res.checkpoint_status, 'COPYING_RAW');
-  assert.equal(fetchCalled, false);
-  assert.equal(supabaseRpcCalled, false);
+  assert.equal(res.hash_verification.mode, 'ZERO_ROW_NOOP');
 });
