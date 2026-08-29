@@ -92,6 +92,36 @@ function resolveMariaDbTransport(env = process.env, options = {}) {
   throw new Error(`MariaDB source on host '${host}' requires a verified TLS CA or an explicitly verified private network tunnel`);
 }
 
+function buildStagingRecord(row, manifest = {}) {
+  const rawPayloadText = canonicalizeRawPayload(row);
+  const sourceHash = sha256(rawPayloadText);
+  const createdOn = row.created_on ? new Date(row.created_on).toISOString() : null;
+  const updatedOn = row.updated_on ? new Date(row.updated_on).toISOString() : null;
+  const sourceId = String(row.id);
+  const sourceSystem = manifest.source_system || 'OceanDigital MariaDB';
+  const sourceDatabase = manifest.source_database || 'thecollective_inventory';
+  const sourceTable = manifest.source_table || 'auctions';
+
+  return {
+    source_system: sourceSystem,
+    source_database: sourceDatabase,
+    source_table: sourceTable,
+    source_id: sourceId,
+    source_unique_key: `${sourceSystem}:${sourceDatabase}:${sourceTable}:${sourceId}`,
+    source_record_id: `mysql_${sourceTable}_${sourceId}`,
+    source_created_on: createdOn,
+    source_updated_on: updatedOn,
+    raw_message: row.description || null,
+    raw_message_source: 'description',
+    raw_sha256: sourceHash,
+    raw_payload_text: rawPayloadText,
+    raw_payload: row,
+    source_hash: sourceHash,
+    canonicalization_version: CANONICAL_VERSION,
+    hash_algorithm: HASH_ALGO
+  };
+}
+
 async function runCaptureLoop(options = {}) {
   const env = options.env || process.env;
   const maxRowsConfig = options.maxRowsConfig !== undefined
