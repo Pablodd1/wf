@@ -1,0 +1,158 @@
+name: QNSA encrypted unbundled workbook release
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Read-only audit, global 10-row canary, or resumable full release
+        required: true
+        default: audit
+        type: choice
+        options: [audit, canary, full]
+      asset_tag:
+        description: Private GitHub Release tag containing the encrypted package
+        required: true
+        type: string
+      asset_id:
+        description: Immutable numeric GitHub Release asset ID
+        required: true
+        type: string
+      asset_name:
+        description: Exact encrypted asset filename
+        required: true
+        type: string
+      asset_sha256:
+        description: Expected SHA-256 of the encrypted asset
+        required: true
+        type: string
+      confirmation:
+        description: Type AUDIT_QNSA_UNBUNDLED, CANARY_QNSA_UNBUNDLED, or FULL_QNSA_UNBUNDLED
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-unbundled-workbook-release-production
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      RELEASE_MODE: ${{ inputs.mode }}
+      ASSET_TAG: ${{ inputs.asset_tag }}
+      ASSET_ID: ${{ inputs.asset_id }}
+      ASSET_NAME: ${{ inputs.asset_name }}
+      ASSET_SHA256: ${{ inputs.asset_sha256 }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate dispatch inputs
+        shell: bash
+        env:
+          HAS_SUPABASE_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN != '' }}
+          HAS_ASSET_KEY: ${{ secrets.UNBUNDLED_IMPORT_AES_KEY_B64 != '' }}
+          HAS_DOWNLOAD_TOKEN: ${{ secrets.UNBUNDLED_RELEASE_DOWNLOAD_TOKEN != '' }}
+          HAS_LINK_KEY: ${{ secrets.LINK_EVIDENCE_HMAC_KEY != '' }}
+        run: |
+          set -euo pipefail
+          node -e '
+            const mode = process.env.RELEASE_MODE;
+            const expected = {audit:"AUDIT_QNSA_UNBUNDLED",canary:"CANARY_QNSA_UNBUNDLED",full:"FULL_QNSA_UNBUNDLED"}[mode];
+            if (!expected || process.env.CONFIRMATION !== expected) throw new Error("confirmation mismatch");
+            if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(process.env.ASSET_TAG || "")) throw new Error("invalid asset tag");
+            if (!/^[1-9][0-9]{0,19}$/.test(process.env.ASSET_ID || "")) throw new Error("invalid asset ID");
+            if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.enc$/.test(process.env.ASSET_NAME || "")) throw new Error("invalid asset name");
+            if (!/^[0-9a-f]{64}$/i.test(process.env.ASSET_SHA256 || "")) throw new Error("invalid asset SHA-256");
+            if (process.env.HAS_SUPABASE_TOKEN !== "true" || process.env.HAS_ASSET_KEY !== "true" || process.env.HAS_DOWNLOAD_TOKEN !== "true") throw new Error("required production secrets unavailable");
+            if (mode === "full" && process.env.HAS_LINK_KEY !== "true") throw new Error("full release requires dealer-link HMAC secret");
+          '
+
+      - run: npm ci
+
+      - name: Compile lineage migration and retrieve ephemeral QNSA service key
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          QNSA_ENV_FILE: ${{ runner.temp }}/qnsa-service.env
+        run: node tools/intake/prepare-qnsa-unbundled-release.cjs
+
+      - name: Download and authenticate encrypted release asset
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.UNBUNDLED_RELEASE_DOWNLOAD_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/unbundled-asset"
+          export DOWNLOADED_ASSET="$RUNNER_TEMP/unbundled-asset/$ASSET_NAME"
+          gh api \
+            -H "Accept: application/octet-stream" \
+            "repos/$GITHUB_REPOSITORY/releases/assets/$ASSET_ID" \
+            > "$DOWNLOADED_ASSET"
+          node -e '
+            const fs=require("fs"),crypto=require("crypto");
+            const p=process.env.DOWNLOADED_ASSET;
+            if(!fs.existsSync(p)) throw new Error("encrypted release asset missing");
+            const actual=crypto.createHash("sha256").update(fs.readFileSync(p)).digest("hex");
+            if(actual.toLowerCase()!==process.env.ASSET_SHA256.toLowerCase()) throw new Error("encrypted asset SHA-256 mismatch");
+          '
+
+      - name: Decrypt and validate archive paths
+        shell: bash
+        env:
+          UNBUNDLED_IMPORT_AES_KEY_B64: ${{ secrets.UNBUNDLED_IMPORT_AES_KEY_B64 }}
+        run: |
+          set -euo pipefail
+          export DOWNLOADED_ASSET="$RUNNER_TEMP/unbundled-asset/$ASSET_NAME"
+          export DECRYPTED_ZIP="$RUNNER_TEMP/unbundled-package.zip"
+          node tools/intake/decrypt-unbundled-release-asset.cjs --input "$DOWNLOADED_ASSET" --output "$DECRYPTED_ZIP"
+          mapfile -t entries < <(unzip -Z1 "$DECRYPTED_ZIP")
+          test "${#entries[@]}" -eq 21
+          for entry in "${entries[@]}"; do
+            [[ "$entry" != /* && "$entry" != *".."* && "$entry" != */* ]]
+            [[ "$entry" == "manifest.json" || "$entry" == *.xlsx ]]
+          done
+          mkdir -p "$RUNNER_TEMP/unbundled-package"
+          unzip -q "$DECRYPTED_ZIP" -d "$RUNNER_TEMP/unbundled-package"
+          node -e 'require("./tools/intake/unbundled-release-package.cjs").validateReleasePackage(process.env.RUNNER_TEMP+"/unbundled-package")'
+
+      - name: Audit or execute bounded release
+        shell: bash
+        env:
+          LINK_EVIDENCE_HMAC_KEY: ${{ inputs.mode == 'full' && secrets.LINK_EVIDENCE_HMAC_KEY || '' }}
+        run: |
+          set -euo pipefail
+          set -a
+          source "$RUNNER_TEMP/qnsa-service.env"
+          set +a
+          mkdir -p "$RUNNER_TEMP/sanitized"
+          node tools/intake/run-unbundled-release.cjs \
+            --mode "$RELEASE_MODE" \
+            --directory "$RUNNER_TEMP/unbundled-package" \
+            --output "$RUNNER_TEMP/sanitized/reconciliation.json"
+
+      - name: Upload sanitized counts and hashes only
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-unbundled-${{ inputs.mode }}-${{ github.run_id }}
+          path: ${{ runner.temp }}/sanitized/reconciliation.json
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Summarize
+        shell: bash
+        run: |
+          set -euo pipefail
+          node -e '
+            const r=require(process.env.RUNNER_TEMP+"/sanitized/reconciliation.json");
+            const totals=r.brands.reduce((a,b)=>({source:a.source+b.source_rows,ready:a.ready+(b.overlap_held?0:b.expected_unique_candidates),price:a.price+(b.overlap_held?0:b.expected_price_research)}),{source:0,ready:0,price:0});
+            require("fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, `## QNSA unbundled release\n\n- Mode: ${r.mode}\n- Workbooks authenticated: ${r.workbook_count}\n- Overlap held: ${r.overlap_held_brands.join(", ")}\n- Source rows audited: ${totals.source}\n- Non-overlap candidates: ${totals.ready}\n- Strict Price Research candidates: ${totals.price}\n- Global canary writes: ${r.global_canary_rows_applied}\n- Exact dealer links written: ${r.dealer_linkage.writes}\n`);
+          '

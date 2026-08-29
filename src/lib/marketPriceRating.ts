@@ -14,8 +14,8 @@ export type MarketPriceRating = {
 
 export function rateMarketPrice(price: number | null | undefined, stats: MarketBenchmark | null, comparableCount: number): MarketPriceRating {
   const amount = Number(price);
-  if (!stats || comparableCount < 5 || !Number.isFinite(amount) || amount <= 0) {
-    return { code: 'NOT_RATED', label: 'Insufficient market data', reason: 'At least five valid comparable offers are required.', color: '#9ca3af' };
+  if (!stats || comparableCount < 2 || !Number.isFinite(amount) || amount <= 0) {
+    return { code: 'NOT_RATED', label: 'Insufficient market data', reason: 'At least two valid comparable offers are required.', color: '#9ca3af' };
   }
   if (amount < stats.min || amount > stats.max) {
     return { code: 'NOT_RATED', label: 'Outside comparable range', reason: 'This price is outside the outlier-clean market range and is not rated.', color: '#d97706' };

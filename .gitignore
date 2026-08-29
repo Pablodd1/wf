@@ -1,42 +1,57 @@
-# WhatsApp auth session (private keys, never commit)
-whatsapp-listener/auth_info_baileys/
-whatsapp-listener/downloaded_images/
-
-# Dependencies
-node_modules/
-
-# Build
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
 dist/
-.playwright-cli/
-audit-output/
-.audit*.json
-.eslint-report.json
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# Environment files — ALL .env* files must never be committed
+# Development & Scratch
+scratch/
+pipeline_fallback.db
 .env
-.env.*
 .env.local
-.env.check
-.env.prod
-.env.production
-.env.supabase
-.env.vercel
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Node
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
 .env*.local
-.env.scripts
-.env.local.fixed
-.env.vercel.local
 
-# Vercel
-.vercel/
+# Read-only six-brand live checkpoints can contain large row-level API snapshots.
+# Commit only the generated aggregate completion summary and per-brand ledgers.
+audit-output/global-six-brand-completion/price-research/
+audit-output/global-six-brand-completion/trading-floor/
 
-# OS
-.DS_Store
-Thumbs.db
-whatsapp-qr.png
-add_groups_result.json
-scripts/migrate_offset.txt
-package-lock.json
-public/watchfacts-export.json
-public/watchfacts-export.csv
-.env*
-.shadow-trigger-token
+# Private raw-first audit artifacts (README remains reviewable)
+audit-output/mariadb-live/
+audit-output/raw-first-rolex-patek/summary.json
+audit-output/raw-first-rolex-patek/*-manifest.jsonl.gz
+audit-output/raw-first-rolex-patek/remaining-queues.jsonl.gz
+audit-output/raw-first-rolex-patek/sanitized-exact-deltas.jsonl.gz
+audit-output/raw-first-rolex-patek/manifest-sha256.json

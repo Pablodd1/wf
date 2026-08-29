@@ -1,0 +1,294 @@
+name: QNSA non-watch exact dealer linkage
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Read-only audit, capped 10-link canary, or full reconciliation
+        required: true
+        default: audit
+        type: choice
+        options: [audit, canary, full]
+      confirmation:
+        description: Type AUDIT_QNSA_NON_WATCH_LINKAGE, CANARY_QNSA_NON_WATCH_LINKAGE, or FULL_QNSA_NON_WATCH_LINKAGE
+        required: true
+        type: string
+      install_contract:
+        description: Install the reviewed forward-only RPC before canary/full
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: qnsa-non-watch-dealer-linkage-production
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      NON_WATCH_LINKAGE_MODE: ${{ inputs.mode }}
+      NON_WATCH_LINKAGE_PAGE_SIZE: '500'
+      NON_WATCH_LINKAGE_CANARY_LIMIT: '10'
+      NON_WATCH_LINKAGE_MAX_PAGES: '5000'
+      NON_WATCH_LINKAGE_DELAY_MS: ${{ inputs.mode == 'full' && '50' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate mode and confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          INSTALL_CONTRACT: ${{ inputs.install_contract }}
+        run: |
+          set -euo pipefail
+          case "$NON_WATCH_LINKAGE_MODE" in
+            audit) expected='AUDIT_QNSA_NON_WATCH_LINKAGE' ;;
+            canary) expected='CANARY_QNSA_NON_WATCH_LINKAGE' ;;
+            full) expected='FULL_QNSA_NON_WATCH_LINKAGE' ;;
+            *) echo 'Invalid linkage mode.' >&2; exit 1 ;;
+          esac
+          test "$CONFIRMATION" = "$expected"
+          test "$SUPABASE_PROJECT_REF" = 'qnsafosakvonzgfcsphh'
+          if [ "$NON_WATCH_LINKAGE_MODE" = 'audit' ]; then
+            test "$INSTALL_CONTRACT" = 'false'
+          else
+            test "$INSTALL_CONTRACT" = 'true'
+          fi
+
+      - name: Compile contract and run read-only audit
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          function Invoke-ReadOnlyAuditQuery([string]$query) {
+            $body = @{ query = $query; read_only = $true } | ConvertTo-Json -Depth 3
+            return Invoke-RestMethod -Method Post `
+              -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $body
+          }
+          function Test-CandidateDigestScopeSafe {
+            $digestScopeSql = @(
+              "SELECT COALESCE((SELECT"
+              "  position('v_candidate_page_digest' in definition)>0"
+              "    AND position('FROM candidate_page' in substring(definition"
+              "      from position('RETURN jsonb_build_object' in definition)))=0"
+              "  FROM (SELECT pg_get_functiondef(to_regprocedure("
+              "    'public.qnsa_non_watch_dealer_candidate_link_page(text,text,timestamptz,uuid,timestamptz,uuid,integer,boolean,integer)'"
+              "  )) AS definition) contract),false) AS safe;"
+            ) -join "`n"
+            $rows = Invoke-ReadOnlyAuditQuery $digestScopeSql
+            return $rows[0].safe -eq $true
+          }
+          function Get-ForwardMigrationBody([string]$path) {
+            $lines = @(Get-Content -LiteralPath $path)
+            $beginIndex = -1
+            $commitIndex = -1
+            for ($i=0; $i -lt $lines.Count; $i++) {
+              if ($beginIndex -lt 0 -and $lines[$i].Trim() -eq 'BEGIN;') { $beginIndex = $i }
+              if ($lines[$i].Trim() -eq 'COMMIT;') { $commitIndex = $i }
+            }
+            if ($beginIndex -lt 0 -or $commitIndex -le $beginIndex) {
+              throw "Migration $path does not have one outer transaction contract."
+            }
+            $bodyLines = for ($i=0; $i -lt $lines.Count; $i++) {
+              if ($i -ne $beginIndex -and $i -ne $commitIndex) { $lines[$i] }
+            }
+            return ($bodyLines -join "`n")
+          }
+          $candidateDigestInitiallySafe = Test-CandidateDigestScopeSafe
+          $digestRepairRequired = $env:NON_WATCH_LINKAGE_MODE -ne 'audit' -and -not $candidateDigestInitiallySafe
+          "NON_WATCH_DIGEST_REPAIR_REQUIRED=$($digestRepairRequired.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          if ($digestRepairRequired) {
+            $migrationBody = Get-ForwardMigrationBody 'supabase/migrations/20260816000500_qnsa_non_watch_candidate_digest_scope_repair.sql'
+            $compileBody = @{ query = "BEGIN;`n$migrationBody`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post `
+              -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $compileBody | Out-Null
+          }
+          $controlSql = @"
+          SELECT jsonb_build_object(
+            'raw_version_primary_key', to_regclass('public.raw_message_versions_pkey') IS NOT NULL,
+            'raw_version_lineage_index', to_regclass('staging.idx_staging_mariadb_raw_version') IS NOT NULL,
+            'non_watch_category_index', to_regclass('staging.idx_staging_qnsa_market_feed_page') IS NOT NULL,
+            'base_linkage_contract_installed', to_regprocedure(
+              'public.qnsa_non_watch_dealer_linkage_reconciliation()') IS NOT NULL,
+            'bounded_reconciliation_contract', COALESCE((SELECT
+              position('QNSA_NON_WATCH_RELEASE_GATED_RAW_LINEAGE' in definition)>0
+                AND position('eligible_released_non_watch' in definition)=0
+                AND position('qnsa_market_feed_control' in definition)=0
+              FROM (SELECT pg_get_functiondef(to_regprocedure(
+                'public.qnsa_non_watch_dealer_linkage_reconciliation()'
+              )) AS definition) contract),false),
+            'candidate_linkage_contract_installed', to_regprocedure(
+              'public.qnsa_non_watch_dealer_candidate_link_page(text,text,timestamptz,uuid,timestamptz,uuid,integer,boolean,integer)') IS NOT NULL,
+            'candidate_digest_scope_safe', COALESCE((SELECT
+              position('v_candidate_page_digest' in definition)>0
+                AND position('FROM candidate_page' in substring(definition
+                  from position('RETURN jsonb_build_object' in definition)))=0
+              FROM (SELECT pg_get_functiondef(to_regprocedure(
+                'public.qnsa_non_watch_dealer_candidate_link_page(text,text,timestamptz,uuid,timestamptz,uuid,integer,boolean,integer)'
+              )) AS definition) contract),false),
+            'enabled_run_key', (SELECT enabled_run_key FROM public.qnsa_market_feed_control
+              WHERE singleton=true AND enabled=true),
+            'enabled_categories', (SELECT enabled_categories FROM public.qnsa_market_feed_control
+              WHERE singleton=true AND enabled=true),
+            'snapshot_run_aligned', NOT EXISTS (
+              SELECT 1 FROM public.qnsa_market_feed_count_snapshot snapshot
+              CROSS JOIN public.qnsa_market_feed_control control
+              WHERE control.singleton=true AND control.enabled=true
+                AND snapshot.normalization_run_key<>control.enabled_run_key
+            ),
+            'snapshot_has_all_non_watch_categories', (SELECT count(DISTINCT category)=3
+              FROM public.qnsa_market_feed_count_snapshot
+              WHERE category IN ('HANDBAG','JEWELRY','ACCESSORY') AND row_count>0),
+            'snapshot_refreshed_at', (SELECT max(refreshed_at)
+              FROM public.qnsa_market_feed_count_snapshot),
+            'released_non_watch_snapshot', (SELECT COALESCE(jsonb_object_agg(category, row_count), '{}'::jsonb)
+              FROM (SELECT category, sum(row_count)::bigint row_count
+                FROM public.qnsa_market_feed_count_snapshot
+                WHERE category IN ('HANDBAG','JEWELRY','ACCESSORY')
+                GROUP BY category) snapshot_counts)
+          ) AS evidence;
+          "@
+          $identitySql = @"
+          SELECT jsonb_build_object(
+            'duplicate_verified_phone_exists', EXISTS (SELECT 1 FROM (
+              SELECT public.normalize_seller_phone_identity(source_identity)
+              FROM public.dealer_source_identities
+              WHERE verification_status='VERIFIED'
+                AND upper(identity_type) IN ('PHONE','WHATSAPP')
+                AND public.normalize_seller_phone_identity(source_identity) IS NOT NULL
+              GROUP BY 1 HAVING count(DISTINCT dealer_id)>1
+            ) duplicates),
+            'verified_identity_table_estimated_rows', COALESCE((SELECT reltuples::bigint
+              FROM pg_class WHERE oid='public.dealer_source_identities'::regclass), 0)
+          ) AS evidence;
+          "@
+          $ledgerSql = @"
+          SELECT jsonb_build_object(
+            'orphan_link_exists', EXISTS (
+              SELECT 1 FROM public.dealer_listing_links link
+              WHERE NOT EXISTS (SELECT 1 FROM staging.listings listing
+                WHERE listing.id=link.listing_id)
+              LIMIT 1
+            ),
+            'non_applied_link_exists', EXISTS (
+              SELECT 1 FROM public.dealer_listing_links
+              WHERE link_status<>'APPLIED' LIMIT 1
+            ),
+            'invalid_non_watch_link_contract_exists', EXISTS (
+              SELECT 1 FROM public.dealer_listing_links
+              WHERE source_system='QNSA_NON_WATCH_RELEASE_GATED_RAW_LINEAGE'
+                AND (link_method<>'EXACT_VERIFIED_PHONE' OR link_status<>'APPLIED')
+              LIMIT 1
+            ),
+            'non_watch_lane_link_exists', EXISTS (
+              SELECT 1 FROM public.dealer_listing_links
+              WHERE source_system='QNSA_NON_WATCH_RELEASE_GATED_RAW_LINEAGE'
+              LIMIT 1
+            ),
+            'link_ledger_estimated_rows', COALESCE((SELECT reltuples::bigint FROM pg_class
+              WHERE oid='public.dealer_listing_links'::regclass), 0)
+          ) AS evidence;
+          "@
+          $control = (Invoke-ReadOnlyAuditQuery $controlSql)[0].evidence
+          $identity = (Invoke-ReadOnlyAuditQuery $identitySql)[0].evidence
+          $ledger = (Invoke-ReadOnlyAuditQuery $ledgerSql)[0].evidence
+          $evidence = [ordered]@{ control = $control; identity = $identity; ledger = $ledger }
+          $evidence | ConvertTo-Json -Depth 8 | Set-Content qnsa-non-watch-linkage-audit.json
+          if ($control.raw_version_primary_key -ne $true -or $control.raw_version_lineage_index -ne $true -or
+              $control.non_watch_category_index -ne $true -or $control.base_linkage_contract_installed -ne $true -or
+              $control.bounded_reconciliation_contract -ne $true -or
+              $control.candidate_linkage_contract_installed -ne $true -or
+              ($env:NON_WATCH_LINKAGE_MODE -eq 'audit' -and $control.candidate_digest_scope_safe -ne $true) -or
+              -not $control.enabled_run_key -or $control.snapshot_run_aligned -ne $true -or
+              $control.snapshot_has_all_non_watch_categories -ne $true -or
+              $identity.duplicate_verified_phone_exists -eq $true -or
+              $ledger.orphan_link_exists -eq $true -or $ledger.non_applied_link_exists -eq $true -or
+              $ledger.invalid_non_watch_link_contract_exists -eq $true) {
+            throw 'Non-watch dealer linkage prerequisites failed.'
+          }
+
+      - name: Install forward-only linkage contract
+        if: ${{ inputs.install_contract && inputs.mode != 'audit' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SUPABASE_PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Unexpected Supabase project.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          function Get-ForwardMigrationBody([string]$path) {
+            $lines = @(Get-Content -LiteralPath $path)
+            $beginIndex = -1
+            $commitIndex = -1
+            for ($i=0; $i -lt $lines.Count; $i++) {
+              if ($beginIndex -lt 0 -and $lines[$i].Trim() -eq 'BEGIN;') { $beginIndex = $i }
+              if ($lines[$i].Trim() -eq 'COMMIT;') { $commitIndex = $i }
+            }
+            if ($beginIndex -lt 0 -or $commitIndex -le $beginIndex) {
+              throw "Migration $path does not have one outer transaction contract."
+            }
+            $bodyLines = for ($i=0; $i -lt $lines.Count; $i++) {
+              if ($i -ne $beginIndex -and $i -ne $commitIndex) { $lines[$i] }
+            }
+            return ($bodyLines -join "`n")
+          }
+          $verifySql = @(
+            "SELECT COALESCE((SELECT"
+            "  position('v_candidate_page_digest' in definition)>0"
+            "    AND position('FROM candidate_page' in substring(definition"
+            "      from position('RETURN jsonb_build_object' in definition)))=0"
+            "  FROM (SELECT pg_get_functiondef(to_regprocedure("
+            "    'public.qnsa_non_watch_dealer_candidate_link_page(text,text,timestamptz,uuid,timestamptz,uuid,integer,boolean,integer)'"
+            "  )) AS definition) contract),false) AS safe;"
+          ) -join "`n"
+          function Test-CandidateDigestScopeSafe {
+            $readBody = @{ query = $verifySql; read_only = $true } | ConvertTo-Json -Depth 3
+            $rows = Invoke-RestMethod -Method Post `
+              -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $readBody
+            return $rows[0].safe -eq $true
+          }
+          $candidateDigestSafeBeforeInstall = Test-CandidateDigestScopeSafe
+          if ($env:NON_WATCH_DIGEST_REPAIR_REQUIRED -eq 'true' -and -not $candidateDigestSafeBeforeInstall) {
+            $migrationBody = Get-ForwardMigrationBody 'supabase/migrations/20260816000500_qnsa_non_watch_candidate_digest_scope_repair.sql'
+            $atomicSql = "BEGIN;`n$migrationBody`nCOMMIT;"
+            $body = @{ query = $atomicSql; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post `
+              -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          } else {
+            Write-Host 'Candidate digest scope is already safe; skipping repair install.'
+          }
+          if (-not (Test-CandidateDigestScopeSafe)) {
+            throw 'Candidate digest scope repair is not installed safely.'
+          }
+
+      - name: Run capped canary or full reconciliation
+        if: ${{ inputs.install_contract && inputs.mode != 'audit' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/dealer-directory/run-non-watch-exact-linkage.cjs \
+            | tee qnsa-non-watch-linkage-reconciliation.json
+
+      - name: Upload sanitized evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-non-watch-linkage-${{ inputs.mode }}
+          path: |
+            qnsa-non-watch-linkage-audit.json
+            qnsa-non-watch-linkage-reconciliation.json
+          if-no-files-found: warn
+          retention-days: 14

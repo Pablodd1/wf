@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { buildMarketForecast, buildMonthlyMedians } = require('../api/_lib/market-forecast.cjs');
+const { buildIndicativeForecast, buildMarketForecast, buildMonthlyMedians } = require('../api/_lib/market-forecast.cjs');
 
 function rows({ months = 15, perMonth = 5, dealers = 5, noisy = false } = {}) {
   const result = [];
@@ -45,4 +45,15 @@ test('withholds a trend model that does not beat the naive baseline', () => {
   const forecast = buildMarketForecast(flat, { now: '2026-07-20T00:00:00Z' });
   assert.equal(forecast.ready, false);
   assert.ok(forecast.reasons.includes('MODEL_DID_NOT_BEAT_NAIVE_BASELINE'));
+});
+
+test('builds three clearly provisional flat median points when dated trend history is insufficient', () => {
+  const sparse = rows().slice(0, 18).map(row => ({ ...row, listing_date: '2026-07-10T00:00:00Z' }));
+  const forecast = buildIndicativeForecast(sparse, { minimumOffers: 10 });
+  assert.equal(forecast.ready, true);
+  assert.equal(forecast.provisional, true);
+  assert.equal(forecast.method, 'CURRENT_COHORT_MEDIAN_BASELINE');
+  assert.equal(forecast.points.length, 3);
+  assert.equal(new Set(forecast.points.map(point => point.expected_price)).size, 1);
+  assert.ok(forecast.reasons.includes('INSUFFICIENT_HISTORY_FOR_TREND_MODEL'));
 });

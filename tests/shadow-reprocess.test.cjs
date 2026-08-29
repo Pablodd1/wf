@@ -28,7 +28,7 @@ test('flags brand and reference corrections in shadow output', () => {
   assert.equal(result.proposed_candidates[0].brand, 'Vacheron Constantin');
 });
 
-test('routes ambiguous bare-dollar prices to shadow review instead of retaining USD', () => {
+test('preserves bare-dollar evidence for review without defaulting USD', () => {
   const result = analyzeRecord({
     id: 'source-3',
     raw_message: '126500LN White $283000',
@@ -38,9 +38,14 @@ test('routes ambiguous bare-dollar prices to shadow review instead of retaining 
     price_raw: 283000,
     listing_type: 'WTS',
   });
-  assert.ok(result.change_flags.includes('CURRENCY_AMBIGUOUS'));
-  assert.ok(result.change_flags.includes('PRICE_PARSE_FAILED'));
-  assert.equal(result.review_status, 'PENDING');
+  const candidate = result.proposed_candidates[0];
+  assert.equal(candidate.currency, null);
+  assert.equal(candidate.price_usd, null);
+  assert.equal(candidate.price_candidates[0].amount_original, 283000);
+  assert.equal(candidate.price_candidates[0].currency_original, null);
+  assert.equal(candidate.price_candidates[0].review_reason, 'CURRENCY_AMBIGUOUS');
+  assert.ok(result.change_flags.includes('PRICE_REVIEW_REQUIRED'));
+  assert.ok(!result.change_flags.includes('PRICE_PARSE_FAILED'));
 });
 
 test('uses a structured source currency with the amount parsed from raw text', () => {
@@ -73,12 +78,20 @@ test('uses source HKD only as currency evidence for a bare-dollar text amount', 
     price_raw: 283000,
     price_usd: 36282,
     listing_type: 'WTS',
+  }, {
+    fxSnapshot: {
+      observed_at: '2026-08-11T00:00:00Z',
+      source: 'TEST_DATED_RATE',
+      usd_per_unit: { HKD: 36282 / 283000 },
+    },
   });
   const candidate = result.proposed_candidates[0];
   assert.equal(candidate.price_raw, 283000);
   assert.equal(candidate.price_usd, 36282);
   assert.equal(candidate.currency, 'HKD');
   assert.equal(candidate.currency_evidence, 'source_record_currency');
+  assert.equal(candidate.prices[0].conversion_timestamp, '2026-08-11T00:00:00Z');
+  assert.equal(candidate.prices[0].conversion_source, 'TEST_DATED_RATE');
   assert.ok(!result.change_flags.includes('CURRENCY_AMBIGUOUS'));
 });
 
@@ -190,5 +203,29 @@ test('flags a text and structured dial conflict instead of silently overwriting 
   });
   assert.ok(result.change_flags.includes('DIAL_AMBIGUOUS'));
   assert.ok(result.change_flags.includes('DIAL_CHANGED'));
+});
+
+test('inherits authoritative source WTB intent when the message omits a repeated intent token', () => {
+  const result = analyzeRecord({
+    id: 'source-wtb-fallback',
+    raw_message: 'Patek Philippe 5712/1A blue dial full set',
+    brand: 'Patek Philippe',
+    reference: '5712/1A',
+    listing_type: 'WTB',
+  });
+  assert.equal(result.proposed_candidates[0].listing_type, 'WTB');
+  assert.ok(!result.change_flags.includes('INTENT_CHANGED'));
+});
+
+test('explicit listing intent overrides a conflicting source-type fallback and is flagged', () => {
+  const result = analyzeRecord({
+    id: 'explicit-wts-override',
+    raw_message: 'WTS Rolex 116500LN white dial USD 28000',
+    brand: 'Rolex',
+    reference: '116500LN',
+    listing_type: 'WTB',
+  });
+  assert.equal(result.proposed_candidates[0].listing_type, 'WTS');
+  assert.ok(result.change_flags.includes('INTENT_CHANGED'));
 });
 

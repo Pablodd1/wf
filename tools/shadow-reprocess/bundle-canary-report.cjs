@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { analyzeRecord } = require('./shadow-reprocess.cjs');
 
-const VERSION = 'v4.2-line-condition';
+const VERSION = 'v4.3-mint-condition';
 const limit = Math.max(1, Math.min(Number(process.env.BUNDLE_CANARY_ROWS || 1000), 10000));
 const pageSize = Math.max(50, Math.min(Number(process.env.BUNDLE_CANARY_PAGE_SIZE || 250), 500));
 const sourceConcurrency = Math.max(1, Math.min(Number(process.env.BUNDLE_CANARY_CONCURRENCY || 5), 10));

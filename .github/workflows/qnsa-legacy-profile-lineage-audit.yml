@@ -1,0 +1,73 @@
+name: QNSA legacy profile lineage audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_LEGACY_PROFILE_LINEAGE
+        required: true
+        type: string
+
+jobs:
+  audit:
+    if: ${{ inputs.confirmation == 'AUDIT_LEGACY_PROFILE_LINEAGE' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reconcile exact legacy profile IDs read-only
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_URL -or -not $env:SUPABASE_SERVICE_ROLE_KEY) {
+            throw 'Supabase read credentials are unavailable.'
+          }
+          if ($env:SUPABASE_URL -notmatch '^https://qnsafosakvonzgfcsphh[.]supabase[.]co/?$') {
+            throw 'Refusing to audit an unexpected Supabase project.'
+          }
+          $audit = Get-Content -Raw 'data/dealer-directory/legacy-profile-audit-2026-08-11.json' | ConvertFrom-Json
+          $ids = @($audit.users | Where-Object { $_.legacy_profile_id } | ForEach-Object { [string]$_.legacy_profile_id })
+          $headers = @{
+            Authorization = "Bearer $env:SUPABASE_SERVICE_ROLE_KEY"
+            apikey = $env:SUPABASE_SERVICE_ROLE_KEY
+          }
+          $matches = @()
+          foreach ($legacyId in $ids) {
+            $encoded = [uri]::EscapeDataString("eq.$legacyId")
+            $uri = "$($env:SUPABASE_URL.TrimEnd('/'))/rest/v1/qnsa_rolex_patek_trading_floor_source?select=dealer_id,listing_type,posting_date,seller_name&dealer_id=$encoded&limit=10000"
+            $rows = @(Invoke-RestMethod -Method Get -Uri $uri -Headers $headers)
+            if ($rows.Count -eq 0) { continue }
+            $names = @($rows | ForEach-Object { [string]$_.seller_name } | Where-Object { $_.Trim() } | Sort-Object -Unique)
+            $dates = @($rows | ForEach-Object { [string]$_.posting_date } | Where-Object { $_ } | Sort-Object)
+            $matches += [ordered]@{
+              legacy_profile_id = $legacyId
+              released_rows = $rows.Count
+              wts_rows = @($rows | Where-Object { ([string]$_.listing_type).ToUpperInvariant() -eq 'WTS' }).Count
+              wtb_rows = @($rows | Where-Object { ([string]$_.listing_type).ToUpperInvariant() -eq 'WTB' }).Count
+              first_post_at = if ($dates.Count) { $dates[0] } else { $null }
+              latest_post_at = if ($dates.Count) { $dates[-1] } else { $null }
+              seller_names = $names
+            }
+          }
+          [ordered]@{
+            audit_profile_ids = $ids.Count
+            matched_profile_ids = $matches.Count
+            unmatched_profile_ids = $ids.Count - $matches.Count
+            matched_released_rows = ($matches | Measure-Object -Property released_rows -Sum).Sum
+            profiles_with_multiple_seller_names = @($matches | Where-Object { $_.seller_names.Count -gt 1 }).Count
+            matches = $matches
+          } | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 legacy-profile-lineage-audit.json
+
+      - name: Upload aggregate reconciliation only
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-legacy-profile-lineage-audit-${{ github.run_id }}
+          path: legacy-profile-lineage-audit.json
+          retention-days: 30

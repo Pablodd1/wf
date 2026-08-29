@@ -3,29 +3,25 @@
  *
  * Per-model market stats for Price Research drill-down:
  *   - total listings, WTS count, WTB count
- *   - avg / median / min / max price (IQR-filtered, min-5 gate)
+ *   - avg / median / min / max price (IQR-filtered, min-2 gate)
  *   - date range covered (first_seen → last_seen)
- *   - per-reference breakdown (only refs with >= 5 priced listings exposed)
+ *   - per-reference breakdown (only refs with >= 2 priced listings exposed)
  *
- * "min-5 exposure": any aggregate bucket (model or reference) is only
- * returned when backed by >= 5 real priced listings — matches the
+ * "min-2 exposure": any aggregate bucket (model or reference) is only
+ * returned when backed by >= 2 real priced listings — matches the
  * Price Research min-bucket rule so no stat is shown on thin data.
  */
-const fs = require('fs');
-const path = require('path');
 const { getClient } = require('./_lib/supabase');
 const { setCorsHeaders } = require('./_lib/cors');
+const { listCatalogReferences } = require('./_lib/catalog');
+const {
+  isReviewedWorkbookBrowseBrand,
+  loadReviewedWorkbookBrandRows,
+  rowModel,
+} = require('./_lib/reviewed-workbook-browse.cjs');
 
-const MIN_BUCKET = 5;
+const MIN_BUCKET = 2;
 const SANITY_FLOOR = 500;
-
-let catalog = null;
-function loadCatalog() {
-  if (!catalog) {
-    catalog = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'public', 'catalog.json'), 'utf-8'));
-  }
-  return catalog;
-}
 
 function stats(prices) {
   if (!prices.length) return null;
@@ -44,9 +40,48 @@ function iqrFilter(prices) {
   const q1 = sorted[Math.floor(sorted.length * 0.25)];
   const q3 = sorted[Math.floor(sorted.length * 0.75)];
   const iqr = q3 - q1;
-  const lo = Math.max(q1 - 1.5 * iqr, SANITY_FLOOR);
-  const hi = q3 + 1.5 * iqr;
+  const lo = Math.max(q1 - 3.0 * iqr, SANITY_FLOOR);
+  const hi = q3 + 3.0 * iqr;
   return sorted.filter(p => p >= lo && p <= hi);
+}
+
+function workbookModelStats(rows, model) {
+  const modelRows = rows.filter(row => rowModel(row) === model);
+  let wts = 0;
+  let wtb = 0;
+  const priced = [];
+  for (const row of modelRows) {
+    const listingType = String(row.listing_type || '').toUpperCase();
+    if (listingType === 'WTB') {
+      wtb += 1;
+      continue;
+    }
+    if (listingType !== 'WTS') continue;
+    wts += 1;
+    const price = Number(row.verified_price_usd);
+    const verified = row.has_verified_usd_price === true
+      || ['SOURCE_EXPLICIT_USD_MATCH', 'EXPLICIT_SOURCE_FX_CONVERTED'].includes(row.price_evidence_status);
+    if (verified && Number.isFinite(price) && price > 0) priced.push(price);
+  }
+  const cleaned = iqrFilter(priced);
+  const dates = modelRows.map(row => row.posting_date).filter(Boolean).sort();
+  return {
+    success: true,
+    total: modelRows.length,
+    wts,
+    wtb,
+    priced_count: priced.length,
+    stats: cleaned.length >= MIN_BUCKET ? stats(cleaned) : null,
+    first_seen: dates[0] || null,
+    last_seen: dates[dates.length - 1] || null,
+    references: [],
+    meta: {
+      min_bucket: MIN_BUCKET,
+      iqr_filter: true,
+      iqr_multiplier: 3,
+      identity_source: 'OWNER_REVIEWED_WORKBOOK',
+    },
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -57,22 +92,25 @@ module.exports = async function handler(req, res) {
   if (!brand || !model) return res.status(400).json({ error: 'brand and model required' });
 
   try {
-    const cat = loadCatalog();
-    const brandLower = brand.toLowerCase();
-    const modelLower = model.toLowerCase();
+    const client = getClient();
+    if (isReviewedWorkbookBrowseBrand(brand)) {
+      const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
+      if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe model statistics' });
+      return res.status(200).json({ brand, model, ...workbookModelStats(rows, model) });
+    }
 
-    // All references belonging to this brand+model per catalog
-    const refs = cat
-      .filter(e => e.brand && e.brand.toLowerCase().includes(brandLower)
-                && e.model && e.model.toLowerCase() === modelLower
-                && e.reference)
+    // ponytail: was fs.readFileSync(process.cwd()/public/catalog.json) —
+    // crashed in the Vercel lambda (FUNCTION_INVOCATION_FAILED) because the
+    // asset isn't reliably traced per-function. Route through _lib/catalog,
+    // the same loader the (working) catalog-models endpoint uses.
+    const modelLower = model.toLowerCase();
+    const refs = listCatalogReferences(brand)
+      .filter(e => e.model && e.model.toLowerCase() === modelLower)
       .map(e => e.reference);
 
     if (refs.length === 0) {
       return res.status(200).json({ success: true, brand, model, total: 0, references: [] });
     }
-
-    const client = getClient();
 
     // Pull priced rows for these refs in chunks (.in() has URL length limits)
     const CHUNK = 50;
@@ -113,7 +151,7 @@ module.exports = async function handler(req, res) {
     const first_seen = dates[0] || null;
     const last_seen = dates[dates.length - 1] || null;
 
-    // Per-reference breakdown with min-5 gate
+    // Per-reference breakdown with min-2 gate
     const byRef = {};
     for (const r of priced) {
       if (!byRef[r.reference]) byRef[r.reference] = { prices: [], dates: [] };
@@ -158,3 +196,5 @@ module.exports = async function handler(req, res) {
     res.status(500).json({ error: err.message });
   }
 };
+
+module.exports.workbookModelStats = workbookModelStats;

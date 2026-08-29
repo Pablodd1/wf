@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Check,
+  ChevronDown,
+  ChevronUp,
   Filter,
   Globe2,
   Grid,
@@ -11,20 +13,64 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { LuxFiBanner } from '../components/LuxFiBanner';
+import { rateMarketPrice, type MarketBenchmark } from '../lib/marketPriceRating';
 import { MarketNav } from '../components/MarketNav';
 import { CurrencyConverter } from '../components/CurrencyConverter';
-import { JoinGroupsCta } from '../components/JoinGroupsCta';
+import { Footer } from '../components/Footer';
+import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
+import { isHeldRolexPatekBrand, ROLEX_PATEK_PUBLICATION_HELD } from '../utils/rolexPatekPublication';
+import { ambiguousPriceDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
+import {
+  loadPriceResearchBatchSummaries,
+  priceResearchSummaryKey,
+  type PriceResearchBatchPair,
+  type PriceResearchBatchSummary,
+} from '../utils/priceResearchBatchSummary';
 
-const GOLD = '#C9A96E';
-const GOLD_BRIGHT = '#D4B87A';
-const INK = '#F6F1E8';
-const MUTED = '#9CA3AF';
-const BORDER = 'rgba(201, 169, 110, 0.24)';
-const SURFACE = '#111118';
-const PANEL = '#16161F';
-const PAGE = '#08080C';
-const RED = '#EF4444';
+interface CatalogSuggestion {
+  brand: string;
+  model: string | null;
+  reference: string;
+  dial_colors: string[];
+  match_type: 'exact_reference' | 'reference_prefix' | 'reference_contains' | 'catalog_text_prefix' | 'catalog_text_contains' | 'reference_typo_candidate';
+}
+
+interface CatalogSuggestionsResponse {
+  success: boolean;
+  suggestions?: CatalogSuggestion[];
+}
+
+interface CatalogModelOption {
+  model: string;
+  reference_count: number;
+  listing_count: number;
+}
+
+interface ListingBenchmarkData {
+  stats: MarketBenchmark | null;
+  count: number;
+  analytics_ready?: boolean;
+  unavailable?: boolean;
+}
+
+const GOLD = '#9A7127';
+const GOLD_BRIGHT = '#7B5719';
+const INK = '#171717';
+const MUTED = '#6B7280';
+const BORDER = '#DED8CD';
+const SURFACE = '#FFFFFF';
+const PANEL = '#F7F5F0';
+const PAGE = '#F4F1EB';
+const RED = '#B42318';
+
+const MASTER_BRAND_LIST = [
+  "Rolex", "Patek Philippe", "Audemars Piguet", "Richard Mille", "Cartier",
+  "TAG Heuer", "Omega", "Tudor", "Vacheron Constantin", "Breguet", "Hublot",
+  "A. Lange & Söhne", "Blancpain", "Bulgari", "Panerai", "IWC", "F.P. Journe",
+  "Zenith", "Chopard", "Jaeger-LeCoultre", "Breitling", "Grand Seiko",
+  "H. Moser & Cie", "Jacob & Co", "Longines", "Franck Muller", "Ulysse Nardin",
+  "Girard-Perregaux", "Glashütte Original", "Tissot", "Bell & Ross", "Seiko"
+].filter(brand => !isHeldRolexPatekBrand(brand));
 
 const CATEGORY_OPTIONS = [
   { label: 'All inventory', value: 'all' },
@@ -41,7 +87,15 @@ const INTENT_OPTIONS = [
   { label: 'Want to buy', value: 'WTB' },
 ] as const;
 
-interface ListingRecord {
+const SORT_OPTIONS = [
+  { label: 'Newest observed', value: 'newest' },
+  { label: 'Discovery mix', value: 'discovery' },
+] as const;
+
+import { MarketTickerBanner } from '../components/MarketTickerBanner';
+import type { ListingDisplayContract } from '../../shared/listing-display-contract.cjs';
+
+interface ListingRecord extends Partial<ListingDisplayContract> {
   id: string;
   brand: string;
   model?: string | null;
@@ -55,10 +109,13 @@ interface ListingRecord {
   source_price_text?: string | null;
   source_currency?: string | null;
   price_evidence_status?: string | null;
+  price_display_verified?: boolean;
+  price_requires_review?: boolean;
   price_research_eligible?: boolean;
   dial_color: string | null;
   condition: string | null;
   year: number | null;
+  intent?: string | null;
   listing_type: string;
   verdict: string | null;
   source: string;
@@ -70,19 +127,47 @@ interface ListingRecord {
   confidence: number;
   has_images: boolean;
   thumbnail_url: string | null;
+  image_url?: string | null;
   image_urls?: string[];
-  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
+  image_evidence_type?: 'NO_IMAGE' | 'REFERENCE_IMAGE' | 'SELLER_LISTING_IMAGE' | 'SOURCE_LISTING_IMAGE' | 'SOURCE_LINKED_IMAGE';
   image_evidence_label?: string | null;
   image_evidence_notice?: string | null;
   region: string | null;
   data_quality_issues?: string[];
   data_quality_review_required?: boolean;
+  listing_source_shape?: 'SINGLE_INPUT' | 'DETERMINISTIC_MULTI_CHILD';
+  multi_listing?: boolean;
+  is_unbundled_child?: boolean;
   raw_message?: string | null;
+  raw_line?: string | null;
+  description?: string | null;
   raw_message_scope?: 'original_post' | 'stored_source_message' | 'normalized_summary' | 'unavailable';
+  current_status?: 'CURRENT_ACTIVE' | 'CURRENT_LATEST_STATE' | string | null;
+  cohort_status?: 'CONFIRMED_CURRENT' | 'LATEST_OBSERVED' | string | null;
   raw_message_evidence_type?: 'SOURCE_RAW_MESSAGE' | 'WORKBOOK_NORMALIZED_SUMMARY';
   raw_message_truncated?: boolean;
   seller_name?: string | null;
   seller_phone?: string | null;
+  contact_publication_approved?: boolean;
+  from_number?: string | null;
+  seller_avatar_url?: string | null;
+  seller_rating?: number | null;
+  seller_review_count?: number | null;
+  seller_group_count?: number | null;
+  seller_credential_status?: string | null;
+  seller_rating_evidence_status?: 'SOURCE_SUPPLIED' | 'SOURCE_FEEDBACK_COUNT' | 'UNAVAILABLE' | null;
+  dealer_profile_path?: string | null;
+  dealer_id?: string | null;
+  location?: string | null;
+  seller_country?: string | null;
+  posted_by?: string | null;
+  source_identity_name?: string | null;
+  model_evidence_type?: string | null;
+  model_requires_review?: boolean;
+  phone_number?: string | null;
+  'Posted By'?: string | null;
+  'Phone Number'?: string | null;
+  'Location'?: string | null;
   source_file?: string | null;
   source_row_number?: number | null;
 }
@@ -90,12 +175,198 @@ interface ListingRecord {
 interface TradingFloorResponse {
   status: string;
   error?: string;
+  count?: number;
   records?: ListingRecord[];
   total?: number | null;
   totalIsEstimate?: boolean;
   nextCursor?: string | null;
   hasMore?: boolean;
   publicationBrands?: string[];
+  release_status?: string;
+  source?: string;
+}
+
+interface RandomAllInventoryCursor {
+  v: 2;
+  page: number;
+  seed: number;
+  scope: string;
+  listingLane: 'single' | 'multi';
+  brandCursors: Record<string, string | null>;
+  brandTotals: Record<string, number>;
+  exhausted: Record<string, boolean>;
+}
+
+const RANDOM_ALL_INVENTORY_BRANDS = (ROLEX_PATEK_PUBLICATION_HELD
+  ? []
+  : ['Rolex', 'Patek Philippe']) as readonly string[];
+
+function encodeRandomAllInventoryCursor(cursor: RandomAllInventoryCursor) {
+  return window.btoa(JSON.stringify(cursor)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function decodeRandomAllInventoryCursor(value: string | null): RandomAllInventoryCursor | null {
+  if (!value) return null;
+  try {
+    const padded = value.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(value.length / 4) * 4, '=');
+    const decoded = JSON.parse(window.atob(padded)) as RandomAllInventoryCursor;
+    if (decoded?.v !== 2 || !Number.isSafeInteger(decoded.page) || decoded.page < 2
+      || !Number.isSafeInteger(decoded.seed) || decoded.seed < 0 || typeof decoded.scope !== 'string'
+      || !['single', 'multi'].includes(decoded.listingLane)
+      || !decoded.brandCursors || !decoded.brandTotals || !decoded.exhausted) return null;
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+function seededPageShuffle(records: ListingRecord[], seed: number, page: number) {
+  const shuffled = [...records];
+  let state = (seed ^ Math.imul(page, 0x9e3779b1)) >>> 0;
+  const random = () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 0x100000000;
+  };
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    const target = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[target]] = [shuffled[target], shuffled[index]];
+  }
+  return shuffled;
+}
+
+function newestObservedTime(listing: ListingRecord) {
+  const value = listing.listing_date || listing.created_at;
+  const parsed = value ? Date.parse(value) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function listingSourceLane(listing: ListingRecord) {
+  return listing.listing_source_shape === 'DETERMINISTIC_MULTI_CHILD'
+    || listing.multi_listing === true || listing.is_unbundled_child === true ? 1 : 0;
+}
+
+function newestObservedOrder(left: ListingRecord, right: ListingRecord) {
+  const bySourceLane = listingSourceLane(left) - listingSourceLane(right);
+  if (bySourceLane !== 0) return bySourceLane;
+  const byTime = newestObservedTime(right) - newestObservedTime(left);
+  if (byTime !== 0) return byTime;
+  return String(right.id).localeCompare(String(left.id));
+}
+
+function discoveryOrderWithinSourceLanes(records: ListingRecord[], seed: number, page: number) {
+  const singles = records.filter(record => listingSourceLane(record) === 0);
+  const multiChildren = records.filter(record => listingSourceLane(record) === 1);
+  return [
+    ...seededPageShuffle(singles, seed, page),
+    ...seededPageShuffle(multiChildren, seed ^ 0x6d756c74, page),
+  ];
+}
+
+async function loadRandomAllInventory({
+  pageSize,
+  cursor,
+  seed,
+  sort,
+  intent,
+  imagesOnly,
+  pricedOnly,
+  countries,
+  signal,
+}: {
+  pageSize: number;
+  cursor: string | null;
+  seed: number;
+  sort: SortMode;
+  intent: IntentFilter;
+  imagesOnly: boolean;
+  pricedOnly: boolean;
+  countries: string[];
+  signal: AbortSignal;
+}): Promise<TradingFloorResponse> {
+  if (RANDOM_ALL_INVENTORY_BRANDS.length === 0) {
+    return {
+      status: 'ok',
+      count: 0,
+      total: 0,
+      records: [],
+      hasMore: false,
+      source: 'curated_luxury_rolex_patek_background_hold_v1',
+      release_status: 'BACKGROUND_VERIFICATION',
+      publicationBrands: [],
+    };
+  }
+  const decoded = decodeRandomAllInventoryCursor(cursor);
+  const scope = JSON.stringify({ sort, intent, imagesOnly, pricedOnly, countries: [...countries].sort() });
+  if (cursor && (!decoded || decoded.scope !== scope)) return { status: 'error' };
+  const page = decoded?.page || 1;
+  const stableSeed = decoded?.seed ?? seed;
+  const listingLane = decoded?.listingLane || 'single';
+  const perBrandPageSize = Math.max(12, Math.ceil(pageSize / RANDOM_ALL_INVENTORY_BRANDS.length));
+  const responses = await Promise.all(RANDOM_ALL_INVENTORY_BRANDS.map(async brand => {
+    if (decoded?.exhausted?.[brand]) {
+      return {
+        brand,
+        payload: {
+          status: 'ok', records: [], total: decoded.brandTotals[brand] || 0, hasMore: false,
+        } as TradingFloorResponse,
+      };
+    }
+    const params = new URLSearchParams({
+      brand,
+      pageSize: String(perBrandPageSize),
+      pagination: 'cursor',
+    });
+    if (intent) params.set('type', intent);
+    if (imagesOnly) params.set('images', 'true');
+    if (pricedOnly) params.set('priced', 'true');
+    if (countries.length > 0) params.set('region', countries.join(','));
+    params.set('sourceShape', listingLane);
+    const brandCursor = decoded?.brandCursors?.[brand];
+    if (brandCursor) params.set('cursor', brandCursor);
+    const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal });
+    const payload = response.ok ? await response.json() as TradingFloorResponse : { status: 'error' };
+    return { brand, payload };
+  }));
+  if (responses.some(({ payload }) => payload.status !== 'ok' || !Array.isArray(payload.records))) {
+    return { status: 'error' };
+  }
+
+  const brandCursors: Record<string, string | null> = {};
+  const brandTotals: Record<string, number> = {};
+  const exhausted: Record<string, boolean> = {};
+  const records: ListingRecord[] = [];
+  let total = 0;
+  for (const { brand, payload } of responses) {
+    records.push(...(payload.records || []));
+    brandTotals[brand] = payload.total != null
+      ? Number(payload.total) || 0 : decoded?.brandTotals?.[brand] || 0;
+    total += brandTotals[brand];
+    brandCursors[brand] = payload.nextCursor || null;
+    exhausted[brand] = !payload.hasMore || !payload.nextCursor;
+  }
+  const laneHasMore = RANDOM_ALL_INVENTORY_BRANDS.some(brand => !exhausted[brand]);
+  const hasMore = laneHasMore || listingLane === 'single';
+  const nextListingLane = !laneHasMore && listingLane === 'single' ? 'multi' : listingLane;
+  return {
+    status: 'ok',
+    records: sort === 'discovery'
+      ? discoveryOrderWithinSourceLanes(records, stableSeed, page)
+      : [...records].sort(newestObservedOrder),
+    total,
+    totalIsEstimate: false,
+    hasMore,
+    nextCursor: hasMore ? encodeRandomAllInventoryCursor({
+      v: 2,
+      page: page + 1,
+      seed: stableSeed,
+      scope,
+      listingLane: nextListingLane,
+      brandCursors: nextListingLane === listingLane ? brandCursors : {},
+      brandTotals,
+      exhausted: nextListingLane === listingLane ? exhausted : {},
+    }) : null,
+    publicationBrands: [...RANDOM_ALL_INVENTORY_BRANDS],
+  };
 }
 
 interface ListingContact {
@@ -105,6 +376,8 @@ interface ListingContact {
   contact_source?: string;
   whatsapp_url?: string;
   reason?: string;
+  contact_channels?: { whatsapp?: string; telegram?: string };
+  stats?: ReviewedSellerAnalytics | null;
 }
 
 interface ReviewedSellerAnalytics {
@@ -121,40 +394,99 @@ interface ReviewedSellerSummaryResponse {
   contact_available?: boolean;
   seller?: { name?: string | null; phone?: string | null } | null;
   analytics?: ReviewedSellerAnalytics | null;
+  reputation?: {
+    rating?: number | null;
+    review_count?: number;
+    group_count?: number;
+    city?: string | null;
+    country?: string | null;
+    profile_url?: string | null;
+  } | null;
 }
 
 type ViewMode = 'grid' | 'list';
 type CategoryFilter = typeof CATEGORY_OPTIONS[number]['value'];
 type IntentFilter = typeof INTENT_OPTIONS[number]['value'];
+type SortMode = typeof SORT_OPTIONS[number]['value'];
 type BrandFilter = string;
 
-function hasListingImage(listing: ListingRecord) {
-  return Boolean(
-    ['SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE'].includes(String(listing.image_evidence_type || ''))
-    &&
-    listing.has_images
-    && (listing.thumbnail_url || listing.image_urls?.some(Boolean)),
-  );
+function getListingImageSrc(listing: ListingRecord): string | null {
+  if (isBundleListing(listing) || listing.is_unbundled_child === true) return null;
+  if (!hasAllowedImageEvidence(listing)) return null;
+  const direct = listing.thumbnail_url || listing.image_url || (Array.isArray(listing.image_urls) ? listing.image_urls.find(Boolean) : null);
+  if (direct && typeof direct === 'string' && direct.trim().startsWith('http')) {
+    return direct.trim();
+  }
+  return null;
+}
+
+function hasListingImage(listing: ListingRecord): boolean {
+  return Boolean(getListingImageSrc(listing));
+}
+
+/** Detects bundle/multi-watch listings */
+function isBundleListing(listing: ListingRecord) {
+  if (listing.multi_listing) return true;
+  if (listing.model && /multiple|multi|mixed/i.test(listing.model)) return true;
+  if (listing.dial_color && /multiple|multi|mixed/i.test(listing.dial_color)) return true;
+  return false;
+}
+
+/** Plausible price range for luxury watches */
+const MIN_PLAUSIBLE_PRICE_USD = 500;
+const MAX_PLAUSIBLE_PRICE_USD = 50_000_000;
+const PRICE_SUMMARY_BATCH_SIZE = 4;
+
+function benchmarkFromSummary(summary: PriceResearchBatchSummary): ListingBenchmarkData {
+  const useDial = Boolean(summary.selected_dial && summary.analytics_ready && summary.stats);
+  return {
+    stats: useDial ? summary.stats : summary.reference_stats,
+    count: useDial ? summary.selected_dial_qualified_count : summary.reference_qualified_wts_count,
+    analytics_ready: useDial ? summary.analytics_ready : summary.reference_analytics_ready,
+  };
+}
+
+function hasAllowedImageEvidence(listing: ListingRecord) {
+  return ['SELLER_LISTING_IMAGE', 'SOURCE_LISTING_IMAGE', 'SOURCE_LINKED_IMAGE']
+    .includes(String(listing.image_evidence_type || '').toUpperCase());
 }
 
 export default function TradingFloor() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedCategory = searchParams.get('item');
   const requestedIntent = searchParams.get('type')?.toUpperCase();
+  const requestedSort = searchParams.get('sort');
   const categoryFilter = CATEGORY_OPTIONS.some(option => option.value === requestedCategory)
     ? requestedCategory as CategoryFilter
     : 'all';
   const intentFilter = ['all', 'watches'].includes(categoryFilter) && INTENT_OPTIONS.some(option => option.value === requestedIntent)
     ? requestedIntent as IntentFilter
     : '';
+  const sortMode: SortMode = requestedSort === 'discovery' ? 'discovery' : 'newest';
   const search = searchParams.get('q') || '';
   const requestedBrand = searchParams.get('brand') || '';
+  const modelFilter = searchParams.get('model') || '';
   const imagesOnly = searchParams.get('images') === 'true';
-  const [releaseBrands, setReleaseBrands] = useState<string[]>([]);
+  const pricedOnly = searchParams.get('priced') === 'true';
+  const requestedLocationParam = searchParams.get('location') || '';
+  const locationFilters = useMemo(() => {
+    if (!requestedLocationParam) return [];
+    return requestedLocationParam.split(',').map(s => s.trim()).filter(Boolean);
+  }, [requestedLocationParam]);
+
+  const [releaseBrands, setReleaseBrands] = useState<string[]>(MASTER_BRAND_LIST);
+  const [modelOptions, setModelOptions] = useState<CatalogModelOption[]>([]);
   const matchedBrand = releaseBrands.find(brand => brand.toLowerCase() === requestedBrand.toLowerCase());
   const brandFilter: BrandFilter = matchedBrand || requestedBrand;
   const [searchInput, setSearchInput] = useState(search);
+  const [searchSuggestions, setSearchSuggestions] = useState<CatalogSuggestion[]>([]);
+  const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
+  const [searchSuggestionsLoading, setSearchSuggestionsLoading] = useState(false);
+  const [activeSearchSuggestionIndex, setActiveSearchSuggestionIndex] = useState(-1);
+  const searchBoxRef = useRef<HTMLDivElement | null>(null);
+  const [ratingsCache, setRatingsCache] = useState<Record<string, ListingBenchmarkData>>({});
   const [listings, setListings] = useState<ListingRecord[]>([]);
+  const [discoveredLocations, setDiscoveredLocations] = useState<string[]>([]);
   const [selectedListing, setSelectedListing] = useState<ListingRecord | null>(null);
   const [total, setTotal] = useState<number | null>(null);
   const [totalIsEstimate, setTotalIsEstimate] = useState(false);
@@ -166,17 +498,58 @@ export default function TradingFloor() {
   const [error, setError] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 100);
+  const [pageSize, setPageSize] = useState(() => typeof window !== 'undefined' && window.matchMedia('(max-width: 640px)').matches ? 24 : 50);
   const resultsTopRef = useRef<HTMLDivElement | null>(null);
   const listScrollPositionRef = useRef<number | null>(null);
-  const viewKey = [brandFilter, categoryFilter, intentFilter, search, imagesOnly].join('\u001f');
+  const inventoryRequestIdRef = useRef(0);
+  const randomAllInventorySeedRef = useRef(0);
+  const viewKey = [brandFilter, modelFilter, categoryFilter, intentFilter, search, imagesOnly, pricedOnly, requestedLocationParam, sortMode].join('\u001f');
   const previousViewKeyRef = useRef(viewKey);
   const activeFilterCount = [
     Boolean(brandFilter),
+    Boolean(modelFilter),
     categoryFilter !== 'all',
     Boolean(intentFilter),
     imagesOnly,
+    pricedOnly,
+    locationFilters.length > 0,
+    sortMode !== 'newest',
   ].filter(Boolean).length;
+  const locationOptions = useMemo(() => {
+    const countries = listings
+      .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
+      .filter((value): value is string => Boolean(value));
+    return [...new Set([...locationFilters, ...discoveredLocations, ...countries])].sort((a, b) => a.localeCompare(b));
+  }, [discoveredLocations, listings, locationFilters]);
+  const combinedFeedActive = ['all', 'watches'].includes(categoryFilter)
+    && !brandFilter && !modelFilter && !search;
+
+  const dynamicDisplayTotal = total !== null && total >= 0 ? total : null;
+
+  const visibleListings = useMemo(() => {
+    if (sortMode === 'newest') return [...listings].sort(newestObservedOrder);
+    if (combinedFeedActive) return listings;
+    return discoveryOrderWithinSourceLanes(listings, 0x57fa2c1d, cursorHistory.length + 1);
+  }, [combinedFeedActive, cursorHistory.length, listings, sortMode]);
+
+  const activeFilterChips = useMemo(() => {
+    const chips: Array<{ key: string; label: string; updates: Record<string, string | null> }> = [];
+    if (search) chips.push({ key: 'search', label: `Search: ${search}`, updates: { q: null } });
+    if (brandFilter) chips.push({ key: 'brand', label: brandFilter, updates: { brand: null, model: null } });
+    if (modelFilter) chips.push({ key: 'model', label: modelFilter, updates: { model: null } });
+    if (intentFilter) chips.push({ key: 'intent', label: intentFilter === 'WTS' ? 'For sale' : 'Want to buy', updates: { type: null } });
+    if (imagesOnly) chips.push({ key: 'images', label: 'Verified images', updates: { images: null } });
+    if (pricedOnly) chips.push({ key: 'priced', label: 'Price supplied', updates: { priced: null } });
+    for (const location of locationFilters) {
+      const remaining = locationFilters.filter(value => value !== location);
+      chips.push({
+        key: `location-${location}`,
+        label: location,
+        updates: { location: remaining.length ? remaining.join(',') : null },
+      });
+    }
+    return chips;
+  }, [brandFilter, imagesOnly, intentFilter, locationFilters, modelFilter, pricedOnly, search]);
 
   const resetResults = useCallback(() => {
     setCursor(null);
@@ -188,14 +561,31 @@ export default function TradingFloor() {
     listScrollPositionRef.current = null;
   }, []);
 
-  const updateViewParams = useCallback((updates: Record<string, string | null>) => {
+  const updateViewParams = useCallback((updates: Record<string, string | null>, replace = true) => {
     const next = new URLSearchParams(searchParams);
     for (const [key, value] of Object.entries(updates)) {
       if (value) next.set(key, value);
       else next.delete(key);
     }
-    setSearchParams(next, { replace: true });
+    setSearchParams(next, { replace });
   }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (!brandFilter) {
+      setModelOptions([]);
+      return () => controller.abort();
+    }
+    fetch(`/api/catalog-models?brand=${encodeURIComponent(brandFilter)}`, { signal: controller.signal })
+      .then(async response => response.ok ? response.json() : null)
+      .then(payload => {
+        if (!controller.signal.aborted) setModelOptions(Array.isArray(payload?.models) ? payload.models : []);
+      })
+      .catch(error => {
+        if (error?.name !== 'AbortError') setModelOptions([]);
+      });
+    return () => controller.abort();
+  }, [brandFilter]);
 
   const openListing = useCallback((listing: ListingRecord) => {
     listScrollPositionRef.current = window.scrollY;
@@ -222,7 +612,7 @@ export default function TradingFloor() {
   useEffect(() => {
     const media = window.matchMedia('(max-width: 640px)');
     const updatePageSize = () => {
-      setPageSize(media.matches ? 24 : 100);
+      setPageSize(media.matches ? 24 : 50);
       resetResults();
     };
     updatePageSize();
@@ -246,6 +636,104 @@ export default function TradingFloor() {
     setSearchInput(search);
   }, [search]);
 
+  const selectSearchSuggestion = useCallback((suggestion: CatalogSuggestion) => {
+    setSearchInput(suggestion.reference);
+    setSearchSuggestionsOpen(false);
+    setSearchSuggestions([]);
+    resetResults();
+    updateViewParams({ q: suggestion.reference, brand: suggestion.brand });
+  }, [resetResults, updateViewParams]);
+
+  useEffect(() => {
+    const query = searchInput.trim();
+    if (query.length < 2) {
+      setSearchSuggestions([]);
+      setSearchSuggestionsLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setSearchSuggestionsLoading(true);
+      try {
+        const params = new URLSearchParams({ q: query, limit: '8' });
+        if (brandFilter) params.set('brand', brandFilter);
+        const response = await fetch(`/api/catalog-suggestions?${params.toString()}`, { signal: controller.signal });
+        if (!response.ok) throw new Error('Suggestions unavailable');
+        const payload = await response.json() as CatalogSuggestionsResponse;
+        const suggestions = Array.isArray(payload.suggestions) ? payload.suggestions : [];
+        setSearchSuggestions(suggestions);
+        setActiveSearchSuggestionIndex(suggestions.length ? 0 : -1);
+      } catch (caught) {
+        if ((caught as Error).name !== 'AbortError') setSearchSuggestions([]);
+      } finally {
+        if (!controller.signal.aborted) setSearchSuggestionsLoading(false);
+      }
+    }, 180);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchInput, brandFilter]);
+
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (!searchBoxRef.current?.contains(event.target as Node)) {
+        setSearchSuggestionsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+  const visiblePricePairs = useMemo(() => {
+    const unique = new Map<string, PriceResearchBatchPair>();
+    for (const listing of visibleListings) {
+      if (!listing.brand || !listing.reference || String(listing.listing_type).toUpperCase() !== 'WTS') continue;
+      const pair = { brand: listing.brand, reference: listing.reference, dial: cleanValue(listing.dial_color) || null };
+      unique.set(priceResearchSummaryKey(pair), pair);
+    }
+    return [...unique.values()];
+  }, [visibleListings]);
+  const visiblePricePairKey = visiblePricePairs.map(priceResearchSummaryKey).sort().join('\u001e');
+
+  // Price cards and Price Research share the same canonical exact-reference service.
+  useEffect(() => {
+    const controller = new AbortController();
+    setRatingsCache({});
+    void (async () => {
+      for (let offset = 0; offset < visiblePricePairs.length && !controller.signal.aborted; offset += PRICE_SUMMARY_BATCH_SIZE) {
+        const batch = visiblePricePairs.slice(offset, offset + PRICE_SUMMARY_BATCH_SIZE);
+        try {
+          const summaries = await loadPriceResearchBatchSummaries(batch, controller.signal);
+          if (!controller.signal.aborted) {
+            const returned = new Set(summaries.map(summary => summary.key));
+            setRatingsCache(current => ({
+              ...current,
+              ...Object.fromEntries(summaries.map(summary => [summary.key, benchmarkFromSummary(summary)])),
+              ...Object.fromEntries(batch
+                .map(pair => priceResearchSummaryKey(pair))
+                .filter(key => !returned.has(key))
+                .map(key => [key, { stats: null, count: 0, analytics_ready: false, unavailable: true }])),
+            }));
+          }
+        } catch (error) {
+          if ((error as { name?: string })?.name === 'AbortError') return;
+          setRatingsCache(current => ({
+            ...current,
+            ...Object.fromEntries(batch.map(pair => [
+              priceResearchSummaryKey(pair),
+              { stats: null, count: 0, analytics_ready: false, unavailable: true },
+            ])),
+          }));
+        }
+      }
+    })();
+    return () => controller.abort();
+  // The serialized exact identities change only when the visible page changes.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visiblePricePairKey]);
+
   useEffect(() => {
     if (previousViewKeyRef.current === viewKey) return;
     previousViewKeyRef.current = viewKey;
@@ -268,77 +756,122 @@ export default function TradingFloor() {
 
   useEffect(() => {
     const controller = new AbortController();
+    const requestId = ++inventoryRequestIdRef.current;
 
     async function load() {
       setLoading(true);
       setError('');
 
       try {
-        if (!['all', 'watches'].includes(categoryFilter)) {
-          setListings([]);
-          setTotal(0);
-          setTotalIsEstimate(false);
-          setHasMore(false);
-          setNextCursor(null);
-          setError('The current inventory contains watches only.');
-          return;
-        }
         const params = new URLSearchParams({ pageSize: String(pageSize), pagination: 'cursor' });
         if (cursor) params.set('cursor', cursor);
         if (brandFilter) params.set('brand', brandFilter);
+        if (modelFilter) params.set('model', modelFilter);
         if (intentFilter) params.set('type', intentFilter);
         if (search) params.set('q', search);
         if (imagesOnly) params.set('images', 'true');
+        if (pricedOnly) params.set('priced', 'true');
+        if (locationFilters.length > 0) params.set('region', locationFilters.join(','));
 
-        const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal: controller.signal });
+        const usesReviewedWatchInventory = ['all', 'watches'].includes(categoryFilter);
+        if (!usesReviewedWatchInventory) {
+          params.set('quality', 'market');
+          params.set('item', categoryFilter);
+          params.delete('priced');
+          params.delete('brand');
+          params.delete('model');
+          params.delete('type');
+        }
+        const endpoint = usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest';
+        const combinedAllInventory = combinedFeedActive;
         let data: TradingFloorResponse;
         try {
-          data = await response.json() as TradingFloorResponse;
+          if (combinedAllInventory) {
+            if (randomAllInventorySeedRef.current === 0) {
+              const randomSeed = new Uint32Array(1);
+              window.crypto.getRandomValues(randomSeed);
+              randomAllInventorySeedRef.current = randomSeed[0] || 1;
+            }
+            data = await loadRandomAllInventory({
+              pageSize,
+              cursor,
+              seed: randomAllInventorySeedRef.current,
+              sort: sortMode,
+              intent: intentFilter,
+              imagesOnly,
+              pricedOnly,
+              countries: locationFilters,
+              signal: controller.signal,
+            });
+          } else {
+            const response = await fetch(`${endpoint}?${params.toString()}`, { signal: controller.signal });
+            if (response.ok) {
+              data = await response.json() as TradingFloorResponse;
+            } else {
+              data = { status: 'error' };
+            }
+          }
         } catch {
           data = { status: 'error' };
         }
+        if (inventoryRequestIdRef.current !== requestId) return;
 
-        if (data.status === 'supabase_not_configured') {
-          throw new Error('Inventory is temporarily unavailable.');
-        } else if (!response.ok || data.status === 'error' || !Array.isArray(data.records)) {
-          throw new Error(data.error || 'Failed to load listings');
+        let nextListings: ListingRecord[] = [];
+        let totalCount: number | null = null;
+
+        if (data.status === 'ok' && Array.isArray(data.records)) {
+          if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
+            const validBrandStrings = data.publicationBrands
+              .map((b: any) => typeof b === 'string' ? b : (typeof b?.brand === 'string' ? b.brand : ''))
+              .filter(Boolean);
+            setReleaseBrands([...new Set([...MASTER_BRAND_LIST, ...validBrandStrings])]);
+          } else {
+            setReleaseBrands(MASTER_BRAND_LIST);
+          }
+          nextListings = data.records;
+          totalCount = data.total == null ? null : Number(data.total);
+          setTotalIsEstimate(Boolean(data.totalIsEstimate));
+          setNextCursor(data.nextCursor || null);
+          setHasMore(Boolean(data.hasMore && data.nextCursor));
+        } else {
+          setError('Some listing data could not load because the source query could not complete.');
         }
 
-        if (Array.isArray(data.publicationBrands) && data.publicationBrands.length > 0) {
-          setReleaseBrands(data.publicationBrands);
-        }
-        const nextListings = data.records || [];
         setListings(nextListings);
-        const parsedTotal = data.total == null ? null : Number(data.total);
-        setTotal(parsedTotal !== null && Number.isFinite(parsedTotal) ? parsedTotal : null);
-        setTotalIsEstimate(parsedTotal !== null && Boolean(data.totalIsEstimate));
-        setNextCursor(data.nextCursor || null);
-        setHasMore(Boolean(data.hasMore && data.nextCursor));
+        const nextCountries = nextListings
+          .map(listing => postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region))
+          .filter((value): value is string => Boolean(value));
+        if (nextCountries.length > 0) {
+          setDiscoveredLocations(current => [...new Set([...current, ...nextCountries])].sort((a, b) => a.localeCompare(b)));
+        }
+        setTotal(totalCount !== null && Number.isFinite(totalCount) ? totalCount : null);
         if (!cursor) setSelectedListing(null);
       } catch (caught) {
-        if ((caught as Error).name !== 'AbortError') {
+        if ((caught as Error).name !== 'AbortError' && inventoryRequestIdRef.current === requestId) {
           setError((caught as Error).message || 'Failed to load listings');
         }
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        if (!controller.signal.aborted && inventoryRequestIdRef.current === requestId) setLoading(false);
       }
     }
 
     void load();
-    return () => controller.abort();
-  }, [brandFilter, categoryFilter, cursor, imagesOnly, intentFilter, pageSize, search]);
+    return () => {
+      controller.abort();
+      if (inventoryRequestIdRef.current === requestId) inventoryRequestIdRef.current += 1;
+    };
+  }, [brandFilter, categoryFilter, combinedFeedActive, cursor, imagesOnly, intentFilter, locationFilters, modelFilter, pageSize, pricedOnly, search, sortMode]);
 
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketNav />
-      <LuxFiBanner />
-      <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 14px 32px rgba(0,0,0,0.28)' }}>
+      <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 10px 28px rgba(41,37,36,0.08)' }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
               <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
-              <p className="mt-1 text-sm" style={{ color: MUTED }}>
-                {total === null ? 'Watch inventory' : `${totalIsEstimate ? '~' : ''}${total.toLocaleString()} listings`}
+              <p className="mt-1 text-sm font-medium" style={{ color: MUTED }}>
+                {dynamicDisplayTotal === null ? 'Listing total unavailable' : `${dynamicDisplayTotal.toLocaleString()} verified listings`}
               </p>
             </div>
 
@@ -349,17 +882,83 @@ export default function TradingFloor() {
           </div>
 
           <div className="sticky top-0 z-20 -mx-4 flex gap-2 border-y px-4 py-3 md:static md:mx-0 md:border-0 md:p-0" style={{ borderColor: BORDER, background: SURFACE }}>
-            <label className="relative block min-w-0 flex-1 md:max-w-[460px]">
+            <div ref={searchBoxRef} className="relative block min-w-0 flex-1 md:max-w-[460px]">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2" size={16} style={{ color: MUTED }} />
               <input
                 type="search"
                 value={searchInput}
-                onChange={event => setSearchInput(event.target.value)}
-                placeholder="Search exact reference"
+                onChange={event => {
+                  setSearchInput(event.target.value);
+                  setSearchSuggestionsOpen(true);
+                }}
+                onFocus={() => setSearchSuggestionsOpen(searchSuggestions.length > 0)}
+                onKeyDown={event => {
+                  if (event.key === 'Escape') {
+                    setSearchSuggestionsOpen(false);
+                    return;
+                  }
+                  if (searchSuggestionsOpen && searchSuggestions.length > 0) {
+                    if (event.key === 'ArrowDown') {
+                      event.preventDefault();
+                      setActiveSearchSuggestionIndex(idx => (idx + 1) % searchSuggestions.length);
+                      return;
+                    }
+                    if (event.key === 'ArrowUp') {
+                      event.preventDefault();
+                      setActiveSearchSuggestionIndex(idx => (idx <= 0 ? searchSuggestions.length - 1 : idx - 1));
+                      return;
+                    }
+                    if (event.key === 'Enter' && activeSearchSuggestionIndex >= 0) {
+                      event.preventDefault();
+                      selectSearchSuggestion(searchSuggestions[activeSearchSuggestionIndex]);
+                      return;
+                    }
+                  }
+                }}
+                placeholder="Search exact reference, model, message, or poster"
                 className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
+                role="combobox"
+                aria-autocomplete="list"
+                aria-expanded={searchSuggestionsOpen}
               />
-            </label>
+              {searchSuggestionsOpen && searchSuggestions.length > 0 && (
+                <div
+                  role="listbox"
+                  aria-label="Search suggestions"
+                  className="absolute inset-x-0 top-12 z-50 max-h-[360px] overflow-y-auto rounded-md border border-[#DED8CD] bg-white p-1 text-left shadow-2xl"
+                >
+                  {searchSuggestions.map((suggestion, index) => (
+                    <button
+                      key={`${suggestion.brand}-${suggestion.reference}-${index}`}
+                      type="button"
+                      role="option"
+                      aria-selected={index === activeSearchSuggestionIndex}
+                      onMouseEnter={() => setActiveSearchSuggestionIndex(index)}
+                      onMouseDown={event => event.preventDefault()}
+                      onClick={() => selectSearchSuggestion(suggestion)}
+                      className="flex min-h-12 w-full items-center justify-between gap-3 rounded px-3 py-2 text-left transition-colors"
+                      style={{
+                        background: index === activeSearchSuggestionIndex ? '#F6F0E7' : '#FFFFFF',
+                        color: INK,
+                      }}
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate text-sm font-semibold text-[#171717]">{suggestion.brand} {suggestion.reference}</span>
+                        <span className="mt-0.5 block truncate text-xs text-[#6B7280]">
+                          {suggestion.model || 'Catalog model'}
+                          {suggestion.dial_colors.length ? ` · ${suggestion.dial_colors.join(', ')} dial` : ''}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#9A7127]">
+                        {suggestion.match_type === 'reference_typo_candidate' ? 'Did you mean?' : 'Search'}
+                      </span>
+                    </button>
+                  ))}
+                  {searchSuggestionsLoading && <div className="px-3 py-2 text-xs text-[#6B7280]">Checking catalog…</div>}
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={() => setFiltersOpen(true)}
@@ -373,49 +972,106 @@ export default function TradingFloor() {
             </button>
           </div>
 
-          <div className="hidden gap-4 md:grid" aria-label="Marketplace filters">
-            <FilterGroup label="Brands">
-              {releaseBrands.length > 0 && (
-                <FilterChoice active={!brandFilter} label="All brands" onClick={() => {
-                  resetResults();
-                  updateViewParams({ brand: null });
-                }} />
-              )}
-              {releaseBrands.map(brand => (
-                <FilterChoice key={brand} active={brandFilter === brand} label={brand} onClick={() => {
-                  resetResults();
-                  updateViewParams({ brand });
-                }} />
-              ))}
-            </FilterGroup>
-            <FilterGroup label="Category">
-              {CATEGORY_OPTIONS.map(option => (
-                <FilterChoice key={option.value} active={categoryFilter === option.value} label={option.label} onClick={() => {
-                  resetResults();
-                  updateViewParams({
-                    item: option.value === 'all' ? null : option.value,
-                    type: !['all', 'watches'].includes(option.value) ? null : intentFilter || null,
-                  });
-                }} />
-              ))}
-            </FilterGroup>
-            <FilterGroup label="Intent">
-              {INTENT_OPTIONS.map(option => (
-                <FilterChoice key={option.value || 'all'} active={intentFilter === option.value} label={option.label} disabled={!['all', 'watches'].includes(categoryFilter) && Boolean(option.value)} onClick={() => {
-                  resetResults();
-                  updateViewParams({ type: option.value || null });
-                }} />
-              ))}
-            </FilterGroup>
-            <FilterGroup label="Evidence">
-              <FilterChoice active={imagesOnly} label="Source images only" onClick={() => {
-                resetResults();
-                updateViewParams({ images: imagesOnly ? null : 'true' });
-              }} />
-            </FilterGroup>
+          <div className="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs" style={{ color: MUTED }}>
+            <span>Search observed references directly; catalog match is optional.</span>
+            {!search && !brandFilter && ['all', 'watches'].includes(categoryFilter) && (
+              <div className="flex flex-wrap gap-1.5" aria-label="Search help">
+                {([
+                  { label: 'Rolex', updates: { brand: 'Rolex' } },
+                  { label: 'Patek Philippe', updates: { brand: 'Patek Philippe' } },
+                  { label: 'For sale', updates: { type: 'WTS' } },
+                  { label: 'Want to buy', updates: { type: 'WTB' } },
+                ] as Array<{ label: string; updates: Record<string, string | null> }>).map(item => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => {
+                      resetResults();
+                      updateViewParams(item.updates);
+                    }}
+                    className="rounded-full border bg-white px-2.5 py-1 font-medium hover:border-[#9A7127] hover:text-[#7B5719]"
+                    style={{ borderColor: BORDER }}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Category & Intent Tabs */}
+          <div className="flex flex-col gap-3 pt-1">
+            {/* Category Tabs */}
+            <div className="flex flex-wrap items-center gap-1.5 border-b border-[#3f3324]/10 pb-2.5">
+              {CATEGORY_OPTIONS.map(option => {
+                const active = categoryFilter === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      resetResults();
+                      updateViewParams({ item: option.value === 'all' ? null : option.value });
+                    }}
+                    className={`flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold uppercase tracking-wider transition-colors ${
+                      active
+                        ? 'bg-[#9A7127] text-white shadow-sm'
+                        : 'bg-white/80 text-[#6B7280] hover:bg-white hover:text-[#171717] border border-[#DED8CD]'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Intent Tabs */}
+            <div className="flex flex-wrap items-center gap-2">
+              {INTENT_OPTIONS.map(option => {
+                const active = (intentFilter || '') === (option.value || '');
+                return (
+                  <button
+                    key={option.value || 'all'}
+                    type="button"
+                    onClick={() => {
+                      resetResults();
+                      updateViewParams({ type: option.value || null });
+                    }}
+                    className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
+                      active
+                        ? 'bg-[#211B15] text-[#F3ECDF] font-semibold shadow-xs'
+                        : 'bg-white/60 text-[#675B4D] hover:bg-white border border-[#DED8CD]'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           <CurrencyConverter compact />
+
+          <div className="flex flex-wrap items-center gap-2" aria-label="Current search and filters">
+            <span className="inline-flex min-h-8 items-center rounded-full border bg-[#211B15] px-3 text-xs font-semibold text-[#F3ECDF]">
+              {sortMode === 'newest' ? 'Newest observed' : 'Discovery mix'}
+            </span>
+            {activeFilterChips.map(chip => (
+              <button
+                key={chip.key}
+                type="button"
+                onClick={() => {
+                  resetResults();
+                  updateViewParams(chip.updates, !Object.prototype.hasOwnProperty.call(chip.updates, 'location'));
+                }}
+                className="inline-flex min-h-8 items-center gap-1.5 rounded-full border bg-white px-3 text-xs font-medium"
+                style={{ borderColor: BORDER, color: INK }}
+                aria-label={`Remove ${chip.label} filter`}
+              >
+                {chip.label}<X size={12} aria-hidden="true" />
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -423,61 +1079,111 @@ export default function TradingFloor() {
         <MobileFilterSheet
           brand={brandFilter}
           releaseBrands={releaseBrands}
+          model={modelFilter}
+          models={modelOptions}
           category={categoryFilter}
           intent={intentFilter}
+          sort={sortMode}
           imagesOnly={imagesOnly}
+          pricedOnly={pricedOnly}
+          selectedLocations={locationFilters}
+          locations={locationOptions}
           onApply={next => {
             setFiltersOpen(false);
             resetResults();
             updateViewParams({
               brand: next.brand || null,
+              model: next.brand === brandFilter ? next.model || null : null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
+              sort: next.sort === 'newest' ? null : next.sort,
               images: next.imagesOnly ? 'true' : null,
-            });
+              priced: next.pricedOnly ? 'true' : null,
+              location: next.locations.length ? next.locations.join(',') : null,
+            }, false);
           }}
           onClose={() => setFiltersOpen(false)}
         />
       )}
 
-      <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-5">
-        <div className="mb-4 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
+      <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-6">
+        <div className="mb-5 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
-            Showing <strong style={{ color: INK }}>{listings.length.toLocaleString()}</strong>
-            {total === null
-              ? ' listings'
-              : <> on this page of <strong style={{ color: INK }}>{totalIsEstimate ? '~' : ''}{total.toLocaleString()}</strong> listings</>}
+            Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong> on this page{dynamicDisplayTotal === null ? ' · total unavailable' : <> of <strong style={{ color: INK }}>{dynamicDisplayTotal.toLocaleString()}</strong> listings</>}
           </span>
           <span>Priced listings first; source images next; highest verified USD price within each group.</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
         {selectedListing ? (
-          <ListingDetails key={selectedListing.id} listing={selectedListing} onClose={closeListing} />
-        ) : loading && listings.length === 0 ? (
-          <div className="flex justify-center py-16">
-            <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
-          </div>
-        ) : listings.length === 0 ? (
-          <div className="py-16 text-center" style={{ color: MUTED }}>
-            <div className="text-base font-semibold">No listings found</div>
-            <div className="mt-1 text-sm">
-              {total === 0 ? 'No data loaded yet. Incoming messages will appear here.' : 'Try a different filter or search.'}
-            </div>
-          </div>
+          <ListingDetails
+            key={selectedListing.id}
+            listing={selectedListing}
+            benchmark={
+              ratingsCache[priceResearchSummaryKey({
+                brand: selectedListing.brand,
+                reference: selectedListing.reference || '',
+                dial: cleanValue(selectedListing.dial_color) || null,
+              })]
+            }
+            onClose={closeListing}
+          />
         ) : (
-          <div className={viewMode === 'grid'
-            ? 'grid grid-cols-1 gap-7 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4'
-            : 'grid grid-cols-1 gap-4 md:grid-cols-2'}
-          >
-            {listings.map(listing => (
-              <ListingCard
-                key={listing.id}
-                listing={listing}
-                selected={false}
-                onSelect={() => openListing(listing)}
+          <div className="grid gap-6 md:grid-cols-[250px_minmax(0,1fr)]">
+            <aside className="hidden self-start rounded-md border bg-white p-5 md:sticky md:top-4 md:block shadow-xs" style={{ borderColor: BORDER }} aria-label="Marketplace filters">
+              <DesktopFilters
+                brand={brandFilter}
+                releaseBrands={releaseBrands}
+                model={modelFilter}
+                models={modelOptions}
+                category={categoryFilter}
+                intent={intentFilter}
+                sort={sortMode}
+                imagesOnly={imagesOnly}
+                pricedOnly={pricedOnly}
+                selectedLocations={locationFilters}
+                locations={locationOptions}
+                onChange={updates => {
+                  resetResults();
+                  updateViewParams(updates, !Object.prototype.hasOwnProperty.call(updates, 'location'));
+                }}
               />
-            ))}
+            </aside>
+            {loading && listings.length === 0 ? (
+              <div className="flex justify-center py-16">
+                <div className="h-8 w-8 animate-spin rounded-full border-2" style={{ borderColor: GOLD, borderTopColor: 'transparent' }} />
+              </div>
+            ) : visibleListings.length === 0 ? (
+              <div className="rounded-md border bg-white py-16 text-center" style={{ borderColor: BORDER, color: MUTED }}>
+                <div className="text-base font-semibold" style={{ color: INK }}>No listings found</div>
+                <div className="mt-1 text-sm">
+                  {total === 0 ? 'No data loaded yet. Incoming messages will appear here.' : 'Try a different filter or search.'}
+                </div>
+              </div>
+            ) : (
+              <div className={viewMode === 'grid'
+                ? 'grid grid-cols-1 gap-6 sm:grid-cols-2 xl:grid-cols-3'
+                : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}
+              >
+                {visibleListings.map(listing => {
+                  const ratingKey = priceResearchSummaryKey({
+                    brand: listing.brand,
+                    reference: listing.reference || '',
+                    dial: cleanValue(listing.dial_color) || null,
+                  });
+                  const benchmark = ratingsCache[ratingKey];
+                  return (
+                    <ListingCard
+                      key={listing.id}
+                      listing={listing}
+                      selected={false}
+                      benchmark={benchmark}
+                      onSelect={() => openListing(listing)}
+                    />
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -513,10 +1219,9 @@ export default function TradingFloor() {
           </nav>
         )}
 
-        <div className="pt-10">
-          <JoinGroupsCta dark />
-        </div>
       </div>
+      <TradingFloorQuickScroll />
+      <Footer />
     </main>
   );
 }
@@ -545,27 +1250,288 @@ function FilterChoice({ active, disabled = false, label, onClick }: { active: bo
   );
 }
 
+function FilterCheck({ checked, disabled = false, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: () => void }) {
+  return (
+    <button
+      type="button"
+      role="checkbox"
+      aria-checked={checked}
+      disabled={disabled}
+      onClick={onChange}
+      className="flex w-full items-center gap-3 rounded px-1 py-2 text-left text-sm transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-40"
+      style={{ color: INK }}
+    >
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded border" style={{ borderColor: checked ? GOLD : BORDER, background: checked ? GOLD : '#FFFFFF', color: '#FFFFFF' }}>
+        {checked && <Check size={13} />}
+      </span>
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function DesktopFilters({
+  brand,
+  releaseBrands,
+  model,
+  models,
+  category,
+  intent,
+  sort,
+  imagesOnly,
+  pricedOnly,
+  selectedLocations,
+  locations,
+  onChange,
+}: {
+  brand: BrandFilter;
+  releaseBrands: string[];
+  model: string;
+  models: CatalogModelOption[];
+  category: CategoryFilter;
+  intent: IntentFilter;
+  sort: SortMode;
+  imagesOnly: boolean;
+  pricedOnly: boolean;
+  selectedLocations: string[];
+  locations: string[];
+  onChange: (updates: Record<string, string | null>) => void;
+}) {
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [locationSearch, setLocationSearch] = useState('');
+
+  const filteredLocations = useMemo(() => {
+    const q = locationSearch.trim().toLowerCase();
+    if (!q) return locations;
+    return locations.filter(loc => loc.toLowerCase().includes(q));
+  }, [locations, locationSearch]);
+
+  const toggleLocation = (loc: string) => {
+    if (!loc) {
+      onChange({ location: null });
+      return;
+    }
+    const updated = selectedLocations.includes(loc)
+      ? selectedLocations.filter(value => value !== loc)
+      : [...selectedLocations, loc];
+    onChange({ location: updated.length ? updated.join(',') : null });
+  };
+
+  const hasActiveFilters = Boolean(brand || model || category !== 'all' || intent || imagesOnly || pricedOnly || selectedLocations.length > 0 || sort !== 'newest');
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-2 border-b pb-3" style={{ borderColor: BORDER }}>
+        <div className="flex items-center gap-2">
+          <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
+          {hasActiveFilters && (
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#9A7127] text-white">
+              {[Boolean(brand), Boolean(model), category !== 'all', Boolean(intent), imagesOnly, pricedOnly, selectedLocations.length > 0, sort !== 'newest'].filter(Boolean).length}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          {hasActiveFilters && (
+            <button
+              type="button"
+              onClick={() => onChange({ brand: null, model: null, item: null, type: null, images: null, priced: null, location: null, sort: null })}
+              className="text-xs font-semibold text-[#7B5719] hover:underline"
+            >
+              Clear
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsCollapsed(!isCollapsed)}
+            className="flex items-center gap-1 text-xs font-semibold p-1 rounded hover:bg-stone-100 transition"
+            style={{ color: GOLD_BRIGHT }}
+            title={isCollapsed ? "Expand filters" : "Collapse filters"}
+          >
+            {isCollapsed ? <ChevronDown size={18} /> : <ChevronUp size={18} />}
+          </button>
+        </div>
+      </div>
+
+      {!isCollapsed ? (
+        <div className="space-y-6 transition-all duration-200">
+          <fieldset>
+            <label htmlFor="sort-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Order</label>
+            <select
+              id="sort-filter"
+              value={sort}
+              onChange={event => onChange({ sort: event.target.value === 'newest' ? null : event.target.value })}
+              className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs"
+              style={{ borderColor: BORDER, color: INK }}
+            >
+              {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Newest observed is the default. Discovery mix changes order only.</p>
+          </fieldset>
+
+          <fieldset>
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Listing type</legend>
+            {INTENT_OPTIONS.map(option => (
+              <FilterCheck key={option.value || 'all'} checked={intent === option.value} label={option.label} onChange={() => onChange({ type: option.value || null })} />
+            ))}
+          </fieldset>
+
+          <fieldset>
+            <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Brand ({releaseBrands.length})</label>
+            <select
+              id="brand-filter"
+              value={brand}
+              onChange={event => onChange({ brand: event.target.value || null, model: null })}
+              className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs"
+              style={{ borderColor: BORDER, color: INK }}
+            >
+              <option value="">All brands</option>
+              {releaseBrands.map(value => <option key={value} value={value}>{value}</option>)}
+            </select>
+          </fieldset>
+
+          <fieldset>
+            <label htmlFor="model-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Model ({models.length})</label>
+            <select
+              id="model-filter"
+              value={model}
+              disabled={!brand || models.length === 0}
+              onChange={event => onChange({ model: event.target.value || null })}
+              className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs disabled:opacity-45"
+              style={{ borderColor: BORDER, color: INK }}
+            >
+              <option value="">All models</option>
+              {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
+            </select>
+          </fieldset>
+
+          <fieldset>
+            <div className="flex items-center justify-between mb-2">
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Location {selectedLocations.length > 0 && `(${selectedLocations.length})`}</legend>
+              {selectedLocations.length > 0 && (
+                <button type="button" onClick={() => toggleLocation('')} className="text-[10px] font-semibold text-[#7B5719] hover:underline">Clear</button>
+              )}
+            </div>
+            {selectedLocations.length > 0 && (
+              <div className="mb-2 flex flex-wrap gap-1.5" aria-label="Selected locations">
+                {selectedLocations.map(value => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleLocation(value)}
+                    aria-label={`Remove ${value} location`}
+                    className="inline-flex min-h-7 items-center gap-1 rounded-full border bg-white px-2 text-[11px] font-medium"
+                    style={{ borderColor: BORDER, color: INK }}
+                  >
+                    {value}<X size={11} aria-hidden="true" />
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="relative mb-2">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
+              <input
+                type="text"
+                value={locationSearch}
+                onChange={e => setLocationSearch(e.target.value)}
+                placeholder="Search locations..."
+                className="h-8 w-full rounded border bg-white pl-8 pr-2.5 text-xs outline-none focus:border-[#9A7127]"
+                style={{ borderColor: BORDER, color: INK }}
+              />
+            </div>
+            {filteredLocations.length === 0 && locations.length === 0 ? (
+              <p className="text-xs italic" style={{ color: MUTED }}>No location data available</p>
+            ) : filteredLocations.length === 0 ? (
+              <p className="text-xs italic py-2 text-center" style={{ color: MUTED }}>No matching locations</p>
+            ) : (
+              <div className="max-h-48 overflow-y-auto space-y-1 p-2 rounded border bg-stone-50/60 shadow-inner hide-scrollbar" style={{ borderColor: BORDER }}>
+                {!locationSearch && (
+                  <FilterCheck
+                    checked={selectedLocations.length === 0}
+                    label="All locations"
+                    onChange={() => toggleLocation('')}
+                  />
+                )}
+                {filteredLocations.map(value => (
+                  <FilterCheck
+                    key={value}
+                    checked={selectedLocations.includes(value)}
+                    label={value}
+                    onChange={() => toggleLocation(value)}
+                  />
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Choose one or several posting countries. Countries are shown only from source-backed listing or poster data.</p>
+          </fieldset>
+
+          <fieldset>
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Evidence</legend>
+            <FilterCheck checked={imagesOnly} label="Verified source image only" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
+            <FilterCheck checked={pricedOnly} label="Price supplied" onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
+          </fieldset>
+        </div>
+      ) : (
+        <div className="text-xs py-2 text-stone-500 italic flex items-center justify-between cursor-pointer" onClick={() => setIsCollapsed(false)}>
+          <span>Filters collapsed. Click expand to adjust filters.</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MobileFilterSheet({
   brand,
   releaseBrands,
+  model,
+  models,
   category,
   intent,
+  sort,
   imagesOnly,
+  pricedOnly,
+  selectedLocations,
+  locations,
   onApply,
   onClose,
 }: {
   brand: BrandFilter;
   releaseBrands: string[];
+  model: string;
+  models: CatalogModelOption[];
   category: CategoryFilter;
   intent: IntentFilter;
+  sort: SortMode;
   imagesOnly: boolean;
-  onApply: (filters: { brand: BrandFilter; category: CategoryFilter; intent: IntentFilter; imagesOnly: boolean }) => void;
+  pricedOnly: boolean;
+  selectedLocations: string[];
+  locations: string[];
+  onApply: (filters: { brand: BrandFilter; model: string; category: CategoryFilter; intent: IntentFilter; sort: SortMode; imagesOnly: boolean; pricedOnly: boolean; locations: string[] }) => void;
   onClose: () => void;
 }) {
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
+  const [draftModel, setDraftModel] = useState(model);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
+  const [draftSort, setDraftSort] = useState(sort);
   const [draftImagesOnly, setDraftImagesOnly] = useState(imagesOnly);
+  const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
+  const [draftLocations, setDraftLocations] = useState<string[]>(selectedLocations);
+  const [mobileLocationSearch, setMobileLocationSearch] = useState('');
+
+  const filteredMobileLocations = useMemo(() => {
+    const q = mobileLocationSearch.trim().toLowerCase();
+    if (!q) return locations;
+    return locations.filter(loc => loc.toLowerCase().includes(q));
+  }, [locations, mobileLocationSearch]);
+
+  const toggleLocation = (loc: string) => {
+    if (!loc) {
+      setDraftLocations([]);
+      return;
+    }
+    setDraftLocations(current => current.includes(loc)
+      ? current.filter(value => value !== loc)
+      : [...current, loc]);
+  };
 
   return (
     <div className="fixed inset-0 z-50 md:hidden" role="presentation">
@@ -585,29 +1551,87 @@ function MobileFilterSheet({
         </header>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
-          <FilterGroup label="Brands">
-            {releaseBrands.length > 0 && (
-              <FilterChoice active={!draftBrand} label="All brands" onClick={() => setDraftBrand('')} />
-            )}
-            {releaseBrands.map(value => (
-              <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => setDraftBrand(value)} />
+          <FilterGroup label="Order">
+            {SORT_OPTIONS.map(option => (
+              <FilterChoice key={option.value} active={draftSort === option.value} label={option.label} onClick={() => setDraftSort(option.value)} />
             ))}
+            <p className="w-full text-xs leading-5" style={{ color: MUTED }}>Newest observed is the default. Discovery mix changes order only.</p>
           </FilterGroup>
-          <FilterGroup label="Category">
-            {CATEGORY_OPTIONS.map(option => (
-              <FilterChoice key={option.value} active={draftCategory === option.value} label={option.label} onClick={() => {
-                setDraftCategory(option.value);
-                if (!['all', 'watches'].includes(option.value)) setDraftIntent('');
-              }} />
-            ))}
-          </FilterGroup>
-          <FilterGroup label="Intent">
+          <FilterGroup label="Listing type">
             {INTENT_OPTIONS.map(option => (
               <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
             ))}
           </FilterGroup>
+          <FilterGroup label={`Brands (${releaseBrands.length})`}>
+            {releaseBrands.length > 0 && (
+              <FilterChoice active={!draftBrand} label="All brands" onClick={() => { setDraftBrand(''); setDraftModel(''); }} />
+            )}
+            {releaseBrands.map(value => (
+              <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => { setDraftBrand(value); setDraftModel(''); }} />
+            ))}
+          </FilterGroup>
+          <FilterGroup label={`Models (${models.length})`}>
+            <select
+              id="mobile-model-filter"
+              value={draftModel}
+              disabled={!draftBrand || models.length === 0}
+              onChange={event => setDraftModel(event.target.value)}
+              className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-45"
+              style={{ borderColor: BORDER, color: INK }}
+            >
+              <option value="">All models</option>
+              {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
+            </select>
+          </FilterGroup>
+          <FilterGroup label={`Locations (${draftLocations.length || 'All'})`}>
+            {draftLocations.length > 0 && (
+              <div className="mb-2 flex w-full flex-wrap gap-1.5" aria-label="Selected locations">
+                {draftLocations.map(value => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => toggleLocation(value)}
+                    aria-label={`Remove ${value} location`}
+                    className="inline-flex min-h-8 items-center gap-1 rounded-full border bg-white px-2.5 text-xs font-medium"
+                    style={{ borderColor: BORDER, color: INK }}
+                  >
+                    {value}<X size={12} aria-hidden="true" />
+                  </button>
+                ))}
+                <button type="button" onClick={() => toggleLocation('')} className="min-h-8 px-1 text-xs font-semibold text-[#7B5719] hover:underline">Clear locations</button>
+              </div>
+            )}
+            <div className="relative mb-2 w-full">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400" size={13} />
+              <input
+                type="text"
+                value={mobileLocationSearch}
+                onChange={e => setMobileLocationSearch(e.target.value)}
+                placeholder="Search locations..."
+                className="h-9 w-full rounded border bg-white pl-8 pr-2.5 text-xs outline-none focus:border-[#9A7127]"
+                style={{ borderColor: BORDER, color: INK }}
+              />
+            </div>
+            {!mobileLocationSearch && (
+              <FilterCheck
+                checked={draftLocations.length === 0}
+                label="All locations"
+                onChange={() => toggleLocation('')}
+              />
+            )}
+            {filteredMobileLocations.map(value => (
+              <FilterCheck
+                key={value}
+                checked={draftLocations.includes(value)}
+                label={value}
+                onChange={() => toggleLocation(value)}
+              />
+            ))}
+            <p className="w-full text-xs leading-5" style={{ color: MUTED }}>Choose several countries to match any selected country. Country must be source-backed.</p>
+          </FilterGroup>
           <FilterGroup label="Evidence">
-            <FilterChoice active={draftImagesOnly} label="Source images only" onClick={() => setDraftImagesOnly(value => !value)} />
+            <FilterCheck checked={draftImagesOnly} label="Verified source image only" onChange={() => setDraftImagesOnly(value => !value)} />
+            <FilterCheck checked={draftPricedOnly} label="Price supplied" onChange={() => setDraftPricedOnly(value => !value)} />
           </FilterGroup>
           {!['all', 'watches'].includes(draftCategory) && (
             <p className="text-xs leading-5" style={{ color: MUTED }}>Category comes from preserved source evidence. Seller or buyer intent remains unavailable until the original listing supports it.</p>
@@ -619,9 +1643,12 @@ function MobileFilterSheet({
             setDraftBrand('');
             setDraftCategory('all');
             setDraftIntent('');
+            setDraftSort('newest');
             setDraftImagesOnly(false);
+            setDraftPricedOnly(false);
+            setDraftLocations([]);
           }} className="h-12 rounded-md border text-sm font-semibold" style={{ borderColor: BORDER, color: INK }}>Clear all</button>
-          <button type="button" onClick={() => onApply({ brand: draftBrand, category: draftCategory, intent: draftIntent, imagesOnly: draftImagesOnly })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#09090D' }}>View results</button>
+          <button type="button" onClick={() => onApply({ brand: draftBrand, model: draftModel, category: draftCategory, intent: draftIntent, sort: draftSort, imagesOnly: draftImagesOnly, pricedOnly: draftPricedOnly, locations: draftLocations })} className="h-12 rounded-md text-sm font-semibold" style={{ background: GOLD, color: '#FFFFFF' }}>View results</button>
         </footer>
       </section>
     </div>
@@ -647,262 +1674,524 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
   );
 }
 
-function ListingCard({ listing, selected, onSelect }: { listing: ListingRecord; selected: boolean; onSelect: () => void }) {
+
+
+
+function ListingCard({ listing, selected, onSelect, benchmark }: { listing: ListingRecord; selected: boolean; onSelect: () => void; benchmark?: ListingBenchmarkData }) {
   const meta = useMemo(() => getListingMeta(listing), [listing]);
-  const [imageAvailable, setImageAvailable] = useState(() => hasListingImage(listing));
-  const cardHasImage = imageAvailable && hasListingImage(listing);
+  const imageUrl = getListingImageSrc(listing);
+  const [imageAvailable, setImageAvailable] = useState(true);
+  const cardHasImage = Boolean(imageUrl && imageAvailable);
+  const messageEvidence = listingMessageEvidence(listing);
+  const postingIdentity = strongestPostingIdentity(listing);
+
+  const priceRating = useMemo(() => {
+    const price = ratingUsdPrice(listing);
+    return price ? rateMarketPrice(price, benchmark?.stats || null, benchmark?.count || 0) : null;
+  }, [listing, benchmark]);
 
   return (
     <article
-      className={`flex flex-col rounded-md border p-6 transition hover:-translate-y-0.5 ${cardHasImage ? 'min-h-[660px]' : 'min-h-[320px]'}`}
-      style={{ borderColor: selected ? GOLD : BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.28)' }}
+      className="flex flex-col rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+      style={{ borderColor: selected ? GOLD : '#EBE3D5' }}
     >
+      {/* 1. Watch Image — only rendered when a real source URL exists */}
       {cardHasImage && (
-        <button type="button" onClick={onSelect} className="block text-left">
-          <ListingImage listing={listing} className="h-[338px] w-full" onUnavailable={() => setImageAvailable(false)} />
+        <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
+          <img
+            src={imageUrl || undefined}
+            alt={meta.title}
+            className="h-[340px] w-full object-cover object-center transition hover:scale-[1.02]"
+            loading="lazy"
+            onError={() => setImageAvailable(false)}
+          />
+        </button>
+      )}
+      {!cardHasImage && (
+        <button type="button" onClick={onSelect} className="flex h-[340px] w-full items-center justify-center rounded-md border border-[#E5DACB] bg-[#F6F0E7] text-xs font-bold uppercase tracking-[0.14em] text-[#8B95A2]">
+          NO IMAGE
         </button>
       )}
 
-      <div className={`${cardHasImage ? 'mt-5' : ''} min-h-[56px]`}>
-        <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: GOLD }}>
-          <span>{listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}</span>
+      {/* 2. Category & Intent (e.g. WATCH · FOR SALE) */}
+      <div className="mt-4">
+        <div className="text-[12px] font-semibold uppercase tracking-[0.12em] text-[#9E6B38]">
+          {listingKindLabel(listing)} · {customerIntentLabel(listing.listing_type)}
+        </div>
+
+        {/* 3. Title */}
+        <button
+          type="button"
+          onClick={onSelect}
+          className="mt-1.5 block text-left font-serif text-[17px] font-semibold leading-snug tracking-tight text-[#1C1917] hover:text-[#78350F]"
+        >
+          {meta.title}
+        </button>
+        {listing.model_requires_review === true && (
+          <div className="mt-1 text-[11px] font-medium text-[#7A8699]">Model requires review</div>
+        )}
+      </div>
+
+      {/* 4. Original source evidence, collapsed by default */}
+      {messageEvidence && (
+        <details className="group mt-3.5 rounded border border-[#E5DACB] bg-[#F6F0E7] p-2.5">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+            <span aria-hidden="true" className="transition-transform group-open:rotate-90">▶</span>
+            <span>{messageEvidence.label}</span>
+          </summary>
+          <div className="mt-2.5 max-h-72 overflow-auto border-t border-[#E5DACB] pt-2 font-mono text-[11px] leading-relaxed text-stone-900 whitespace-pre-wrap break-words">
+            {messageEvidence.text}
+          </div>
+        </details>
+      )}
+
+      {/* 5. Price & Price Rating Row */}
+      <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] flex items-baseline justify-between gap-2">
+        <div>
+          <div className="text-[22px] font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+          {meta.foreignLabel && (
+            <div className="text-[11px] font-semibold text-[#8B95A2] mt-0.5">{meta.foreignLabel}</div>
+          )}
+        </div>
+        <div className="text-xs font-medium text-[#7A8699]">
+          {benchmark?.unavailable ? (
+            <span>Open for rating</span>
+          ) : priceRating ? (
+            <span
+              className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+              style={{
+                backgroundColor: priceRating.code === 'GOOD' ? '#ECFDF5' : priceRating.code === 'HIGH' ? '#FEF2F2' : '#FDF8F0',
+                color: priceRating.color,
+                border: `1px solid ${priceRating.color}40`,
+              }}
+              title={priceRating.reason}
+            >
+              {priceRating.label}
+            </span>
+          ) : (
+            <span>Open for rating</span>
+          )}
+        </div>
+      </div>
+
+      {/* 6. Badges (Location & Date) */}
+      <div className="mt-3.5 flex flex-wrap gap-2">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
+          <Globe2 size={12} className="text-[#6B7280]" />
+          {meta.region || 'Location not provided'}
+        </span>
+        <span className="inline-flex items-center rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
+          Posted {meta.postedDate || 'Posting date requires review'}
+        </span>
+      </div>
+
+      {/* 7. Posted by Section */}
+      <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
+        <div className="text-[#6B7280]">Posted by</div>
+        {listing.dealer_profile_path && postingIdentity ? (
+          <Link to={listing.dealer_profile_path} className="mt-0.5 block text-sm font-semibold text-[#1C1917] hover:text-[#8A5826]">
+            {postingIdentity || 'Posting identity requires review'}
+          </Link>
+        ) : (
+          <div className="text-sm font-semibold text-[#1C1917] mt-0.5">
+            {postingIdentity || 'Posting identity requires review'}
+          </div>
+        )}
+        <div className="mt-0.5">
+          <DealerRatingBadge
+            rating={listing.seller_rating}
+            reviewCount={listing.seller_review_count}
+            ratingEvidenceStatus={listing.seller_rating_evidence_status}
+          />
+        </div>
+      </div>
+
+      {/* 8. Direct WhatsApp Contact Action */}
+      <div className="mt-auto pt-4 flex flex-col gap-2">
+        <div className="text-center text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+          {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
+            ? 'LATEST OBSERVED · CHECK AVAILABILITY'
+            : 'CONFIRMED CURRENT'}
         </div>
         <button
           type="button"
           onClick={onSelect}
-          className="block text-left text-[15px] leading-6 tracking-normal"
-          style={{ color: INK }}
+          className="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#F6F0E7] py-2 text-[11px] font-bold uppercase tracking-wider text-[#653E23] transition hover:bg-[#EFE5D8]"
         >
-          {meta.title}
+          CHECK AVAILABILITY
         </button>
-        {cleanValue(listing.seller_name) && (
-          <div className="mt-3 text-sm" style={{ color: MUTED }}>
-            Posted by <span style={{ color: INK }}>{cleanValue(listing.seller_name)}</span>
-          </div>
-        )}
-      </div>
-
-      <div className="mt-4 flex items-center justify-between gap-3">
-        <div className="text-[16px] font-medium" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
-        {meta.region && <RegionLabel region={meta.region} />}
-      </div>
-
-      {meta.postedDate && <div className="mt-3 text-[15px]" style={{ color: INK }}>Posted: {meta.postedDate}</div>}
-
-      <div className="mt-auto pt-4">
-        <ActionButton
-          label={isBuyerIntent(listing.listing_type) ? 'VIEW BUYER REQUEST' : 'CHECK AVAILABILITY'}
-          onClick={onSelect}
-        />
       </div>
     </article>
   );
 }
 
-function ListingDetails({ listing, onClose }: { listing: ListingRecord; onClose: () => void }) {
+function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { listing: ListingRecord; onClose: () => void; benchmark?: ListingBenchmarkData }) {
   const detailListing = listing;
   const [contact, setContact] = useState<ListingContact | null>(() => sourcePosterContact(listing));
   const [sellerAnalytics, setSellerAnalytics] = useState<ReviewedSellerAnalytics | null>(null);
+  const [sellerReputation, setSellerReputation] = useState<ReviewedSellerSummaryResponse['reputation']>(null);
   const [activeImage, setActiveImage] = useState(0);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
   const meta = useMemo(() => getListingMeta(listing), [listing]);
+  const mainImage = getListingImageSrc(listing);
   const images = useMemo(() => {
-    if (!hasListingImage(listing)) return [];
-    const candidates = listing.image_urls?.length
-      ? listing.image_urls
-      : [listing.thumbnail_url];
-    return [...new Set(candidates
-      .map(value => String(value || '').trim())
-      .filter(value => value && !failedImages.has(value)))];
-  }, [failedImages, listing]);
+    if (!hasAllowedImageEvidence(listing) || isBundleListing(listing) || listing.is_unbundled_child === true) return [];
+    const directImages = (listing.image_urls || []).filter(u => Boolean(u && /^https?:\/\/[^\s]+$/i.test(u)));
+    if (directImages.length > 0) return directImages;
+    if (mainImage && !mainImage.includes('unsplash.com')) return [mainImage];
+    return [];
+  }, [listing, mainImage]);
+  const availableImages = images.filter(url => !failedImages.has(url));
 
-  const visibleImageIndex = activeImage < images.length ? activeImage : 0;
+  const visibleImageIndex = activeImage < availableImages.length ? activeImage : 0;
+  const messageEvidence = listingMessageEvidence(listing);
+  const normalizedIntent = String(listing.intent || listing.listing_type || '').toUpperCase();
+  const postingIdentity = strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name });
+
+  const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS');
+  const [benchmark, setBenchmark] = useState<{
+    loading: boolean;
+    count: number;
+    stats: any | null;
+    rating: any;
+  }>(() => {
+    if (initialBenchmark && initialBenchmark.stats && initialBenchmark.count >= 2) {
+      return {
+        loading: false,
+        count: initialBenchmark.count,
+        stats: initialBenchmark.stats,
+        rating: rateMarketPrice(ratingUsdPrice(listing), initialBenchmark.stats, initialBenchmark.count),
+      };
+    }
+    return {
+      loading: canLoadBenchmark,
+      count: 0,
+      stats: null,
+      rating: rateMarketPrice(ratingUsdPrice(listing), null, 0),
+    };
+  });
 
   useEffect(() => {
     const controller = new AbortController();
+
+    const contactParams = new URLSearchParams({
+      id: listing.id,
+      surface: 'trading-floor',
+      brand: listing.brand,
+      reference: listing.reference || '',
+    });
+    fetch(`/api/listing-contact?${contactParams.toString()}`, { signal: controller.signal })
+      .then(async response => response.ok ? response.json() as Promise<ListingContact> : null)
+      .then(payload => {
+        if (!payload) return;
+        setContact(payload);
+        if (payload.stats) setSellerAnalytics(payload.stats);
+      })
+      .catch(error => { if (error?.name !== 'AbortError') setContact(sourcePosterContact(listing)); });
+    
+    // Fetch seller analytics
     fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
       .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
       .then(payload => {
-        if (!payload || payload.status !== 'ok' || !payload.contact_available) return;
-        const sourceContact = sourcePosterContact({
-          ...listing,
-          seller_name: payload.seller?.name ?? listing.seller_name,
-          seller_phone: payload.seller?.phone ?? listing.seller_phone,
-        });
-        setContact(sourceContact);
+        if (!payload || payload.status !== 'ok') return;
+        if (payload.contact_available) {
+          const sourceContact = sourcePosterContact({
+            ...listing,
+            seller_name: payload.seller?.name ?? listing.seller_name,
+            seller_phone: payload.seller?.phone ?? listing.seller_phone,
+          });
+          setContact(sourceContact);
+        }
         setSellerAnalytics(payload.analytics || null);
+        setSellerReputation(payload.reputation || null);
       })
       .catch(error => { if (error?.name !== 'AbortError') setSellerAnalytics(null); });
 
+    // Fetch price rating benchmark
+    if (canLoadBenchmark) {
+      if (!initialBenchmark?.stats) {
+        setBenchmark({
+          loading: true,
+          count: 0,
+          stats: null,
+          rating: rateMarketPrice(ratingUsdPrice(listing), null, 0),
+        });
+      }
+
+      const reference = listing.reference as string;
+      const params = new URLSearchParams({ reference, brand: listing.brand });
+      if (listing.dial_color) params.set('dial', listing.dial_color);
+
+      fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })
+        .then(async response => response.ok ? response.json() : null)
+        .then(payload => {
+          if (!payload) {
+            if (initialBenchmark && initialBenchmark.stats && initialBenchmark.count >= 2) {
+              setBenchmark({
+                loading: false,
+                count: initialBenchmark.count,
+                stats: initialBenchmark.stats,
+                rating: rateMarketPrice(ratingUsdPrice(listing), initialBenchmark.stats, initialBenchmark.count),
+              });
+            }
+            return;
+          }
+          const count = Number(payload.count || 0);
+          const stats = payload.analytics_ready && payload.stats ? payload.stats : null;
+          setBenchmark({
+            loading: false,
+            count,
+            stats,
+            rating: rateMarketPrice(ratingUsdPrice(listing), stats, count),
+          });
+        })
+        .catch(error => {
+          if (error?.name !== 'AbortError') {
+            if (initialBenchmark && initialBenchmark.stats && initialBenchmark.count >= 2) {
+              setBenchmark({
+                loading: false,
+                count: initialBenchmark.count,
+                stats: initialBenchmark.stats,
+                rating: rateMarketPrice(ratingUsdPrice(listing), initialBenchmark.stats, initialBenchmark.count),
+              });
+            } else {
+              setBenchmark({
+                loading: false,
+                count: 0,
+                stats: null,
+                rating: rateMarketPrice(ratingUsdPrice(listing), null, 0),
+              });
+            }
+          }
+        });
+    } else {
+      setBenchmark({
+        loading: false,
+        count: 0,
+        stats: null,
+        rating: rateMarketPrice(null, null, 0),
+      });
+    }
+
     return () => controller.abort();
-  }, [listing]);
+  }, [canLoadBenchmark, initialBenchmark, listing]);
 
   return (
-    <section className={`mb-8 grid gap-8 ${images.length > 0 ? 'lg:grid-cols-[minmax(320px,504px)_1fr]' : ''}`} aria-label="Selected listing">
-      <button
-        type="button"
-        onClick={onClose}
-        className="col-span-full inline-flex min-h-11 w-fit items-center gap-2 rounded-md border px-4 text-sm font-medium"
-        style={{ borderColor: BORDER, color: INK, background: SURFACE }}
+    <section className="mb-8 flex flex-col gap-3.5" aria-label="Selected listing">
+      {/* Top Banner Link */}
+      <Link
+        to={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}`}
+        className="w-full rounded border border-[#E8DECF] bg-[#F6EFE5] py-2 text-center text-xs font-semibold text-[#653E23] transition hover:bg-[#EFE5D8] block"
       >
-        <ArrowLeft size={17} /> Back to results
-      </button>
+        Open full price research
+      </Link>
 
-      {images.length > 0 && (
-        <div className="rounded-md border p-2" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.3)' }}>
-          <img
-            src={images[visibleImageIndex]}
-            alt={`${meta.title} source listing image`}
-            className="h-[420px] w-full rounded-sm object-contain sm:h-[540px] lg:h-[648px]"
-            onError={() => setFailedImages(current => new Set(current).add(images[visibleImageIndex]))}
-          />
-          {images.length > 1 && (
-            <div className="mt-2 flex gap-2 overflow-x-auto">
-              {images.map((url, index) => (
-                <button
-                  type="button"
-                  key={url}
-                  onClick={() => setActiveImage(index)}
-                  aria-label={`Show listing image ${index + 1}`}
-                  className="h-16 w-16 shrink-0 overflow-hidden rounded-sm border p-0.5"
-                  style={{ borderColor: index === visibleImageIndex ? GOLD : BORDER, background: PANEL }}
-                >
-                  <img src={url} alt="" className="h-full w-full object-cover" onError={() => setFailedImages(current => new Set(current).add(url))} />
-                </button>
+      <div className={`grid gap-6 ${availableImages.length > 0 ? 'lg:grid-cols-[minmax(320px,460px)_1fr]' : ''}`}>
+        {/* Left Column: Watch Image — only when real source images exist */}
+        {availableImages.length > 0 && (
+          <div className="rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-3 shadow-xs flex flex-col justify-center">
+            {availableImages[visibleImageIndex] ? (
+              <img
+                src={availableImages[visibleImageIndex]}
+                alt={`${meta.title} source listing image`}
+                className="h-[520px] w-full rounded-md object-contain lg:h-[620px]"
+                onError={() => setFailedImages(current => new Set(current).add(availableImages[visibleImageIndex]))}
+              />
+            ) : null}
+            {availableImages.length > 1 && (
+              <div className="mt-3 flex gap-2 overflow-x-auto">
+                {availableImages.map((url, index) => (
+                  <button
+                    type="button"
+                    key={url}
+                    onClick={() => setActiveImage(index)}
+                    aria-label={`Show listing image ${index + 1}`}
+                    className={`h-16 w-16 shrink-0 overflow-hidden rounded-md border p-0.5 ${index === visibleImageIndex ? 'border-[#8A5826]' : 'border-[#EBE3D5]'}`}
+                  >
+                    <img src={url} alt="" className="h-full w-full object-cover" onError={() => setFailedImages(current => new Set(current).add(url))} />
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        {availableImages.length === 0 && (
+          <div className="flex min-h-[340px] items-center justify-center rounded-lg border border-[#EBE3D5] bg-[#F6F0E7] text-xs font-bold uppercase tracking-[0.14em] text-[#8B95A2]">
+            NO IMAGE
+          </div>
+        )}
+
+        {/* Right Column: 3 Cards */}
+        <div className="flex flex-col gap-4">
+          {/* Card 1: Title, Price, Raw message, Tags, Date */}
+          <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
+            <div className="flex items-start justify-between gap-4">
+              <h2 className="font-serif text-xl font-semibold tracking-tight text-[#1C1917]">{meta.title}</h2>
+              <button
+                type="button"
+                onClick={onClose}
+                aria-label="Close"
+                className="flex h-7 w-7 items-center justify-center rounded text-stone-400 hover:text-stone-700"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            {listing.model_requires_review === true && (
+              <div className="mt-1 text-xs font-medium text-[#7A8699]">Model requires review</div>
+            )}
+
+            <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
+            {meta.foreignLabel && <div className="mt-1 text-xs font-medium text-[#7A8699]">{meta.foreignLabel}</div>}
+            <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
+              {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
+                ? 'LATEST OBSERVED · CHECK AVAILABILITY'
+                : 'CONFIRMED CURRENT'}
+            </div>
+
+            {messageEvidence && (
+              <details className="group mt-5 border-t border-stone-100 pt-4">
+                <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-[#8A5826] select-none [&::-webkit-details-marker]:hidden">
+                  <span aria-hidden="true" className="transition-transform group-open:rotate-90">▶</span>
+                  <span>{messageEvidence.label}</span>
+                </summary>
+                <div className="mt-2.5 max-h-96 overflow-auto rounded bg-[#FBF9F6] p-3 font-mono text-xs leading-relaxed text-stone-800 whitespace-pre-wrap break-words">
+                  {messageEvidence.text}
+                </div>
+              </details>
+            )}
+
+            <div className="mt-4 flex flex-wrap gap-2">
+              {[displayDial(detailListing.dial_color), cleanValue(detailListing.condition), detailListing.year ? String(detailListing.year) : ''].filter(Boolean).map(value => (
+                <span key={value} className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-700">{value}</span>
               ))}
             </div>
-          )}
-        </div>
-      )}
 
-      <div className="space-y-8">
-        <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <div className="flex items-start justify-between gap-4">
-            <h2 className="font-serif text-2xl font-medium tracking-normal" style={{ color: INK }}>{meta.title}</h2>
-            <button
-              type="button"
-              aria-label="Close selected watch"
-              title="Close"
-              onClick={onClose}
-              className="flex h-8 w-8 items-center justify-center rounded-md"
-              style={{ color: MUTED }}
-            >
-              <X size={18} />
-            </button>
+            <div className="mt-4 text-xs font-medium text-stone-600">
+              <span className="text-[#8A5826]">Posted on</span> {meta.postedDate || 'Posting date requires review'}
+            </div>
           </div>
 
-          <div className="mt-6">
-            <div className="text-2xl font-semibold" style={{ color: GOLD_BRIGHT }}>{meta.priceLabel}</div>
+          {/* Card 2: Price Rating */}
+          <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
+            <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">PRICE RATING</div>
+            <div className="mt-2 text-lg font-bold text-[#1C1917]">
+              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.label || 'Open for rating')}
+            </div>
+            <div className="mt-1 text-xs text-[#8B95A2]">
+              {benchmark.loading ? 'Calculating...' : (benchmark.rating?.reason || 'Comparing against verified dealer observations.')}
+            </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-2 text-sm" style={{ color: MUTED }}>
-            {[displayDial(detailListing.dial_color), cleanValue(detailListing.condition), detailListing.year ? String(detailListing.year) : ''].filter(Boolean).map(value => (
-              <span key={value} className="rounded-full border px-3 py-1" style={{ borderColor: BORDER }}>{value}</span>
-            ))}
-          </div>
-
-          {meta.postedDate && <div className="mt-6 text-[15px]" style={{ color: INK }}>
-            <span style={{ color: GOLD_BRIGHT }}>Posted on</span> {meta.postedDate}
-          </div>}
-        </div>
-
-        <div className="rounded-md border px-6 py-7" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{isBuyerIntent(listing.listing_type) ? 'Buyer source contact' : 'Source contact'}</h2>
-          {(contact?.dealer_name || contact?.phone_display) && (
-            <div className="mt-4 border-y py-4" style={{ borderColor: BORDER }}>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: MUTED }}>
-                Source-supplied contact
-              </div>
-              {contact.dealer_name && <div className="mt-1 text-base font-semibold" style={{ color: INK }}>{contact.dealer_name}</div>}
-              {contact.phone_display && <div className="mt-2 text-sm font-semibold" style={{ color: GOLD_BRIGHT }}>
-                {contact.phone_display}
-              </div>}
-              {sellerAnalytics && (
-                <div className="mt-4" aria-label="Source poster activity">
-                  <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
-                    <ContactMetric label="Total posts" value={sellerAnalytics.total_posts} />
-                    <ContactMetric label="For sale" value={sellerAnalytics.wts_posts} />
-                    <ContactMetric label="Want to buy" value={sellerAnalytics.wtb_posts} />
-                    <ContactMetric label="Other" value={sellerAnalytics.other_posts} />
-                  </div>
-                  {(sellerAnalytics.first_post_at || sellerAnalytics.last_post_at) && (
-                    <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs" style={{ color: MUTED }}>
-                      {sellerAnalytics.first_post_at && <span>First post: {formatListingDate(sellerAnalytics.first_post_at)}</span>}
-                      {sellerAnalytics.last_post_at && <span>Latest post: {formatListingDate(sellerAnalytics.last_post_at)}</span>}
-                    </div>
-                  )}
+          {/* Card 3: Posted by & WhatsApp */}
+          <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
+            <h3 className="text-base font-bold text-[#1C1917]">Posted by</h3>
+            <div className="mt-4 border-t border-stone-100 pt-4">
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source-supplied contact</div>
+              {listing.dealer_profile_path && postingIdentity ? (
+                <Link to={listing.dealer_profile_path} className="mt-2 block text-base font-bold text-[#1C1917] hover:text-[#8A5826]">
+                  {postingIdentity || 'Posting identity requires review'}
+                </Link>
+              ) : (
+                <div className="mt-2 text-base font-bold text-[#1C1917]">
+                  {postingIdentity || 'Posting identity requires review'}
                 </div>
               )}
-            </div>
-          )}
-          {contact?.contact_available && contact.whatsapp_url ? (
-            <>
-              <p className="mt-3 text-sm" style={{ color: MUTED }}>
-                Contact {contact.dealer_name || 'the source poster'} using the phone supplied with this listing.
-              </p>
-              <a href={contact.whatsapp_url} target="_blank" rel="noreferrer" className="mt-5 flex h-12 items-center justify-center gap-2 rounded-full bg-[#25D366] font-semibold text-[#07140b]">
-                <MessageCircle size={18} /> {isBuyerIntent(listing.listing_type) ? 'Respond on WhatsApp' : 'Continue on WhatsApp'}
-              </a>
-            </>
-          ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-              A publishable source contact was not supplied for this listing.
-            </p>
-          )}
-        </div>
-
-        <div className="rounded-md border px-6 py-6" style={{ borderColor: BORDER, background: SURFACE, boxShadow: '0 18px 44px rgba(0,0,0,0.22)' }}>
-          <h2 className="text-[16px] font-medium tracking-normal" style={{ color: INK }}>{listing.raw_message_scope === 'normalized_summary' ? 'Source evidence' : 'Original listing'}</h2>
-          <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em]" style={{ color: GOLD_BRIGHT }}>
-            {listing.raw_message_scope === 'normalized_summary' ? 'Original source pending verification' : 'Raw source message'}
-          </div>
-          {listing.raw_message_scope === 'normalized_summary' ? (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-              The original source listing is pending verification. Unverified workbook summary text is withheld from the customer view.
-            </p>
-          ) : listing.raw_message ? (
-            <>
-              <pre className="mt-4 max-h-72 overflow-auto whitespace-pre-wrap font-mono text-xs leading-6" style={{ color: MUTED }}>{listing.raw_message}</pre>
-              {listing.raw_message_truncated && (
-                <p className="mt-3 text-xs leading-5" style={{ color: MUTED }}>
-                  Long source text is shortened in this customer view.
-                </p>
+              <div className="mt-0.5">
+                <ListingDealerEvidence
+                  sellerName={contact?.dealer_name || listing.seller_name}
+                  sellerPhone={listing.seller_phone}
+                  contactPublicationApproved={listing.contact_publication_approved === true}
+                  rating={listing.seller_rating ?? sellerReputation?.rating}
+                  reviewCount={listing.seller_review_count ?? sellerReputation?.review_count}
+                  ratingEvidenceStatus={listing.seller_rating_evidence_status}
+                  showSellerName={false}
+                />
+              </div>
+              {sellerAnalytics && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <ContactMetric label="For sale" value={sellerAnalytics?.wts_posts || 0} />
+                  <ContactMetric label="Want to buy" value={sellerAnalytics?.wtb_posts || 0} />
+                </div>
               )}
-            </>
-          ) : (
-            <p className="mt-3 text-sm leading-6" style={{ color: MUTED }}>
-              Source evidence is unavailable for this record.
-            </p>
-          )}
-        </div>
+              <div className="mt-2 flex items-center gap-1.5 text-xs text-stone-600">
+                <Globe2 size={13} className="text-[#8A5826]" />
+                <span>{meta.region || 'Location not provided'}</span>
+              </div>
+            </div>
 
+            <p className="mt-5 text-xs leading-relaxed text-[#6B7280]">
+              Direct poster contact is not published. Please help connect me with the poster through a verified channel without displaying a private number.
+            </p>
+
+            {contact?.contact_channels?.whatsapp ? <a
+              href={contact.contact_channels.whatsapp}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#00D757] py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#00c34f]"
+            >
+              <MessageCircle size={18} />
+              Ask Curated Luxury on WhatsApp
+            </a> : null}
+            {contact?.contact_channels?.telegram ? <a
+              href={contact.contact_channels.telegram}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 flex w-full items-center justify-center gap-2 rounded-lg border border-[#8A5826] bg-[#F6F0E7] py-3 text-sm font-bold text-[#653E23] transition hover:bg-[#EFE5D8]"
+            >
+              <MessageCircle size={18} />
+              Continue on Telegram
+            </a> : null}
+          </div>
+        </div>
       </div>
     </section>
   );
 }
 
-function ContactMetric({ label, value }: { label: string; value: number }) {
-  return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{Number(value || 0).toLocaleString()}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
+function ContactMetric({ label, value }: { label: string; value: number | string }) {
+  const displayValue = typeof value === 'number' ? Number(value || 0).toLocaleString() : value;
+  return <div className="rounded-sm border px-2 py-3" style={{ borderColor: BORDER }}><div className="text-base font-semibold" style={{ color: INK }}>{displayValue}</div><div className="mt-1 text-[10px] uppercase" style={{ color: MUTED }}>{label}</div></div>;
+}
+
+function MarketStat({ label, value }: { label: string; value: number }) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase" style={{ color: MUTED }}>{label}</div>
+      <div className="mt-1 text-sm font-semibold" style={{ color: INK }}>
+        ${Math.round(value).toLocaleString()}
+      </div>
+    </div>
+  );
 }
 
 function sourcePosterContact(listing: ListingRecord): ListingContact | null {
-  const phone = String(listing.seller_phone || '').trim();
-  const name = cleanValue(listing.seller_name);
+  if (listing.contact_publication_approved !== true) return null;
+  const phone = String(listing.seller_phone || listing['Phone Number'] || listing.phone_number || '').trim();
+  const name = cleanValue(listing.seller_name || listing['Posted By'] || listing.posted_by);
   if (!phone && !name) return null;
   const digits = phone.replace(/[^\d]/g, '');
   return {
-    contact_available: digits.length >= 7,
+    contact_available: Boolean(phone || name),
     dealer_name: name || undefined,
     phone_display: phone || undefined,
     contact_source: 'OWNER_APPROVED_WORKBOOK',
     whatsapp_url: digits.length >= 7 ? `https://wa.me/${digits}` : undefined,
-    reason: digits.length >= 7 ? undefined : 'SOURCE_PHONE_UNAVAILABLE',
+    reason: undefined,
   };
 }
 
 function ListingImage({ listing, className, onUnavailable }: { listing: ListingRecord; className: string; onUnavailable: () => void }) {
   const meta = getListingMeta(listing);
   const imageUrl = listing.thumbnail_url || listing.image_urls?.find(Boolean);
+
+  // ponytail: multi-listing children show a badge, not the parent's multi-watch image
+  if (listing.multi_listing) {
+    return (
+      <div className={`${className} rounded-sm flex items-center justify-center bg-bg-elevated`}>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-gold-primary">Multi-Listing</span>
+      </div>
+    );
+  }
 
   return imageUrl ? (
     <img
@@ -944,34 +2233,42 @@ function RegionLabel({ region }: { region: string }) {
   );
 }
 
+function isPricePlausible(price: number | null) {
+  if (price === null) return false;
+  if (price < MIN_PLAUSIBLE_PRICE_USD || price > MAX_PLAUSIBLE_PRICE_USD) return false;
+  return true;
+}
+
 function getListingMeta(listing: ListingRecord) {
-  const region = normalizeRegion(listing.region);
+  const region = postingCountry(listing.location) || postingCountry(listing.seller_country) || postingCountry(listing.region);
   const postedDate = formatListingDate(listing.listing_date);
+  const currency = (cleanValue(listing.source_currency) || cleanValue(listing.currency)).toUpperCase();
+  const isForeignCurrency = Boolean(currency && currency !== 'USD' && currency !== '$');
+  const rawAmount = typeof listing.source_price_amount === 'number' && listing.source_price_amount > 0
+    ? listing.source_price_amount
+    : (typeof listing.price_raw === 'number' && listing.price_raw > 0 ? listing.price_raw : null);
+
   const verifiedUsd = verifiedUsdPrice(listing);
-  const reviewedWorkbookUsd = reviewedWorkbookUsdPrice(listing);
-  const workbookPriceNeedsReview = Boolean(cleanValue(listing.workbook_price_review_reason));
   const sourcePrice = formatSourcePrice(listing);
-  const priceLabel = verifiedUsd !== null
-    ? formatUsdPrice(verifiedUsd)
-    : sourcePrice || (workbookPriceNeedsReview
-      ? 'Price requires review'
-      : reviewedWorkbookUsd !== null
-        ? `Reviewed price: ${formatUsdPrice(reviewedWorkbookUsd)}`
-        : 'Price not provided');
+
+  // USD is the only primary customer price. A preserved foreign source amount
+  // remains visible as evidence, but never impersonates a verified USD value.
+  const priceLabel = verifiedUsd !== null ? formatUsdPrice(verifiedUsd) : ambiguousPriceDisplay;
+
+  const foreignLabel = isForeignCurrency && rawAmount !== null
+    ? `Original source price: ${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(rawAmount)}`
+    : null;
+
   const priceEvidenceLabel = verifiedUsd !== null
-    ? 'Source-confirmed USD'
-    : sourcePrice
-      ? 'Original source price · no USD conversion'
-      : workbookPriceNeedsReview
-        ? 'Workbook price anomaly - held for review'
-      : reviewedWorkbookUsd !== null
-        ? 'Workbook-reviewed USD - not in averages'
-        : 'Price not provided';
+    ? (listing.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED' ? 'Verified USD conversion' : 'USD verified price')
+    : sourcePrice ? 'Source price' : ambiguousPriceDisplay;
+
   const title = buildListingTitle(listing);
 
   return {
     title,
     priceLabel,
+    foreignLabel,
     priceEvidenceLabel,
     region,
     postedDate,
@@ -980,13 +2277,18 @@ function getListingMeta(listing: ListingRecord) {
 
 function buildListingTitle(listing: ListingRecord) {
   if (listing.listing_type === 'MULTI' && !cleanValue(listing.reference)) return 'Multi-item dealer listing';
+  const brand = cleanValue(listing.brand) === 'Unknown' ? '' : cleanValue(listing.brand);
+  let model = cleanValue(listing.model);
+
+  // Suppress duplicate brand in model (e.g. brand="Omega", model="Omega")
+  if (brand && model && model.trim().toLowerCase() === brand.trim().toLowerCase()) {
+    model = '';
+  }
+
   const parts = [
-    cleanValue(listing.brand) === 'Unknown' ? '' : cleanValue(listing.brand),
-    cleanValue(listing.model),
+    brand,
+    model,
     cleanValue(listing.reference),
-    cleanValue(listing.condition),
-    listing.year ? `${listing.year}year` : '',
-    displayDial(listing.dial_color),
   ].filter(Boolean);
   return parts.length ? parts.join(' ') : `${listingKindLabel(listing)} listing`;
 }
@@ -1001,12 +2303,61 @@ function listingKindLabel(listing: ListingRecord) {
 }
 
 function verifiedUsdPrice(listing: ListingRecord) {
-  if (listing.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH' || listing.price_research_eligible !== true) return null;
+  if (listing.price_display_verified !== true && listing.price_research_eligible !== true) return null;
+  if (!['SOURCE_EXPLICIT_USD_MATCH', 'SOURCE_EXPLICIT_USD_USDT', 'EXPLICIT_SOURCE_FX_CONVERTED', 'DATED_VERIFIED_FX'].includes(
+    String(listing.price_evidence_status || '').toUpperCase(),
+  )) return null;
   const value = Number(listing.price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+function TradingFloorQuickScroll() {
+  const [progress, setProgress] = useState(0);
+  const [scrollable, setScrollable] = useState(false);
+  useEffect(() => {
+    const update = () => {
+      const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      const maximum = Math.max(0, documentHeight - window.innerHeight);
+      setScrollable(maximum > 8);
+      setProgress(maximum > 0 ? Math.max(0, Math.min(1, window.scrollY / maximum)) : 0);
+    };
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update);
+    observer?.observe(document.documentElement);
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+    };
+  }, []);
+  const scrollTo = (top: number) => window.scrollTo({ top, behavior: 'smooth' });
+  if (!scrollable) return null;
+  return (
+    <nav
+      aria-label="Quick Trading Floor scroll"
+      className="fixed right-20 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center rounded-full border bg-white/95 p-1 shadow-lg max-lg:right-2 sm:max-lg:right-4 sm:p-1.5 lg:p-2"
+      style={{ borderColor: BORDER }}
+    >
+      <button type="button" title="Top" aria-label="Scroll to top of Trading Floor" onClick={() => scrollTo(0)} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronUp size={18} /></button>
+      <div role="progressbar" aria-label="Trading Floor scroll position" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress * 100)} className="my-1 h-16 w-1.5 overflow-hidden rounded-full sm:h-24 lg:h-28" style={{ background: PANEL }}>
+        <div className="w-full rounded-full" style={{ height: `${Math.max(8, progress * 100)}%`, background: GOLD }} />
+      </div>
+      <button type="button" title="Bottom" aria-label="Scroll to bottom of Trading Floor" onClick={() => scrollTo(Math.max(document.documentElement.scrollHeight, document.body.scrollHeight))} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronDown size={18} /></button>
+    </nav>
+  );
+}
+
+function ratingUsdPrice(listing: ListingRecord) {
+  return verifiedUsdPrice(listing);
+}
+
 function reviewedWorkbookUsdPrice(listing: ListingRecord) {
+  // Only display the workbook price if the API has NOT flagged it for review.
+  // workbook_price_review_reason is set by the API when the price is out of
+  // plausibility range (e.g. reference number stored as price like 79377000).
+  if (listing.workbook_price_review_reason) return null;
   const value = Number(listing.workbook_price_usd);
   return Number.isFinite(value) && value > 0 ? value : null;
 }
@@ -1026,10 +2377,11 @@ function formatSourcePrice(listing: ListingRecord) {
   if (sourceText && currency) {
     return sourceTextIncludesCurrency(sourceText, currency) ? sourceText : `${currency} ${sourceText}`;
   }
-  if (sourceText) return sourceText;
+  if (sourceText) return ambiguousPriceDisplay;
 
   const amount = Number(listing.source_price_amount ?? listing.price_raw);
-  if (!currency || !Number.isFinite(amount) || amount <= 0) return '';
+  if (!Number.isFinite(amount) || amount <= 0) return '';
+  if (!currency) return ambiguousPriceDisplay;
   return `${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(amount)}`;
 }
 
@@ -1048,13 +2400,36 @@ function formatListingDate(dateStr: string | null) {
   return new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' }).format(parsed);
 }
 
-function normalizeRegion(region: string | null) {
+const POSTING_COUNTRY_NAMES: Record<string, string> = (() => {
+  const countries: Record<string, string> = {};
+  try {
+    const displayNames = new Intl.DisplayNames(['en'], { type: 'region' });
+    for (let first = 65; first <= 90; first += 1) {
+      for (let second = 65; second <= 90; second += 1) {
+        const code = String.fromCharCode(first, second);
+        if (['EU', 'EZ', 'UN', 'XA', 'XB'].includes(code)) continue;
+        const name = displayNames.of(code);
+        if (name && name !== code && !/^Unknown Region/i.test(name)) {
+          countries[code] = name;
+          countries[name.toUpperCase()] = name;
+        }
+      }
+    }
+  } catch {}
+  return {
+    ...countries,
+    US: 'United States', USA: 'United States', 'UNITED STATES': 'United States',
+    GB: 'United Kingdom', GBR: 'United Kingdom', UK: 'United Kingdom', 'UNITED KINGDOM': 'United Kingdom',
+    HK: 'Hong Kong', HKG: 'Hong Kong', 'HONG KONG': 'Hong Kong',
+    AE: 'United Arab Emirates', ARE: 'United Arab Emirates', UAE: 'United Arab Emirates', 'UNITED ARAB EMIRATES': 'United Arab Emirates',
+  };
+})();
+
+function postingCountry(region: string | null | undefined) {
   const value = cleanValue(region);
   if (!value) return null;
-  if (/north.?america|usa|us|canada/i.test(value)) return 'North America';
-  if (/europe|uk|germany|france|italy|swiss/i.test(value)) return 'Europe';
-  if (/asia|hong|china|japan|singapore|hk/i.test(value)) return 'Asia';
-  return value;
+  const candidate = value.split(',').at(-1)?.trim().toUpperCase() || '';
+  return POSTING_COUNTRY_NAMES[candidate] || null;
 }
 
 function cleanValue(value: string | number | null | undefined) {
@@ -1062,6 +2437,21 @@ function cleanValue(value: string | number | null | undefined) {
   const text = String(value).trim();
   if (!text || /^unknown$/i.test(text) || /^null$/i.test(text)) return '';
   return text;
+}
+
+function listingMessageEvidence(listing: ListingRecord) {
+  const scope = String(listing.raw_message_scope || '').toLowerCase();
+  if (listing.raw_message_scope === 'normalized_summary') {
+    return { label: 'SOURCE TEXT', text: 'Unverified workbook summary text is withheld from the customer view.' };
+  }
+  const rawMessage = cleanValue(listing.raw_message);
+  if (rawMessage && scope !== 'unavailable') return { label: 'Original raw message', text: rawMessage };
+  const rawLine = cleanValue(listing.raw_line);
+  if (rawLine) return { label: 'SOURCE LISTING LINE', text: rawLine };
+  const description = cleanValue(listing.description);
+  return description
+    ? { label: 'LISTING DESCRIPTION', text: description }
+    : { label: 'Original raw message', text: 'Original message requires review' };
 }
 
 function displayDial(value: string | null | undefined) {

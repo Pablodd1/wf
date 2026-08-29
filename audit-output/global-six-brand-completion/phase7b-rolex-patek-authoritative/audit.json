@@ -1,0 +1,432 @@
+{
+  "phase": "7B",
+  "generated_at": "2026-08-25T11:21:53.935Z",
+  "decision": "CANARY_READY",
+  "run_key": "phase7b-rolex-patek-verified-20260824-v1",
+  "complete": true,
+  "catalog_sha256": "f91a456baf0622ad42694dd6cf1c2c1b9ef43ac2565d50026896e1a6f86938e4",
+  "result_sha256": "c9f1284e4cf837d91cbc4b2104e18766a870bbddaff69c8f56c314baf40a899b",
+  "verified_observations": {
+    "Rolex": 6348,
+    "Patek Philippe": 3075
+  },
+  "customer_safe_reference_counts": {
+    "Rolex": 303,
+    "Patek Philippe": 460
+  },
+  "represented_customer_safe_reference_counts": {
+    "Rolex": 282,
+    "Patek Philippe": 385
+  },
+  "classifications": [
+    {
+      "brand": "Rolex",
+      "classification": "VERIFIED_IN_NEW_COHORT",
+      "count": 6348,
+      "verified": true,
+      "share": 0.040306041461633704
+    },
+    {
+      "brand": "Rolex",
+      "classification": "LEGACY_USD_DEFAULTED",
+      "count": 65205,
+      "verified": false,
+      "share": 0.41401314327438965
+    },
+    {
+      "brand": "Rolex",
+      "classification": "BARE_DOLLAR_AMBIGUOUS",
+      "count": 3,
+      "verified": false,
+      "share": 0.00001904822375313502
+    },
+    {
+      "brand": "Rolex",
+      "classification": "CURRENCYLESS_AMOUNT",
+      "count": 0,
+      "verified": false,
+      "share": 0
+    },
+    {
+      "brand": "Rolex",
+      "classification": "CURRENCYLESS_KM",
+      "count": 21,
+      "verified": false,
+      "share": 0.00013333756627194513
+    },
+    {
+      "brand": "Rolex",
+      "classification": "FX_PROVENANCE_MISSING",
+      "count": 0,
+      "verified": false,
+      "share": 0
+    },
+    {
+      "brand": "Rolex",
+      "classification": "FX_INVALID",
+      "count": 0,
+      "verified": false,
+      "share": 0
+    },
+    {
+      "brand": "Rolex",
+      "classification": "MULTIPLE_PRICE_AMBIGUOUS",
+      "count": 13028,
+      "verified": false,
+      "share": 0.08272008635194768
+    },
+    {
+      "brand": "Rolex",
+      "classification": "BUNDLE_PRICE_AMBIGUOUS",
+      "count": 748,
+      "verified": false,
+      "share": 0.004749357122448332
+    },
+    {
+      "brand": "Rolex",
+      "classification": "SOURCE_PRICE_CONFLICT",
+      "count": 16837,
+      "verified": false,
+      "share": 0.10690498111051144
+    },
+    {
+      "brand": "Rolex",
+      "classification": "REFERENCE_INVALID",
+      "count": 48345,
+      "verified": false,
+      "share": 0.30696212578177084
+    },
+    {
+      "brand": "Rolex",
+      "classification": "REFERENCE_AMBIGUOUS",
+      "count": 6935,
+      "verified": false,
+      "share": 0.044033143909330455
+    },
+    {
+      "brand": "Rolex",
+      "classification": "SOURCE_NOT_RECONCILABLE",
+      "count": 0,
+      "verified": false,
+      "share": 0
+    },
+    {
+      "brand": "Rolex",
+      "classification": "REVIEW_REQUIRED",
+      "count": 22,
+      "verified": false,
+      "share": 0.00013968697418965682
+    },
+    {
+      "brand": "Rolex",
+      "classification": "OTHER",
+      "count": 3,
+      "verified": false,
+      "share": 0.00001904822375313502
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "VERIFIED_IN_NEW_COHORT",
+      "count": 3075,
+      "verified": true,
+      "share": 0.04252817924071641
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "LEGACY_USD_DEFAULTED",
+      "count": 1879,
+      "verified": false,
+      "share": 0.025987137818961344
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "BARE_DOLLAR_AMBIGUOUS",
+      "count": 0,
+      "verified": false,
+      "share": 0
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "CURRENCYLESS_AMOUNT",
+      "count": 0,
+      "verified": false,
+      "share": 0
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "CURRENCYLESS_KM",
+      "count": 2,
+      "verified": false,
+      "share": 0.000027660604384205795
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "FX_PROVENANCE_MISSING",
+      "count": 0,
+      "verified": false,
+      "share": 0
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "FX_INVALID",
+      "count": 0,
+      "verified": false,
+      "share": 0
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "MULTIPLE_PRICE_AMBIGUOUS",
+      "count": 1843,
+      "verified": false,
+      "share": 0.02548924694004564
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "BUNDLE_PRICE_AMBIGUOUS",
+      "count": 164,
+      "verified": false,
+      "share": 0.002268169559504875
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "SOURCE_PRICE_CONFLICT",
+      "count": 3020,
+      "verified": false,
+      "share": 0.04176751262015075
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "REFERENCE_INVALID",
+      "count": 13083,
+      "verified": false,
+      "share": 0.1809418435792822
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "REFERENCE_AMBIGUOUS",
+      "count": 49237,
+      "verified": false,
+      "share": 0.6809625890325703
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "SOURCE_NOT_RECONCILABLE",
+      "count": 0,
+      "verified": false,
+      "share": 0
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "REVIEW_REQUIRED",
+      "count": 2,
+      "verified": false,
+      "share": 0.000027660604384205795
+    },
+    {
+      "brand": "Patek Philippe",
+      "classification": "OTHER",
+      "count": 0,
+      "verified": false,
+      "share": 0
+    }
+  ],
+  "rating_impact": [
+    {
+      "brand": "Patek Philippe",
+      "count": 1572,
+      "impact_class": "CHANGED"
+    },
+    {
+      "brand": "Patek Philippe",
+      "count": 3567,
+      "impact_class": "CURRENTLY_RATED_FROM_UNTRUSTED_BENCHMARK"
+    },
+    {
+      "brand": "Patek Philippe",
+      "count": 3708,
+      "impact_class": "OPEN_FOR_RATING"
+    },
+    {
+      "brand": "Patek Philippe",
+      "count": 1139,
+      "impact_class": "UNCHANGED"
+    },
+    {
+      "brand": "Rolex",
+      "count": 18671,
+      "impact_class": "CHANGED"
+    },
+    {
+      "brand": "Rolex",
+      "count": 29313,
+      "impact_class": "CURRENTLY_RATED_FROM_UNTRUSTED_BENCHMARK"
+    },
+    {
+      "brand": "Rolex",
+      "count": 41889,
+      "impact_class": "OPEN_FOR_RATING"
+    },
+    {
+      "brand": "Rolex",
+      "count": 12355,
+      "impact_class": "UNCHANGED"
+    }
+  ],
+  "proposed_canaries": [
+    {
+      "brand": "Patek Philippe",
+      "impact_rank": 1,
+      "current_median": 140297,
+      "verified_median": 1063000,
+      "median_delta_ratio": 6.576783537780566,
+      "canonical_reference": "5303R-001",
+      "current_observation_count": 11,
+      "verified_observation_count": 3
+    },
+    {
+      "brand": "Patek Philippe",
+      "impact_rank": 2,
+      "current_median": 567148,
+      "verified_median": 3590250,
+      "median_delta_ratio": 5.330358213376402,
+      "canonical_reference": "5811/1460G-001",
+      "current_observation_count": 13,
+      "verified_observation_count": 2
+    },
+    {
+      "brand": "Patek Philippe",
+      "impact_rank": 3,
+      "current_median": 64500,
+      "verified_median": 139000,
+      "median_delta_ratio": 1.1550387596899225,
+      "canonical_reference": "5330G-001",
+      "current_observation_count": 19,
+      "verified_observation_count": 4
+    },
+    {
+      "brand": "Patek Philippe",
+      "impact_rank": 4,
+      "current_median": 140150,
+      "verified_median": 13300,
+      "median_delta_ratio": 0.9051016767748841,
+      "canonical_reference": "4972G-001",
+      "current_observation_count": 10,
+      "verified_observation_count": 3
+    },
+    {
+      "brand": "Patek Philippe",
+      "impact_rank": 5,
+      "current_median": 528000,
+      "verified_median": 81300,
+      "median_delta_ratio": 0.8460227272727273,
+      "canonical_reference": "5738/1R-001",
+      "current_observation_count": 19,
+      "verified_observation_count": 3
+    },
+    {
+      "brand": "Rolex",
+      "impact_rank": 1,
+      "current_median": 8992.5,
+      "verified_median": 20900,
+      "median_delta_ratio": 1.3241590214067278,
+      "canonical_reference": "116400",
+      "current_observation_count": 362,
+      "verified_observation_count": 3
+    },
+    {
+      "brand": "Rolex",
+      "impact_rank": 2,
+      "current_median": 13000,
+      "verified_median": 25800,
+      "median_delta_ratio": 0.9846153846153846,
+      "canonical_reference": "116139",
+      "current_observation_count": 51,
+      "verified_observation_count": 10
+    },
+    {
+      "brand": "Rolex",
+      "impact_rank": 3,
+      "current_median": 129950,
+      "verified_median": 36400,
+      "median_delta_ratio": 0.7198922662562524,
+      "canonical_reference": "178158",
+      "current_observation_count": 4,
+      "verified_observation_count": 2
+    },
+    {
+      "brand": "Rolex",
+      "impact_rank": 4,
+      "current_median": 75000,
+      "verified_median": 120000,
+      "median_delta_ratio": 0.6,
+      "canonical_reference": "18956",
+      "current_observation_count": 36,
+      "verified_observation_count": 14
+    },
+    {
+      "brand": "Rolex",
+      "impact_rank": 5,
+      "current_median": 69500,
+      "verified_median": 109000,
+      "median_delta_ratio": 0.5683453237410072,
+      "canonical_reference": "128348RBR",
+      "current_observation_count": 229,
+      "verified_observation_count": 34
+    }
+  ],
+  "query_benchmarks": [
+    {
+      "brand": "Patek Philippe",
+      "reference": "5303R-001",
+      "elapsed_ms": 86.29
+    },
+    {
+      "brand": "Patek Philippe",
+      "reference": "5811/1460G-001",
+      "elapsed_ms": 79.41
+    },
+    {
+      "brand": "Patek Philippe",
+      "reference": "5330G-001",
+      "elapsed_ms": 77.39
+    },
+    {
+      "brand": "Patek Philippe",
+      "reference": "4972G-001",
+      "elapsed_ms": 79.83
+    },
+    {
+      "brand": "Patek Philippe",
+      "reference": "5738/1R-001",
+      "elapsed_ms": 77.23
+    },
+    {
+      "brand": "Rolex",
+      "reference": "116400",
+      "elapsed_ms": 80.77
+    },
+    {
+      "brand": "Rolex",
+      "reference": "116139",
+      "elapsed_ms": 147.99
+    },
+    {
+      "brand": "Rolex",
+      "reference": "178158",
+      "elapsed_ms": 77.85
+    },
+    {
+      "brand": "Rolex",
+      "reference": "18956",
+      "elapsed_ms": 77.58
+    },
+    {
+      "brand": "Rolex",
+      "reference": "128348RBR",
+      "elapsed_ms": 78.01
+    }
+  ],
+  "production_mutations": 0,
+  "customer_source_switches": 0,
+  "ui_changes": 0
+}

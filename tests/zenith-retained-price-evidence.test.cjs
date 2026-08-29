@@ -9,18 +9,17 @@ const root = path.join(__dirname, '..');
 const api = fs.readFileSync(path.join(root, 'api', 'price-research.js'), 'utf8');
 const page = fs.readFileSync(path.join(root, 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
 
-test('reviewed Zenith exclusions remain retained for audit but are not customer comparable cards', () => {
+test('reviewed Zenith exclusions remain counted for audit but unpriced rows are Trading-Floor-only', () => {
   assert.match(api, /retainedEvidenceRows = requiredFieldExclusions\.filter/);
   assert.match(api, /isOwnerReviewedWorkbookRow\(row\)/);
   assert.match(api, /isReviewedPaneraiReleaseRecord\(row\)/);
   assert.match(api, /isReviewedZenithIdentityCorrectionRecord\(row\)/);
-  assert.match(api, /retained_rows: serializedRetainedEvidence\.map/);
-  assert.match(api, /price_usd: null/);
-  assert.match(api, /source_price_amount: r\.source_price_amount \|\| null/);
-  const retainedBlock = api.split('retained_rows:')[1].split('rows: serializedComparables')[0];
-  assert.doesNotMatch(retainedBlock, /stored_price_usd/);
+  assert.match(api, /retained_evidence_count: retainedEvidenceRows\.length/);
+  assert.match(api, /retained_total: retainedEvidenceRows\.length/);
+  assert.match(api, /retained_rows: \[\]/);
+  assert.match(api, /customerPricedOutlierRows/);
   assert.doesNotMatch(page, /retainedListings\.map/);
-  assert.match(page, /\.filter\(row => !row\.is_outlier\)/);
-  assert.match(page, /Outliers and other exclusions are summarized above and are not displayed as watch listings/);
+  assert.doesNotMatch(page, /\.\.\.\(data\.retained_rows \|\| \[\]\)/);
+  assert.match(page, /Unpriced WTS stays on the Trading Floor/);
   assert.match(page, /data\.retained_evidence_count \?\? data\.excludedEvidenceCount/);
 });

@@ -3,23 +3,15 @@ import { Navigate, useLocation } from 'react-router-dom';
 
 interface DealerGateProps {
   children: ReactNode;
-  allowBetaSkip?: boolean;
   allowedRoles?: Array<'dealer' | 'reviewer' | 'admin'>;
 }
 
-export function DealerGate({ children, allowBetaSkip = false, allowedRoles }: DealerGateProps) {
+export function DealerGate({ children, allowedRoles }: DealerGateProps) {
   const location = useLocation();
-  // The demo entry point is deliberately limited to the routes that pass
-  // allowBetaSkip. Do not let a stale Vercel build variable show the Skip
-  // button while silently rejecting the session on the next route.
-  const betaSkipEnabled = allowBetaSkip;
-  const [state, setState] = useState<'loading' | 'authorized' | 'beta' | 'denied'>(() =>
-    betaSkipEnabled && sessionStorage.getItem('wf_beta_skip') === '1' ? 'beta' : 'loading'
-  );
+  const [state, setState] = useState<'loading' | 'authorized' | 'denied'>('loading');
 
   useEffect(() => {
     if (state === 'authorized') return;
-    if (state === 'beta' && betaSkipEnabled) return;
     const controller = new AbortController();
     fetch('/api/dealer-auth', { credentials: 'include', signal: controller.signal })
       .then(async response => {
@@ -31,13 +23,14 @@ export function DealerGate({ children, allowBetaSkip = false, allowedRoles }: De
         if (error?.name !== 'AbortError') setState('denied');
       });
     return () => controller.abort();
-  }, [allowedRoles, betaSkipEnabled, state]);
+  }, [allowedRoles, state]);
 
-  if (state === 'loading' || (state === 'beta' && !betaSkipEnabled)) {
+  if (state === 'loading') {
     return <div className="flex min-h-screen items-center justify-center bg-bg-primary text-sm text-text-secondary">Checking dealer session...</div>;
   }
   if (state === 'denied') {
-    return <Navigate to="/dealer-login" replace state={{ from: `${location.pathname}${location.search}` }} />;
+    const loginPath = allowedRoles?.length && !allowedRoles.includes('dealer') ? '/cl-login' : '/dealer';
+    return <Navigate to={loginPath} replace state={{ from: `${location.pathname}${location.search}` }} />;
   }
   return children;
 }

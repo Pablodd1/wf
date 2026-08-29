@@ -1,9 +1,12 @@
+import { ArrowLeft } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { MarketHeader } from './MarketHeader';
+import { MarketTickerBanner } from './MarketTickerBanner';
 
 export function MarketNav() {
   const location = useLocation();
+  const navigate = useNavigate();
   const [role, setRole] = useState('');
 
   useEffect(() => {
@@ -15,18 +18,27 @@ export function MarketNav() {
     return () => controller.abort();
   }, []);
 
-  const links = [
-    ...(!role ? [{ to: '/dealer-login', label: 'Login' }] : []),
-    ...(role ? [{ to: '/dealers', label: 'Dealers' }] : []),
-    ...(role === 'admin' ? [{ to: '/admin', label: 'Admin Panel' }] : []),
-  ];
+  const links = role === 'admin' ? [{ to: '/admin', label: 'Admin Panel' }] : [];
 
   return (
-    <div className="bg-[#09090d] text-white">
+    <div className="bg-[#f3ecdf] text-[#211b15]">
+      <MarketTickerBanner />
       <MarketHeader compact />
-      {links.length > 0 && (
-        <nav className="border-b border-white/10" aria-label="Dealer navigation">
-          <div className="mx-auto flex max-w-7xl items-center justify-end gap-4 overflow-x-auto px-4 py-2 text-xs sm:gap-6 sm:px-6 lg:px-8">
+      <nav className="border-b border-[#3f3324]/15" aria-label="Dealer navigation">
+        <div className="mx-auto flex w-full max-w-[1600px] items-center justify-between gap-4 overflow-x-auto px-4 py-2 text-xs sm:gap-6 sm:px-6 lg:px-8 xl:px-10">
+          <div>
+            {location.pathname !== '/trading' && (
+              <button
+                type="button"
+                onClick={() => navigate(-1)}
+                className="flex items-center gap-1.5 rounded border border-[#3f3324]/15 bg-white/30 px-3 py-1 text-xs font-medium text-[#735c32] transition-colors hover:bg-white/70 hover:text-[#211b15]"
+                aria-label="Go Back"
+              >
+                <ArrowLeft size={14} /> Go Back
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-4">
             {links.map(link => {
               const active = location.pathname.startsWith(link.to);
               return (
@@ -35,15 +47,15 @@ export function MarketNav() {
                   to={link.to}
                   aria-current={active ? 'page' : undefined}
                   className="shrink-0 border-b py-1.5 transition-colors"
-                  style={{ borderColor: active ? '#c9a96e' : 'transparent', color: active ? '#d4b87a' : '#a8a8b3' }}
+                  style={{ borderColor: active ? '#9a7127' : 'transparent', color: active ? '#735c32' : '#675b4d' }}
                 >
                   {link.label}
                 </Link>
               );
             })}
           </div>
-        </nav>
-      )}
+        </div>
+      </nav>
     </div>
   );
 }

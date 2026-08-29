@@ -1,0 +1,163 @@
+name: QNSA dealer exact-phone linkage
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Read-only audit, capped 10-link canary, or resumable full reconciliation
+        required: true
+        default: audit
+        type: choice
+        options: [audit, canary, full]
+      confirmation:
+        description: Type AUDIT_QNSA_DEALER_LINKAGE, CANARY_QNSA_DEALER_LINKAGE, or FULL_QNSA_DEALER_LINKAGE
+        required: true
+        type: string
+      install_contract:
+        description: Apply the forward-only RPC contract before canary/full
+        required: true
+        default: false
+        type: boolean
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      LINKAGE_MODE: ${{ inputs.mode }}
+      LINKAGE_PAGE_SIZE: '1000'
+      LINKAGE_CANARY_LIMIT: '10'
+      LINKAGE_MAX_PAGES: '5000'
+      LINKAGE_DELAY_MS: ${{ inputs.mode == 'full' && '50' || '0' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate mode and production confirmation
+        shell: bash
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+          INSTALL_CONTRACT: ${{ inputs.install_contract }}
+        run: |
+          set -euo pipefail
+          case "$LINKAGE_MODE" in
+            audit) expected='AUDIT_QNSA_DEALER_LINKAGE' ;;
+            canary) expected='CANARY_QNSA_DEALER_LINKAGE' ;;
+            full) expected='FULL_QNSA_DEALER_LINKAGE' ;;
+            *) echo 'Invalid linkage mode.' >&2; exit 1 ;;
+          esac
+          test "$CONFIRMATION" = "$expected"
+          test "$SUPABASE_PROJECT_REF" = 'qnsafosakvonzgfcsphh'
+          if [ "$LINKAGE_MODE" = 'audit' ] && [ "$INSTALL_CONTRACT" = 'true' ]; then
+            echo 'Audit mode is read-only and cannot install the contract.' >&2
+            exit 1
+          fi
+          if [ "$LINKAGE_MODE" != 'audit' ] && [ "$INSTALL_CONTRACT" != 'true' ]; then
+            echo 'Canary and full modes require the reviewed forward-only contract.' >&2
+            exit 1
+          fi
+
+      - name: Compile contract and audit private linkage prerequisites
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $migration = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815133000_qnsa_dealer_exact_phone_linkage.sql'
+          $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815160000_qnsa_dealer_linkage_completion_checkpoint.sql')
+          $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815163000_qnsa_dealer_linkage_uuid_cursor_fix.sql')
+          $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815173000_qnsa_dealer_global_raw_phone_scan.sql')
+          $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815174000_qnsa_dealer_global_raw_scan_timeout_repair.sql')
+          $migration += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815175000_qnsa_dealer_raw_page_lateral_lookup.sql')
+          $compileSql = $migration -replace '(?im)^\s*(BEGIN|COMMIT);\s*$', ''
+          $compileBody = @{ query = "BEGIN;`n$compileSql`nROLLBACK;"; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post `
+            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $compileBody | Out-Null
+          $auditSql = @"
+          SELECT jsonb_build_object(
+            'raw_version_primary_key', to_regclass('public.raw_message_versions_pkey') IS NOT NULL,
+            'raw_version_lineage_index', to_regclass('staging.idx_staging_mariadb_raw_version') IS NOT NULL,
+            'raw_versions_estimated_rows', (SELECT reltuples::bigint FROM pg_class
+              WHERE oid='public.raw_message_versions'::regclass),
+            'raw_versions_total_bytes', pg_total_relation_size('public.raw_message_versions'::regclass),
+            'database_bytes', pg_database_size(current_database()),
+            'verified_dealers', (SELECT count(*) FROM public.dealers WHERE status='VERIFIED'),
+            'dealers_with_verified_phone', (SELECT count(DISTINCT dealer_id)
+              FROM public.dealer_source_identities WHERE verification_status='VERIFIED'
+                AND upper(identity_type) IN ('PHONE','WHATSAPP')
+                AND public.normalize_seller_phone_identity(source_identity) IS NOT NULL),
+            'duplicate_verified_phones', (SELECT count(*) FROM (
+              SELECT public.normalize_seller_phone_identity(source_identity)
+              FROM public.dealer_source_identities WHERE verification_status='VERIFIED'
+                AND upper(identity_type) IN ('PHONE','WHATSAPP') GROUP BY 1
+              HAVING count(DISTINCT dealer_id)>1
+            ) duplicates),
+            'applied_links', (SELECT count(*) FROM public.dealer_listing_links WHERE link_status='APPLIED'),
+            'orphan_links', (SELECT count(*) FROM public.dealer_listing_links link
+              LEFT JOIN staging.listings listing ON listing.id=link.listing_id WHERE listing.id IS NULL)
+          ) AS evidence;
+          "@
+          $auditBody = @{ query = $auditSql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post `
+            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $auditBody
+          $evidence = $result[0].evidence
+          $evidence | ConvertTo-Json -Depth 5 | Set-Content qnsa-dealer-linkage-audit.json
+          if ($evidence.raw_version_primary_key -ne $true -or $evidence.raw_version_lineage_index -ne $true -or [long]$evidence.duplicate_verified_phones -ne 0 -or [long]$evidence.orphan_links -ne 0) {
+            throw 'Dealer linkage prerequisites failed.'
+          }
+
+      - name: Install forward-only exact-phone contract
+        if: ${{ inputs.install_contract && inputs.mode != 'audit' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          if ($env:SUPABASE_PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Unexpected Supabase project.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260815133000_qnsa_dealer_exact_phone_linkage.sql'
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815160000_qnsa_dealer_linkage_completion_checkpoint.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815163000_qnsa_dealer_linkage_uuid_cursor_fix.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815173000_qnsa_dealer_global_raw_phone_scan.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815174000_qnsa_dealer_global_raw_scan_timeout_repair.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260815175000_qnsa_dealer_raw_page_lateral_lookup.sql')
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post `
+            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Import idempotent private canonical identity snapshots
+        if: ${{ inputs.mode != 'audit' && inputs.install_contract }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/dealer-directory/import-canonical-snapshots.cjs \
+            | tee qnsa-dealer-private-identity-reconciliation.json
+
+      - name: Run bounded linkage mode
+        if: ${{ inputs.mode != 'audit' && inputs.install_contract }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node tools/dealer-directory/run-exact-phone-linkage.cjs \
+            | tee qnsa-dealer-linkage-reconciliation.json
+
+      - name: Upload sanitized reconciliation
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-dealer-linkage-${{ inputs.mode }}
+          path: |
+            qnsa-dealer-linkage-audit.json
+            qnsa-dealer-private-identity-reconciliation.json
+            qnsa-dealer-linkage-reconciliation.json
+          if-no-files-found: warn
+          retention-days: 14

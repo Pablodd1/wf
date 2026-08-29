@@ -38,7 +38,7 @@ export function Navbar({
     sessionStorage.removeItem('wf_beta_skip');
     await fetch('/api/dealer-auth', { method: 'DELETE', credentials: 'include' }).catch(() => undefined);
     setDealerSession(false);
-    navigate('/dealer-login', { replace: true });
+    navigate('/dealer', { replace: true });
   }
 
   useEffect(() => {

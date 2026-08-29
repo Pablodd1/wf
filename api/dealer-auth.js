@@ -24,12 +24,13 @@ function sameOrigin(req) {
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store'); res.setHeader('Vary', 'Cookie');
   const client = authClient();
-  if (!client) return res.status(503).json({ error: 'Dealer authentication is not configured.' });
   if (req.method === 'GET') {
+    if (!client) return res.status(200).json({ authenticated: false, configured: false });
     const user = await resolveSession(client, req, res);
-    if (!user || !DEALER_ROLES.has(userRole(user))) return res.status(401).json({ authenticated: false });
+    if (!user || !DEALER_ROLES.has(userRole(user))) return res.status(200).json({ authenticated: false });
     return res.status(200).json({ authenticated: true, user: publicUser(user) });
   }
+  if (!client) return res.status(503).json({ error: 'Dealer authentication is not configured.' });
   if (!sameOrigin(req)) return res.status(403).json({ error: 'Invalid request origin.' });
   if (req.method === 'DELETE') {
     const user = await resolveSession(client, req, res); clearSessionCookies(res);

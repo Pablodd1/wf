@@ -166,9 +166,24 @@ function sanitizeTradingRecord(record, { verifiedImages = false } = {}) {
     issues.push('PRICE_BELOW_PLAUSIBILITY_FLOOR');
   }
 
+  // ponytail: multi-listing unbundled children — suppress image, flag for recycle bin
+  const rawFlags = Array.isArray(record?.flags) ? record.flags : [];
+  const isMultiListing = rawFlags.includes('MULTI_LISTING') || rawFlags.includes('UNBUNDLED_CHILD')
+    || /MANUAL_UNBUNDLE/i.test(String(record?.source || ''));
+
+  if (isMultiListing && verifiedImages) {
+    // Even verified images must be suppressed for multi-listing children — wrong-watch misattribution risk
+    sanitized.has_images = false;
+    sanitized.thumbnail_url = null;
+    sanitized.image_urls = [];
+    sanitized.dealer_photos = [];
+    issues.push('MULTI_LISTING_IMAGE_SUPPRESSED');
+  }
+
   return {
     ...sanitized,
     item_category: deriveItemCategory(record),
+    multi_listing: isMultiListing,
     data_quality_issues: issues,
     data_quality_review_required: issues.length > 0,
   };

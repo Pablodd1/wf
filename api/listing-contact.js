@@ -16,6 +16,55 @@ function hasOwnerApprovedPublicContact(flags) {
   return Array.isArray(flags) && flags.includes('OWNER_APPROVED_CONTACT_PUBLIC');
 }
 
+function normalizeTelegramUsername(value) {
+  const candidate = String(value || '').trim()
+    .replace(/^https?:\/\/(?:www\.)?t\.me\//i, '')
+    .replace(/^@/, '')
+    .split(/[/?#]/, 1)[0];
+  return /^[A-Za-z0-9_]{5,32}$/.test(candidate) ? candidate : null;
+}
+
+function hasApprovedPublicContact(listing) {
+  return listing?.contact_publication_approved === true
+    || hasOwnerApprovedPublicContact(listing?.flags);
+}
+
+function optionalLegacyPublicListingUnavailable(error) {
+  if (!error) return false;
+  return String(error.code || '') === '57014'
+    || /statement timeout|relation .*trading_floor_verified_listings.* does not exist|schema cache/i
+      .test(`${error.message || error}`);
+}
+
+async function findQnsaReleasedListing(client, { id, brand, reference, maximumPages = 20 }) {
+  const zenith = String(brand || '').trim().toLowerCase() === 'zenith';
+  let offset = 0;
+  for (let page = 0; page < maximumPages; page += 1) {
+    const { data, error } = await client.rpc(
+      zenith ? 'qnsa_zenith_reference_rows' : 'qnsa_trading_floor_reference_rows',
+      zenith ? {
+        p_reference: reference,
+        p_limit: 101,
+        p_offset: offset,
+        p_listing_type: null,
+      } : {
+        p_brand: brand,
+        p_reference: reference,
+        p_family: false,
+        p_limit: 101,
+        p_offset: offset,
+      },
+    );
+    if (error) throw error;
+    const rows = (data || []).map(row => row?.row_data || row).filter(Boolean);
+    const match = rows.find(row => String(row.id) === String(id));
+    if (match) return match;
+    if (rows.length < 101) return null;
+    offset += rows.length;
+  }
+  return null;
+}
+
 function whatsappUrl(phone, listing) {
   const item = [listing.brand, listing.reference].filter(Boolean).join(' ');
   const isBuyerRequest = ['WTB', 'NTQ'].includes(String(listing.listing_type || '').toUpperCase());
@@ -25,12 +74,53 @@ function whatsappUrl(phone, listing) {
   return `https://wa.me/${phone}?text=${message}`;
 }
 
+function telegramUrl(username, listing) {
+  const item = [listing.brand, listing.reference].filter(Boolean).join(' ');
+  const message = encodeURIComponent(`Hello, I am contacting you about ${item || 'this luxury listing'} on Curated Luxury.`);
+  return `https://t.me/${username}?text=${message}`;
+}
+
+function sendContactResult(res, {
+  payload, externalChannels, id, surface, requestedChannel, brand, reference,
+}) {
+  if (requestedChannel) {
+    const destination = externalChannels[requestedChannel];
+    if (!destination) return res.status(404).json({ error: 'Requested contact channel unavailable' });
+    res.setHeader('Location', destination);
+    return res.status(302).end();
+  }
+  const context = `${brand ? `&brand=${encodeURIComponent(brand)}` : ''}${reference ? `&reference=${encodeURIComponent(reference)}` : ''}`;
+  const contactChannels = Object.fromEntries(Object.keys(externalChannels).map(channel => [
+    channel,
+    `/api/listing-contact?id=${encodeURIComponent(id)}&surface=${encodeURIComponent(surface)}${context}&channel=${channel}`,
+  ]));
+  return res.status(200).json({ ...payload, contact_channels: contactChannels });
+}
+
 async function ownerApprovedContactStats(client, sellerPhone) {
+  if (!sellerPhone) return null;
+  try {
+    const { data: rpcData } = await client.rpc('reviewed_workbook_seller_activity', { p_phone: sellerPhone });
+    const activity = Array.isArray(rpcData) ? rpcData[0] : rpcData;
+    if (activity && Number(activity.total_posts || 0) > 0) {
+      return {
+        total_posts: Number(activity.total_posts || 0),
+        active_listings: Number(activity.total_posts || 0),
+        wts_posts: Number(activity.wts_posts || 0),
+        wtb_posts: Number(activity.wtb_posts || 0),
+        first_post_at: activity.first_post_at || null,
+        last_post_at: activity.last_post_at || null,
+        posting_years: 0,
+      };
+    }
+  } catch (e) {
+    // proceed to watch_records
+  }
+
   const base = () => client
     .from('watch_records')
     .select('id', { count: 'exact', head: true })
     .eq('seller_phone', sellerPhone)
-    .contains('flags', ['OWNER_APPROVED_CONTACT_PUBLIC'])
     .eq('verdict', 'APPROVED')
     .gte('confidence', MIN_RELEASE_CONFIDENCE);
   const [total, wts, wtb, active] = await Promise.all([
@@ -66,6 +156,12 @@ module.exports = async function handler(req, res) {
   if (!['trading-floor', 'price-research'].includes(surface)) {
     return res.status(400).json({ error: 'Valid listing surface required' });
   }
+  const requestedChannel = String(req.query?.channel || '').trim().toLowerCase();
+  if (requestedChannel && !['whatsapp', 'telegram'].includes(requestedChannel)) {
+    return res.status(400).json({ error: 'Valid contact channel required' });
+  }
+  const requestedBrand = String(req.query?.brand || '').trim().slice(0, 80);
+  const requestedReference = String(req.query?.reference || '').trim().slice(0, 120);
 
   try {
     const client = getClient();
@@ -74,8 +170,50 @@ module.exports = async function handler(req, res) {
       : 'trading_floor_verified_listings';
     const { data: strictPublicListing, error: publicError } = await client
       .from(publicTable).select('id,brand,reference').eq('id', id).maybeSingle();
-    if (publicError) throw publicError;
+    if (publicError && !optionalLegacyPublicListingUnavailable(publicError)) throw publicError;
     let publicListing = strictPublicListing;
+    let qnsaReleaseListing = null;
+    let qnsaDealerLink = null;
+    let canonicalReadyListing = null;
+    if (!publicListing && id.toLowerCase().startsWith('cn_')) {
+      const canonicalResult = await client
+        .from('trading_floor_ready_view')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (canonicalResult.error && !optionalLegacyPublicListingUnavailable(canonicalResult.error)) {
+        throw canonicalResult.error;
+      }
+      canonicalReadyListing = canonicalResult.data || null;
+      if (canonicalReadyListing) {
+        publicListing = {
+          id: canonicalReadyListing.id,
+          brand: canonicalReadyListing.brand || canonicalReadyListing.canonical_brand || null,
+          reference: canonicalReadyListing.reference || canonicalReadyListing.normalized_reference || null,
+        };
+      }
+    }
+    if (!publicListing && requestedBrand && requestedReference) {
+      qnsaReleaseListing = await findQnsaReleasedListing(client, {
+        id, brand: requestedBrand, reference: requestedReference,
+      });
+      if (qnsaReleaseListing) {
+        publicListing = {
+          id: qnsaReleaseListing.id,
+          brand: qnsaReleaseListing.canonical_brand || qnsaReleaseListing.brand_scope,
+          reference: qnsaReleaseListing.normalized_reference || qnsaReleaseListing.catalog_reference,
+        };
+        const linkResult = await client
+          .from('dealer_listing_links')
+          .select('dealer_id,link_status')
+          .eq('listing_id', id)
+          .eq('link_status', 'APPLIED')
+          .limit(1)
+          .maybeSingle();
+        if (linkResult.error) throw linkResult.error;
+        qnsaDealerLink = linkResult.data || null;
+      }
+    }
     if (!publicListing
       && surface === 'trading-floor'
       && id.startsWith(REVIEWED_ZENITH_RECORD_PREFIX)) {
@@ -91,16 +229,66 @@ module.exports = async function handler(req, res) {
       if (fallback.error) throw fallback.error;
       publicListing = fallback.data;
     }
+    if (!publicListing) {
+      const { data: wbListing } = await client
+        .from('reviewed_workbook_inventory')
+        .select('id,brand,reference,posted_by,phone_number,contact_publication_approved,listing_type')
+        .eq('id', id)
+        .maybeSingle();
+      if (wbListing) publicListing = wbListing;
+    }
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
 
-    const { data: listing, error: listingError } = await client
+    let { data: listing, error: listingError } = await client
       .from('watch_records')
       .select('id,brand,reference,listing_type,dealer_id,verdict,confidence,source,seller_name,seller_phone,flags')
       .eq('id', id)
       .eq('verdict', 'APPROVED')
       .gte('confidence', MIN_RELEASE_CONFIDENCE)
       .maybeSingle();
-    if (listingError) throw listingError;
+    if (!listing) {
+      const { data: wbListing } = await client
+        .from('reviewed_workbook_inventory')
+        .select('id,brand,reference,posted_by,phone_number,contact_publication_approved,listing_type')
+        .eq('id', id)
+        .maybeSingle();
+      if (wbListing) {
+        listing = {
+          id: wbListing.id,
+          brand: wbListing.brand,
+          reference: wbListing.reference,
+          listing_type: wbListing.listing_type || 'WTS',
+          seller_name: wbListing.posted_by || null,
+          seller_phone: wbListing.phone_number || null,
+          contact_publication_approved: wbListing.contact_publication_approved === true,
+        };
+      }
+    }
+    if (!listing && qnsaReleaseListing) {
+      listing = {
+        id: qnsaReleaseListing.id,
+        brand: qnsaReleaseListing.canonical_brand || qnsaReleaseListing.brand_scope,
+        reference: qnsaReleaseListing.normalized_reference || qnsaReleaseListing.catalog_reference,
+        listing_type: qnsaReleaseListing.listing_type,
+        seller_name: qnsaReleaseListing.seller_name || null,
+        seller_phone: null,
+        dealer_id: qnsaDealerLink?.dealer_id || null,
+      };
+    }
+    if (!listing && canonicalReadyListing) {
+      listing = {
+        id: canonicalReadyListing.id,
+        brand: canonicalReadyListing.brand || canonicalReadyListing.canonical_brand || null,
+        reference: canonicalReadyListing.reference || canonicalReadyListing.normalized_reference || null,
+        listing_type: canonicalReadyListing.listing_type || canonicalReadyListing.intent || null,
+        seller_name: canonicalReadyListing.seller_name || canonicalReadyListing.posted_by
+          || canonicalReadyListing.source_identity_name || null,
+        seller_phone: canonicalReadyListing.seller_phone || canonicalReadyListing.phone_number
+          || canonicalReadyListing.from_number || null,
+        contact_publication_approved: canonicalReadyListing.contact_publication_approved === true,
+        dealer_id: canonicalReadyListing.dealer_id || null,
+      };
+    }
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     const resolvedListing = {
       ...listing,
@@ -108,14 +296,16 @@ module.exports = async function handler(req, res) {
       reference: publicListing.reference || listing.reference,
     };
     if (!isPublicationBrandAllowed(resolvedListing.brand)
-      || !isReleaseListingEligible(resolvedListing)) {
+      || (!qnsaReleaseListing && !canonicalReadyListing && !isReleaseListingEligible(resolvedListing))) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
-    if (hasOwnerApprovedPublicContact(listing.flags) && listing.seller_phone) {
-      const phone = normalizePhone(listing.seller_phone);
-      const dealerStats = await ownerApprovedContactStats(client, listing.seller_phone);
+    if (listing.seller_phone || listing.contact_publication_approved === true) {
+      const contactApproved = hasApprovedPublicContact(listing);
+      const approvedPhone = contactApproved ? listing.seller_phone : null;
+      const phone = normalizePhone(approvedPhone);
+      const dealerStats = approvedPhone ? await ownerApprovedContactStats(client, approvedPhone) : null;
       const profile = {
-        dealer_name: listing.seller_name || 'WatchFacts member',
+        dealer_name: listing.seller_name || 'Curated Luxury member',
         dealer_company: null,
         dealer_country: null,
         dealer_city: null,
@@ -123,34 +313,32 @@ module.exports = async function handler(req, res) {
         dealer_review_count: 0,
         dealer_group_count: 0,
         dealer_stats: dealerStats,
-        phone_display: listing.seller_phone,
-        contact_source: 'OWNER_APPROVED_WORKBOOK',
+        contact_source: 'WORKBOOK_SELLER_CONTACT',
       };
-      if (!phone) {
-        return res.status(200).json({
-          success: true,
-          contact_available: false,
-          reason: 'APPROVED_PHONE_INVALID',
-          ...profile,
-        });
-      }
-      return res.status(200).json({
-        success: true,
-        contact_available: true,
-        ...profile,
-        whatsapp_url: whatsappUrl(phone, resolvedListing),
+      return sendContactResult(res, {
+        payload: { success: true, contact_available: Boolean(phone), ...profile },
+        externalChannels: phone ? { whatsapp: whatsappUrl(phone, resolvedListing) } : {},
+        id,
+        surface,
+        requestedChannel,
+        brand: resolvedListing.brand,
+        reference: resolvedListing.reference,
       });
     }
     if (!listing.dealer_id) return res.status(200).json({ success: true, contact_available: false, reason: 'DEALER_UNRESOLVED' });
-    const { data: lineage, error: lineageError } = await client
-      .from('seller_listing_lineage_staging')
-      .select('id')
-      .eq('source_record_id', listing.id)
-      .eq('matched_dealer_id', listing.dealer_id)
-      .eq('match_status', 'APPLIED')
-      .limit(1)
-      .maybeSingle();
-    if (lineageError) throw lineageError;
+    let lineage = qnsaDealerLink;
+    if (!qnsaReleaseListing) {
+      const lineageResult = await client
+        .from('seller_listing_lineage_staging')
+        .select('id')
+        .eq('source_record_id', listing.id)
+        .eq('matched_dealer_id', listing.dealer_id)
+        .eq('match_status', 'APPLIED')
+        .limit(1)
+        .maybeSingle();
+      if (lineageResult.error) throw lineageResult.error;
+      lineage = lineageResult.data;
+    }
     if (!lineage) {
       return res.status(200).json({ success: true, contact_available: false, reason: 'SELLER_LINEAGE_UNVERIFIED' });
     }
@@ -170,7 +358,7 @@ module.exports = async function handler(req, res) {
       dealer_city: dealer.city || null,
       dealer_avatar_url: dealer.avatar_url || null,
       dealer_profile_summary: dealer.profile_summary || null,
-      dealer_profile_url: `/dealers/${dealer.slug || dealer.id}`,
+      dealer_profile_url: `/reference-check/${dealer.slug || dealer.id}`,
       dealer_rating: dealer.rating,
       dealer_review_count: dealer.review_count,
       dealer_group_count: dealer.whatsapp_group_count,
@@ -178,28 +366,43 @@ module.exports = async function handler(req, res) {
       // A future aggregate must count only APPLIED listing lineage.
       dealer_stats: null,
     };
-    if (!dealer.contact_consent) {
-      return res.status(200).json({ success: true, contact_available: false, reason: 'CONTACT_CONSENT_REQUIRED', ...profile });
+    if (dealer.contact_consent !== true) {
+      return res.status(200).json({ success: true, contact_available: false, reason: 'CONTACT_CONSENT_NOT_GRANTED', ...profile });
     }
 
     const { data: identities, error: identityError } = await client
       .from('dealer_source_identities')
       .select('source_identity,identity_type,verification_status')
       .eq('dealer_id', dealer.id).eq('verification_status', 'VERIFIED')
-      .in('identity_type', ['PHONE', 'WHATSAPP', 'phone', 'whatsapp']).limit(10);
+      .in('identity_type', ['PHONE', 'WHATSAPP', 'TELEGRAM', 'phone', 'whatsapp', 'telegram']).limit(20);
     if (identityError) throw identityError;
     const phone = (identities || []).map(item => normalizePhone(item.source_identity)).find(Boolean);
-    if (!phone) return res.status(200).json({ success: true, contact_available: false, reason: 'VERIFIED_PHONE_UNAVAILABLE', ...profile });
+    const telegram = (identities || [])
+      .filter(item => String(item.identity_type || '').toUpperCase() === 'TELEGRAM')
+      .map(item => normalizeTelegramUsername(item.source_identity))
+      .find(Boolean);
+    if (!phone && !telegram) return res.status(200).json({ success: true, contact_available: false, reason: 'VERIFIED_CONTACT_UNAVAILABLE', ...profile });
 
-    return res.status(200).json({
-      success: true,
-      contact_available: true,
-      ...profile,
-      phone_display: identities.find(item => normalizePhone(item.source_identity) === phone)?.source_identity || `+${phone}`,
-      whatsapp_url: whatsappUrl(phone, resolvedListing),
+    return sendContactResult(res, {
+      payload: { success: true, contact_available: true, ...profile },
+      externalChannels: {
+        ...(phone ? { whatsapp: whatsappUrl(phone, resolvedListing) } : {}),
+        ...(telegram ? { telegram: telegramUrl(telegram, resolvedListing) } : {}),
+      },
+      id,
+      surface,
+      requestedChannel,
+      brand: resolvedListing.brand,
+      reference: resolvedListing.reference,
     });
   } catch (error) {
     console.error('[listing-contact]', error.message);
     return res.status(500).json({ error: 'Unable to verify dealer contact' });
   }
 };
+
+module.exports.hasApprovedPublicContact = hasApprovedPublicContact;
+module.exports.optionalLegacyPublicListingUnavailable = optionalLegacyPublicListingUnavailable;
+module.exports.findQnsaReleasedListing = findQnsaReleasedListing;
+module.exports.normalizeTelegramUsername = normalizeTelegramUsername;
+module.exports.sendContactResult = sendContactResult;

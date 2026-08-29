@@ -492,7 +492,7 @@ export interface OutlierResult {
 }
 
 export function iqrOutlierRemoval(prices: number[]): OutlierResult {
-  if (prices.length < 5) {
+  if (prices.length < 2) {
     return { keep: prices, remove: [], q1: 0, q3: 0, iqr: 0, lowerBound: 0, upperBound: 0 };
   }
   const sorted = [...prices].sort((a, b) => a - b);
@@ -501,8 +501,8 @@ export function iqrOutlierRemoval(prices: number[]): OutlierResult {
   const q1 = sorted[q1Idx];
   const q3 = sorted[q3Idx];
   const iqr = q3 - q1;
-  const lowerBound = q1 - 1.5 * iqr;
-  const upperBound = q3 + 1.5 * iqr;
+  const lowerBound = q1 - 3.0 * iqr;
+  const upperBound = q3 + 3.0 * iqr;
 
   return {
     keep: prices.filter(p => p >= lowerBound && p <= upperBound),
@@ -518,7 +518,7 @@ export function iqrOutlierRemoval(prices: number[]): OutlierResult {
 /** Group records by reference+dial and apply IQR filtering. */
 export function applyIQRFiltering<T extends { reference: string; dialColor: string; price: number }>(
   records: T[],
-  minDataPoints = 5
+  minDataPoints = 2
 ): { clean: T[]; outliers: T[]; insufficient: T[]; stats: Record<string, OutlierResult> } {
   const groups = new Map<string, T[]>();
   for (const r of records) {

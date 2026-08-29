@@ -1,0 +1,114 @@
+name: QNSA Zenith missing-price correction
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_ZENITH_MISSING_PRICE or APPLY_QNSA_ZENITH_MISSING_PRICE
+        required: true
+        type: string
+      mode:
+        required: true
+        default: audit
+        type: choice
+        options: [audit, apply]
+      normalization_run_key:
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+      correction_run_key:
+        required: true
+        default: zenith-missing-price-20260814-v1
+        type: string
+
+concurrency:
+  group: qnsa-zenith-missing-price-correction
+  cancel-in-progress: false
+
+jobs:
+  correct:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      NORMALIZED_RUN_KEY: ${{ inputs.normalization_run_key }}
+      CORRECTION_RUN_KEY: ${{ inputs.correction_run_key }}
+      MARIADB_FX_SNAPSHOT_OUTPUT: zenith-fx-snapshot.json
+      ZENITH_PRICE_INPUT: zenith-private-input.json
+      ZENITH_PRICE_OUTPUT: zenith-private-corrections.json
+      ZENITH_PRICE_REPORT: zenith-missing-price-report.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: Validate authorization
+        shell: pwsh
+        run: |
+          $expected=if('${{ inputs.mode }}' -eq 'apply'){'APPLY_QNSA_ZENITH_MISSING_PRICE'}else{'AUDIT_QNSA_ZENITH_MISSING_PRICE'}
+          if('${{ inputs.confirmation }}' -cne $expected){throw "Confirmation must be $expected"}
+          if($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh' -or -not $env:SUPABASE_ACCESS_TOKEN){throw 'Pinned QNSA credentials unavailable'}
+      - name: Install locked parser dependencies
+        run: npm ci --ignore-scripts
+      - name: Fetch dated ECB snapshot
+        run: node tools/mariadb-live/fetch-fx-snapshot.cjs
+      - name: Read bounded exact-lineage missing-price cohort
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
+          $sql=@"
+          SELECT l.id::text listing_id,l.source_record_id,l.source_hash,
+            upper(COALESCE(l.listing_type,l.intent,'')) listing_type,
+            l.reference_normalized normalized_reference,l.raw_message_text raw_message
+          FROM staging.listings l
+          JOIN staging.qnsa_zenith_identity_reconciliation_audit a
+            ON a.listing_id=l.id AND a.normalization_run_key=l.normalization_run_key
+           AND a.reconciliation_run_key='zenith-identity-20260814-v1' AND a.decision='RELEASE_SAFE'
+           AND a.corrected_reference=l.reference_normalized
+          JOIN public.raw_message_versions rv ON rv.id=l.raw_message_version_id
+            AND rv.source_record_id=l.source_record_id AND rv.source_hash=l.source_hash
+          WHERE l.normalization_run_key='$env:NORMALIZED_RUN_KEY' AND l.brand_normalized='Zenith'
+            AND upper(COALESCE(l.category,''))='WATCH' AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
+            AND l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
+            AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB') AND COALESCE(l.price_normalized,0)<=0
+          ORDER BY l.id LIMIT 250;
+          "@
+          $body=@{query=$sql;read_only=$true}|ConvertTo-Json -Depth 3
+          $rows=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          if($rows.Count -lt 1 -or $rows.Count -gt 250){throw 'Missing-price cohort outside bounded range'}
+          $rows|ConvertTo-Json -Depth 5|Set-Content $env:ZENITH_PRICE_INPUT
+      - name: Build deterministic private correction payload
+        run: node tools/mariadb-live/build-zenith-missing-price-correction.cjs
+      - name: Apply forward contract and exact-lineage correction
+        if: inputs.mode == 'apply'
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
+          $migration=Get-Content -Raw supabase/migrations/20260814193000_qnsa_zenith_missing_price_correction.sql
+          if($migration -match '(?i)(UPDATE|DELETE|INSERT\s+INTO)\s+(public\.)?(raw_messages|raw_message_versions)'){throw 'Immutable raw write detected'}
+          if($migration -match '(?i)(INSERT\s+INTO|DELETE\s+FROM)\s+staging\.listings'){throw 'Listing cardinality mutation detected'}
+          $body=@{query=$migration;read_only=$false}|ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body|Out-Null
+          $fx=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content -Raw $env:MARIADB_FX_SNAPSHOT_OUTPUT)))
+          $payload=[Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes((Get-Content -Raw $env:ZENITH_PRICE_OUTPUT)))
+          $sql="SELECT public.apply_qnsa_zenith_missing_price_correction('$env:NORMALIZED_RUN_KEY','$env:CORRECTION_RUN_KEY',convert_from(decode('$fx','base64'),'utf8')::jsonb,convert_from(decode('$payload','base64'),'utf8')::jsonb) evidence;"
+          $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
+          $result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $e=$result[0].evidence;$e|ConvertTo-Json -Depth 5
+          $report=Get-Content -Raw $env:ZENITH_PRICE_REPORT|ConvertFrom-Json
+          if([long]$e.target_rows -ne [long]$report.corrected_rows -or [long]$e.verified_rows -ne [long]$report.corrected_rows){throw 'Correction count mismatch'}
+          if([long]$e.staging_rows_created -ne 0 -or [long]$e.raw_rows_mutated -ne 0){throw 'Cardinality/immutable raw gate failed'}
+      - name: Destroy private raw payloads
+        if: always()
+        shell: pwsh
+        run: Remove-Item -Force -ErrorAction SilentlyContinue $env:ZENITH_PRICE_INPUT,$env:ZENITH_PRICE_OUTPUT
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-zenith-missing-price-evidence
+          path: |
+            zenith-missing-price-report.json
+            zenith-fx-snapshot.json
+          if-no-files-found: error

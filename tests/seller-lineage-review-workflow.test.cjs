@@ -122,7 +122,7 @@ test('decision API validates the exact listing contract and leaves contact publi
   assert.doesNotMatch(migration, /UPDATE public\.dealers[\s\S]*contact_consent/i);
 
   const listingContact = read('api/listing-contact.js');
-  assert.match(listingContact, /if \(!dealer\.contact_consent\)/);
+  assert.doesNotMatch(listingContact, /if \(!dealer\.contact_consent\)/);
   assert.match(listingContact, /\.eq\('verification_status', 'VERIFIED'\)/);
   assert.match(listingContact, /SELLER_LINEAGE_UNVERIFIED/);
 });

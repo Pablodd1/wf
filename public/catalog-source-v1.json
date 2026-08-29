@@ -141055,9 +141055,7 @@
       "model_claims": [
         "RM001"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141078,9 +141076,7 @@
       "model_claims": [
         "RM002-V1"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141101,9 +141097,7 @@
       "model_claims": [
         "RM002-V2"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141124,9 +141118,7 @@
       "model_claims": [
         "RM003-V1"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141147,9 +141139,7 @@
       "model_claims": [
         "RM003-V2"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141170,9 +141160,7 @@
       "model_claims": [
         "RM004"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141193,9 +141181,7 @@
       "model_claims": [
         "RM004-V1"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141216,9 +141202,7 @@
       "model_claims": [
         "RM004-V3"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141239,9 +141223,7 @@
       "model_claims": [
         "RM005"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141262,9 +141244,7 @@
       "model_claims": [
         "RM006"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141285,9 +141265,7 @@
       "model_claims": [
         "RM007"
       ],
-      "dial_colors": [
-        "Black"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Black",
@@ -141308,9 +141286,7 @@
       "model_claims": [
         "RM008-V1"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141331,9 +141307,7 @@
       "model_claims": [
         "RM008-V2"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141354,9 +141328,7 @@
       "model_claims": [
         "RM009"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141377,9 +141349,7 @@
       "model_claims": [
         "RM010"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141400,9 +141370,7 @@
       "model_claims": [
         "RM011"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141423,9 +141391,7 @@
       "model_claims": [
         "RM012"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141446,9 +141412,7 @@
       "model_claims": [
         "RM014"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141469,9 +141433,7 @@
       "model_claims": [
         "RM015"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141492,9 +141454,7 @@
       "model_claims": [
         "RM016"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141515,9 +141475,7 @@
       "model_claims": [
         "RM016 AJ WG"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141538,9 +141496,7 @@
       "model_claims": [
         "RM017"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141561,9 +141517,7 @@
       "model_claims": [
         "RM018"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141584,9 +141538,7 @@
       "model_claims": [
         "RM019"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141607,9 +141559,7 @@
       "model_claims": [
         "RM020"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141630,9 +141580,7 @@
       "model_claims": [
         "RM021"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141653,9 +141601,7 @@
       "model_claims": [
         "RM023"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141676,9 +141622,7 @@
       "model_claims": [
         "RM025"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141699,9 +141643,7 @@
       "model_claims": [
         "RM026"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141722,9 +141664,7 @@
       "model_claims": [
         "RM027"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141745,9 +141685,7 @@
       "model_claims": [
         "RM028"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141768,9 +141706,7 @@
       "model_claims": [
         "RM028-AJTI"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141791,9 +141727,7 @@
       "model_claims": [
         "RM029"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141814,9 +141748,7 @@
       "model_claims": [
         "RM030"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141837,9 +141769,7 @@
       "model_claims": [
         "RM031"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141860,9 +141790,7 @@
       "model_claims": [
         "RM032"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141883,9 +141811,7 @@
       "model_claims": [
         "RM033"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141906,9 +141832,7 @@
       "model_claims": [
         "RM035"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141929,9 +141853,7 @@
       "model_claims": [
         "RM036"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141952,9 +141874,7 @@
       "model_claims": [
         "RM037"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141975,9 +141895,7 @@
       "model_claims": [
         "RM038"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -141998,9 +141916,7 @@
       "model_claims": [
         "RM050"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142021,9 +141937,7 @@
       "model_claims": [
         "RM051"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142044,9 +141958,7 @@
       "model_claims": [
         "RM053"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142067,9 +141979,7 @@
       "model_claims": [
         "RM055"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142090,9 +142000,7 @@
       "model_claims": [
         "RM056"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142113,9 +142021,7 @@
       "model_claims": [
         "RM057"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142136,15 +142042,7 @@
       "model_claims": [
         "RM07-01"
       ],
-      "dial_colors": [
-        "Black",
-        "Diamond",
-        "Jade",
-        "Jasper",
-        "Mother of Pearl",
-        "Red",
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142201,9 +142099,7 @@
       "model_claims": [
         "RM07-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142224,9 +142120,7 @@
       "model_claims": [
         "RM07-03"
       ],
-      "dial_colors": [
-        "Multi-Color"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Multi-Color",
@@ -142247,9 +142141,7 @@
       "model_claims": [
         "RM07-04"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142270,9 +142162,7 @@
       "model_claims": [
         "RM10"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142293,9 +142183,7 @@
       "model_claims": [
         "RM11"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142316,9 +142204,7 @@
       "model_claims": [
         "RM11-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142339,9 +142225,7 @@
       "model_claims": [
         "RM11-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142362,9 +142246,7 @@
       "model_claims": [
         "RM11-03"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142385,9 +142267,7 @@
       "model_claims": [
         "RM11-04"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142408,9 +142288,7 @@
       "model_claims": [
         "RM11-05"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142431,9 +142309,7 @@
       "model_claims": [
         "RM11-FM"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142454,9 +142330,7 @@
       "model_claims": [
         "RM12-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142477,9 +142351,7 @@
       "model_claims": [
         "RM16-01"
       ],
-      "dial_colors": [
-        "Multi-Color"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Multi-Color",
@@ -142500,9 +142372,7 @@
       "model_claims": [
         "RM16-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142523,9 +142393,7 @@
       "model_claims": [
         "RM17"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142546,9 +142414,7 @@
       "model_claims": [
         "RM17-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142569,9 +142435,7 @@
       "model_claims": [
         "RM17-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142592,9 +142456,7 @@
       "model_claims": [
         "RM19-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142615,9 +142477,7 @@
       "model_claims": [
         "RM19-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142638,9 +142498,7 @@
       "model_claims": [
         "RM21-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142661,9 +142519,7 @@
       "model_claims": [
         "RM21-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142684,9 +142540,7 @@
       "model_claims": [
         "RM22"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142707,9 +142561,7 @@
       "model_claims": [
         "RM23"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142730,9 +142582,7 @@
       "model_claims": [
         "RM25"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142753,9 +142603,7 @@
       "model_claims": [
         "RM25-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142776,9 +142624,7 @@
       "model_claims": [
         "RM26-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142799,9 +142645,7 @@
       "model_claims": [
         "RM26-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142822,9 +142666,7 @@
       "model_claims": [
         "RM27-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142845,9 +142687,7 @@
       "model_claims": [
         "RM27-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142868,9 +142708,7 @@
       "model_claims": [
         "RM27-03"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142891,9 +142729,7 @@
       "model_claims": [
         "RM27-04"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142914,9 +142750,7 @@
       "model_claims": [
         "RM27-05"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142937,9 +142771,7 @@
       "model_claims": [
         "RM29"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142960,9 +142792,7 @@
       "model_claims": [
         "RM30"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -142983,9 +142813,7 @@
       "model_claims": [
         "RM30 RG/TI"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143006,9 +142834,7 @@
       "model_claims": [
         "RM30-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143029,9 +142855,7 @@
       "model_claims": [
         "RM32"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143052,9 +142876,7 @@
       "model_claims": [
         "RM33"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143075,9 +142897,7 @@
       "model_claims": [
         "RM33-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143098,9 +142918,7 @@
       "model_claims": [
         "RM33-03"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143121,9 +142939,7 @@
       "model_claims": [
         "RM35"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143144,9 +142960,7 @@
       "model_claims": [
         "RM35-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143167,9 +142981,7 @@
       "model_claims": [
         "RM35-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143190,9 +143002,7 @@
       "model_claims": [
         "RM35-03"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143213,9 +143023,7 @@
       "model_claims": [
         "RM36-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143236,10 +143044,7 @@
       "model_claims": [
         "RM37"
       ],
-      "dial_colors": [
-        "Diamond",
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143266,9 +143071,7 @@
       "model_claims": [
         "RM37-01"
       ],
-      "dial_colors": [
-        "Multi-Color"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Multi-Color",
@@ -143289,9 +143092,7 @@
       "model_claims": [
         "RM38-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143312,9 +143113,7 @@
       "model_claims": [
         "RM38-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143335,9 +143134,7 @@
       "model_claims": [
         "RM39"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143358,9 +143155,7 @@
       "model_claims": [
         "RM39-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143381,9 +143176,7 @@
       "model_claims": [
         "RM40-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143404,9 +143197,7 @@
       "model_claims": [
         "RM41-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143427,9 +143218,7 @@
       "model_claims": [
         "RM43-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143450,9 +143239,7 @@
       "model_claims": [
         "RM47"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143473,9 +143260,7 @@
       "model_claims": [
         "RM50-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143496,9 +143281,7 @@
       "model_claims": [
         "RM50-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143519,9 +143302,7 @@
       "model_claims": [
         "RM50-03"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143542,9 +143323,7 @@
       "model_claims": [
         "RM50-04"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143565,9 +143344,7 @@
       "model_claims": [
         "RM51-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143588,9 +143365,7 @@
       "model_claims": [
         "RM51-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143611,9 +143386,7 @@
       "model_claims": [
         "RM52"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143634,9 +143407,7 @@
       "model_claims": [
         "RM52-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143657,9 +143428,7 @@
       "model_claims": [
         "RM52-05"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143680,9 +143449,7 @@
       "model_claims": [
         "RM53-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143703,9 +143470,7 @@
       "model_claims": [
         "RM55"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143726,9 +143491,7 @@
       "model_claims": [
         "RM55-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143749,9 +143512,7 @@
       "model_claims": [
         "RM56-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143772,9 +143533,7 @@
       "model_claims": [
         "RM56-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143795,9 +143554,7 @@
       "model_claims": [
         "RM57-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143818,9 +143575,7 @@
       "model_claims": [
         "RM58-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143841,9 +143596,7 @@
       "model_claims": [
         "RM59-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143864,9 +143617,7 @@
       "model_claims": [
         "RM60-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143887,9 +143638,7 @@
       "model_claims": [
         "RM61-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143910,9 +143659,7 @@
       "model_claims": [
         "RM62-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143933,9 +143680,7 @@
       "model_claims": [
         "RM63-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143956,9 +143701,7 @@
       "model_claims": [
         "RM63-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -143979,9 +143722,7 @@
       "model_claims": [
         "RM65-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144002,9 +143743,7 @@
       "model_claims": [
         "RM66"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144025,9 +143764,7 @@
       "model_claims": [
         "RM67-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144048,9 +143785,7 @@
       "model_claims": [
         "RM67-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144071,9 +143806,7 @@
       "model_claims": [
         "RM68-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144094,9 +143827,7 @@
       "model_claims": [
         "RM69"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144117,9 +143848,7 @@
       "model_claims": [
         "RM70-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144140,9 +143869,7 @@
       "model_claims": [
         "RM71-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144163,9 +143890,7 @@
       "model_claims": [
         "RM71-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144186,9 +143911,7 @@
       "model_claims": [
         "RM72-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144209,9 +143932,7 @@
       "model_claims": [
         "RM74-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144232,9 +143953,7 @@
       "model_claims": [
         "RM74-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144255,9 +143974,7 @@
       "model_claims": [
         "RM75-01"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144278,9 +143995,7 @@
       "model_claims": [
         "RM88"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144301,9 +144016,7 @@
       "model_claims": [
         "RMHJ-02"
       ],
-      "dial_colors": [
-        "Skeleton"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Skeleton",
@@ -144324,9 +144037,7 @@
       "model_claims": [
         "RMUP-01"
       ],
-      "dial_colors": [
-        "Grey"
-      ],
+      "dial_colors": [],
       "variants": [
         {
           "dial_color": "Grey",
@@ -181103,6 +180814,2261 @@
       "source_files": [
         "Zenith Final Catalog.xlsx"
       ]
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAZ1010",
+      "normalized_reference": "CAZ1010",
+      "model": "Formula 1 Chronograph",
+      "model_claims": [
+        "Formula 1 Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAZ1010.BA0842",
+      "normalized_reference": "CAZ1010BA0842",
+      "model": "Formula 1",
+      "model_claims": [
+        "Formula 1"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAZ1011",
+      "normalized_reference": "CAZ1011",
+      "model": "Formula 1",
+      "model_claims": [
+        "Formula 1"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAZ1011.BA0842",
+      "normalized_reference": "CAZ1011BA0842",
+      "model": "Formula 1",
+      "model_claims": [
+        "Formula 1"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAZ1012",
+      "normalized_reference": "CAZ1012",
+      "model": "Formula 1",
+      "model_claims": [
+        "Formula 1"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAZ1014",
+      "normalized_reference": "CAZ1014",
+      "model": "Formula 1 Chronograph",
+      "model_claims": [
+        "Formula 1 Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAZ1015",
+      "normalized_reference": "CAZ1015",
+      "model": "Formula 1",
+      "model_claims": [
+        "Formula 1"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAZ1110",
+      "normalized_reference": "WAZ1110",
+      "model": "Formula 1",
+      "model_claims": [
+        "Formula 1"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAZ1111",
+      "normalized_reference": "WAZ1111",
+      "model": "Formula 1",
+      "model_claims": [
+        "Formula 1"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAZ1112",
+      "normalized_reference": "WAZ1112",
+      "model": "Formula 1",
+      "model_claims": [
+        "Formula 1"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAR2010",
+      "normalized_reference": "CAR2010",
+      "model": "Carrera",
+      "model_claims": [
+        "Carrera"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAR2011",
+      "normalized_reference": "CAR2011",
+      "model": "Carrera",
+      "model_claims": [
+        "Carrera"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAR2012",
+      "normalized_reference": "CAR2012",
+      "model": "Carrera",
+      "model_claims": [
+        "Carrera"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAR2014",
+      "normalized_reference": "CAR2014",
+      "model": "Carrera",
+      "model_claims": [
+        "Carrera"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAR2110",
+      "normalized_reference": "CAR2110",
+      "model": "Carrera",
+      "model_claims": [
+        "Carrera"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAR2111",
+      "normalized_reference": "CAR2111",
+      "model": "Carrera",
+      "model_claims": [
+        "Carrera"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAW2110",
+      "normalized_reference": "CAW2110",
+      "model": "Carrera",
+      "model_claims": [
+        "Carrera"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAW2111",
+      "normalized_reference": "CAW2111",
+      "model": "Monaco Calibre 12",
+      "model_claims": [
+        "Monaco Calibre 12"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CV2010",
+      "normalized_reference": "CV2010",
+      "model": "Carrera Calibre 16",
+      "model_claims": [
+        "Carrera Calibre 16"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAR2010",
+      "normalized_reference": "WAR2010",
+      "model": "Carrera",
+      "model_claims": [
+        "Carrera"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WBN2010",
+      "normalized_reference": "WBN2010",
+      "model": "Aquaracer",
+      "model_claims": [
+        "Aquaracer"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WBN2011",
+      "normalized_reference": "WBN2011",
+      "model": "Aquaracer",
+      "model_claims": [
+        "Aquaracer"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WBP2010",
+      "normalized_reference": "WBP2010",
+      "model": "Aquaracer",
+      "model_claims": [
+        "Aquaracer"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAY2010",
+      "normalized_reference": "WAY2010",
+      "model": "Aquaracer",
+      "model_claims": [
+        "Aquaracer"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAY2110",
+      "normalized_reference": "WAY2110",
+      "model": "Aquaracer Calibre 5",
+      "model_claims": [
+        "Aquaracer Calibre 5"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAY201A",
+      "normalized_reference": "WAY201A",
+      "model": "Aquaracer 300M",
+      "model_claims": [
+        "Aquaracer 300M"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAY201C",
+      "normalized_reference": "WAY201C",
+      "model": "Aquaracer",
+      "model_claims": [
+        "Aquaracer"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAY1110",
+      "normalized_reference": "WAY1110",
+      "model": "Aquaracer",
+      "model_claims": [
+        "Aquaracer"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAF1110",
+      "normalized_reference": "WAF1110",
+      "model": "Aquaracer",
+      "model_claims": [
+        "Aquaracer"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAW211",
+      "normalized_reference": "CAW211",
+      "model": "Monaco",
+      "model_claims": [
+        "Monaco"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAW211B",
+      "normalized_reference": "CAW211B",
+      "model": "Monaco Calibre 11",
+      "model_claims": [
+        "Monaco Calibre 11"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAW2111M",
+      "normalized_reference": "CAW2111M",
+      "model": "Monaco",
+      "model_claims": [
+        "Monaco"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WW2110",
+      "normalized_reference": "WW2110",
+      "model": "Monaco",
+      "model_claims": [
+        "Monaco"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WW2111",
+      "normalized_reference": "WW2111",
+      "model": "Monaco Vintage",
+      "model_claims": [
+        "Monaco Vintage"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBN2010",
+      "normalized_reference": "CBN2010",
+      "model": "Carrera Elegance Chronograph",
+      "model_claims": [
+        "Carrera Elegance Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBN2011",
+      "normalized_reference": "CBN2011",
+      "model": "Carrera",
+      "model_claims": [
+        "Carrera"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBS2010",
+      "normalized_reference": "CBS2010",
+      "model": "Autavia",
+      "model_claims": [
+        "Autavia"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBS2011",
+      "normalized_reference": "CBS2011",
+      "model": "Autavia",
+      "model_claims": [
+        "Autavia"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WBE5110",
+      "normalized_reference": "WBE5110",
+      "model": "Aquaracer",
+      "model_claims": [
+        "Aquaracer"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WBE5111",
+      "normalized_reference": "WBE5111",
+      "model": "Aquaracer",
+      "model_claims": [
+        "Aquaracer"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAW211P",
+      "normalized_reference": "CAW211P",
+      "model": "Monaco Calibre 11",
+      "model_claims": [
+        "Monaco Calibre 11"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBL2111",
+      "normalized_reference": "CBL2111",
+      "model": "Monaco Heuer 02",
+      "model_claims": [
+        "Monaco Heuer 02"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBL2113",
+      "normalized_reference": "CBL2113",
+      "model": "Monaco Heuer 02",
+      "model_claims": [
+        "Monaco Heuer 02"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CAL5113",
+      "normalized_reference": "CAL5113",
+      "model": "Monaco Linear System",
+      "model_claims": [
+        "Monaco Linear System"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CV2013",
+      "normalized_reference": "CV2013",
+      "model": "Carrera Calibre 16",
+      "model_claims": [
+        "Carrera Calibre 16"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CV2015",
+      "normalized_reference": "CV2015",
+      "model": "Carrera Calibre 16",
+      "model_claims": [
+        "Carrera Calibre 16"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBK2110",
+      "normalized_reference": "CBK2110",
+      "model": "Carrera Calibre 16",
+      "model_claims": [
+        "Carrera Calibre 16"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBK2112",
+      "normalized_reference": "CBK2112",
+      "model": "Carrera Calibre 16",
+      "model_claims": [
+        "Carrera Calibre 16"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBN2A1A",
+      "normalized_reference": "CBN2A1A",
+      "model": "Carrera Sport Chronograph",
+      "model_claims": [
+        "Carrera Sport Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBN2A1B",
+      "normalized_reference": "CBN2A1B",
+      "model": "Carrera Sport Chronograph",
+      "model_claims": [
+        "Carrera Sport Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBS2210",
+      "normalized_reference": "CBS2210",
+      "model": "Carrera Glassbox",
+      "model_claims": [
+        "Carrera Glassbox"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBS2212",
+      "normalized_reference": "CBS2212",
+      "model": "Carrera Glassbox",
+      "model_claims": [
+        "Carrera Glassbox"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAS2110",
+      "normalized_reference": "WAS2110",
+      "model": "Carrera Heritage",
+      "model_claims": [
+        "Carrera Heritage"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WBP201A",
+      "normalized_reference": "WBP201A",
+      "model": "Aquaracer Professional 300",
+      "model_claims": [
+        "Aquaracer Professional 300"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WBP201B",
+      "normalized_reference": "WBP201B",
+      "model": "Aquaracer Professional 300",
+      "model_claims": [
+        "Aquaracer Professional 300"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAY201B",
+      "normalized_reference": "WAY201B",
+      "model": "Aquaracer 300M",
+      "model_claims": [
+        "Aquaracer 300M"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAY2112",
+      "normalized_reference": "WAY2112",
+      "model": "Aquaracer Calibre 5",
+      "model_claims": [
+        "Aquaracer Calibre 5"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "WAZ1010",
+      "normalized_reference": "WAZ1010",
+      "model": "Formula 1",
+      "model_claims": [
+        "Formula 1"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "TAG Heuer",
+      "reference": "CBE2110",
+      "normalized_reference": "CBE2110",
+      "model": "Autavia Heritage",
+      "model_claims": [
+        "Autavia Heritage"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "25600",
+      "normalized_reference": "25600",
+      "model": "Pelagos",
+      "model_claims": [
+        "Pelagos"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "25610",
+      "normalized_reference": "25610",
+      "model": "Pelagos FXD",
+      "model_claims": [
+        "Pelagos FXD"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "55910",
+      "normalized_reference": "55910",
+      "model": "Ranger",
+      "model_claims": [
+        "Ranger"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79030",
+      "normalized_reference": "79030",
+      "model": "Black Bay 58",
+      "model_claims": [
+        "Black Bay 58"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79230",
+      "normalized_reference": "79230",
+      "model": "Black Bay",
+      "model_claims": [
+        "Black Bay"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79260",
+      "normalized_reference": "79260",
+      "model": "Heritage Chrono",
+      "model_claims": [
+        "Heritage Chrono"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79360",
+      "normalized_reference": "79360",
+      "model": "Black Bay Chrono",
+      "model_claims": [
+        "Black Bay Chrono"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79540",
+      "normalized_reference": "79540",
+      "model": "Black Bay 41",
+      "model_claims": [
+        "Black Bay 41"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79630",
+      "normalized_reference": "79630",
+      "model": "Glamour",
+      "model_claims": [
+        "Glamour"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79730",
+      "normalized_reference": "79730",
+      "model": "Black Bay Steel",
+      "model_claims": [
+        "Black Bay Steel"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79830",
+      "normalized_reference": "79830",
+      "model": "Black Bay GMT",
+      "model_claims": [
+        "Black Bay GMT"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79950",
+      "normalized_reference": "79950",
+      "model": "Ranger",
+      "model_claims": [
+        "Ranger"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "91210",
+      "normalized_reference": "91210",
+      "model": "North Flag",
+      "model_claims": [
+        "North Flag"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "91550",
+      "normalized_reference": "91550",
+      "model": "1926",
+      "model_claims": [
+        "1926"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79230N",
+      "normalized_reference": "79230N",
+      "model": "Black Bay",
+      "model_claims": [
+        "Black Bay"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79230R",
+      "normalized_reference": "79230R",
+      "model": "Black Bay",
+      "model_claims": [
+        "Black Bay"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79230B",
+      "normalized_reference": "79230B",
+      "model": "Black Bay",
+      "model_claims": [
+        "Black Bay"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79230DK",
+      "normalized_reference": "79230DK",
+      "model": "Black Bay Dark",
+      "model_claims": [
+        "Black Bay Dark"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79250BM",
+      "normalized_reference": "79250BM",
+      "model": "Black Bay Bronze",
+      "model_claims": [
+        "Black Bay Bronze"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79360N",
+      "normalized_reference": "79360N",
+      "model": "Black Bay Chrono",
+      "model_claims": [
+        "Black Bay Chrono"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79360R",
+      "normalized_reference": "79360R",
+      "model": "Black Bay Chrono",
+      "model_claims": [
+        "Black Bay Chrono"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79360B",
+      "normalized_reference": "79360B",
+      "model": "Black Bay Chrono",
+      "model_claims": [
+        "Black Bay Chrono"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79030N",
+      "normalized_reference": "79030N",
+      "model": "Black Bay Fifty-Eight",
+      "model_claims": [
+        "Black Bay Fifty-Eight"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79030R",
+      "normalized_reference": "79030R",
+      "model": "Black Bay 58",
+      "model_claims": [
+        "Black Bay 58"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79030B",
+      "normalized_reference": "79030B",
+      "model": "Black Bay Fifty-Eight",
+      "model_claims": [
+        "Black Bay Fifty-Eight"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79012M",
+      "normalized_reference": "79012M",
+      "model": "Black Bay Fifty-Eight Bronze",
+      "model_claims": [
+        "Black Bay Fifty-Eight Bronze"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79010SG",
+      "normalized_reference": "79010SG",
+      "model": "Black Bay Fifty-Eight 925",
+      "model_claims": [
+        "Black Bay Fifty-Eight 925"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79830RB",
+      "normalized_reference": "79830RB",
+      "model": "Black Bay GMT",
+      "model_claims": [
+        "Black Bay GMT"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M79030",
+      "normalized_reference": "M79030",
+      "model": "Black Bay 58",
+      "model_claims": [
+        "Black Bay 58"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M79230",
+      "normalized_reference": "M79230",
+      "model": "Black Bay",
+      "model_claims": [
+        "Black Bay"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M79230DK",
+      "normalized_reference": "M79230DK",
+      "model": "Black Bay Dark",
+      "model_claims": [
+        "Black Bay Dark"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M79250BM",
+      "normalized_reference": "M79250BM",
+      "model": "Black Bay Bronze",
+      "model_claims": [
+        "Black Bay Bronze"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M79360",
+      "normalized_reference": "M79360",
+      "model": "Black Bay Chrono",
+      "model_claims": [
+        "Black Bay Chrono"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M79730",
+      "normalized_reference": "M79730",
+      "model": "Black Bay Steel",
+      "model_claims": [
+        "Black Bay Steel"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M79830RB",
+      "normalized_reference": "M79830RB",
+      "model": "Black Bay GMT",
+      "model_claims": [
+        "Black Bay GMT"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M79010SG",
+      "normalized_reference": "M79010SG",
+      "model": "Black Bay 58 925",
+      "model_claims": [
+        "Black Bay 58 925"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M79012M",
+      "normalized_reference": "M79012M",
+      "model": "Black Bay 58 Bronze",
+      "model_claims": [
+        "Black Bay 58 Bronze"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "25600TB",
+      "normalized_reference": "25600TB",
+      "model": "Pelagos",
+      "model_claims": [
+        "Pelagos"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "25600TN",
+      "normalized_reference": "25600TN",
+      "model": "Pelagos",
+      "model_claims": [
+        "Pelagos"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M25600TB",
+      "normalized_reference": "M25600TB",
+      "model": "Pelagos",
+      "model_claims": [
+        "Pelagos"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M25600TN",
+      "normalized_reference": "M25600TN",
+      "model": "Pelagos",
+      "model_claims": [
+        "Pelagos"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "M79733N",
+      "normalized_reference": "M79733N",
+      "model": "Black Bay S&G",
+      "model_claims": [
+        "Black Bay S&G"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79363N",
+      "normalized_reference": "79363N",
+      "model": "Black Bay Chrono S&G",
+      "model_claims": [
+        "Black Bay Chrono S&G"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "79210CNU",
+      "normalized_reference": "79210CNU",
+      "model": "Black Bay Ceramic",
+      "model_claims": [
+        "Black Bay Ceramic"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "25707B",
+      "normalized_reference": "25707B",
+      "model": "Pelagos FXD",
+      "model_claims": [
+        "Pelagos FXD"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "25707N",
+      "normalized_reference": "25707N",
+      "model": "Pelagos FXD",
+      "model_claims": [
+        "Pelagos FXD"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Tudor",
+      "reference": "25407N",
+      "normalized_reference": "25407N",
+      "model": "Pelagos 39",
+      "model_claims": [
+        "Pelagos 39"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WSSA0009",
+      "normalized_reference": "WSSA0009",
+      "model": "Santos",
+      "model_claims": [
+        "Santos"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "W69011Z4",
+      "normalized_reference": "W69011Z4",
+      "model": "Ballon Bleu",
+      "model_claims": [
+        "Ballon Bleu"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "W5200005",
+      "normalized_reference": "W5200005",
+      "model": "Tank",
+      "model_claims": [
+        "Tank"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "W5200007",
+      "normalized_reference": "W5200007",
+      "model": "Tank Louis Cartier",
+      "model_claims": [
+        "Tank Louis Cartier"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WGTA0022",
+      "normalized_reference": "WGTA0022",
+      "model": "Tank Must",
+      "model_claims": [
+        "Tank Must"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WSTA0028",
+      "normalized_reference": "WSTA0028",
+      "model": "Tank Must",
+      "model_claims": [
+        "Tank Must"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WSTA0073",
+      "normalized_reference": "WSTA0073",
+      "model": "Tank Solo",
+      "model_claims": [
+        "Tank Solo"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WHPA0012",
+      "normalized_reference": "WHPA0012",
+      "model": "Pasha de Cartier",
+      "model_claims": [
+        "Pasha de Cartier"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WHPA0013",
+      "normalized_reference": "WHPA0013",
+      "model": "Pasha de Cartier",
+      "model_claims": [
+        "Pasha de Cartier"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WGCA0010",
+      "normalized_reference": "WGCA0010",
+      "model": "Ronde de Cartier",
+      "model_claims": [
+        "Ronde de Cartier"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "W7100016",
+      "normalized_reference": "W7100016",
+      "model": "Ballon Bleu",
+      "model_claims": [
+        "Ballon Bleu"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WGBA0045",
+      "normalized_reference": "WGBA0045",
+      "model": "Baignoire Mini",
+      "model_claims": [
+        "Baignoire Mini"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "W5200024",
+      "normalized_reference": "W5200024",
+      "model": "Tank Solo",
+      "model_claims": [
+        "Tank Solo"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WSSA0046",
+      "normalized_reference": "WSSA0046",
+      "model": "Santos-Dumont",
+      "model_claims": [
+        "Santos-Dumont"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WSPN0015",
+      "normalized_reference": "WSPN0015",
+      "model": "Panthère de Cartier",
+      "model_claims": [
+        "Panthère de Cartier"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "310.30.42.50.01.001",
+      "normalized_reference": "31030425001001",
+      "model": "Speedmaster Moonwatch Hesalite",
+      "model_claims": [
+        "Speedmaster Moonwatch Hesalite"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "310.30.42.50.01.002",
+      "normalized_reference": "31030425001002",
+      "model": "Speedmaster Moonwatch Sapphire",
+      "model_claims": [
+        "Speedmaster Moonwatch Sapphire"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "310.32.42.50.02.001",
+      "normalized_reference": "31032425002001",
+      "model": "Speedmaster Silver Snoopy 50th",
+      "model_claims": [
+        "Speedmaster Silver Snoopy 50th"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "310.60.42.50.99.001",
+      "normalized_reference": "31060425099001",
+      "model": "Speedmaster Moonwatch",
+      "model_claims": [
+        "Speedmaster Moonwatch"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "311.30.42.30.01.006",
+      "normalized_reference": "31130423001006",
+      "model": "Speedmaster Moonwatch Sapphire",
+      "model_claims": [
+        "Speedmaster Moonwatch Sapphire"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "3510.50",
+      "normalized_reference": "351050",
+      "model": "Speedmaster Reduced",
+      "model_claims": [
+        "Speedmaster Reduced"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "3570.50",
+      "normalized_reference": "357050",
+      "model": "Speedmaster Moonwatch",
+      "model_claims": [
+        "Speedmaster Moonwatch"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "3506.61",
+      "normalized_reference": "350661",
+      "model": "Speedmaster Schumacher",
+      "model_claims": [
+        "Speedmaster Schumacher"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "212.30.36.20.51.001",
+      "normalized_reference": "21230362051001",
+      "model": "Seamaster Diver 300M",
+      "model_claims": [
+        "Seamaster Diver 300M"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "220.10.41.21.01.002",
+      "normalized_reference": "22010412101002",
+      "model": "Seamaster Aqua Terra",
+      "model_claims": [
+        "Seamaster Aqua Terra"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "215.32.44.21.09.001",
+      "normalized_reference": "21532442109001",
+      "model": "Seamaster Planet Ocean",
+      "model_claims": [
+        "Seamaster Planet Ocean"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "425.65.34.20.55.001",
+      "normalized_reference": "42565342055001",
+      "model": "De Ville Ladymatic",
+      "model_claims": [
+        "De Ville Ladymatic"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "434.20.34.20.10.001",
+      "normalized_reference": "43420342010001",
+      "model": "De Ville Prestige",
+      "model_claims": [
+        "De Ville Prestige"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "210.92.44.20.01.003",
+      "normalized_reference": "21092442001003",
+      "model": "Seamaster Planet Ocean Dark Side",
+      "model_claims": [
+        "Seamaster Planet Ocean Dark Side"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "210.90.42.20.01.001",
+      "normalized_reference": "21090422001001",
+      "model": "Seamaster Diver 300M 007 Edition",
+      "model_claims": [
+        "Seamaster Diver 300M 007 Edition"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "210.30.42.20.10.001",
+      "normalized_reference": "21030422010001",
+      "model": "Seamaster Diver 300M",
+      "model_claims": [
+        "Seamaster Diver 300M"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "210.30.42.20.03.002",
+      "normalized_reference": "21030422003002",
+      "model": "Seamaster Diver 300M Summer Blue",
+      "model_claims": [
+        "Seamaster Diver 300M Summer Blue"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "310.30.40.50.06.001",
+      "normalized_reference": "31030405006001",
+      "model": "Speedmaster First Omega in Space",
+      "model_claims": [
+        "Speedmaster First Omega in Space"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "311.30.40.30.01.001",
+      "normalized_reference": "31130403001001",
+      "model": "Speedmaster Calibre 321 Ed White",
+      "model_claims": [
+        "Speedmaster Calibre 321 Ed White"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "311.32.40.30.02.001",
+      "normalized_reference": "31132403002001",
+      "model": "Speedmaster CK2998",
+      "model_claims": [
+        "Speedmaster CK2998"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "326.30.40.50.01.001",
+      "normalized_reference": "32630405001001",
+      "model": "Speedmaster Racing",
+      "model_claims": [
+        "Speedmaster Racing"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Omega",
+      "reference": "3510.50.00",
+      "normalized_reference": "35105000",
+      "model": "Speedmaster Reduced",
+      "model_claims": [
+        "Speedmaster Reduced"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "15500ST",
+      "normalized_reference": "15500ST",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "15400ST",
+      "normalized_reference": "15400ST",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "15510ST",
+      "normalized_reference": "15510ST",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "15300ST",
+      "normalized_reference": "15300ST",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "15202ST",
+      "normalized_reference": "15202ST",
+      "model": "Royal Oak Jumbo Extra-Thin",
+      "model_claims": [
+        "Royal Oak Jumbo Extra-Thin"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "16202ST",
+      "normalized_reference": "16202ST",
+      "model": "Royal Oak Jumbo Extra-Thin",
+      "model_claims": [
+        "Royal Oak Jumbo Extra-Thin"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "26331ST",
+      "normalized_reference": "26331ST",
+      "model": "Royal Oak Chronograph",
+      "model_claims": [
+        "Royal Oak Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "26240ST",
+      "normalized_reference": "26240ST",
+      "model": "Royal Oak Chronograph",
+      "model_claims": [
+        "Royal Oak Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "26320ST",
+      "normalized_reference": "26320ST",
+      "model": "Royal Oak Chronograph",
+      "model_claims": [
+        "Royal Oak Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "15710ST",
+      "normalized_reference": "15710ST",
+      "model": "Royal Oak Offshore Diver",
+      "model_claims": [
+        "Royal Oak Offshore Diver"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "15720ST",
+      "normalized_reference": "15720ST",
+      "model": "Royal Oak Offshore Diver",
+      "model_claims": [
+        "Royal Oak Offshore Diver"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "26470ST",
+      "normalized_reference": "26470ST",
+      "model": "Royal Oak Offshore Chronograph",
+      "model_claims": [
+        "Royal Oak Offshore Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "26420ST",
+      "normalized_reference": "26420ST",
+      "model": "Royal Oak Offshore Chronograph",
+      "model_claims": [
+        "Royal Oak Offshore Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77350ST",
+      "normalized_reference": "77350ST",
+      "model": "Royal Oak Selfwinding 34mm",
+      "model_claims": [
+        "Royal Oak Selfwinding 34mm"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Vacheron Constantin",
+      "reference": "222",
+      "normalized_reference": "222",
+      "model": "Historiques 222",
+      "model_claims": [
+        "Historiques 222"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Vacheron Constantin",
+      "reference": "4500V",
+      "normalized_reference": "4500V",
+      "model": "Overseas",
+      "model_claims": [
+        "Overseas"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Vacheron Constantin",
+      "reference": "4520V",
+      "normalized_reference": "4520V",
+      "model": "Overseas",
+      "model_claims": [
+        "Overseas"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Vacheron Constantin",
+      "reference": "5500V",
+      "normalized_reference": "5500V",
+      "model": "Overseas Chronograph",
+      "model_claims": [
+        "Overseas Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Vacheron Constantin",
+      "reference": "7900V",
+      "normalized_reference": "7900V",
+      "model": "Overseas Dual Time",
+      "model_claims": [
+        "Overseas Dual Time"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Vacheron Constantin",
+      "reference": "2300V",
+      "normalized_reference": "2300V",
+      "model": "Overseas Small Model",
+      "model_claims": [
+        "Overseas Small Model"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Vacheron Constantin",
+      "reference": "4000V",
+      "normalized_reference": "4000V",
+      "model": "Overseas Tourbillon",
+      "model_claims": [
+        "Overseas Tourbillon"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "03.2040.400",
+      "normalized_reference": "032040400",
+      "model": "Chronomaster El Primero",
+      "model_claims": [
+        "Chronomaster El Primero"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "03.3100.3600",
+      "normalized_reference": "0331003600",
+      "model": "Chronomaster Sport",
+      "model_claims": [
+        "Chronomaster Sport"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "03.3100.3600/69.M3100",
+      "normalized_reference": "033100360069M3100",
+      "model": "Chronomaster Sport",
+      "model_claims": [
+        "Chronomaster Sport"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "03.3100.3600/21.M3100",
+      "normalized_reference": "033100360021M3100",
+      "model": "Chronomaster Sport",
+      "model_claims": [
+        "Chronomaster Sport"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "03.2150.400",
+      "normalized_reference": "032150400",
+      "model": "El Primero 36,000 VPH",
+      "model_claims": [
+        "El Primero 36,000 VPH"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "95.9000.670",
+      "normalized_reference": "959000670",
+      "model": "Defy Classic",
+      "model_claims": [
+        "Defy Classic"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "49.9000.670",
+      "normalized_reference": "499000670",
+      "model": "Defy Classic Ceramic",
+      "model_claims": [
+        "Defy Classic Ceramic"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "03.A384.400",
+      "normalized_reference": "03A384400",
+      "model": "Chronomaster Revival A384",
+      "model_claims": [
+        "Chronomaster Revival A384"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "03.A386.400",
+      "normalized_reference": "03A386400",
+      "model": "Chronomaster Revival A386",
+      "model_claims": [
+        "Chronomaster Revival A386"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "03.9300.3620",
+      "normalized_reference": "0393003620",
+      "model": "Defy Skyline",
+      "model_claims": [
+        "Defy Skyline"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "03.9400.3620",
+      "normalized_reference": "0394003620",
+      "model": "Defy Skyline Chronograph",
+      "model_claims": [
+        "Defy Skyline Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "95.9002.9004",
+      "normalized_reference": "9590029004",
+      "model": "Defy 21",
+      "model_claims": [
+        "Defy 21"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Richard Mille",
+      "reference": "RM53-02",
+      "normalized_reference": "RM5302",
+      "model": "RM 53-02",
+      "model_claims": [
+        "RM 53-02"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77350CB",
+      "normalized_reference": "77350CB",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77350SR",
+      "normalized_reference": "77350SR",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77450ST",
+      "normalized_reference": "77450ST",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77450BC",
+      "normalized_reference": "77450BC",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77450OR",
+      "normalized_reference": "77450OR",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77450BA",
+      "normalized_reference": "77450BA",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77451OR",
+      "normalized_reference": "77451OR",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77451ST",
+      "normalized_reference": "77451ST",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77321ST",
+      "normalized_reference": "77321ST",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77350CE",
+      "normalized_reference": "77350CE",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77351OR",
+      "normalized_reference": "77351OR",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77351ST",
+      "normalized_reference": "77351ST",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77353BC",
+      "normalized_reference": "77353BC",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77450SR",
+      "normalized_reference": "77450SR",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "77605OK",
+      "normalized_reference": "77605OK",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "26330ST",
+      "normalized_reference": "26330ST",
+      "model": "Royal Oak Day Date",
+      "model_claims": [
+        "Royal Oak Day Date"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "26240CE",
+      "normalized_reference": "26240CE",
+      "model": "Royal Oak Chronograph",
+      "model_claims": [
+        "Royal Oak Chronograph"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "26579CB",
+      "normalized_reference": "26579CB",
+      "model": "Royal Oak Perpetual Calendar",
+      "model_claims": [
+        "Royal Oak Perpetual Calendar"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "15212NR",
+      "normalized_reference": "15212NR",
+      "model": "Royal Oak",
+      "model_claims": [
+        "Royal Oak"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Audemars Piguet",
+      "reference": "26420SO",
+      "normalized_reference": "26420SO",
+      "model": "Royal Oak Offshore",
+      "model_claims": [
+        "Royal Oak Offshore"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Cartier",
+      "reference": "WJBA0060",
+      "normalized_reference": "WJBA0060",
+      "model": "Baignoire",
+      "model_claims": [
+        "Baignoire"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Rolex",
+      "reference": "126599",
+      "normalized_reference": "126599",
+      "model": "Daytona",
+      "model_claims": [
+        "Daytona"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Rolex",
+      "reference": "126755",
+      "normalized_reference": "126755",
+      "model": "GMT-Master II",
+      "model_claims": [
+        "GMT-Master II"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Rolex",
+      "reference": "128348",
+      "normalized_reference": "128348",
+      "model": "Day-Date",
+      "model_claims": [
+        "Day-Date"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Rolex",
+      "reference": "116588",
+      "normalized_reference": "116588",
+      "model": "Daytona",
+      "model_claims": [
+        "Daytona"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Rolex",
+      "reference": "226668TBR",
+      "normalized_reference": "226668TBR",
+      "model": "Yacht-Master",
+      "model_claims": [
+        "Yacht-Master"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Patek Philippe",
+      "reference": "4061/69",
+      "normalized_reference": "406169",
+      "model": "Ellipse",
+      "model_claims": [
+        "Ellipse"
+      ],
+      "dial_colors": [],
+      "variants": []
+    },
+    {
+      "brand": "Zenith",
+      "reference": "95.9000.670/78.R782",
+      "normalized_reference": "95900067078R782",
+      "model": "Defy",
+      "model_claims": [
+        "Defy"
+      ],
+      "dial_colors": [],
+      "variants": []
     }
   ]
 }

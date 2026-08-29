@@ -1,0 +1,170 @@
+name: QNSA Four Brand Source Completion
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: schema, repair, audit, canary, full, or rollback
+        required: true
+        type: choice
+        options: [schema, repair, audit, canary, full, rollback]
+      run_key:
+        description: Unique immutable run key
+        required: true
+        type: string
+      confirmation:
+        description: Exact mode-specific confirmation phrase
+        required: true
+        type: string
+      origin:
+        description: Public production origin used for exact crawl reconciliation
+        required: true
+        default: https://watchfacts-poc.vercel.app
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qnsa-four-brand-source-completion-production
+  cancel-in-progress: false
+
+jobs:
+  completion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    environment: production
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_URL: https://qnsafosakvonzgfcsphh.supabase.co
+      EXPECTED_MIGRATION_SHA256: 1bc39e89eeb552a7c1dcc3d30d47e7b531adfbd92f980cb94b624f7fde9ac4c2
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate exact authorization
+        shell: pwsh
+        env:
+          MODE: ${{ inputs.mode }}
+          RUN_KEY: ${{ inputs.run_key }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          ORIGIN: ${{ inputs.origin }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:RUN_KEY -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_.:-]{5,119}$') { throw 'Invalid run key.' }
+          if ($env:ORIGIN -cne 'https://watchfacts-poc.vercel.app') { throw 'Public origin must be the pinned production site.' }
+          $expected = switch ($env:MODE) {
+            'schema' { "INSTALL_SCHEMA_$($env:RUN_KEY)" }
+            'repair' { "REPAIR_SCHEMA_$($env:RUN_KEY)" }
+            'audit' { "AUDIT_$($env:RUN_KEY)" }
+            'canary' { "ACTIVATE_CANARY_$($env:RUN_KEY)" }
+            'full' { "ACTIVATE_FULL_$($env:RUN_KEY)" }
+            'rollback' { "ROLLBACK_$($env:RUN_KEY)" }
+            default { throw 'Unsupported mode.' }
+          }
+          if ($env:CONFIRMATION -cne $expected) { throw "Exact confirmation required: $expected" }
+
+      - name: Verify pinned migration bytes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $path = 'supabase/migrations/20260821150000_qnsa_four_brand_source_completion.sql'
+          $normalized = (Get-Content -LiteralPath $path -Raw) -replace "`r`n", "`n"
+          $bytes = [Text.Encoding]::UTF8.GetBytes($normalized)
+          $sha = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
+          if ($sha -cne $env:EXPECTED_MIGRATION_SHA256) { throw 'Pinned migration checksum mismatch.' }
+
+      - name: Install or repair private schema atomically
+        if: inputs.mode == 'schema' || inputs.mode == 'repair'
+        shell: pwsh
+        env:
+          MODE: ${{ inputs.mode }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $preflight = @"
+          SELECT
+            (to_regclass('public.qnsa_four_brand_source_completion_runs') IS NOT NULL)::int
+            +(to_regclass('public.qnsa_four_brand_source_completion_proposals') IS NOT NULL)::int
+            +(to_regclass('public.qnsa_four_brand_source_completion_snapshots') IS NOT NULL)::int AS object_count;
+          "@
+          $preflightBody = @{ query = $preflight; read_only = $true } | ConvertTo-Json
+          $existing = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $preflightBody
+          $objectCount = [int]$existing[0].object_count
+          if ($env:MODE -eq 'schema' -and $objectCount -ne 0) { throw 'Source-completion schema already exists; refusing blind reinstall.' }
+          if ($env:MODE -eq 'repair' -and $objectCount -ne 3) { throw 'Source-completion schema repair requires the exact installed private tables.' }
+          $migration = Get-Content -LiteralPath 'supabase/migrations/20260821150000_qnsa_four_brand_source_completion.sql' -Raw
+          $migration = $migration -replace '(?im)^\s*BEGIN\s*;\s*$', '' -replace '(?im)^\s*COMMIT\s*;\s*$', ''
+          if ($env:MODE -eq 'repair') {
+            $functionMarker = 'CREATE OR REPLACE FUNCTION public.stage_qnsa_four_brand_source_completion('
+            $functionStart = $migration.IndexOf($functionMarker, [StringComparison]::Ordinal)
+            if ($functionStart -lt 0) { throw 'Pinned repair function marker is absent.' }
+            $migration = $migration.Substring($functionStart)
+          }
+          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='45s';`n$migration`nCOMMIT;"
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Verify installed private contract without DDL
+        if: inputs.mode != 'schema' && inputs.mode != 'repair'
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SELECT
+            to_regclass('public.qnsa_four_brand_source_completion_runs') IS NOT NULL AS runs,
+            to_regclass('public.qnsa_four_brand_source_completion_proposals') IS NOT NULL AS proposals,
+            to_regclass('public.qnsa_four_brand_source_completion_snapshots') IS NOT NULL AS snapshots,
+            to_regprocedure('public.begin_qnsa_four_brand_source_completion(text,text,text,integer)') IS NOT NULL AS begin_rpc,
+            to_regprocedure('public.stage_qnsa_four_brand_source_completion(text,jsonb)') IS NOT NULL AS stage_rpc,
+            to_regprocedure('public.activate_qnsa_four_brand_source_completion(text)') IS NOT NULL AS activate_rpc,
+            to_regprocedure('public.rollback_qnsa_four_brand_source_completion(text)') IS NOT NULL AS rollback_rpc;
+          "@
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body
+          foreach ($field in @('runs','proposals','snapshots','begin_rpc','stage_rpc','activate_rpc','rollback_rpc')) {
+            if (-not [bool]$result[0].$field) { throw "Missing exact installed object: $field" }
+          }
+
+      - if: inputs.mode != 'schema' && inputs.mode != 'repair'
+        run: npm ci
+
+      - name: Resolve current service key without exposing it
+        if: inputs.mode != 'schema' && inputs.mode != 'repair'
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $keys = Invoke-RestMethod -Method Get -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/api-keys" -Headers $headers
+          $service = @($keys | Where-Object { $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret') }) | Select-Object -First 1
+          if (-not $service.api_key) { throw 'Current QNSA service key is unavailable.' }
+          "::add-mask::$($service.api_key)"
+          "QNSA_RUNTIME_SERVICE_ROLE_KEY=$($service.api_key)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Audit or activate exact source completion
+        if: inputs.mode != 'schema' && inputs.mode != 'repair'
+        shell: pwsh
+        env:
+          MODE: ${{ inputs.mode }}
+          RUN_KEY: ${{ inputs.run_key }}
+          CONFIRMATION: ${{ inputs.confirmation }}
+          ORIGIN: ${{ inputs.origin }}
+          MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+          MYSQL_PORT: ${{ secrets.MYSQL_PORT }}
+          MYSQL_USER: ${{ secrets.MYSQL_USER }}
+          MYSQL_PASS: ${{ secrets.MYSQL_PASS }}
+          MYSQL_DB: thecollective_inventory
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:SUPABASE_SERVICE_ROLE_KEY = $env:QNSA_RUNTIME_SERVICE_ROLE_KEY
+          node tools/mariadb-live/run-four-brand-source-completion.cjs `
+            --mode $env:MODE --run-key $env:RUN_KEY --confirm $env:CONFIRMATION --origin $env:ORIGIN

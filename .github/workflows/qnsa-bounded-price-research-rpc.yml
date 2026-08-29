@@ -1,0 +1,61 @@
+name: QNSA bounded Price Research RPC
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_QNSA_BOUNDED_PRICE_RESEARCH_RPC
+        required: true
+        type: string
+
+jobs:
+  apply:
+    if: ${{ inputs.confirmation == 'APPLY_QNSA_BOUNDED_PRICE_RESEARCH_RPC' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Apply pinned forward migration
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          if ($env:SUPABASE_PROJECT_REF -ne $env:EXPECTED_PROJECT_REF) { throw 'Unexpected Supabase project.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260812030000_qnsa_bounded_price_research_rpc.sql'
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260812033000_qnsa_trading_reference_rows.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260812012000_qnsa_trading_floor_page_rows.sql')
+          $sql += "`n" + (Get-Content -Raw -LiteralPath 'supabase/migrations/20260812041000_qnsa_intent_feed_index.sql')
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Smoke test exact references and bundle boundary
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SELECT jsonb_build_object(
+            'wts_5164a', (SELECT count(*) FROM public.qnsa_bounded_price_research_rows('Patek Philippe', ARRAY['5164A'], 'WTS', 1000)),
+            'wtb_5164a', (SELECT count(*) FROM public.qnsa_bounded_price_research_rows('Patek Philippe', ARRAY['5164A'], 'WTB', 2500)),
+            'wts_116500ln', (SELECT count(*) FROM public.qnsa_bounded_price_research_rows('Rolex', ARRAY['116500LN'], 'WTS', 1000)),
+            'bundle_leakage', (SELECT count(*) FROM public.qnsa_bounded_price_research_rows('Patek Philippe', ARRAY['5164A'], 'WTS', 1000) AS row WHERE row->>'listing_status' IN ('bundle_pending_separation','bundle_child_pending_review'))
+          ) AS result;
+          "@
+          # Management sessions run as supabase_admin; the SECURITY DEFINER
+          # function itself is read-only, but a read-only transaction cannot
+          # execute it on this hosted role boundary.
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $evidence = $result[0].result
+          if ([int]$evidence.wts_5164a -lt 1 -or [int]$evidence.wts_116500ln -lt 1) { throw 'Reference smoke test returned no WTS evidence.' }
+          if ([int]$evidence.bundle_leakage -ne 0) { throw 'Bundle leakage detected.' }
+          $evidence | ConvertTo-Json -Compress

@@ -47,6 +47,18 @@ test('allows WTB identity confirmation without an asking price', () => {
   assert.equal(result.disposition, 'CATALOG_CONFIRMATION_REQUIRED');
 });
 
+test('uses explicit normalized WTB intent instead of a conflicting legacy source default', () => {
+  const result = buildPromotionDecision({
+    source_listing_type: 'WTS',
+    candidate_count: 1,
+    proposed_candidates: [{
+      brand: 'Patek Philippe', reference: '7118/1A', listing_type: 'WTB', prices: [],
+    }],
+    change_flags: ['INTENT_CHANGED'],
+  });
+  assert.equal(result.disposition, 'CATALOG_CONFIRMATION_REQUIRED');
+});
+
 test('does not promote source-record currency evidence without human review', () => {
   const result = buildPromotionDecision({
     source_listing_type: 'WTS',

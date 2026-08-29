@@ -13,7 +13,7 @@ const {
 } = require('./audit-three-brand-workbooks.cjs');
 
 const VERSION = 'reviewed-three-brand-canary-v1';
-const NORMALIZATION_VERSION = 'v4.2-line-condition';
+const NORMALIZATION_VERSION = 'v4.3-mint-condition';
 const SAMPLE_PLAN = {
   'Patek Philippe': { quota: 33334, files: [1, 105, 138] },
   Rolex: { quota: 33333, files: [1, 100, 104] },

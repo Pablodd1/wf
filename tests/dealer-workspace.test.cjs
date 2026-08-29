@@ -28,3 +28,13 @@ test('billing remains inactive until commercial terms are approved', () => {
   assert.match(page, /Commercial plans and payment processing are not enabled during beta/);
   assert.doesNotMatch(page, /stripe|checkout|payment_intent/i);
 });
+
+test('account exposes the same verified demographic stamp used by Post an Item', () => {
+  const route = fs.readFileSync(path.join(__dirname, '..', 'api', 'dealer-workspace.js'), 'utf8');
+  const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'DealerAccount.tsx'), 'utf8');
+  assert.match(route, /dealer_source_identities/);
+  assert.match(route, /profile_stamp/);
+  assert.match(page, /Verified phone/);
+  assert.match(page, /Posting location/);
+  assert.match(page, /Ratings and verified phone lineage cannot be edited here/);
+});

@@ -1,0 +1,288 @@
+name: QNSA four-brand missing-field enrichment
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: schema, audit, canary, full, or rollback
+        required: true
+        type: choice
+        options: [schema, audit, canary, full, rollback]
+      run_key:
+        description: Unique immutable run key
+        required: true
+        type: string
+      source_run_id:
+        description: Same-repository workflow run containing the private manifest artifact
+        required: false
+        type: string
+      artifact_name:
+        description: Private manifest artifact name
+        required: false
+        type: string
+      manifest_file:
+        description: JSON filename inside the artifact
+        required: false
+        default: manifest.json
+        type: string
+      manifest_sha256:
+        description: Exact private manifest file SHA-256
+        required: false
+        type: string
+      confirmation:
+        description: Exact run-specific authorization phrase
+        required: true
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: qnsa-four-brand-field-enrichment
+  cancel-in-progress: false
+
+jobs:
+  enrich:
+    environment: production
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_URL: https://qnsafosakvonzgfcsphh.supabase.co
+      MIGRATION_VERSION: '20260820210000'
+      MIGRATION_SHA256: c7124258d982cbd12e664301614c8635d042f21ad7010cc596e82213f2462490
+      FORWARD_READ_MIGRATION_SHA256: fd3b4156ef7387adc6c753ea5aa7944d9fe3c36e96251e4274520948e615e1ed
+      SCHEMA_CONTRACT_VERSION: 2026-08-20-v2
+      SCHEMA_CONTRACT_SHA256: d67cb39107e7446de3d8d26be20058a3f7f5dce932f7feb92a56d4ac742406b2
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate authorization and pinned migration
+        shell: pwsh
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_RUN_KEY: ${{ inputs.run_key }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:PROJECT_REF -cne 'qnsafosakvonzgfcsphh') { throw 'Workflow is not QNSA pinned.' }
+          if ($env:INPUT_RUN_KEY -notmatch '^[A-Za-z0-9][A-Za-z0-9_.:-]{5,119}$') { throw 'Unsafe run key.' }
+          $required = switch ($env:INPUT_MODE) {
+            'schema' { "INSTALL_SCHEMA_$($env:INPUT_RUN_KEY)" }
+            'audit' { "AUDIT_$($env:INPUT_RUN_KEY)" }
+            'canary' { "ACTIVATE_CANARY_$($env:INPUT_RUN_KEY)" }
+            'full' { "ACTIVATE_FULL_$($env:INPUT_RUN_KEY)" }
+            'rollback' { "ROLLBACK_$($env:INPUT_RUN_KEY)" }
+            default { throw 'Unsupported mode.' }
+          }
+          if ($env:INPUT_CONFIRMATION -cne $required) { throw "Confirmation must exactly match $required" }
+          $migration = (Get-Content -LiteralPath 'supabase/migrations/20260820210000_qnsa_four_brand_field_enrichment.sql' -Raw).Replace("`r`n","`n")
+          $actual = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+            [Text.UTF8Encoding]::new($false).GetBytes($migration))).ToLowerInvariant()
+          if ($actual -cne $env:MIGRATION_SHA256) { throw 'Pinned migration SHA mismatch.' }
+          $forwardMigration = (Get-Content -LiteralPath 'supabase/migrations/20260821010000_qnsa_four_brand_effective_count_detail.sql' -Raw).Replace("`r`n","`n")
+          $forwardActual = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData(
+            [Text.UTF8Encoding]::new($false).GetBytes($forwardMigration))).ToLowerInvariant()
+          if ($forwardActual -cne $env:FORWARD_READ_MIGRATION_SHA256) { throw 'Pinned forward read migration SHA mismatch.' }
+
+      - name: Verify trusted private-manifest run and artifact provenance
+        if: inputs.mode != 'rollback' && inputs.mode != 'schema'
+        shell: pwsh
+        env:
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          INPUT_RUN_KEY: ${{ inputs.run_key }}
+          INPUT_ARTIFACT_NAME: ${{ inputs.artifact_name }}
+          MANIFEST_FILE: ${{ inputs.manifest_file }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SOURCE_RUN_ID -notmatch '^\d+$') { throw 'source_run_id must be an exact GitHub run ID.' }
+          $expectedArtifact = "qnsa-four-brand-private-manifest-$($env:INPUT_RUN_KEY)"
+          if ($env:INPUT_ARTIFACT_NAME -cne $expectedArtifact) { throw "Artifact name must exactly match $expectedArtifact" }
+          if ($env:MANIFEST_FILE -cne 'manifest.json') { throw 'Only the trusted manifest.json contract file is accepted.' }
+          $headers = @{
+            Authorization = "Bearer $env:GH_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          $base = "https://api.github.com/repos/$env:GITHUB_REPOSITORY"
+          $trusted = Invoke-RestMethod -Headers $headers -Uri "$base/actions/workflows/qnsa-four-brand-private-manifest.yml"
+          if ([string]$trusted.name -cne 'QNSA four-brand private enrichment manifest' `
+            -or [string]$trusted.path -cne '.github/workflows/qnsa-four-brand-private-manifest.yml') {
+            throw 'Trusted private-manifest workflow identity mismatch.'
+          }
+          $sourceRun = Invoke-RestMethod -Headers $headers -Uri "$base/actions/runs/$env:SOURCE_RUN_ID"
+          if ([string]$sourceRun.id -cne $env:SOURCE_RUN_ID `
+            -or [long]$sourceRun.workflow_id -ne [long]$trusted.id `
+            -or [string]$sourceRun.name -cne [string]$trusted.name `
+            -or [string]$sourceRun.path -cne [string]$trusted.path `
+            -or [string]$sourceRun.status -cne 'completed' `
+            -or [string]$sourceRun.conclusion -cne 'success' `
+            -or [string]$sourceRun.head_sha -cne $env:GITHUB_SHA) {
+            throw 'Source run provenance is not the exact trusted successful workflow at this commit.'
+          }
+          $artifactPage = Invoke-RestMethod -Headers $headers -Uri "$base/actions/runs/$env:SOURCE_RUN_ID/artifacts?per_page=100"
+          $matches = @($artifactPage.artifacts | Where-Object { [string]$_.name -ceq $expectedArtifact })
+          if ($matches.Count -ne 1 -or [bool]$matches[0].expired) {
+            throw 'Expected one non-expired run-bound private manifest artifact.'
+          }
+
+      - name: Download private manifest artifact
+        if: inputs.mode != 'rollback' && inputs.mode != 'schema'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact_name }}
+          path: private-manifest
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id }}
+
+      - name: Verify private manifest checksum
+        if: inputs.mode != 'rollback' && inputs.mode != 'schema'
+        shell: pwsh
+        env:
+          MANIFEST_FILE: ${{ inputs.manifest_file }}
+          MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+          INPUT_RUN_KEY: ${{ inputs.run_key }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:MANIFEST_SHA256 -notmatch '^[0-9a-f]{64}$') { throw 'Exact manifest SHA-256 is required.' }
+          $path = Join-Path 'private-manifest' $env:MANIFEST_FILE
+          if (-not (Test-Path -LiteralPath $path)) { throw 'Manifest file is absent from the artifact.' }
+          $actual = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -cne $env:MANIFEST_SHA256) { throw 'Private manifest checksum mismatch.' }
+          $manifest = Get-Content -LiteralPath $path -Raw | ConvertFrom-Json
+          if ([string]$manifest.contract -cne 'four-brand-private-enrichment-manifest-v1' `
+            -or [string]$manifest.run_key -cne $env:INPUT_RUN_KEY) {
+            throw 'Private manifest contract or run-key binding mismatch.'
+          }
+
+      - name: Install sidecar schema only under explicit schema authorization
+        if: inputs.mode == 'schema'
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          if ($env:MIGRATION_VERSION -notmatch '^\d{14}$') { throw 'Invalid pinned migration version.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $preflightSql = @"
+          SELECT
+            (to_regclass('public.qnsa_four_brand_enrichment_runs') IS NOT NULL)::int
+            +(to_regclass('public.qnsa_four_brand_enrichment_proposals') IS NOT NULL)::int
+            +(to_regclass('public.qnsa_four_brand_enrichment_control') IS NOT NULL)::int
+            +(to_regclass('public.qnsa_four_brand_enrichment_rollback_ledger') IS NOT NULL)::int AS core_count,
+            to_regclass('public.qnsa_four_brand_enrichment_schema_contract') IS NOT NULL AS marker_exists,
+            to_regclass('supabase_migrations.schema_migrations') IS NOT NULL AS migration_table_exists;
+          "@
+          $preflightBody = @{ query = [string]$preflightSql; read_only = $true } | ConvertTo-Json -Depth 3
+          $preflight = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $preflightBody
+          $coreCount = [int]$preflight[0].core_count
+          $markerExists = [bool]$preflight[0].marker_exists
+          $migrationRecorded = $false
+          if ([bool]$preflight[0].migration_table_exists) {
+            $migrationBody = @{ query = "SELECT EXISTS (SELECT 1 FROM supabase_migrations.schema_migrations WHERE version='$($env:MIGRATION_VERSION)') AS migration_recorded;"; read_only = $true } | ConvertTo-Json -Depth 3
+            $migrationResult = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $migrationBody
+            $migrationRecorded = [bool]$migrationResult[0].migration_recorded
+          }
+          if ($migrationRecorded -and (-not $markerExists)) { throw 'Migration version exists without the exact schema contract marker.' }
+          if (($coreCount -gt 0) -and (-not $markerExists)) { throw 'Unversioned sidecar schema exists; refusing install.' }
+          if ($markerExists) {
+            if ($coreCount -ne 4) { throw 'Incomplete sidecar schema contract.' }
+            $contractBody = @{ query = 'SELECT contract_version,signature_sha256 FROM public.qnsa_four_brand_enrichment_schema_contract WHERE singleton=true;'; read_only = $true } | ConvertTo-Json -Depth 3
+            $contract = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+              -Headers $headers -ContentType 'application/json' -Body $contractBody
+            if ($contract.Count -ne 1 -or $contract[0].contract_version -cne $env:SCHEMA_CONTRACT_VERSION `
+              -or $contract[0].signature_sha256 -cne $env:SCHEMA_CONTRACT_SHA256) {
+              throw 'Existing sidecar schema contract is incompatible.'
+            }
+          }
+          $migration = Get-Content -LiteralPath 'supabase/migrations/20260820210000_qnsa_four_brand_field_enrichment.sql' -Raw
+          $migration = $migration -replace '(?im)^\s*BEGIN\s*;\s*$', '' -replace '(?im)^\s*COMMIT\s*;\s*$', ''
+          $forwardMigration = Get-Content -LiteralPath 'supabase/migrations/20260821010000_qnsa_four_brand_effective_count_detail.sql' -Raw
+          $forwardMigration = $forwardMigration -replace '(?im)^\s*BEGIN\s*;\s*$', '' -replace '(?im)^\s*COMMIT\s*;\s*$', ''
+          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='45s';`n$migration`n$forwardMigration`nCOMMIT;"
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Verify exact installed schema contract without DDL
+        if: inputs.mode != 'schema'
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $preflightSql = @"
+          SELECT
+            (to_regclass('public.qnsa_four_brand_enrichment_runs') IS NOT NULL)::int
+            +(to_regclass('public.qnsa_four_brand_enrichment_proposals') IS NOT NULL)::int
+            +(to_regclass('public.qnsa_four_brand_enrichment_control') IS NOT NULL)::int
+            +(to_regclass('public.qnsa_four_brand_enrichment_rollback_ledger') IS NOT NULL)::int AS core_count,
+            to_regclass('public.qnsa_four_brand_enrichment_schema_contract') IS NOT NULL AS marker_exists;
+          "@
+          $body = @{ query = [string]$preflightSql; read_only = $true } | ConvertTo-Json -Depth 3
+          $preflight = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body
+          if ([int]$preflight[0].core_count -ne 4 -or (-not [bool]$preflight[0].marker_exists)) {
+            throw 'Exact sidecar schema is not installed; run explicit schema mode first.'
+          }
+          $contractBody = @{ query = 'SELECT contract_version,signature_sha256 FROM public.qnsa_four_brand_enrichment_schema_contract WHERE singleton=true;'; read_only = $true } | ConvertTo-Json -Depth 3
+          $contract = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $contractBody
+          if ($contract.Count -ne 1 -or [string]$contract[0].contract_version -cne $env:SCHEMA_CONTRACT_VERSION `
+            -or [string]$contract[0].signature_sha256 -cne $env:SCHEMA_CONTRACT_SHA256) {
+            throw 'Installed sidecar schema contract is incompatible; no DDL was attempted.'
+          }
+
+      - if: inputs.mode != 'schema'
+        run: npm ci
+
+      - name: Resolve the current QNSA service key without exposing it
+        if: inputs.mode != 'schema'
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $keys = Invoke-RestMethod -Method Get `
+            -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/api-keys" `
+            -Headers $headers
+          $service = @($keys | Where-Object {
+            $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret')
+          }) | Select-Object -First 1
+          if (-not $service.api_key) { throw 'Current QNSA service key is unavailable.' }
+          "::add-mask::$($service.api_key)"
+          "QNSA_RUNTIME_SERVICE_ROLE_KEY=$($service.api_key)" | Out-File `
+            -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Audit or activate bounded private manifest
+        if: inputs.mode != 'schema'
+        shell: pwsh
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_RUN_KEY: ${{ inputs.run_key }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+          MANIFEST_FILE: ${{ inputs.manifest_file }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:QNSA_RUNTIME_SERVICE_ROLE_KEY) { throw 'A current service-only QNSA key is unavailable.' }
+          $env:SUPABASE_SERVICE_ROLE_KEY = $env:QNSA_RUNTIME_SERVICE_ROLE_KEY
+          $arguments = @('--mode',$env:INPUT_MODE,'--run-key',$env:INPUT_RUN_KEY,'--confirm',$env:INPUT_CONFIRMATION)
+          if ($env:INPUT_MODE -cne 'rollback') {
+            $arguments += @('--manifest',(Join-Path 'private-manifest' $env:MANIFEST_FILE))
+          }
+          node tools/mariadb-live/run-four-brand-field-enrichment.cjs @arguments

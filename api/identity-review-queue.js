@@ -9,7 +9,7 @@ const {
   unresolvedIdentity,
 } = require('./_lib/identity-review-source.cjs');
 
-const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe']);
+const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier']);
 const REVIEW_BUCKETS = new Map([
   ['release-ready', 'READY_FOR_IDENTITY_REVIEW'],
 ]);
@@ -29,7 +29,7 @@ module.exports = async function handler(req, res) {
   const bucket = String(req.query?.bucket || 'release-ready').trim().toLowerCase();
   const after = String(req.query?.after || '').trim();
   if (brand && !ALLOWED_BRANDS.has(brand)) {
-    return res.status(400).json({ error: 'Brand must be Rolex or Patek Philippe' });
+    return res.status(400).json({ error: 'Brand must be an enabled reviewed watch brand' });
   }
   if (identityStatus && !['UNVERIFIED', 'CONFLICT'].includes(identityStatus)) {
     return res.status(400).json({ error: 'Status must be UNVERIFIED or CONFLICT' });
@@ -64,7 +64,8 @@ module.exports = async function handler(req, res) {
       scanCursor = rows.at(-1).id;
       const enrichedRows = await enrichIdentityRows(auth.client, rows);
       const staticCandidates = enrichedRows.filter(row =>
-        unresolvedIdentity(row)
+        ALLOWED_BRANDS.has(row.brand)
+        && unresolvedIdentity(row)
         && (!brand || row.brand === brand)
         && (!reference || row.reference === reference)
         && (!identityStatus || row.identity_status === identityStatus)
@@ -97,7 +98,7 @@ module.exports = async function handler(req, res) {
       hasMore: Boolean(nextCursor),
       nextCursor,
       items,
-      scope: ['Rolex', 'Patek Philippe'],
+      scope: [...ALLOWED_BRANDS],
       bucket,
       reviewDisposition: REVIEW_BUCKETS.get(bucket),
       countStatus: 'Global actionable membership is evaluated asynchronously; this endpoint scans at most 1,000 indexed source rows per page and joins only those IDs to private review ledgers.',

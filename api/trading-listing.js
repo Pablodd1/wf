@@ -4,7 +4,13 @@ const { getClient } = require('./_lib/supabase');
 const { listEquivalentReferences } = require('./_lib/catalog');
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { isCustomerIdentitySafe, sanitizeTradingRecord } = require('./_lib/trading-record-safety.cjs');
+const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
+const {
+  BACKGROUND_HOLD_SOURCE,
+  isRolexPatekBrand,
+  isRolexPatekPublicationHeld,
+} = require('./_lib/rolex-patek-publication-hold.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
   REVIEWED_ZENITH_RECORD_PREFIX,
@@ -33,6 +39,14 @@ module.exports = async function handler(req, res) {
       .maybeSingle();
     if (publicError) throw publicError;
     let publicListing = strictTradingListing;
+    if (publicListing) {
+      try {
+        const enriched = await loadVerifiedListingRows(client, [id]);
+        publicListing = enriched.get(id) || publicListing;
+      } catch (mediaError) {
+        console.warn('[trading-listing] multi-image enrichment unavailable; retaining verified thumbnail:', mediaError.message);
+      }
+    }
     if (!publicListing && id.startsWith(REVIEWED_ZENITH_RECORD_PREFIX)) {
       const fallback = await client
         .from('watch_records')
@@ -61,6 +75,13 @@ module.exports = async function handler(req, res) {
       }
     }
     if (!publicListing) return res.status(404).json({ error: 'Listing not found' });
+    if (isRolexPatekPublicationHeld() && isRolexPatekBrand(publicListing.brand)) {
+      return res.status(404).json({
+        error: 'Listing is temporarily unavailable while background verification continues',
+        release_status: 'BACKGROUND_VERIFICATION',
+        source: BACKGROUND_HOLD_SOURCE,
+      });
+    }
     const verifiedListing = publicListing;
 
     const { data, error } = await client.from('watch_records')

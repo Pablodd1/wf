@@ -1,8 +1,41 @@
 'use strict';
 
-// These workbook releases remain available even when deployment configuration
-// is empty. Other brands must be named explicitly by the deployment.
-const CONTROLLED_FILE_RELEASE_BRANDS = ['Panerai', 'Zenith'];
+const CONTROLLED_FILE_RELEASE_BRANDS = [
+  'A. Lange & Söhne',
+  'Audemars Piguet',
+  'Bell & Ross',
+  'Blancpain',
+  'Breguet',
+  'Bulgari',
+  'Breitling',
+  'Bvlgari',
+  'Cartier',
+  'Chopard',
+  'F.P. Journe',
+  'Franck Muller',
+  'Girard-Perregaux',
+  'Glashütte Original',
+  'Grand Seiko',
+  'Greubel Forsey',
+  'H. Moser & Cie',
+  'Hublot',
+  'IWC',
+  'Jacob & Co',
+  'Jaeger-LeCoultre',
+  'MB&F',
+  'Omega',
+  'Panerai',
+  'Patek Philippe',
+  'Piaget',
+  'Richard Mille',
+  'Roger Dubuis',
+  'Rolex',
+  'TAG Heuer',
+  'Tudor',
+  'Ulysse Nardin',
+  'Vacheron Constantin',
+  'Zenith',
+];
 
 function publicationBrands(value = process.env.PUBLICATION_BRANDS) {
   const configured = String(value || '')

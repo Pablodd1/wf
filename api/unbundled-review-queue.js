@@ -72,6 +72,8 @@ module.exports = async function handler(req, res) {
     const sellerLineage = await loadSellerLineage(baseUrl, key, result.rows);
     const items = result.rows.map(row => {
       const seller = sellerLineage.get(String(row.field_confidence?.source_record_id || ''));
+      const flags = Array.isArray(row.flags) ? row.flags : [];
+      const isUnbundledChild = flags.includes('UNBUNDLED_CHILD');
       return {
         ...row,
         batchId: row.batch_id,
@@ -85,7 +87,12 @@ module.exports = async function handler(req, res) {
         seller_phone: maskPhone(seller?.source_identity),
         seller_contact_available: Boolean(seller?.source_identity),
         original_posted_at: seller?.source_posted_at || null,
-        front_image: seller?.front_image || null,
+        isUnbundledChild,
+        // ponytail: multi-listing children must not inherit the parent bundle image
+        front_image: null,
+        multi_listing: isUnbundledChild,
+        // Recycle bin: preserve parent image URL for admin visual review / future crop-and-match
+        recycle_image_url: seller?.front_image || null,
         seller_lineage_status: seller?.match_status || null,
       };
     });

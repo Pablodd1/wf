@@ -6,6 +6,486 @@ const path = require('node:path');
 const test = require('node:test');
 
 const api = require('../api/reviewed-market-inventory.js');
+
+test('QNSA Trading Floor does not depend on legacy workbook checkpoints', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../api/reviewed-market-inventory.js'),
+    'utf8',
+  );
+  assert.match(source, /async function loadQnsaReviewedReleaseSummary\(client\)/);
+  assert.match(source, /MARKET_SOURCE_VIEW === 'qnsa_rolex_patek_trading_floor_source'/);
+  assert.match(source, /loadQnsaReviewedReleaseSummary\(client\)/);
+});
+
+test('QNSA pages use indexed brand/reference predicates and no-image lane', () => {
+  assert.match(source, /queryParams\.set\('normalized_reference', `in\.\(\$\{exactVariants\.join\(','\)\}\)`\)/);
+  assert.match(source, /qnsaUnpartitionedMedia[\s\S]*!imagesOnly/);
+  assert.match(source, /if \(!qnsaUnpartitionedMedia\)[\s\S]*has_exact_source_image/);
+  assert.match(source, /if \(brand\) queryParams\.set\('brand_scope', `eq\.\$\{brand\}`\)/);
+  assert.match(source, /const qnsaBrandScanLimit = pageSize \+ 1/);
+  assert.match(source, /qnsa_trading_floor_page_rows/);
+  assert.match(source, /qnsa_market_feed_page_rows/);
+  assert.match(source, /pageRowsRes\.json\(\)[\s\S]*row\.row_data/);
+  assert.match(source, /\? 'created_at\.desc,id\.desc'/);
+  assert.match(source, /normalized_reference', `like\.\$\{familyPrefix\}\*`/);
+});
+
+test('general QNSA market feed bounds pages and joins immutable evidence', () => {
+  const migration = fs.readFileSync(path.join(__dirname, '../supabase/migrations/20260812110000_qnsa_general_market_feed.sql'), 'utf8');
+  assert.match(migration, /WITH eligible AS MATERIALIZED/);
+  assert.match(migration, /JOIN staging\.listings l ON l\.id = e\.id/);
+  assert.match(migration, /p_brand IS NULL OR l\.brand_normalized = p_brand/);
+  assert.match(migration, /p_listing_type text DEFAULT NULL/);
+  assert.match(migration, /p_listing_type IS NULL OR upper/);
+  assert.match(migration, /upper\(COALESCE\(l\.category, ''\)\) = ANY\(v_categories\)/);
+  assert.match(source, /p_brand: brand \|\| null/);
+  assert.match(source, /p_category: itemCategory/);
+});
+
+test('page-local Trading Floor presentation rank keeps exact images ahead of explicit price', () => {
+  const priced = {
+    id: 'priced', brand: 'Patek Philippe', reference: '5712/1A-001',
+    source_price_amount: 92000, has_images: false, listing_date: '2026-01-01',
+    price_research_eligible: true, price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
+  };
+  const unpriced = {
+    id: 'unpriced', brand: 'Patek Philippe', reference: '5712/1A-001',
+    source_price_amount: null, has_images: true, listing_date: '2026-08-01',
+    thumbnail_url: 'https://objects.example/exact-source.jpg',
+    image_urls: ['https://objects.example/exact-source.jpg'],
+    image_evidence_type: 'SOURCE_LISTING_IMAGE',
+  };
+  const records = [unpriced, priced].sort(api.compareInventoryForDisplay);
+  assert.deepEqual(records.map(record => record.id), ['unpriced', 'priced']);
+  assert.equal(api.hasUsableSourcePrice(priced), 92000);
+  assert.equal(api.hasUsableSourcePrice(unpriced), null);
+  assert.deepEqual(api.summarizeCoverage([
+    { ...priced, evidence_coverage: { identity: { complete: true }, contact: { available: false }, image: { available: false }, price: { analytics_eligible: true } } },
+    { ...unpriced, evidence_coverage: { identity: { complete: true }, contact: { available: true }, image: { available: true }, price: { analytics_eligible: false } } },
+  ]), {
+    scope: 'returned_page', record_count: 2, identity_complete: 2, contact_available: 1,
+    exact_source_image: 1, supplied_price: 1, price_not_supplied: 1, price_analytics_eligible: 1,
+  });
+});
+
+test('bounded Trading Floor page rank is evidence-first and never fabricates sparse-card evidence', () => {
+  const records = [
+    { id: 'released-bundle', multi_listing: true, multi_listing_release_approved: true },
+    { id: 'sparse' },
+    {
+      id: 'explicit-price', source_price_amount: 10000,
+      price_research_eligible: true, price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
+    },
+    { id: 'profile', dealer_id: 'dealer-1', dealer_profile_path: '/reference-check/dealer-1' },
+    {
+      id: 'rated', seller_rating: 4.8, seller_review_count: 12,
+      seller_rating_evidence_status: 'SOURCE_SUPPLIED',
+    },
+    {
+      id: 'image', has_images: true,
+      thumbnail_url: 'https://objects.example/source.jpg',
+      image_urls: ['https://objects.example/source.jpg'],
+      image_evidence_type: 'SOURCE_LISTING_IMAGE',
+    },
+  ].sort(api.compareInventoryForDisplay);
+  assert.deepEqual(records.map(record => record.id), [
+    'image', 'explicit-price', 'rated', 'profile', 'sparse', 'released-bundle',
+  ]);
+});
+
+test('admitted workbook brands are globally ordered in Postgres before cursor range', () => {
+  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)");
+  const branch = source.slice(branchStart, source.indexOf('if (admissionError) throw admissionError;', branchStart));
+  assert.match(branch, /\.from\('reviewed_workbook_inventory'\)/);
+  const imageOrder = branch.indexOf(".order('has_image', { ascending: false })");
+  const intentOrder = branch.indexOf(".order('listing_type', { ascending: false })");
+  const evidenceOrder = branch.indexOf(".order('price_evidence_status', { ascending: false })");
+  const priceOrder = branch.indexOf(".order('workbook_price_usd', { ascending: false, nullsFirst: false })");
+  const idOrder = branch.indexOf(".order('id', { ascending: false })");
+  assert.ok(imageOrder > 0 && imageOrder < intentOrder && intentOrder < evidenceOrder
+    && evidenceOrder < priceOrder && priceOrder < idOrder);
+  assert.ok(branch.indexOf('.range(admissionOffset, admissionOffset + pageSize)') > idOrder);
+  assert.match(source, /qnsa_database: 'Global exact-source-image lane first\. Dealer rating\/profile is enriched after the bounded RPC and is not globally ordered\.'/);
+  assert.match(source, /returned_page: 'Within the bounded server page only:/);
+});
+
+test('bundle release is fail-closed and requires the dedicated immutable-lineage lane', () => {
+  const base = {
+    item_category: 'WATCH', listing_type: 'WTS', is_bundle: true,
+    trading_floor_status: 'PUBLISHED_BUNDLE', publication_state: 'APPROVED',
+    normalization_run_complete: true, raw_lineage_verified: true,
+  };
+  assert.equal(api.isTradingFloorSourceRow(base), false);
+  assert.equal(api.isTradingFloorSourceRow({
+    ...base, publication_lane: 'QNSA_EXPLICIT_MULTI_RELEASE_V1',
+  }), true);
+});
+
+test('reviewed-workbook multi parent requires its exact status and source-lineage lane', () => {
+  const base = {
+    item_category: 'WATCH', listing_type: 'MULTI', is_bundle: true,
+    trading_floor_status: 'PUBLISHED_MULTI_LISTING', publication_state: 'APPROVED',
+    raw_lineage_verified: true,
+    verification_status: api.MULTI_PARENT_VERIFICATION_STATUS,
+    publication_lane: api.MULTI_PARENT_PUBLICATION_LANE,
+  };
+  assert.equal(api.isExplicitlyReleasedMultiListing(base), true);
+  assert.equal(api.isTradingFloorSourceRow(base), true);
+  assert.equal(api.isTradingFloorSourceRow({ ...base, raw_lineage_verified: false }), false);
+  assert.equal(api.isTradingFloorSourceRow({ ...base, verification_status: 'APPROVED' }), false);
+  assert.equal(api.isTradingFloorSourceRow({ ...base, publication_lane: 'LEGACY_BUNDLE' }), false);
+});
+
+test('admission query keeps missing-intent singles for post-map resolution and orders parents last', () => {
+  const branchStart = source.indexOf("if (brand && REVIEWED_WORKBOOK_ADMISSION_BRANDS.has(brand)");
+  const branch = source.slice(branchStart, source.indexOf('if (admissionError) throw admissionError;', branchStart));
+  assert.match(branch, /'APPROVED_SINGLE_CANDIDATE',[\s\S]*MULTI_PARENT_VERIFICATION_STATUS/);
+  assert.match(branch, /listing_type\.in\.\(WTS,WTB,MULTI,OTHER,UNKNOWN\),listing_type\.is\.null/);
+  const statusOrder = branch.indexOf(".order('verification_status', { ascending: false })");
+  const typeOrder = branch.indexOf(".order('listing_type', { ascending: false })");
+  assert.ok(statusOrder > 0 && statusOrder < typeOrder);
+});
+
+test('a count-snapshot failure does not take the bounded customer feed offline', () => {
+  assert.match(source, /QNSA count snapshot unavailable/);
+  assert.match(source, /const marketCounts = Array\.isArray\(data\) \? data : \[\]/);
+  assert.match(source, /count_snapshot_available: !error/);
+  assert.doesNotMatch(source, /if \(error\) throw error;\s*const marketCounts/);
+});
+
+test('broad pages bypass the reference-scoped FX sidecar', () => {
+  const broadStart = source.indexOf('if ((qnsaBroadPage || fourBrandEffectiveScope) && !legacyMarketViewContractDetected)');
+  const broadBlock = source.slice(
+    broadStart,
+    source.indexOf('const pageRows =', broadStart),
+  );
+  assert.match(broadBlock, /qnsa_trading_floor_page_rows/);
+  assert.match(broadBlock, /qnsa_market_feed_page_rows/);
+  assert.doesNotMatch(broadBlock, /qnsa_three_brand_fx_trading_floor_rows/);
+});
+
+test('customer inventory does not wait for the optional global count snapshot', () => {
+  const requestBlock = source.slice(
+    source.indexOf('const summaryPromise ='),
+    source.indexOf('const brand = requestedBrand'),
+  );
+  assert.match(requestBlock, /Promise\.resolve\(unavailableQnsaReleaseSummary\(\)\)/);
+  assert.doesNotMatch(requestBlock, /loadQnsaReviewedReleaseSummary\(client\)/);
+});
+
+test('Trading Floor source view is allowlisted and defaults to the canonical QNSA source', () => {
+  assert.equal(api.MARKET_SOURCE_VIEW, 'qnsa_rolex_patek_trading_floor_source');
+  const sourceText = fs.readFileSync(
+    path.join(__dirname, '../api/reviewed-market-inventory.js'),
+    'utf8',
+  );
+  assert.match(sourceText, /TRADING_FLOOR_SOURCE_VIEW/);
+  assert.match(sourceText, /qnsa_rolex_patek_trading_floor_source/);
+  assert.match(sourceText, /ALLOWED_MARKET_SOURCE_VIEWS\.has\(requestedMarketSourceView\)/);
+  assert.match(sourceText, /rest\/v1\/\$\{activeMarketSourceView\}/);
+});
+
+test('authenticated form submissions map into the Trading Floor contract', () => {
+  const record = api.mapDealerSubmission({
+    id: 'submission-1', intent: 'WTS', category: 'WATCH', raw_message: 'WTS Rolex 124060 USD 11000',
+    claimed_fields: { brand: 'Rolex', model: 'Submariner', reference: '124060', dial_color: 'Black', price_amount: 11000, currency: 'USD', poster_name: 'Daisy', poster_phone: '+17860000000', location: 'Miami', dealer_rating: 4.8, review_count: 12, group_count: 3, credential_status: 'VERIFIED' },
+    image_urls: ['https://example.com/rolex.jpg'], poster_image_url: 'https://example.com/daisy.jpg',
+    review_status: 'APPROVED', publication_status: 'PUBLISHED', created_at: '2026-08-06T12:00:00Z',
+  });
+  assert.equal(record.source_type, 'authenticated_user_form');
+  assert.equal(record.price_research_eligible, true);
+  assert.equal(record.thumbnail_url, 'https://example.com/rolex.jpg');
+  assert.equal(record.seller_avatar_url, 'https://example.com/daisy.jpg');
+  assert.equal(record.seller_rating, 4.8);
+  assert.equal(record.seller_review_count, 12);
+  assert.equal(record.seller_rating_evidence_status, 'SOURCE_SUPPLIED');
+  assert.equal(record.seller_group_count, 3);
+  assert.equal(record.location, 'Miami');
+});
+
+test('reviewed inventory cards inherit exact public Rated Dealer feedback evidence', () => {
+  const record = api.mapReviewedRecord({
+    id: 'rated-source-listing', supplied_brand: 'Rolex', model: 'Daytona',
+    normalized_reference: '116500LN', raw_reference: '116500LN', dial_color: 'Black',
+    listing_type: 'WTS', raw_message: 'WTS Rolex 116500LN USD 28000',
+    posted_by: 'Federico Maman', phone_number: '+1 (305) 988-8263',
+    contact_publication_approved: true, source_price_amount: 28000, source_currency: 'USD',
+    has_exact_source_image: false,
+  });
+  assert.equal(record.seller_rating, null);
+  assert.equal(record.seller_review_count, 22);
+  assert.equal(record.seller_rating_evidence_status, 'SOURCE_FEEDBACK_COUNT');
+  assert.equal(record.seller_trust_status, 'Trusted User');
+  assert.equal(api.isSourceBackedRatedDealer(record), true);
+});
+
+test('exact listing links enrich cards with the canonical dealer profile without exposing private phone evidence', async () => {
+  const tableRows = {
+    dealer_listing_links: [{ listing_id: 'listing-1', dealer_id: 'dealer-1' }],
+    dealers: [{ id: 'dealer-1', display_name: 'Verified Dealer', company_name: null,
+      country_code: 'US', city: 'Miami', rating: null, review_count: 22,
+      whatsapp_group_count: 5, status: 'VERIFIED' }],
+  };
+  const client = { from(table) {
+    const chain = {
+      select() { return chain; },
+      eq() { return chain; },
+      in() { return Promise.resolve({ data: tableRows[table], error: null }); },
+    };
+    return chain;
+  } };
+  const [record] = await api.enrichRecordsWithDealerDirectory(client, [{
+    id: 'listing-1', seller_name: 'Source Alias', seller_phone: null,
+    seller_rating: null, seller_review_count: 0, seller_rating_source_url: 'https://watchfacts.com/private-evidence',
+  }]);
+  assert.equal(record.source_seller_name, 'Source Alias');
+  assert.equal(record.seller_name, 'Verified Dealer');
+  assert.equal(record.dealer_id, 'dealer-1');
+  assert.equal(record.dealer_profile_path, '/reference-check/dealer-1');
+  assert.equal(record.seller_rating, null);
+  assert.equal(record.seller_review_count, 22);
+  assert.equal(record.seller_rating_evidence_status, 'SOURCE_FEEDBACK_COUNT');
+  assert.equal(record.seller_group_count, 5);
+  assert.equal(record.seller_rating_source_url, null);
+  assert.equal(record.seller_phone, null);
+});
+
+test('authenticated submissions inherit their verified dealer profile without exposing the internal join hint', async () => {
+  const tableRows = {
+    dealer_listing_links: [],
+    dealers: [{ id: 'dealer-auth', display_name: 'Authenticated Dealer', company_name: 'Dealer LLC',
+      country_code: 'US', city: 'Miami', rating: 4.9, review_count: 12,
+      whatsapp_group_count: 2, status: 'VERIFIED' }],
+  };
+  const client = { from(table) {
+    const chain = {
+      select() { return chain; },
+      eq() { return chain; },
+      in() { return Promise.resolve({ data: tableRows[table], error: null }); },
+    };
+    return chain;
+  } };
+  const submission = api.mapDealerSubmission({
+    id: 'submission-auth', dealer_id: 'dealer-auth', intent: 'WTS', category: 'WATCH',
+    raw_message: 'WTS Rolex 116500LN Black',
+    claimed_fields: { brand: 'Rolex', model: 'Daytona', reference: '116500LN', dial_color: 'Black' },
+    image_urls: [], review_status: 'APPROVED', publication_status: 'PUBLISHED',
+    created_at: '2026-08-15T12:00:00Z',
+  });
+  assert.equal(submission.source_dealer_id, 'dealer-auth');
+  const [record] = await api.enrichRecordsWithDealerDirectory(client, [submission]);
+  assert.equal(record.dealer_id, 'dealer-auth');
+  assert.equal(record.dealer_profile_path, '/reference-check/dealer-auth');
+  assert.equal(record.seller_name, 'Authenticated Dealer');
+  assert.equal(record.seller_rating, 4.9);
+  assert.equal(record.seller_review_count, 12);
+  assert.equal(record.seller_group_count, 2);
+  assert.equal(Object.hasOwn(record, 'source_dealer_id'), false);
+});
+
+test('reviewed direct submissions support category, intent, image, price, and location filters together', () => {
+  const record = api.mapDealerSubmission({
+    id: 'bag-1', intent: 'WTS', category: 'HANDBAG', raw_message: 'WTS Birkin 30 USD 25000',
+    claimed_fields: { title: 'Birkin 30', price_amount: 25000, currency: 'USD', location: 'Miami, US', poster_name: 'Dealer', poster_phone: '+13055550101' },
+    image_urls: ['https://example.com/bag.jpg'], review_status: 'APPROVED', publication_status: 'PUBLISHED', created_at: '2026-08-09T12:00:00Z',
+  });
+  assert.equal(record.seller_phone, null);
+  assert.equal(record.contact_publication_approved, false);
+  assert.equal(api.directSubmissionMatches(record, { itemCategory: 'HANDBAG', listingType: 'WTS', imagesOnly: true, pricedOnly: true, region: 'United States' }), true);
+  assert.equal(api.directSubmissionMatches(record, { itemCategory: 'JEWELRY' }), false);
+  assert.equal(api.directSubmissionMatches(record, { search: 'MIAMI' }), true);
+  assert.equal(api.directSubmissionMatches(record, { region: 'miami' }), false);
+});
+
+test('reviewed direct submission contact requires the stored explicit consent snapshot', () => {
+  const record = api.mapDealerSubmission({
+    id: 'watch-consented', intent: 'WTS', category: 'WATCH', raw_message: 'WTS Rolex 116500LN White USD 30000',
+    claimed_fields: {
+      brand: 'Rolex', model: 'Daytona', reference: '116500LN', dial_color: 'White',
+      poster_name: 'Dealer', poster_phone: '+13055550101', contact_publication_approved: true,
+    },
+    image_urls: ['https://example.com/watch.jpg'], review_status: 'APPROVED', publication_status: 'PUBLISHED', created_at: '2026-08-09T12:00:00Z',
+  });
+  assert.equal(record.seller_phone, '+13055550101');
+  assert.equal(record.contact_publication_approved, true);
+});
+
+test('location filters match posting countries only', () => {
+  assert.equal(api.locationSearchPattern(' United States '), '*United*States*');
+  assert.equal(api.locationMatches('Miami, US', 'United States'), true);
+  assert.equal(api.locationMatches('New York, United States', 'US'), true);
+  assert.equal(api.locationMatches('Miami, US', 'Miami'), false);
+  assert.equal(api.locationMatches('Europe', 'Europe'), false);
+  assert.equal(api.locationMatches('Hong Kong', 'United States'), false);
+});
+
+test('posting-country normalization supports ISO countries and safe database suffix tokens', () => {
+  assert.equal(api.postingCountryName('Paris, FR'), 'France');
+  assert.equal(api.postingCountryName('Brazil'), 'Brazil');
+  assert.equal(api.postingCountryName('Europe'), null);
+  assert.equal(api.databasePostingCountryToken('United States'), ', US');
+  assert.equal(api.databasePostingCountryToken('France'), ', FR');
+  assert.equal(api.databasePostingCountryToken('Germany'), ', DE');
+});
+
+test('combined Trading Floor lanes suppress exact listing-ID duplicates without taking the page offline', () => {
+  const result = api.deduplicateRecordsById([
+    { id: 'listing-1', source: 'base' },
+    { id: 'listing-1', source: 'overlay' },
+    { id: 'listing-2', source: 'overlay' },
+  ]);
+  assert.deepEqual(result.records.map(record => record.id), ['listing-1', 'listing-2']);
+  assert.equal(result.records[0].source, 'base');
+  assert.equal(result.duplicateCount, 1);
+});
+
+test('free-text search is case-insensitive and matches all terms without requiring adjacency', () => {
+  const record = {
+    brand: 'Patek Philippe',
+    model: 'Nautilus',
+    reference: '5712/1A-001',
+    seller_name: 'Pierre Duchateau',
+    raw_message: 'WTS Patek Philippe Nautilus blue dial 5712/1A-001',
+  };
+  assert.equal(api.searchTermsMatch(record, 'pAtEk 5712'), true);
+  assert.equal(api.searchTermsMatch(record, 'PIERRE nautilus'), true);
+  assert.equal(api.searchTermsMatch(record, 'patek rolex'), false);
+  assert.equal(api.searchTermsMatch({ ...record, raw_message: `${record.raw_message} full set 2018` }, 'black nautilus full-set 2018'), false);
+  assert.equal(api.searchTermsMatch({ ...record, raw_message: `${record.raw_message} full set 2018` }, 'blue nautilus full-set 2018'), true);
+
+  const legacyParams = api.buildLegacyMarketQueryParams({
+    pageSize: 50,
+    requestedReference: '5712',
+    exactDialVariants: [],
+    search: 'pAtEk 5712',
+  });
+  assert.equal(legacyParams.get('or'), null);
+  assert.equal(legacyParams.get('normalized_reference'), 'in.(5712)');
+});
+
+test('reviewed records expose only supplied location and suppress bundle child media', () => {
+  const mapped = api.mapReviewedRecord(record({
+    parent_id: 'bundle-parent',
+    location: 'Miami, US',
+    user_image_url: 'https://example.com/group.jpg',
+    has_exact_source_image: true,
+  }));
+  assert.equal(mapped.location, 'Miami, US');
+  assert.equal(mapped.is_unbundled_child, true);
+  assert.equal(mapped.has_images, false);
+  assert.equal(mapped.thumbnail_url, null);
+  assert.deepEqual(mapped.image_urls, []);
+});
+
+test('direct submissions cannot cross the global image boundary', () => {
+  assert.equal(api.directSubmissionMatchesImageLane({ has_images: true }, 'images'), true);
+  assert.equal(api.directSubmissionMatchesImageLane({ has_images: false }, 'images'), false);
+  assert.equal(api.directSubmissionMatchesImageLane({ has_images: false }, 'no-images'), true);
+  assert.equal(api.directSubmissionMatchesImageLane({ has_images: true }, 'no-images'), false);
+});
+
+test('rated filtering requires source-backed rating and review evidence', () => {
+  const rated = { seller_rating: 4.8, seller_review_count: 12, seller_rating_evidence_status: 'SOURCE_SUPPLIED' };
+  const feedbackRated = { seller_rating: null, seller_review_count: 22, seller_rating_evidence_status: 'SOURCE_FEEDBACK_COUNT' };
+  assert.equal(api.isSourceBackedRatedDealer(rated), true);
+  assert.equal(api.isSourceBackedRatedDealer(feedbackRated), true);
+  assert.equal(api.isSourceBackedRatedDealer({ seller_rating: 5, seller_review_count: 0, seller_rating_evidence_status: 'SOURCE_SUPPLIED' }), false);
+  assert.equal(api.isSourceBackedRatedDealer({ seller_rating: 5, seller_review_count: 50, seller_rating_evidence_status: 'UNAVAILABLE' }), false);
+  assert.equal(api.ratingMatches(rated, 'rated'), true);
+  assert.equal(api.ratingMatches(feedbackRated, 'rated'), true);
+  assert.equal(api.ratingMatches(rated, 'unrated'), false);
+  assert.equal(api.ratingMatches({ seller_rating: null, seller_review_count: 0, seller_rating_evidence_status: 'UNAVAILABLE' }, 'unrated'), true);
+});
+
+test('rated and unrated direct submission filters use the mapped evidence contract', () => {
+  const rated = api.mapDealerSubmission({
+    id: 'rated-1', intent: 'WTS', category: 'WATCH', raw_message: 'WTS Rolex 116500LN USD 30000',
+    claimed_fields: { brand: 'Rolex', model: 'Daytona', reference: '116500LN', dial_color: 'Black', dealer_rating: 4.9, review_count: 22 },
+    image_urls: [], review_status: 'APPROVED', publication_status: 'PUBLISHED', created_at: '2026-08-11T00:00:00Z',
+  });
+  assert.equal(api.directSubmissionMatches(rated, { rating: 'rated' }), true);
+  assert.equal(api.directSubmissionMatches(rated, { rating: 'unrated' }), false);
+});
+
+test('date windows produce deterministic inclusive lower bounds', () => {
+  const now = new Date('2026-08-11T12:00:00.000Z');
+  assert.equal(api.dateWindowStart('1D', now), '2026-08-10T12:00:00.000Z');
+  assert.equal(api.dateWindowStart('7D', now), '2026-08-04T12:00:00.000Z');
+  assert.equal(api.dateWindowStart('1M', now), '2026-07-12T12:00:00.000Z');
+  assert.equal(api.dateWindowStart('invalid', now), null);
+});
+
+test('only reconciled Rolex, Patek, and Audemars Piguet pending-review singles enter the Trading Floor', () => {
+  const pending = {
+    item_category: 'WATCH', listing_type: 'WTS', trading_floor_status: 'published_pending_verification',
+    publication_lane: 'QNSA_NORMALIZED_STAGING_V1', normalization_run_complete: true,
+    raw_lineage_verified: true, publication_state: 'PENDING_VERIFICATION',
+  };
+  assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Rolex' }), true);
+  assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Patek Philippe' }), true);
+  assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Audemars Piguet' }), true);
+  assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Omega' }), false);
+  assert.equal(api.isTradingFloorSourceRow({ ...pending, canonical_brand: 'Rolex', raw_lineage_verified: false }), false);
+});
+
+test('the bounded six-brand image lane is admitted through the same reviewed QNSA gate', () => {
+  const row = {
+    item_category: 'WATCH', listing_type: 'WTS', canonical_brand: 'Rolex',
+    publication_lane: 'QNSA_SIX_BRAND_IMAGE_LANE_V1',
+    normalization_run_complete: true, raw_lineage_verified: true,
+    publication_state: 'PENDING_VERIFICATION',
+    trading_floor_status: 'PUBLISHED_PENDING_VERIFICATION',
+    parent_id: null, is_bundle: false,
+  };
+  assert.equal(api.isTradingFloorSourceRow(row), true);
+  assert.equal(api.isTradingFloorSourceRow({ ...row, raw_lineage_verified: false }), false);
+  assert.equal(api.isTradingFloorSourceRow({ ...row, is_bundle: true }), false);
+});
+
+test('reviewed QNSA release rows and source-backed ratings reach the card contract', () => {
+  assert.match(source, /'QNSA_ROLEX_PATEK_REVIEWED_V1'/);
+  assert.match(source, /'QNSA_GENERAL_MARKET_FEED_V1'/);
+  assert.match(source, /'QNSA_REVIEWED_LATER_BRAND_V1'/);
+  assert.match(source, /\['APPROVED', 'PENDING_VERIFICATION'\]\.includes\(row\?\.publication_state\)/);
+  assert.match(source, /reviewedQnsaRelease \|\|/);
+  assert.match(source, /seller_rating: ratingEvidenceStatus === 'SOURCE_SUPPLIED' \? directRating : null/);
+  assert.match(source, /ratedDealerEvidence/);
+  assert.match(source, /raw_lineage_verified,dealer_rating,review_count/);
+  assert.equal(api.isTradingFloorSourceRow({
+    item_category: 'WATCH', listing_type: 'WTS', canonical_brand: 'Richard Mille',
+    publication_lane: 'QNSA_REVIEWED_LATER_BRAND_V1', normalization_run_complete: true,
+    raw_lineage_verified: true, publication_state: 'PENDING_VERIFICATION',
+  }), true);
+});
+
+test('raw messages with several watch candidates stay out of the single-watch publication lane', () => {
+  const multi = api.mapReviewedRecord(record({
+    raw_message: 'WTS AP 15500ST Blue USD 40k\nRolex 126500LN White USD 30k',
+    is_bundle: false,
+    listing_type: 'WTS',
+  }));
+  assert.equal(multi.multi_listing, true);
+  assert.equal(multi.has_images, false);
+  assert.deepEqual(multi.image_urls, []);
+
+  const single = api.mapReviewedRecord(record({
+    raw_message: 'WTS Rolex 126500LN White 2025 full set USD 30k',
+    is_bundle: false,
+    listing_type: 'WTS',
+  }));
+  assert.equal(single.multi_listing, false);
+});
+
+test('pending publication keeps customer copy neutral without loosening price eligibility', () => {
+  const mapped = api.mapReviewedRecord(record({
+    verdict: 'HUMAN_REVIEW', verification_status: 'HUMAN_REVIEW',
+    trading_floor_status: 'published_pending_verification', publication_state: 'PENDING_VERIFICATION',
+    has_verified_usd_price: false, verified_price_usd: null,
+  }));
+  assert.equal(mapped.data_quality_review_required, true);
+  assert.equal(mapped.verification_label, 'Listing');
+  assert.equal(mapped.price_research_eligible, false);
+});
 const source = fs.readFileSync(
   path.join(__dirname, '../api/reviewed-market-inventory.js'),
   'utf8',
@@ -34,7 +514,11 @@ const workflow = fs.readFileSync(
 test('parses a combined exact-reference and dial search into indexed filters', () => {
   assert.match(source, /parseTradingSearch\(search\)/);
   assert.match(source, /req\.query\?\.reference \|\| parsedSearch\.reference/);
-  assert.match(source, /query\.in\('dial_color', exactDialVariants\)/);
+  assert.match(source, /const brandQueryValues = \(Array\.isArray\(req\.query\?\.brand\)/);
+  assert.match(source, /const requestedBrand = requestedBrands\.length === 1 \? requestedBrands\[0\] : ''/);
+  assert.match(source, /genericSearch && !genericSearch\.includes\(' '\) && !requestedReference && !requestedDial/);
+  assert.match(source, /filter\(record => !search \|\| searchTermsMatch\(record, search\)\)/);
+  assert.match(source, /queryParams\.set\('dial_color'/);
 });
 
 function record(overrides = {}) {
@@ -49,6 +533,7 @@ function record(overrides = {}) {
     contact_publication_approved: true,
     raw_message: 'Rolex 126500LN white USD 30,000',
     listing_type: 'WTS',
+    item_category: 'WATCH',
     brand_scope: 'Rolex',
     supplied_brand: 'Rolex',
     canonical_brand: 'Rolex',
@@ -79,6 +564,42 @@ function record(overrides = {}) {
     ...overrides,
   };
 }
+
+test('routes an explicit watch-part sale out of watch inventory without losing evidence', () => {
+  const mapped = api.mapReviewedRecord(record({
+    id: 'dab509ee-feec-4b6c-b955-dac54638493e',
+    raw_message: 'Black Ceramic Bezel for 116500LN Rolex Daytona Steel *$2,400*',
+    raw_reference: '116500LN', normalized_reference: '116500LN',
+    public_reference: '116500LN', reference_search_key: '116500LN',
+    source_price_amount: '2400', source_price_text: '$2,400', source_currency: 'USD',
+    workbook_price_usd: '2400', verified_price_usd: '2400',
+    posted_by: 'Parts Dealer', user_image_url: 'https://images.example.test/bezel.jpg',
+  }));
+
+  assert.equal(mapped.id, 'dab509ee-feec-4b6c-b955-dac54638493e');
+  assert.equal(mapped.item_category, 'ACCESSORY');
+  assert.equal(mapped.watch_part_classification_reason, 'WATCH_PART_ACCESSORY');
+  assert.equal(mapped.model, 'Bezel');
+  assert.equal(mapped.luxury_item_type, 'Bezel');
+  assert.equal(mapped.luxury_identity_eligible, true);
+  assert.equal(mapped.price_research_eligible, false);
+  assert.equal(mapped.raw_message, 'Black Ceramic Bezel for 116500LN Rolex Daytona Steel *$2,400*');
+  assert.equal(mapped.reference, '116500LN');
+  assert.equal(mapped.price_raw, 2400);
+  assert.equal(mapped.seller_name, 'Parts Dealer');
+  assert.deepEqual(mapped.image_urls, ['https://images.example.test/bezel.jpg']);
+  assert.equal(api.effectiveItemCategory(record({ raw_message: mapped.raw_message })), 'ACCESSORY');
+  assert.match(source, /filter\(record => itemCategory === 'ALL' \|\| record\.item_category === itemCategory\)/);
+});
+
+test('keeps a complete watch on a strap in the watch lane', () => {
+  const mapped = api.mapReviewedRecord(record({
+    raw_message: 'Rolex Daytona 126500LN watch on black strap USD 30,000',
+  }));
+  assert.equal(mapped.item_category, 'WATCH');
+  assert.equal(mapped.watch_part_classification_reason, null);
+  assert.equal(mapped.price_research_eligible, true);
+});
 
 test('maps exact reviewed evidence to the Trading Floor-compatible contract', () => {
   const mapped = api.mapReviewedRecord(record({
@@ -144,6 +665,15 @@ test('removes the entire image contract when no exact supplied image exists', ()
   assert.doesNotMatch(JSON.stringify(mapped), /catalog\.example\.test/);
 });
 
+test('preserves a database-qualified legacy HTTP image token in the image lane', () => {
+  const mapped = api.mapReviewedRecord(record({
+    has_exact_source_image: true,
+    user_image_url: 'https://example.com/listings/legacy%object.jpg',
+  }));
+  assert.equal(mapped.has_images, true);
+  assert.equal(mapped.thumbnail_url, 'https://example.com/listings/legacy%object.jpg');
+});
+
 test('customer image copy contains no internal review-process labels', () => {
   const mapped = api.mapReviewedRecord(record());
   assert.equal(mapped.image_evidence_label, 'Source-supplied listing image');
@@ -168,6 +698,25 @@ test('never promotes unresolved workbook USD values into verified USD price', ()
   assert.equal(mapped.price_research_eligible, false);
 });
 
+test('Trading Floor prefers a qualified corrected USD price and retains original source evidence', () => {
+  const mapped = api.mapReviewedRecord({
+    id: 'corrected-1', supplied_brand: 'Patek Philippe', model: 'Nautilus',
+    normalized_reference: '5712/1A', dial_color: 'Blue', listing_type: 'WTS',
+    source_price_amount: 305000, source_currency: 'HKD',
+    verified_price_usd: null, has_verified_usd_price: false,
+    corrected_price_usd: 39102, corrected_source_amount: 305000,
+    corrected_source_currency: 'HKD', corrected_fx_rate: 0.128203,
+    corrected_fx_source: 'ECB_REFERENCE_RATES', corrected_fx_date: '2026-08-11',
+    price_correction_status: 'QUALIFIED', price_correction_id: 'sidecar-row-2',
+    price_correction_key: 'three-brand-v1', confidence: 100, verdict: 'APPROVED',
+  });
+  assert.equal(mapped.price_usd, 39102);
+  assert.equal(mapped.price_raw, 305000);
+  assert.equal(mapped.currency, 'HKD');
+  assert.equal(mapped.price_correction_applied, true);
+  assert.equal(mapped.price_research_eligible, true);
+});
+
 test('holds implausible workbook-only amounts for review instead of displaying them as USD', () => {
   const mapped = api.mapReviewedRecord(record({
     workbook_price_usd: '25000000000',
@@ -184,6 +733,26 @@ test('holds implausible workbook-only amounts for review instead of displaying t
   assert.equal(mapped.price_research_eligible, false);
 });
 
+test('keeps reviewed malformed source prices as evidence without exposing normalized USD', () => {
+  const mapped = api.mapReviewedRecord(record({
+    model: 'Cosmograph Daytona',
+    raw_reference: '116500LN',
+    normalized_reference: '116500LN',
+    dial_color: 'Black',
+    workbook_price_usd: 251,
+    source_price_amount: 251,
+    source_currency: 'USD',
+    price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
+    has_verified_usd_price: true,
+    verified_price_usd: 251,
+    raw_message: '116500LN black, watch + card, $25,1 + label',
+  }));
+  assert.equal(mapped.workbook_price_review_reason, 'WORKBOOK_PRICE_BELOW_PUBLIC_PLAUSIBILITY');
+  assert.equal(mapped.price_usd, null);
+  assert.equal(mapped.price_raw, 251, 'raw source evidence must remain intact');
+  assert.equal(mapped.price_research_eligible, false);
+});
+
 test('reference punctuation variants share one exact key without changing display reference', () => {
   assert.equal(api.referenceComparisonKey('5712/1A'), '57121A');
   assert.equal(api.referenceComparisonKey('5712-1A'), '57121A');
@@ -197,8 +766,7 @@ test('reference punctuation variants share one exact key without changing displa
   }));
   assert.equal(mapped.reference, '5712/1A');
   assert.equal(mapped.reference_search_key, '57121A');
-  assert.match(source, /\.eq\('reference_search_key', reference\)/);
-  assert.doesNotMatch(source, /\.ilike\(|\.contains\(/);
+  assert.match(source, /queryParams\.set\('reference_search_key', `eq\.\$\{reference\}`\)/);
 });
 
 test('fails closed when a price and currency token contaminates the reference', () => {
@@ -234,6 +802,89 @@ test('fails closed when a price and currency token contaminates the reference', 
   assert.equal(mapped.evidence_coverage.identity.complete, false);
   assert.equal(mapped.evidence_coverage.identity.invalid_reference_reason, 'PRICE_CURRENCY_TOKEN');
   assert.equal(mapped.evidence_coverage.price.analytics_eligible, false);
+});
+
+test('does not publish Richard Mille reference digits as a MYR price', () => {
+  for (const sample of [
+    { reference: 'RM001', amount: 1, raw: 'NTQ/ RM 001' },
+    { reference: 'RM002', amount: 2, raw: 'NTQ\nRM 002\nSold order' },
+  ]) {
+    assert.equal(api.rmReferenceIsMyrPriceArtifact(sample.reference, sample.amount, 'MYR', sample.raw), true);
+    const mapped = api.mapReviewedRecord(record({
+      raw_message: sample.raw,
+      brand_scope: 'Richard Mille',
+      supplied_brand: 'Richard Mille',
+      canonical_brand: 'Richard Mille',
+      model: 'Tourbillon',
+      raw_reference: sample.reference,
+      normalized_reference: sample.reference,
+      public_reference: sample.reference,
+      reference_search_key: sample.reference,
+      source_price_amount: String(sample.amount),
+      source_price_text: `MYR ${sample.amount}`,
+      source_currency: 'MYR',
+      workbook_price_usd: '0',
+      verified_price_usd: '0',
+      has_verified_usd_price: false,
+    }));
+    assert.equal(mapped.reference, sample.reference);
+    assert.equal(mapped.price_raw, null);
+    assert.equal(mapped.source_price_amount, null);
+    assert.equal(mapped.source_price_text, null);
+    assert.equal(mapped.currency, null);
+    assert.equal(mapped.source_currency, null);
+    assert.equal(mapped.price_evidence_status, 'REFERENCE_TOKEN_AS_PRICE');
+    assert.equal(mapped.price_research_eligible, false);
+  }
+});
+
+test('preserves a true MYR amount when the raw message directly labels the price', () => {
+  for (const raw of ['RM001 asking MYR 500,000', 'RM001 asking 500000 MYR']) {
+    assert.equal(api.rmReferenceIsMyrPriceArtifact('RM001', 500000, 'MYR', raw), false);
+    const mapped = api.mapReviewedRecord(record({
+      raw_message: raw,
+      brand_scope: 'Richard Mille',
+      supplied_brand: 'Richard Mille',
+      canonical_brand: 'Richard Mille',
+      model: 'Tourbillon',
+      raw_reference: 'RM001',
+      normalized_reference: 'RM001',
+      public_reference: 'RM001',
+      reference_search_key: 'RM001',
+      source_price_amount: '500000',
+      source_price_text: 'MYR 500000',
+      source_currency: 'MYR',
+      price_evidence_status: 'EXPLICIT_SOURCE_FX_PENDING',
+      workbook_price_usd: null,
+      verified_price_usd: null,
+      has_verified_usd_price: false,
+    }));
+    assert.equal(mapped.source_price_amount, 500000);
+    assert.equal(mapped.source_currency, 'MYR');
+    assert.equal(mapped.price_evidence_status, 'EXPLICIT_SOURCE_FX_PENDING');
+  }
+});
+
+test('final public response boundary clears an RM reference token even after later recovery', () => {
+  const sanitized = api.suppressPublicReferenceTokenPrice({
+    reference: 'RM001',
+    raw_message: 'NTQ/ RM 001',
+    price_usd: 0,
+    price_raw: 1,
+    currency: 'MYR',
+    source_price_amount: 1,
+    source_price_text: 'RM 001',
+    source_currency: 'MYR',
+    price_evidence_status: 'PRICE_NOT_SUPPLIED',
+    price_research_eligible: true,
+  });
+  assert.equal(sanitized.price_usd, null);
+  assert.equal(sanitized.price_raw, null);
+  assert.equal(sanitized.currency, null);
+  assert.equal(sanitized.source_price_amount, null);
+  assert.equal(sanitized.source_currency, null);
+  assert.equal(sanitized.price_evidence_status, 'REFERENCE_TOKEN_AS_PRICE');
+  assert.equal(sanitized.price_research_eligible, false);
 });
 
 test('verified USD remains ineligible until every identity field is present', () => {
@@ -272,14 +923,17 @@ test('coverage summary is page-bounded and reconciles evidence flags', () => {
     identity_complete: 1,
     contact_available: 1,
     exact_source_image: 1,
+    supplied_price: 2,
+    price_not_supplied: 0,
     price_analytics_eligible: 1,
   });
 });
 
-test('suppresses seller contact unless the stored owner-publication approval is true', () => {
+test('publishes seller identity but keeps contact consent-gated', () => {
   const mapped = api.mapReviewedRecord(record({ contact_publication_approved: false }));
-  assert.equal(mapped.seller_name, null);
+  assert.equal(mapped.seller_name, 'Dealer One');
   assert.equal(mapped.seller_phone, null);
+  assert.equal(mapped.contact_publication_approved, false);
 });
 
 test('supports numeric and base64url page cursors', () => {
@@ -287,6 +941,15 @@ test('supports numeric and base64url page cursors', () => {
   assert.equal(api.parseCursorPage(Buffer.from('177755').toString('base64url')), 177755);
   assert.equal(api.parseCursorPage('0'), null);
   assert.equal(api.parseCursorPage('bad-token'), null);
+});
+
+test('inventory cursors preserve the global image boundary without a full-view sort', () => {
+  assert.deepEqual(api.parseInventoryCursor('', 24), { lane: 'images', offset: 0, page: 1 });
+  const token = api.encodeInventoryCursor({ lane: 'no-images', offset: 17, page: 8 });
+  assert.deepEqual(api.parseInventoryCursor(token, 24), {
+    lane: 'no-images', offset: 17, page: 8,
+  });
+  assert.equal(api.parseInventoryCursor('not-a-cursor', 24), null);
 });
 
 test('scoped pages use one lookahead row instead of trusting estimated totals', () => {
@@ -298,8 +961,20 @@ test('scoped pages use one lookahead row instead of trusting estimated totals', 
     records: rows.slice(0, 8),
     hasLookahead: false,
   });
-  assert.match(source, /pageWindow\.end \+ Number\(scopedFilter\)/);
-  assert.match(source, /scopedFilter[\s\S]*\? pageResult\.hasLookahead/);
+  assert.match(source, /const qnsaBrandScanLimit = pageSize \+ 1/);
+  assert.match(source, /queryParams\.set\('limit', String\(qnsaBrandScanLimit\)\)/);
+  assert.match(source, /lastReturnedSourceIndex/);
+  assert.match(source, /const nextCursor = hasMore[\s\S]*encodeInventoryCursor/);
+});
+
+test('cursor inventory honors the 50-card marketplace page and overlaps independent database reads', () => {
+  assert.match(source, /const pageSizeLimit = pagination === 'cursor' \? 50 : MAX_PAGE_SIZE/);
+  assert.match(source, /const summaryPromise = activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'/);
+  assert.match(source, /\? Promise\.resolve\(unavailableQnsaReleaseSummary\(\)\)/);
+  assert.match(source, /: loadSummary\(client\)/);
+  assert.match(source, /directRowsPromise = Promise\.resolve\(directQuery\)/);
+  assert.match(source, /await directRowsPromise/);
+  assert.match(source, /const summary = await summaryPromise/);
 });
 
 test('publication brands are derived from populated reviewed checkpoints', () => {
@@ -310,28 +985,82 @@ test('publication brands are derived from populated reviewed checkpoints', () =>
   ] }), ['Rolex', 'Patek Philippe']);
 });
 
-test('public brand filters preserve punctuation and exact references use exact counts', () => {
-  assert.match(source, /const requestedBrand = cleanExactText\(req\.query\?\.brand \|\| parsedSearch\.brand, 80\)/);
-  assert.match(source, /item\.brand\?\.toLocaleLowerCase\(\) === requestedBrand\.toLocaleLowerCase\(\)/);
-  assert.match(source, /const preciseCount = Boolean\(reference\)/);
-  assert.match(source, /count: preciseCount \? 'exact' : scopedFilter \? 'estimated' : undefined/);
+test('enabled reviewed brands stay discoverable while count metadata is offline', () => {
+  assert.deepEqual(api.publicationBrandsFromSummary({
+    count_snapshot_available: false,
+    brands: [{ brand: 'Rolex', canonical_listings: null }, { brand: 'Richard Mille', canonical_listings: null }],
+  }), ['Rolex', 'Richard Mille']);
 });
 
-test('endpoint is read-only and orders by price evidence without ranking ambiguous workbook amounts', () => {
-  assert.match(source, /\.from\(MARKET_SOURCE_VIEW\)/);
-  assert.match(source, /const MARKET_SOURCE_VIEW = 'reviewed_workbook_market_source_v2'/);
+test('public brand filters preserve punctuation and use only supported exact snapshot totals', () => {
+  assert.match(source, /const requestedBrands = \[\.\.\.new Set\(brandQueryValues/);
+  assert.match(source, /const requestedBrand = requestedBrands\.length === 1 \? requestedBrands\[0\] : ''/);
+  assert.match(source, /const brand = requestedBrand/);
+  assert.match(source, /snapshotInventoryTotal\(summary/);
+  assert.match(source, /'withheld_for_unsupported_filter'/);
+  assert.match(source, /'available_from_market_feed_counts'/);
+  assert.doesNotMatch(source, /const preciseCount = Boolean\(reference\)/);
+  assert.doesNotMatch(source, /const total = summaryTotal/);
+});
+
+test('QNSA endpoint is read-only and globally exhausts its indexed image lane before no-image rows', () => {
+  assert.match(source, /rest\/v1\/\$\{activeMarketSourceView\}/);
+  assert.match(source, /: 'qnsa_rolex_patek_trading_floor_source'/);
   assert.doesNotMatch(source, /\.from\(['"]watch_records['"]\)/);
   assert.doesNotMatch(source, /\.(?:insert|upsert|update|delete)\s*\(/);
-  assert.match(source, /query = query\.eq\('has_complete_identity', true\)/);
+  assert.match(source, /has_complete_identity/);
   assert.match(source, /MULTIPLE_LISTING_IDENTITY_VALUES/);
-  assert.match(source, /query = query\.not\('dial_color', 'ilike', value\)/);
-  assert.match(source, /query = query\.not\('model', 'ilike', value\)/);
-  assert.match(source, /query = query\.neq\('verification_status', 'QUARANTINED_SOURCE_CONFLICT'\)/);
-  assert.match(source, /order\('has_supplied_price', \{ ascending: false \}\)[\s\S]*order\('has_verified_usd_price', \{ ascending: false \}\)[\s\S]*order\('verified_price_usd', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('has_exact_source_image', \{ ascending: false \}\)[\s\S]*order\('posting_date', \{ ascending: false, nullsFirst: false \}\)[\s\S]*order\('id', \{ ascending: true \}\)/);
-  assert.doesNotMatch(source, /order\('workbook_price_usd'/);
-  assert.doesNotMatch(source, /order\('source_price_amount'/);
-  assert.doesNotMatch(source, /order\('has_complete_identity'/);
+  assert.match(source, /activeMarketSourceView !== 'qnsa_rolex_patek_trading_floor_source'[\s\S]*trading_floor_status', 'not\.in\.\(bundle_child_pending_review,bundle_pending_separation,suppressed_exact_duplicate\)'/);
+  // ponytail: images-first ORDER BY was reverted — it causes a Postgres
+  // statement timeout on the unindexed view. Assert the proven indexed order:
+  // price evidence primary, images as tiebreaker, newest last.
+  assert.match(source, /queryParams\.set\('has_exact_source_image', requestedLane === 'images' \? 'eq\.true' : 'eq\.false'\)/);
+  assert.match(source, /queryParams\.set\('order', activeMarketSourceView === 'qnsa_rolex_patek_trading_floor_source'/);
+  assert.match(source, /\? 'created_at\.desc,id\.desc'[\s\S]*: 'id\.desc'/);
+  assert.match(source, /Fill the final image page from the no-image lane/);
+  assert.match(source, /pageResult\.records\.filter\(row => \{/);
+  assert.match(source, /return isTradingFloorSourceRow\(row\)/);
+  assert.match(source, /usedLegacyViewContract \? isLegacyReviewedInventoryRecord\(record\) : true/);
+  const legacyBuilder = api.buildLegacyMarketQueryParams.toString();
+  assert.doesNotMatch(legacyBuilder, /order\('workbook_price_usd'/);
+  assert.doesNotMatch(legacyBuilder, /order\('source_price_amount'/);
+  assert.doesNotMatch(legacyBuilder, /order\('has_complete_identity'/);
   assert.doesNotMatch(source, /catalog_image_url|final_image_url|display_image_url/);
+  assert.match(source, /buildLegacyMarketQueryParams/);
+  assert.match(source, /legacyMarketViewContractDetected/);
+  assert.match(source, /42703\|does not exist/);
+});
+
+test('legacy production view fallback preserves exact reference families and bounded indexed reads', () => {
+  const params = api.buildLegacyMarketQueryParams({
+    pageSize: 24,
+    offset: 0,
+    imageLane: 'images',
+    brand: 'Patek Philippe',
+    requestedReference: '5712/1A-001',
+    exactDialVariants: [],
+    listingType: 'WTS',
+    imagesOnly: true,
+    pricedOnly: false,
+    search: 'Patek Philippe 5712/1A-001',
+  });
+  assert.equal(params.get('brand_scope'), 'eq.Patek Philippe');
+  assert.match(params.get('normalized_reference'), /5712\/1A-001/);
+  assert.match(params.get('normalized_reference'), /5712\/1A/);
+  assert.equal(params.get('has_exact_source_image'), 'eq.true');
+  assert.equal(params.get('order'), 'id.desc');
+  assert.equal(params.get('limit'), '25');
+});
+
+test('legacy reviewed evidence accepts explicit confirmed review labels but rejects quarantine states', () => {
+  assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 0.95, listing_status: 'CATALOG_AND_RAW_REFERENCE_CONFIRMED' }), true);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 95, listing_status: 'IMAGE_CONFIRMED_MODEL' }), true);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 89, listing_status: 'IMAGE_CONFIRMED_MODEL' }), false);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ brand: 'Rolex', reference: '116500LN', confidence: 72, listing_status: 'HUMAN_REVIEW' }), true);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ brand: 'Patek Philippe', reference: '5712/1A-001', confidence: null, listing_status: 'NEEDS_REVIEW' }), true);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ brand: 'Patek Philippe', reference: '5712/1A-001', confidence: 72, listing_status: 'BUNDLE_PENDING_SEPARATION' }), false);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 100, listing_status: 'bundle_child_pending_review' }), false);
+  assert.equal(api.isLegacyReviewedInventoryRecord({ confidence: 100, listing_status: 'REJECTED' }), false);
 });
 
 test('price-first indexes cover global, intent, brand, and brand-intent floor orders', () => {
@@ -388,7 +1117,193 @@ test('service-only evidence view keeps strict identity while reusing v1 indexes'
 });
 
 test('standalone listing type is indexed while condition remains narrowly guarded', () => {
-  assert.match(source, /if \(listingType && !\['WTS', 'WTB', 'OTHER'\]\.includes\(listingType\)\)/);
+  assert.match(source, /if \(listingType && !\['WTS', 'WTB', 'OTHER', 'MULTI'\]\.includes\(listingType\)\)/);
   assert.match(source, /if \(condition && !\(requestedBrand && reference\)\)/);
   assert.doesNotMatch(source, /if \(\(listingType \|\| condition\)/);
+});
+
+test('QNSA broad intent lanes have an expression-matched cold-read index', () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, '../supabase/migrations/20260812041000_qnsa_intent_feed_index.sql'),
+    'utf8',
+  );
+  assert.match(migration, /brand_normalized/);
+  assert.match(migration, /upper\(COALESCE\(listing_type, intent, ''\)\)/);
+  assert.match(migration, /created_at DESC/);
+  assert.match(migration, /parent_id IS NULL/);
+});
+
+test('QNSA exact reference RPC preserves Patek catalog punctuation', () => {
+  assert.match(source, /const patekBaseEquivalent[\s\S]*replace\(\/-001\$\/i, ''\)/);
+  assert.match(source, /const rpcReference = familyReference[\s\S]*patekBaseEquivalent/);
+  assert.match(source, /reference: rpcReference, family: Boolean\(familyReference \|\| patekBaseEquivalent\)/);
+  assert.match(source, /p_reference: request\.reference/);
+  assert.doesNotMatch(source, /p_reference: reference, p_family/);
+});
+
+test('QNSA exact reference RPC uses indexed family lookup for AP base references', () => {
+  assert.match(source, /const audemarsBaseFamily = normalizedBrand === 'audemars piguet'/);
+  assert.match(source, /\^\\d\{5\}\[A-Z\]\{2,4\}\$/);
+  assert.match(source, /listCatalogReferences\('Audemars Piguet'\)/);
+  assert.match(source, /candidate\.startsWith\(`\$\{audemarsBaseFamily\}\.``?\)/);
+  assert.doesNotMatch(source, /candidate === audemarsBaseFamily/);
+  assert.match(source, /qnsa_bounded_price_research_rows/);
+  assert.match(source, /const apEvidenceReferences = \[audemarsBaseFamily, \.\.\.apExactReferences\]/);
+  assert.match(source, /p_references: apEvidenceReferences/);
+  assert.match(source, /Promise\.all\(\['WTS', 'WTB'\]\.map/);
+  assert.match(source, /publication_lane: 'QNSA_ROLEX_PATEK_REVIEWED_V1'/);
+});
+
+test('obvious immutable-raw cross-brand conflicts never reach customer cards', () => {
+  assert.equal(api.hasObviousCrossBrandConflict(record({
+    canonical_brand: 'Patek Philippe',
+    supplied_brand: null,
+    brand_scope: null,
+    raw_message: 'Vacheron Constantin 3110V full set 16700usd',
+  })), true);
+  assert.equal(api.hasObviousCrossBrandConflict(record({
+    canonical_brand: 'Patek Philippe',
+    supplied_brand: null,
+    brand_scope: null,
+    raw_message: 'Patek Philippe 5712 plus Vacheron trade considered',
+  })), false);
+});
+
+test('bounded QNSA RPC rows reapply every customer filter before publication', () => {
+  assert.match(source, /p_listing_type: databaseListingType/);
+  assert.match(source, /databaseTradingIntentFilter\(listingType\)/);
+  assert.match(source, /!listingType \|\| String\(record\.listing_type/);
+  assert.match(source, /!imagesOnly \|\| record\.has_images === true/);
+  assert.match(source, /!pricedOnly \|\| hasUsableSourcePrice\(record\)/);
+  assert.match(source, /!postedAfter \|\| new Date\(record\.listing_date/);
+  assert.match(source, /!requestedDial \|\| cleanExactText\(record\.dial_color/);
+  assert.match(source, /!condition \|\| cleanExactText\(record\.condition/);
+});
+
+test('reconciled Zenith singles are not re-quarantined by the generic bundle splitter', () => {
+  assert.equal(api.isMultiListing(record({
+    publication_lane: 'QNSA_ZENITH_REVIEWED_V1',
+    raw_message: '12379 - Zenith - 51.2081.400/78.C810 complete set EUR 4650',
+  })), false);
+  assert.equal(api.isMultiListing(record({
+    publication_lane: 'QNSA_ZENITH_REVIEWED_V1',
+    raw_message: 'Zenith 03.A384.400/385.C855 and Breitling V13375101C1X1',
+  })), true);
+});
+
+test('audited Rolex/Patek delta singles bypass only the legacy prose splitter', () => {
+  const auditedSingle = record({
+    id: `rpdelta_${'a'.repeat(64)}`,
+    verification_tier: 'QNSA_ROLEX_PATEK_REVIEWED_DELTA_V1',
+    verification_status: 'APPROVED_SINGLE_CANDIDATE',
+    confidence: 100,
+    raw_lineage_verified: true,
+    raw_message: 'Rolex 126500LN white USD 30,000; dealer signature also mentions Patek 5711',
+  });
+  assert.equal(api.isAuditedRolexPatekDeltaSingle(auditedSingle), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, verification_tier: null }), true);
+  assert.equal(api.isMultiListing(auditedSingle), false);
+
+  assert.equal(api.isMultiListing({ ...auditedSingle, is_bundle: true }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, listing_type: 'MULTI' }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, model: 'Multiple' }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, raw_lineage_verified: false }), true);
+});
+
+test('effective four-brand audited singles bypass only the legacy prose splitter', () => {
+  const auditedSingle = record({
+    publication_lane: 'QNSA_FOUR_BRAND_EFFECTIVE_SIDECAR_V1',
+    verification_status: 'APPROVED_SINGLE_CANDIDATE',
+    normalization_run_complete: true,
+    raw_lineage_verified: true,
+    canonical_brand: 'Omega',
+    brand_scope: 'Omega',
+    raw_message: 'Omega 310.30.42.50.01.001 USD 7,000; dealer signature mentions Rolex 126500LN',
+  });
+  assert.equal(api.isAuditedFourBrandEffectiveSingle(auditedSingle), true);
+  assert.equal(api.isMultiListing(auditedSingle), false);
+
+  for (const unsafe of [
+    { publication_lane: 'UNREVIEWED_V1' },
+    { verification_status: 'REVIEW_PENDING' },
+    { normalization_run_complete: false },
+    { raw_lineage_verified: false },
+    { canonical_brand: 'Rolex', brand_scope: 'Rolex' },
+    { listing_type: 'OTHER' },
+  ]) {
+    assert.equal(api.isAuditedFourBrandEffectiveSingle({ ...auditedSingle, ...unsafe }), false);
+  }
+  assert.equal(api.isMultiListing({ ...auditedSingle, is_bundle: true }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, multi_listing: true }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, listing_type: 'MULTI' }), true);
+  assert.equal(api.isMultiListing({ ...auditedSingle, model: 'Multiple' }), true);
+});
+
+test('effective endpoint publication gate preserves exact count-to-crawl parity', () => {
+  const sourceTotals = new Map([
+    ['Tudor', 2555],
+    ['Omega', 6871],
+    ['Cartier', 7154],
+    ['Zenith', 453],
+  ]);
+  const formerlySplit = new Map([
+    ['Tudor', 13],
+    ['Omega', 26],
+    ['Cartier', 54],
+    ['Zenith', 1],
+  ]);
+  let exactCount = 0;
+  let crawledCards = 0;
+  for (const [brand, count] of sourceTotals) {
+    const rows = Array.from({ length: count }, (_, index) => record({
+      id: `${brand.toLowerCase()}-${index}`,
+      publication_lane: 'QNSA_FOUR_BRAND_EFFECTIVE_SIDECAR_V1',
+      verification_status: 'APPROVED_SINGLE_CANDIDATE',
+      verdict: 'APPROVED',
+      publication_state: 'APPROVED',
+      normalization_run_complete: true,
+      raw_lineage_verified: true,
+      canonical_brand: brand,
+      brand_scope: brand,
+      raw_message: index < formerlySplit.get(brand)
+        ? `${brand} 1234 USD 7,000; dealer signature mentions Rolex 126500LN`
+        : `${brand} 1234 USD 7,000`,
+    }));
+    exactCount += rows.length;
+    crawledCards += rows.filter(api.isTradingFloorSourceRow).length;
+  }
+  assert.equal(exactCount, 17033);
+  assert.equal(crawledCards, exactCount);
+});
+
+test('four-brand exact count is serialized after page mapping and omitted on continuation', () => {
+  const mappedPage = source.indexOf('const combinedPageRecords =');
+  const exactCount = source.indexOf('await loadEffectiveCount(client, fourBrandCountOptions)');
+  assert.ok(mappedPage >= 0 && exactCount > mappedPage);
+  assert.match(source, /if \(fourBrandEffectiveScope && firstEffectiveCountPage && publicInventoryTotal === null\)/);
+  assert.match(source, /else if \(fourBrandEffectiveScope && publicInventoryTotal === null\)[\s\S]*publicInventoryTotal = null/);
+  assert.doesNotMatch(source, /fourBrandCountPromise/);
+});
+
+test('Zenith exact Trading Floor lookups use the reconciled punctuation-preserving lane', () => {
+  const migration = fs.readFileSync(
+    path.join(__dirname, '../supabase/migrations/20260815121500_qnsa_zenith_exact_reference_rows.sql'),
+    'utf8',
+  );
+  assert.match(source, /normalizedBrand === 'zenith'[\s\S]*qnsa_zenith_reference_rows/);
+  assert.match(source, /p_reference: request\.reference/);
+  assert.match(source, /brand === 'ZENITH'/);
+  assert.match(migration, /l\.reference_normalized = btrim\(p_reference\)/);
+  assert.doesNotMatch(migration, /regexp_replace\([^\n]*p_reference|LIKE\s+p_reference/i);
+  assert.match(migration, /qnsa_zenith_identity_reconciliation_audit[\s\S]*audit\.decision = 'RELEASE_SAFE'/);
+  assert.match(migration, /identity_reconciliation_status'[\s\S]*RELEASE_SAFE_EXACT_SOURCE_REFERENCE/);
+  assert.match(migration, /JOIN public\.raw_message_versions[\s\S]*rv\.source_hash = l\.source_hash/);
+  assert.match(migration, /provenance_metadata->>'bundle_status' = 'SINGLE_CANDIDATE'/);
+  assert.match(migration, /parent_id IS NULL[\s\S]*is_bundle, false\) = false/);
+  assert.match(migration, /publication_lane', 'QNSA_ZENITH_REVIEWED_V1'/);
+  assert.match(source, /'QNSA_ZENITH_REVIEWED_V1'/);
+  assert.match(migration, /'seller_phone', CASE WHEN COALESCE\(l\.contact_consent, false\) THEN/);
+  assert.match(migration, /'contact_publication_approved', COALESCE\(l\.contact_consent, false\)/);
+  assert.doesNotMatch(migration, /'contact_publication_approved'[\s\S]{0,300}from_number[\s\S]{0,80}IS NOT NULL/);
+  assert.doesNotMatch(source, /contact_publication_approved:\s*Boolean\(row\.seller_phone\)/);
 });

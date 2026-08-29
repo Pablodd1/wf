@@ -80,7 +80,7 @@ def extract_ref(title, brand):
 DIALS = [
     ('mother of pearl', 'Mother of Pearl'), ('mop', 'Mother of Pearl'),
     ('ice blue', 'Ice Blue'), ('tiffany', 'Tiffany Blue'), ('olive', 'Olive Green'),
-    ('mint green', 'Mint Green'), ('navy', 'Navy Blue'), ('wimbledon', 'Wimbledon'),
+    ('navy', 'Navy Blue'), ('wimbledon', 'Wimbledon'),
     ('rhodium', 'Rhodium'), ('meteorite', 'Meteorite'), ('skeleton', 'Skeleton'),
     ('champagne', 'Champagne'), ('chocolate', 'Chocolate'), ('salmon', 'Salmon'),
     ('bronze', 'Bronze'), ('slate', 'Slate'), ('panda', 'Panda'),
@@ -180,8 +180,9 @@ def parse_row(row):
     # Dial
     dial = 'Unknown'
     tl = title.lower()
+    dial_text = re.sub(r'\bmint\s+green\b(?!\s+dial\b)', 'mint', tl)
     for kw, canon in DIALS:
-        if re.search(r'\b' + re.escape(kw) + r'\b', tl):
+        if re.search(r'\b' + re.escape(kw) + r'\b', dial_text):
             dial = canon
             break
     # Intent
@@ -200,7 +201,9 @@ def parse_row(row):
             pass
     # Condition
     cond = 'Used'
-    if re.search(r'\b(?:brand\s*new|bnib|new\b|unworn|sealed|n\d{1,2}/2\d)\b', tl):
+    if re.search(r'\b(?:like\s+new|slider|mint|excellent|lnib)\b', tl):
+        cond = 'Used - Like New'
+    elif re.search(r'\b(?:brand\s*new|bnib|new\b|unworn|sealed|n\d{1,2}/2\d)\b', tl):
         cond = 'New'
     elif re.search(r'\b(?:used|pre[- ]?owned|preowned)\b', tl):
         cond = 'Used'

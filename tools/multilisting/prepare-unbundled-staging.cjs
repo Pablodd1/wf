@@ -40,6 +40,7 @@ function stagingRow(row, lineage, batchId, sourceLabel = 'MANUAL_UNBUNDLE_BATCH_
   const sourceDate = text(row.source_created_at) || text(lineage?.listing_date) || text(lineage?.source_created_at) || null;
   const flags = [
     'UNBUNDLED_CHILD',
+    'MULTI_LISTING',
     `UNBUNDLED_PARENT:${row.source_record_id}`,
     `UNBUNDLED_CHILD_INDEX:${row.child_index}`,
     `REVIEW_BUCKET:${row.review_bucket}`,
@@ -89,6 +90,8 @@ function stagingRow(row, lineage, batchId, sourceLabel = 'MANUAL_UNBUNDLE_BATCH_
       seller_phone: lineage?.seller_phone || null,
       region: lineage?.region || null,
       review_bucket: row.review_bucket,
+      // ponytail: preserve parent image URL for recycle bin — admin can visually review and later crop-and-match
+      bundle_parent_image: lineage?.front_image || null,
     },
     accessories: null,
     image_urls: [],

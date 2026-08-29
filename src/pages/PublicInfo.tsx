@@ -5,7 +5,7 @@ import { MarketHeader } from '@/components/MarketHeader';
 const pages = {
   tools: {
     label: 'Tools', icon: BookOpen, title: 'Market language, made precise.',
-    intro: 'A working glossary for the terms used across Curated Luxury and WatchFacts.',
+    intro: 'A working glossary for the terms used across Curated Luxury.',
     items: [
       ['WTS / For sale', 'A seller is offering the listed object. A valid watch offer requires identity, configuration, price, and currency.'],
       ['WTB / Looking for', 'A buyer is seeking the listed object. A price is optional and does not become a market offer.'],
@@ -34,7 +34,7 @@ const pages = {
   },
   company: {
     label: 'Company', icon: Building2, title: 'A considered market needs better evidence.',
-    intro: 'Curated Luxury is building a marketplace for exceptional objects. WatchFacts supplies the watch-market intelligence layer.',
+    intro: 'Curated Luxury is building a marketplace and market-intelligence platform for exceptional objects.',
     items: [
       ['Raw fidelity', 'Original listing text, source time, and provenance remain connected to normalized records.'],
       ['Measured confidence', 'Incomplete or conflicting evidence moves to review instead of becoming false certainty.'],
@@ -53,6 +53,6 @@ export default function PublicInfo() {
       <div className="mx-auto max-w-6xl"><p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#8b692d]"><Icon size={15} /> {page.label}</p><h1 className="mt-5 max-w-4xl font-serif text-4xl leading-tight sm:text-6xl">{page.title}</h1><p className="mt-6 max-w-2xl text-base leading-7 text-black/58">{page.intro}</p></div>
     </section>
     <section className="px-5 py-10 sm:px-8 sm:py-16 lg:px-12"><div className="mx-auto max-w-6xl border-t border-black/15">{page.items.map(([title, copy], index) => <div key={title} className="grid gap-3 border-b border-black/10 py-7 sm:grid-cols-[72px_230px_1fr] sm:items-start"><span className="font-mono text-xs text-black/35">0{index + 1}</span><h2 className="text-lg font-semibold">{title}</h2><p className="max-w-2xl text-sm leading-6 text-black/55">{copy}</p></div>)}</div></section>
-    <footer className="border-t border-black/10 px-5 py-8 sm:px-8 lg:px-12"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-5"><Link to="/" className="flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Home</Link><Link to="/trading" className="flex items-center gap-2 text-sm font-semibold text-[#8b692d]">Explore the collection <ArrowRight size={16} /></Link></div></footer>
+    <footer className="border-t border-black/10 px-5 py-8 sm:px-8 lg:px-12"><div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-5"><Link to="/trading" className="flex items-center gap-2 text-sm font-semibold"><ArrowLeft size={16} /> Trading Floor</Link><Link to="/trading" className="flex items-center gap-2 text-sm font-semibold text-[#8b692d]">Explore the collection <ArrowRight size={16} /></Link></div></footer>
   </main>;
 }

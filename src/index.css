@@ -2,6 +2,18 @@
 @tailwind components;
 @tailwind utilities;
 
+html,
+body,
+#root {
+  min-height: 100%;
+  width: 100%;
+}
+
+body {
+  margin: 0;
+  overflow-x: hidden;
+}
+
 @layer utilities {
   .luxury-wordmark {
     color: #d8bd80;
@@ -37,6 +49,42 @@
     .luxury-wordmark {
       animation: none;
       background-position: 50% 42%;
+    }
+  }
+
+  .market-activity-track {
+    animation: market-activity-scroll var(--market-ticker-duration, 60s) linear infinite;
+    will-change: transform;
+  }
+
+  @keyframes market-activity-scroll {
+    from { transform: translate3d(0, 0, 0); }
+    to { transform: translate3d(-50%, 0, 0); }
+  }
+
+  @keyframes ticker-scroll {
+    0% { transform: translate3d(0, 0, 0); }
+    100% { transform: translate3d(-50%, 0, 0); }
+  }
+
+  .animate-ticker-scroll {
+    display: flex;
+    width: max-content;
+    animation: ticker-scroll 50s linear infinite;
+    will-change: transform;
+  }
+
+  .animate-ticker-scroll:hover {
+    animation-play-state: paused;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .market-activity-viewport {
+      overflow: hidden;
+    }
+
+    .market-activity-track {
+      animation-duration: max(90s, var(--market-ticker-duration, 60s));
     }
   }
 }

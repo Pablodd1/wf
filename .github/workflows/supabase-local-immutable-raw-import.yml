@@ -1,0 +1,138 @@
+name: Supabase local immutable raw import
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type IMPORT_IMMUTABLE_MARIADB_RAW
+        required: true
+        type: string
+      run_key:
+        description: Stable idempotent import run key
+        required: true
+        default: mariadb-full-archive-20260810-codex-v1
+        type: string
+
+concurrency:
+  group: supabase-local-immutable-raw-import
+  cancel-in-progress: false
+
+jobs:
+  import-raw:
+    if: ${{ inputs.confirmation == 'IMPORT_IMMUTABLE_MARIADB_RAW' }}
+    runs-on: [self-hosted, Windows, X64, watchfacts-raw-import]
+    environment: production
+    timeout-minutes: 720
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
+      RAW_INPUT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-archive-20260810-codex-v1
+      IMPORT_OUTPUT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-import-20260810-codex-v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate, import, and reconcile immutable raw evidence
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SUPABASE_PROJECT_REF -ne $env:EXPECTED_PROJECT_REF) {
+            throw 'Production Supabase project reference does not match the approved target.'
+          }
+          if ('${{ inputs.run_key }}' -notmatch '^[A-Za-z0-9._:-]{1,100}$') {
+            throw 'Invalid run key.'
+          }
+          $sourceCheckpointPath = Join-Path $env:RAW_INPUT 'checkpoint.json'
+          if (-not (Test-Path -LiteralPath $sourceCheckpointPath)) {
+            throw 'Collector checkpoint is missing.'
+          }
+          $sourceCheckpoint = Get-Content -Raw -LiteralPath $sourceCheckpointPath | ConvertFrom-Json
+          if ($sourceCheckpoint.complete -ne $true -or
+              [long]$sourceCheckpoint.input_rows -ne [long]$sourceCheckpoint.output_rows -or
+              [long]$sourceCheckpoint.error_rows -ne 0) {
+            throw 'Collector is incomplete or unreconciled.'
+          }
+
+          $managementHeaders = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          function Get-DatabaseBytes {
+            $sizeBody = @{ query = 'SELECT pg_database_size(current_database()) AS database_bytes'; read_only = $true } | ConvertTo-Json
+            $sizeResult = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $managementHeaders -ContentType 'application/json' -Body $sizeBody
+            return [long]$sizeResult[0].database_bytes
+          }
+          $databaseBytesAtStart = Get-DatabaseBytes
+          $migrationPaths = @(
+            'supabase/migrations/20260810104500_self_contained_immutable_mariadb_raw_import.sql',
+            'supabase/migrations/20260810110000_compact_mariadb_raw_envelopes.sql'
+          )
+          foreach ($migrationPath in $migrationPaths) {
+            if (-not (Test-Path -LiteralPath $migrationPath)) { throw "Required forward migration is missing: $migrationPath" }
+            $migrationSql = [string](Get-Content -Raw -LiteralPath $migrationPath)
+            $migrationBody = @{ query = $migrationSql; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $managementHeaders -ContentType 'application/json' -Body $migrationBody | Out-Null
+          }
+          $reloadBody = @{ query = "NOTIFY pgrst, 'reload schema';"; read_only = $false } | ConvertTo-Json
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $managementHeaders -ContentType 'application/json' -Body $reloadBody | Out-Null
+          $databaseBytesAfterMigration = Get-DatabaseBytes
+          Write-Output "Database bytes before migration: $databaseBytesAtStart; after storage correction: $databaseBytesAfterMigration."
+          Start-Sleep -Seconds 3
+
+          $keys = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/api-keys?reveal=true" -Headers $managementHeaders
+          $serverKey = $keys | Where-Object {
+            $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret')
+          } | Select-Object -First 1
+          if (-not $serverKey) { throw 'An existing server API key could not be retrieved for the approved project.' }
+          $env:SUPABASE_SERVICE_ROLE_KEY = [string]$serverKey.api_key
+          Write-Output "::add-mask::$env:SUPABASE_SERVICE_ROLE_KEY"
+          $env:SUPABASE_URL = "https://$env:SUPABASE_PROJECT_REF.supabase.co"
+
+          function Get-WatchRecordCount {
+            $restHeaders = @{
+              apikey = $env:SUPABASE_SERVICE_ROLE_KEY
+              Authorization = "Bearer $env:SUPABASE_SERVICE_ROLE_KEY"
+              Prefer = 'count=exact'
+            }
+            $response = Invoke-WebRequest -Uri "$env:SUPABASE_URL/rest/v1/watch_records?select=id&limit=1" -Headers $restHeaders
+            $contentRange = [string]$response.Headers['Content-Range']
+            if ($contentRange -notmatch '/(\d+)$') { throw 'watch_records count response was invalid.' }
+            return [long]$Matches[1]
+          }
+
+          $before = Get-WatchRecordCount
+          $env:MARIADB_RAW_IMPORT_INPUT = $env:RAW_INPUT
+          $env:MARIADB_RAW_IMPORT_OUTPUT = $env:IMPORT_OUTPUT
+          $env:MARIADB_RAW_IMPORT_RUN_KEY = '${{ inputs.run_key }}'
+          $env:MARIADB_RAW_IMPORT_BATCH_SIZE = '500'
+          node tools/mariadb-live/import-raw.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Immutable raw importer failed.' }
+
+          $after = Get-WatchRecordCount
+          if ([long]$before -ne [long]$after) { throw 'watch_records changed during immutable raw import.' }
+          $databaseBytesAfterImport = Get-DatabaseBytes
+          $reconciliationPath = Join-Path $env:IMPORT_OUTPUT 'reconciliation.json'
+          $reconciliation = Get-Content -Raw -LiteralPath $reconciliationPath | ConvertFrom-Json
+          if ($reconciliation.reconciled -ne $true -or
+              $reconciliation.complete -ne $true -or
+              [long]$reconciliation.error_rows -ne 0 -or
+              [long]$reconciliation.watch_records_writes -ne 0 -or
+              [long]$reconciliation.normalization_writes -ne 0) {
+            throw 'Raw import reconciliation failed.'
+          }
+          Write-Output "Immutable raw import reconciled $($reconciliation.input_rows) rows; watch_records unchanged at $after; database bytes after import: $databaseBytesAfterImport."
+
+      - name: Upload reconciliation only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mariadb-immutable-import-reconciliation-${{ github.run_id }}
+          path: |
+            C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-import-20260810-codex-v1\checkpoint.json
+            C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-import-20260810-codex-v1\reconciliation.json
+          if-no-files-found: warn
+          retention-days: 7

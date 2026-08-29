@@ -14,36 +14,33 @@ test('blocks private and reserved image destinations', () => {
   assert.equal(isPrivateAddress('8.8.8.8'), false);
 });
 
-test('redacts dealer contact paths without erasing watch references or prices', () => {
+test('redacts dealer contact paths while preserving watch references and prices', () => {
   const raw = '[7/12, 7:19 AM] +852 6236 1307: Rolex 116500LN USD 30,000\nWhatsApp: +1 (305) 555-1212';
   const redacted = redactPublicSource(raw);
-  assert.doesNotMatch(redacted, /6236 1307|555-1212/);
-  assert.match(redacted, /116500LN/);
-  assert.match(redacted, /30,000/);
+  assert.match(redacted, /Rolex 116500LN USD 30,000/);
+  assert.doesNotMatch(redacted, /6236|305|555|1212/);
 });
 
-test('redacts WhatsApp links while preserving the surrounding listing evidence', () => {
+test('redacts WhatsApp links while preserving raw watch evidence', () => {
   const raw = 'Rolex 52506 HKD 380K contact https://wa.me/85262361307';
   const redacted = redactPublicSource(raw);
-  assert.doesNotMatch(redacted, /85262361307/);
-  assert.match(redacted, /Rolex 52506 HKD 380K/);
+  assert.match(redacted, /Rolex 52506 HKD 380K contact/);
+  assert.doesNotMatch(redacted, /wa\.me|62361307/);
 });
 
-test('redacts standalone phone and email before external AI review', () => {
+test('redacts standalone international phone and email without corrupting watch evidence', () => {
   const raw = 'Dealer +852 6236 1307 john@example.com Rolex 116500LN USD 30,000';
   const redacted = redactPublicSource(raw);
-  assert.doesNotMatch(redacted, /6236 1307|john@example\.com/);
-  assert.match(redacted, /116500LN/);
-  assert.match(redacted, /30,000/);
+  assert.match(redacted, /Rolex 116500LN USD 30,000/);
+  assert.doesNotMatch(redacted, /6236|john@example/);
 });
 
-test('redacts poster headings and messaging handles without changing listing evidence', () => {
+test('redacts contact-labeled messaging handles and links but preserves poster headings', () => {
   const raw = '[7/12/2026, 7:19 AM] Jane Dealer: Rolex 116500LN USD 30,000\nTelegram: @jane_watches\nhttps://t.me/jane_watches';
   const redacted = redactPublicSource(raw);
-  assert.doesNotMatch(redacted, /Jane Dealer|jane_watches/);
-  assert.match(redacted, /\[POSTER REDACTED\]/);
-  assert.match(redacted, /116500LN/);
-  assert.match(redacted, /30,000/);
+  assert.match(redacted, /Jane Dealer: Rolex 116500LN USD 30,000/);
+  assert.doesNotMatch(redacted, /@jane_watches|t\.me/);
+  assert.match(redacted, /Telegram \[handle redacted\]/);
 });
 
 test('neutralizes spreadsheet formulas and quotes CSV values', () => {
@@ -119,7 +116,7 @@ test('dealer login does not redirect unauthorized roles into protected review ro
   assert.match(page, /Review Queue accepts reviewer or admin/);
 });
 
-test('public listing evidence is withheld and public dealer profiles omit raw messages', () => {
+test('listing detail stays release-gated while approved dealer profiles expose source evidence', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const listingRoute = fs.readFileSync(path.join(__dirname, '..', 'api', 'trading-listing.js'), 'utf8');
@@ -131,51 +128,57 @@ test('public listing evidence is withheld and public dealer profiles omit raw me
   assert.doesNotMatch(listingRoute, /const publicTable[\s\S]*trading_floor_listings/);
   assert.match(listingRoute, /isReleaseListingEligible/);
   assert.match(listingRoute, /\.from\(publicTable\)/);
-  assert.doesNotMatch(profileRoute, /select\([^)]*raw_message/);
+  assert.match(profileRoute, /raw_message/);
+  assert.match(profileRoute, /raw_message_access: true/);
 });
 
-test('Price Research shows contact-redacted source evidence and only verified seller activity on click', () => {
+test('Price Research shows unredacted raw source evidence and verified seller activity on click', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'PriceResearch.tsx'), 'utf8');
   assert.match(page, /Original listing/);
-  assert.match(page, /CONTACT REDACTED/);
+  assert.match(page, /RAW SOURCE MESSAGE/);
   assert.match(page, /Posted by/);
-  assert.match(page, /No identity or contact data is guessed/);
   assert.match(page, /api\/listing-contact/);
   assert.match(page, /api\/reviewed-seller-summary/);
   assert.match(page, /Source poster activity/);
-  assert.match(page, /Total posts/);
   assert.match(page, /For sale/);
   assert.match(page, /Looking for/);
-  assert.doesNotMatch(page, /dealer_review_count|dealer_group_count|Common groups/);
+  assert.doesNotMatch(page, /Total posts/);
+  assert.match(page, /Groups/);
   assert.doesNotMatch(page, /title\.startsWith\('Raw source'\)/);
-  assert.match(page, /seller\.dealer_stats \?/);
+  assert.match(page, /seller\?\.dealer_stats \?/);
   assert.doesNotMatch(page, /seller\.dealer_stats\?\.wts_posts \|\| 0/);
-  assert.match(page, /Dealer activity is not available until an applied-lineage aggregate is verified/);
 });
 
-test('Price Research only returns excluded observation rows to reviewers and admins', () => {
+test('Price Research returns outlier analytics publicly (no auth gate)', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const route = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
-  assert.match(route, /\['admin', 'reviewer'\]\.includes\(auth\.role\)/);
+  // 2026-08-01 product decision (adaa4e9, 0b92aa3, 0e51450): Price Research
+  // is public — outliers/liquidity/graphics are customer-facing analytics.
+  // Guard against the auth gate regression recurring (it did once, in c1f6490).
+  assert.doesNotMatch(route, /authorizeDealer\(req, res\)/);
+  assert.match(route, /const canReviewExcludedEvidence = true/);
   assert.match(route, /outlier_rows: canReviewExcludedEvidence \?/);
   assert.match(route, /Cache-Control', 'no-store/);
-  assert.match(route, /Vary', 'Cookie/);
 });
 
-test('Trading Floor click-through shows source evidence and only verified seller analytics', () => {
+test('Trading Floor click-through shows source evidence and consent-gated dealer analytics', () => {
   const fs = require('node:fs');
   const path = require('node:path');
   const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'pages', 'TradingFloor.tsx'), 'utf8');
   assert.match(page, /api\/reviewed-market-inventory/);
   assert.match(page, /api\/reviewed-seller-summary/);
-  assert.doesNotMatch(page, /api\/(?:price-research-listing|listing-contact|trading-listing)\?id=/);
-  assert.match(page, /Original listing/);
+  assert.match(page, /api\/listing-contact\?/);
+  assert.match(page, /if \(payload\.contact_available\)/);
+  assert.doesNotMatch(page, /https:\/\/wa\.me\/\$\{listing\./);
+  assert.match(page, /Original raw message/);
   assert.match(page, /sellerAnalytics/);
   assert.match(page, /For sale/);
   assert.match(page, /Want to buy/);
   assert.match(page, /Source-supplied contact/);
-  assert.doesNotMatch(page, /verified dealer|common groups|dealer_review_count/);
+  assert.match(page, /ListingDealerEvidence/);
+  assert.match(page, /contactPublicationApproved=\{listing\.contact_publication_approved === true\}/);
+  assert.match(page, /ratingEvidenceStatus=\{listing\.seller_rating_evidence_status\}/);
 });

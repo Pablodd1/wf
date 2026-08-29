@@ -154,11 +154,12 @@ test('returns verified shorthand and canonical references as one market family',
 
 test('price research normalizes every resolved reference variant', () => {
   const source = fs.readFileSync(path.join(__dirname, '..', 'api', 'price-research.js'), 'utf8');
-  assert.match(source, /normalizeMarketRow\(row,\s*referenceVariants\)/);
+  assert.match(source, /normalizeMarketRow\(conditionCorrectedRow,\s*referenceVariants\)/);
+  assert.match(source, /normalizeWatchConditionFields\(row\)/);
   assert.doesNotMatch(source, /normalizeMarketRow\(row,\s*\[rawRef,\s*targetRef\]\)/);
   assert.match(source, /referenceVariants\s*=\s*equivalentReferences/);
   assert.match(source, /referenceVariants\s*=\s*\[\.\.\.new Set\(\[\.\.\.equivalentReferences,\s*\.\.\.exactVariants\]\)\]/);
-  assert.match(source, /baseSampleCount\s*>=\s*sampleLimit\s*&&\s*observedDialCounts\.get/);
+  assert.match(source, /sourceSampleCapped\s*&&\s*observedDialCounts\.get/);
   assert.match(source, /\.order\('created_at', \{ ascending: false \}\)\s*\.order\('id', \{ ascending: false \}\)/);
 });
 

@@ -1,0 +1,99 @@
+name: QNSA four-brand model filter schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: audit compiles and rolls back; apply commits schema only
+        required: true
+        type: choice
+        options: [audit, apply]
+      confirmation:
+        description: Exact mode-specific confirmation phrase
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qnsa-four-brand-model-filter-schema
+  cancel-in-progress: false
+
+jobs:
+  schema:
+    environment: production
+    runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      CONTROLLED_SHA256: 9ab36c398b40967bba4e8548f57383f9455534743e150bcc011cd6b5a5fbfac3
+      ZENITH_SHA256: 2c58a2bbc915cf23323c31165bf21d01de2bc69c8e1cb66d84e6ba9f4a2e2f20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile or apply exact schema
+        shell: pwsh
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $required = if ($env:INPUT_MODE -ceq 'audit') {
+            'AUDIT_QNSA_FOUR_BRAND_MODEL_FILTER_SCHEMA'
+          } elseif ($env:INPUT_MODE -ceq 'apply') {
+            'APPLY_QNSA_FOUR_BRAND_MODEL_FILTER_SCHEMA'
+          } else { throw 'Unsupported mode.' }
+          if ($env:INPUT_CONFIRMATION -cne $required) { throw "Confirmation must exactly match $required." }
+          if ($env:PROJECT_REF -cne 'qnsafosakvonzgfcsphh') { throw 'Workflow is not QNSA pinned.' }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+
+          $paths = @(
+            'supabase/migrations/20260820170000_qnsa_controlled_model_browse.sql',
+            'supabase/migrations/20260820171000_qnsa_zenith_model_browse.sql'
+          )
+          $expected = @($env:CONTROLLED_SHA256, $env:ZENITH_SHA256)
+          $sqlParts = @()
+          for ($index = 0; $index -lt $paths.Count; $index++) {
+            $normalized = (Get-Content -LiteralPath $paths[$index] -Raw).Replace("`r`n", "`n")
+            $actual = [Convert]::ToHexString(
+              [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($normalized))
+            ).ToLowerInvariant()
+            if ($actual -cne $expected[$index]) { throw "Pinned migration SHA mismatch: $($paths[$index])" }
+            if ($normalized -match '(?im)^\s*(INSERT|UPDATE|DELETE|TRUNCATE|MERGE)\s+') {
+              throw 'Schema migration unexpectedly contains inventory DML.'
+            }
+            $sqlParts += ($normalized `
+              -replace '(?im)^\s*BEGIN\s*;\s*$', '' `
+              -replace '(?im)^\s*COMMIT\s*;\s*$', '')
+          }
+          $assertions = @'
+          DO $$
+          BEGIN
+            IF to_regprocedure('public.qnsa_controlled_model_release_count(text,text,text)') IS NULL
+              OR to_regprocedure('public.qnsa_controlled_model_page_rows(text,text,integer,integer,text,text)') IS NULL
+              OR to_regprocedure('public.qnsa_zenith_model_release_count(text[],text)') IS NULL
+              OR to_regprocedure('public.qnsa_zenith_model_page_rows(text[],integer,integer,text)') IS NULL THEN
+              RAISE EXCEPTION 'Required model functions are missing';
+            END IF;
+            IF has_function_privilege('anon', 'public.qnsa_controlled_model_page_rows(text,text,integer,integer,text,text)', 'EXECUTE')
+              OR has_function_privilege('authenticated', 'public.qnsa_controlled_model_page_rows(text,text,integer,integer,text,text)', 'EXECUTE')
+              OR has_function_privilege('anon', 'public.qnsa_zenith_model_page_rows(text[],integer,integer,text)', 'EXECUTE')
+              OR has_function_privilege('authenticated', 'public.qnsa_zenith_model_page_rows(text[],integer,integer,text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'Customer roles may not execute service model functions';
+            END IF;
+            IF NOT has_function_privilege('service_role', 'public.qnsa_controlled_model_page_rows(text,text,integer,integer,text,text)', 'EXECUTE')
+              OR NOT has_function_privilege('service_role', 'public.qnsa_zenith_model_page_rows(text[],integer,integer,text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'Service role model execution is unavailable';
+            END IF;
+          END $$;
+          '@
+          $finish = if ($env:INPUT_MODE -ceq 'apply') { 'COMMIT;' } else { 'ROLLBACK;' }
+          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='30s';`n$($sqlParts -join "`n")`n$assertions`n$finish"
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Method Post `
+            -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          Write-Output "{`"project`":`"qnsafosakvonzgfcsphh`",`"mode`":`"$env:INPUT_MODE`",`"inventory_writes`":0,`"schema_verified`":true}"

@@ -13,8 +13,26 @@ function explicitAmount(line, currencies) {
   const currentYear = new Date().getUTCFullYear();
   return [line.match(before), line.match(after)]
     .filter(Boolean)
+    .filter(match => !isAmbiguousCommaAmount(match[1], match[2]))
     .map(match => parseNumber(match[1], match[2]))
     .find(amount => amount && !(Number.isInteger(amount) && amount >= 1900 && amount <= currentYear + 2)) || null;
+}
+
+function isAmbiguousCommaAmount(rawAmount, multiplier) {
+  if (multiplier) return false;
+  const token = String(rawAmount || '').trim();
+  // A single comma followed by one or two digits can be a decimal comma, a
+  // truncated thousands value, or a typo. The raw evidence must go to review;
+  // silently removing the comma turned values such as `28,2` into USD 282.
+  return /^\d{1,6},\d{1,2}$/.test(token);
+}
+
+function hasAmbiguousExplicitAmount(line, currencies) {
+  const labels = currencies.join('|');
+  const before = new RegExp(`(?:${labels})\\s*[:=$-]?\\s*([\\d][\\d.,]*)\\s*(K|M|MN|W|\\u4E07)?(?![\\dA-Z])`, 'ig');
+  const after = new RegExp(`([\\d][\\d.,]*)\\s*(K|M|MN|W|\\u4E07)?\\s*(?:${labels})`, 'ig');
+  return [...String(line || '').matchAll(before), ...String(line || '').matchAll(after)]
+    .some(match => isAmbiguousCommaAmount(match[1], match[2]));
 }
 
 function hasCurrencyToken(line, currencies) {
@@ -60,6 +78,15 @@ function normalizeMarketRow(row, reference) {
   if (!line) {
     return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: stored ? 'CURRENCY_UNVERIFIED' : 'MISSING_PRICE' };
   }
+  if (hasAmbiguousExplicitAmount(line, ['USDT', 'USD', 'US\\$', 'U\\$', 'HKD', 'HDK', 'HK\\$'])) {
+    return {
+      ...row,
+      analytics_price_usd: null,
+      price_normalization: null,
+      analytics_currency_status: 'AMBIGUOUS_PRICE_FORMAT',
+      source_price_amount: null,
+    };
+  }
   const usd = explicitAmount(line, ['USDT', 'USD', 'US\\$', 'U\\$']);
   if (usd) {
     const converted = Math.round(usd);
@@ -74,18 +101,19 @@ function normalizeMarketRow(row, reference) {
   }
   const hkd = explicitAmount(line, ['HKD', 'HDK', 'HK\\$']);
   if (hkd) {
-    const converted = Math.round(hkd / 7.8);
-    // The historical 7.8 conversion is useful as a review proposal, but it has
-    // no source date and is not admissible to customer analytics as verified FX.
+    const usdPerUnit = Number(row.conversion_rate || row.analytics_fx_rate);
+    const hasDatedRate = Number.isFinite(usdPerUnit) && usdPerUnit > 0
+      && Boolean(row.conversion_timestamp || row.analytics_fx_date);
+    const converted = hasDatedRate ? Math.round(hkd * usdPerUnit) : Math.round(hkd / 7.8);
     return {
       ...row,
       analytics_price_usd: converted,
       price_normalization: converted !== Math.round(stored) ? 'EXPLICIT_HKD_FROM_REFERENCE_LINE' : null,
-      analytics_currency_status: 'CURRENCY_RATE_UNVERIFIED',
-      analytics_fx_rate: 7.8,
-      analytics_fx_rate_basis: 'HKD_PER_USD',
-      analytics_fx_source: 'LEGACY_FIXED_RATE_REVIEW_ONLY',
-      analytics_fx_date: null,
+      analytics_currency_status: hasDatedRate ? 'VERIFIED' : 'CURRENCY_RATE_UNVERIFIED',
+      analytics_fx_rate: hasDatedRate ? usdPerUnit : 7.8,
+      analytics_fx_rate_basis: hasDatedRate ? 'USD_PER_SOURCE_UNIT' : 'HKD_PER_USD',
+      analytics_fx_source: hasDatedRate ? (row.conversion_source || row.analytics_fx_source || 'PIPELINE_DATED_RATE') : 'LEGACY_FIXED_RATE_REVIEW_ONLY',
+      analytics_fx_date: hasDatedRate ? (row.conversion_timestamp || row.analytics_fx_date) : null,
       source_price_amount: hkd,
       source_currency: 'HKD',
     };
@@ -94,9 +122,26 @@ function normalizeMarketRow(row, reference) {
     return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: 'CURRENCY_RATE_UNVERIFIED' };
   }
   if (/\$\s*\d/.test(line)) {
-    return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: 'CURRENCY_AMBIGUOUS' };
+    const amount = explicitAmount(line, ['\\$']);
+    return {
+      ...row,
+      analytics_price_usd: amount || stored,
+      price_normalization: null,
+      analytics_currency_status: amount || stored ? 'AMBIGUOUS_DOLLAR_CURRENCY' : 'MISSING_PRICE',
+      source_price_amount: amount || stored,
+      source_currency: null,
+      source_currency_evidence: 'BARE_DOLLAR_UNRESOLVED',
+    };
   }
   return { ...row, analytics_price_usd: stored, price_normalization: null, analytics_currency_status: stored ? 'CURRENCY_UNVERIFIED' : 'MISSING_PRICE' };
 }
 
-module.exports = { explicitAmount, hasCurrencyToken, normalizeMarketRow, referenceBlock, referenceLine };
+module.exports = {
+  explicitAmount,
+  hasAmbiguousExplicitAmount,
+  hasCurrencyToken,
+  isAmbiguousCommaAmount,
+  normalizeMarketRow,
+  referenceBlock,
+  referenceLine,
+};

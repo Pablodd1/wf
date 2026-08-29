@@ -1,15 +1,16 @@
 /**
  * CATALOG REFERENCES — /api/catalog-references?brand=Rolex&model=Submariner
  *
- * Returns catalog references only when an indexed exact lookup finds real,
- * approved listing evidence. Each result carries a bounded price/dial sample,
- * avoiding the former full-brand scan over millions of production rows.
+ * Returns deterministic catalog reference identities for model browsing.
+ * Catalog presence never implies a market observation or analytics readiness;
+ * exact approved evidence is resolved by /api/price-research after selection.
  */
 const { getClient } = require('./_lib/supabase');
-const { listCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
+const { listCanonicalCatalogReferences, listEquivalentReferences, lookupCatalog } = require('./_lib/catalog');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   loadReviewedWorkbookBrandRows,
+  isReviewedWorkbookBrowseBrand,
   summarizeReviewedWorkbookReferences,
 } = require('./_lib/reviewed-workbook-browse.cjs');
 const {
@@ -25,6 +26,7 @@ const {
 const { normalizeMarketRow } = require('./_lib/market-row-normalization.cjs');
 const { classifyResearchEligibility } = require('./_lib/price-research-eligibility.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
+const { buildReleaseBrowseIndex } = require('./_lib/release-catalog-browse.cjs');
 
 const _cache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
@@ -34,6 +36,66 @@ const LOOKUP_CONCURRENCY = 8;
 const ZENITH_REFERENCE_ONLY_MODEL = 'Reference-only listings';
 const PANERAI_REFERENCE_ONLY_MODEL = 'Reference-only listings';
 const FOREIGN_ZENITH_MODEL = /\b(?:Audemars Piguet|Cartier|IWC|Omega|Patek Philippe|Piaget|Rolex|Tudor|Vacheron Constantin)\b/i;
+
+function referenceKey(value) {
+  return String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+}
+
+function mergeVacheronReleaseReferences(catalogEntries, observedRows) {
+  const byKey = new Map((catalogEntries || []).map(entry => [referenceKey(entry.reference), {
+    reference: entry.reference,
+    listing_count: 0,
+    wts_observation_count: 0,
+    wtb_observation_count: 0,
+    priced_wts_observation_count: 0,
+    eligible_observation_count: 0,
+    analytics_ready: false,
+    sample_capped: false,
+    avg_price: null,
+    dial_colors: [],
+    identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+    evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+  }]));
+  let unresolvedReferenceListingCount = 0;
+  let unresolvedReferencePricedWtsCount = 0;
+  for (const row of observedRows || []) {
+    if (!row?.reference) {
+      unresolvedReferenceListingCount += Number(row?.listing_count || 0);
+      unresolvedReferencePricedWtsCount += Number(row?.priced_wts_count || 0);
+      continue;
+    }
+    const key = referenceKey(row.reference);
+    const current = byKey.get(key) || {
+      reference: String(row.reference),
+      eligible_observation_count: 0,
+      analytics_ready: false,
+      sample_capped: false,
+      avg_price: null,
+      dial_colors: [],
+      identity_source: 'SOURCE_PROVEN_RELEASE_REFERENCE',
+      evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+    };
+    byKey.set(key, {
+      ...current,
+      listing_count: Number(current.listing_count || 0) + Number(row.listing_count || 0),
+      wts_observation_count: Number(current.wts_observation_count || 0) + Number(row.wts_count || 0),
+      wtb_observation_count: Number(current.wtb_observation_count || 0) + Number(row.wtb_count || 0),
+      priced_wts_observation_count: Number(current.priced_wts_observation_count || 0)
+        + Number(row.priced_wts_count || 0),
+      identity_source: row.catalog_reference_confirmed === true
+        ? 'CATALOG_AND_RELEASE_MANIFEST'
+        : current.identity_source,
+    });
+  }
+  return {
+    references: [...byKey.values()].sort((left, right) => (
+      Number(right.listing_count || 0) - Number(left.listing_count || 0)
+      || left.reference.localeCompare(right.reference)
+    )),
+    unresolvedReferenceListingCount,
+    unresolvedReferencePricedWtsCount,
+  };
+}
 
 async function mapWithConcurrency(items, concurrency, mapper) {
   const results = new Array(items.length);
@@ -265,6 +327,106 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    if (brand.toLowerCase() === 'vacheron constantin' && model.toLowerCase() === 'overseas') {
+      const { data: observedRows, error: observedError } = await client
+        .rpc('qnsa_vacheron_overseas_reference_index');
+      if (observedError) throw observedError;
+      const merged = mergeVacheronReleaseReferences(
+        listCanonicalCatalogReferences('Vacheron Constantin', 'Overseas'),
+        observedRows,
+      );
+      const out = merged.references;
+      const payload = {
+        success: true,
+        brand: 'Vacheron Constantin',
+        model: 'Overseas',
+        reference_count: out.length,
+        observed_listing_count: out.reduce((sum, item) => sum + Number(item.listing_count || 0), 0),
+        unresolved_reference_listing_count: merged.unresolvedReferenceListingCount,
+        unresolved_reference_priced_wts_count: merged.unresolvedReferencePricedWtsCount,
+        references: out,
+        identity_source: 'CATALOG_PLUS_EXACT_RELEASE_MANIFEST',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+        sample_capped: false,
+      };
+      _cache.set(cacheKey, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
+    if (['omega', 'cartier', 'tudor'].includes(brand.toLowerCase())) {
+      const canonicalBrand = brand.toLowerCase() === 'cartier' ? 'Cartier'
+        : brand.toLowerCase() === 'tudor' ? 'Tudor' : 'Omega';
+      const releaseIndexRpc = canonicalBrand === 'Cartier'
+        ? 'qnsa_cartier_reference_index'
+        : canonicalBrand === 'Tudor' ? 'qnsa_tudor_reference_index' : 'qnsa_omega_reference_index';
+      const { data: observedRows, error: observedError } = await client.rpc(releaseIndexRpc);
+      if (observedError) throw observedError;
+      const browse = buildReleaseBrowseIndex(canonicalBrand, observedRows || []);
+      const references = browse.references.filter(row => row.model.toLowerCase() === model.toLowerCase());
+      const canonicalModel = references[0]?.model || model;
+      const unresolved = browse.unresolvedByModel[canonicalModel] || { listing_count: 0, priced_wts_count: 0 };
+      const payload = {
+        success: true,
+        brand: canonicalBrand,
+        model,
+        reference_count: references.length,
+        observed_listing_count: references.reduce((sum, item) => sum + Number(item.listing_count || 0), 0),
+        unresolved_reference_listing_count: unresolved.listing_count,
+        unresolved_reference_priced_wts_count: unresolved.priced_wts_count,
+        references,
+        identity_source: 'CATALOG_PLUS_EXACT_RELEASE_MANIFEST',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+        sample_capped: false,
+        suppressed_model_conflict_count: browse.modelConflicts.length,
+        suppressed_partial_reference_count: browse.suppressedPartialReferenceCount,
+      };
+      _cache.set(cacheKey, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
+    if (isReviewedWorkbookBrowseBrand(brand)) {
+      const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
+      if (!rows.length && brand.toLowerCase() !== 'tag heuer') {
+        return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      }
+      if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe reference browsing' });
+      let out = summarizeReviewedWorkbookReferences(rows, model, false);
+      if (brand.toLowerCase() === 'tag heuer') {
+        const merged = new Map(listCanonicalCatalogReferences('TAG Heuer', model).map(entry => [
+          referenceKey(entry.reference),
+          {
+            reference: entry.reference,
+            listing_count: 0,
+            eligible_observation_count: 0,
+            analytics_ready: false,
+            sample_capped: false,
+            avg_price: null,
+            dial_colors: [],
+            identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+            evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+          },
+        ]));
+        for (const item of out) merged.set(referenceKey(item.reference), item);
+        out = [...merged.values()].sort((left, right) => (
+          Number(right.listing_count || 0) - Number(left.listing_count || 0)
+          || left.reference.localeCompare(right.reference)
+        ));
+      }
+      const payload = {
+        success: true,
+        brand,
+        model,
+        reference_count: out.length,
+        observed_listing_count: out.reduce((sum, item) => sum + item.listing_count, 0),
+        eligible_observation_count: out.reduce((sum, item) => sum + item.eligible_observation_count, 0),
+        references: out,
+        identity_source: brand.toLowerCase() === 'tag heuer'
+          ? 'CATALOG_PLUS_POSITIVE_OWNER_REVIEWED_WORKBOOK'
+          : 'OWNER_REVIEWED_WORKBOOK',
+        evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+        sample_capped: false,
+      };
+      _cache.set(cacheKey, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (!isPublicationBrandAllowed(brand)) {
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(client, brand);
       if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
@@ -296,30 +458,52 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(payload);
     }
     if (brand.toLowerCase() === 'zenith') {
-      const out = await loadReviewedZenithReferences(client, model);
+      // Browse identity comes from the canonical catalog. Market counts and
+      // analytics are resolved only after an exact reference is selected, via
+      // the bounded QNSA release RPC; never reuse the retired text-ID workbook
+      // range or present catalog metadata as live market evidence.
+      const out = listCanonicalCatalogReferences('Zenith', model).map(entry => ({
+        reference: entry.reference,
+        listing_count: 0,
+        eligible_observation_count: 0,
+        analytics_ready: false,
+        sample_capped: false,
+        avg_price: null,
+        dial_colors: [],
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+      }));
       const payload = {
         success: true,
         brand: 'Zenith',
         model,
         reference_count: out.length,
         references: out,
-        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+        sample_capped: false,
       };
       _cache.set(cacheKey, { at: Date.now(), payload });
       return res.status(200).json(payload);
     }
-    const catalogReferences = listCatalogReferences(brand, model)
+    const catalogReferences = listCanonicalCatalogReferences(brand, model)
       .filter(entry => isPublicationReferenceAllowed(brand, entry.reference));
-    const evidence = await mapWithConcurrency(
-      catalogReferences,
-      LOOKUP_CONCURRENCY,
-      entry => loadReferenceEvidence(client, brand, entry)
-    );
-    // Keep every reference with real approved evidence searchable. The five-row
-    // gate belongs to analytics publication, not reference discovery.
-    const out = evidence
-      .filter(item => item && item.listing_count > 0)
-      .sort((a, b) => b.listing_count - a.listing_count);
+
+    // Catalog identity is metadata. Exact market evidence is resolved only
+    // after selection; never manufacture one observation from catalog presence.
+    const out = catalogReferences.map(entry => {
+      return {
+        reference: entry.reference,
+        listing_count: 0,
+        eligible_observation_count: 0,
+        analytics_ready: false,
+        sample_capped: false,
+        avg_price: null,
+        dial_colors: [],
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+      };
+    });
 
     const payload = {
       success: true,
@@ -327,6 +511,9 @@ module.exports = async function handler(req, res) {
       model,
       reference_count: out.length,
       references: out,
+      identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+      evidence_resolution: 'EXACT_REFERENCE_ON_SELECTION',
+      sample_capped: false,
     };
     _cache.set(cacheKey, { at: Date.now(), payload });
     return res.status(200).json(payload);
@@ -335,3 +522,5 @@ module.exports = async function handler(req, res) {
     return res.status(500).json({ error: 'Failed to load references', detail: err.message });
   }
 };
+
+module.exports.mergeVacheronReleaseReferences = mergeVacheronReleaseReferences;

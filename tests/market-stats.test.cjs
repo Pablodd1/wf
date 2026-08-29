@@ -10,18 +10,22 @@ const {
   summarizePrices,
 } = require('../api/_lib/market-stats.cjs');
 
-test('uses standard 1.5 IQR fences and preserves outliers separately', () => {
+test('uses standard 3.0 IQR fences and preserves outliers separately', () => {
   const result = summarizePrices([100, 101, 102, 103, 104, 105, 500]);
   assert.equal(result.stats.iqr, 3);
-  assert.equal(result.stats.upper_fence, 109);
+  assert.equal(result.stats.upper_fence, 114);
   assert.deepEqual(result.outliers, [500]);
   assert.equal(result.included.length, 6);
+  assert.equal(result.raw_count, 7);
+  assert.equal(result.included_count, 6);
+  assert.equal(result.outlier_count, 1);
+  assert.equal(result.stats.iqr_multiplier, 3);
 });
 
-test('does not claim analytics readiness below five observations', () => {
+test('claims analytics readiness for two or more observations', () => {
   const result = summarizePrices([100, 110, 120, 1000]);
-  assert.equal(result.analytics_ready, false);
-  assert.equal(result.sample_quality, 'observational');
+  assert.equal(result.analytics_ready, true);
+  assert.equal(result.sample_quality, 'provisional');
   assert.deepEqual(result.outliers, []);
 });
 

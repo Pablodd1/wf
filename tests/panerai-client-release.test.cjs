@@ -25,8 +25,8 @@ test('Panerai Price Research reads only exact reviewed IDs and retains workbook 
 
   assert.match(research, /controlledPaneraiRelease[\s\S]*price_research_verified_source/);
   assert.match(research, /\.in\('id', REVIEWED_PANERAI_RECORD_IDS\)/);
-  assert.match(research, /rows\.filter\(isOwnerReviewedWorkbookRow\)/);
-  assert.match(research, /owner_reviewed_identity: isOwnerReviewedWorkbookRow/);
+  assert.match(research, /const usingReviewedWorkbook = preloadedReviewedWorkbookEvidenceRows\.length > 0/);
+  assert.match(research, /owner_reviewed_identity:[^\n]*isOwnerReviewedWorkbookRow\(row\)/);
   assert.match(detail, /isReviewedPaneraiReleaseRecord\(resolvedData\)/);
 });
 
@@ -36,9 +36,10 @@ test('Panerai public floor deduplicates reposts without changing raw records', (
   const reviewedMarket = read('api/reviewed-market-inventory.js');
 
   assert.match(ingest, /const controlledItems = sortTradingItems[\s\S]*const matched = deduplicateTradingItems\(controlledItems\)/);
-  assert.match(floor, /fetch\(`\/api\/reviewed-market-inventory\?/);
+  assert.match(floor, /usesReviewedWatchInventory \? '\/api\/reviewed-market-inventory' : '\/api\/ingest'/);
   assert.match(floor, /releaseBrands\.map/);
-  assert.match(reviewedMarket, /summary\.canonical_listings/);
+  assert.match(reviewedMarket, /canonical_listings/);
+  assert.match(reviewedMarket, /deduplicateRecordsById/);
   assert.doesNotMatch(reviewedMarket, /\.(?:insert|upsert|update|delete)\s*\(/);
   assert.doesNotMatch(ingest, /\.from\('watch_records'\)\.(?:update|upsert|insert|delete)/);
 });

@@ -117,7 +117,7 @@ async function main() {
   if (!key) throw new Error('SUPABASE_SERVICE_ROLE_KEY is required');
 
   const parents = await fetchParents(baseUrl, key);
-  const staleParents = parents.filter(parent => parent.normalization_version !== 'v4.2-line-condition');
+  const staleParents = parents.filter(parent => parent.normalization_version !== 'v4.3-mint-condition');
   if (staleParents.length) {
     throw new Error(`${staleParents.length} parent(s) are not reconciled with v4.2; staging write aborted`);
   }

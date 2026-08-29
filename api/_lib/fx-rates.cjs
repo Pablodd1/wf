@@ -3,7 +3,15 @@
 const { Readable } = require('node:stream');
 const csv = require('csv-parser');
 
-const SUPPORTED_CURRENCIES = ['USD', 'EUR', 'HKD', 'GBP', 'CHF', 'CNY', 'JPY', 'SGD'];
+// Currencies recognized by the listing parser for which the ECB publishes a
+// daily reference rate. Recognized currencies without an ECB quote remain
+// explicitly withheld instead of receiving an invented or pegged rate.
+const SUPPORTED_CURRENCIES = [
+  'USD', 'EUR', 'HKD', 'GBP', 'CHF', 'CNY', 'JPY', 'SGD',
+  'KRW', 'THB', 'CAD', 'AUD', 'NZD', 'MYR', 'IDR', 'INR',
+  'PHP', 'BRL', 'MXN', 'ZAR', 'SEK', 'NOK', 'DKK',
+];
+const RECOGNIZED_WITHHELD_CURRENCIES = ['AED', 'SAR', 'TWD', 'VND'];
 
 async function parseEcbRates(csvText) {
   const latest = new Map();
@@ -41,4 +49,4 @@ function convertCurrency(amount, from, to, rates) {
   return (numeric / fromRate) * toRate;
 }
 
-module.exports = { SUPPORTED_CURRENCIES, convertCurrency, parseEcbRates };
+module.exports = { RECOGNIZED_WITHHELD_CURRENCIES, SUPPORTED_CURRENCIES, convertCurrency, parseEcbRates };

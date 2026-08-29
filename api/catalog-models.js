@@ -2,15 +2,19 @@
  * CATALOG MODELS — /api/catalog-models?brand=Rolex
  *
  * Returns catalog-confirmed models without scanning the multi-million-row live
- * listing table. The references endpoint verifies real listing evidence before
- * showing a reference. Uncatalogued references remain directly searchable and
- * are never presented as model names.
+ * listing table. Browse identity is deterministic catalog metadata; exact
+ * listing evidence is resolved only after a reference is selected.
+ * Uncatalogued references remain directly searchable and are never presented
+ * as model names.
  */
-const { listCatalogReferences, lookupCatalog } = require('./_lib/catalog');
+const { listCanonicalCatalogReferences, lookupCatalog } = require('./_lib/catalog');
 const { getClient } = require('./_lib/supabase');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   loadReviewedWorkbookBrandRows,
+  isReviewedWorkbookBrowseBrand,
+  rowModel,
+  rowReference,
   summarizeReviewedWorkbookModels,
 } = require('./_lib/reviewed-workbook-browse.cjs');
 const {
@@ -28,24 +32,42 @@ const CACHE_TTL = 5 * 60 * 1000;
 const REFERENCE_ONLY_MODEL = 'Reference-only listings';
 const FOREIGN_BRAND_NAMES = [
   'Audemars Piguet',
+  'Breguet',
+  'Bulgari',
   'Cartier',
+  'Franck Muller',
+  'Girard-Perregaux',
+  'Glashütte Original',
+  'Grand Seiko',
+  'H. Moser & Cie',
   'IWC',
+  'Jacob & Co',
   'Omega',
   'Patek Philippe',
   'Piaget',
   'Rolex',
+  'TAG Heuer',
   'Tudor',
+  'Ulysse Nardin',
   'Vacheron Constantin',
 ];
 
+const { normalizeCanonicalModel } = require('./_lib/catalog-taxonomy');
+const { buildReleaseBrowseIndex } = require('./_lib/release-catalog-browse.cjs');
+
 function reviewedWorkbookModel(row, brand) {
   const catalog = lookupCatalog(row.reference, brand);
-  if (catalog?.found && catalog.model) return String(catalog.model).trim();
-  const claimed = String(row.model || '').trim();
-  const foreignBrand = FOREIGN_BRAND_NAMES.some(name =>
-    name.toLowerCase() !== brand.toLowerCase()
-    && claimed.toLowerCase().includes(name.toLowerCase()));
-  return claimed && !foreignBrand ? claimed : REFERENCE_ONLY_MODEL;
+  let modelName = '';
+  if (catalog?.found && catalog.model) {
+    modelName = String(catalog.model).trim();
+  } else {
+    const claimed = String(row.model || '').trim();
+    const foreignBrand = FOREIGN_BRAND_NAMES.some(name =>
+      name.toLowerCase() !== brand.toLowerCase()
+      && claimed.toLowerCase().includes(name.toLowerCase()));
+    modelName = claimed && !foreignBrand ? claimed : REFERENCE_ONLY_MODEL;
+  }
+  return normalizeCanonicalModel(modelName, brand);
 }
 
 function summarizeReviewedModels(rows, brand) {
@@ -118,7 +140,127 @@ module.exports = async function handler(req, res) {
   }
 
   try {
+    if (['omega', 'cartier', 'tudor'].includes(brand.toLowerCase())) {
+      const client = getClient();
+      const canonicalBrand = brand.toLowerCase() === 'cartier' ? 'Cartier'
+        : brand.toLowerCase() === 'tudor' ? 'Tudor' : 'Omega';
+      const releaseIndexRpc = canonicalBrand === 'Cartier'
+        ? 'qnsa_cartier_reference_index'
+        : canonicalBrand === 'Tudor' ? 'qnsa_tudor_reference_index' : 'qnsa_omega_reference_index';
+      const { data: observedRows, error: observedError } = await client.rpc(releaseIndexRpc);
+      if (observedError) throw observedError;
+      const browse = buildReleaseBrowseIndex(canonicalBrand, observedRows || []);
+      const models = browse.models;
+      const payload = {
+        success: true,
+        brand: canonicalBrand,
+        model_count: models.length,
+        catalog_reference_count: browse.references.length,
+        models,
+        identity_source: 'EXACT_RELEASE_MANIFEST',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+        suppressed_model_conflict_count: browse.modelConflicts.length,
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
+    if (brand.toLowerCase() === 'vacheron constantin') {
+      const references = listCanonicalCatalogReferences('Vacheron Constantin')
+        .filter(entry => String(entry.model || '').trim().toLowerCase() === 'overseas');
+      const payload = {
+        success: true,
+        brand: 'Vacheron Constantin',
+        model_count: 1,
+        catalog_reference_count: references.length,
+        models: [{ model: 'Overseas', reference_count: references.length }],
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        evidence_resolution: 'EXACT_RELEASE_MANIFEST_ON_SELECTION',
+        sample_capped: false,
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
+    if (isReviewedWorkbookBrowseBrand(brand)) {
+      const { rows, truncated } = await loadReviewedWorkbookBrandRows(getClient(), brand);
+      if (!rows.length && brand.toLowerCase() !== 'tag heuer') {
+        return res.status(404).json({ error: 'Brand has no published reviewed listings' });
+      }
+      if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe model browsing' });
+      let out = summarizeReviewedWorkbookModels(rows);
+      if (brand.toLowerCase() === 'tag heuer') {
+        const grouped = new Map();
+        const exactReferenceKey = value => String(value || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+        for (const entry of listCanonicalCatalogReferences('TAG Heuer')) {
+          const model = normalizeCanonicalModel(entry.model, 'TAG Heuer');
+          const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
+          current.references.add(exactReferenceKey(entry.reference));
+          grouped.set(model, current);
+        }
+        for (const row of rows) {
+          const model = rowModel(row);
+          const reference = rowReference(row);
+          if (!model || !reference) continue;
+          const current = grouped.get(model) || { references: new Set(), listing_count: 0 };
+          current.references.add(exactReferenceKey(reference));
+          current.listing_count += 1;
+          grouped.set(model, current);
+        }
+        out = [...grouped.entries()].map(([model, value]) => ({
+          model,
+          reference_count: value.references.size,
+          listing_count: value.listing_count,
+        })).sort((left, right) => right.listing_count - left.listing_count || left.model.localeCompare(right.model));
+      }
+      const payload = {
+        success: true,
+        brand,
+        model_count: out.length,
+        catalog_reference_count: out.reduce((sum, item) => sum + item.reference_count, 0),
+        observed_listing_count: out.reduce((sum, item) => sum + item.listing_count, 0),
+        models: out,
+        identity_source: brand.toLowerCase() === 'tag heuer'
+          ? 'CATALOG_PLUS_POSITIVE_OWNER_REVIEWED_WORKBOOK'
+          : 'OWNER_REVIEWED_WORKBOOK',
+        sample_capped: false,
+      };
+      _cache.set(brand, { at: Date.now(), payload });
+      return res.status(200).json(payload);
+    }
     if (!isPublicationBrandAllowed(brand)) {
+      // ponytail: prefer the preaggregated in-memory catalog index. The
+      // per-request reviewed-workbook row scan times out on large brands
+      // (Richard Mille hit the 10k-row cap -> 503; Cartier hit the Postgres
+      // statement timeout -> 500). Scan only as last resort for brands with
+      // no catalog coverage.
+      // ponytail: browse index shows ALL catalogued brand references — model
+      // names + reference numbers are catalog metadata, not market evidence.
+      // The reviewed-reference allowlist gates analytics display downstream,
+      // not the browse tree (gating here emptied RM/Cartier back into the
+      // timeout-prone DB scan).
+      const catalogReferences = listCanonicalCatalogReferences(brand);
+      if (catalogReferences.length) {
+        const models = new Map();
+        for (const entry of catalogReferences) {
+          if (!entry.model) continue;
+          const canonicalModel = normalizeCanonicalModel(entry.model, brand);
+          if (!models.has(canonicalModel)) models.set(canonicalModel, new Set());
+          models.get(canonicalModel).add(entry.reference);
+        }
+        const out = [...models.entries()]
+          .map(([model, refs]) => ({ model, reference_count: refs.size }))
+          .sort((a, b) => b.reference_count - a.reference_count || a.model.localeCompare(b.model));
+        const payload = {
+          success: true,
+          brand,
+          model_count: out.length,
+          catalog_reference_count: catalogReferences.length,
+          models: out,
+          identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+          sample_capped: false,
+        };
+        _cache.set(brand, { at: Date.now(), payload });
+        return res.status(200).json(payload);
+      }
       const { rows, truncated } = await loadReviewedWorkbookBrandRows(getClient(), brand);
       if (!rows.length) return res.status(404).json({ error: 'Brand has no published reviewed listings' });
       if (truncated) return res.status(503).json({ error: 'Brand inventory is too large for safe model browsing' });
@@ -149,24 +291,37 @@ module.exports = async function handler(req, res) {
       return res.status(200).json(payload);
     }
     if (brand.toLowerCase() === 'zenith') {
-      const out = await loadReviewedZenithModels();
+      const catalogReferences = listCanonicalCatalogReferences('Zenith');
+      const models = new Map();
+      for (const entry of catalogReferences) {
+        if (!entry.model) continue;
+        const canonicalModel = normalizeCanonicalModel(entry.model, 'Zenith');
+        if (!models.has(canonicalModel)) models.set(canonicalModel, new Set());
+        models.get(canonicalModel).add(entry.reference);
+      }
+      const out = [...models.entries()]
+        .map(([model, refs]) => ({ model, reference_count: refs.size }))
+        .sort((a, b) => b.reference_count - a.reference_count || a.model.localeCompare(b.model));
       const payload = {
         success: true,
         brand: 'Zenith',
         model_count: out.length,
-        catalog_reference_count: out.reduce((sum, item) => sum + item.reference_count, 0),
+        catalog_reference_count: catalogReferences.length,
         models: out,
-        identity_source: 'OWNER_REVIEWED_WORKBOOK',
+        identity_source: 'PREAGGREGATED_CATALOG_INDEX',
+        sample_capped: false,
       };
       _cache.set(brand, { at: Date.now(), payload });
       return res.status(200).json(payload);
     }
-    const catalogReferences = listCatalogReferences(brand)
+    const catalogReferences = listCanonicalCatalogReferences(brand)
       .filter(entry => isPublicationReferenceAllowed(brand, entry.reference));
     const models = new Map();
     for (const entry of catalogReferences) {
-      if (!models.has(entry.model)) models.set(entry.model, new Set());
-      models.get(entry.model).add(entry.reference);
+      if (!entry.model) continue;
+      const canonicalModel = normalizeCanonicalModel(entry.model, brand);
+      if (!models.has(canonicalModel)) models.set(canonicalModel, new Set());
+      models.get(canonicalModel).add(entry.reference);
     }
 
     const out = [...models.entries()]

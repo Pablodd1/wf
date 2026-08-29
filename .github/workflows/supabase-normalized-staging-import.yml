@@ -1,0 +1,250 @@
+name: Supabase reconciled normalized staging import
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type STAGE_RECONCILED_MARIADB_NORMALIZATION
+        required: true
+        type: string
+      raw_import_run_key:
+        description: Completed immutable raw import run key
+        required: true
+        default: mariadb-full-archive-20260810-codex-v1
+        type: string
+      normalization_run_key:
+        description: Stable idempotent normalization staging run key
+        required: true
+        default: mariadb-normalized-staging-20260811-codex-v1
+        type: string
+      expected_input_rows:
+        description: Exact reconciled archive row count
+        required: true
+        default: '1394269'
+        type: string
+      expected_staged_rows:
+        description: Exact safe single-listing materialization count
+        required: true
+        default: '620886'
+        type: string
+      expected_deferred_rows:
+        description: Exact deferred bundle/unresolved count
+        required: true
+        default: '773383'
+        type: string
+
+concurrency:
+  group: supabase-reconciled-normalized-staging-import
+  cancel-in-progress: false
+
+jobs:
+  stage-normalized:
+    if: ${{ inputs.confirmation == 'STAGE_RECONCILED_MARIADB_NORMALIZATION' }}
+    runs-on: [self-hosted, Windows, X64, watchfacts-raw-import]
+    environment: production
+    timeout-minutes: 720
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
+      NORMALIZED_RAW_INPUT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-archive-20260810-codex-v1\raw-records.jsonl
+      NORMALIZED_SOURCE_CHECKPOINT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-archive-20260810-codex-v1\checkpoint.json
+      NORMALIZED_MANIFEST: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\normalization-shards-v3-20260810-codex\full-normalization-manifest.json
+      NORMALIZED_OUTPUT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\normalized-staging-20260811-codex-v1
+      EXPECTED_INPUT_ROWS: ${{ inputs.expected_input_rows }}
+      EXPECTED_STAGED_ROWS: ${{ inputs.expected_staged_rows }}
+      EXPECTED_DEFERRED_ROWS: ${{ inputs.expected_deferred_rows }}
+      RAW_IMPORT_RUN_KEY: ${{ inputs.raw_import_run_key }}
+      NORMALIZATION_RUN_KEY: ${{ inputs.normalization_run_key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate evidence, apply forward schema, stage, and reconcile
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SUPABASE_PROJECT_REF -ne $env:EXPECTED_PROJECT_REF) {
+            throw 'Production Supabase project reference does not match the approved target.'
+          }
+          foreach ($name in @('RAW_IMPORT_RUN_KEY', 'NORMALIZATION_RUN_KEY')) {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            if ($value -notmatch '^[A-Za-z0-9._:-]{1,100}$') { throw "$name is invalid." }
+          }
+          foreach ($name in @('EXPECTED_INPUT_ROWS', 'EXPECTED_STAGED_ROWS', 'EXPECTED_DEFERRED_ROWS')) {
+            $value = [Environment]::GetEnvironmentVariable($name)
+            $parsed = 0L
+            if (-not [Int64]::TryParse($value, [ref]$parsed) -or $parsed -lt 0) {
+              throw "$name must be a non-negative integer."
+            }
+          }
+          if ([long]$env:EXPECTED_STAGED_ROWS + [long]$env:EXPECTED_DEFERRED_ROWS -ne [long]$env:EXPECTED_INPUT_ROWS) {
+            throw 'Expected staged and deferred counts do not reconcile to the archive total.'
+          }
+          foreach ($path in @($env:NORMALIZED_RAW_INPUT, $env:NORMALIZED_SOURCE_CHECKPOINT, $env:NORMALIZED_MANIFEST)) {
+            if (-not (Test-Path -LiteralPath $path)) { throw "Required local evidence is missing: $path" }
+          }
+
+          $sourceCheckpoint = Get-Content -Raw -LiteralPath $env:NORMALIZED_SOURCE_CHECKPOINT | ConvertFrom-Json
+          if ($sourceCheckpoint.complete -ne $true -or
+              [long]$sourceCheckpoint.input_rows -ne [long]$env:EXPECTED_INPUT_ROWS -or
+              [long]$sourceCheckpoint.output_rows -ne [long]$env:EXPECTED_INPUT_ROWS -or
+              [long]$sourceCheckpoint.error_rows -ne 0) {
+            throw 'Immutable source archive is incomplete or unreconciled.'
+          }
+          $manifest = Get-Content -Raw -LiteralPath $env:NORMALIZED_MANIFEST | ConvertFrom-Json
+          if ($manifest.source_coverage_reconciled -ne $true -or
+              [long]$manifest.source_rows -ne [long]$env:EXPECTED_INPUT_ROWS -or
+              [long]$manifest.difference -ne 0 -or
+              [long]$manifest.totals.error_rows -ne 0) {
+            throw 'Normalization manifest is incomplete or unreconciled.'
+          }
+
+          $managementHeaders = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          function Invoke-DatabaseQuery([string]$Sql, [bool]$ReadOnly = $true) {
+            $body = @{ query = $Sql; read_only = $ReadOnly } | ConvertTo-Json -Depth 4
+            return Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $managementHeaders -ContentType 'application/json' -Body $body
+          }
+
+          $migrationPaths = @(
+            'supabase/migrations/20260811120000_mariadb_normalized_staging_import.sql',
+            'supabase/migrations/20260811130000_trading_floor_location_and_media_contract.sql',
+            'supabase/migrations/20260811150000_trading_floor_pending_publication_contract.sql',
+            'supabase/migrations/20260811170000_trading_floor_unconfirmed_source_price.sql'
+          )
+          foreach ($migrationPath in $migrationPaths) {
+            if (-not (Test-Path -LiteralPath $migrationPath)) { throw "Required forward migration is missing: $migrationPath" }
+            Invoke-DatabaseQuery ([string](Get-Content -Raw -LiteralPath $migrationPath)) $false | Out-Null
+          }
+          Invoke-DatabaseQuery "NOTIFY pgrst, 'reload schema';" $false | Out-Null
+          Start-Sleep -Seconds 3
+
+          $preflightSql = @"
+          SELECT jsonb_build_object(
+            'raw_messages', (SELECT count(*) FROM public.raw_messages),
+            'raw_message_versions', (SELECT count(*) FROM public.raw_message_versions),
+            'raw_checkpoint_status', (SELECT status FROM public.mariadb_raw_import_checkpoints WHERE run_key = '$env:RAW_IMPORT_RUN_KEY'),
+            'raw_checkpoint_rows', (SELECT input_rows FROM public.mariadb_raw_import_checkpoints WHERE run_key = '$env:RAW_IMPORT_RUN_KEY'),
+            'raw_checkpoint_errors', (SELECT error_rows FROM public.mariadb_raw_import_checkpoints WHERE run_key = '$env:RAW_IMPORT_RUN_KEY'),
+            'legacy_staging_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key IS NULL),
+            'other_staging_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key IS DISTINCT FROM '$env:NORMALIZATION_RUN_KEY'),
+            'processing_jobs', (SELECT count(*) FROM jobs.processing_jobs),
+            'payload_versions', (SELECT count(*) FROM raw.payload_versions),
+            'payloads', (SELECT count(*) FROM raw.payloads),
+            'watch_records', (SELECT count(*) FROM public.watch_records),
+            'normalization_status', (SELECT status FROM staging.mariadb_normalization_import_checkpoints WHERE run_key = '$env:NORMALIZATION_RUN_KEY')
+          ) AS evidence;
+          "@
+          $preflight = (Invoke-DatabaseQuery $preflightSql $true)[0].evidence
+          if ([long]$preflight.raw_messages -ne [long]$env:EXPECTED_INPUT_ROWS -or
+              [long]$preflight.raw_message_versions -ne [long]$env:EXPECTED_INPUT_ROWS -or
+              $preflight.raw_checkpoint_status -ne 'RAW_COPY_COMPLETE' -or
+              [long]$preflight.raw_checkpoint_rows -ne [long]$env:EXPECTED_INPUT_ROWS -or
+              [long]$preflight.raw_checkpoint_errors -ne 0) {
+            throw 'Immutable raw import is not complete and exactly reconciled.'
+          }
+          if ([long]$preflight.legacy_staging_rows -ne 0 -or
+              [long]$preflight.other_staging_rows -ne 0 -or
+              [long]$preflight.processing_jobs -ne 0 -or
+              [long]$preflight.payload_versions -ne 0 -or
+              [long]$preflight.payloads -ne 0) {
+            throw 'Derived-lane cleanup has not completed, or unrelated staging data exists.'
+          }
+          $watchRecordsBefore = [long]$preflight.watch_records
+
+          $localReconciliationPath = Join-Path $env:NORMALIZED_OUTPUT 'reconciliation.json'
+          $localComplete = $false
+          if (Test-Path -LiteralPath $localReconciliationPath) {
+            $localReconciliation = Get-Content -Raw -LiteralPath $localReconciliationPath | ConvertFrom-Json
+            $localComplete = $localReconciliation.reconciled -eq $true -and
+              $localReconciliation.complete -eq $true -and
+              [long]$localReconciliation.input_rows -eq [long]$env:EXPECTED_INPUT_ROWS -and
+              ([long]$localReconciliation.staged_rows + [long]$localReconciliation.existing_rows) -eq [long]$env:EXPECTED_STAGED_ROWS -and
+              [long]$localReconciliation.deferred_rows -eq [long]$env:EXPECTED_DEFERRED_ROWS -and
+              [long]$localReconciliation.error_rows -eq 0
+          }
+          if ($preflight.normalization_status -eq 'NORMALIZATION_STAGED' -and -not $localComplete) {
+            throw 'Database normalization is complete but matching local reconciliation evidence is missing.'
+          }
+          if ($localComplete -and $preflight.normalization_status -ne 'NORMALIZATION_STAGED') {
+            throw 'Local normalization is complete but the database checkpoint is not reconciled.'
+          }
+
+          if (-not $localComplete) {
+            $keys = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/api-keys?reveal=true" -Headers $managementHeaders
+            $serverKey = $keys | Where-Object {
+              $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret')
+            } | Select-Object -First 1
+            if (-not $serverKey) { throw 'An existing server API key could not be retrieved for the approved project.' }
+            $env:SUPABASE_SERVICE_ROLE_KEY = [string]$serverKey.api_key
+            Write-Output "::add-mask::$env:SUPABASE_SERVICE_ROLE_KEY"
+            $env:SUPABASE_URL = "https://$env:SUPABASE_PROJECT_REF.supabase.co"
+            $env:MARIADB_NORMALIZED_RAW_INPUT = $env:NORMALIZED_RAW_INPUT
+            $env:MARIADB_NORMALIZED_MANIFEST = $env:NORMALIZED_MANIFEST
+            $env:MARIADB_RAW_IMPORT_RUN_KEY = $env:RAW_IMPORT_RUN_KEY
+            $env:MARIADB_NORMALIZED_RUN_KEY = $env:NORMALIZATION_RUN_KEY
+            $env:MARIADB_NORMALIZED_BATCH_SIZE = '200'
+            $env:MARIADB_NORMALIZED_OUTPUT = $env:NORMALIZED_OUTPUT
+            node tools/mariadb-live/import-normalized-staging.cjs
+            if ($LASTEXITCODE -ne 0) { throw 'Normalized staging importer failed.' }
+          } else {
+            Write-Output 'Matching local and database normalization reconciliations already exist; import is idempotently complete.'
+          }
+
+          $postflightSql = @"
+          SELECT jsonb_build_object(
+            'checkpoint_status', c.status,
+            'input_rows', c.input_rows,
+            'staged_rows', c.staged_rows,
+            'existing_rows', c.existing_rows,
+            'deferred_rows', c.deferred_rows,
+            'error_rows', c.error_rows,
+            'materialized_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key = '$env:NORMALIZATION_RUN_KEY'),
+            'bundle_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key = '$env:NORMALIZATION_RUN_KEY' AND (parent_id IS NOT NULL OR COALESCE(is_bundle, false))),
+            'published_image_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key = '$env:NORMALIZATION_RUN_KEY' AND image_url IS NOT NULL),
+            'unverified_usd_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key = '$env:NORMALIZATION_RUN_KEY' AND currency_normalized IS NULL AND price_usd IS NOT NULL),
+            'currency_unconfirmed_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key = '$env:NORMALIZATION_RUN_KEY' AND price_normalized > 0 AND currency_normalized IS NULL),
+            'trading_floor_rows', (SELECT count(*) FROM public.reviewed_workbook_market_source_v2 WHERE publication_lane = 'QNSA_NORMALIZED_STAGING_V1'),
+            'raw_messages', (SELECT count(*) FROM public.raw_messages),
+            'raw_message_versions', (SELECT count(*) FROM public.raw_message_versions),
+            'watch_records', (SELECT count(*) FROM public.watch_records)
+          ) AS evidence
+          FROM staging.mariadb_normalization_import_checkpoints AS c
+          WHERE c.run_key = '$env:NORMALIZATION_RUN_KEY';
+          "@
+          $postflightResult = Invoke-DatabaseQuery $postflightSql $true
+          if (-not $postflightResult -or -not $postflightResult[0].evidence) { throw 'Normalized staging postflight returned no evidence.' }
+          $postflight = $postflightResult[0].evidence
+          if ($postflight.checkpoint_status -ne 'NORMALIZATION_STAGED' -or
+              [long]$postflight.input_rows -ne [long]$env:EXPECTED_INPUT_ROWS -or
+              ([long]$postflight.staged_rows + [long]$postflight.existing_rows) -ne [long]$env:EXPECTED_STAGED_ROWS -or
+              [long]$postflight.deferred_rows -ne [long]$env:EXPECTED_DEFERRED_ROWS -or
+              [long]$postflight.error_rows -ne 0 -or
+              [long]$postflight.materialized_rows -ne [long]$env:EXPECTED_STAGED_ROWS -or
+              [long]$postflight.bundle_rows -ne 0 -or
+              [long]$postflight.published_image_rows -ne 0 -or
+              [long]$postflight.unverified_usd_rows -ne 0 -or
+              [long]$postflight.trading_floor_rows -ne [long]$env:EXPECTED_STAGED_ROWS -or
+              [long]$postflight.raw_messages -ne [long]$env:EXPECTED_INPUT_ROWS -or
+              [long]$postflight.raw_message_versions -ne [long]$env:EXPECTED_INPUT_ROWS -or
+              [long]$postflight.watch_records -ne $watchRecordsBefore) {
+            throw 'Normalized staging postflight reconciliation failed.'
+          }
+          $postflight | ConvertTo-Json -Depth 8
+
+      - name: Upload reconciliation only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mariadb-normalized-staging-reconciliation-${{ github.run_id }}
+          path: |
+            C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\normalized-staging-20260811-codex-v1\checkpoint.json
+            C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\normalized-staging-20260811-codex-v1\reconciliation.json
+          if-no-files-found: warn
+          retention-days: 7

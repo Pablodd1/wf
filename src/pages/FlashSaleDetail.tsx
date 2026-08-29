@@ -5,8 +5,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { MarketNav } from '@/components/MarketNav';
+import { Breadcrumb } from '@/components/Breadcrumb';
 import { Footer } from '@/components/Footer';
-import { JoinGroupsCta } from '@/components/JoinGroupsCta';
 import { Package, FileText, User, Globe, Shield, ArrowLeft } from 'lucide-react';
 
 function detectAccessories(raw: string | null): { box: boolean; papers: boolean } {
@@ -33,12 +33,10 @@ export default function FlashSaleDetail() {
     const fetchDetail = async () => {
       setLoading(true);
       try {
-        const res = await fetch(`/api/listings?limit=100&search=${encodeURIComponent(id)}`);
+        const res = await fetch(`/api/trading-listing?id=${encodeURIComponent(id)}`);
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const result = await res.json();
-        const allRows = result.rows || result || [];
-        const data = Array.isArray(allRows) ? allRows.filter((r: any) => r.id === id || r.id?.endsWith(id)) : [];
-        if (data?.[0]) setListing(data[0]);
+        if (result?.listing) setListing(result.listing);
         else setError('Listing not found');
       } catch (err: any) {
         setError(err.message);
@@ -88,9 +86,16 @@ export default function FlashSaleDetail() {
       <MarketNav />
 
       <div className="max-w-5xl mx-auto px-4 py-6">
-        <Link to="/trading" className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-[#C9A96E] mb-6 transition-colors">
-          <ArrowLeft size={14} /> Back to Trading Floor
-        </Link>
+        <div className="mb-6">
+          <Breadcrumb
+            items={[
+              { label: 'Trading Floor', to: '/trading' },
+              { label: listing?.brand ? `${listing.brand} ${listing.reference || ''}`.trim() : `Listing ${id}` },
+            ]}
+            backTo="/trading"
+            backLabel="Back to Trading Floor"
+          />
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* POST INFO */}

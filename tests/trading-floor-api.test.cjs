@@ -376,7 +376,7 @@ test('strict release fails closed when PostgREST returns its 1,000-row ceiling',
 test('recent inventory excludes recycle rows and undated imports', async () => {
   const url = await runQuery({ quality: 'market' });
   assert.equal(url.searchParams.get('status'), 'in.(CATALOG_CONFIRMED,HUMAN_APPROVED)');
-  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","116500LN","52506","5712/1A","5712/1A-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")');
+  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","116500LN","126500LN","52506","5712/1A","5712/1A-001","5712","5712G","5712G-001","5712R","5712R-001","5712/1R","5712/1R-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")');
   assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
@@ -388,7 +388,7 @@ test('all inventory still excludes recycle rows but includes undated imports', a
 
 test('reference search reaches dated and undated eligible market inventory', async () => {
   const url = await runQuery({ quality: 'market', q: '116610LN' });
-  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","116500LN","52506","5712/1A","5712/1A-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")');
+  assert.equal(url.searchParams.get('canonical_reference'), 'in.("116610LN","116500LN","126500LN","52506","5712/1A","5712/1A-001","5712","5712G","5712G-001","5712R","5712R-001","5712/1R","5712/1R-001","3712/1A","126710BLNR","16202ST","15500ST","15500","15400")');
   assert.equal(url.pathname, '/rest/v1/listing_identity_reviews');
 });
 
@@ -487,10 +487,12 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.doesNotMatch(floor, /label: 'Bulk listings'/);
   assert.doesNotMatch(floor, /label: 'Trade'/);
   assert.match(floor, /Want to buy/);
-  assert.match(floor, /fetch\(`\/api\/reviewed-market-inventory\?/);
+  assert.match(floor, /const endpoint = usesReviewedWatchInventory \? '\/api\/reviewed-market-inventory' : '\/api\/ingest'/);
+  assert.match(floor, /fetch\(`\$\{endpoint\}\?\$\{params\.toString\(\)\}`/);
   assert.doesNotMatch(floor, /InventoryScope|Full archive/);
   assert.match(floor, /const categoryFilter = CATEGORY_OPTIONS\.some/);
-  assert.match(floor, /const intentFilter = \['all', 'watches'\]\.includes\(categoryFilter\)/);
+  assert.match(floor, /const intentFilter = \['all', 'watches'\]\.includes\(categoryFilter\) && INTENT_OPTIONS\.some/);
+  assert.match(floor, /params\.set\('item', categoryFilter\)/);
   assert.match(floor, /MobileFilterSheet/);
   assert.match(floor, /Filter inventory/);
   assert.match(floor, /View results/);
@@ -504,6 +506,8 @@ test('Trading Floor beta route is public and bulk or trade filters are absent', 
   assert.match(floor, /previousViewKeyRef\.current === viewKey/);
   assert.match(floor, /Back to results/);
   assert.match(floor, /aria-label="Trading Floor pages"/);
+  assert.match(floor, />\s*Previous\s*</);
+  assert.match(floor, /loading \? 'Loading\.\.\.' : 'Next'/);
   assert.match(header, /overflow-x-auto/);
   assert.match(header, /h-11 shrink-0/);
   assert.match(header, /sm:flex-row/);

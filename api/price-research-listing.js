@@ -24,7 +24,153 @@ const {
 } = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
+const { enforceListingDisplayContract } = require('../shared/listing-display-contract.cjs');
 const { loadReviewedWorkbookListing } = require('./_lib/reviewed-workbook-analytics.cjs');
+const { ROLEX_PATEK_MULTI_PARENT_ID } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
+const { loadEffectiveDetail } = require('./_lib/four-brand-field-enrichment.cjs');
+const {
+  BACKGROUND_HOLD_SOURCE,
+  isRolexPatekBrand,
+  isRolexPatekPublicationHeld,
+} = require('./_lib/rolex-patek-publication-hold.cjs');
+const {
+  applyConfirmedFiveWatchPublication,
+  frozenFiveDefinition,
+} = require('./_lib/five-watch-publication.cjs');
+
+const QNSA_PRICE_RESEARCH_SOURCE = 'qnsa_rolex_patek_price_research_source';
+
+function rejectHeldRolexPatek(res, brand) {
+  if (!isRolexPatekPublicationHeld() || !isRolexPatekBrand(brand)) return false;
+  res.status(404).json({
+    error: 'Listing is temporarily unavailable while background verification continues',
+    release_status: 'BACKGROUND_VERIFICATION',
+    source: BACKGROUND_HOLD_SOURCE,
+  });
+  return true;
+}
+
+function isMissingQnsaDetailSource(error) {
+  return /42P01|PGRST205|relation .* does not exist|could not find the table/i
+    .test(`${error?.code || ''} ${error?.message || error || ''}`);
+}
+
+function isTradingFloorOnlyReviewedListingId(id) {
+  return String(id || '') === ROLEX_PATEK_MULTI_PARENT_ID;
+}
+
+async function loadQnsaReleaseListing(client, id) {
+  const { data, error } = await client
+    .from(QNSA_PRICE_RESEARCH_SOURCE)
+    // The reviewed source is a versioned public contract. Selecting the row
+    // avoids coupling this endpoint to optional projection columns added by
+    // individual release migrations while the response mapper remains
+    // deliberately allow-listed below.
+    .select('*')
+    .eq('id', id)
+    .maybeSingle();
+  if (error && isMissingQnsaDetailSource(error)) return null;
+  if (error) throw error;
+  return data || null;
+}
+
+function qnsaListingResponse(listing) {
+  const imageUrls = Array.isArray(listing.image_urls)
+    ? listing.image_urls.filter(Boolean)
+    : [listing.thumbnail_url].filter(Boolean);
+  const rawMessage = String(listing.raw_message || '').trim();
+  return {
+    success: true,
+    listing: enforceListingDisplayContract({
+      id: String(listing.id),
+      brand: listing.brand,
+      model: listing.model || null,
+      reference: listing.reference,
+      dial_color: listing.dial_color || null,
+      condition: listing.condition || null,
+      price_raw: listing.price_raw == null ? null : Number(listing.price_raw),
+      price_usd: listing.price_usd == null ? null : Number(listing.price_usd),
+      price_evidence_status: listing.price_evidence_status
+        || (Number(listing.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED'),
+      currency: listing.currency || null,
+      source_price_amount: listing.source_price_amount ?? listing.price_raw ?? null,
+      source_currency: listing.source_currency ?? listing.currency ?? null,
+      source_price_text: listing.source_price_text || null,
+      original_price_amount: listing.original_price_amount ?? listing.source_price_amount ?? listing.price_raw ?? null,
+      original_currency: listing.original_currency ?? listing.source_currency ?? listing.currency ?? null,
+      price_confirmation_note: listing.price_confirmation_note || null,
+      confirmed_data_publication: listing.confirmed_data_publication || null,
+      raw_message: rawMessage || null,
+      raw_message_scope: rawMessage ? 'original_post' : 'unavailable',
+      raw_message_truncated: false,
+      source_message_available_to_reviewers: Boolean(rawMessage),
+      created_at: listing.created_at,
+      listing_date: listing.listing_date || listing.created_at,
+      source: listing.source || 'MARIADB_IMMUTABLE_RAW',
+      source_type: 'qnsa_reviewed_release',
+      listing_type: listing.listing_type || 'WTS',
+      listing_status: listing.listing_status || null,
+      confidence: listing.confidence == null ? null : Number(listing.confidence),
+      accessories: [],
+      image_urls: imageUrls,
+      thumbnail_url: imageUrls[0] || null,
+      has_images: listing.has_images === true && imageUrls.length > 0,
+      image_evidence_type: listing.has_images === true && imageUrls.length > 0 ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
+      image_evidence_label: listing.has_images === true && imageUrls.length > 0 ? 'Source-supplied listing image' : null,
+      image_evidence_notice: listing.has_images === true && imageUrls.length > 0
+        ? 'Exact image retained with this immutable source listing.'
+        : null,
+      image_provenance: listing.has_images === true && imageUrls.length > 0 ? 'source_supplied' : 'none',
+      region: listing.location || null,
+      data_quality_issues: [],
+      data_quality_review_required: false,
+    }),
+  };
+}
+
+function effectiveDetailListing(row) {
+  const imageUrl = row.has_exact_source_image === true ? row.user_image_url : null;
+  const publicRawMessage = redactPublicSource(row.raw_message).trim();
+  return {
+    id: row.id,
+    brand: row.canonical_brand,
+    model: row.model,
+    reference: row.normalized_reference,
+    dial_color: row.dial_color,
+    condition: row.condition,
+    price_raw: row.source_price_amount,
+    price_usd: row.price_usd,
+    price_evidence_status: row.price_evidence_status,
+    currency: row.source_currency,
+    raw_message: publicRawMessage || null,
+    created_at: row.posting_date,
+    listing_date: row.posting_date,
+    source: row.source_file || 'MARIADB_IMMUTABLE_RAW',
+    source_type: 'qnsa_four_brand_effective_release',
+    listing_type: row.listing_type,
+    listing_status: row.trading_floor_status,
+    confidence: row.confidence,
+    thumbnail_url: imageUrl,
+    image_urls: imageUrl ? [imageUrl] : [],
+    has_images: Boolean(imageUrl),
+    location: row.location,
+  };
+}
+
+async function loadFrozenVacheronDetail(client, id) {
+  const definition = frozenFiveDefinition(id);
+  if (!definition || definition.brand !== 'Vacheron Constantin') return null;
+  const { data, error } = await client.rpc('qnsa_vacheron_overseas_reference_rows', {
+    p_reference: definition.reference,
+    p_limit: 101,
+    p_offset: 0,
+    p_listing_type: null,
+  });
+  if (error) throw error;
+  const row = (data || []).map(value => value?.row_data || value)
+    .find(value => String(value?.id) === String(id));
+  return row ? effectiveDetailListing(row) : null;
+}
 
 function normalizeAccessories(value) {
   if (!value) return [];
@@ -70,6 +216,9 @@ module.exports = async function handler(req, res) {
 
   const id = String(req.query.id || '').trim();
   if (!id || id.length > 250) return res.status(400).json({ error: 'Valid listing id required' });
+  if (isTradingFloorOnlyReviewedListingId(id)) {
+    return res.status(404).json({ error: 'Listing is Trading Floor only' });
+  }
 
   try {
     const client = getClient();
@@ -81,6 +230,35 @@ module.exports = async function handler(req, res) {
     } catch {
       // Public evidence remains available when optional reviewer resolution fails.
     }
+    let effectiveDetail = null;
+    try {
+      effectiveDetail = await loadEffectiveDetail(client, id);
+    } catch (effectiveDetailError) {
+      console.warn('[price-research-listing] four-brand exact detail unavailable; preserving legacy detail path:', effectiveDetailError.message);
+    }
+    if (effectiveDetail?.fourBrandScope) {
+      if (!effectiveDetail.row) return res.status(404).json({ error: 'Listing not found' });
+      return res.status(200).json(qnsaListingResponse(
+        applyConfirmedFiveWatchPublication(effectiveDetailListing(effectiveDetail.row)),
+      ));
+    }
+    const frozenVacheronDetail = await loadFrozenVacheronDetail(client, id);
+    if (frozenVacheronDetail) {
+      return res.status(200).json(qnsaListingResponse(
+        applyConfirmedFiveWatchPublication(frozenVacheronDetail),
+      ));
+    }
+    let qnsaListing = null;
+    try {
+      qnsaListing = await loadQnsaReleaseListing(client, id);
+    } catch (qnsaDetailError) {
+      console.warn('[price-research-listing] QNSA detail source unavailable; checking legacy release sources:', qnsaDetailError.message);
+    }
+    if (qnsaListing) {
+      if (rejectHeldRolexPatek(res, qnsaListing.brand)) return undefined;
+      return res.status(200).json(qnsaListingResponse(qnsaListing));
+    }
+
     const strictResult = await client
       .from('price_research_verified_source')
       .select('id,brand,model,reference,dial_color')
@@ -91,45 +269,72 @@ module.exports = async function handler(req, res) {
     if (!strictGate) {
       const workbookListing = await loadReviewedWorkbookListing(client, id);
       if (workbookListing) {
-        const redactedSource = redactPublicSource(workbookListing.raw_message || '').trim();
-        const publicSource = redactedSource.slice(0, 12_000);
+        if (rejectHeldRolexPatek(res, workbookListing.brand)) return undefined;
+        const publicSource = redactPublicSource(workbookListing.raw_message).trim();
+        const workbookImageProvenance = publicImageProvenance(workbookListing);
+        const workbookHasPublicSourceImage = [
+          'SELLER_LISTING_IMAGE',
+          'SOURCE_LISTING_IMAGE',
+          'SOURCE_LINKED_IMAGE',
+        ].includes(String(workbookImageProvenance.image_evidence_type || '').toUpperCase());
+        const workbookImageUrls = workbookHasPublicSourceImage
+          ? [...new Set([
+              workbookListing.thumbnail_url,
+              ...(workbookListing.image_urls || []),
+            ].filter(Boolean))]
+          : [];
+        const workbookThumbnailUrl = workbookImageUrls[0] || null;
+        let dialColor = workbookListing.dial_color;
+        if ((!dialColor || dialColor === 'UNKNOWN') && workbookHasPublicSourceImage && workbookThumbnailUrl) {
+          const imageUrl = workbookThumbnailUrl;
+          try {
+            const { resolveDialWithVisionFallback } = require('./_lib/dial-normalization.cjs');
+            const visionResolved = await resolveDialWithVisionFallback({
+              sourceDial: dialColor,
+              rawText: publicSource,
+              imageUrl,
+              textReference: workbookListing.reference,
+              textBrand: workbookListing.brand,
+            });
+            if (visionResolved?.value) dialColor = visionResolved.value;
+          } catch (e) {
+            console.warn('[price-research-listing] vision fallback error:', e.message);
+          }
+        }
         return res.status(200).json({
           success: true,
-          listing: {
+          listing: enforceListingDisplayContract({
             id: workbookListing.id,
             brand: workbookListing.brand,
             model: workbookListing.model,
             reference: workbookListing.reference,
-            dial_color: workbookListing.dial_color,
+            dial_color: dialColor,
             condition: workbookListing.condition,
             price_raw: workbookListing.source_price_amount,
             price_usd: workbookListing.price_usd,
-            price_evidence_status: 'SOURCE_EXPLICIT_USD_MATCH',
-            currency: workbookListing.source_currency || 'USD',
+            price_evidence_status: workbookListing.price_evidence_status || 'PRICE_NOT_SUPPLIED',
+            currency: workbookListing.source_currency || null,
             raw_message: publicSource || null,
             raw_message_scope: publicSource ? 'reviewed_workbook_source' : 'unavailable',
-            raw_message_truncated: redactedSource.length > publicSource.length,
+            raw_message_truncated: false,
             source_message_available_to_reviewers: Boolean(workbookListing.raw_message),
             created_at: workbookListing.created_at,
             listing_date: workbookListing.listing_date,
             source: workbookListing.source,
             source_type: workbookListing.source_type,
             listing_type: workbookListing.listing_type,
+            seller_name: workbookListing.seller_name || null,
             listing_status: workbookListing.listing_status,
             confidence: workbookListing.confidence,
-            image_urls: workbookListing.image_urls,
-            thumbnail_url: workbookListing.thumbnail_url,
-            has_images: workbookListing.has_images,
-            image_evidence_type: workbookListing.has_images ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
-            image_evidence_label: workbookListing.has_images ? 'Source-supplied listing image' : null,
-            image_evidence_notice: workbookListing.has_images
-              ? 'Exact image URL retained with this reviewed source listing.'
-              : null,
-            image_provenance: workbookListing.has_images ? 'source_supplied' : 'none',
+            image_urls: workbookImageUrls,
+            thumbnail_url: workbookThumbnailUrl,
+            has_images: workbookImageUrls.length > 0,
+            ...workbookImageProvenance,
+            image_provenance: workbookHasPublicSourceImage ? 'source_supplied' : 'none',
             data_quality_issues: [],
             data_quality_review_required: false,
             human_review_available: canReview,
-          },
+          }),
         });
       }
       if (!canReview) return res.status(404).json({ error: 'Listing not found' });
@@ -187,6 +392,7 @@ module.exports = async function handler(req, res) {
           image_urls: verified?.image_urls || [],
         }
       : data;
+    if (rejectHeldRolexPatek(res, resolvedData.brand)) return undefined;
     if (!isPublicationBrandAllowed(resolvedData.brand) || !isReleaseListingEligible(resolvedData)) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
@@ -223,14 +429,31 @@ module.exports = async function handler(req, res) {
       && Number.isFinite(Number(normalized.analytics_price_usd))
       && Number(normalized.analytics_price_usd) > 0;
     const priceIssues = priceVerified
-      ? customerListing.data_quality_issues
+      ? (customerListing.data_quality_issues || [])
       : [...new Set([...(customerListing.data_quality_issues || []), normalized.analytics_currency_status])];
     const redactedSource = redactPublicSource(rawSource.text).trim();
-    const publicSource = redactedSource.slice(0, 12_000);
+    const publicSource = redactedSource;
+    let dialColor = customerListing.dial_color;
+    if ((!dialColor || dialColor === 'UNKNOWN') && (customerListing.has_images || customerListing.image_urls?.length)) {
+      const imageUrl = customerListing.thumbnail_url || customerListing.image_urls?.[0];
+      try {
+        const { resolveDialWithVisionFallback } = require('./_lib/dial-normalization.cjs');
+        const visionResolved = await resolveDialWithVisionFallback({
+          sourceDial: dialColor,
+          rawText: publicSource,
+          imageUrl,
+          textReference: customerListing.reference,
+          textBrand: customerListing.brand,
+        });
+        if (visionResolved?.value) dialColor = visionResolved.value;
+      } catch (e) {
+        console.warn('[price-research-listing] vision fallback error:', e.message);
+      }
+    }
 
     return res.status(200).json({
       success: true,
-      listing: {
+      listing: enforceListingDisplayContract({
         id: customerListing.id,
         brand: customerListing.brand,
         model: customerListing.model,
@@ -242,13 +465,13 @@ module.exports = async function handler(req, res) {
         currency: priceVerified ? 'USD' : normalized.source_currency || null,
         raw_message: publicSource || null,
         raw_message_scope: publicSource ? rawSource.scope : 'unavailable',
-        raw_message_truncated: redactedSource.length > publicSource.length,
+        raw_message_truncated: false,
         source_message_available_to_reviewers: Boolean(rawSource.text),
         created_at: customerListing.created_at,
         listing_date: customerListing.listing_date,
         condition: customerListing.condition,
         source: customerListing.source,
-        dial_color: customerListing.dial_color,
+        dial_color: dialColor,
         year: customerListing.year,
         listing_type: customerListing.listing_type,
         accessories: normalizeAccessories(customerListing.accessories),
@@ -265,10 +488,14 @@ module.exports = async function handler(req, res) {
         human_review_available: canReview,
         data_quality_issues: priceIssues,
         data_quality_review_required: priceIssues.length > 0,
-      },
+      }),
     });
   } catch (error) {
     console.error('[price-research-listing] error:', error.message);
     return res.status(500).json({ error: 'Failed to fetch listing detail' });
   }
 };
+
+module.exports.isTradingFloorOnlyReviewedListingId = isTradingFloorOnlyReviewedListingId;
+module.exports.effectiveDetailListing = effectiveDetailListing;
+module.exports.loadFrozenVacheronDetail = loadFrozenVacheronDetail;

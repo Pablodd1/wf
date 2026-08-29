@@ -726,7 +726,7 @@ function regexExtract(text) {
   else if (/\bf\.p\.\s*journe\b|fpj\b/.test(lower)) brand = 'F.P. Journe';
   else if (/\bmb&f\b|maximilian/.test(lower)) brand = 'MB&F';
 
-  const rmMatch = text.match(/\bRM\s?\d{2}[-\s]?\d{2}[A-Z]?\b/i);
+  const rmMatch = text.match(/\bRM\s?\d{2,3}(?:[-\s]?\d{2})?[A-Z]*\b/i);
   const ppMatch = text.match(/\b\d{4}\/\d{1,4}[A-Z]{0,2}(?:-\d{3})?\b/i);
   // AP: handle 'AP26650ti' (no space) and '26650ti' (with word boundary)
   const apMatch = text.match(/\b(?:AP)?\s*(\d{5}[A-Z]{2,4})\b/i);
@@ -735,6 +735,10 @@ function regexExtract(text) {
   const jlcMatch = text.match(/\bQ?\d{6}[A-Z]{0,4}\b/i);
   // VC: 4-5 digits + optional letters (e.g., 82035, 4300V)
   const vcMatch = text.match(/\b\d{4,5}[A-Z]{0,2}\b/i);
+  const omegaMatch = text.match(/\b\d{3}\.\d{2}\.\d{2}\.\d{2}\.\d{2}\.\d{3}\b/);
+  const cartierMatch = text.match(/\bW[A-Z0-9]{7}\b/i);
+  const tudorMatch = text.match(/\b(?:M)?(?:7|2|4|8|9)\d{4}[A-Z]{0,2}(?:-\d{4})?\b/i);
+  const tagMatch = text.match(/\b[A-Z]{3,4}\d{4}[A-Z]?[-.][A-Z0-9]+\b/i);
 
   // Price detection FIRST — so we can exclude price-looking numbers from ref candidates
   const kM = text.match(/\b(\d{1,3}(?:\.\d{1,2})?)\s?[kK]\b/);
@@ -753,6 +757,11 @@ function regexExtract(text) {
   if (rolexMatch) candidates.push({ ref: rolexMatch[0].toUpperCase(), source: 'rolex' });
   if (jlcMatch) candidates.push({ ref: jlcMatch[0].toUpperCase(), source: 'jlc' });
   if (vcMatch && brand === 'Vacheron Constantin') candidates.push({ ref: vcMatch[0].toUpperCase(), source: 'vc' });
+  if (omegaMatch) candidates.push({ ref: omegaMatch[0], source: 'omega' });
+  if (cartierMatch) candidates.push({ ref: cartierMatch[0].toUpperCase(), source: 'cartier' });
+  if (tudorMatch) candidates.push({ ref: tudorMatch[0].toUpperCase(), source: 'tudor' });
+  if (tagMatch) candidates.push({ ref: tagMatch[0].toUpperCase(), source: 'tag' });
+    if (zenithMatch) candidates.push({ ref: zenithMatch[0].toUpperCase(), source: 'zenith' });
 
   // Filter: reject candidates that are just the explicit price or K-price
   const validCandidates = candidates.filter(c => {
@@ -847,27 +856,25 @@ function regexExtract(text) {
 
 // ─── AI Parse ───
 async function aiParse(kimiKey, rawMessage, currentGuess) {
-  const systemPrompt = `You are an expert luxury watch cataloging assistant. Parse unstructured dealer chat messages and extract structured watch metadata.
-
-Analyze the provided raw message and extract:
-- reference: The clean, uppercase reference number (e.g., '126710GRNR', 'PFC914-1020001-100182').
-- brand: The standardized brand name (e.g., 'Rolex', 'Patek Philippe', 'Parmigiani Fleurier').
+  const systemPrompt = `You are an expert luxury watch cataloging assistant. Analyze the provided raw message and extract:
+- reference: The clean, uppercase reference number. CRITICAL: For Richard Mille, strictly extract ONLY the base reference (e.g. 'RM11-03') and DO NOT append dial colors or nicknames like 'BLUE' or 'SKELETON'. (e.g., '126710GRNR', 'RM11-03', '79030N').
+- brand: The standardized brand name (e.g., 'Rolex', 'Patek Philippe', 'Richard Mille', 'Omega', 'Cartier', 'Tudor', 'TAG Heuer').
 - dialColor: The dial color (e.g., 'Green', 'Silver', 'White').
 - condition: Standardized condition (e.g., 'New', 'Unworn', 'Used').
 - year: The 4-digit year of the watch (if mentioned).
 - price: The numeric price (if mentioned).
 - currency: The currency code (USD, HKD, EUR, etc.).
-- confidence: Your confidence 0-100.
+- confidence: Your confidence 0-100.\n- image_urls: Array of image HTTP links found in the text.
 
 Rules:
 1. If the brand is omitted, return null. Catalog reconciliation may validate the reference later.
-2. Map abbreviations: 'VC' -> 'Vacheron Constantin', 'AP' -> 'Audemars Piguet', 'PP' -> 'Patek Philippe', 'JLC' -> 'Jaeger-LeCoultre', 'AL&S' or 'Lange' -> 'A. Lange & Sohne'.
+2. Map abbreviations: 'VC' -> 'Vacheron Constantin', 'AP' -> 'Audemars Piguet', 'PP' -> 'Patek Philippe', 'JLC' -> 'Jaeger-LeCoultre', 'AL&S' or 'Lange' -> 'A. Lange & Sohne', 'RM' -> 'Richard Mille', 'Tag' -> 'TAG Heuer'.
 3. If the message is just generic noise (e.g., 'Brand New Rolex' with no model/reference), return null for reference.
 4. Do not infer dial from a reference suffix. Return null unless the raw message states the dial.
 
 ${ZERO_HALLUCINATION_NORMALIZATION_CONTRACT}
 
-Output MUST be a valid JSON object with these exact keys: reference, brand, dialColor, condition, year, price, currency, confidence.`;
+Output MUST be a valid JSON object with these exact keys: reference, brand, dialColor, condition, year, price, currency, confidence, image_urls.`;
 
   const userPrompt = `Regex guess: ${JSON.stringify(currentGuess || {})}\nRaw message:\n"""\n${rawMessage}\n"""\nReturn ONLY valid JSON:`;
 
@@ -896,12 +903,12 @@ Output MUST be a valid JSON object with these exact keys: reference, brand, dial
  * Canonical IQR outlier test.
  * @param {number}   price      - Price under test (USD).
  * @param {number[]} prices     - Reference pool (USD).
- * @param {number}   [mult=1.5] - IQR fence multiplier (use 3 for Richard Mille).
+ * @param {number}   [mult=3.0] - IQR fence multiplier (use 3 for Richard Mille).
  * @param {number}   [tol=0.10] - Tolerance fraction applied to clean min/max.
  * @returns {boolean}
  */
-function priceIsOutlier(price, prices, mult = 1.5, tol = 0.10) {
-  if (prices.length < 5) return false;
+function priceIsOutlier(price, prices, mult = 3.0, tol = 0.10) {
+  if (prices.length < 2) return false;
   const sorted = [...prices].sort((a, b) => a - b);
   const q1 = sorted[Math.floor(sorted.length * 0.25)];
   const q3 = sorted[Math.floor(sorted.length * 0.75)];
@@ -909,7 +916,7 @@ function priceIsOutlier(price, prices, mult = 1.5, tol = 0.10) {
   const lowBound  = q1 - mult * iqr;
   const highBound = q3 + mult * iqr;
   const clean = sorted.filter(p => p >= lowBound && p <= highBound);
-  if (clean.length < 5) return false;
+  if (clean.length < 2) return false;
   const cq1 = clean[Math.floor(clean.length * 0.25)];
   const cq3 = clean[Math.floor(clean.length * 0.75)];
   const ciqr = cq3 - cq1;
@@ -946,15 +953,15 @@ function _brandBucketKey(brand) {
  * Rules:
  *  - RICHARD_MILLE  → mult = 3.0  (prices span $50k–$5 M)
  *  - PATEK_PHILIPPE high complications (52xx, 53xx, 57xx) → tol = 0.30 (20 pp on top of base 10 pp)
- *  - All others     → mult = 1.5, tol = 0.10 (default)
+ *  - All others     → mult = 3.0, tol = 0.10 (default)
  */
 function _iqrParams(brandBucket, ref) {
   if (brandBucket === 'RICHARD_MILLE') return { mult: 3.0, tol: 0.10 };
   if (brandBucket === 'PATEK_PHILIPPE') {
     const refNum = String(ref || '').replace(/[^0-9]/g, '').slice(0, 4);
-    if (/^5[237]/.test(refNum)) return { mult: 1.5, tol: 0.30 }; // 52xx, 53xx, 57xx
+    if (/^5[237]/.test(refNum)) return { mult: 3.0, tol: 0.30 }; // 52xx, 53xx, 57xx
   }
-  return { mult: 1.5, tol: 0.10 };
+  return { mult: 3.0, tol: 0.10 };
 }
 
 /**
@@ -978,7 +985,7 @@ function priceIsOutlierBranded(price, brand, ref, catalogEntry) {
     const allRefPrices = [];
     for (const d of catalogEntry.dials.values()) allRefPrices.push(...d.prices);
 
-    if (allRefPrices.length >= 5) {
+    if (allRefPrices.length >= 2) {
       return {
         outlier:  priceIsOutlier(price, allRefPrices, mult, tol),
         pool:     `ref:${ref}`,
@@ -1007,7 +1014,7 @@ function priceIsOutlierBranded(price, brand, ref, catalogEntry) {
     }
   }
 
-  if (brandPrices.length >= 5) {
+  if (brandPrices.length >= 2) {
     return {
       outlier:  priceIsOutlier(price, brandPrices, mult, tol),
       pool:     `brand:${brandBucket}`,
@@ -1032,16 +1039,36 @@ async function analyzeOne(chunk, ctx) {
   if (needsAi && ctx.kimiKey) {
     try {
       const ai = await aiParse(ctx.kimiKey, chunk, parsed);
-      parsed = {
-        brand: ai.brand || parsed.brand,
-        ref: ai.reference || parsed.ref,
-        dial: ai.dialColor || parsed.dial,
-        condition: ai.condition || parsed.condition,
-        year: ai.year ?? parsed.year,
-        price: parsed.price,
-        currency: parsed.currency,
-        confidence: Math.min(ai.confidence ?? confidence, 100),
-      };
+      if (ai.dialColor && !/\b(blue|black|green|white|brown|grey|gray|silver|pink|purple|red|orange|yellow|champagne|mop|mother\s*of\s*pearl|meteorite|diamond|gemset|rainbow|multi[\s-]?color|panda|hulk|tiffany|onyx|root\s*beer|cognac|ice\s*blue)\b/i.test(ai.dialColor)) ai.dialColor = null;
+      
+        let finalBrand = ai.brand || parsed.brand;
+        let finalRef = ai.reference || parsed.ref;
+        let finalBrandLower = (finalBrand || '').toLowerCase();
+        
+        if (finalBrandLower === 'richard mille' || finalBrandLower === 'rm') {
+            if (finalRef) {
+                const rmMatch = finalRef.match(/^(RM\d{2,3}-\d{2})/i);
+                if (rmMatch) finalRef = rmMatch[1].toUpperCase();
+            }
+        }
+        
+        if (finalBrandLower === 'zenith') {
+            const zMatch = chunk.match(/\b(\d{2}\.\d{4}\.\d{3,4}\/\d{2}\.[A-Z0-9]+)\b/i);
+            if (zMatch) finalRef = zMatch[1].toUpperCase();
+        }
+        
+        parsed = {
+          brand: finalBrand,
+          ref: finalRef,
+          dial: ai.dialColor || parsed.dial,
+          condition: ai.condition || parsed.condition,
+          year: ai.year ?? parsed.year,
+          price: ai.price ?? parsed.price,
+          currency: ai.currency || parsed.currency,
+          image_urls: ai.image_urls || parsed.image_urls || [],
+          confidence: Math.min(ai.confidence ?? confidence, 100),
+        };
+
       aiAssisted = true;
       confidence = parsed.confidence;
       stages.push({ stage: 'AI_TEXT', engine: 'kimi-k2.6', confidence, data: { ...parsed }, note: 'AI parsed messy text' });
@@ -1108,7 +1135,7 @@ async function analyzeOne(chunk, ctx) {
   if (originalPrice) {
     const usdPrice = toUSD(originalPrice, currency);
     const { outlier, pool, poolSize } = priceIsOutlierBranded(usdPrice, brand, reference, catalogEntry);
-    if (poolSize >= 5) {
+    if (poolSize >= 2) {
       if (outlier) {
         outlierFlag = 'PRICE_OUTLIER';
         confidence = Math.min(confidence, 60);
@@ -1117,7 +1144,7 @@ async function analyzeOne(chunk, ctx) {
         stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { priceUSD: usdPrice, pool, poolSize }, note: `Price within normal range [pool: ${pool}]` });
       }
     } else {
-      stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { pool, poolSize }, note: `Insufficient data for IQR (${poolSize} < 5 points) [pool: ${pool}]` });
+      stages.push({ stage: 'IQR', engine: 'statistical', confidence, data: { pool, poolSize }, note: `Insufficient data for IQR (${poolSize} < 2 points) [pool: ${pool}]` });
     }
   }
 
@@ -1147,7 +1174,7 @@ async function analyzeOne(chunk, ctx) {
 
   return {
     input: chunk,
-    parsed: { brand, reference, family, dialColor, condition, year, price: originalPrice, currency, priceUSD, materials },
+    parsed: { brand, reference, family, dialColor, condition, year, price: originalPrice, currency, priceUSD, materials, image_urls: parsed.image_urls || [] },
     confidence: Math.round(confidence),
     verdict,
     reason,

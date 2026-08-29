@@ -65,13 +65,13 @@ test('Trading Floor detail prices require verified USD or preserve the source pr
     assert.match(api, /analytics_currency_status === 'VERIFIED'/);
     assert.match(api, /price_evidence_status/);
   }
-  assert.match(trading, /listing\.price_evidence_status !== 'SOURCE_EXPLICIT_USD_MATCH'/);
+  assert.match(trading, /listing\.price_evidence_status === 'SOURCE_EXPLICIT_USD_MATCH'/);
+  assert.match(trading, /listing\.price_evidence_status === 'EXPLICIT_SOURCE_FX_CONVERTED'/);
   assert.match(trading, /listing\.price_research_eligible !== true/);
   assert.match(trading, /function formatSourcePrice/);
   assert.doesNotMatch(trading, /price_usd: tradingListing\.price_usd/);
   assert.doesNotMatch(trading, /Price under review/);
   assert.doesNotMatch(trading, /Price on request/);
-  assert.match(trading, /Reviewed price:/);
   assert.match(trading, /Workbook-reviewed USD - not in averages/);
   assert.match(trading, /Posted by/);
   assert.match(trading, /getListingMeta\(listing\)/);

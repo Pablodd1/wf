@@ -111,9 +111,24 @@ test('does not borrow a later emoji-bullet price from the same physical line', (
   assert.equal(result.price_normalization, 'EXPLICIT_HKD_FROM_REFERENCE_LINE');
 });
 
-test('withholds bare-dollar and non-pegged currency records without a verified USD conversion', () => {
+test('withholds bare-dollar and non-pegged currency without dated FX', () => {
   const ambiguous = normalizeMarketRow({ price_usd: 25000, raw_message: '5712/1A blue $25k' }, '5712/1A');
   const eur = normalizeMarketRow({ price_usd: 27000, raw_message: '5712/1A blue EUR 25k' }, '5712/1A');
-  assert.equal(ambiguous.analytics_currency_status, 'CURRENCY_AMBIGUOUS');
+  assert.equal(ambiguous.analytics_currency_status, 'AMBIGUOUS_DOLLAR_CURRENCY');
+  assert.equal(ambiguous.analytics_price_usd, 25000);
+  assert.equal(ambiguous.price_normalization, null);
+  assert.equal(ambiguous.source_currency, null);
+  assert.equal(ambiguous.source_currency_evidence, 'BARE_DOLLAR_UNRESOLVED');
   assert.equal(eur.analytics_currency_status, 'CURRENCY_RATE_UNVERIFIED');
+});
+
+test('withholds an ambiguous decimal-comma price instead of silently converting it to 282 USD', () => {
+  const result = normalizeMarketRow({
+    price_usd: 282,
+    raw_message: 'Rolex 116500LN white dial USD 28,2',
+  }, '116500LN');
+  assert.equal(result.analytics_price_usd, null);
+  assert.equal(result.analytics_currency_status, 'AMBIGUOUS_PRICE_FORMAT');
+  assert.equal(result.source_price_amount, null);
+  assert.equal(result.price_normalization, null);
 });

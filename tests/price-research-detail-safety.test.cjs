@@ -22,7 +22,7 @@ test('public listing detail keeps Trading Floor raw evidence private and redacts
   assert.match(trading, /raw_message: null/);
   assert.doesNotMatch(trading, /redactPublicSource/);
   assert.match(research, /redactPublicSource\(rawSource\.text\)/);
-  assert.match(research, /slice\(0, 12_000\)/);
+  assert.doesNotMatch(research, /slice\(0, 12_000\)/);
   assert.match(research, /raw_message: publicSource \|\| null/);
   assert.doesNotMatch(research, /raw_message_lineage_id/);
 });

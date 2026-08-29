@@ -54,15 +54,15 @@ function stdDev(arr: number[], mean: number): number {
 }
 
 function iqrFilter(prices: number[]): { keep: number[]; remove: number[] } {
-  if (prices.length < 5) return { keep: prices, remove: [] };
+  if (prices.length < 2) return { keep: prices, remove: [] };
   const sorted = [...prices].sort((a, b) => a - b);
   const q1Idx = Math.floor(sorted.length * 0.25);
   const q3Idx = Math.floor(sorted.length * 0.75);
   const q1 = sorted[q1Idx];
   const q3 = sorted[q3Idx];
   const iqr = q3 - q1;
-  const lower = q1 - 1.5 * iqr;
-  const upper = q3 + 1.5 * iqr;
+  const lower = q1 - 3.0 * iqr;
+  const upper = q3 + 3.0 * iqr;
   return {
     keep: prices.filter((p) => p >= lower && p <= upper),
     remove: prices.filter((p) => p < lower || p > upper),
@@ -71,7 +71,7 @@ function iqrFilter(prices: number[]): { keep: number[]; remove: number[] } {
 
 export function buildPriceAnalytics(
   records: WatchRecord[],
-  minDataPoints = 5
+  minDataPoints = 2
 ): AnalyticsResult {
   // Group by reference + dialColor
   const map = new Map<string, WatchRecord[]>();

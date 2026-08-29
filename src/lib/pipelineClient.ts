@@ -77,7 +77,7 @@ export async function enrichRecords(
     record: p,
   }));
 
-  const { outliers } = applyIQRFiltering(forIqr, 5);
+  const { outliers } = applyIQRFiltering(forIqr, 2);
   const outlierSet = new Set(outliers.map((o) => o.record.raw.id));
 
   // Step 3: Build enriched records
@@ -159,10 +159,10 @@ export async function verifyImage(
   discrepancies: string[];
 }> {
   try {
-    const res = await fetch('/api/image-verify', {
+    const res = await fetch('/api/verify-image', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ imageUrl, textParsed }),
+      body: JSON.stringify({ imageUrl, ...textParsed }),
     });
     const data = await res.json();
     if (!res.ok) {

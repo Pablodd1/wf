@@ -183,6 +183,42 @@ const SUFFIX_DIAL: Record<string, string> = {
   'BLNR': 'Blue Black', 'GRNR': 'Green Black', 'RBOW': 'Rainbow',
 };
 
+export function inferDialWithVisionFallback(
+  dialColor: string | null | undefined,
+  reference: string | null | undefined,
+  imageUrl?: string | null,
+): string {
+  if (dialColor && dialColor !== 'UNKNOWN' && dialColor !== 'Unspecified') {
+    return dialColor;
+  }
+  if (reference) {
+    const cleanRef = reference.toUpperCase();
+    const overrides: Record<string, string> = {
+      '116500LN': 'White', '116500': 'White', '126500LN': 'White', '126500': 'White',
+      '116518': 'Champagne', '116519': 'Meteorite', '116595RBOW': 'Rainbow',
+      '126710BLNR': 'Blue/Black', '126710BLRO': 'Blue/Red',
+      '5711/1A': 'Blue', '5712/1A': 'Blue', '5167A': 'Black',
+      '5164A': 'Black', '5968A': 'Black', '5968G': 'Green',
+      '126334': 'Grey', '126234': 'Grey',
+    };
+    for (const [key, color] of Object.entries(overrides)) {
+      if (cleanRef.includes(key)) return color;
+    }
+    const suffixes: Record<string, string> = {
+      LN: 'Black', LB: 'Blue', LV: 'Green', CHNR: 'Brown',
+      BLNR: 'Blue/Black', BLRO: 'Blue/Red', VTNR: 'Black/Green',
+      GRNR: 'Black/Grey', SARU: 'Orange',
+    };
+    for (const [suf, color] of Object.entries(suffixes)) {
+      if (cleanRef.endsWith(suf) || cleanRef.includes('/' + suf)) return color;
+    }
+  }
+  if (imageUrl) {
+    return 'Vision Fallback';
+  }
+  return 'Unspecified';
+}
+
 const DIAL_KEYWORDS: [RegExp, string][] = [
   [/\b(?:tiffany|tiffanie|tiff)\s*(?:blue|dial)?\b/i, 'Tiffany'],
   [/\b(?:ice\s*blue|icy\s*blue|light\s*blue|powder\s*blue)\b/i, 'Ice Blue'],
@@ -211,7 +247,7 @@ const DIAL_KEYWORDS: [RegExp, string][] = [
 
 const CONDITION_PATTERNS: [RegExp, string][] = [
   [/\b(?:brand\s*new|bnib|unworn|unused|nib)\b/i, 'New'],
-  [/\b(?:like\s*new|mint|excellent)\b/i, 'New'],
+  [/\b(?:like\s*new|mint|excellent|slider|lnib)\b/i, 'Like New'],
   [/\b(?:pre.owned|used|second.hand)\b/i, 'Used'],
   [/\b(?:fair|good|vintage)\b/i, 'Used'],
 ];

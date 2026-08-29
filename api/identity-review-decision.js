@@ -13,7 +13,7 @@ const {
   unresolvedIdentity,
 } = require('./_lib/identity-review-source.cjs');
 
-const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe']);
+const ALLOWED_BRANDS = new Set(['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Cartier']);
 const RPC_DECISIONS = {
   APPROVE: 'HUMAN_APPROVED',
   CONFLICT: 'CONFLICT',
@@ -43,7 +43,7 @@ function validateDecisionBody(body) {
     return { error: 'Approval requires brand, model, reference, and dial color' };
   }
   if (!ALLOWED_BRANDS.has(canonical.brand)) {
-    return { error: 'Approval is restricted to Rolex and Patek Philippe' };
+    return { error: 'Approval is restricted to enabled reviewed watch brands' };
   }
   return { value: { recordId, decision, reason, canonical } };
 }

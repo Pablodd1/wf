@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Layout } from '@/components/Layout';
 import { TabNav } from '@/components/TabNav';
 import { verifyImageReference, type VerifyImageResult } from '@/lib/verifyImage';
+import { DealerSubmissionReviewLane } from '@/components/DealerSubmissionReviewLane';
 import {
   CheckCircle2, AlertTriangle, Eye,
   Search, Clock, MessageSquare, Shield, Database, RefreshCw, KeyRound,
@@ -62,6 +63,7 @@ interface ReviewItem {
   status: 'pending' | 'approved' | 'rejected';
   submittedAt: string;
   imageUrl?: string;
+  multiListing?: boolean;
   listingTitle: string;
   reviewReasons: string[];
   disposition: 'HUMAN_REVIEW' | 'READY_FOR_HUMAN_APPROVAL' | 'CATALOG_CONFIRMATION_REQUIRED';
@@ -175,6 +177,9 @@ interface UnbundledQueueApiItem {
   seller_contact_available?: boolean;
   original_posted_at?: string | null;
   front_image?: string | null;
+  multi_listing?: boolean;
+  recycle_image_url?: string | null;
+  isUnbundledChild?: boolean;
   seller_lineage_status?: string | null;
 }
 
@@ -916,7 +921,7 @@ function IdentityReviewLane() {
       <div className="rounded-xl border border-border-default bg-bg-card p-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h2 className="text-sm font-bold text-text-primary">Rolex and Patek identity review</h2>
+            <h2 className="text-sm font-bold text-text-primary">Released watch identity review</h2>
             <p className="mt-1 max-w-3xl text-xs text-text-muted">
               Actionable identities are loaded in bounded pages of 50, with no synchronous global count across the 1.4M-row unresolved universe. Normalization, market-data, bundle, duplicate, and missing-evidence cases stay in their own lanes. Approval requires the exact reference in the preserved raw listing and a catalog-compatible dial.
             </p>
@@ -1649,7 +1654,7 @@ function SellerLineageReviewLane() {
 }
 
 export default function ReviewQueue() {
-  const [lane, setLane] = useState<'identity' | 'shadow' | 'unbundled' | 'duplicates' | 'price' | 'packets' | 'images' | 'sellers'>('identity');
+  const [lane, setLane] = useState<'dealer-posts' | 'identity' | 'shadow' | 'unbundled' | 'duplicates' | 'price' | 'packets' | 'images' | 'sellers'>('dealer-posts');
   const [items, setItems] = useState<ReviewItem[]>([]);
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('pending');
   const [reasonFilter, setReasonFilter] = useState('');
@@ -1822,6 +1827,7 @@ export default function ReviewQueue() {
               reviewReasons: [
                 ...flags.filter(flag => flag.startsWith('REVIEW:') || flag.startsWith('BLOCKER:')),
                 ...(item.dealerAttributionMissing ? ['DEALER_ATTRIBUTION_MISSING'] : []),
+              ...(item.multi_listing ? ['MULTI_LISTING'] : []),
               ],
               disposition: ready ? 'READY_FOR_HUMAN_APPROVAL' : 'HUMAN_REVIEW',
               priority: ready ? 30 : 90,
@@ -1830,12 +1836,15 @@ export default function ReviewQueue() {
                 ...(item.field_confidence || {}),
                 ...(item.seller_lineage_status ? { seller_lineage_status: item.seller_lineage_status } : {}),
                 ...(item.seller_contact_available ? { seller_contact_available: true } : {}),
-                ...(item.front_image ? { front_image: item.front_image } : {}),
+                // ponytail: multi-listing children show no front_image, but recycle_image_url is preserved for admin
+                ...(item.recycle_image_url ? { recycle_image_url: item.recycle_image_url } : {}),
               },
               sellerName: item.seller_name || String(item.field_confidence?.seller_name || '') || null,
               sellerPhone: item.seller_phone || String(item.field_confidence?.seller_phone || '') || null,
               originalPostedAt: item.original_posted_at || item.created_at || null,
-              imageUrl: item.front_image || undefined,
+              // ponytail: multi-listing children get no imageUrl — image suppressed to avoid wrong-watch misattribution
+              imageUrl: item.multi_listing ? undefined : (item.front_image || undefined),
+              multiListing: item.multi_listing || false,
               source: String(item.source || '') || null,
               condition: item.condition || null,
               year: item.year ?? null,
@@ -1850,7 +1859,7 @@ export default function ReviewQueue() {
         });
       return () => { active = false; };
     }
-    if (lane === 'identity' || lane === 'images' || lane === 'sellers' || lane === 'packets') {
+    if (lane === 'dealer-posts' || lane === 'identity' || lane === 'images' || lane === 'sellers' || lane === 'packets') {
       setItems([]);
       return () => { active = false; };
     }
@@ -2132,7 +2141,7 @@ export default function ReviewQueue() {
     }
   };
 
-  const dedicatedLane = lane === 'identity' || lane === 'packets' || lane === 'images' || lane === 'sellers';
+  const dedicatedLane = lane === 'dealer-posts' || lane === 'identity' || lane === 'packets' || lane === 'images' || lane === 'sellers';
 
   return (
     <Layout>
@@ -2164,6 +2173,12 @@ export default function ReviewQueue() {
         </div>
 
         <div className="mb-6 flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => { setLane('dealer-posts'); setSelected(null); }}
+            className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'dealer-posts' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
+          >
+            Post an Item
+          </button>
           <button
             onClick={() => { setLane('identity'); setSelected(null); }}
             className={`rounded-lg px-4 py-2 text-xs font-bold ${lane === 'identity' ? 'bg-gold-primary text-black' : 'border border-border-default text-text-secondary'}`}
@@ -2217,6 +2232,7 @@ export default function ReviewQueue() {
           )}
         </div>
 
+        {lane === 'dealer-posts' && <DealerSubmissionReviewLane />}
         {lane === 'identity' && <IdentityReviewLane />}
         {lane === 'packets' && (
           <PacketReviewLane openUnbundled={() => { setLane('unbundled'); setSelected(null); }} />

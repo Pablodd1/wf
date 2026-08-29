@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { ExternalLink, Download, FileSpreadsheet } from 'lucide-react';
 import { generateInsightReport } from '@/lib/reports';
+import { MarketNav } from '../components/MarketNav';
+import { Breadcrumb } from '../components/Breadcrumb';
 
 const NAVY = '#1a2744';
 const GOLD = '#c9a03a';
@@ -79,11 +81,11 @@ export default function InsightDetails() {
   const sortedPrices = [...allPrices].sort((a, b) => a - b);
 
   // IQR for this view's processing
-  const q1 = sortedPrices.length >= 4 ? sortedPrices[Math.floor(sortedPrices.length * 0.25)] : 0;
-  const q3 = sortedPrices.length >= 4 ? sortedPrices[Math.floor(sortedPrices.length * 0.75)] : 0;
+  const q1 = sortedPrices.length >= 2 ? sortedPrices[Math.floor(sortedPrices.length * 0.25)] : 0;
+  const q3 = sortedPrices.length >= 2 ? sortedPrices[Math.floor(sortedPrices.length * 0.75)] : 0;
   const iqr = q3 - q1;
-  const lowerBound = q1 - 1.5 * iqr;
-  const upperBound = q3 + 1.5 * iqr;
+  const lowerBound = q1 - 3.0 * iqr;
+  const upperBound = q3 + 3.0 * iqr;
   const outliers = sortedPrices.filter(p => p < lowerBound || p > upperBound);
   const filteredPrices = sortedPrices.filter(p => p >= lowerBound && p <= upperBound);
 
@@ -118,11 +120,23 @@ export default function InsightDetails() {
 
   return (
     <div style={{ backgroundColor: WHITE, color: TEXT, fontFamily: "'Inter', system-ui, sans-serif", minHeight: '100vh' }}>
-      <NavBar />
+      <MarketNav />
 
       {/* Header */}
-      <div style={{ backgroundColor: NAVY, color: WHITE, padding: '32px 0' }}>
+      <div style={{ backgroundColor: NAVY, color: WHITE, padding: '24px 0' }}>
         <div className="max-w-6xl mx-auto px-4">
+          <div className="mb-4">
+            <Breadcrumb
+              dark
+              items={[
+                { label: 'Trading Floor', to: '/trading' },
+                { label: 'Price Research', to: '/price-research' },
+                { label: `Insight: ${displayRef}` },
+              ]}
+              backTo="/price-research"
+              backLabel="Back to Price Research"
+            />
+          </div>
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Insight Details</h1>
@@ -355,25 +369,12 @@ function ListingModal({ listing, reference, onClose }: {
   );
 }
 
-function NavBar() {
-  return (
-    <nav style={{ backgroundColor: WHITE, borderBottom: `1px solid ${BORDER}`, padding: '12px 0' }}>
-      <div className="max-w-6xl mx-auto px-4 flex items-center justify-between">
-        <a href="/" style={{ fontWeight: 700, fontSize: 18, color: NAVY, fontFamily: "'Playfair Display', serif", textDecoration: 'none' }}>Curated Luxury</a>
-        <div className="flex gap-6" style={{ fontSize: 14 }}>
-          {['Trading', 'Price Research', 'Dealer Directory', 'Escrow', 'Hire Fi'].map(item => (
-            <a key={item} href={item === 'Price Research' ? '/price-research' : '#'} style={{ color: MUTED, textDecoration: 'none' }}>{item}</a>
-          ))}
-        </div>
-      </div>
-    </nav>
-  );
-}
+
 
 function Footer() {
   return (
     <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 48, paddingTop: 32, paddingBottom: 32, textAlign: 'center', fontSize: 12, color: MUTED }}>
-      © 2026 Watchfacts Inc. All Rights Reserved.
+      © 2026 Curated Luxury. All Rights Reserved.
     </div>
   );
 }

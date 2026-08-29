@@ -89,7 +89,7 @@ export default function DemoMode() {
             <div className="rounded-lg border border-border-default bg-bg-card p-4">
               <h4 className="text-xs font-bold text-text-primary mb-2">Supported Brands</h4>
               <div className="flex flex-wrap gap-2">
-                {['Rolex', 'Patek Philippe', 'Breitling', 'Cartier', 'Breguet', 'IWC', 'Bvlgari', 'Grand Seiko'].map(brand => (
+                {['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Breitling', 'Cartier', 'Breguet', 'IWC', 'Bvlgari', 'Grand Seiko'].map(brand => (
                   <span key={brand} className="px-2 py-1 rounded bg-bg-elevated text-xs text-text-secondary">{brand}</span>
                 ))}
               </div>

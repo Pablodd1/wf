@@ -4,7 +4,7 @@ const { parseNumber, segmentDealerMessage } = require('../../api/_lib/normalizat
 const { lookupCatalog } = require('../../api/_lib/catalog.js');
 const { comparisonKey, normalizeDialValue, resolveDial } = require('../../api/_lib/dial-normalization.cjs');
 
-const VERSION = 'v4.2-line-condition';
+const VERSION = 'v4.3-mint-condition';
 const USD_PER_UNIT = { USD: 1, USDT: 1, HKD: 1 / 7.8, EUR: 1.08, GBP: 1.27, CHF: 1.12, SGD: 0.74, CNY: 0.138 };
 
 function normalizeText(value) {
@@ -55,17 +55,60 @@ function sourceCurrencyTextObservation(candidate, record) {
   };
 }
 
-function analyzeRecord(record) {
-  const candidates = segmentDealerMessage(record.raw_message || '');
+function applyCurrencyPolicy(price, fxSnapshot = null) {
+  if (!price) return price;
+  const currency = String(price.currency_original || '').toUpperCase();
+  const amount = Number(price.amount_original);
+  if (!Number.isFinite(amount) || amount <= 0 || !currency) return price;
+  if (currency === 'USD' || currency === 'USDT') {
+    return {
+      ...price,
+      amount_usd: amount,
+      conversion_rate: 1,
+      conversion_timestamp: null,
+      conversion_source: price.currency_evidence === 'usd_defaulted_by_policy'
+        ? 'USD_DEFAULTED_BY_POLICY'
+        : 'SOURCE_USD_OR_USDT',
+    };
+  }
+  const rate = Number(fxSnapshot?.usd_per_unit?.[currency]);
+  if (!Number.isFinite(rate) || rate <= 0 || !fxSnapshot?.observed_at || !fxSnapshot?.source) {
+    return {
+      ...price,
+      amount_usd: null,
+      conversion_rate: null,
+      conversion_timestamp: null,
+      conversion_source: null,
+    };
+  }
+  return {
+    ...price,
+    amount_usd: Math.round(amount * rate),
+    conversion_rate: rate,
+    conversion_timestamp: fxSnapshot.observed_at,
+    conversion_source: fxSnapshot.source,
+  };
+}
+
+function analyzeRecord(record, options = {}) {
+  const sourceIntent = ['WTB', 'WTS'].includes(String(record.listing_type || '').toUpperCase())
+    ? String(record.listing_type).toUpperCase()
+    : null;
+  const candidates = segmentDealerMessage(
+    record.raw_message || '',
+    sourceIntent ? { intent_context: sourceIntent } : {},
+  );
   const proposed = candidates.map(candidate => {
-    const parsedPrices = candidate.prices || [];
+    let parsedPrices = candidate.prices || [];
     const sourceCurrencyPrice = parsedPrices.length ? null : sourceCurrencyTextObservation(candidate, record);
+    if (sourceCurrencyPrice) parsedPrices = [];
     // A collapsed parent price cannot be assigned to an arbitrary child. Only
     // retain a structured source price when the message resolves to one watch.
     const retainedSourcePrice = candidates.length === 1 && !parsedPrices.length && !sourceCurrencyPrice
       ? sourcePriceObservation(record)
       : null;
-    const prices = sourceCurrencyPrice ? [sourceCurrencyPrice] : retainedSourcePrice ? [retainedSourcePrice] : parsedPrices;
+    const prices = (sourceCurrencyPrice ? [sourceCurrencyPrice] : retainedSourcePrice ? [retainedSourcePrice] : parsedPrices)
+      .map(price => applyCurrencyPolicy(price, options.fxSnapshot));
     const primary = prices.find(price => price.is_primary) || prices[0] || null;
     const candidateBrand = candidate.context.brand_context || record.brand || null;
     const candidateReference = candidate.reference || record.reference || null;
@@ -97,6 +140,8 @@ function analyzeRecord(record) {
       dial_ambiguous: dial.ambiguous,
       dial_reason: dial.reason,
       prices,
+      price_candidates: candidate.price_candidates || [],
+      price_review_reasons: candidate.price_review_reasons || [],
       emoji_price_ambiguous: candidate.emoji_price_ambiguous === true,
     };
   });
@@ -115,14 +160,8 @@ function analyzeRecord(record) {
     if (next.dial_ambiguous) flags.add('DIAL_AMBIGUOUS');
     if (next.dial_color && comparisonKey(next.dial_color) !== comparisonKey(sourceDial.value)) flags.add('DIAL_CHANGED');
 
-    // A bare dollar amount without message or section currency context is not
-    // safe to preserve as USD. Keep it out of automatic approval even when an
-    // older parser already supplied a numeric price or currency.
-    const priceCameFromText = next.prices.some(price => price.currency_evidence !== 'source_record');
-    if (!priceCameFromText && /\$\s*\d/.test(next.raw_line) && !/(?:US\$|U\$|HK\$)/i.test(next.raw_line)) {
-      flags.add('CURRENCY_AMBIGUOUS');
-    }
-    if (!next.price_raw && record.price_raw != null) flags.add('PRICE_PARSE_FAILED');
+    if (next.price_review_reasons.length) flags.add('PRICE_REVIEW_REQUIRED');
+    if (!next.price_raw && record.price_raw != null && !next.price_review_reasons.length) flags.add('PRICE_PARSE_FAILED');
     if (next.listing_type !== 'WTB' && next.emoji_price_ambiguous) flags.add('EMOJI_PRICE_AMBIGUOUS');
   }
   const changeFlags = [...flags];
@@ -223,5 +262,5 @@ if (require.main === module) {
   });
 }
 
-module.exports = { analyzeRecord };
+module.exports = { analyzeRecord, applyCurrencyPolicy };
 
