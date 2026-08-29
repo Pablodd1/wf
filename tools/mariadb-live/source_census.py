@@ -358,6 +358,12 @@ def fetch_scoped_canonical_parents(pg_config, log_fn):
         conn.rollback()
         conn.close()
 
+    if scoped_parents["total_parent_rows"] == 0:
+        raise RuntimeError(
+            "PostgreSQL canonical parent validation failure: zero rows returned from wf_canonical_staging.canonical_listing_parents. "
+            "Failing closed to prevent silent RLS policy suppression or unpopulated target staging."
+        )
+
     dup_source_ids = scoped_parents["non_null_source_listing_ids"] - len(scoped_parents["distinct_source_listing_ids"])
     log_fn(
         f"Fetched {scoped_parents['total_parent_rows']:,} canonical parent rows "

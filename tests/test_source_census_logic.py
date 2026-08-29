@@ -212,6 +212,33 @@ class TestSourceCensusHardeningFull(unittest.TestCase):
         cur_valid.fetchone.side_effect = [("census_reader", "off"), [True], [True], [False], [False], [False], [False]]
         verify_postgres_role_permissions(cur_valid, lambda m: None)
 
+    @patch("psycopg2.connect")
+    def test_rls_zero_rows_fails_closed(self, mock_pg_connect):
+        from source_census import fetch_scoped_canonical_parents
+        mock_pg_conn = MagicMock()
+        mock_pg_cur = MagicMock()
+        mock_pg_connect.return_value = mock_pg_conn
+        mock_pg_conn.cursor.return_value = mock_pg_cur
+
+        mock_pg_cur.fetchone.side_effect = [
+            ("census_reader", "off"),
+            [True],
+            [True],
+            [False],
+            [False],
+            [False],
+            [False],
+        ]
+        # fetchall returns empty immediately (zero rows returned)
+        mock_pg_cur.fetchall.return_value = []
+
+        with self.assertRaises(RuntimeError) as ctx:
+            fetch_scoped_canonical_parents({
+                "host": EXACT_PINNED_PGHOST, "port": 5432, "user": "census_reader",
+                "password": "pwd", "dbname": "postgres", "sslmode": "verify-full"
+            }, lambda m: None)
+        self.assertIn("zero rows returned from wf_canonical_staging.canonical_listing_parents", str(ctx.exception))
+
     def test_explain_enforces_proved_composite_index(self):
         mcur = MagicMock()
         mcur.fetchall.side_effect = [
