@@ -15,17 +15,74 @@ const {
   sha256,
   canonicalizeRawPayload
 } = require('../tools/mariadb-live/full-capture-preflight.cjs');
+const {
+  resolveMariaDbTransport,
+  isPublicHost
+} = require('../tools/mariadb-live/run-full-private-capture.cjs');
+
+test('isPublicHost correctly classifies RFC1918 private vs public hosts', () => {
+  assert.equal(isPublicHost('localhost'), false);
+  assert.equal(isPublicHost('127.0.0.1'), false);
+  assert.equal(isPublicHost('10.0.4.12'), false);
+  assert.equal(isPublicHost('172.20.0.5'), false);
+  assert.equal(isPublicHost('192.168.1.100'), false);
+  assert.equal(isPublicHost('mariadb.railway.internal'), false);
+  assert.equal(isPublicHost('db.internal'), false);
+
+  assert.equal(isPublicHost('161.35.0.209'), true);
+  assert.equal(isPublicHost('mariadb.example.com'), true);
+  assert.equal(isPublicHost('8.8.8.8'), true);
+});
+
+test('resolveMariaDbTransport rejects public-host private-tunnel assertions and requires verified CA', () => {
+  // 1. Public host with private tunnel assertion must be strictly rejected
+  assert.throws(() => {
+    resolveMariaDbTransport({
+      MARIADB_HOST: '161.35.0.209',
+      MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true'
+    });
+  }, /Public host '161.35.0.209' cannot claim PRIVATE_TUNNEL_VERIFIED without a verified TLS CA/);
+
+  // 2. Public host without TLS CA fails closed when default CA is disabled
+  assert.throws(() => {
+    resolveMariaDbTransport({
+      MARIADB_HOST: '161.35.0.209'
+    }, { useDefaultCa: false });
+  }, /requires a verified TLS CA/);
+
+  // 3. Public host with verified TLS CA succeeds
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tls-runner-test-'));
+  const caPath = path.join(tmpDir, 'ca.pem');
+  fs.writeFileSync(caPath, '-----BEGIN CERTIFICATE-----\nMOCK_CA\n-----END CERTIFICATE-----');
+
+  try {
+    const res = resolveMariaDbTransport({
+      MARIADB_HOST: '161.35.0.209',
+      MARIADB_TLS_CA_FILE: caPath
+    });
+    assert.equal(res.transport, 'TLS_CA_VERIFIED');
+    assert.equal(res.ssl.rejectUnauthorized, true);
+    assert.ok(res.ssl.ca.length > 0);
+  } finally {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  }
+
+  // 4. Private host with verified tunnel succeeds
+  const privRes = resolveMariaDbTransport({
+    MARIADB_HOST: '10.0.1.5',
+    MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true'
+  }, { useDefaultCa: false });
+  assert.equal(privRes.transport, 'PRIVATE_TUNNEL_VERIFIED');
+  assert.equal(privRes.ssl, null);
+});
 
 test('verifyTlsProof strictly requires verified CA with rejectUnauthorized=true and rejects unverified transports', () => {
-  // 1. Missing transport fails closed
   assert.throws(() => verifyTlsProof({}), /verified TLS CA or an explicitly verified private tunnel/);
 
-  // 2. Verified private tunnel succeeds
   const tunnelResult = verifyTlsProof({ MARIADB_PRIVATE_TUNNEL_VERIFIED: 'true' });
   assert.equal(tunnelResult.verified, true);
   assert.equal(tunnelResult.transport, 'PRIVATE_TUNNEL_VERIFIED');
 
-  // 3. CA File with rejectUnauthorized=true succeeds
   const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tls-test-'));
   const caPath = path.join(tmpDir, 'ca.pem');
   fs.writeFileSync(caPath, '-----BEGIN CERTIFICATE-----\nMOCK_CA_CERT\n-----END CERTIFICATE-----');
@@ -65,7 +122,6 @@ test('createFrozenSourceBoundary establishes repeatable read consistent snapshot
   assert.equal(manifest.isolation_level, 'REPEATABLE READ (CONSISTENT SNAPSHOT, READ ONLY)');
   assert.match(manifest.manifest_sha256, /^[a-f0-9]{64}$/);
 
-  // Assert required transaction statements were executed
   assert.ok(queries.includes('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'));
   assert.ok(queries.includes('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY'));
 });
@@ -76,13 +132,11 @@ test('verifyHashReadbackContract validates 100% cryptographic hashes and fails o
     { source_id: '2', source_hash: sha256('{"b":2}'), raw_payload_text: '{"b":2}' }
   ];
 
-  // 1. Valid readback succeeds
   const result = verifyHashReadbackContract(records, records);
   assert.equal(result.verified, true);
   assert.equal(result.total_verified, 2);
   assert.equal(result.mismatches_count, 0);
 
-  // 2. Tampered hash triggers fail-closed error
   const tampered = [
     { source_id: '1', source_hash: sha256('{"a":1}'), raw_payload_text: '{"a":1}' },
     { source_id: '2', source_hash: sha256('{"b":2}'), raw_payload_text: '{"b":999_TAMPERED}' }
@@ -94,20 +148,17 @@ test('verifyHashReadbackContract validates 100% cryptographic hashes and fails o
 });
 
 test('verifyErrorLedgerContract enforces exact error count match and fails on discrepancies', () => {
-  // 1. Exact match succeeds
   const ledger = [{ id: 'err-1' }, { id: 'err-2' }];
   const res = verifyErrorLedgerContract(ledger, 2);
   assert.equal(res.verified, true);
   assert.equal(res.error_count, 2);
 
-  // 2. Discrepancy throws fail-closed error
   assert.throws(() => {
     verifyErrorLedgerContract(ledger, 1);
   }, /Error Ledger Contract Discrepancy/);
 });
 
 test('verifyDryRunReconciliation proves exact formula and enforces zero public mutations', () => {
-  // 1. Exact reconciliation with zero public writes succeeds
   const accounting = {
     input_rows: 1000,
     newly_staged: 1000,
@@ -118,12 +169,10 @@ test('verifyDryRunReconciliation proves exact formula and enforces zero public m
   const res = verifyDryRunReconciliation(accounting);
   assert.equal(res.reconciled, true);
 
-  // 2. Accounting discrepancy throws
   assert.throws(() => {
     verifyDryRunReconciliation({ ...accounting, newly_staged: 999 });
   }, /Reconciliation Formula Discrepancy/);
 
-  // 3. Public mutation throws
   assert.throws(() => {
     verifyDryRunReconciliation({ ...accounting, public_mutations: 1 });
   }, /Public Isolation Violation/);

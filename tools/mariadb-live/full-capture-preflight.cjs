@@ -16,6 +16,7 @@ function sha256(data) {
 
 function stableJson(obj) {
   if (obj === null || typeof obj !== 'object') return JSON.stringify(obj);
+  if (obj instanceof Date) return JSON.stringify(obj.toISOString());
   if (Array.isArray(obj)) return '[' + obj.map(stableJson).join(',') + ']';
   const keys = Object.keys(obj).sort();
   return '{' + keys.map(k => JSON.stringify(k) + ':' + stableJson(obj[k])).join(',') + '}';
@@ -46,11 +47,9 @@ function verifyTlsProof(env = process.env) {
 }
 
 async function createFrozenSourceBoundary(mariadbConn) {
-  // 1. Establish consistent read-only snapshot
   await mariadbConn.query('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
   await mariadbConn.query('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY');
 
-  // 2. Query total rows and boundaries within consistent snapshot
   const [countRows] = await mariadbConn.query('SELECT COUNT(*) as total FROM auctions');
   const [minRows] = await mariadbConn.query('SELECT id, created_on, updated_on FROM auctions ORDER BY created_on ASC, id ASC LIMIT 1');
   const [maxRows] = await mariadbConn.query('SELECT id, created_on, updated_on FROM auctions ORDER BY created_on DESC, id DESC LIMIT 1');
@@ -72,13 +71,13 @@ async function createFrozenSourceBoundary(mariadbConn) {
     total_source_rows: totalRows,
     lower_boundary: {
       id: minBoundary.id,
-      created_on: minBoundary.created_on,
-      updated_on: minBoundary.updated_on
+      created_on: minBoundary.created_on instanceof Date ? minBoundary.created_on.toISOString() : minBoundary.created_on,
+      updated_on: minBoundary.updated_on instanceof Date ? minBoundary.updated_on.toISOString() : minBoundary.updated_on
     },
     upper_boundary: {
       id: maxBoundary.id,
-      created_on: maxBoundary.created_on,
-      updated_on: maxBoundary.updated_on
+      created_on: maxBoundary.created_on instanceof Date ? maxBoundary.created_on.toISOString() : maxBoundary.created_on,
+      updated_on: maxBoundary.updated_on instanceof Date ? maxBoundary.updated_on.toISOString() : maxBoundary.updated_on
     },
     snapshot_timestamp: new Date().toISOString()
   };
@@ -90,24 +89,38 @@ async function createFrozenSourceBoundary(mariadbConn) {
 }
 
 function verifyHashReadbackContract(stagedRows, expectedRecords) {
-  const expectedMap = new Map(expectedRecords.map(r => [r.source_id, r]));
+  const stagedBySourceId = new Map();
+  for (const row of stagedRows) {
+    if (!stagedBySourceId.has(row.source_id)) {
+      stagedBySourceId.set(row.source_id, []);
+    }
+    stagedBySourceId.get(row.source_id).push(row);
+  }
+
   let verifiedCount = 0;
   const mismatches = [];
 
-  for (const row of stagedRows) {
-    const exp = expectedMap.get(row.source_id);
-    if (!exp) {
-      mismatches.push({ source_id: row.source_id, error: 'Unexpected row in readback' });
+  for (const exp of expectedRecords) {
+    const candidates = stagedBySourceId.get(exp.source_id) || [];
+    const exactMatch = candidates.find(c => c.source_hash === exp.source_hash);
+
+    if (!exactMatch) {
+      mismatches.push({
+        source_id: exp.source_id,
+        expected_hash: exp.source_hash,
+        error: 'No staged row matched expected source_hash'
+      });
       continue;
     }
 
-    const recalculated = sha256(row.raw_payload_text);
-    if (recalculated !== exp.source_hash || recalculated !== row.source_hash) {
+    const recalculated = sha256(exactMatch.raw_payload_text);
+    if (recalculated !== exp.source_hash) {
       mismatches.push({
-        source_id: row.source_id,
+        source_id: exp.source_id,
         expected_hash: exp.source_hash,
-        stored_hash: row.source_hash,
-        recalculated_hash: recalculated
+        stored_hash: exactMatch.source_hash,
+        recalculated_hash: recalculated,
+        error: 'Recalculated hash does not match expected hash'
       });
     } else {
       verifiedCount++;
