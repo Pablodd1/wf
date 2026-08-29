@@ -29,6 +29,14 @@ function canonicalizeRawPayload(rawData) {
   return stableJson(rawData || {});
 }
 
+function computeManifestHash(manifest) {
+  if (!manifest) return null;
+  const copy = { ...manifest };
+  delete copy.manifest_sha256;
+  return sha256(stableJson(copy));
+}
+
+
 function checkPinnedServerIdentity(servername, cert) {
   if (!cert) {
     throw new Error('TLS Peer Certificate Missing: server did not present a peer certificate');
@@ -250,6 +258,7 @@ function verifyDryRunReconciliation(accounting) {
 }
 
 module.exports = {
+  computeManifestHash,
   CONTRACT,
   CANONICAL_VERSION,
   HASH_ALGO,

@@ -14,6 +14,7 @@ const {
   PINNED_MARIADB_CA_CERT_SHA256,
   sha256,
   stableJson,
+  computeManifestHash,
   canonicalizeRawPayload,
   checkPinnedServerIdentity,
   verifyTlsProof,
@@ -90,48 +91,6 @@ function resolveMariaDbTransport(env = process.env, options = {}) {
   throw new Error(`MariaDB source on host '${host}' requires a verified TLS CA or an explicitly verified private network tunnel`);
 }
 
-async function snapshotPublicLineage(supabase, sourceIds) {
-  const snapshot = {
-    raw_messages_count: 0,
-    raw_message_versions_count: 0,
-    watch_records_count: 0
-  };
-
-  const chunks = [];
-  for (let i = 0; i < sourceIds.length; i += 100) {
-    const chunkIds = sourceIds.slice(i, i + 100);
-    const chunkRecordIds = chunkIds.map(id => ('mysql_auctions_' + id));
-    chunks.push({ chunkIds, chunkRecordIds });
-  }
-
-  const poolConcurrency = 10;
-  const queue = [...chunks];
-
-  async function queryWorker() {
-    while (queue.length > 0) {
-      const item = queue.shift();
-      if (!item) break;
-
-      const [resRaw, resVers, resWatch] = await Promise.all([
-        supabase.from('raw_messages').select('id').in('external_message_id', item.chunkRecordIds),
-        supabase.from('raw_message_versions').select('id').in('source_record_id', item.chunkRecordIds),
-        supabase.from('watch_records').select('id').in('id', item.chunkIds)
-      ]);
-
-      if (resRaw.error) throw new Error('Public raw_messages audit query failed: ' + resRaw.error.message);
-      if (resVers.error) throw new Error('Public raw_message_versions audit query failed: ' + resVers.error.message);
-      if (resWatch.error) throw new Error('Public watch_records audit query failed: ' + resWatch.error.message);
-
-      snapshot.raw_messages_count += resRaw.data?.length || 0;
-      snapshot.raw_message_versions_count += resVers.data?.length || 0;
-      snapshot.watch_records_count += resWatch.data?.length || 0;
-    }
-  }
-
-  await Promise.all(Array.from({ length: poolConcurrency }, () => queryWorker()));
-  return snapshot;
-}
-
 async function runCaptureLoop(options = {}) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -151,7 +110,7 @@ async function runCaptureLoop(options = {}) {
   const transportConfig = resolveMariaDbTransport(process.env);
   console.log(`Transport Verified: ${transportConfig.transport} (rejectUnauthorized: true, pinned_cert: ${PINNED_MARIADB_SERVER_CERT_SHA256})`);
 
-  // 2. MariaDB Connection & Checkpoint State Retrieval
+  // 2. Read Checkpoint via RPC (fail-closed)
   const runKey = process.env.CAPTURE_RUN_KEY || options.runKey || `full-capture-auctions-${Date.now()}`;
   const batchSize = Number(process.env.BATCH_SIZE || options.batchSize || 250);
   const maxRows = options.maxRows || (process.env.MAX_CAPTURE_ROWS ? Number(process.env.MAX_CAPTURE_ROWS) : null);
@@ -180,17 +139,20 @@ async function runCaptureLoop(options = {}) {
   try {
     if (existingCheckpoint) {
       console.log(`Checkpoint Found: Resuming existing runKey '${runKey}'.`);
-      if (!existingCheckpoint.frozen_upper_boundary || !existingCheckpoint.manifest_sha256) {
-        throw new Error('Resume Safety Violation: Existing checkpoint is missing frozen_upper_boundary or manifest_sha256');
+      if (!existingCheckpoint.frozen_manifest || !existingCheckpoint.manifest_sha256) {
+        throw new Error('Resume Safety Violation: Existing checkpoint is missing frozen_manifest or manifest_sha256');
       }
 
+      // Recompute and validate manifest SHA-256
+      const recomputedManifestHash = computeManifestHash(existingCheckpoint.frozen_manifest);
+      if (recomputedManifestHash !== existingCheckpoint.manifest_sha256) {
+        throw new Error(`Manifest Hash Tampering Detected on Resume: recomputed ${recomputedManifestHash} does not match stored ${existingCheckpoint.manifest_sha256}`);
+      }
+      console.log('Manifest Hash Successfully Recomputed and Cryptographically Validated on Resume.');
+
       manifest = {
-        contract: existingCheckpoint.contract || CONTRACT,
-        source_system: 'OceanDigital MariaDB',
-        source_database: 'thecollective_inventory',
-        source_table: 'auctions',
-        isolation_level: 'REPEATABLE READ (REUSED FROZEN BOUNDARY ON RESUME)',
-        upper_boundary: existingCheckpoint.frozen_upper_boundary,
+        ...existingCheckpoint.frozen_manifest,
+        upper_boundary: existingCheckpoint.frozen_upper_boundary || existingCheckpoint.frozen_manifest.upper_boundary,
         manifest_sha256: existingCheckpoint.manifest_sha256
       };
 
@@ -225,7 +187,7 @@ async function runCaptureLoop(options = {}) {
     throw err;
   }
 
-  // 4. Execution Loop
+  // 4. Ingestion Loop
   console.log(`4. Starting keyset ingestion loop (batchSize=${batchSize})...`);
   const canonicalRecordsHistory = [];
   let batchIndex = 0;
@@ -292,7 +254,7 @@ async function runCaptureLoop(options = {}) {
         p_next_last_created_on: nextLastCreatedOn,
         p_next_last_source_id: nextLastSourceId,
         p_records: canonicalRecords,
-        p_frozen_upper_boundary: manifest.upper_boundary,
+        p_frozen_upper_boundary: manifest,
         p_manifest_sha256: manifest.manifest_sha256
       });
 
@@ -330,7 +292,7 @@ async function runCaptureLoop(options = {}) {
 
   console.log(`5. Ingestion loop finished: cumulative_input_rows=${cumulativeInputRows}, newly_staged=${cumulativeNewlyStaged}, already_staged=${cumulativeAlreadyStaged}, errors=${cumulativeErrors}`);
 
-  // 6. Cryptographic Hash Readback Verification (Explicitly Sampled)
+  // 6. Cryptographic Hash Readback Verification (Sampled)
   const sampleVerificationRecords = canonicalRecordsHistory.slice(0, 1000);
   const sampleSourceIds = sampleVerificationRecords.map(r => r.source_id);
   console.log(`6. Performing sampled cryptographic hash readback verification (${sampleVerificationRecords.length} / ${cumulativeInputRows} rows)...`);

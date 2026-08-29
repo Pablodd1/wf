@@ -459,3 +459,47 @@ test('verifyDryRunReconciliation proves exact formula and enforces zero public m
     });
   }, /Public Isolation Violation/);
 });
+
+test('committed SQL function signature matches runner RPC invocation parameters exactly 1:1', () => {
+  const migrationPath = path.resolve(__dirname, '../supabase/migrations/20260829143000_private_mariadb_checkpoint_resume_safety.sql');
+  assert.ok(fs.existsSync(migrationPath), 'Forward migration file must exist');
+
+  const migrationSql = fs.readFileSync(migrationPath, 'utf8');
+
+  // Extract ingest_mariadb_private_raw_batch parameter names from migration SQL
+  const ingestMatch = migrationSql.match(/CREATE OR REPLACE FUNCTION public\.ingest_mariadb_private_raw_batch\(([\s\S]*?)\)\s*RETURNS JSONB/i);
+  assert.ok(ingestMatch, 'ingest_mariadb_private_raw_batch signature must be found in migration');
+  
+  const rawParams = ingestMatch[1].split(',').map(p => p.trim());
+  const sqlParamNames = rawParams.map(p => p.split(/\s+/)[0]);
+
+  const expectedParams = [
+    'p_run_key',
+    'p_batch_token',
+    'p_contract',
+    'p_expected_last_created_on',
+    'p_expected_last_source_id',
+    'p_next_last_created_on',
+    'p_next_last_source_id',
+    'p_records',
+    'p_frozen_upper_boundary',
+    'p_manifest_sha256'
+  ];
+
+  assert.deepEqual(sqlParamNames, expectedParams, 'SQL parameter names and order must match 10-parameter contract');
+
+  // Verify runner invocation in run-full-private-capture.cjs
+  const runnerPath = path.resolve(__dirname, '../tools/mariadb-live/run-full-private-capture.cjs');
+  const runnerCode = fs.readFileSync(runnerPath, 'utf8');
+
+  for (const param of expectedParams) {
+    assert.ok(runnerCode.includes(param + ':'), `Runner RPC call must explicitly include parameter '${param}'`);
+  }
+
+  // Extract get_mariadb_private_raw_checkpoint parameter names
+  const checkpointMatch = migrationSql.match(/CREATE OR REPLACE FUNCTION public\.get_mariadb_private_raw_checkpoint\(([\s\S]*?)\)\s*RETURNS JSONB/i);
+  assert.ok(checkpointMatch, 'get_mariadb_private_raw_checkpoint signature must be found in migration');
+  const checkpointParams = checkpointMatch[1].split(',').map(p => p.trim().split(/\s+/)[0]);
+  assert.deepEqual(checkpointParams, ['p_run_key']);
+  assert.ok(runnerCode.includes('p_run_key:'));
+});
