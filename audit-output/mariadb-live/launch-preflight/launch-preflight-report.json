@@ -1,0 +1,72 @@
+{
+  "contract": "wf-mariadb-private-raw-staging-v1",
+  "timestamp": "2026-08-29T18:36:18.615Z",
+  "tls_proof": {
+    "verified": true,
+    "transport": "TLS_CA_VERIFIED",
+    "tls_reject_unauthorized": true,
+    "ca_bytes": 2223,
+    "pinned_server_cert_sha256": "07:F7:B9:58:1B:79:C7:42:61:8D:3F:85:91:DC:54:9B:F1:6E:FB:C6:2E:45:0E:FD:9B:56:F7:54:D3:52:E1:97"
+  },
+  "source_boundary": {
+    "contract": "wf-mariadb-private-raw-staging-v1",
+    "source_system": "OceanDigital MariaDB",
+    "source_database": "thecollective_inventory",
+    "source_table": "auctions",
+    "isolation_level": "REPEATABLE READ (CONSISTENT SNAPSHOT, READ ONLY)",
+    "total_source_rows": 1495793,
+    "lower_boundary": {
+      "id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "created_on": "2025-01-08T18:28:49.000Z",
+      "updated_on": null
+    },
+    "upper_boundary": {
+      "id": "8a44ae7d-79cf-4664-8a20-2d38df08e42d",
+      "created_on": "2026-08-29T18:36:03.000Z",
+      "updated_on": null
+    },
+    "snapshot_timestamp": "2026-08-29T18:36:17.696Z",
+    "manifest_sha256": "f433b3b8306308a8444f95091a8c0f638c70860fd2c4a96225650fe56c9b2c0b"
+  },
+  "database_security_audit": {
+    "direct_table_privileges_all_false": true,
+    "schema_usage": {
+      "anon": false,
+      "service_role": true,
+      "authenticated": false
+    },
+    "function_privileges": {
+      "get_errors": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "ingest_batch": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "audit_security": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "get_checkpoint": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "verify_readback": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "finalize_checkpoint": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      }
+    }
+  },
+  "launch_gate_status": "READY_FOR_FINAL_AUTHORIZATION"
+}

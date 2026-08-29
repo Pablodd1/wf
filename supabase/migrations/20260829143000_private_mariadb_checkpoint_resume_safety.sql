@@ -368,8 +368,8 @@ BEGIN
   IF p_final_status = 'RAW_STAGED' THEN
     IF v_checkpoint.frozen_manifest IS NOT NULL AND (v_checkpoint.frozen_manifest ? 'total_source_rows') THEN
       v_total_source_rows := (v_checkpoint.frozen_manifest->>'total_source_rows')::bigint;
-      IF v_checkpoint.input_rows < v_total_source_rows THEN
-        RAISE EXCEPTION 'Cannot finalize RAW_STAGED for partial capture: input_rows (%) < total_source_rows (%)',
+      IF v_checkpoint.input_rows <> v_total_source_rows THEN
+        RAISE EXCEPTION 'Cannot finalize RAW_STAGED: input_rows (%) <> total_source_rows (%)',
           v_checkpoint.input_rows, v_total_source_rows;
       END IF;
     END IF;

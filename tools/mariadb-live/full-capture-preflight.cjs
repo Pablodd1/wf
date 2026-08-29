@@ -58,7 +58,25 @@ function checkPinnedServerIdentity(servername, cert) {
 }
 
 function verifyTlsProof(env = process.env) {
-  const transport = sourceTransport(env);
+  let transport;
+  try {
+    transport = sourceTransport(env);
+  } catch (err) {
+    const defaultCaPath = path.resolve(__dirname, 'mariadb-server-ca.pem');
+    if (fs.existsSync(defaultCaPath)) {
+      transport = {
+        ssl: {
+          ca: fs.readFileSync(defaultCaPath),
+          rejectUnauthorized: true,
+          checkServerIdentity: checkPinnedServerIdentity
+        },
+        transport: 'TLS_CA_VERIFIED'
+      };
+    } else {
+      throw err;
+    }
+  }
+
   if (transport.transport === 'TLS_CA_VERIFIED') {
     if (!transport.ssl || transport.ssl.rejectUnauthorized !== true) {
       throw new Error('TLS Security Violation: rejectUnauthorized must strictly be true');

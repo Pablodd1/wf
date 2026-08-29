@@ -322,20 +322,12 @@ async function runCaptureLoop(options = {}) {
   console.log('Error Ledger Verified:', errorLedgerResult);
 
   // 8. Checkpoint Finalization with Strict Total, Boundary, and Zero-Row Verification
-  let finalStatus = 'RAW_STAGED';
+  let finalStatus = 'COPYING_RAW';
   let finalizeData = null;
 
   if (maxRows && cumulativeInputRows < manifest.total_source_rows) {
-    console.log(`8. Bounded run configured (${cumulativeInputRows} < ${manifest.total_source_rows}): Leaving checkpoint status as PARTIAL.`);
-    finalStatus = 'PARTIAL';
-    const { data, error } = await supabase.rpc('finalize_mariadb_private_raw_checkpoint', {
-      p_run_key: runKey,
-      p_expected_staged_rows: cumulativeNewlyStaged + cumulativeAlreadyStaged,
-      p_expected_error_rows: cumulativeErrors,
-      p_final_status: 'PARTIAL'
-    });
-    if (error) throw new Error('Partial finalization failed: ' + error.message);
-    finalizeData = data;
+    console.log(`8. Bounded run configured (${cumulativeInputRows} < ${manifest.total_source_rows}): Leaving checkpoint status as COPYING_RAW without calling finalization.`);
+    finalStatus = 'COPYING_RAW';
   } else {
     // Invariants required before RAW_STAGED finalization
     if (cumulativeInputRows !== manifest.total_source_rows) {
@@ -354,8 +346,9 @@ async function runCaptureLoop(options = {}) {
     });
     if (error) throw new Error('Checkpoint finalization failed: ' + error.message);
     finalizeData = data;
+    finalStatus = 'RAW_STAGED';
+    console.log('Checkpoint Finalized:', finalizeData);
   }
-  console.log('Checkpoint Finalized:', finalizeData);
 
   // 9. Produce Final Audit Summary
   const outputDir = path.resolve('audit-output/mariadb-live/full-capture');
@@ -375,7 +368,7 @@ async function runCaptureLoop(options = {}) {
       source_id: lastSourceId
     },
     exact_reconciliation: (cumulativeNewlyStaged + cumulativeAlreadyStaged + cumulativeErrors) === cumulativeInputRows,
-    checkpoint_status: 'RAW_STAGED',
+    checkpoint_status: finalStatus,
     hash_verification: {
       mode: isFullVerification ? 'FULL_EXHAUSTIVE' : 'SAMPLED',
       sample_size: sampleVerificationRecords.length,
