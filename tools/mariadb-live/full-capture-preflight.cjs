@@ -112,6 +112,43 @@ async function createFrozenSourceBoundary(mariadbConn) {
   return manifest;
 }
 
+function buildKeysetQuery({ lastCreatedOn, lastSourceId, upperBoundary, batchSize }) {
+  const upperCreatedOn = upperBoundary.created_on;
+  const upperId = upperBoundary.id;
+
+  if (!lastCreatedOn && !lastSourceId) {
+    return {
+      sql: `
+        SELECT * FROM auctions
+        WHERE (created_on < ? OR (created_on = ? AND id <= ?))
+        ORDER BY created_on ASC, id ASC
+        LIMIT ?
+      `.trim().replace(/\s+/g, ' '),
+      params: [upperCreatedOn, upperCreatedOn, upperId, batchSize]
+    };
+  }
+
+  return {
+    sql: `
+      SELECT * FROM auctions
+      WHERE (
+        (created_on > ? OR (created_on = ? AND id > ?))
+        AND
+        (created_on < ? OR (created_on = ? AND id <= ?))
+      )
+      ORDER BY created_on ASC, id ASC
+      LIMIT ?
+    `.trim().replace(/\s+/g, ' '),
+    params: [lastCreatedOn, lastCreatedOn, lastSourceId, upperCreatedOn, upperCreatedOn, upperId, batchSize]
+  };
+}
+
+async function fetchKeysetBatch(mariadbConn, options) {
+  const { sql, params } = buildKeysetQuery(options);
+  const [rows] = await mariadbConn.query(sql, params);
+  return rows || [];
+}
+
 function verifyHashReadbackContract(stagedRows, expectedRecords) {
   const stagedBySourceId = new Map();
   for (const row of stagedRows) {
@@ -211,6 +248,8 @@ module.exports = {
   checkPinnedServerIdentity,
   verifyTlsProof,
   createFrozenSourceBoundary,
+  buildKeysetQuery,
+  fetchKeysetBatch,
   verifyHashReadbackContract,
   verifyErrorLedgerContract,
   verifyDryRunReconciliation

@@ -19,6 +19,8 @@ const {
   checkPinnedServerIdentity,
   verifyTlsProof,
   createFrozenSourceBoundary,
+  buildKeysetQuery,
+  fetchKeysetBatch,
   verifyHashReadbackContract,
   verifyErrorLedgerContract,
   verifyDryRunReconciliation
@@ -97,19 +99,126 @@ test('createFrozenSourceBoundary establishes repeatable read consistent snapshot
     queryCalls: [],
     query: async function(sql) {
       this.queryCalls.push(sql);
-      if (sql.includes('COUNT(*)')) return [[{ total: 1495680 }]];
-      if (sql.includes('ORDER BY created_on ASC')) return [[{ id: 'min-1', created_on: new Date('2025-01-08T18:28:49.000Z'), updated_on: null }]];
-      if (sql.includes('ORDER BY created_on DESC')) return [[{ id: 'max-1', created_on: new Date('2026-08-29T17:59:21.000Z'), updated_on: null }]];
+      if (sql.includes('COUNT(*)')) return [[{ total: 1495718 }]];
+      if (sql.includes('ORDER BY created_on ASC')) return [[{ id: 'min-1', created_on: new Date('2025-01-08T13:28:49.000Z'), updated_on: null }]];
+      if (sql.includes('ORDER BY created_on DESC')) return [[{ id: 'max-1', created_on: new Date('2026-08-29T14:11:18.000Z'), updated_on: null }]];
       return [[]];
     }
   };
 
   const manifest = await createFrozenSourceBoundary(fakeConn);
-  assert.equal(manifest.total_source_rows, 1495680);
+  assert.equal(manifest.total_source_rows, 1495718);
   assert.equal(manifest.lower_boundary.id, 'min-1');
   assert.equal(manifest.upper_boundary.id, 'max-1');
   assert.ok(manifest.manifest_sha256);
   assert.ok(fakeConn.queryCalls.includes('START TRANSACTION WITH CONSISTENT SNAPSHOT, READ ONLY'));
+});
+
+test('buildKeysetQuery constructs valid initial and resumed keyset boundary SQL', () => {
+  const upperBoundary = { id: 'uuid-max', created_on: '2026-08-29T14:11:18.000Z' };
+
+  // Initial query (no prior cursor)
+  const initial = buildKeysetQuery({
+    lastCreatedOn: '',
+    lastSourceId: '',
+    upperBoundary,
+    batchSize: 250
+  });
+  assert.match(initial.sql, /WHERE \(created_on < \? OR \(created_on = \? AND id <= \?\)\)/);
+  assert.match(initial.sql, /ORDER BY created_on ASC, id ASC LIMIT \?/);
+  assert.deepEqual(initial.params, ['2026-08-29T14:11:18.000Z', '2026-08-29T14:11:18.000Z', 'uuid-max', 250]);
+
+  // Resumed query (with prior cursor)
+  const resumed = buildKeysetQuery({
+    lastCreatedOn: '2025-06-01T00:00:00.000Z',
+    lastSourceId: 'uuid-cursor',
+    upperBoundary,
+    batchSize: 250
+  });
+  assert.match(resumed.sql, /\(created_on > \? OR \(created_on = \? AND id > \?\)\)/);
+  assert.match(resumed.sql, /\(created_on < \? OR \(created_on = \? AND id <= \?\)\)/);
+  assert.deepEqual(resumed.params, [
+    '2025-06-01T00:00:00.000Z',
+    '2025-06-01T00:00:00.000Z',
+    'uuid-cursor',
+    '2026-08-29T14:11:18.000Z',
+    '2026-08-29T14:11:18.000Z',
+    'uuid-max',
+    250
+  ]);
+});
+
+test('keyset pagination and resume-after-interruption accurately advances cursor across batches', async () => {
+  const sourceDataset = [
+    { id: '1', created_on: '2025-01-01T00:00:00.000Z', val: 'a' },
+    { id: '2', created_on: '2025-01-01T00:00:00.000Z', val: 'b' },
+    { id: '3', created_on: '2025-01-02T00:00:00.000Z', val: 'c' },
+    { id: '4', created_on: '2025-01-03T00:00:00.000Z', val: 'd' },
+    { id: '5', created_on: '2025-01-04T00:00:00.000Z', val: 'e' }
+  ];
+
+  const upperBoundary = { id: '5', created_on: '2025-01-04T00:00:00.000Z' };
+
+  const fakeConn = {
+    query: async function(sql, params) {
+      if (params.length === 4) {
+        // Initial query: params = [upperCreatedOn, upperCreatedOn, upperId, limit]
+        const limit = params[3];
+        return [sourceDataset.slice(0, limit)];
+      } else {
+        // Resumed query: params = [lastCreatedOn, lastCreatedOn, lastSourceId, upperCreatedOn, upperCreatedOn, upperId, limit]
+        const [lastCreatedOn, , lastSourceId, , , , limit] = params;
+        const filtered = sourceDataset.filter(r => {
+          if (r.created_on > lastCreatedOn) return true;
+          if (r.created_on === lastCreatedOn && r.id > lastSourceId) return true;
+          return false;
+        });
+        return [filtered.slice(0, limit)];
+      }
+    }
+  };
+
+  // Batch 1 (limit 2) -> fetches records 1, 2
+  const batch1 = await fetchKeysetBatch(fakeConn, {
+    lastCreatedOn: '',
+    lastSourceId: '',
+    upperBoundary,
+    batchSize: 2
+  });
+  assert.equal(batch1.length, 2);
+  assert.equal(batch1[0].id, '1');
+  assert.equal(batch1[1].id, '2');
+
+  // Interruption occurs after batch 1!
+  // Resuming with checkpoint cursor (last_created_on: batch1[1].created_on, last_source_id: batch1[1].id)
+  const cursorCreatedOn = batch1[1].created_on;
+  const cursorSourceId = batch1[1].id;
+
+  // Batch 2 (resumed, limit 2) -> fetches records 3, 4
+  const batch2 = await fetchKeysetBatch(fakeConn, {
+    lastCreatedOn: cursorCreatedOn,
+    lastSourceId: cursorSourceId,
+    upperBoundary,
+    batchSize: 2
+  });
+  assert.equal(batch2.length, 2);
+  assert.equal(batch2[0].id, '3');
+  assert.equal(batch2[1].id, '4');
+
+  // Batch 3 (resumed, limit 2) -> fetches record 5
+  const batch3 = await fetchKeysetBatch(fakeConn, {
+    lastCreatedOn: batch2[1].created_on,
+    lastSourceId: batch2[1].id,
+    upperBoundary,
+    batchSize: 2
+  });
+  assert.equal(batch3.length, 1);
+  assert.equal(batch3[0].id, '5');
+
+  // Total collected equals exact source count
+  const allCollected = [...batch1, ...batch2, ...batch3];
+  assert.equal(allCollected.length, 5);
+  assert.deepEqual(allCollected.map(r => r.id), ['1', '2', '3', '4', '5']);
 });
 
 test('verifyHashReadbackContract validates 100% cryptographic hashes and fails on tampering', () => {

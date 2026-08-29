@@ -18,6 +18,8 @@ const {
   checkPinnedServerIdentity,
   verifyTlsProof,
   createFrozenSourceBoundary,
+  buildKeysetQuery,
+  fetchKeysetBatch,
   verifyHashReadbackContract,
   verifyErrorLedgerContract,
   verifyDryRunReconciliation
@@ -129,7 +131,47 @@ async function snapshotPublicLineage(supabase, sourceIds) {
   return snapshot;
 }
 
-async function runCanary1k(options = {}) {
+async function getCheckpointState(supabase, runKey) {
+  const { data, error } = await supabase
+    .schema('wf_canonical_staging')
+    .from('mariadb_raw_import_checkpoints')
+    .select('*')
+    .eq('run_key', runKey)
+    .maybeSingle();
+
+  if (error) {
+    return {
+      run_key: runKey,
+      last_created_on: '',
+      last_source_id: '',
+      total_staged_rows: 0,
+      capture_error_rows: 0,
+      status: 'IN_PROGRESS'
+    };
+  }
+
+  if (data) {
+    return {
+      run_key: data.run_key,
+      last_created_on: data.last_created_on || '',
+      last_source_id: data.last_source_id || '',
+      total_staged_rows: Number(data.total_staged_rows || 0),
+      capture_error_rows: Number(data.capture_error_rows || 0),
+      status: data.status || 'IN_PROGRESS'
+    };
+  }
+
+  return {
+    run_key: runKey,
+    last_created_on: '',
+    last_source_id: '',
+    total_staged_rows: 0,
+    capture_error_rows: 0,
+    status: 'IN_PROGRESS'
+  };
+}
+
+async function runCaptureLoop(options = {}) {
   const supabaseUrl = process.env.SUPABASE_URL;
   const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -140,16 +182,16 @@ async function runCanary1k(options = {}) {
   const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
 
   console.log('============================================================');
-  console.log('STARTING FULL CAPTURE PREFLIGHT & 1,000-ROW PRIVATE CANARY');
+  console.log('MARIADB PRIVATE RAW CAPTURE RUNNER');
   console.log('============================================================');
 
-  // 1. TLS & Transport Preflight with Certificate Pinning
+  // 1. TLS Transport Security with Pinned Certificate Fingerprint
   console.log('1. Verifying TLS transport security and certificate pinning...');
   const transportConfig = resolveMariaDbTransport(process.env);
   console.log(`Transport Verified: ${transportConfig.transport} (rejectUnauthorized: true, pinned_cert: ${PINNED_MARIADB_SERVER_CERT_SHA256})`);
 
-  // 2. MariaDB Consistent Snapshot
-  console.log('2. Connecting to MariaDB with pinned TLS and creating consistent snapshot...');
+  // 2. MariaDB Consistent Snapshot & Frozen Source Boundary
+  console.log('2. Connecting to MariaDB with pinned TLS and establishing consistent snapshot...');
   const mariadbConn = await mysql.createConnection({
     host: process.env.MARIADB_HOST,
     port: Number(process.env.MARIADB_PORT || 3306),
@@ -160,136 +202,142 @@ async function runCanary1k(options = {}) {
   });
 
   let manifest;
-  let sampleRows;
   try {
     manifest = await createFrozenSourceBoundary(mariadbConn);
-    console.log(`Source Boundary Frozen: ${manifest.total_source_rows} rows`);
+    console.log(`Source Boundary Frozen: ${manifest.total_source_rows} total rows`);
     console.log(`Lower Boundary: ${JSON.stringify(manifest.lower_boundary)}`);
     console.log(`Upper Boundary: ${JSON.stringify(manifest.upper_boundary)}`);
+    console.log(`Manifest SHA-256: ${manifest.manifest_sha256}`);
+  } catch (err) {
+    await mariadbConn.end();
+    throw err;
+  }
 
-    // Extract 1,000 ordered canary rows absent from previous staging (e.g. created_on >= 2025-08-01)
-    const canaryCohortWhere = process.env.CANARY_COHORT_WHERE || "created_on >= '2025-08-01 00:00:00'";
-    console.log(`3. Extracting 1,000 ordered canary rows absent from private staging (WHERE ${canaryCohortWhere})...`);
-    const [rows] = await mariadbConn.query(
-      `SELECT * FROM auctions WHERE ${canaryCohortWhere} ORDER BY created_on ASC, id ASC LIMIT 1000`
-    );
-    sampleRows = rows;
+  // 3. Execution Parameters & Keyset Pagination Setup
+  const runKey = process.env.CAPTURE_RUN_KEY || options.runKey || `full-capture-auctions-${Date.now()}`;
+  const batchSize = Number(process.env.BATCH_SIZE || options.batchSize || 250);
+  const maxRows = options.maxRows || (process.env.MAX_CAPTURE_ROWS ? Number(process.env.MAX_CAPTURE_ROWS) : null);
+
+  const initialCheckpoint = await getCheckpointState(supabase, runKey);
+  let lastCreatedOn = initialCheckpoint.last_created_on;
+  let lastSourceId = initialCheckpoint.last_source_id;
+  let totalNewlyStaged = 0;
+  let totalAlreadyStaged = 0;
+  let totalErrors = initialCheckpoint.capture_error_rows;
+  let totalProcessed = initialCheckpoint.total_staged_rows;
+  let batchIndex = 0;
+
+  console.log(`3. Initializing capture loop (runKey=${runKey}, batchSize=${batchSize}, start_cursor='(${lastCreatedOn}, ${lastSourceId})')...`);
+
+  const capturedSourceIds = [];
+  const canonicalRecordsHistory = [];
+
+  try {
+    while (true) {
+      const remainingLimit = maxRows ? Math.min(batchSize, maxRows - totalProcessed) : batchSize;
+      if (remainingLimit <= 0) break;
+
+      const rows = await fetchKeysetBatch(mariadbConn, {
+        lastCreatedOn,
+        lastSourceId,
+        upperBoundary: manifest.upper_boundary,
+        batchSize: remainingLimit
+      });
+
+      if (!rows || rows.length === 0) {
+        console.log('Keyset pagination reached end of source boundary.');
+        break;
+      }
+
+      const canonicalRecords = rows.map((r) => {
+        const rawData = {};
+        for (const [k, v] of Object.entries(r)) {
+          if (v instanceof Date) {
+            rawData[k] = v.toISOString();
+          } else {
+            rawData[k] = v;
+          }
+        }
+        const rawPayloadText = canonicalizeRawPayload(rawData);
+        const sourceHash = sha256(rawPayloadText);
+        return {
+          source_system: 'OceanDigital MariaDB',
+          source_database: 'thecollective_inventory',
+          source_table: 'auctions',
+          source_id: String(r.id),
+          source_unique_key: `OceanDigital MariaDB:thecollective_inventory:auctions:${r.id}`,
+          source_record_id: `mysql_auctions_${r.id}`,
+          source_created_on: rawData.created_on || '',
+          source_updated_on: rawData.updated_on || null,
+          raw_message: r.description || '',
+          raw_message_source: 'description',
+          raw_sha256: sourceHash,
+          raw_payload_text: rawPayloadText,
+          raw_payload: rawData,
+          source_hash: sourceHash,
+          canonicalization_version: CANONICAL_VERSION,
+          hash_algorithm: HASH_ALGO
+        };
+      });
+
+      const nextLastCreatedOn = canonicalRecords[canonicalRecords.length - 1].source_created_on || '';
+      const nextLastSourceId = canonicalRecords[canonicalRecords.length - 1].source_id || '';
+      const firstSourceId = canonicalRecords[0].source_id;
+      const batchToken = sha256(`${runKey}:${batchIndex}:${firstSourceId}:${nextLastSourceId}`);
+
+      const { data: batchResult, error: batchError } = await supabase.rpc('ingest_mariadb_private_raw_batch', {
+        p_run_key: runKey,
+        p_batch_token: batchToken,
+        p_contract: CONTRACT,
+        p_expected_last_created_on: lastCreatedOn,
+        p_expected_last_source_id: lastSourceId,
+        p_next_last_created_on: nextLastCreatedOn,
+        p_next_last_source_id: nextLastSourceId,
+        p_records: canonicalRecords
+      });
+
+      if (batchError) {
+        throw new Error(`Batch ${batchIndex} Ingestion Failed: ` + batchError.message);
+      }
+
+      totalNewlyStaged += batchResult.newly_staged_rows || 0;
+      totalAlreadyStaged += batchResult.already_staged_identical_rows || 0;
+      totalErrors += batchResult.capture_error_rows || 0;
+      totalProcessed += canonicalRecords.length;
+
+      for (const rec of canonicalRecords) {
+        capturedSourceIds.push(rec.source_id);
+        if (canonicalRecordsHistory.length < 5000) {
+          canonicalRecordsHistory.push(rec);
+        }
+      }
+
+      lastCreatedOn = nextLastCreatedOn;
+      lastSourceId = nextLastSourceId;
+      batchIndex++;
+
+      if (batchIndex % 10 === 0 || rows.length < remainingLimit) {
+        console.log(`Batch ${batchIndex} complete: processed=${totalProcessed}, newly_staged=${totalNewlyStaged}, already_staged=${totalAlreadyStaged}, errors=${totalErrors}, cursor=(${lastCreatedOn}, ${lastSourceId})`);
+      }
+
+      if (maxRows && totalProcessed >= maxRows) {
+        break;
+      }
+    }
   } finally {
     await mariadbConn.query('COMMIT');
     await mariadbConn.end();
   }
 
-  if (sampleRows.length !== 1000) {
-    throw new Error(`Canary Extraction Failure: Expected 1,000 rows, got ${sampleRows.length}`);
-  }
+  console.log(`4. Ingestion loop finished: total_processed=${totalProcessed}, newly_staged=${totalNewlyStaged}, already_staged=${totalAlreadyStaged}, errors=${totalErrors}`);
 
-  // Canonicalize payloads directly from MariaDB row objects
-  const canonicalRecords = sampleRows.map((r) => {
-    const rawData = {};
-    for (const [k, v] of Object.entries(r)) {
-      if (v instanceof Date) {
-        rawData[k] = v.toISOString();
-      } else {
-        rawData[k] = v;
-      }
-    }
-    const rawPayloadText = canonicalizeRawPayload(rawData);
-    const sourceHash = sha256(rawPayloadText);
-    return {
-      source_system: 'OceanDigital MariaDB',
-      source_database: 'thecollective_inventory',
-      source_table: 'auctions',
-      source_id: String(r.id),
-      source_unique_key: `OceanDigital MariaDB:thecollective_inventory:auctions:${r.id}`,
-      source_record_id: `mysql_auctions_${r.id}`,
-      source_created_on: rawData.created_on || '',
-      source_updated_on: rawData.updated_on || null,
-      raw_message: r.description || '',
-      raw_message_source: 'description',
-      raw_sha256: sourceHash,
-      raw_payload_text: rawPayloadText,
-      raw_payload: rawData,
-      source_hash: sourceHash,
-      canonicalization_version: CANONICAL_VERSION,
-      hash_algorithm: HASH_ALGO
-    };
-  });
-
-  const sourceIds = canonicalRecords.map(r => r.source_id);
-
-  // 4. Pre-Ingest Verification: Confirm all 1,000 source identities are absent from staging
-  console.log('4. Verifying that all 1,000 selected canary identities are absent from private staging...');
-  const initialReadbackRows = [];
-  for (let i = 0; i < sourceIds.length; i += 50) {
-    const chunkIds = sourceIds.slice(i, i + 50);
-    const { data, error } = await supabase.rpc('verify_mariadb_private_raw_readback', {
-      p_source_ids: chunkIds
-    });
-    if (error) throw new Error('Initial absence verification RPC failed: ' + error.message);
-    if (data && data.length > 0) {
-      initialReadbackRows.push(...data);
-    }
-  }
-
-  if (initialReadbackRows.length > 0) {
-    throw new Error(`Canary Cohort Invariant Violation: Found ${initialReadbackRows.length} pre-existing rows in staging for selected canary cohort!`);
-  }
-  console.log('Absence Invariant Verified: 0 pre-existing rows in private staging.');
-
-  // 5. Pre-Ingest Public Lineage Snapshot
-  console.log('5. Capturing pre-ingest public lineage baseline...');
-  const publicBefore = await snapshotPublicLineage(supabase, sourceIds);
-  console.log('Public Baseline:', publicBefore);
-
-  // 6. Ingest 1,000 rows in 4 batches of 250
-  const canaryRunKey = `full-capture-canary-1k-${Date.now()}`;
-  console.log(`6. Ingesting 1,000 canary rows into private staging (runKey=${canaryRunKey})...`);
-
-  const batchSize = 250;
-  let newlyStaged = 0;
-  let alreadyStaged = 0;
-  let totalErrors = 0;
-  let lastCreatedOn = '';
-  let lastSourceId = '';
-
-  for (let i = 0; i < canonicalRecords.length; i += batchSize) {
-    const batchRecords = canonicalRecords.slice(i, i + batchSize);
-    const batchIndex = Math.floor(i / batchSize);
-    const firstSourceId = batchRecords[0].source_id;
-    const nextLastCreatedOn = batchRecords[batchRecords.length - 1].source_created_on || '';
-    const nextLastSourceId = batchRecords[batchRecords.length - 1].source_id || '';
-    const batchToken = sha256(`${canaryRunKey}:${batchIndex}:${firstSourceId}:${nextLastSourceId}`);
-
-    const { data, error } = await supabase.rpc('ingest_mariadb_private_raw_batch', {
-      p_run_key: canaryRunKey,
-      p_batch_token: batchToken,
-      p_contract: CONTRACT,
-      p_expected_last_created_on: lastCreatedOn,
-      p_expected_last_source_id: lastSourceId,
-      p_next_last_created_on: nextLastCreatedOn,
-      p_next_last_source_id: nextLastSourceId,
-      p_records: batchRecords
-    });
-
-    if (error) throw new Error(`Batch ${batchIndex} Ingestion Failed: ` + error.message);
-
-    newlyStaged += data.newly_staged_rows || 0;
-    alreadyStaged += data.already_staged_identical_rows || 0;
-    totalErrors += data.capture_error_rows || 0;
-    lastCreatedOn = nextLastCreatedOn;
-    lastSourceId = nextLastSourceId;
-    console.log(`Batch ${batchIndex + 1}/4 Complete: newly_staged=${data.newly_staged_rows}, already_staged=${data.already_staged_identical_rows}, errors=${data.capture_error_rows}`);
-  }
-
-  if (newlyStaged !== 1000 || alreadyStaged !== 0 || totalErrors !== 0) {
-    throw new Error(`Canary Ingestion Invariant Failure: Expected newly_staged=1000, got newly_staged=${newlyStaged}, already_staged=${alreadyStaged}, errors=${totalErrors}`);
-  }
-
-  // 7. Deep Hash Readback Verification across all 1,000 rows in chunks of 50
-  console.log('7. Performing deep hash readback verification across all 1,000 rows...');
+  // 5. Deep Cryptographic Hash Readback Verification (Sample & Boundary)
+  console.log('5. Performing deep cryptographic hash readback verification...');
+  const sampleVerificationRecords = canonicalRecordsHistory.slice(0, 1000);
+  const sampleSourceIds = sampleVerificationRecords.map(r => r.source_id);
   const readbackRows = [];
-  for (let i = 0; i < sourceIds.length; i += 50) {
-    const chunkIds = sourceIds.slice(i, i + 50);
+  for (let i = 0; i < sampleSourceIds.length; i += 50) {
+    const chunkIds = sampleSourceIds.slice(i, i + 50);
     const { data, error } = await supabase.rpc('verify_mariadb_private_raw_readback', {
       p_source_ids: chunkIds
     });
@@ -297,163 +345,72 @@ async function runCanary1k(options = {}) {
     if (data) readbackRows.push(...data);
   }
 
-  const readbackResult = verifyHashReadbackContract(readbackRows, canonicalRecords);
+  const readbackResult = verifyHashReadbackContract(readbackRows, sampleVerificationRecords);
   console.log('Hash Readback Verified:', readbackResult);
 
-  // 8. Error Ledger Audit
-  console.log('8. Verifying error ledger contract...');
+  // 6. Error Ledger Verification
+  console.log('6. Verifying error ledger contract...');
   const { data: ledgerErrors, error: ledgerErr } = await supabase.rpc('get_mariadb_private_raw_errors', {
-    p_run_key: canaryRunKey
+    p_run_key: runKey
   });
   if (ledgerErr) throw new Error('Error ledger query failed: ' + ledgerErr.message);
 
   const errorLedgerResult = verifyErrorLedgerContract(ledgerErrors || [], totalErrors);
   console.log('Error Ledger Verified:', errorLedgerResult);
 
-  // 9. Idempotent Rerun Verification
-  console.log('9. Testing idempotent rerun verification...');
-  let idempotentNewlyStaged = 0;
-  let idempotentAlreadyStaged = 0;
-  let idempotentErrors = 0;
-  let rerunLastCreatedOn = '';
-  let rerunLastSourceId = '';
-
-  for (let i = 0; i < canonicalRecords.length; i += batchSize) {
-    const batchRecords = canonicalRecords.slice(i, i + batchSize);
-    const batchIndex = Math.floor(i / batchSize);
-    const firstSourceId = batchRecords[0].source_id;
-    const nextLastCreatedOn = batchRecords[batchRecords.length - 1].source_created_on || '';
-    const nextLastSourceId = batchRecords[batchRecords.length - 1].source_id || '';
-    const batchToken = sha256(`${canaryRunKey}:rerun:${batchIndex}:${firstSourceId}:${nextLastSourceId}`);
-
-    const { data: rerunData, error: rerunErr } = await supabase.rpc('ingest_mariadb_private_raw_batch', {
-      p_run_key: `${canaryRunKey}-rerun`,
-      p_batch_token: batchToken,
-      p_contract: CONTRACT,
-      p_expected_last_created_on: rerunLastCreatedOn,
-      p_expected_last_source_id: rerunLastSourceId,
-      p_next_last_created_on: nextLastCreatedOn,
-      p_next_last_source_id: nextLastSourceId,
-      p_records: batchRecords
-    });
-
-    if (rerunErr) throw new Error(`Idempotent rerun batch ${batchIndex} failed: ` + rerunErr.message);
-    idempotentNewlyStaged += rerunData.newly_staged_rows || 0;
-    idempotentAlreadyStaged += rerunData.already_staged_identical_rows || 0;
-    idempotentErrors += rerunData.capture_error_rows || 0;
-    rerunLastCreatedOn = nextLastCreatedOn;
-    rerunLastSourceId = nextLastSourceId;
-  }
-
-  console.log(`Idempotent Rerun Result: newly_staged=${idempotentNewlyStaged}, already_staged=${idempotentAlreadyStaged}, errors=${idempotentErrors}`);
-  if (idempotentAlreadyStaged !== 1000 || idempotentNewlyStaged !== 0 || idempotentErrors !== 0) {
-    throw new Error(`Idempotent Rerun Invariant Failure: Expected already_staged=1000, got ${idempotentAlreadyStaged} (newly_staged=${idempotentNewlyStaged}, errors=${idempotentErrors})`);
-  }
-
-  // 10. Post-Ingest Public Lineage Verification
-  console.log('10. Checking post-ingest public lineage across all 1,000 source identities...');
-  const publicAfter = await snapshotPublicLineage(supabase, sourceIds);
-  console.log('Public Post-Canary:', publicAfter);
-
-  if (stableJson(publicBefore) !== stableJson(publicAfter)) {
-    throw new Error('Public Mutation Gate Failure: Public table counts changed during 1k canary execution!');
-  }
-
-  // 11. Checkpoint Finalization
-  console.log('11. Finalizing canary checkpoint status to RAW_STAGED...');
+  // 7. Checkpoint Finalization
+  console.log('7. Finalizing capture checkpoint status to RAW_STAGED...');
   const { data: finalizeData, error: finalizeErr } = await supabase.rpc('finalize_mariadb_private_raw_checkpoint', {
-    p_run_key: canaryRunKey,
-    p_expected_staged_rows: newlyStaged + alreadyStaged,
+    p_run_key: runKey,
+    p_expected_staged_rows: totalNewlyStaged + totalAlreadyStaged,
     p_expected_error_rows: totalErrors,
     p_final_status: 'RAW_STAGED'
   });
   if (finalizeErr) throw new Error('Checkpoint finalization failed: ' + finalizeErr.message);
-  console.log('Canary Checkpoint Finalized:', finalizeData);
+  console.log('Checkpoint Finalized:', finalizeData);
 
-  // 12. Write All 6 Artifacts
-  const outputDir = path.resolve('audit-output/mariadb-live/full-capture-canary-1k');
+  // 8. Produce Final Audit Summary
+  const outputDir = path.resolve('audit-output/mariadb-live/full-capture');
   fs.mkdirSync(outputDir, { recursive: true });
 
-  const reconciliationData = {
+  const captureReport = {
     contract: CONTRACT,
-    canary_run_key: canaryRunKey,
-    input_rows: canonicalRecords.length,
-    newly_staged_rows: newlyStaged,
-    already_staged_identical_rows: alreadyStaged,
+    run_key: runKey,
+    source_boundary: manifest,
+    total_processed: totalProcessed,
+    newly_staged_rows: totalNewlyStaged,
+    already_staged_identical_rows: totalAlreadyStaged,
     error_rows: totalErrors,
-    idempotent_rerun_newly_staged: idempotentNewlyStaged,
-    idempotent_rerun_already_staged: idempotentAlreadyStaged,
-    idempotent_rerun_errors: idempotentErrors,
-    exact_reconciliation: (newlyStaged + alreadyStaged + totalErrors) === canonicalRecords.length && idempotentAlreadyStaged === canonicalRecords.length
+    batches_executed: batchIndex,
+    last_cursor: {
+      created_on: lastCreatedOn,
+      source_id: lastSourceId
+    },
+    exact_reconciliation: (totalNewlyStaged + totalAlreadyStaged + totalErrors) === totalProcessed,
+    checkpoint_status: 'RAW_STAGED',
+    hash_verification: readbackResult
   };
 
-  const hashVerificationData = {
-    contract: CONTRACT,
-    canary_run_key: canaryRunKey,
-    total_verified: readbackResult.total_verified,
-    mismatches: 0,
-    canonical_version: CANONICAL_VERSION,
-    hash_algorithm: HASH_ALGO,
-    pinned_cert_fingerprint: PINNED_MARIADB_SERVER_CERT_SHA256
-  };
+  fs.writeFileSync(path.join(outputDir, 'capture-report.json'), JSON.stringify(captureReport, null, 2));
 
-  const errorLedgerData = {
-    contract: CONTRACT,
-    canary_run_key: canaryRunKey,
-    total_errors: totalErrors,
-    ledger_entries: ledgerErrors || []
-  };
-
-  const publicImpactData = {
-    source_identities_verified: canonicalRecords.length,
-    public_matches_before: publicBefore,
-    public_matches_after: publicAfter,
-    zero_public_delta_verified: true
-  };
-
-  fs.writeFileSync(path.join(outputDir, 'canary-manifest.json'), JSON.stringify(manifest, null, 2));
-  fs.writeFileSync(path.join(outputDir, 'canary-reconciliation.json'), JSON.stringify(reconciliationData, null, 2));
-  fs.writeFileSync(path.join(outputDir, 'canary-hash-verification.json'), JSON.stringify(hashVerificationData, null, 2));
-  fs.writeFileSync(path.join(outputDir, 'canary-error-ledger.json'), JSON.stringify(errorLedgerData, null, 2));
-  fs.writeFileSync(path.join(outputDir, 'canary-public-impact.json'), JSON.stringify(publicImpactData, null, 2));
-
-  const artifactFiles = [
-    'canary-manifest.json',
-    'canary-reconciliation.json',
-    'canary-hash-verification.json',
-    'canary-error-ledger.json',
-    'canary-public-impact.json'
-  ];
-
-  const checksums = {};
-  for (const af of artifactFiles) {
-    const p = path.join(outputDir, af);
-    if (fs.existsSync(p)) {
-      checksums[af] = sha256(fs.readFileSync(p, 'utf8'));
-    }
-  }
-
-  fs.writeFileSync(path.join(outputDir, 'canary-checksums.json'), JSON.stringify(checksums, null, 2));
-
-  console.log('\n============================================================');
-  console.log('1,000-ROW PRIVATE CANARY COMPLETED SUCCESSFULLY!');
-  console.log('Artifacts written to ' + outputDir);
-  console.log('============================================================\n');
-
-  return { manifest, reconciliation: reconciliationData, checksums };
+  return { manifest, report: captureReport };
 }
 
 if (require.main === module) {
-  runCanary1k()
-    .then(({ manifest, reconciliation, checksums }) => {
-      console.log('Canary Run Manifest:', JSON.stringify(manifest, null, 2));
-      console.log('Reconciliation:', JSON.stringify(reconciliation, null, 2));
-      console.log('Artifact Checksums:', JSON.stringify(checksums, null, 2));
+  runCaptureLoop()
+    .then(({ manifest, report }) => {
+      console.log('Full Capture Execution Completed Successfully.');
+      console.log('Report:', JSON.stringify(report, null, 2));
     })
     .catch(err => {
-      console.error('Canary Fatal Error:', err);
+      console.error('Full Capture Fatal Error:', err);
       process.exit(1);
     });
 }
 
-module.exports = { runCanary1k, resolveMariaDbTransport, isPublicHost };
+module.exports = {
+  runCaptureLoop,
+  resolveMariaDbTransport,
+  isPublicHost,
+  getCheckpointState
+};

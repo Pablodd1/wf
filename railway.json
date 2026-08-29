@@ -4,7 +4,8 @@
     "builder": "DOCKERFILE"
   },
   "deploy": {
-    "startCommand": "node tools/mariadb-live/run-full-private-capture.cjs",
-    "restartPolicyType": "NEVER"
+    "startCommand": "sh -c 'exec ${WF_START_COMMAND:-node tools/shadow-reprocess/railway-worker.cjs}'",
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 10
   }
 }

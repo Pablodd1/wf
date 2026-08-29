@@ -132,7 +132,7 @@
     "test:data-recovery": "node --test tests/data-recovery-control-plane.test.cjs",
     "test:e2e": "node tests/e2e/e2e-test-runner.cjs",
     "mariadb:census": "node tools/mariadb-live/source-census.cjs",
-    "start": "node tools/mariadb-live/run-full-private-capture.cjs"
+    "mariadb:full-capture": "node tools/mariadb-live/run-full-private-capture.cjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
