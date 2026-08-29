@@ -20,6 +20,7 @@ import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
 import { isHeldRolexPatekBrand, ROLEX_PATEK_PUBLICATION_HELD } from '../utils/rolexPatekPublication';
 import { ambiguousPriceDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
+import { useLanguage } from '../i18n/LanguageContext';
 import {
   loadPriceResearchBatchSummaries,
   priceResearchSummaryKey,
@@ -93,8 +94,9 @@ const SORT_OPTIONS = [
 ] as const;
 
 import { MarketTickerBanner } from '../components/MarketTickerBanner';
+import type { ListingDisplayContract } from '../../shared/listing-display-contract.cjs';
 
-interface ListingRecord {
+interface ListingRecord extends Partial<ListingDisplayContract> {
   id: string;
   brand: string;
   model?: string | null;
@@ -181,6 +183,7 @@ interface TradingFloorResponse {
   nextCursor?: string | null;
   hasMore?: boolean;
   publicationBrands?: string[];
+  availableCountries?: string[];
   release_status?: string;
   source?: string;
 }
@@ -451,6 +454,7 @@ function hasAllowedImageEvidence(listing: ListingRecord) {
 }
 
 export default function TradingFloor() {
+  const { t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedCategory = searchParams.get('item');
   const requestedIntent = searchParams.get('type')?.toUpperCase();
@@ -828,6 +832,9 @@ export default function TradingFloor() {
             setReleaseBrands(MASTER_BRAND_LIST);
           }
           nextListings = data.records;
+          if (Array.isArray(data.availableCountries)) {
+            setDiscoveredLocations(current => [...new Set([...current, ...data.availableCountries!.filter(Boolean)])].sort((a, b) => a.localeCompare(b)));
+          }
           totalCount = data.total == null ? null : Number(data.total);
           setTotalIsEstimate(Boolean(data.totalIsEstimate));
           setNextCursor(data.nextCursor || null);
@@ -868,15 +875,15 @@ export default function TradingFloor() {
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div>
-              <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>Trading Floor</h1>
+              <h1 className="text-[26px] font-semibold tracking-normal" style={{ color: GOLD_BRIGHT }}>{t('Trading Floor')}</h1>
               <p className="mt-1 text-sm font-medium" style={{ color: MUTED }}>
-                {dynamicDisplayTotal === null ? 'Listing total unavailable' : `${dynamicDisplayTotal.toLocaleString()} verified listings`}
+                {dynamicDisplayTotal === null ? t('Listing total unavailable') : `${dynamicDisplayTotal.toLocaleString()} ${t('verified listings')}`}
               </p>
             </div>
 
             <div className="flex items-center gap-2">
-              <ViewButton active={viewMode === 'grid'} label="Grid" onClick={() => setViewMode('grid')} icon={<Grid size={16} />} />
-              <ViewButton active={viewMode === 'list'} label="List" onClick={() => setViewMode('list')} icon={<List size={16} />} />
+              <ViewButton active={viewMode === 'grid'} label={t('Grid')} onClick={() => setViewMode('grid')} icon={<Grid size={16} />} />
+              <ViewButton active={viewMode === 'list'} label={t('List')} onClick={() => setViewMode('list')} icon={<List size={16} />} />
             </div>
           </div>
 
@@ -914,7 +921,7 @@ export default function TradingFloor() {
                     }
                   }
                 }}
-                placeholder="Search exact reference, model, message, or poster"
+                placeholder={t('Search exact reference, model, message, or poster')}
                 className="h-11 w-full rounded-md border pl-10 pr-3 text-sm outline-none"
                 style={{ borderColor: BORDER, background: PANEL, color: INK }}
                 role="combobox"
@@ -971,89 +978,11 @@ export default function TradingFloor() {
             </button>
           </div>
 
-          <div className="-mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs" style={{ color: MUTED }}>
-            <span>Search observed references directly; catalog match is optional.</span>
-            {!search && !brandFilter && ['all', 'watches'].includes(categoryFilter) && (
-              <div className="flex flex-wrap gap-1.5" aria-label="Search help">
-                {([
-                  { label: 'Rolex', updates: { brand: 'Rolex' } },
-                  { label: 'Patek Philippe', updates: { brand: 'Patek Philippe' } },
-                  { label: 'For sale', updates: { type: 'WTS' } },
-                  { label: 'Want to buy', updates: { type: 'WTB' } },
-                ] as Array<{ label: string; updates: Record<string, string | null> }>).map(item => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => {
-                      resetResults();
-                      updateViewParams(item.updates);
-                    }}
-                    className="rounded-full border bg-white px-2.5 py-1 font-medium hover:border-[#9A7127] hover:text-[#7B5719]"
-                    style={{ borderColor: BORDER }}
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Category & Intent Tabs */}
-          <div className="flex flex-col gap-3 pt-1">
-            {/* Category Tabs */}
-            <div className="flex flex-wrap items-center gap-1.5 border-b border-[#3f3324]/10 pb-2.5">
-              {CATEGORY_OPTIONS.map(option => {
-                const active = categoryFilter === option.value;
-                return (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => {
-                      resetResults();
-                      updateViewParams({ item: option.value === 'all' ? null : option.value });
-                    }}
-                    className={`flex h-9 items-center gap-1.5 rounded-full px-3.5 text-xs font-semibold uppercase tracking-wider transition-colors ${
-                      active
-                        ? 'bg-[#9A7127] text-white shadow-sm'
-                        : 'bg-white/80 text-[#6B7280] hover:bg-white hover:text-[#171717] border border-[#DED8CD]'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Intent Tabs */}
-            <div className="flex flex-wrap items-center gap-2">
-              {INTENT_OPTIONS.map(option => {
-                const active = (intentFilter || '') === (option.value || '');
-                return (
-                  <button
-                    key={option.value || 'all'}
-                    type="button"
-                    onClick={() => {
-                      resetResults();
-                      updateViewParams({ type: option.value || null });
-                    }}
-                    className={`flex h-8 items-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors ${
-                      active
-                        ? 'bg-[#211B15] text-[#F3ECDF] font-semibold shadow-xs'
-                        : 'bg-white/60 text-[#675B4D] hover:bg-white border border-[#DED8CD]'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           <CurrencyConverter compact />
 
           <div className="flex flex-wrap items-center gap-2" aria-label="Current search and filters">
             <span className="inline-flex min-h-8 items-center rounded-full border bg-[#211B15] px-3 text-xs font-semibold text-[#F3ECDF]">
-              {sortMode === 'newest' ? 'Newest observed' : 'Discovery mix'}
+              {t(sortMode === 'newest' ? 'Newest observed' : 'Discovery mix')}
             </span>
             {activeFilterChips.map(chip => (
               <button
@@ -1108,8 +1037,9 @@ export default function TradingFloor() {
       <div ref={resultsTopRef} className="mx-auto max-w-7xl px-4 py-6">
         <div className="mb-5 flex flex-wrap items-center gap-4 text-sm" style={{ color: MUTED }}>
           <span>
-            Showing <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong> on this page{dynamicDisplayTotal === null ? ' · total unavailable' : <> of <strong style={{ color: INK }}>{dynamicDisplayTotal.toLocaleString()}</strong> listings</>}
+            {t('Showing')} <strong style={{ color: INK }}>{visibleListings.length.toLocaleString()}</strong> {t('on this page')}{dynamicDisplayTotal === null ? ` · ${t('total unavailable')}` : <> {t('of')} <strong style={{ color: INK }}>{dynamicDisplayTotal.toLocaleString()}</strong> {t('listings')}</>}
           </span>
+          <span>{t('Priced listings first; source images next; highest verified USD price within each group.')}</span>
           {error && <span style={{ color: RED }}>{error}</span>}
         </div>
 
@@ -1198,9 +1128,9 @@ export default function TradingFloor() {
               className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
               style={{ borderColor: GOLD, background: SURFACE, color: GOLD_BRIGHT }}
             >
-              Previous
+              {t('Previous')}
             </button>
-            <span className="text-sm" style={{ color: MUTED }}>Page {cursorHistory.length + 1}</span>
+            <span className="text-sm" style={{ color: MUTED }}>{t('Page')} {cursorHistory.length + 1}</span>
             <button
               type="button"
               onClick={() => {
@@ -1212,7 +1142,7 @@ export default function TradingFloor() {
               className="h-11 min-w-[120px] rounded-md border px-5 text-sm font-medium disabled:cursor-default disabled:opacity-45"
               style={{ borderColor: GOLD, background: GOLD, color: '#09090D' }}
             >
-              {loading ? 'Loading...' : 'Next'}
+              {loading ? t('Loading...') : t('Next')}
             </button>
           </nav>
         )}
@@ -1294,6 +1224,7 @@ function DesktopFilters({
   locations: string[];
   onChange: (updates: Record<string, string | null>) => void;
 }) {
+  const { t } = useLanguage();
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [locationSearch, setLocationSearch] = useState('');
 
@@ -1320,7 +1251,7 @@ function DesktopFilters({
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-2 border-b pb-3" style={{ borderColor: BORDER }}>
         <div className="flex items-center gap-2">
-          <h2 className="text-base font-semibold" style={{ color: INK }}>Filters</h2>
+          <h2 className="text-base font-semibold" style={{ color: INK }}>{t('Filters')}</h2>
           {hasActiveFilters && (
             <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#9A7127] text-white">
               {[Boolean(brand), Boolean(model), category !== 'all', Boolean(intent), imagesOnly, pricedOnly, selectedLocations.length > 0, sort !== 'newest'].filter(Boolean).length}
@@ -1334,7 +1265,7 @@ function DesktopFilters({
               onClick={() => onChange({ brand: null, model: null, item: null, type: null, images: null, priced: null, location: null, sort: null })}
               className="text-xs font-semibold text-[#7B5719] hover:underline"
             >
-              Clear
+              {t('Clear')}
             </button>
           )}
           <button
@@ -1352,7 +1283,7 @@ function DesktopFilters({
       {!isCollapsed ? (
         <div className="space-y-6 transition-all duration-200">
           <fieldset>
-            <label htmlFor="sort-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Order</label>
+            <label htmlFor="sort-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Order')}</label>
             <select
               id="sort-filter"
               value={sort}
@@ -1360,20 +1291,32 @@ function DesktopFilters({
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs"
               style={{ borderColor: BORDER, color: INK }}
             >
-              {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+              {SORT_OPTIONS.map(option => <option key={option.value} value={option.value}>{t(option.label)}</option>)}
             </select>
-            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Newest observed is the default. Discovery mix changes order only.</p>
+            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>{t('Newest observed is the default. Discovery mix changes order only.')}</p>
           </fieldset>
 
           <fieldset>
-            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Listing type</legend>
-            {INTENT_OPTIONS.map(option => (
-              <FilterCheck key={option.value || 'all'} checked={intent === option.value} label={option.label} onChange={() => onChange({ type: option.value || null })} />
+            <legend className="mb-2 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Category')}</legend>
+            {CATEGORY_OPTIONS.map(option => (
+              <FilterCheck
+                key={option.value}
+                checked={category === option.value}
+                label={t(option.label)}
+                onChange={() => onChange({ item: option.value === 'all' ? null : option.value, type: ['all', 'watches'].includes(option.value) ? intent || null : null })}
+              />
             ))}
           </fieldset>
 
           <fieldset>
-            <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Brand ({releaseBrands.length})</label>
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Listing type')}</legend>
+            {INTENT_OPTIONS.map(option => (
+              <FilterCheck key={option.value || 'all'} checked={intent === option.value} label={t(option.label)} onChange={() => onChange({ type: option.value || null })} />
+            ))}
+          </fieldset>
+
+          <fieldset>
+            <label htmlFor="brand-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Brand')} ({releaseBrands.length})</label>
             <select
               id="brand-filter"
               value={brand}
@@ -1381,13 +1324,13 @@ function DesktopFilters({
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs"
               style={{ borderColor: BORDER, color: INK }}
             >
-              <option value="">All brands</option>
+              <option value="">{t('All brands')}</option>
               {releaseBrands.map(value => <option key={value} value={value}>{value}</option>)}
             </select>
           </fieldset>
 
           <fieldset>
-            <label htmlFor="model-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Model ({models.length})</label>
+            <label htmlFor="model-filter" className="mb-2 block text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Model')} ({models.length})</label>
             <select
               id="model-filter"
               value={model}
@@ -1396,14 +1339,14 @@ function DesktopFilters({
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none shadow-xs disabled:opacity-45"
               style={{ borderColor: BORDER, color: INK }}
             >
-              <option value="">All models</option>
+              <option value="">{t('All models')}</option>
               {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
             </select>
           </fieldset>
 
           <fieldset>
             <div className="flex items-center justify-between mb-2">
-              <legend className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Location {selectedLocations.length > 0 && `(${selectedLocations.length})`}</legend>
+              <legend className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Location')} {selectedLocations.length > 0 && `(${selectedLocations.length})`}</legend>
               {selectedLocations.length > 0 && (
                 <button type="button" onClick={() => toggleLocation('')} className="text-[10px] font-semibold text-[#7B5719] hover:underline">Clear</button>
               )}
@@ -1430,21 +1373,21 @@ function DesktopFilters({
                 type="text"
                 value={locationSearch}
                 onChange={e => setLocationSearch(e.target.value)}
-                placeholder="Search locations..."
+                placeholder={t('Search locations...')}
                 className="h-8 w-full rounded border bg-white pl-8 pr-2.5 text-xs outline-none focus:border-[#9A7127]"
                 style={{ borderColor: BORDER, color: INK }}
               />
             </div>
             {filteredLocations.length === 0 && locations.length === 0 ? (
-              <p className="text-xs italic" style={{ color: MUTED }}>No location data available</p>
+              <p className="text-xs italic" style={{ color: MUTED }}>{t('No location data available')}</p>
             ) : filteredLocations.length === 0 ? (
-              <p className="text-xs italic py-2 text-center" style={{ color: MUTED }}>No matching locations</p>
+              <p className="text-xs italic py-2 text-center" style={{ color: MUTED }}>{t('No matching locations')}</p>
             ) : (
               <div className="max-h-48 overflow-y-auto space-y-1 p-2 rounded border bg-stone-50/60 shadow-inner hide-scrollbar" style={{ borderColor: BORDER }}>
                 {!locationSearch && (
                   <FilterCheck
                     checked={selectedLocations.length === 0}
-                    label="All locations"
+                    label={t('All locations')}
                     onChange={() => toggleLocation('')}
                   />
                 )}
@@ -1458,13 +1401,12 @@ function DesktopFilters({
                 ))}
               </div>
             )}
-            <p className="mt-2 text-[11px] leading-4" style={{ color: MUTED }}>Choose one or several posting countries. Countries are shown only from source-backed listing or poster data.</p>
           </fieldset>
 
           <fieldset>
-            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>Evidence</legend>
-            <FilterCheck checked={imagesOnly} label="Verified source image only" onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
-            <FilterCheck checked={pricedOnly} label="Price supplied" onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
+            <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: MUTED }}>{t('Evidence')}</legend>
+            <FilterCheck checked={imagesOnly} label={t('Verified source image only')} onChange={() => onChange({ images: imagesOnly ? null : 'true' })} />
+            <FilterCheck checked={pricedOnly} label={t('Price supplied')} onChange={() => onChange({ priced: pricedOnly ? null : 'true' })} />
           </fieldset>
         </div>
       ) : (
@@ -1505,6 +1447,7 @@ function MobileFilterSheet({
   onApply: (filters: { brand: BrandFilter; model: string; category: CategoryFilter; intent: IntentFilter; sort: SortMode; imagesOnly: boolean; pricedOnly: boolean; locations: string[] }) => void;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftModel, setDraftModel] = useState(model);
   const [draftCategory, setDraftCategory] = useState(category);
@@ -1542,22 +1485,30 @@ function MobileFilterSheet({
         style={{ borderColor: BORDER, background: SURFACE, color: INK }}
       >
         <header className="flex h-16 shrink-0 items-center justify-between border-b px-5" style={{ borderColor: BORDER }}>
-          <h2 id="mobile-filter-title" className="text-lg font-semibold">Filter inventory</h2>
+          <h2 id="mobile-filter-title" className="text-lg font-semibold">{t('Filter inventory')}</h2>
           <button type="button" onClick={onClose} aria-label="Close filters" className="flex h-11 w-11 items-center justify-center rounded-md border" style={{ borderColor: BORDER }}>
             <X size={20} />
           </button>
         </header>
 
         <div className="flex-1 space-y-7 overflow-y-auto px-5 py-6">
-          <FilterGroup label="Order">
+          <FilterGroup label={t('Order')}>
             {SORT_OPTIONS.map(option => (
-              <FilterChoice key={option.value} active={draftSort === option.value} label={option.label} onClick={() => setDraftSort(option.value)} />
+              <FilterChoice key={option.value} active={draftSort === option.value} label={t(option.label)} onClick={() => setDraftSort(option.value)} />
             ))}
             <p className="w-full text-xs leading-5" style={{ color: MUTED }}>Newest observed is the default. Discovery mix changes order only.</p>
           </FilterGroup>
-          <FilterGroup label="Listing type">
+          <FilterGroup label={t('Category')}>
+            {CATEGORY_OPTIONS.map(option => (
+              <FilterChoice key={option.value} active={draftCategory === option.value} label={t(option.label)} onClick={() => {
+                setDraftCategory(option.value);
+                if (!['all', 'watches'].includes(option.value)) setDraftIntent('');
+              }} />
+            ))}
+          </FilterGroup>
+          <FilterGroup label={t('Listing type')}>
             {INTENT_OPTIONS.map(option => (
-              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={option.label} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
+              <FilterChoice key={option.value || 'all'} active={draftIntent === option.value} label={t(option.label)} disabled={!['all', 'watches'].includes(draftCategory) && Boolean(option.value)} onClick={() => setDraftIntent(option.value)} />
             ))}
           </FilterGroup>
           <FilterGroup label={`Brands (${releaseBrands.length})`}>
@@ -1625,7 +1576,6 @@ function MobileFilterSheet({
                 onChange={() => toggleLocation(value)}
               />
             ))}
-            <p className="w-full text-xs leading-5" style={{ color: MUTED }}>Choose several countries to match any selected country. Country must be source-backed.</p>
           </FilterGroup>
           <FilterGroup label="Evidence">
             <FilterCheck checked={draftImagesOnly} label="Verified source image only" onChange={() => setDraftImagesOnly(value => !value)} />
@@ -1676,6 +1626,7 @@ function ViewButton({ active, label, icon, onClick }: { active: boolean; label: 
 
 
 function ListingCard({ listing, selected, onSelect, benchmark }: { listing: ListingRecord; selected: boolean; onSelect: () => void; benchmark?: ListingBenchmarkData }) {
+  const { t } = useLanguage();
   const meta = useMemo(() => getListingMeta(listing), [listing]);
   const imageUrl = getListingImageSrc(listing);
   const [imageAvailable, setImageAvailable] = useState(true);
@@ -1707,7 +1658,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
       )}
       {!cardHasImage && (
         <button type="button" onClick={onSelect} className="flex h-[340px] w-full items-center justify-center rounded-md border border-[#E5DACB] bg-[#F6F0E7] text-xs font-bold uppercase tracking-[0.14em] text-[#8B95A2]">
-          NO IMAGE
+          {t('NO IMAGE')}
         </button>
       )}
 
@@ -1753,7 +1704,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
         </div>
         <div className="text-xs font-medium text-[#7A8699]">
           {benchmark?.unavailable ? (
-            <span>Open for rating</span>
+            <span>{t('Open for rating')}</span>
           ) : priceRating ? (
             <span
               className="inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
@@ -1767,7 +1718,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
               {priceRating.label}
             </span>
           ) : (
-            <span>Open for rating</span>
+            <span>{t('Open for rating')}</span>
           )}
         </div>
       </div>
@@ -1776,16 +1727,16 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
       <div className="mt-3.5 flex flex-wrap gap-2">
         <span className="inline-flex items-center gap-1.5 rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
           <Globe2 size={12} className="text-[#6B7280]" />
-          {meta.region || 'Location not provided'}
+          {meta.region || t('Location not provided')}
         </span>
         <span className="inline-flex items-center rounded-full border border-[#E5DACB] bg-[#F6F0E7] px-3 py-1 text-xs font-medium text-[#374151]">
-          Posted {meta.postedDate || 'Posting date requires review'}
+          {t('Posted')} {meta.postedDate || t('Posting date requires review')}
         </span>
       </div>
 
       {/* 7. Posted by Section */}
       <div className="mt-4 pt-3.5 border-t border-[#E8DFC9] text-xs">
-        <div className="text-[#6B7280]">Posted by</div>
+        <div className="text-[#6B7280]">{t('Posted by')}</div>
         {listing.dealer_profile_path && postingIdentity ? (
           <Link to={listing.dealer_profile_path} className="mt-0.5 block text-sm font-semibold text-[#1C1917] hover:text-[#8A5826]">
             {postingIdentity || 'Posting identity requires review'}
@@ -1816,7 +1767,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
           onClick={onSelect}
           className="flex w-full items-center justify-center gap-2 rounded-full border border-[#8A5826] bg-[#F6F0E7] py-2 text-[11px] font-bold uppercase tracking-wider text-[#653E23] transition hover:bg-[#EFE5D8]"
         >
-          CHECK AVAILABILITY
+          {t('Check availability')}
         </button>
       </div>
     </article>
@@ -2251,7 +2202,7 @@ function getListingMeta(listing: ListingRecord) {
 
   // USD is the only primary customer price. A preserved foreign source amount
   // remains visible as evidence, but never impersonates a verified USD value.
-  const priceLabel = verifiedUsd !== null ? formatUsdPrice(verifiedUsd) : ambiguousPriceDisplay;
+  const priceLabel = verifiedUsd !== null ? formatUsdPrice(verifiedUsd) : (sourcePrice || ambiguousPriceDisplay);
 
   const foreignLabel = isForeignCurrency && rawAmount !== null
     ? `Original source price: ${currency} ${new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 }).format(rawAmount)}`
@@ -2313,6 +2264,8 @@ function TradingFloorQuickScroll() {
   const [progress, setProgress] = useState(0);
   const [scrollable, setScrollable] = useState(false);
   useEffect(() => {
+    const previousScrollBehavior = document.documentElement.style.scrollBehavior;
+    document.documentElement.style.scrollBehavior = 'smooth';
     const update = () => {
       const documentHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
       const maximum = Math.max(0, documentHeight - window.innerHeight);
@@ -2325,6 +2278,7 @@ function TradingFloorQuickScroll() {
     window.addEventListener('scroll', update, { passive: true });
     window.addEventListener('resize', update);
     return () => {
+      document.documentElement.style.scrollBehavior = previousScrollBehavior;
       observer?.disconnect();
       window.removeEventListener('scroll', update);
       window.removeEventListener('resize', update);
@@ -2335,7 +2289,7 @@ function TradingFloorQuickScroll() {
   return (
     <nav
       aria-label="Quick Trading Floor scroll"
-      className="fixed right-20 top-1/2 z-30 flex -translate-y-1/2 flex-col items-center rounded-full border bg-white/95 p-1 shadow-lg max-lg:right-2 sm:max-lg:right-4 sm:p-1.5 lg:p-2"
+      className="fixed right-3 top-1/2 z-[60] flex -translate-y-1/2 flex-col items-center rounded-full border bg-white/95 p-1 shadow-lg sm:right-4 sm:p-1.5 lg:right-24 lg:p-2"
       style={{ borderColor: BORDER }}
     >
       <button type="button" title="Top" aria-label="Scroll to top of Trading Floor" onClick={() => scrollTo(0)} className="grid h-8 w-8 place-items-center rounded-full hover:bg-stone-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 sm:h-9 sm:w-9" style={{ color: GOLD_BRIGHT }}><ChevronUp size={18} /></button>

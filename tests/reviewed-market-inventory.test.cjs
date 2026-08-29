@@ -89,7 +89,7 @@ test('bounded Trading Floor page rank is evidence-first and never fabricates spa
     },
   ].sort(api.compareInventoryForDisplay);
   assert.deepEqual(records.map(record => record.id), [
-    'image', 'rated', 'profile', 'explicit-price', 'sparse', 'released-bundle',
+    'image', 'explicit-price', 'rated', 'profile', 'sparse', 'released-bundle',
   ]);
 });
 
@@ -173,8 +173,8 @@ test('customer inventory does not wait for the optional global count snapshot', 
   assert.doesNotMatch(requestBlock, /loadQnsaReviewedReleaseSummary\(client\)/);
 });
 
-test('Trading Floor source view is allowlisted and defaults to the legacy source', () => {
-  assert.equal(api.MARKET_SOURCE_VIEW, 'reviewed_workbook_market_source_v2');
+test('Trading Floor source view is allowlisted and defaults to the canonical QNSA source', () => {
+  assert.equal(api.MARKET_SOURCE_VIEW, 'qnsa_rolex_patek_trading_floor_source');
   const sourceText = fs.readFileSync(
     path.join(__dirname, '../api/reviewed-market-inventory.js'),
     'utf8',
@@ -1005,7 +1005,7 @@ test('public brand filters preserve punctuation and use only supported exact sna
 
 test('QNSA endpoint is read-only and globally exhausts its indexed image lane before no-image rows', () => {
   assert.match(source, /rest\/v1\/\$\{activeMarketSourceView\}/);
-  assert.match(source, /: 'reviewed_workbook_market_source_v2'/);
+  assert.match(source, /: 'qnsa_rolex_patek_trading_floor_source'/);
   assert.doesNotMatch(source, /\.from\(['"]watch_records['"]\)/);
   assert.doesNotMatch(source, /\.(?:insert|upsert|update|delete)\s*\(/);
   assert.match(source, /has_complete_identity/);
@@ -1280,8 +1280,8 @@ test('four-brand exact count is serialized after page mapping and omitted on con
   const mappedPage = source.indexOf('const combinedPageRecords =');
   const exactCount = source.indexOf('await loadEffectiveCount(client, fourBrandCountOptions)');
   assert.ok(mappedPage >= 0 && exactCount > mappedPage);
-  assert.match(source, /if \(fourBrandEffectiveScope && firstEffectiveCountPage\)/);
-  assert.match(source, /else if \(fourBrandEffectiveScope\)[\s\S]*publicInventoryTotal = null/);
+  assert.match(source, /if \(fourBrandEffectiveScope && firstEffectiveCountPage && publicInventoryTotal === null\)/);
+  assert.match(source, /else if \(fourBrandEffectiveScope && publicInventoryTotal === null\)[\s\S]*publicInventoryTotal = null/);
   assert.doesNotMatch(source, /fourBrandCountPromise/);
 });
 

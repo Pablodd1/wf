@@ -174,6 +174,25 @@ module.exports = async function handler(req, res) {
     let publicListing = strictPublicListing;
     let qnsaReleaseListing = null;
     let qnsaDealerLink = null;
+    let canonicalReadyListing = null;
+    if (!publicListing && id.toLowerCase().startsWith('cn_')) {
+      const canonicalResult = await client
+        .from('trading_floor_ready_view')
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+      if (canonicalResult.error && !optionalLegacyPublicListingUnavailable(canonicalResult.error)) {
+        throw canonicalResult.error;
+      }
+      canonicalReadyListing = canonicalResult.data || null;
+      if (canonicalReadyListing) {
+        publicListing = {
+          id: canonicalReadyListing.id,
+          brand: canonicalReadyListing.brand || canonicalReadyListing.canonical_brand || null,
+          reference: canonicalReadyListing.reference || canonicalReadyListing.normalized_reference || null,
+        };
+      }
+    }
     if (!publicListing && requestedBrand && requestedReference) {
       qnsaReleaseListing = await findQnsaReleasedListing(client, {
         id, brand: requestedBrand, reference: requestedReference,
@@ -256,6 +275,20 @@ module.exports = async function handler(req, res) {
         dealer_id: qnsaDealerLink?.dealer_id || null,
       };
     }
+    if (!listing && canonicalReadyListing) {
+      listing = {
+        id: canonicalReadyListing.id,
+        brand: canonicalReadyListing.brand || canonicalReadyListing.canonical_brand || null,
+        reference: canonicalReadyListing.reference || canonicalReadyListing.normalized_reference || null,
+        listing_type: canonicalReadyListing.listing_type || canonicalReadyListing.intent || null,
+        seller_name: canonicalReadyListing.seller_name || canonicalReadyListing.posted_by
+          || canonicalReadyListing.source_identity_name || null,
+        seller_phone: canonicalReadyListing.seller_phone || canonicalReadyListing.phone_number
+          || canonicalReadyListing.from_number || null,
+        contact_publication_approved: canonicalReadyListing.contact_publication_approved === true,
+        dealer_id: canonicalReadyListing.dealer_id || null,
+      };
+    }
     if (!listing) return res.status(404).json({ error: 'Listing not found' });
     const resolvedListing = {
       ...listing,
@@ -263,7 +296,7 @@ module.exports = async function handler(req, res) {
       reference: publicListing.reference || listing.reference,
     };
     if (!isPublicationBrandAllowed(resolvedListing.brand)
-      || (!qnsaReleaseListing && !isReleaseListingEligible(resolvedListing))) {
+      || (!qnsaReleaseListing && !canonicalReadyListing && !isReleaseListingEligible(resolvedListing))) {
       return res.status(404).json({ error: 'Listing not included in this release' });
     }
     if (listing.seller_phone || listing.contact_publication_approved === true) {

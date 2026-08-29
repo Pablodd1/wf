@@ -13,6 +13,10 @@ const { classifyWatchPartListing } = require('./_lib/watch-item-classification.c
 const { normalizeWatchConditionFields } = require('./_lib/watch-condition-normalization.cjs');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const {
+  LISTING_DISPLAY_CONTRACT_VERSION,
+  enforceListingDisplayContract,
+} = require('../shared/listing-display-contract.cjs');
+const {
   MARKET_SELECTOR: CURATED_SHADOW_MARKET_SOURCE,
   isShadowBrand,
   loadInventory: loadCuratedShadowInventory,
@@ -770,6 +774,16 @@ function compareInventoryForDisplay(left, right) {
   const imageDifference = Number(hasExactSourceImage(right)) - Number(hasExactSourceImage(left));
   if (imageDifference !== 0) return imageDifference;
 
+  const verifiedPriceDifference = Number(hasVerifiedExplicitPrice(right))
+    - Number(hasVerifiedExplicitPrice(left));
+  if (verifiedPriceDifference !== 0) return verifiedPriceDifference;
+  if (hasVerifiedExplicitPrice(left) && hasVerifiedExplicitPrice(right)) {
+    const numericPriceDifference = Number(right.price_usd) - Number(left.price_usd);
+    if (Number.isFinite(numericPriceDifference) && numericPriceDifference !== 0) {
+      return numericPriceDifference;
+    }
+  }
+
   const rightDate = Date.parse(right?.listing_date || right?.created_at || '') || 0;
   const leftDate = Date.parse(left?.listing_date || left?.created_at || '') || 0;
   if (rightDate !== leftDate) return rightDate - leftDate;
@@ -781,9 +795,6 @@ function compareInventoryForDisplay(left, right) {
   if (intentDifference !== 0) return intentDifference;
   const dealerDifference = dealerEvidenceRank(right) - dealerEvidenceRank(left);
   if (dealerDifference !== 0) return dealerDifference;
-  const priceDifference = Number(hasVerifiedExplicitPrice(right))
-    - Number(hasVerifiedExplicitPrice(left));
-  if (priceDifference !== 0) return priceDifference;
   const completenessDifference = listingCompletenessScore(right) - listingCompletenessScore(left);
   if (completenessDifference !== 0) return completenessDifference;
 
@@ -1365,6 +1376,7 @@ function mapReviewedRecord(row) {
     seller_rating_source_url: null,
     contact_publication_approved: contactApproved,
     price_usd: displayPriceUsd,
+    price_display_verified: publicVerifiedUsd !== null,
     effective_price_source: publicVerifiedUsd !== null
       ? (row.effective_price_source || 'VERIFIED_USD')
       : ownerAssumedUsd !== null
@@ -3325,7 +3337,7 @@ module.exports = async function handler(req, res) {
     const publicBaseRecords = (reviewedOverlayLaneActive ? [] : records)
       .map(applyConfirmedFiveWatchPublication);
     const deduplicatedPage = deduplicateRecordsById([...publicBaseRecords, ...reviewedOverlayRecords]);
-    const combinedPageRecords = deduplicatedPage.records;
+    const combinedPageRecords = deduplicatedPage.records.map(enforceListingDisplayContract);
     const combinedPageDuplicateCount = deduplicatedPage.duplicateCount;
     // Serialize the cohort-wide count after the bounded page has been fetched,
     // mapped and filtered. Running both cold scans in parallel caused avoidable
@@ -3355,6 +3367,9 @@ module.exports = async function handler(req, res) {
       hasMore,
       nextCursor,
       records: combinedPageRecords,
+      availableCountries: [...new Set(combinedPageRecords
+        .map(record => postingCountryName(record.location))
+        .filter(Boolean))].sort((left, right) => left.localeCompare(right)),
       reviewedOverlayRecords,
       reviewedOverlay: {
         source: 'reviewed_workbook_inventory',
@@ -3372,6 +3387,10 @@ module.exports = async function handler(req, res) {
       summary,
       publicationBrands,
       evidenceContract: EVIDENCE_CONTRACT,
+      listingDisplayContract: {
+        version: LISTING_DISPLAY_CONTRACT_VERSION,
+        null_policy: 'EXPLICIT_JSON_NULL',
+      },
       coverage: summarizeCoverage(combinedPageRecords),
       displayPolicy: {
         unpriced_listings_visible: true,
