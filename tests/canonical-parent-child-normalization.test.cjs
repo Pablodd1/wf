@@ -344,20 +344,22 @@ test('14. Production NYC3 Image resolution with HEAD and bounded GET fallback', 
 });
 
 test('15. Canary artifacts and manifest checksums are consistent and present', () => {
-  const summaryPath = path.resolve('audit-output/mariadb-live/canonical-canary-10k/canonical-canary-10k-summary.json');
-  const manifestPath = path.resolve('audit-output/mariadb-live/canonical-canary-10k/canonical-canary-10k-authoritative-manifest.json');
-
-  assert.ok(fs.existsSync(summaryPath), 'canonical-canary-10k-summary.json must exist');
+  const artifactDir = path.resolve('audit-output/mariadb-live/canonical-canary-10k');
+  const manifestPath = path.join(artifactDir, 'canonical-canary-10k-authoritative-manifest.json');
   assert.ok(fs.existsSync(manifestPath), 'canonical-canary-10k-authoritative-manifest.json must exist');
 
-  const summaryBytes = fs.readFileSync(summaryPath);
-  const summary = JSON.parse(summaryBytes.toString('utf-8'));
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  assert.strictEqual(manifest.single_children_count, 9860);
+  assert.strictEqual(manifest.bundle_parents_count, 140);
+  assert.strictEqual(manifest.bundle_children_count, 381);
+  assert.strictEqual(manifest.total_children_count, 10241);
 
-  const computedHash = crypto.createHash('sha256').update(summaryBytes).digest('hex');
-  assert.strictEqual(manifest.artifact_checksums['canonical-canary-10k-summary.json'].sha256, computedHash);
-  assert.strictEqual(summary.single_children_count, 9860);
-  assert.strictEqual(summary.bundle_parents_count, 140);
-  assert.strictEqual(summary.bundle_children_count, 381);
-  assert.strictEqual(summary.total_children_count, 10241);
+  for (const [fname, meta] of Object.entries(manifest.artifact_checksums)) {
+    const fpath = path.join(artifactDir, fname);
+    assert.ok(fs.existsSync(fpath), `Artifact ${fname} must exist on disk`);
+    const fileBytes = fs.readFileSync(fpath);
+    const computedSha = crypto.createHash('sha256').update(fileBytes).digest('hex');
+    assert.strictEqual(meta.sha256, computedSha, `Checksum mismatch for artifact ${fname}`);
+    assert.strictEqual(meta.bytes, fileBytes.length, `Byte length mismatch for artifact ${fname}`);
+  }
 });

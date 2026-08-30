@@ -1,0 +1,92 @@
+{
+  "contract": "wf-postgresql-migration-smoke-preview-v1",
+  "timestamp": "2026-08-30T23:30:00.000Z",
+  "steps": [
+    {
+      "step": "pre_check_audit_rpc_grant",
+      "service_role_execute": true
+    },
+    {
+      "step": "apply_remediation_migration",
+      "status": "SUCCESS"
+    },
+    {
+      "step": "upsert_pass_1",
+      "result": {
+        "updated_parents": 0,
+        "inserted_parents": 1,
+        "updated_children": 0,
+        "inserted_children": 2,
+        "unchanged_parents": 0,
+        "unchanged_children": 0
+      }
+    },
+    {
+      "step": "upsert_pass_2_idempotency",
+      "result": {
+        "updated_parents": 0,
+        "inserted_parents": 0,
+        "updated_children": 0,
+        "inserted_children": 0,
+        "unchanged_parents": 1,
+        "unchanged_children": 2
+      }
+    },
+    {
+      "step": "upsert_superseded",
+      "result": {
+        "updated_parents": 1,
+        "inserted_parents": 0,
+        "updated_children": 1,
+        "inserted_children": 0,
+        "unchanged_parents": 0,
+        "unchanged_children": 0
+      }
+    },
+    {
+      "step": "verify_children_supersession",
+      "active_count": 1
+    },
+    {
+      "step": "detail_rpc_unapproved",
+      "authorized_inquiry": {
+        "source_id": "smoke-test-uuid-001",
+        "seller_name": "Zurich Watch Vault",
+        "source_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_table": "auctions",
+        "whatsapp_url": null,
+        "inquiry_ready": false,
+        "source_system": "OceanDigital MariaDB",
+        "source_database": "thecollective_inventory",
+        "seller_contact_raw": null,
+        "seller_contact_masked": null,
+        "contact_publication_approved": false
+      }
+    },
+    {
+      "step": "detail_rpc_approved",
+      "authorized_inquiry": {
+        "source_id": "smoke-test-uuid-001",
+        "seller_name": "Zurich Watch Vault",
+        "source_hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_table": "auctions",
+        "whatsapp_url": "https://wa.me/41789998888?text=Hi%20Zurich%20Watch%20Vault,%20I%20am%20inquiring%20about%20your%20listing%20for%20Rolex%20126610LN%20on%20WatchFlow.",
+        "inquiry_ready": true,
+        "source_system": "OceanDigital MariaDB",
+        "source_database": "thecollective_inventory",
+        "seller_contact_raw": "+41 78 999 8888",
+        "seller_contact_masked": "+*** *** 8888",
+        "contact_publication_approved": true
+      }
+    },
+    {
+      "step": "verify_immutable_parent_trigger",
+      "status": "PROTECTED"
+    },
+    {
+      "step": "post_check_audit_rpc_grant",
+      "service_role_execute": true
+    }
+  ],
+  "smoke_test_passed": true
+}
