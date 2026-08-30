@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const mysql = require('mysql2/promise');
+const { createClient } = require('@supabase/supabase-js');
 const {
   resolveMariaDbTransport,
   buildStagingRecord
@@ -11,6 +12,14 @@ const {
   fetchKeysetBatch,
   sha256
 } = require('./full-capture-preflight.cjs');
+
+const MAIN_RUN_KEY = 'full-capture-auctions-1788028958313';
+const ORIGINAL_377750_BOUNDARY = Object.freeze({
+  input_rows: 377750,
+  last_created_on: '2025-11-19T02:27:57.000Z',
+  last_source_id: '80da285d-8ef3-46a9-8f36-b89f93eff399'
+});
+const CANARY_SOURCE_TABLE = 'auctions_canary_after_377750_v1';
 
 async function rpc(supabaseUrl, supabaseKey, functionName, params) {
   const url = supabaseUrl.replace(/\/$/, '') + '/rest/v1/rpc/' + functionName;
@@ -30,6 +39,26 @@ async function rpc(supabaseUrl, supabaseKey, functionName, params) {
   return await res.json();
 }
 
+async function snapshotPublicLineage(supabase, sourceIds) {
+  const snapshot = { raw_messages: 0, raw_message_versions: 0, watch_records: 0 };
+  for (let offset = 0; offset < sourceIds.length; offset += 100) {
+    const ids = sourceIds.slice(offset, offset + 100);
+    const recordIds = ids.map(id => `mysql_auctions_${id}`);
+    const [raw, versions, watches] = await Promise.all([
+      supabase.from('raw_messages').select('id').in('external_message_id', recordIds),
+      supabase.from('raw_message_versions').select('id').in('source_record_id', recordIds),
+      supabase.from('watch_records').select('id').in('id', ids)
+    ]);
+    if (raw.error) throw new Error(`Public raw_messages audit failed: ${raw.error.message}`);
+    if (versions.error) throw new Error(`Public raw_message_versions audit failed: ${versions.error.message}`);
+    if (watches.error) throw new Error(`Public watch_records audit failed: ${watches.error.message}`);
+    snapshot.raw_messages += raw.data?.length || 0;
+    snapshot.raw_message_versions += versions.data?.length || 0;
+    snapshot.watch_records += watches.data?.length || 0;
+  }
+  return snapshot;
+}
+
 async function runLive250RowCanary(options = {}) {
   const env = options.env || process.env;
   const supabaseUrl = env.SUPABASE_URL;
@@ -39,9 +68,10 @@ async function runLive250RowCanary(options = {}) {
     throw new Error('SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY must be provided');
   }
 
-  // 1. Verify Main Checkpoint Before
-  const mainRunKey = 'full-capture-auctions-1788028958313';
-  const cpBefore = await rpc(supabaseUrl, supabaseKey, 'get_mariadb_private_raw_checkpoint', { p_run_key: mainRunKey });
+  // 1. Read the main checkpoint for non-mutation proof. The canary source cursor is
+  // deliberately pinned to the recorded 377,750-row boundary even if the main
+  // checkpoint was advanced by an independently running deployment.
+  const cpBefore = await rpc(supabaseUrl, supabaseKey, 'get_mariadb_private_raw_checkpoint', { p_run_key: MAIN_RUN_KEY });
 
   // 2. Connect to MariaDB via Pinned TLS
   const transport = resolveMariaDbTransport(env);
@@ -54,13 +84,13 @@ async function runLive250RowCanary(options = {}) {
     ssl: transport.ssl
   });
 
-  const lastCreatedOn = cpBefore.last_created_on;
-  const lastSourceId = cpBefore.last_source_id;
+  const lastCreatedOn = ORIGINAL_377750_BOUNDARY.last_created_on;
+  const lastSourceId = ORIGINAL_377750_BOUNDARY.last_source_id;
 
   // 3. Keyset fetch the exact next 250 rows from MariaDB after the cursor
   const rawRows = await fetchKeysetBatch(conn, {
     sourceTable: 'auctions',
-    upperBoundary: cpBefore.frozen_upper_boundary || { created_on: '2026-08-29T14:42:32.000Z', id: 'f1bdf67a-3723-41c6-a1e3-35c5ca9138b0' },
+    upperBoundary: cpBefore.frozen_upper_boundary,
     lastCreatedOn,
     lastSourceId,
     batchSize: 250
@@ -72,16 +102,20 @@ async function runLive250RowCanary(options = {}) {
     throw new Error('Expected 250 rows from MariaDB, got ' + rawRows.length);
   }
 
+  const sourceIds = rawRows.map(row => String(row.id));
+  const supabase = createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } });
+  const publicBefore = await snapshotPublicLineage(supabase, sourceIds);
+
   // 4. Transform rows into canary namespace staging records
   const canaryManifest = {
     source_system: 'OceanDigital MariaDB',
     source_database: 'thecollective_inventory',
-    source_table: 'auctions_canary',
+    source_table: CANARY_SOURCE_TABLE,
     contract: 'wf-mariadb-private-raw-staging-v1'
   };
 
   const stagingRecords = rawRows.map(r => buildStagingRecord(r, canaryManifest));
-  const canaryRunKey = options.runKey || 'canary-live-next-250rows-' + Date.now();
+  const canaryRunKey = options.runKey || 'canary-live-after-377750-' + Date.now();
   const batchToken = sha256(canaryRunKey + ':0:' + stagingRecords[0].source_id + ':' + stagingRecords[stagingRecords.length - 1].source_id);
 
   // 5. Ingest into private Supabase raw staging under canary namespace
@@ -101,8 +135,10 @@ async function runLive250RowCanary(options = {}) {
   // 6. Query error ledger for the canary run
   const errors = await rpc(supabaseUrl, supabaseKey, 'get_mariadb_private_raw_errors', { p_run_key: canaryRunKey });
 
+  const publicAfter = await snapshotPublicLineage(supabase, sourceIds);
+
   // 7. Verify Main Checkpoint After
-  const cpAfter = await rpc(supabaseUrl, supabaseKey, 'get_mariadb_private_raw_checkpoint', { p_run_key: mainRunKey });
+  const cpAfter = await rpc(supabaseUrl, supabaseKey, 'get_mariadb_private_raw_checkpoint', { p_run_key: MAIN_RUN_KEY });
 
   const isMainCheckpointUnchanged = (
     cpBefore.input_rows === cpAfter.input_rows &&
@@ -119,7 +155,13 @@ async function runLive250RowCanary(options = {}) {
     contract: 'wf-mariadb-private-raw-staging-v1',
     timestamp: new Date().toISOString(),
     canary_run_key: canaryRunKey,
-    source_table: 'auctions_canary',
+    source_table: CANARY_SOURCE_TABLE,
+    source_cursor: {
+      description: 'actual next 250 MariaDB rows after the recorded 377,750-row checkpoint boundary',
+      ...ORIGINAL_377750_BOUNDARY,
+      first_source_id: sourceIds[0],
+      last_source_id: sourceIds[sourceIds.length - 1]
+    },
     reconciliation: {
       input_rows: batchResult.source_rows,
       newly_staged_rows: batchResult.newly_staged_rows,
@@ -127,25 +169,65 @@ async function runLive250RowCanary(options = {}) {
       capture_error_rows: batchResult.capture_error_rows,
       exact_reconciliation: (batchResult.newly_staged_rows + batchResult.already_staged_identical_rows + batchResult.capture_error_rows) === batchResult.source_rows
     },
-    lossless_error_evidence: errors.map(err => ({
-      source_id: err.source_id,
-      source_created_on: err.source_created_on,
-      source_hash: err.source_hash,
-      classification: err.raw_payload?._lossless_raw_evidence?.classification || 'CAPTURE_ERROR_LOSSLESS_EVIDENCE',
-      affected_fields: err.raw_payload?._lossless_raw_evidence?.affected_fields || [],
-      null_byte_count: err.raw_payload?._lossless_raw_evidence?.null_byte_count || 0,
-      character_positions: err.raw_payload?._lossless_raw_evidence?.character_positions || {},
-      original_payload_base64_present: Boolean(err.raw_payload?._lossless_raw_evidence?.original_payload_base64),
-      remediation_status: err.raw_payload?._lossless_raw_evidence?.remediation_status || 'CAPTURE_ERROR_LOSSLESS_EVIDENCE_PRESERVED',
-      error_reason: err.error_reason
-    })),
+    lossless_error_evidence: errors.map(err => {
+      const evidence = err.raw_payload?._lossless_raw_evidence || {};
+      const decoded = evidence.original_payload_base64
+        ? Buffer.from(evidence.original_payload_base64, 'base64').toString('utf8')
+        : '';
+      return {
+        source_id: err.source_id,
+        source_created_on: err.source_created_on,
+        source_hash: err.source_hash,
+        classification: evidence.classification || 'CAPTURE_ERROR_LOSSLESS_EVIDENCE',
+        affected_fields: evidence.affected_fields || [],
+        null_byte_count: evidence.null_byte_count || 0,
+        character_positions: evidence.character_positions || {},
+        original_payload_base64_present: Boolean(evidence.original_payload_base64),
+        original_payload_reconstructs_to_source_hash: Boolean(decoded) && sha256(decoded) === err.source_hash,
+        sanitized_transport_copy_present: Boolean(err.raw_payload_text),
+        sanitized_transport_sha256: err.raw_payload_text ? sha256(err.raw_payload_text) : null,
+        remediation_status: evidence.remediation_status || 'CAPTURE_ERROR_LOSSLESS_EVIDENCE_PRESERVED',
+        error_reason: err.error_reason
+      };
+    }),
+    public_impact_verification: {
+      source_ids_checked: sourceIds.length,
+      before: publicBefore,
+      after: publicAfter,
+      zero_public_delta: JSON.stringify(publicBefore) === JSON.stringify(publicAfter)
+    },
     main_checkpoint_verification: {
-      main_run_key: mainRunKey,
+      main_run_key: MAIN_RUN_KEY,
       unchanged: isMainCheckpointUnchanged,
-      input_rows: cpAfter.input_rows,
-      last_source_id: cpAfter.last_source_id
+      requested_historical_value: ORIGINAL_377750_BOUNDARY.input_rows,
+      observed_before: {
+        input_rows: cpBefore.input_rows,
+        last_created_on: cpBefore.last_created_on,
+        last_source_id: cpBefore.last_source_id,
+        capture_error_rows: cpBefore.capture_error_rows,
+        manifest_sha256: cpBefore.manifest_sha256
+      },
+      observed_after: {
+        input_rows: cpAfter.input_rows,
+        last_created_on: cpAfter.last_created_on,
+        last_source_id: cpAfter.last_source_id,
+        capture_error_rows: cpAfter.capture_error_rows,
+        manifest_sha256: cpAfter.manifest_sha256
+      }
     }
   };
+
+  if (report.reconciliation.input_rows !== 250 ||
+      report.reconciliation.newly_staged_rows !== 249 ||
+      report.reconciliation.already_staged_identical_rows !== 0 ||
+      report.reconciliation.capture_error_rows !== 1 ||
+      !report.reconciliation.exact_reconciliation ||
+      report.lossless_error_evidence.length !== 1 ||
+      !report.lossless_error_evidence[0].original_payload_reconstructs_to_source_hash ||
+      !report.public_impact_verification.zero_public_delta ||
+      !report.main_checkpoint_verification.unchanged) {
+    throw new Error(`Canary acceptance criteria failed: ${JSON.stringify(report)}`);
+  }
 
   const outputDir = path.resolve('audit-output/mariadb-live');
   fs.mkdirSync(outputDir, { recursive: true });

@@ -1,3 +1,4 @@
+import os
 import sys
 import pymysql
 
@@ -6,7 +7,7 @@ sys.stdout.reconfigure(encoding='utf-8')
 conn = pymysql.connect(
     host='161.35.0.209',
     user='john',
-    password='U0aeAr1zFt2\\',
+    password=os.environ['MYSQL_PASS'],
     database='thecollective_inventory',
     cursorclass=pymysql.cursors.DictCursor
 )
