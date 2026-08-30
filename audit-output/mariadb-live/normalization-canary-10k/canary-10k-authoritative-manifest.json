@@ -1,0 +1,72 @@
+{
+  "canary_version": "wf-authoritative-10k-canary-v2",
+  "timestamp": "2026-08-30T19:27:05.513Z",
+  "invariants": {
+    "provenance_synthesized": false,
+    "intent_required_for_price_research": true,
+    "usdt_treated_as_usd_parity": false,
+    "image_domain": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings",
+    "seller_contact_private_by_default": true,
+    "source_observed_at_separated": true
+  },
+  "counts": {
+    "total_inputs": 10000,
+    "normalized_proposals": 78,
+    "review_required": 9922,
+    "normalization_errors": 0,
+    "exact_reconciliation": true
+  },
+  "eligibility": {
+    "trading_floor_eligible_count": 9935,
+    "trading_floor_eligible_pct": "99.35%",
+    "price_research_eligible_count": 65,
+    "price_research_eligible_pct": "0.65%"
+  },
+  "coverage": {
+    "image_coverage_count": 10000,
+    "image_coverage_pct": "100.00%",
+    "seller_contact_count": 0,
+    "seller_contact_pct": "0.00%",
+    "explicit_usd_price_count": 78,
+    "explicit_usd_price_pct": "0.78%",
+    "bundle_count": 65,
+    "bundle_pct": "0.65%"
+  },
+  "performance": {
+    "duration_ms": 658,
+    "throughput_rows_per_sec": 15197.57
+  },
+  "review_flags_breakdown": {
+    "MISSING_PRICE_OR_CURRENCY": 4307,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 5345,
+    "USDT_HELD_FOR_FX_PROOF": 270,
+    "HELD_BUNDLE_REVIEW": 65
+  },
+  "exclusion_reasons_breakdown": {
+    "INTENT_NOT_WTS": 1444,
+    "BUNDLE_PARENT_UNSPLIT": 65
+  },
+  "currency_status_breakdown": {
+    "MISSING_PRICE": 2898,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 5345,
+    "MISSING_CURRENCY_PROOF": 1324,
+    "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 270,
+    "VERIFIED_EXPLICIT_HKD": 13,
+    "VERIFIED_EXPLICIT_USD": 78,
+    "VERIFIED_EXPLICIT_EUR": 72
+  },
+  "artifact_checksums": {
+    "proposals.jsonl": {
+      "sha256": "0826dc6aa400ad84f7e6a3ba205728e5113132bd64435a8b43f5121d220988eb",
+      "size_bytes": 15567574
+    },
+    "proposals.csv": {
+      "sha256": "04c8d891ad751751efa8f12950ff67ac31234ea34cac4216b1266e94df0225c6",
+      "size_bytes": 2126310
+    },
+    "summary.json": {
+      "sha256": "9c3a4934f183359dc1d91d2bcfc924b02e72716a376422de33038a78c96336a9",
+      "size_bytes": 1753
+    }
+  }
+}

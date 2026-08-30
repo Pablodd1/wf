@@ -1,0 +1,24 @@
+{
+  "classification": "DIAGNOSTIC_ONLY_DO_NOT_PUBLISH",
+  "status": "DIAGNOSTIC_PASS_HALTED_AT_800K_TIMEOUT",
+  "timestamp": "2026-08-30T19:30:14.000Z",
+  "disclaimer": "This diagnostic pass used initial heuristic mappings (e.g. USDT parity, synthesized image domain) and MUST NOT be loaded into Supabase, public feeds, or Vercel.",
+  "counts": {
+    "total_lines_streamed": 805000,
+    "trading_floor_eligible": 698929,
+    "price_research_eligible": 108355,
+    "image_coverage": 804967,
+    "bundle_count": 105111
+  },
+  "artifact_checksums": {
+    "proposals.jsonl": {
+      "sha256": "6d7a00d70823bf74158bad3233f345fb453387698fcef3acf0cc3998e6a45d85",
+      "size_bytes": 1699578312,
+      "line_count": 805000
+    },
+    "diagnostic-manifest.json": {
+      "sha256": "b69c2b1bc5ce110553e2f944f5d2844299260dd434b9a35f70c9c7c4019b4a0a",
+      "size_bytes": 746
+    }
+  }
+}

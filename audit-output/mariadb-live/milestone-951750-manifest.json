@@ -1,0 +1,29 @@
+{
+  "milestone": "RAW_CAPTURE_951750_FROZEN_BOUNDARY",
+  "checkpoint_run_key": "full-capture-auctions-1788028958313",
+  "timestamp": "2026-08-30T19:07:54.000Z",
+  "exact_counts": {
+    "input_rows": 951750,
+    "newly_staged_rows": 950743,
+    "already_staged_identical_rows": 1000,
+    "capture_error_rows": 7,
+    "exact_reconciliation": true
+  },
+  "frozen_cursor": {
+    "last_created_on": "2026-04-28T15:50:43.000Z",
+    "last_source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
+  },
+  "manifest_sha256": "fd545df7a5668c28ede4f2c721a9539fcb6f7cf755302a975052b23270b8adb1",
+  "frozen_normalization_cohort": {
+    "scope": "FROZEN_951743_STAGED_RECORDS",
+    "staged_rows_count": 950743,
+    "identical_existing_staged": 1000,
+    "distinct_staged_eligible_target": 951743,
+    "excluded_capture_errors": 7,
+    "upper_boundary_created_on": "2026-04-28T15:50:43.000Z",
+    "upper_boundary_source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057",
+    "source_system": "OceanDigital MariaDB",
+    "source_database": "thecollective_inventory",
+    "source_table": "auctions"
+  }
+}
