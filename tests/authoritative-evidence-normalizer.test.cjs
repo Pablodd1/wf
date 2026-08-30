@@ -3,7 +3,11 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { normalizeAuthoritativeRow, resolveStrictIntentFromText } = require('../tools/mariadb-live/authoritative-evidence-normalizer.cjs');
+const {
+  normalizeAuthoritativeRow,
+  resolveSourceTextEvidence,
+  resolveStrictIntentFromText
+} = require('../tools/mariadb-live/authoritative-evidence-normalizer.cjs');
 
 test('1. Provenance: throws if any required provenance field is missing (no synthesis)', () => {
   assert.throws(() => {
@@ -29,23 +33,102 @@ test('1. Provenance: throws if any required provenance field is missing (no synt
   }, /Benchmark namespace violation/);
 });
 
-test('2. Missing raw_message: routes to review and holds from publication', () => {
+test('2. Source Text Precedence: description alone', () => {
   const norm = normalizeAuthoritativeRow({
-    source_id: 'missing-msg-1',
+    source_id: 'desc-1',
     source_hash: 'h'.repeat(64),
     source_system: 'OceanDigital MariaDB',
     source_database: 'thecollective_inventory',
     source_table: 'auctions',
-    source_record_id: 'mysql_auctions_1',
-    raw_message: null
+    source_record_id: 'mysql_auctions_desc_1',
+    raw_payload: {
+      description: 'WTS: Rolex Submariner 126610LN 14000 USD',
+      title: 'Ignored Title',
+      comments: 'Ignored Comments'
+    }
   });
+  assert.equal(norm.listing_text_source, 'description');
+  assert.equal(norm.listing_text_evidence, 'WTS: Rolex Submariner 126610LN 14000 USD');
+  assert.ok(norm.listing_text_sha256);
+  assert.equal(norm.intent, 'WTS');
+  assert.equal(norm.original_price_currency, 'USD');
+  assert.equal(norm.price_usd, 14000);
+  assert.equal(norm.trading_floor_eligible, true);
+  assert.equal(norm.price_research_eligible, true);
+});
+
+test('3. Source Text Precedence: title fallback when description is blank', () => {
+  const norm = normalizeAuthoritativeRow({
+    source_id: 'title-1',
+    source_hash: 'h'.repeat(64),
+    source_system: 'OceanDigital MariaDB',
+    source_database: 'thecollective_inventory',
+    source_table: 'auctions',
+    source_record_id: 'mysql_auctions_title_1',
+    raw_payload: {
+      description: '   ',
+      title: 'WTS: Rolex 124060 11000 USD',
+      comments: 'Ignored Comments'
+    }
+  });
+  assert.equal(norm.listing_text_source, 'title');
+  assert.equal(norm.listing_text_evidence, 'WTS: Rolex 124060 11000 USD');
+  assert.ok(norm.listing_text_sha256);
+  assert.equal(norm.intent, 'WTS');
+  assert.equal(norm.original_price_currency, 'USD');
+  assert.equal(norm.price_usd, 11000);
+  assert.equal(norm.trading_floor_eligible, true);
+  assert.equal(norm.price_research_eligible, true);
+});
+
+test('4. Source Text Precedence: comments fallback when description and title are blank', () => {
+  const norm = normalizeAuthoritativeRow({
+    source_id: 'comments-1',
+    source_hash: 'h'.repeat(64),
+    source_system: 'OceanDigital MariaDB',
+    source_database: 'thecollective_inventory',
+    source_table: 'auctions',
+    source_record_id: 'mysql_auctions_comments_1',
+    raw_payload: {
+      description: null,
+      title: '',
+      comments: 'WTS: Rolex 116500LN 28000 USD'
+    }
+  });
+  assert.equal(norm.listing_text_source, 'comments');
+  assert.equal(norm.listing_text_evidence, 'WTS: Rolex 116500LN 28000 USD');
+  assert.ok(norm.listing_text_sha256);
+  assert.equal(norm.intent, 'WTS');
+  assert.equal(norm.original_price_currency, 'USD');
+  assert.equal(norm.price_usd, 28000);
+  assert.equal(norm.trading_floor_eligible, true);
+  assert.equal(norm.price_research_eligible, true);
+});
+
+test('5. Source Text Precedence: all three blank routes to MISSING_SOURCE_TEXT', () => {
+  const norm = normalizeAuthoritativeRow({
+    source_id: 'blank-1',
+    source_hash: 'h'.repeat(64),
+    source_system: 'OceanDigital MariaDB',
+    source_database: 'thecollective_inventory',
+    source_table: 'auctions',
+    source_record_id: 'mysql_auctions_blank_1',
+    raw_payload: {
+      description: '',
+      title: '   ',
+      comments: null
+    }
+  });
+  assert.equal(norm.listing_text_source, null);
+  assert.equal(norm.listing_text_evidence, null);
+  assert.equal(norm.listing_text_sha256, null);
   assert.equal(norm.trading_floor_eligible, false);
   assert.equal(norm.price_research_eligible, false);
-  assert.ok(norm.review_flags.includes('MISSING_RAW_MESSAGE'));
+  assert.ok(norm.review_flags.includes('MISSING_SOURCE_TEXT'));
   assert.equal(norm.reconciliation_category, 'REVIEW_REQUIRED');
 });
 
-test('3. Zero fallbacks to raw_payload metadata for price, currency, year, condition, intent', () => {
+test('6. Zero fallbacks to raw_payload metadata for price, currency, year, condition, intent', () => {
   const row = {
     source_id: 'no-fallbacks',
     source_hash: 'h'.repeat(64),
@@ -54,8 +137,8 @@ test('3. Zero fallbacks to raw_payload metadata for price, currency, year, condi
     source_table: 'auctions',
     source_record_id: 'mysql_auctions_no_fallbacks',
     source_created_on: '2026-01-01T00:00:00.000Z',
-    raw_message: 'Rolex Daytona 116500LN', // no price, no currency, no year, no condition, no intent keywords
     raw_payload: {
+      title: 'Rolex Daytona 116500LN', // no price, no currency, no year, no condition, no intent keywords
       type: 'sale',
       price: '28000',
       currency: 'USD',
@@ -75,7 +158,7 @@ test('3. Zero fallbacks to raw_payload metadata for price, currency, year, condi
   assert.equal(norm.price_research_eligible, false);
 });
 
-test('4. DigitalOcean image URL rule: unreachable URL returns image_url=null and IMAGE_KEY_PRESERVED_URL_UNVERIFIED', () => {
+test('7. DigitalOcean image URL rule: unreachable URL returns image_url=null and IMAGE_KEY_PRESERVED_URL_UNVERIFIED', () => {
   const row = {
     source_id: 'img-1',
     source_hash: 'h'.repeat(64),
@@ -83,8 +166,8 @@ test('4. DigitalOcean image URL rule: unreachable URL returns image_url=null and
     source_database: 'thecollective_inventory',
     source_table: 'auctions',
     source_record_id: 'mysql_auctions_img_1',
-    raw_message: 'FS: Rolex Submariner 126610LN 14000 USD',
     raw_payload: {
+      title: 'WTS: Rolex Submariner 126610LN 14000 USD',
       front_image: '677ec3e161c64_front_image.jpg'
     }
   };
@@ -96,7 +179,7 @@ test('4. DigitalOcean image URL rule: unreachable URL returns image_url=null and
   assert.notEqual(norm.image_evidence_type, 'SOURCE_LISTING_IMAGE');
 });
 
-test('5. Unknown intent handling: held from publication and price research', () => {
+test('8. Unknown intent handling: held from publication and price research', () => {
   const row = {
     source_id: 'unk-intent',
     source_hash: 'h'.repeat(64),
@@ -104,8 +187,9 @@ test('5. Unknown intent handling: held from publication and price research', () 
     source_database: 'thecollective_inventory',
     source_table: 'auctions',
     source_record_id: 'mysql_auctions_unk',
-    raw_message: 'Rolex Submariner 126610LN 14000 USD', // no FS, WTS, WTB cues
-    raw_payload: {}
+    raw_payload: {
+      title: 'Rolex Submariner 126610LN 14000 USD' // no FS, WTS, WTB cues
+    }
   };
 
   const norm = normalizeAuthoritativeRow(row);
@@ -114,37 +198,4 @@ test('5. Unknown intent handling: held from publication and price research', () 
   assert.equal(norm.price_research_eligible, false);
   assert.ok(norm.review_flags.includes('UNKNOWN_INTENT'));
   assert.equal(norm.reconciliation_category, 'REVIEW_REQUIRED');
-});
-
-test('6. Explicit WTS, USD, USDT, HKD parsing from raw_message', () => {
-  const wtsUsd = normalizeAuthoritativeRow({
-    source_id: 'wts-usd',
-    source_hash: 'h'.repeat(64),
-    source_system: 'OceanDigital MariaDB',
-    source_database: 'thecollective_inventory',
-    source_table: 'auctions',
-    source_record_id: 'mysql_auctions_wts_usd',
-    raw_message: 'WTS: Rolex 126610LN 14000 USD'
-  });
-  assert.equal(wtsUsd.intent, 'WTS');
-  assert.equal(wtsUsd.original_price_currency, 'USD');
-  assert.equal(wtsUsd.price_usd, 14000);
-  assert.equal(wtsUsd.currency_status, 'VERIFIED_EXPLICIT_USD');
-  assert.equal(wtsUsd.trading_floor_eligible, true);
-  assert.equal(wtsUsd.price_research_eligible, true);
-
-  const wtsUsdt = normalizeAuthoritativeRow({
-    source_id: 'wts-usdt',
-    source_hash: 'h'.repeat(64),
-    source_system: 'OceanDigital MariaDB',
-    source_database: 'thecollective_inventory',
-    source_table: 'auctions',
-    source_record_id: 'mysql_auctions_wts_usdt',
-    raw_message: 'For sale Rolex 126610LN 14,000 USDT'
-  });
-  assert.equal(wtsUsdt.intent, 'WTS');
-  assert.equal(wtsUsdt.original_price_currency, 'USDT');
-  assert.equal(wtsUsdt.price_usd, null, 'USDT must not receive USD parity');
-  assert.equal(wtsUsdt.currency_status, 'VERIFIED_EXPLICIT_USDT_HELD_FOR_FX');
-  assert.equal(wtsUsdt.price_research_eligible, false);
 });

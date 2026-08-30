@@ -19,6 +19,16 @@ function sha256File(filePath) {
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
+function redactSeller(name) {
+  if (!name) return null;
+  return '[REDACTED_SELLER_HANDLE:' + sha256(name) + ']';
+}
+
+function redactObjectKey(key) {
+  if (!key) return null;
+  return '[REDACTED_IMAGE_KEY:' + sha256(key) + ']';
+}
+
 async function testImageReachabilitySample(imageKeys = [], sampleSize = 15) {
   const uniqueKeys = [...new Set(imageKeys.filter(Boolean))];
   const sample = uniqueKeys.slice(0, sampleSize);
@@ -29,7 +39,7 @@ async function testImageReachabilitySample(imageKeys = [], sampleSize = 15) {
     try {
       const res = await fetch(url, { method: 'HEAD' });
       results.push({
-        image_key: key,
+        image_key: redactObjectKey(key),
         image_url: url,
         http_status: res.status,
         content_type: res.headers.get('content-type'),
@@ -38,7 +48,7 @@ async function testImageReachabilitySample(imageKeys = [], sampleSize = 15) {
       });
     } catch (err) {
       results.push({
-        image_key: key,
+        image_key: redactObjectKey(key),
         image_url: url,
         error: err.message,
         reachable: false
@@ -136,19 +146,12 @@ async function runAuthoritativeCanary(env = process.env) {
   const distinctSourceIds = new Set(stagedRows.map(r => r.source_id));
   const provenanceKeys = new Set(stagedRows.map(r => r.source_system + ':' + r.source_database + ':' + r.source_table + ':' + r.source_id));
   
-  const rawMessagePreservedCount = stagedRows.filter(r => (
-    (typeof r.raw_message === 'string' && r.raw_message.trim().length > 0) ||
-    (typeof r.raw_payload?.description === 'string' && r.raw_payload.description.trim().length > 0)
-  )).length;
-
   const computedInvariants = {
     exact_10000_rows: stagedRows.length === TARGET_ROW_COUNT,
     exact_10000_distinct_ids: distinctSourceIds.size === TARGET_ROW_COUNT,
     zero_benchmark_namespaces: stagedRows.every(r => r.source_system === 'OceanDigital MariaDB' && r.source_database === 'thecollective_inventory' && r.source_table === 'auctions'),
     zero_duplicate_provenance_keys: provenanceKeys.size === TARGET_ROW_COUNT,
     zero_provenance_synthesized: stagedRows.every(r => Boolean(r.source_id && r.source_hash && r.source_system && r.source_database && r.source_table && r.source_record_id)),
-    raw_message_preserved_count: rawMessagePreservedCount,
-    raw_message_preserved_rate: ((rawMessagePreservedCount / TARGET_ROW_COUNT) * 100).toFixed(2) + '%',
     frozen_cursor_boundary_asserted: stagedRows.every(r => (
       r.source_created_on < FROZEN_UPPER_CURSOR.created_on ||
       (r.source_created_on === FROZEN_UPPER_CURSOR.created_on && r.source_id <= FROZEN_UPPER_CURSOR.source_id)
@@ -168,7 +171,7 @@ async function runAuthoritativeCanary(env = process.env) {
   // ============================================================
   // DETERMINISTIC EVIDENCE-FIRST NORMALIZATION
   // ============================================================
-  console.log('[Authoritative-10k-Canary] Normalizing rows using exclusive raw_message parser...');
+  console.log('[Authoritative-10k-Canary] Normalizing rows using precedence-based source text parser...');
   const startTime = Date.now();
 
   let normalizedProposals = 0;
@@ -186,6 +189,11 @@ async function runAuthoritativeCanary(env = process.env) {
   let unknownIntentCount = 0;
   let multiOfferBundleCount = 0;
 
+  let resolvedFromDescCount = 0;
+  let resolvedFromTitleCount = 0;
+  let resolvedFromCommentsCount = 0;
+  let missingSourceTextCount = 0;
+
   const proposals = [];
   const redactedProposals = [];
   const reviewFlagsBreakdown = {};
@@ -199,10 +207,17 @@ async function runAuthoritativeCanary(env = process.env) {
       const contract = normalizeAuthoritativeRow(row);
       proposals.push(contract);
 
-      // Create strictly redacted copy for committed artifacts (mask raw message & phone)
+      if (contract.listing_text_source === 'description') resolvedFromDescCount++;
+      else if (contract.listing_text_source === 'title') resolvedFromTitleCount++;
+      else if (contract.listing_text_source === 'comments') resolvedFromCommentsCount++;
+      else missingSourceTextCount++;
+
+      // Create strictly redacted copy for committed artifacts (mask seller name, contact, image key, raw text)
       const redacted = { ...contract };
-      redacted.raw_message_evidence = '[REDACTED_EVIDENCE_SHA256:' + contract.raw_message_sha256 + ']';
+      redacted.seller_name = redactSeller(contract.seller_name);
       redacted.seller_contact = null; // Strictly private
+      redacted.image_key = redactObjectKey(contract.image_key);
+      redacted.listing_text_evidence = contract.listing_text_sha256 ? ('[REDACTED_EVIDENCE_SHA256:' + contract.listing_text_sha256 + ']') : null;
       redactedProposals.push(redacted);
 
       if (contract.image_key) {
@@ -255,7 +270,7 @@ async function runAuthoritativeCanary(env = process.env) {
   const imageReachabilityReport = await testImageReachabilitySample(allImageKeys, 15);
   fs.writeFileSync(path.join(OUTPUT_DIR, 'image-reachability-sample.json'), JSON.stringify(imageReachabilityReport, null, 2), 'utf-8');
 
-  // Write redacted proposals.jsonl (Zero raw messages or contacts committed)
+  // Write redacted proposals.jsonl (Zero raw messages, seller names, contacts, or raw object keys committed)
   const jsonlLines = redactedProposals.map(p => JSON.stringify(p)).join('\n');
   fs.writeFileSync(path.join(OUTPUT_DIR, 'proposals.jsonl'), jsonlLines, 'utf-8');
 
@@ -264,7 +279,7 @@ async function runAuthoritativeCanary(env = process.env) {
     'source_id', 'source_cursor', 'brand', 'brand_source_evidence', 'reference', 'reference_source_evidence',
     'year', 'condition', 'intent', 'original_price_amount', 'original_price_currency',
     'price_usd', 'currency_status', 'seller_name', 'seller_contact', 'image_key', 'image_evidence_type',
-    'trading_floor_eligible', 'price_research_eligible', 'is_bundle', 'raw_message_sha256'
+    'trading_floor_eligible', 'price_research_eligible', 'is_bundle', 'listing_text_source', 'listing_text_sha256'
   ];
   const csvRows = [csvHeaders.join(',')];
   for (const p of redactedProposals) {
@@ -289,7 +304,8 @@ async function runAuthoritativeCanary(env = process.env) {
       p.trading_floor_eligible ? 'true' : 'false',
       p.price_research_eligible ? 'true' : 'false',
       p.is_bundle ? 'true' : 'false',
-      JSON.stringify(p.raw_message_sha256 || '')
+      JSON.stringify(p.listing_text_source || ''),
+      JSON.stringify(p.listing_text_sha256 || '')
     ];
     csvRows.push(vals.join(','));
   }
@@ -297,16 +313,30 @@ async function runAuthoritativeCanary(env = process.env) {
 
   // Write summary.json with computed assertions
   const summary = {
-    contract: 'wf-authoritative-normalization-canary-v4',
+    contract: 'wf-authoritative-normalization-canary-v5',
     run_key: 'authoritative-10k-canary-' + Date.now(),
     timestamp: new Date().toISOString(),
-    parser_version: 'authoritative-normalizer-v7-exclusive-raw-message',
+    parser_version: 'authoritative-normalizer-v8-precedence-text-evidence',
     frozen_upper_cursor: FROZEN_UPPER_CURSOR,
+    source_text_precedence_census: {
+      resolved_from_description_count: resolvedFromDescCount,
+      resolved_from_description_pct: ((resolvedFromDescCount / TARGET_ROW_COUNT) * 100).toFixed(2) + '%',
+      resolved_from_title_count: resolvedFromTitleCount,
+      resolved_from_title_pct: ((resolvedFromTitleCount / TARGET_ROW_COUNT) * 100).toFixed(2) + '%',
+      resolved_from_comments_count: resolvedFromCommentsCount,
+      resolved_from_comments_pct: ((resolvedFromCommentsCount / TARGET_ROW_COUNT) * 100).toFixed(2) + '%',
+      total_source_text_coverage_count: (resolvedFromDescCount + resolvedFromTitleCount + resolvedFromCommentsCount),
+      total_source_text_coverage_pct: (((resolvedFromDescCount + resolvedFromTitleCount + resolvedFromCommentsCount) / TARGET_ROW_COUNT) * 100).toFixed(2) + '%',
+      missing_source_text_count: missingSourceTextCount,
+      missing_source_text_pct: ((missingSourceTextCount / TARGET_ROW_COUNT) * 100).toFixed(2) + '%'
+    },
     computed_invariant_assertions: {
       ...computedInvariants,
       image_reachability_audit_rate: imageReachabilityReport.reachability_pct,
       image_evidence_type_rule_applied: redactedProposals.every(p => p.image_url === null && p.image_evidence_type !== 'SOURCE_LISTING_IMAGE'),
       seller_contact_privacy_asserted: redactedProposals.every(p => p.seller_contact === null),
+      seller_name_redacted_asserted: redactedProposals.every(p => p.seller_name === null || p.seller_name.startsWith('[REDACTED_SELLER_HANDLE:')),
+      image_key_redacted_asserted: redactedProposals.every(p => p.image_key === null || p.image_key.startsWith('[REDACTED_IMAGE_KEY:')),
       unknown_intent_held_asserted: redactedProposals.filter(p => p.intent === null).every(p => !p.trading_floor_eligible && !p.price_research_eligible)
     },
     counts: {
@@ -349,10 +379,10 @@ async function runAuthoritativeCanary(env = process.env) {
 
   // Write authoritative manifest with exact artifact checksums
   const manifest = {
-    contract: 'wf-authoritative-10k-canary-manifest-v4',
+    contract: 'wf-authoritative-10k-canary-manifest-v5',
     timestamp: new Date().toISOString(),
-    classification: 'CANARY_EVIDENCE_REPRODUCIBLE_REDACTED',
-    disclaimer: 'Committed artifacts contain redacted message hashes only. Raw seller messages and contacts are strictly excluded.',
+    classification: 'CANARY_EVIDENCE_REPRODUCIBLE_FULLY_REDACTED',
+    disclaimer: 'Committed artifacts contain redacted evidence hashes, redacted seller handles, and redacted image keys only. Raw seller text, handles, phones, and media keys are strictly excluded.',
     summary,
     artifact_checksums: {
       'proposals.jsonl': {
@@ -378,8 +408,10 @@ async function runAuthoritativeCanary(env = process.env) {
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
 
   console.log('============================================================');
-  console.log('AUTHORITATIVE 10,000-ROW CANARY RE-RUN COMPLETE:');
+  console.log('AUTHORITATIVE 10,000-ROW CANARY RE-RUN (V5) COMPLETE:');
   console.log('  Total Inputs:           ', summary.counts.total_inputs);
+  console.log('  Source Text Coverage:   ', summary.source_text_precedence_census.total_source_text_coverage_count, '(' + summary.source_text_precedence_census.total_source_text_coverage_pct + ')');
+  console.log('  - From Title:           ', summary.source_text_precedence_census.resolved_from_title_count, '(' + summary.source_text_precedence_census.resolved_from_title_pct + ')');
   console.log('  Normalized Proposals:   ', summary.counts.normalized_proposals);
   console.log('  Review Required:        ', summary.counts.review_required);
   console.log('  Normalization Errors:   ', summary.counts.normalization_errors);

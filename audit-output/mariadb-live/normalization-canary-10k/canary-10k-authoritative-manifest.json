@@ -1,16 +1,28 @@
 {
-  "contract": "wf-authoritative-10k-canary-manifest-v4",
-  "timestamp": "2026-08-30T19:53:18.331Z",
-  "classification": "CANARY_EVIDENCE_REPRODUCIBLE_REDACTED",
-  "disclaimer": "Committed artifacts contain redacted message hashes only. Raw seller messages and contacts are strictly excluded.",
+  "contract": "wf-authoritative-10k-canary-manifest-v5",
+  "timestamp": "2026-08-30T20:01:00.600Z",
+  "classification": "CANARY_EVIDENCE_REPRODUCIBLE_FULLY_REDACTED",
+  "disclaimer": "Committed artifacts contain redacted evidence hashes, redacted seller handles, and redacted image keys only. Raw seller text, handles, phones, and media keys are strictly excluded.",
   "summary": {
-    "contract": "wf-authoritative-normalization-canary-v4",
-    "run_key": "authoritative-10k-canary-1788119598326",
-    "timestamp": "2026-08-30T19:53:18.326Z",
-    "parser_version": "authoritative-normalizer-v7-exclusive-raw-message",
+    "contract": "wf-authoritative-normalization-canary-v5",
+    "run_key": "authoritative-10k-canary-1788120060593",
+    "timestamp": "2026-08-30T20:01:00.594Z",
+    "parser_version": "authoritative-normalizer-v8-precedence-text-evidence",
     "frozen_upper_cursor": {
       "created_on": "2026-04-28T15:50:43.000Z",
       "source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
+    },
+    "source_text_precedence_census": {
+      "resolved_from_description_count": 0,
+      "resolved_from_description_pct": "0.00%",
+      "resolved_from_title_count": 10000,
+      "resolved_from_title_pct": "100.00%",
+      "resolved_from_comments_count": 0,
+      "resolved_from_comments_pct": "0.00%",
+      "total_source_text_coverage_count": 10000,
+      "total_source_text_coverage_pct": "100.00%",
+      "missing_source_text_count": 0,
+      "missing_source_text_pct": "0.00%"
     },
     "computed_invariant_assertions": {
       "exact_10000_rows": true,
@@ -18,26 +30,26 @@
       "zero_benchmark_namespaces": true,
       "zero_duplicate_provenance_keys": true,
       "zero_provenance_synthesized": true,
-      "raw_message_preserved_count": 1000,
-      "raw_message_preserved_rate": "10.00%",
       "frozen_cursor_boundary_asserted": true,
       "image_reachability_audit_rate": "0.0%",
       "image_evidence_type_rule_applied": true,
       "seller_contact_privacy_asserted": true,
+      "seller_name_redacted_asserted": true,
+      "image_key_redacted_asserted": true,
       "unknown_intent_held_asserted": true
     },
     "counts": {
       "total_inputs": 10000,
-      "normalized_proposals": 0,
-      "review_required": 10000,
+      "normalized_proposals": 2,
+      "review_required": 9998,
       "normalization_errors": 0,
       "exact_reconciliation": true
     },
     "eligibility": {
-      "trading_floor_eligible_count": 144,
-      "trading_floor_eligible_pct": "1.44%",
-      "price_research_eligible_count": 0,
-      "price_research_eligible_pct": "0.00%"
+      "trading_floor_eligible_count": 2002,
+      "trading_floor_eligible_pct": "20.02%",
+      "price_research_eligible_count": 2,
+      "price_research_eligible_pct": "0.02%"
     },
     "coverage": {
       "source_image_key_present_count": 10000,
@@ -49,7 +61,7 @@
         "reachability_pct": "0.0%",
         "sample_results": [
           {
-            "image_key": "677ec3e161c64_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:8e3b28354cdc0368bbf492903de32d6f0fb8091df528facc98c49e3eaca08e00]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e161c64_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -57,7 +69,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3e21285f_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:fbc3bc995645d73b791f84058b6bba156c67f8c73050cd1f556554950756fc97]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e21285f_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -65,7 +77,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3e2d48ba_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:30795244113faf9ea2212552203052a613a2f08fd817922d3d7b119e0cb617b5]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e2d48ba_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -73,7 +85,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3e373077_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:2837feaad0c90952ec0e0e658f8a4da10269aeb502b3c8210c680d7151905af0]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e373077_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -81,7 +93,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3e43b620_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:871d47e250939d8d8cb0e022e1d9b2c98272de958618624e1f61f1839af0df34]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e43b620_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -89,7 +101,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3e5153eb_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:33a710196172963d8d893630c3d26527e3c055d676d2833f73d63fa39788610c]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e5153eb_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -97,7 +109,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3e61528b_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:430e8c27d4cd0430a5789270dc8b2c3b992a469a0d637d908caf31bc5c7a57ec]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e61528b_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -105,7 +117,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3e6f264a_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:c4a8db48c7bec0f282fc127de4f7fca302609b1014ac4eeaf360f1bbdf7fea86]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e6f264a_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -113,7 +125,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3e7dcd6d_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:828cd92e7ae1b16d0724941e72650aee52dc2f581e2119e3ccb1b2705c02ab4f]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e7dcd6d_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -121,7 +133,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3e8cd696_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:810d7ad385b59739d32258add96037b45cf4c1c93a7d5f2122ad0a7d3610f7ce]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e8cd696_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -129,7 +141,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3e9a3c68_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:661039314cd4b644899fade7052653634cb55d2d5be13fdb03c3669681170b00]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3e9a3c68_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -137,7 +149,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3ea8490a_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:32c3b534afdf103a4c12d57d74e52a4c506b8adfbbe576c414685ac06e8968e5]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3ea8490a_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -145,7 +157,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec3eb769db_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:6676e78acc95a615f6e06552427ffdc26afbf5f83b3f862a2071b28531eee9ca]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec3eb769db_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -153,7 +165,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec6426d768_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:356f65126af355e11c739a3fc02cb364fdc81f8f3b8f5b7134bf9e8254925757]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec6426d768_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -161,7 +173,7 @@
             "reachable": false
           },
           {
-            "image_key": "677ec6435d2a2_front_image.jpg",
+            "image_key": "[REDACTED_IMAGE_KEY:623d96bdfdfb8d55424d538f2727de200020a90cec287b5d43cf34d08dd00bcb]",
             "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/677ec6435d2a2_front_image.jpg",
             "http_status": 404,
             "content_type": "application/xml",
@@ -172,58 +184,64 @@
       },
       "seller_contact_exposed_count": 0,
       "seller_contact_exposed_pct": "0.00% (strictly private)",
-      "explicit_usd_price_count": 9,
-      "explicit_usd_price_pct": "0.09%",
-      "explicit_usdt_held_for_fx_count": 29,
-      "explicit_hkd_held_for_fx_count": 2,
-      "bare_dollar_held_count": 531,
-      "unknown_intent_held_count": 9856,
-      "multi_offer_bundle_count": 5
+      "explicit_usd_price_count": 136,
+      "explicit_usd_price_pct": "1.36%",
+      "explicit_usdt_held_for_fx_count": 1082,
+      "explicit_hkd_held_for_fx_count": 333,
+      "bare_dollar_held_count": 3898,
+      "unknown_intent_held_count": 7953,
+      "multi_offer_bundle_count": 140
     },
     "performance": {
-      "duration_ms": 143,
-      "throughput_rows_per_sec": 69930.07
+      "duration_ms": 1537,
+      "throughput_rows_per_sec": 6506.18
     },
     "review_flags_breakdown": {
-      "UNKNOWN_INTENT": 9856,
-      "MISSING_PRICE_OR_CURRENCY": 9429,
-      "AMBIGUOUS_BARE_DOLLAR_HELD": 531,
-      "USDT_HELD_FOR_FX_PROOF": 29,
-      "HELD_BUNDLE_REVIEW": 5,
-      "HKD_HELD_FOR_FX_PROOF": 2,
-      "MISSING_RAW_MESSAGE": 9000
+      "UNKNOWN_INTENT": 7953,
+      "MISSING_PRICE_OR_CURRENCY": 4551,
+      "AMBIGUOUS_BARE_DOLLAR_HELD": 3898,
+      "USDT_HELD_FOR_FX_PROOF": 1082,
+      "HELD_BUNDLE_REVIEW": 140,
+      "HKD_HELD_FOR_FX_PROOF": 333,
+      "INCOMPLETE_IDENTITY": 1
     },
     "exclusion_reasons_breakdown": {
-      "INTENT_UNKNOWN_HELD_FROM_PUBLICATION": 9856,
-      "INTENT_NOT_WTS": 135,
-      "BUNDLE_PARENT_UNSPLIT": 5,
-      "RAW_MESSAGE_ABSENT": 9000
+      "INTENT_UNKNOWN_HELD_FROM_PUBLICATION": 7953,
+      "INTENT_NOT_WTS": 1838,
+      "BUNDLE_PARENT_UNSPLIT": 140,
+      "IDENTITY_UNRECOGNIZED": 1
     },
     "currency_status_breakdown": {
-      "MISSING_PRICE": 9416,
-      "AMBIGUOUS_BARE_DOLLAR_HELD": 531,
-      "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 29,
-      "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX": 2,
-      "VERIFIED_EXPLICIT_USD": 9,
-      "VERIFIED_EXPLICIT_EUR": 13
+      "MISSING_PRICE": 4411,
+      "AMBIGUOUS_BARE_DOLLAR_HELD": 3898,
+      "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 1082,
+      "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX": 333,
+      "VERIFIED_EXPLICIT_USD": 136,
+      "VERIFIED_EXPLICIT_EUR": 90,
+      "VERIFIED_EXPLICIT_SAR": 2,
+      "VERIFIED_EXPLICIT_GBP": 7,
+      "VERIFIED_EXPLICIT_AED": 36,
+      "VERIFIED_EXPLICIT_MYR": 1,
+      "VERIFIED_EXPLICIT_AUD": 3,
+      "VERIFIED_EXPLICIT_CNY": 1
     }
   },
   "artifact_checksums": {
     "proposals.jsonl": {
-      "sha256": "019df72bf585474036785b5a71fca1ce9cf03fcecc9ecd66511811ff205de9d1",
-      "size_bytes": 18754696
+      "sha256": "971786b741e5af5d5f2ad8b6c71fdbc90b07cbfbab09415b164a661523749df8",
+      "size_bytes": 20290476
     },
     "proposals.csv": {
-      "sha256": "18a3793db4a6fda5e8421e256b457b0c169fb56db66624b0ca8087e322a43b64",
-      "size_bytes": 3382713
+      "sha256": "00eb5a2bfdef75a76ba4755d9aa3c5177aefafc8c5fd57fe434865418200770f",
+      "size_bytes": 5058608
     },
     "summary.json": {
-      "sha256": "65cef370b730aaac9dbace4e45b25de90df21f7cbfe4b48feb74c05cb1195ef5",
-      "size_bytes": 7790
+      "sha256": "af99927ea8967ddc0a584e05e2008d2a0fa45a66107f04964d29137f137432c5",
+      "size_bytes": 9314
     },
     "image-reachability-sample.json": {
-      "sha256": "3479a992dd7b70f5faa1b66eaedb9cf4abb03583923acde2bbd5c68786d43554",
-      "size_bytes": 4705
+      "sha256": "a20eca71d50c0c19c806328f981fab8b5828a5995c5a648ddf64c0d7e1703a1e",
+      "size_bytes": 5545
     }
   }
 }

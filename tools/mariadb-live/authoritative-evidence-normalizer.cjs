@@ -17,40 +17,78 @@ const { normalizeWatchCondition, normalizeWatchDial } = require('../../api/_lib/
 const DO_SPACES_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings';
 
 function sha256(content) {
-  return crypto.createHash('sha256').update(content || '').digest('hex');
+  if (content === null || content === undefined) return null;
+  return crypto.createHash('sha256').update(String(content)).digest('hex');
 }
 
 /**
- * Resolves intent EXCLUSIVELY from raw_message text evidence.
+ * Resolves source text evidence using strict precedence:
+ * description -> title -> comments
+ * Returns { text: string | null, source: 'description' | 'title' | 'comments' | null }
+ */
+function resolveSourceTextEvidence(stagedRow) {
+  const raw = (stagedRow && stagedRow.raw_payload) ? stagedRow.raw_payload : {};
+
+  // 1. Check description
+  const desc = typeof raw.description === 'string' ? raw.description.trim() : '';
+  if (desc.length > 0) {
+    return { text: desc, source: 'description' };
+  }
+
+  // 2. Check title
+  const title = typeof raw.title === 'string' ? raw.title.trim() : '';
+  if (title.length > 0) {
+    return { text: title, source: 'title' };
+  }
+
+  // 3. Check comments
+  const comments = typeof raw.comments === 'string' ? raw.comments.trim() : '';
+  if (comments.length > 0) {
+    return { text: comments, source: 'comments' };
+  }
+
+  // Fallback: check stagedRow.raw_message if available
+  if (typeof stagedRow.raw_message === 'string' && stagedRow.raw_message.trim().length > 0) {
+    return { text: stagedRow.raw_message.trim(), source: 'raw_message' };
+  }
+
+  return { text: null, source: null };
+}
+
+/**
+ * Resolves intent EXCLUSIVELY from source text evidence.
  * Zero fallback to raw_payload.type.
  * Returns 'WTS' | 'WTB' | null (if unknown/ambiguous)
  */
-function resolveStrictIntentFromText(rawMessageText) {
-  const text = String(rawMessageText || '').trim();
-  if (!text) return null;
-  const explicit = explicitIntent(text);
+function resolveStrictIntentFromText(text) {
+  if (!text || typeof text !== 'string') return null;
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const explicit = explicitIntent(trimmed);
   if (explicit === 'WTB' || explicit === 'WTS') return explicit;
   return null;
 }
 
 /**
- * Extracts 4-digit year EXCLUSIVELY from raw_message text evidence.
+ * Extracts 4-digit year EXCLUSIVELY from source text evidence.
  * Zero fallback to raw_payload.year.
  */
 function extractYearFromText(text) {
-  const match = String(text || '').match(/\b(19[5-9]\d|20[0-2]\d)\b/);
+  if (!text || typeof text !== 'string') return null;
+  const match = text.match(/\b(19[5-9]\d|20[0-2]\d)\b/);
   return match ? Number(match[1]) : null;
 }
 
 /**
  * Normalizes an authoritative row strictly adhering to CTO invariants:
  * 1. Provenance: strictly requires source_id, source_hash, source_system, source_database, source_table, source_record_id.
- * 2. Raw message: price, currency, year, condition, and intent come EXCLUSIVELY from raw_message text.
- * 3. Zero fallbacks to raw.type, raw.price, raw.currency, raw.year, raw.condition.
- * 4. Explicit provenance labeling for identity metadata.
- * 5. DigitalOcean image URL set to null until reachable; evidence type set to IMAGE_KEY_PRESERVED_URL_UNVERIFIED (never SOURCE_LISTING_IMAGE).
- * 6. Unknown intent held from publication.
- * 7. Missing raw_message routed to review (fail closed for publication).
+ * 2. Deterministic derived field: listing_text_evidence, listing_text_source, listing_text_sha256 (precedence: description -> title -> comments).
+ * 3. Price, currency, year, condition, and intent come EXCLUSIVELY from listing_text_evidence.
+ * 4. Zero fallbacks to raw.type, raw.price, raw.currency, raw.year, raw.condition.
+ * 5. Identity metadata labeled explicitly by provenance.
+ * 6. DigitalOcean image URL set to null until reachable; evidence type set to IMAGE_KEY_PRESERVED_URL_UNVERIFIED.
+ * 7. Unknown intent held from publication.
+ * 8. Missing source text routed to MISSING_SOURCE_TEXT.
  */
 function normalizeAuthoritativeRow(stagedRow, options = {}) {
   // 1. Strict Provenance Invariant: Require existing fields, never synthesize
@@ -78,23 +116,22 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
 
   const raw = stagedRow.raw_payload || {};
 
-  // 2. Preserved Raw Message Resolution
-  let rawMessage = typeof stagedRow.raw_message === 'string' && stagedRow.raw_message.trim()
-    ? stagedRow.raw_message.trim()
-    : (typeof raw.description === 'string' && raw.description.trim() ? raw.description.trim() : null);
-
-  const messageText = rawMessage || '';
-  const hasRawMessage = messageText.length > 0;
+  // 2. Deterministic Source Text Evidence Resolution (description -> title -> comments)
+  const resolvedEvidence = resolveSourceTextEvidence(stagedRow);
+  const listingTextEvidence = resolvedEvidence.text;
+  const listingTextSource = resolvedEvidence.source;
+  const listingTextSha256 = listingTextEvidence ? sha256(listingTextEvidence) : null;
+  const hasTextEvidence = listingTextEvidence !== null && listingTextEvidence.length > 0;
 
   // 3. Timestamps
   const postedAt = stagedRow.source_created_on || null;
   const sourceObservedAt = stagedRow.captured_at || stagedRow.source_created_on || null;
 
-  // 4. Intent Extraction: EXCLUSIVELY from raw_message
-  const intent = hasRawMessage ? resolveStrictIntentFromText(messageText) : null;
+  // 4. Intent Extraction: EXCLUSIVELY from listing_text_evidence
+  const intent = hasTextEvidence ? resolveStrictIntentFromText(listingTextEvidence) : null;
 
   // 5. Multi-Offer Segmentation & Bundle Lineage
-  const candidates = hasRawMessage ? segmentDealerMessage(messageText) : [];
+  const candidates = hasTextEvidence ? segmentDealerMessage(listingTextEvidence) : [];
   const isMultiOffer = candidates.length > 1;
   const isExplicitBundle = Number(raw.is_bundle) === 1;
   const isBundle = isExplicitBundle || isMultiOffer;
@@ -109,15 +146,15 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
 
   if (candidates.length === 1 && candidates[0].reference) {
     reference = candidates[0].reference;
-    referenceSourceEvidence = 'raw_message_candidate_reference';
-  } else if (!isBundle && hasRawMessage) {
-    reference = extractReference(messageText);
-    if (reference) referenceSourceEvidence = 'raw_message_extracted_reference';
+    referenceSourceEvidence = 'listing_text_candidate_reference';
+  } else if (!isBundle && hasTextEvidence) {
+    reference = extractReference(listingTextEvidence);
+    if (reference) referenceSourceEvidence = 'listing_text_extracted_reference';
   }
 
   if (reference) {
     brand = inferBrandFromReference(reference);
-    if (brand) brandSourceEvidence = 'raw_message_reference_inferred';
+    if (brand) brandSourceEvidence = 'listing_text_reference_inferred';
   }
 
   // Label source metadata identity separately if text lacked explicit match
@@ -134,16 +171,16 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     modelSourceEvidence = 'source_metadata_model';
   }
 
-  let dialColor = hasRawMessage ? normalizeWatchDial(null, messageText) : null;
+  let dialColor = hasTextEvidence ? normalizeWatchDial(null, listingTextEvidence) : null;
   if (dialColor) {
     const normDial = normalizeDialValue(dialColor);
     if (normDial && normDial.known) dialColor = normDial.value;
   }
-  const condition = hasRawMessage ? normalizeWatchCondition(null, messageText) : null;
-  const year = hasRawMessage ? extractYearFromText(messageText) : null;
+  const condition = hasTextEvidence ? normalizeWatchCondition(null, listingTextEvidence) : null;
+  const year = hasTextEvidence ? extractYearFromText(listingTextEvidence) : null;
 
-  // 7. Price & Currency: EXCLUSIVELY from raw_message text
-  const priceCandidates = hasRawMessage ? extractPriceCandidates(messageText) : [];
+  // 7. Price & Currency: EXCLUSIVELY from listing_text_evidence
+  const priceCandidates = hasTextEvidence ? extractPriceCandidates(listingTextEvidence) : [];
   const autoApprovedPrices = priceCandidates.filter(c => c.evidence_status === 'AUTO_APPROVED' && !c.review_required);
   const primaryPrice = autoApprovedPrices[0] || null;
 
@@ -159,7 +196,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   if (primaryPrice) {
     originalPriceAmount = primaryPrice.amount_original;
     originalPriceCurrency = primaryPrice.currency_original;
-    currencyEvidence = primaryPrice.currency_evidence || 'explicit_raw_message_token';
+    currencyEvidence = primaryPrice.currency_evidence || 'explicit_listing_text_token';
 
     if (originalPriceCurrency === 'USD') {
       priceUsd = primaryPrice.amount_usd || originalPriceAmount;
@@ -221,9 +258,9 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   const reviewFlags = [];
   const exclusionReasons = [];
 
-  if (!hasRawMessage) {
-    reviewFlags.push('MISSING_RAW_MESSAGE');
-    exclusionReasons.push('RAW_MESSAGE_ABSENT');
+  if (!hasTextEvidence) {
+    reviewFlags.push('MISSING_SOURCE_TEXT');
+    exclusionReasons.push('SOURCE_TEXT_ABSENT');
   }
 
   // Unknown Intent Rule: Unknown intent must be held from WTS/WTB publication
@@ -233,7 +270,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   }
 
   let tradingFloorEligible = false;
-  if (!hasRawMessage) {
+  if (!hasTextEvidence) {
     tradingFloorEligible = false;
   } else if (isBundle) {
     reviewFlags.push('HELD_BUNDLE_REVIEW');
@@ -277,7 +314,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     reconciliationCategory = 'REVIEW_REQUIRED';
   }
 
-  const parserVersion = 'authoritative-normalizer-v7-exclusive-raw-message';
+  const parserVersion = 'authoritative-normalizer-v8-precedence-text-evidence';
 
   return {
     source_id: sourceId,
@@ -289,6 +326,9 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     source_record_id: sourceRecordId,
     source_observed_at: sourceObservedAt,
     posted_at: postedAt,
+    listing_text_evidence: listingTextEvidence,
+    listing_text_source: listingTextSource,
+    listing_text_sha256: listingTextSha256,
     brand: brand || null,
     brand_source_evidence: brandSourceEvidence,
     model: model || null,
@@ -314,7 +354,6 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     seller_rating: sellerRating,
     seller_rating_status: sellerRatingStatus,
     seller_review_evidence: sellerReviewEvidence,
-    raw_message_sha256: sha256(messageText),
     location: location,
     image_key: imageKey,
     image_url: imageUrl,
@@ -333,6 +372,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
 
 module.exports = {
   normalizeAuthoritativeRow,
+  resolveSourceTextEvidence,
   resolveStrictIntentFromText,
   extractYearFromText,
   sha256,
