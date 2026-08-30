@@ -37,6 +37,8 @@ CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_normalized_proposals (
   source_record_id TEXT NOT NULL,
   source_observed_at TIMESTAMPTZ NOT NULL,
   posted_at TIMESTAMPTZ,
+  listing_text_source TEXT,
+  listing_text_sha256 TEXT,
   brand TEXT,
   model TEXT,
   reference TEXT,
@@ -57,6 +59,7 @@ CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_normalized_proposals (
   contact_publication_approved BOOLEAN NOT NULL DEFAULT FALSE,
   seller_activity_count INT,
   seller_rating NUMERIC,
+  seller_rating_status TEXT NOT NULL DEFAULT 'UNRATED_SELLER',
   seller_review_evidence TEXT,
   raw_message TEXT,
   location TEXT,
@@ -66,7 +69,9 @@ CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_normalized_proposals (
   bundle_parent_id TEXT,
   bundle_child_lineage JSONB,
   is_bundle BOOLEAN NOT NULL DEFAULT FALSE,
+  trading_floor_status TEXT NOT NULL DEFAULT 'HELD_UNKNOWN',
   trading_floor_eligible BOOLEAN NOT NULL DEFAULT FALSE,
+  price_research_status TEXT NOT NULL DEFAULT 'INELIGIBLE_OTHER',
   price_research_eligible BOOLEAN NOT NULL DEFAULT FALSE,
   review_flags TEXT[] NOT NULL DEFAULT '{}',
   exclusion_reasons TEXT[] NOT NULL DEFAULT '{}',
@@ -80,6 +85,10 @@ CREATE INDEX IF NOT EXISTS idx_mariadb_norm_tf_eligible
   ON wf_canonical_staging.mariadb_normalized_proposals (trading_floor_eligible);
 CREATE INDEX IF NOT EXISTS idx_mariadb_norm_pr_eligible 
   ON wf_canonical_staging.mariadb_normalized_proposals (price_research_eligible);
+CREATE INDEX IF NOT EXISTS idx_mariadb_norm_tf_status 
+  ON wf_canonical_staging.mariadb_normalized_proposals (trading_floor_status);
+CREATE INDEX IF NOT EXISTS idx_mariadb_norm_pr_status 
+  ON wf_canonical_staging.mariadb_normalized_proposals (price_research_status);
 
 -- 3. Staged Rows Keyset Batch Read Procedure with Strict Namespace & Boundary Enforcement
 CREATE OR REPLACE FUNCTION public.get_mariadb_private_staged_auctions_batch(
@@ -96,7 +105,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = wf_canonical_staging, pg_catalog
-AS 
+AS $
 DECLARE
   v_res JSONB;
 BEGIN
@@ -142,7 +151,7 @@ BEGIN
 
   RETURN COALESCE(v_res, '[]'::jsonb);
 END;
-;
+$;
 
 REVOKE ALL ON FUNCTION public.get_mariadb_private_staged_auctions_batch FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_mariadb_private_staged_auctions_batch TO service_role;
@@ -155,21 +164,22 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = wf_canonical_staging, pg_catalog
-AS 
+AS $
 DECLARE
   v_inserted INT := 0;
 BEGIN
   INSERT INTO wf_canonical_staging.mariadb_normalized_proposals (
     source_id, source_hash, source_system, source_database, source_table,
-    source_record_id, source_observed_at, posted_at, brand, model,
-    reference, dial_color, year, condition, intent,
+    source_record_id, source_observed_at, posted_at, listing_text_source, listing_text_sha256,
+    brand, model, reference, dial_color, year, condition, intent,
     original_price_amount, original_price_currency, currency_evidence,
     price_usd, fx_rate, fx_source, fx_date, currency_status,
     seller_name, seller_contact, contact_publication_approved,
-    seller_activity_count, seller_rating, seller_review_evidence,
+    seller_activity_count, seller_rating, seller_rating_status, seller_review_evidence,
     raw_message, location, image_key, image_url, image_evidence_type,
     bundle_parent_id, bundle_child_lineage, is_bundle,
-    trading_floor_eligible, price_research_eligible,
+    trading_floor_status, trading_floor_eligible,
+    price_research_status, price_research_eligible,
     review_flags, exclusion_reasons, parser_version
   )
   SELECT
@@ -181,6 +191,8 @@ BEGIN
     (elem->>'source_record_id')::TEXT,
     (elem->>'source_observed_at')::TIMESTAMPTZ,
     (elem->>'posted_at')::TIMESTAMPTZ,
+    (elem->>'listing_text_source')::TEXT,
+    (elem->>'listing_text_sha256')::TEXT,
     (elem->>'brand')::TEXT,
     (elem->>'model')::TEXT,
     (elem->>'reference')::TEXT,
@@ -201,6 +213,7 @@ BEGIN
     COALESCE((elem->>'contact_publication_approved')::BOOLEAN, FALSE),
     (elem->>'seller_activity_count')::INT,
     (elem->>'seller_rating')::NUMERIC,
+    COALESCE((elem->>'seller_rating_status')::TEXT, 'UNRATED_SELLER'),
     (elem->>'seller_review_evidence')::TEXT,
     (elem->>'raw_message')::TEXT,
     (elem->>'location')::TEXT,
@@ -210,7 +223,9 @@ BEGIN
     (elem->>'bundle_parent_id')::TEXT,
     (elem->'bundle_child_lineage')::JSONB,
     COALESCE((elem->>'is_bundle')::BOOLEAN, FALSE),
+    COALESCE((elem->>'trading_floor_status')::TEXT, 'HELD_UNKNOWN'),
     COALESCE((elem->>'trading_floor_eligible')::BOOLEAN, FALSE),
+    COALESCE((elem->>'price_research_status')::TEXT, 'INELIGIBLE_OTHER'),
     COALESCE((elem->>'price_research_eligible')::BOOLEAN, FALSE),
     COALESCE(ARRAY(SELECT jsonb_array_elements_text(elem->'review_flags')), '{}'::TEXT[]),
     COALESCE(ARRAY(SELECT jsonb_array_elements_text(elem->'exclusion_reasons')), '{}'::TEXT[]),
@@ -218,6 +233,8 @@ BEGIN
   FROM jsonb_array_elements(p_proposals) AS elem
   ON CONFLICT (source_id) DO UPDATE SET
     source_hash = EXCLUDED.source_hash,
+    listing_text_source = EXCLUDED.listing_text_source,
+    listing_text_sha256 = EXCLUDED.listing_text_sha256,
     brand = EXCLUDED.brand,
     model = EXCLUDED.model,
     reference = EXCLUDED.reference,
@@ -231,11 +248,16 @@ BEGIN
     currency_status = EXCLUDED.currency_status,
     seller_name = EXCLUDED.seller_name,
     seller_contact = EXCLUDED.seller_contact,
+    seller_rating = EXCLUDED.seller_rating,
+    seller_rating_status = EXCLUDED.seller_rating_status,
+    seller_review_evidence = EXCLUDED.seller_review_evidence,
     image_key = EXCLUDED.image_key,
     image_url = EXCLUDED.image_url,
     image_evidence_type = EXCLUDED.image_evidence_type,
     is_bundle = EXCLUDED.is_bundle,
+    trading_floor_status = EXCLUDED.trading_floor_status,
     trading_floor_eligible = EXCLUDED.trading_floor_eligible,
+    price_research_status = EXCLUDED.price_research_status,
     price_research_eligible = EXCLUDED.price_research_eligible,
     review_flags = EXCLUDED.review_flags,
     exclusion_reasons = EXCLUDED.exclusion_reasons,
@@ -245,7 +267,7 @@ BEGIN
   GET DIAGNOSTICS v_inserted = ROW_COUNT;
   RETURN jsonb_build_object('upserted_proposals', v_inserted);
 END;
-;
+$;
 
 REVOKE ALL ON FUNCTION public.upsert_mariadb_normalized_proposals_batch FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.upsert_mariadb_normalized_proposals_batch TO service_role;
@@ -270,7 +292,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = wf_canonical_staging, pg_catalog
-AS 
+AS $
 BEGIN
   INSERT INTO wf_canonical_staging.mariadb_normalization_checkpoints (
     job_name, frozen_cursor_created_on, frozen_cursor_source_id, expected_staged_rows,
@@ -298,7 +320,7 @@ BEGIN
 
   RETURN jsonb_build_object('checkpoint_updated', TRUE, 'job_name', p_job_name, 'status', p_status);
 END;
-;
+$;
 
 REVOKE ALL ON FUNCTION public.update_mariadb_normalization_checkpoint FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.update_mariadb_normalization_checkpoint TO service_role;

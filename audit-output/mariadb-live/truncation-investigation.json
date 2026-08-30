@@ -1,0 +1,109 @@
+{
+  "contract": "wf-truncation-investigation-audit-v1",
+  "timestamp": "2026-08-30T20:38:49.780Z",
+  "total_records_screened": 10000,
+  "candidates_identified_count": 12,
+  "findings_summary": {
+    "user_punctuation_ellipsis_count": 10,
+    "potential_varchar_boundary_count": 1,
+    "conclusion": "10 of 11 records are deliberate dealer punctuation (...), 1 record is exactly 255 chars indicating upstream source column boundary"
+  },
+  "all_identified_candidates": [
+    {
+      "source_id": "6706b383-91c8-43b0-a49b-3b6072734355",
+      "source_created_on": "2025-02-17T20:25:09.000Z",
+      "title_length": 255,
+      "ending_classification": "POTENTIAL_DB_VARCHAR255_TRUNCATION",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:631fc2d0b457c921175e83c931660c3b754d95377ab8ecd78fca13645629594a]",
+      "last_ten_characters_sample": "y  hkd290k"
+    },
+    {
+      "source_id": "8cf21762-d070-4db7-9516-3b4f563f6a00",
+      "source_created_on": "2025-02-20T22:40:07.000Z",
+      "title_length": 78,
+      "ending_classification": "USER_PUNCTUATION_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:b1bb2c6c99cf410f7d6739cc2e4f2e5b0231835dd569a99bd48741e24f94403b]",
+      "last_ten_characters_sample": " HK, BKK.."
+    },
+    {
+      "source_id": "964360e9-0e49-49b2-b1ee-058640ee3151",
+      "source_created_on": "2025-02-21T23:05:06.000Z",
+      "title_length": 120,
+      "ending_classification": "USER_PUNCTUATION_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:f5938a7f36499358ed0d6369dac334df07696bcef830cc0151508472e26476cf]",
+      "last_ten_characters_sample": " HK,Bkk..."
+    },
+    {
+      "source_id": "c1072f86-d1c0-4c46-adaf-258548c5805c",
+      "source_created_on": "2025-02-24T21:08:08.000Z",
+      "title_length": 508,
+      "ending_classification": "NATURAL_USER_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:15871db6e07bf0e11e8d334a40e528c6f4670629e36c947fb823946d65039ed6]",
+      "last_ten_characters_sample": "ng, models"
+    },
+    {
+      "source_id": "b9ce1a4f-079f-41dd-86bb-3513416ada35",
+      "source_created_on": "2025-02-25T04:45:06.000Z",
+      "title_length": 58,
+      "ending_classification": "USER_PUNCTUATION_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:144a134b61cbe568e437380b55607b7b757e1f6f408e30601f2e9c71b547e6d0]",
+      "last_ten_characters_sample": " Hk,Bkk..."
+    },
+    {
+      "source_id": "2150cd1f-df40-4c50-b2bf-c214faf5f72a",
+      "source_created_on": "2025-02-25T05:06:05.000Z",
+      "title_length": 78,
+      "ending_classification": "USER_PUNCTUATION_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:c90bcd9d85d76eafb502557923ed0d93b8d2a30a82251340732ebb09fbe09cbf]",
+      "last_ten_characters_sample": " HK,BKK..."
+    },
+    {
+      "source_id": "29c5c9f4-1944-4789-b0b1-1b37ac4d3b3b",
+      "source_created_on": "2025-02-25T22:39:07.000Z",
+      "title_length": 68,
+      "ending_classification": "USER_PUNCTUATION_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:a493f534eb177a6c47445a6639720a9092e221190b42160caa92dbceaacc394f]",
+      "last_ten_characters_sample": "HK, BKK..."
+    },
+    {
+      "source_id": "440fbf43-f49e-475b-bd74-d19db71f3f20",
+      "source_created_on": "2025-02-26T00:55:07.000Z",
+      "title_length": 59,
+      "ending_classification": "USER_PUNCTUATION_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:9aa77ee602b75da4c0677bac82d46d95b4b977ade0eb655d6bd513b76ef0ffaf]",
+      "last_ten_characters_sample": "er mint..."
+    },
+    {
+      "source_id": "3830be85-cb00-4040-8110-3990e5041d8e",
+      "source_created_on": "2025-02-26T01:14:05.000Z",
+      "title_length": 79,
+      "ending_classification": "USER_PUNCTUATION_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:36d84fc68b34ee282d820ad859a199f297450f34b48dd68bb34bdd4ab61e522b]",
+      "last_ten_characters_sample": "K, BKK,..."
+    },
+    {
+      "source_id": "5971adcc-4c5f-40e5-8d14-96e016d03482",
+      "source_created_on": "2025-02-26T22:08:07.000Z",
+      "title_length": 65,
+      "ending_classification": "USER_PUNCTUATION_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:7cc7ec0ddd0d2ec6e50f4873787ed68b61652e22418bf318189ad94e4028adc8]",
+      "last_ten_characters_sample": " HK,BKK..."
+    },
+    {
+      "source_id": "0f51e417-c663-415b-9193-bb5c79d04d1e",
+      "source_created_on": "2025-02-28T13:23:59.000Z",
+      "title_length": 99,
+      "ending_classification": "USER_PUNCTUATION_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:b610a869b0d3c4a6b732e3b68d099f95c815e64624f4e3a1ad1e80be53ebbc47]",
+      "last_ten_characters_sample": "HK, BKK..."
+    },
+    {
+      "source_id": "07aff7f0-0e7f-4899-8283-2e3b72e681a0",
+      "source_created_on": "2025-02-28T13:24:30.000Z",
+      "title_length": 57,
+      "ending_classification": "USER_PUNCTUATION_ELLIPSIS",
+      "title_full_redacted_evidence": "[REDACTED_EVIDENCE_SHA256:b660d6aa1c7b29e9ea2540541dbf43d9cd1834ca8e4994958097cc5d2cb80d00]",
+      "last_ten_characters_sample": "HK, BKK..."
+    }
+  ]
+}
