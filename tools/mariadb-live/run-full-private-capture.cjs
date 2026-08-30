@@ -27,6 +27,7 @@ const {
   verifyErrorLedgerContract,
   verifyDryRunReconciliation
 } = require('./full-capture-preflight.cjs');
+const { sanitizeLosslessPayload } = require('./lossless-payload-sanitizer.cjs');
 
 function isPublicHost(host) {
   if (!host) return false;
@@ -93,14 +94,18 @@ function resolveMariaDbTransport(env = process.env, options = {}) {
 }
 
 function buildStagingRecord(row, manifest = {}) {
-  const rawPayloadText = canonicalizeRawPayload(row);
-  const sourceHash = sha256(rawPayloadText);
+  const sanitization = sanitizeLosslessPayload(row);
+  const sourceHash = sanitization.originalHash;
   const createdOn = row.created_on ? new Date(row.created_on).toISOString() : null;
   const updatedOn = row.updated_on ? new Date(row.updated_on).toISOString() : null;
   const sourceId = String(row.id);
   const sourceSystem = manifest.source_system || 'OceanDigital MariaDB';
   const sourceDatabase = manifest.source_database || 'thecollective_inventory';
   const sourceTable = manifest.source_table || 'auctions';
+
+  const rawMessage = typeof row.description === 'string'
+    ? row.description.replace(/\0/g, '').replace(/\\u0000/g, '')
+    : (row.description || null);
 
   return {
     source_system: sourceSystem,
@@ -111,11 +116,11 @@ function buildStagingRecord(row, manifest = {}) {
     source_record_id: `mysql_${sourceTable}_${sourceId}`,
     source_created_on: createdOn,
     source_updated_on: updatedOn,
-    raw_message: row.description || null,
+    raw_message: rawMessage,
     raw_message_source: 'description',
     raw_sha256: sourceHash,
-    raw_payload_text: rawPayloadText,
-    raw_payload: row,
+    raw_payload_text: sanitization.transportPayloadText,
+    raw_payload: sanitization.sanitizedObj,
     source_hash: sourceHash,
     canonicalization_version: CANONICAL_VERSION,
     hash_algorithm: HASH_ALGO
@@ -414,5 +419,6 @@ if (require.main === module) {
 module.exports = {
   runCaptureLoop,
   resolveMariaDbTransport,
-  isPublicHost
+  isPublicHost,
+  buildStagingRecord
 };
