@@ -342,6 +342,17 @@ test('7. fetchTableCountAndMaxDate fail-closed behavior on HTTP errors and malfo
     /Missing or invalid Content-Range header/
   );
 
+  const mockFetchMalformedRange = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => '0-0/' },
+    json: async () => []
+  });
+  await assert.rejects(
+    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchMalformedRange),
+    /Missing or invalid Content-Range header/
+  );
+
   // Test non-array JSON response
   const mockFetchObjResponse = async () => ({
     ok: true,
@@ -364,6 +375,17 @@ test('7. fetchTableCountAndMaxDate fail-closed behavior on HTTP errors and malfo
   await assert.rejects(
     async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchMissingDateField),
     /Missing date field "posted_date"/
+  );
+
+  const mockFetchInvalidDate = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: (h) => (h === 'content-range' ? '0-0/100' : null) },
+    json: async () => [{ posted_date: 'not-a-date' }]
+  });
+  await assert.rejects(
+    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchInvalidDate),
+    /Invalid date value/
   );
 
   // Test valid response

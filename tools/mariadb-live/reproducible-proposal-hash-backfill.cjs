@@ -21,66 +21,72 @@ async function callRpc(supabaseUrl, supabaseKey, rpcName, body) {
   return await res.json();
 }
 
-async function runReproducibleBackfill(env = process.env) {
+async function runReproducibleBackfill(env = process.env, dependencies = {}) {
   const supabaseUrl = env.SUPABASE_URL;
   const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
+
+  const callRpcFn = dependencies.callRpc || callRpc;
 
   console.log('[Backfill] Selecting only proposals with missing or invalid proposal hashes...');
 
   let totalChecked = 0;
   let totalUpdated = 0;
-  let totalUnchanged = 0;
+  let totalMissing = 0;
   let totalInserted = 0;
 
-  // Query staged auctions batch
-  let lastCreatedOn = null;
-  let lastSourceId = null;
   const BATCH_SIZE = 500;
 
   while (true) {
-    const batch = await callRpc(supabaseUrl, supabaseKey, 'get_mariadb_private_staged_auctions_batch', {
-      p_limit: BATCH_SIZE,
-      p_last_created_on: lastCreatedOn,
-      p_last_source_id: lastSourceId
+    const batch = await callRpcFn(supabaseUrl, supabaseKey, 'get_mariadb_proposals_missing_or_invalid_hash', {
+      p_limit: BATCH_SIZE
     });
 
-    if (!batch || !batch.length) break;
+    if (!Array.isArray(batch)) {
+      throw new Error('[Backfill] Selection RPC must return an array');
+    }
+    if (batch.length === 0) break;
 
-    // Filter proposals that genuinely require hash backfill/update
-    const proposalsToBackfill = [];
-    for (const r of batch) {
+    const hashesToBackfill = batch.map(r => {
       const p = normalizeAuthoritativeRow(r);
-      if (!p.proposal_hash || p.proposal_hash.length !== 64) {
+      if (!/^[0-9a-f]{64}$/.test(p.proposal_hash || '')) {
         throw new Error('Normalization generated invalid hash for source_id ' + r.source_id);
       }
-      proposalsToBackfill.push(p);
+      return {
+        source_system: p.source_system,
+        source_database: p.source_database,
+        source_table: p.source_table,
+        source_id: p.source_id,
+        source_hash: p.source_hash,
+        proposal_hash: p.proposal_hash
+      };
+    });
+
+    const res = await callRpcFn(supabaseUrl, supabaseKey, 'backfill_mariadb_proposal_hashes', {
+      p_hashes: hashesToBackfill
+    });
+    const inserted = Number(res && res.inserted);
+    if (!Number.isSafeInteger(inserted) || inserted !== 0) {
+      throw new Error('[Backfill] HARD INVARIANT VIOLATION: Backfill requires inserted=0; received ' + String(res && res.inserted));
     }
 
-    if (proposalsToBackfill.length > 0) {
-      const res = await callRpc(supabaseUrl, supabaseKey, 'upsert_mariadb_normalized_proposals_batch', {
-        p_proposals: proposalsToBackfill
-      });
-
-      if ((res.inserted || 0) > 0) {
-        throw new Error('[Backfill] HARD INVARIANT VIOLATION: Backfill must NEVER insert new proposals! Inserted count: ' + res.inserted);
-      }
-
-      totalInserted += (res.inserted || 0);
-      totalUpdated += (res.updated || 0);
-      totalUnchanged += (res.unchanged || 0);
-      totalChecked += proposalsToBackfill.length;
+    const updated = Number(res.updated || 0);
+    const missing = Number(res.missing || 0);
+    if (!Number.isSafeInteger(updated) || !Number.isSafeInteger(missing) || updated + missing !== batch.length) {
+      throw new Error('[Backfill] RPC reconciliation failed for selected hash rows');
+    }
+    if (missing !== 0 || updated === 0) {
+      throw new Error('[Backfill] Selected rows were not updated exactly once; missing=' + missing + ', updated=' + updated);
     }
 
-    const last = batch[batch.length - 1];
-    lastCreatedOn = last.source_created_on;
-    lastSourceId = last.source_id;
-
-    if (totalChecked >= 4000) break;
+    totalInserted += inserted;
+    totalUpdated += updated;
+    totalMissing += missing;
+    totalChecked += batch.length;
   }
 
-  console.log('[Backfill] Result: checked = ' + totalChecked + ', inserted = ' + totalInserted + ' (must be 0), updated = ' + totalUpdated + ', unchanged = ' + totalUnchanged);
-  return { totalChecked, totalInserted, totalUpdated, totalUnchanged };
+  console.log('[Backfill] Result: checked = ' + totalChecked + ', inserted = ' + totalInserted + ' (required 0), updated = ' + totalUpdated + ', missing = ' + totalMissing);
+  return { totalChecked, totalInserted, totalUpdated, totalMissing };
 }
 
 if (require.main === module) {

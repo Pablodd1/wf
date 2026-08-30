@@ -63,12 +63,15 @@ async function fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, tableName, da
     throw new Error(`fetchTableCountAndMaxDate failed with HTTP ${res.status} for table ${tableName}: ${txt}`);
   }
   const contentRange = res.headers.get('content-range');
-  if (!contentRange || !contentRange.includes('/')) {
+  const contentRangeMatch = typeof contentRange === 'string'
+    ? contentRange.match(/^(?:\d+-\d+|\*)\/(\d+)$/)
+    : null;
+  if (!contentRangeMatch) {
     throw new Error(`fetchTableCountAndMaxDate: Missing or invalid Content-Range header for table ${tableName}: "${contentRange}"`);
   }
-  const countPart = contentRange.split('/')[1];
+  const countPart = contentRangeMatch[1];
   const totalCount = Number(countPart);
-  if (!Number.isFinite(totalCount) || totalCount < 0) {
+  if (!Number.isSafeInteger(totalCount) || totalCount < 0) {
     throw new Error(`fetchTableCountAndMaxDate: Invalid parsed total count "${countPart}" for table ${tableName}`);
   }
 
@@ -83,7 +86,11 @@ async function fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, tableName, da
       throw new Error(`fetchTableCountAndMaxDate: Missing date field "${dateField}" in response row for table ${tableName}`);
     }
     latestDate = rows[0][dateField];
-    if (latestDate !== null && typeof latestDate !== 'string') {
+    if (
+      typeof latestDate !== 'string' ||
+      latestDate.trim() === '' ||
+      !Number.isFinite(Date.parse(latestDate))
+    ) {
       throw new Error(`fetchTableCountAndMaxDate: Invalid date value for "${dateField}" in table ${tableName}`);
     }
   }
