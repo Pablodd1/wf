@@ -1,6 +1,6 @@
 {
   "contract": "wf-mariadb-private-raw-staging-v1",
-  "timestamp": "2026-08-29T21:39:29.502Z",
+  "timestamp": "2026-08-30T09:53:41.359Z",
   "tls_proof": {
     "verified": true,
     "transport": "TLS_CA_VERIFIED",
@@ -14,19 +14,19 @@
     "source_database": "thecollective_inventory",
     "source_table": "auctions",
     "isolation_level": "REPEATABLE READ (CONSISTENT SNAPSHOT, READ ONLY)",
-    "total_source_rows": 1496065,
+    "total_source_rows": 1497325,
     "lower_boundary": {
       "id": "7534d09b-28b9-4052-8005-228c32f972df",
       "created_on": "2025-01-08T18:28:49.000Z",
       "updated_on": null
     },
     "upper_boundary": {
-      "id": "d53fc81c-8d90-49d2-97c4-5ec6e215a1e1",
-      "created_on": "2026-08-29T21:39:14.000Z",
-      "updated_on": "2026-08-29T21:39:14.000Z"
+      "id": "0dfb066b-9a53-4af9-a9b7-ce3baf6194f4",
+      "created_on": "2026-08-30T09:53:21.000Z",
+      "updated_on": null
     },
-    "snapshot_timestamp": "2026-08-29T21:39:28.125Z",
-    "manifest_sha256": "2b31056d7f6d247ed8f9b2cafb2a2ad9c8e21b085d4871e5fbe457366a02240f"
+    "snapshot_timestamp": "2026-08-30T09:53:40.388Z",
+    "manifest_sha256": "702eb51e7e04b45cbdb06d1c1e95bab21bf7e87722e319d74ce84f55bbb6d10b"
   },
   "database_security_audit": {
     "direct_table_privileges_all_false": true,
