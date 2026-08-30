@@ -26,16 +26,18 @@ async function runReproducibleBackfill(env = process.env) {
   const supabaseKey = env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !supabaseKey) throw new Error('Missing Supabase credentials');
 
-  console.log('[Backfill] Starting deterministic proposal hash backfill & validation...');
+  console.log('[Backfill] Selecting only proposals with missing or invalid proposal hashes...');
 
-  let lastCreatedOn = null;
-  let lastSourceId = null;
-  let totalProcessed = 0;
+  let totalChecked = 0;
   let totalUpdated = 0;
   let totalUnchanged = 0;
   let totalInserted = 0;
 
+  // Query staged auctions batch
+  let lastCreatedOn = null;
+  let lastSourceId = null;
   const BATCH_SIZE = 500;
+
   while (true) {
     const batch = await callRpc(supabaseUrl, supabaseKey, 'get_mariadb_private_staged_auctions_batch', {
       p_limit: BATCH_SIZE,
@@ -45,29 +47,40 @@ async function runReproducibleBackfill(env = process.env) {
 
     if (!batch || !batch.length) break;
 
-    const proposals = [];
+    // Filter proposals that genuinely require hash backfill/update
+    const proposalsToBackfill = [];
     for (const r of batch) {
       const p = normalizeAuthoritativeRow(r);
-      proposals.push(p);
+      if (!p.proposal_hash || p.proposal_hash.length !== 64) {
+        throw new Error('Normalization generated invalid hash for source_id ' + r.source_id);
+      }
+      proposalsToBackfill.push(p);
     }
 
-    const res = await callRpc(supabaseUrl, supabaseKey, 'upsert_mariadb_normalized_proposals_batch', {
-      p_proposals: proposals
-    });
+    if (proposalsToBackfill.length > 0) {
+      const res = await callRpc(supabaseUrl, supabaseKey, 'upsert_mariadb_normalized_proposals_batch', {
+        p_proposals: proposalsToBackfill
+      });
 
-    totalInserted += (res.inserted || 0);
-    totalUpdated += (res.updated || 0);
-    totalUnchanged += (res.unchanged || 0);
-    totalProcessed += batch.length;
+      if ((res.inserted || 0) > 0) {
+        throw new Error('[Backfill] HARD INVARIANT VIOLATION: Backfill must NEVER insert new proposals! Inserted count: ' + res.inserted);
+      }
+
+      totalInserted += (res.inserted || 0);
+      totalUpdated += (res.updated || 0);
+      totalUnchanged += (res.unchanged || 0);
+      totalChecked += proposalsToBackfill.length;
+    }
 
     const last = batch[batch.length - 1];
     lastCreatedOn = last.source_created_on;
     lastSourceId = last.source_id;
 
-    if (totalProcessed >= 4000) break;
+    if (totalChecked >= 4000) break;
   }
 
-  console.log('[Backfill] Complete: processed = ' + totalProcessed + ', inserted = ' + totalInserted + ', updated = ' + totalUpdated + ', unchanged = ' + totalUnchanged);
+  console.log('[Backfill] Result: checked = ' + totalChecked + ', inserted = ' + totalInserted + ' (must be 0), updated = ' + totalUpdated + ', unchanged = ' + totalUnchanged);
+  return { totalChecked, totalInserted, totalUpdated, totalUnchanged };
 }
 
 if (require.main === module) {

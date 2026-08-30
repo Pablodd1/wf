@@ -293,3 +293,87 @@ test('6. Mandatory source_hash and multi-hash source identity isolation', () => 
     getDetailMock('OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'multi-hash-uuid-101', 'unknown-hash-xyz');
   }, /No matching proposal and raw source found/, 'Must fail closed on non-matching hash');
 });
+
+test('7. fetchTableCountAndMaxDate fail-closed behavior on HTTP errors and malformed responses', async () => {
+  const { fetchTableCountAndMaxDate } = require('../tools/mariadb-live/run-state-idempotent-1k-canary-v3.cjs');
+
+  // Test HTTP 400
+  const mockFetch400 = async () => ({
+    ok: false,
+    status: 400,
+    text: async () => 'Bad Request: column does not exist'
+  });
+  await assert.rejects(
+    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetch400),
+    /fetchTableCountAndMaxDate failed with HTTP 400/
+  );
+
+  // Test HTTP 404
+  const mockFetch404 = async () => ({
+    ok: false,
+    status: 404,
+    text: async () => 'Not Found'
+  });
+  await assert.rejects(
+    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'non_existent_table', 'posted_date', mockFetch404),
+    /fetchTableCountAndMaxDate failed with HTTP 404/
+  );
+
+  // Test HTTP 500
+  const mockFetch500 = async () => ({
+    ok: false,
+    status: 500,
+    text: async () => 'Internal Server Error'
+  });
+  await assert.rejects(
+    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetch500),
+    /fetchTableCountAndMaxDate failed with HTTP 500/
+  );
+
+  // Test missing Content-Range header
+  const mockFetchNoRange = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: () => null },
+    json: async () => []
+  });
+  await assert.rejects(
+    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchNoRange),
+    /Missing or invalid Content-Range header/
+  );
+
+  // Test non-array JSON response
+  const mockFetchObjResponse = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: (h) => (h === 'content-range' ? '0-0/100' : null) },
+    json: async () => ({ message: 'Not an array' })
+  });
+  await assert.rejects(
+    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchObjResponse),
+    /Expected JSON array/
+  );
+
+  // Test missing dateField in row
+  const mockFetchMissingDateField = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: (h) => (h === 'content-range' ? '0-0/100' : null) },
+    json: async () => [{ other_col: 'val' }]
+  });
+  await assert.rejects(
+    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchMissingDateField),
+    /Missing date field "posted_date"/
+  );
+
+  // Test valid response
+  const mockFetchValid = async () => ({
+    ok: true,
+    status: 200,
+    headers: { get: (h) => (h === 'content-range' ? '0-0/96340' : null) },
+    json: async () => [{ posted_date: '2026-08-30T12:00:00Z' }]
+  });
+  const validRes = await fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchValid);
+  assert.strictEqual(validRes.totalCount, 96340);
+  assert.strictEqual(validRes.latestDate, '2026-08-30T12:00:00Z');
+});

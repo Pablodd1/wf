@@ -46,22 +46,47 @@ async function callRpc(supabaseUrl, supabaseKey, rpcName, body) {
   return await res.json();
 }
 
-async function fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, tableName, dateField) {
-  const url = supabaseUrl.replace(/\/$/, '') + '/rest/v1/' + tableName + '?select=' + dateField + '&order=' + dateField + '.desc&limit=1';
-  const res = await fetch(url, {
+async function fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, tableName, dateField, fetchFn = fetch) {
+  if (!supabaseUrl || !supabaseKey || !tableName) {
+    throw new Error('fetchTableCountAndMaxDate: supabaseUrl, supabaseKey, and tableName are required');
+  }
+  const url = supabaseUrl.replace(/\/$/, '') + '/rest/v1/' + tableName + (dateField ? '?select=' + dateField + '&order=' + dateField + '.desc&limit=1' : '?select=*&limit=1');
+  const res = await fetchFn(url, {
     headers: {
       apikey: supabaseKey,
       Authorization: 'Bearer ' + supabaseKey,
       Prefer: 'count=exact'
     }
   });
-  const contentRange = res.headers.get('content-range');
-  let totalCount = 0;
-  if (contentRange && contentRange.includes('/')) {
-    totalCount = Number(contentRange.split('/')[1]);
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    throw new Error(`fetchTableCountAndMaxDate failed with HTTP ${res.status} for table ${tableName}: ${txt}`);
   }
+  const contentRange = res.headers.get('content-range');
+  if (!contentRange || !contentRange.includes('/')) {
+    throw new Error(`fetchTableCountAndMaxDate: Missing or invalid Content-Range header for table ${tableName}: "${contentRange}"`);
+  }
+  const countPart = contentRange.split('/')[1];
+  const totalCount = Number(countPart);
+  if (!Number.isFinite(totalCount) || totalCount < 0) {
+    throw new Error(`fetchTableCountAndMaxDate: Invalid parsed total count "${countPart}" for table ${tableName}`);
+  }
+
   const rows = await res.json();
-  const latestDate = rows.length > 0 ? rows[0][dateField] : null;
+  if (!Array.isArray(rows)) {
+    throw new Error(`fetchTableCountAndMaxDate: Expected JSON array for table ${tableName}, got ${typeof rows}`);
+  }
+
+  let latestDate = null;
+  if (rows.length > 0 && dateField) {
+    if (typeof rows[0] !== 'object' || rows[0] === null || !(dateField in rows[0])) {
+      throw new Error(`fetchTableCountAndMaxDate: Missing date field "${dateField}" in response row for table ${tableName}`);
+    }
+    latestDate = rows[0][dateField];
+    if (latestDate !== null && typeof latestDate !== 'string') {
+      throw new Error(`fetchTableCountAndMaxDate: Invalid date value for "${dateField}" in table ${tableName}`);
+    }
+  }
   return { totalCount, latestDate };
 }
 
@@ -386,4 +411,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { runStateIdempotentCanaryV3 };
+module.exports = { runStateIdempotentCanaryV3, fetchTableCountAndMaxDate };
