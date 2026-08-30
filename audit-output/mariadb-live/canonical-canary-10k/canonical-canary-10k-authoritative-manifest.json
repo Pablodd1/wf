@@ -1,9 +1,9 @@
 {
   "contract": "wf-canonical-canary-10k-authoritative-manifest-v3",
-  "generated_at": "2026-08-30T23:42:48.786Z",
+  "generated_at": "2026-08-30T23:51:42.593Z",
   "artifacts_directory": "audit-output/mariadb-live/canonical-canary-10k",
-  "total_artifacts": 6,
-  "total_code_files": 8,
+  "total_artifacts": 7,
+  "total_code_files": 10,
   "artifacts": {
     "canonical-canary-10k-summary.json": {
       "bytes": 3004,
@@ -26,14 +26,19 @@
       "last_modified": "2026-08-30T23:33:59.515Z"
     },
     "legacy_public_lineage_reconciliation.json": {
-      "bytes": 33744,
-      "sha256": "3c24d2a470c4e4ed0ff71bd7914ad334281cfc98a3b274c089ab18741aa8bf3e",
-      "last_modified": "2026-08-30T23:42:35.612Z"
+      "bytes": 53201,
+      "sha256": "d8b673dca0062a9afc675fc01956e6a47dca6479a460c6c2888280d231832e5b",
+      "last_modified": "2026-08-30T23:51:21.882Z"
     },
     "preview_migration_smoke_test.json": {
       "bytes": 1755,
-      "sha256": "73c47b990c7008e1dd456bd65631c24371afcbf18c87cdecda85beec16547a59",
-      "last_modified": "2026-08-30T23:38:42.956Z"
+      "sha256": "d20a42544b156ad59a88cfbdb5d120ef182ce44bb8ac0fd4b297955be16970d0",
+      "last_modified": "2026-08-30T23:51:32.509Z"
+    },
+    "ephemeral_migration_test_results.json": {
+      "bytes": 1388,
+      "sha256": "8ee89654154a6bb06b2ca6c09853ace580a0c8e0d5b6ff60bd7149060249f4f5",
+      "last_modified": "2026-08-30T23:51:30.150Z"
     }
   },
   "verified_code_and_migrations": {
@@ -53,9 +58,9 @@
       "last_modified": "2026-08-30T23:34:07.943Z"
     },
     "tools/mariadb-live/reconcile_legacy_public_lineage.py": {
-      "bytes": 4318,
-      "sha256": "66edfd9321635f440ffa3ee13cde06491a4359c3fcc9753f7009560c2ffdced8",
-      "last_modified": "2026-08-30T23:35:01.523Z"
+      "bytes": 6021,
+      "sha256": "b79f536cb45529d57a44c511414a8288bea406d4fc4de2e5cb3eb016bf73b2c7",
+      "last_modified": "2026-08-30T23:50:33.385Z"
     },
     "tools/mariadb-live/exact_public_lineage_audit.cjs": {
       "bytes": 1230,
@@ -67,15 +72,25 @@
       "sha256": "7a4dc428a2b2bc49bfb3ea653534cd48ac9f69a3d9516f4e02f4a3bf553bb4cd",
       "last_modified": "2026-08-30T23:38:20.802Z"
     },
+    "tools/mariadb-live/ephemeral_migration_tester.cjs": {
+      "bytes": 1164,
+      "sha256": "881d166b4da28a6df8b28884080989a15d5d0c19d198ca581fb4c4eeb49b4e0e",
+      "last_modified": "2026-08-30T23:50:05.009Z"
+    },
+    "tools/mariadb-live/ephemeral_migration_tester.py": {
+      "bytes": 17445,
+      "sha256": "039bf138cf2514002908cf4bd5d772d1d2416d3a3b3a94d3dd18de27b266e044",
+      "last_modified": "2026-08-30T23:49:49.964Z"
+    },
     "tools/mariadb-live/generate_checksum_manifest.cjs": {
-      "bytes": 3047,
-      "sha256": "4f930b4b9fc36d36deb4a3504f3f5bf15e7069b51e4a2354ea6d1ee25dd625e3",
-      "last_modified": "2026-08-30T23:38:47.089Z"
+      "bytes": 3205,
+      "sha256": "b3788fe7b74bfedb488ae63160cfa2e7226feeee35eacd11e87cf7860ef3cd32",
+      "last_modified": "2026-08-30T23:51:39.030Z"
     },
     "supabase/migrations/20260830190000_canonical_parent_child_remediation.sql": {
-      "bytes": 38155,
-      "sha256": "ec76f03895b75a3ef620928af9220734294a589fb593c4c8594d6044bb03a063",
-      "last_modified": "2026-08-30T23:38:40.355Z"
+      "bytes": 40480,
+      "sha256": "bf170c0bc6b7f0e845d06c82aa50d18d45c42c0d496ea76c7ce5b39eec3b575d",
+      "last_modified": "2026-08-30T23:49:36.841Z"
     }
   }
 }

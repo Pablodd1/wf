@@ -18,7 +18,8 @@ function generateChecksumManifest() {
     'exact_public_lineage_audit.json',
     'image_reachability_verification.json',
     'legacy_public_lineage_reconciliation.json',
-    'preview_migration_smoke_test.json'
+    'preview_migration_smoke_test.json',
+    'ephemeral_migration_test_results.json'
   ];
 
   const toolsToManifest = [
@@ -28,6 +29,8 @@ function generateChecksumManifest() {
     'tools/mariadb-live/reconcile_legacy_public_lineage.py',
     'tools/mariadb-live/exact_public_lineage_audit.cjs',
     'tools/mariadb-live/preview_migration_smoke_test.cjs',
+    'tools/mariadb-live/ephemeral_migration_tester.cjs',
+    'tools/mariadb-live/ephemeral_migration_tester.py',
     'tools/mariadb-live/generate_checksum_manifest.cjs',
     'supabase/migrations/20260830190000_canonical_parent_child_remediation.sql'
   ];

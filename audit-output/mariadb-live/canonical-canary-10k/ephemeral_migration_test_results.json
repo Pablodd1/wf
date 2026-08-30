@@ -1,0 +1,45 @@
+{
+  "contract": "wf-ephemeral-canonical-migration-tests-v1",
+  "generated_at": "2026-08-30T23:50:00.000Z",
+  "status": "PASSED",
+  "total_tests": 7,
+  "passed_tests": 7,
+  "failed_tests": 0,
+  "test_cases": [
+    {
+      "test": "TEST_A_INITIAL_INSERT",
+      "passed": true,
+      "detail": "Parents=1, ActiveChildren=2, ActiveImages=4"
+    },
+    {
+      "test": "TEST_B_IDENTICAL_RERUN",
+      "passed": true,
+      "detail": "UnchangedParents=1, UnchangedChildren=2"
+    },
+    {
+      "test": "TEST_C_CHANGED_CHILD_SUPERSESSION",
+      "passed": true,
+      "detail": "UpdatedChildren=1, InactiveChildren=1, ActiveChildren=2"
+    },
+    {
+      "test": "TEST_D_REMOVED_CHILD_IMAGE_DEACTIVATION",
+      "passed": true,
+      "detail": "ActiveChildren=1, InactiveChildren=2, InactiveImages=4"
+    },
+    {
+      "test": "TEST_E_REMOVED_IMAGE_SYNCHRONIZATION",
+      "passed": true,
+      "detail": "Child0ActiveImages=1 (historical row preserved as inactive)"
+    },
+    {
+      "test": "TEST_F_INVALID_SCOPE_CONSTRAINT",
+      "passed": true,
+      "detail": "chk_mariadb_images_scope_child_id successfully prevented PARENT scope with non-null child_id"
+    },
+    {
+      "test": "TEST_G_MALFORMED_ARRAYS_FAIL_CLOSED",
+      "passed": true,
+      "detail": "upsert_mariadb_canonical_batch successfully rejected non-array JSONB"
+    }
+  ]
+}

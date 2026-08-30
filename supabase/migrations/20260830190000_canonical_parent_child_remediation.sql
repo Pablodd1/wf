@@ -237,6 +237,18 @@ BEGIN
     ALTER TABLE wf_canonical_staging.mariadb_normalized_images
       ADD CONSTRAINT chk_mariadb_images_scope CHECK (scope IN ('PARENT', 'CHILD'));
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'wf_canonical_staging.mariadb_normalized_images'::regclass
+      AND conname = 'chk_mariadb_images_scope_child_id'
+  ) THEN
+    ALTER TABLE wf_canonical_staging.mariadb_normalized_images
+      ADD CONSTRAINT chk_mariadb_images_scope_child_id CHECK (
+        (scope = 'PARENT' AND child_id IS NULL) OR
+        (scope = 'CHILD' AND child_id IS NOT NULL)
+      );
+  END IF;
 END $$;
 
 DROP INDEX IF EXISTS wf_canonical_staging.uq_mariadb_norm_images_key;
@@ -425,11 +437,36 @@ BEGIN
       v_unchanged_parents := v_unchanged_parents + 1;
     END IF;
 
+    -- Supersession: Deactivate active images belonging to children removed by a smaller child set
+    UPDATE wf_canonical_staging.mariadb_normalized_images
+    SET is_active = FALSE, superseded_at = NOW()
+    WHERE parent_id = v_parent_id
+      AND is_active = TRUE
+      AND child_id IN (
+        SELECT id FROM wf_canonical_staging.mariadb_normalized_children
+        WHERE parent_id = v_parent_id AND is_active = TRUE
+          AND child_ordinal >= COALESCE(
+            CASE
+              WHEN (v_parent->'children') IS NOT NULL AND jsonb_typeof(v_parent->'children') = 'array'
+              THEN jsonb_array_length(v_parent->'children')
+              ELSE 0
+            END,
+            0
+          )
+      );
+
     -- Supersession: Deactivate active children with higher ordinals if child count decreased
     UPDATE wf_canonical_staging.mariadb_normalized_children
     SET is_active = FALSE, superseded_at = NOW(), superseded_by_parser_version = v_new_parser_version
     WHERE parent_id = v_parent_id AND is_active = TRUE
-      AND child_ordinal >= COALESCE(jsonb_array_length(v_parent->'children'), 0);
+      AND child_ordinal >= COALESCE(
+        CASE
+          WHEN (v_parent->'children') IS NOT NULL AND jsonb_typeof(v_parent->'children') = 'array'
+          THEN jsonb_array_length(v_parent->'children')
+          ELSE 0
+        END,
+        0
+      );
 
     -- Process Children (Version-preserving replacement)
     IF (v_parent->'children') IS NOT NULL AND jsonb_typeof(v_parent->'children') = 'array' THEN
@@ -557,8 +594,21 @@ BEGIN
           v_unchanged_children := v_unchanged_children + 1;
         END IF;
 
-        -- Process Child Images
+        -- Synchronize Child Images (preserve historical inactive rows, deactivate absent active rows)
         IF (v_child->'images') IS NOT NULL AND jsonb_typeof(v_child->'images') = 'array' THEN
+          -- Deactivate active images for this child that are absent from the new payload
+          UPDATE wf_canonical_staging.mariadb_normalized_images
+          SET is_active = FALSE, superseded_at = NOW()
+          WHERE parent_id = v_parent_id
+            AND child_id = v_child_id
+            AND is_active = TRUE
+            AND scope = 'CHILD'
+            AND image_key NOT IN (
+              SELECT (img->>'image_key')::text
+              FROM jsonb_array_elements(v_child->'images') img
+              WHERE img->>'image_key' IS NOT NULL
+            );
+
           FOR v_img IN SELECT * FROM jsonb_array_elements(v_child->'images')
           LOOP
             IF (v_img->>'image_key') IS NOT NULL THEN
@@ -583,6 +633,14 @@ BEGIN
                 is_active = TRUE;
             END IF;
           END LOOP;
+        ELSE
+          -- Deactivate all active images for this child if images array is absent
+          UPDATE wf_canonical_staging.mariadb_normalized_images
+          SET is_active = FALSE, superseded_at = NOW()
+          WHERE parent_id = v_parent_id
+            AND child_id = v_child_id
+            AND is_active = TRUE
+            AND scope = 'CHILD';
         END IF;
       END LOOP;
     END IF;
