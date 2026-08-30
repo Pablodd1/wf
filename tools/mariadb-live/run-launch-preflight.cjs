@@ -58,6 +58,13 @@ async function runLaunchPreflight() {
   const testCp = await fetchCheckpointState(supabase, 'non-existent-probe-key');
   console.log('PostgreSQL Checkpoint RPC Functional (Returned null for probe key as expected)');
 
+  const actualCp = await fetchCheckpointState(supabase, 'full-capture-auctions-1788028958313');
+  if (!actualCp) throw new Error('Primary checkpoint full-capture-auctions-1788028958313 not found');
+  console.log('Primary Checkpoint Status: input_rows = ' + actualCp.input_rows + ', capture_errors = ' + actualCp.capture_errors_count + ', status = ' + actualCp.status);
+  if (Number(actualCp.input_rows) !== 951750 || Number(actualCp.capture_errors_count) !== 7) {
+    throw new Error('Checkpoint mismatch: expected 951,750 inputs and 7 errors, got ' + actualCp.input_rows + ' inputs and ' + actualCp.capture_errors_count + ' errors');
+  }
+
   // 4. Verify Comprehensive Security Audit
   console.log('4. Verifying Comprehensive Security Audit (84 direct privileges + 6 function privileges)...');
   const { data: auditData, error: auditErr } = await supabase.rpc('audit_mariadb_private_raw_security');
