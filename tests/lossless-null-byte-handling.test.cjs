@@ -24,13 +24,14 @@ test('1. ordinary rows remain byte-identical without modification or metadata ov
 
   const result = sanitizeLosslessPayload(ordinaryRow);
   assert.equal(result.isModified, false);
+  assert.equal(result.hasNullBytes, false);
   assert.equal(result.metadata, null);
   assert.equal(result.originalHash, result.transportHash);
   assert.equal(result.originalPayloadText, result.transportPayloadText);
   assert.deepEqual(result.sanitizedObj, ordinaryRow);
 });
 
-test('2. a null-byte row is preserved losslessly and original evidence can be reconstructed', () => {
+test('2. a null-byte row is preserved losslessly as CAPTURE_ERROR_LOSSLESS_EVIDENCE and original evidence can be reconstructed', () => {
   const nullByteRow = {
     id: '2bc51cf2-da58-4fa5-8828-f23e0da287db',
     brand: 'Omega',
@@ -41,19 +42,21 @@ test('2. a null-byte row is preserved losslessly and original evidence can be re
 
   const result = sanitizeLosslessPayload(nullByteRow);
   assert.equal(result.isModified, true);
+  assert.equal(result.hasNullBytes, true);
   assert.notEqual(result.metadata, null);
-  assert.equal(result.metadata.has_null_bytes, true);
+  assert.equal(result.metadata.classification, 'CAPTURE_ERROR_LOSSLESS_EVIDENCE');
   assert.deepEqual(result.metadata.affected_fields, ['title']);
   assert.equal(result.metadata.null_byte_count, 2);
-  assert.deepEqual(result.metadata.byte_positions.title, [11, 25]);
+  assert.deepEqual(result.metadata.character_positions.title, [11, 25]);
+  assert.equal(result.metadata.remediation_status, 'CAPTURE_ERROR_LOSSLESS_EVIDENCE_PRESERVED');
 
-  // Decode original from base64 and prove exact hash match with original evidence
+  // Decode original from base64 and prove exact hash match with original canonicalized decoded source representation
   const decodedOriginal = Buffer.from(result.metadata.original_payload_base64, 'base64').toString('utf8');
   assert.equal(decodedOriginal, result.originalPayloadText);
   assert.equal(sha256(decodedOriginal), result.originalHash);
 });
 
-test('3. canonical transport JSON contains no unsupported PostgreSQL characters (\u0000)', () => {
+test('3. canonical transport JSON contains no unsupported PostgreSQL characters (\\u0000)', () => {
   const nullByteRow = {
     id: 'failing-row-002',
     description: 'Contains\0embedded\0null\0bytes',
@@ -63,7 +66,7 @@ test('3. canonical transport JSON contains no unsupported PostgreSQL characters 
   };
 
   const result = sanitizeLosslessPayload(nullByteRow);
-  assert.equal(result.transportPayloadText.includes('\u0000'), false);
+  assert.equal(result.transportPayloadText.includes('\\u0000'), false);
   assert.equal(result.transportPayloadText.includes('\0'), false);
 
   // PostgreSQL JSON.parse / JSONB test
@@ -130,8 +133,8 @@ test('6. checkpoint does not advance when affected batch fails (fail-closed simu
 
 test('7. staged rows plus capture errors reconcile exactly to input rows', () => {
   const totalInput = 250;
-  const newlyStaged = 248;
-  const alreadyStaged = 1;
+  const newlyStaged = 249;
+  const alreadyStaged = 0;
   const errorRows = 1;
 
   const sum = newlyStaged + alreadyStaged + errorRows;

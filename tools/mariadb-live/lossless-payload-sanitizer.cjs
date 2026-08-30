@@ -19,15 +19,17 @@ function canonicalizeRawPayload(rawData) {
 }
 
 /**
- * Inspects a raw MariaDB object for null bytes (\\u0000 / \\0).
- * If found, produces a lossless audit envelope preserving original bytes in Base64
- * and computing the source_hash strictly from original unmodified bytes.
+ * Inspects a raw MariaDB object for null characters (\\u0000 / \\0).
+ * If found, produces a lossless audit envelope preserving original canonical payload in Base64,
+ * recording character positions, and computing the source_hash strictly from the
+ * original canonicalized decoded source representation.
  */
 function sanitizeLosslessPayload(rawObj) {
   if (!rawObj || typeof rawObj !== 'object') {
     const rawText = canonicalizeRawPayload(rawObj);
     return {
       isModified: false,
+      hasNullBytes: false,
       originalHash: sha256(rawText),
       transportHash: sha256(rawText),
       sanitizedObj: rawObj,
@@ -40,10 +42,10 @@ function sanitizeLosslessPayload(rawObj) {
   const originalPayloadText = canonicalizeRawPayload(rawObj);
   const originalHash = sha256(originalPayloadText);
 
-  // Deep inspect for null bytes
+  // Deep inspect for null characters
   const affectedFields = [];
-  const bytePositions = {};
-  let totalNullBytes = 0;
+  const characterPositions = {};
+  let totalNullCount = 0;
 
   function inspectValue(val, keyPath) {
     if (typeof val === 'string' && (val.includes('\0') || val.includes('\\u0000'))) {
@@ -53,8 +55,8 @@ function sanitizeLosslessPayload(rawObj) {
       }
       if (positions.length > 0) {
         affectedFields.push(keyPath);
-        bytePositions[keyPath] = positions;
-        totalNullBytes += positions.length;
+        characterPositions[keyPath] = positions;
+        totalNullCount += positions.length;
       }
     } else if (val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
       for (const [k, v] of Object.entries(val)) {
@@ -67,9 +69,10 @@ function sanitizeLosslessPayload(rawObj) {
 
   inspectValue(rawObj, '');
 
-  if (totalNullBytes === 0) {
+  if (totalNullCount === 0) {
     return {
       isModified: false,
+      hasNullBytes: false,
       originalHash,
       transportHash: originalHash,
       sanitizedObj: rawObj,
@@ -98,27 +101,29 @@ function sanitizeLosslessPayload(rawObj) {
 
   const sanitizedObj = sanitizeValue(rawObj);
   const originalPayloadBase64 = Buffer.from(originalPayloadText, 'utf8').toString('base64');
+  const transportPayloadText = canonicalizeRawPayload(sanitizedObj);
+  const transportHash = sha256(transportPayloadText);
 
   const metadata = {
     has_null_bytes: true,
+    classification: 'CAPTURE_ERROR_LOSSLESS_EVIDENCE',
     affected_fields: affectedFields,
-    null_byte_count: totalNullBytes,
-    byte_positions: bytePositions,
+    null_byte_count: totalNullCount,
+    character_positions: characterPositions,
     method: 'STRIP_NULL_BYTES_AND_PRESERVE_ORIGINAL_BASE64',
     parser_version: 'v1-lossless-null-sanitized',
     original_hash: originalHash,
-    transport_hash: sha256(canonicalizeRawPayload(sanitizedObj)),
-    original_payload_base64: originalPayloadBase64
+    transport_hash: transportHash,
+    original_payload_base64: originalPayloadBase64,
+    remediation_status: 'CAPTURE_ERROR_LOSSLESS_EVIDENCE_PRESERVED'
   };
 
   // Embed lossless metadata in the sanitized JSON object
   sanitizedObj._lossless_raw_evidence = metadata;
 
-  const transportPayloadText = canonicalizeRawPayload(sanitizedObj);
-  const transportHash = sha256(transportPayloadText);
-
   return {
     isModified: true,
+    hasNullBytes: true,
     originalHash,
     transportHash,
     sanitizedObj,
