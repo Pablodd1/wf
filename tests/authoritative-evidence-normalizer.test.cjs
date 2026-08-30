@@ -24,13 +24,13 @@ test('1. Provenance: throws if any required provenance field is missing (no synt
   assert.throws(() => {
     normalizeAuthoritativeRow({
       source_id: '1',
-      source_hash: 'h'.repeat(64),
-      source_system: 'Benchmark Test',
+      source_hash: null,
+      source_system: 'OceanDigital MariaDB',
       source_database: 'thecollective_inventory',
       source_table: 'auctions',
       source_record_id: 'mysql_auctions_1'
     });
-  }, /Benchmark namespace violation/);
+  }, /Missing required source_hash/);
 });
 
 test('2. Source Text Precedence: description alone', () => {

@@ -113,11 +113,14 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   const sourceRecordId = stagedRow.source_record_id ? String(stagedRow.source_record_id) : (stagedRow.raw_payload && stagedRow.raw_payload.id ? String(stagedRow.raw_payload.id) : null);
   if (!sourceRecordId) throw new Error('Missing required source_record_id');
 
-  // Strict namespace boundary assertion
-  if (stagedRow.source_system !== 'OceanDigital MariaDB' ||
-      stagedRow.source_database !== 'thecollective_inventory' ||
-      stagedRow.source_table !== 'auctions') {
-    throw new Error('Benchmark namespace violation: ' + stagedRow.source_system + ':' + stagedRow.source_database + ':' + stagedRow.source_table);
+  if (!stagedRow.source_system || typeof stagedRow.source_system !== 'string' || stagedRow.source_system.trim() === '') {
+    throw new Error('Missing required source_system');
+  }
+  if (!stagedRow.source_database || typeof stagedRow.source_database !== 'string' || stagedRow.source_database.trim() === '') {
+    throw new Error('Missing required source_database');
+  }
+  if (!stagedRow.source_table || typeof stagedRow.source_table !== 'string' || stagedRow.source_table.trim() === '') {
+    throw new Error('Missing required source_table');
   }
 
   const sourceId = String(stagedRow.source_id);
@@ -477,7 +480,55 @@ function computeProposalHash(contract) {
   return crypto.createHash('sha256').update(JSON.stringify(payload, Object.keys(payload).sort())).digest('hex');
 }
 
+const DEFAULT_NYC3_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/';
+
+function resolveProductionImageUrl(imageKey, bucketBase = process.env.DO_SPACES_BUCKET_BASE || DEFAULT_NYC3_BASE) {
+  if (!imageKey || typeof imageKey !== 'string') return null;
+  const cleanKey = imageKey.trim().replace(/^\/+/, '');
+  const cleanBase = bucketBase.replace(/\/+$/, '') + '/';
+  return `${cleanBase}${cleanKey}`;
+}
+
+async function verifyImageReachabilityBounded(imageUrl, fetchFn = globalThis.fetch) {
+  if (!imageUrl) return { reachable: false, status: 'NO_URL', error: 'Missing image URL' };
+  try {
+    const headRes = await fetchFn(imageUrl, { method: 'HEAD' });
+    if (headRes.ok) {
+      const ct = headRes.headers.get('content-type') || '';
+      if (ct.startsWith('image/')) {
+        return { reachable: true, status: headRes.status, contentType: ct };
+      }
+    }
+    if (headRes.status === 405 || headRes.status === 403 || !headRes.ok) {
+      const getRes = await fetchFn(imageUrl, {
+        method: 'GET',
+        headers: { Range: 'bytes=0-1023' }
+      });
+      if (getRes.ok || getRes.status === 206) {
+        const getCt = getRes.headers.get('content-type') || '';
+        if (getCt.startsWith('image/')) {
+          return { reachable: true, status: getRes.status, contentType: getCt };
+        }
+      }
+      return { reachable: false, status: getRes.status, error: `Invalid content-type: ${getRes.headers.get('content-type')}` };
+    }
+    return { reachable: false, status: headRes.status, error: `Unsuccessful HTTP status ${headRes.status}` };
+  } catch (err) {
+    return { reachable: false, status: 'NETWORK_ERROR', error: err.message };
+  }
+}
+
 function buildAuthorizedInquiryContract(proposal, rawRow = null) {
+  const sourceSystem = proposal.source_system || (rawRow && rawRow.source_system);
+  const sourceDatabase = proposal.source_database || (rawRow && rawRow.source_database);
+  const sourceTable = proposal.source_table || (rawRow && rawRow.source_table);
+  const sourceId = proposal.source_id || (rawRow && rawRow.source_id);
+  const sourceHash = proposal.source_hash || (rawRow && rawRow.source_hash);
+
+  if (!sourceSystem || !sourceDatabase || !sourceTable || !sourceId || !sourceHash) {
+    throw new Error(`buildAuthorizedInquiryContract: Missing required composite provenance fields (system=${sourceSystem}, db=${sourceDatabase}, table=${sourceTable}, id=${sourceId}, hash=${sourceHash})`);
+  }
+
   const sellerName = proposal.seller_name || (rawRow && rawRow.raw_payload && rawRow.raw_payload.from_name) || 'Seller';
   const sellerContact = proposal.seller_contact || (rawRow && rawRow.raw_payload && rawRow.raw_payload.from_number) || null;
   const brand = proposal.brand || 'Watch';
@@ -506,19 +557,21 @@ function buildAuthorizedInquiryContract(proposal, rawRow = null) {
     }
   }
 
+  const isApproved = Boolean(proposal.contact_publication_approved);
+
   return {
-    source_system: proposal.source_system || (rawRow && rawRow.source_system) || 'OceanDigital MariaDB',
-    source_database: proposal.source_database || (rawRow && rawRow.source_database) || 'thecollective_inventory',
-    source_table: proposal.source_table || (rawRow && rawRow.source_table) || 'auctions',
-    source_id: proposal.source_id,
-    source_hash: proposal.source_hash || (rawRow && rawRow.source_hash) || null,
+    source_system: sourceSystem,
+    source_database: sourceDatabase,
+    source_table: sourceTable,
+    source_id: sourceId,
+    source_hash: sourceHash,
     seller_name: sellerName,
     seller_contact_masked: maskedContact,
-    seller_contact_raw: sellerContact,
-    contact_publication_approved: Boolean(proposal.contact_publication_approved),
-    inquiry_text: inquiryText,
-    whatsapp_url: whatsappUrl,
-    inquiry_ready: Boolean(digitsOnlyPhone && digitsOnlyPhone.length >= 7)
+    seller_contact_raw: isApproved ? sellerContact : null,
+    contact_publication_approved: isApproved,
+    inquiry_text: isApproved ? inquiryText : null,
+    whatsapp_url: isApproved ? whatsappUrl : null,
+    inquiry_ready: Boolean(isApproved && digitsOnlyPhone && digitsOnlyPhone.length >= 7)
   };
 }
 
@@ -896,6 +949,9 @@ module.exports = {
   computeParentHash,
   computeChildProposalHash,
   buildAuthorizedInquiryContract,
+  resolveProductionImageUrl,
+  verifyImageReachabilityBounded,
+  DEFAULT_NYC3_BASE,
   resolveSourceTextEvidence,
   resolveStrictIntentFromText,
   extractYearFromText,

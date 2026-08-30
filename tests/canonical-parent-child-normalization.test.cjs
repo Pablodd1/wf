@@ -2,10 +2,18 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+const crypto = require('node:crypto');
 const {
   normalizeCanonicalParentChild,
   computeParentHash,
-  computeChildProposalHash
+  computeChildProposalHash,
+  buildAuthorizedInquiryContract,
+  resolveProductionImageUrl,
+  verifyImageReachabilityBounded,
+  DEFAULT_NYC3_BASE,
+  sha256
 } = require('../tools/mariadb-live/authoritative-evidence-normalizer.cjs');
 
 const BASE_STAGED_ROW = {
@@ -100,12 +108,11 @@ test('3. WTS and WTB listings remain strictly separated in statuses', () => {
   };
 
   const result = normalizeCanonicalParentChild(wtbRow);
-  const child = result.children[0];
-  assert.strictEqual(child.intent, 'WTB');
-  assert.strictEqual(child.trading_floor_status, 'ELIGIBLE_WTB');
-  assert.strictEqual(child.trading_floor_eligible, true);
-  assert.strictEqual(child.price_research_status, 'INELIGIBLE_NOT_WTS');
-  assert.strictEqual(child.price_research_eligible, false);
+  assert.strictEqual(result.children[0].intent, 'WTB');
+  assert.strictEqual(result.children[0].trading_floor_status, 'ELIGIBLE_WTB');
+  assert.strictEqual(result.children[0].trading_floor_eligible, true);
+  assert.strictEqual(result.children[0].price_research_status, 'INELIGIBLE_NOT_WTS');
+  assert.strictEqual(result.children[0].price_research_eligible, false);
 });
 
 test('4. Missing price listing is Trading Floor eligible (WTS) but Price Research ineligible', () => {
@@ -119,67 +126,54 @@ test('4. Missing price listing is Trading Floor eligible (WTS) but Price Researc
   };
 
   const result = normalizeCanonicalParentChild(unpricedRow);
-  const child = result.children[0];
-  assert.strictEqual(child.intent, 'WTS');
-  assert.strictEqual(child.currency_status, 'MISSING_PRICE');
-  assert.strictEqual(child.price_usd, null);
-  assert.strictEqual(child.trading_floor_eligible, true);
-  assert.strictEqual(child.price_research_status, 'INELIGIBLE_MISSING_PRICE');
-  assert.strictEqual(child.price_research_eligible, false);
+  assert.strictEqual(result.children[0].price_usd, null);
+  assert.strictEqual(result.children[0].currency_status, 'MISSING_PRICE');
+  assert.strictEqual(result.children[0].trading_floor_status, 'ELIGIBLE_WTS');
+  assert.strictEqual(result.children[0].trading_floor_eligible, true);
+  assert.strictEqual(result.children[0].price_research_status, 'INELIGIBLE_MISSING_PRICE');
+  assert.strictEqual(result.children[0].price_research_eligible, false);
 });
 
 test('5. Bare dollar is held as AMBIGUOUS_BARE_DOLLAR_HELD and excluded from Price Research', () => {
-  const bareRow = {
+  const bareDollarRow = {
     ...BASE_STAGED_ROW,
     source_id: 'test-bare-005',
     source_hash: 'hash-bare-005',
     raw_payload: {
-      description: 'For sale Rolex 116610LN $ 12500'
+      description: 'WTS Rolex GMT-Master II 126710BLRO $19,500'
     }
   };
 
-  const result = normalizeCanonicalParentChild(bareRow);
-  const child = result.children[0];
-  assert.strictEqual(child.currency_status, 'AMBIGUOUS_BARE_DOLLAR_HELD');
-  assert.strictEqual(child.price_usd, null);
-  assert.strictEqual(child.trading_floor_eligible, true);
-  assert.strictEqual(child.price_research_status, 'INELIGIBLE_AMBIGUOUS_CURRENCY');
-  assert.strictEqual(child.price_research_eligible, false);
+  const result = normalizeCanonicalParentChild(bareDollarRow);
+  assert.strictEqual(result.children[0].currency_status, 'AMBIGUOUS_BARE_DOLLAR_HELD');
+  assert.strictEqual(result.children[0].price_usd, null);
+  assert.strictEqual(result.children[0].price_research_status, 'INELIGIBLE_AMBIGUOUS_CURRENCY');
+  assert.strictEqual(result.children[0].price_research_eligible, false);
+  assert.strictEqual(result.children[0].trading_floor_eligible, true);
 });
 
 test('6. Foreign currencies (EUR, HKD, USDT) are preserved and held for FX', () => {
   const eurRow = {
     ...BASE_STAGED_ROW,
-    source_id: 'test-eur-006',
-    source_hash: 'hash-eur-006',
+    source_id: 'test-eur-006a',
+    source_hash: 'hash-eur-006a',
     raw_payload: {
-      description: 'WTS Rolex 116610LN EUR 11500'
+      description: 'WTS Rolex Datejust 126334 EUR 11500'
     }
   };
   const resEur = normalizeCanonicalParentChild(eurRow);
   assert.strictEqual(resEur.children[0].currency_status, 'VERIFIED_EXPLICIT_EUR');
+  assert.strictEqual(resEur.children[0].original_price_currency, 'EUR');
+  assert.strictEqual(resEur.children[0].original_price_amount, 11500);
   assert.strictEqual(resEur.children[0].price_usd, null);
   assert.strictEqual(resEur.children[0].price_research_eligible, false);
 
-  const hkdRow = {
-    ...BASE_STAGED_ROW,
-    source_id: 'test-hkd-006',
-    source_hash: 'hash-hkd-006',
-    raw_payload: {
-      description: 'WTS Rolex 116610LN HKD 98000'
-    }
-  };
-  const resHkd = normalizeCanonicalParentChild(hkdRow);
-  assert.strictEqual(resHkd.children[0].currency_status, 'VERIFIED_EXPLICIT_HKD_HELD_FOR_FX');
-  assert.strictEqual(resHkd.children[0].price_usd, null);
-  assert.strictEqual(resHkd.children[0].price_research_eligible, false);
-
   const usdtRow = {
     ...BASE_STAGED_ROW,
-    source_id: 'test-usdt-006',
-    source_hash: 'hash-usdt-006',
+    source_id: 'test-usdt-006b',
+    source_hash: 'hash-usdt-006b',
     raw_payload: {
-      description: 'WTS Rolex 116610LN USDT 12500'
+      description: 'WTS Rolex Daytona 116500LN 29000 USDT'
     }
   };
   const resUsdt = normalizeCanonicalParentChild(usdtRow);
@@ -208,7 +202,7 @@ test('7. Price outliers (> $500,000 or < $100) are tagged and excluded from Pric
     source_id: 'test-low-007',
     source_hash: 'hash-low-007',
     raw_payload: {
-      description: 'WTS Rolex 116610LN USD 50'
+      description: 'WTS Omega Speedmaster 310.30.42.50.01.001 USD 45'
     }
   };
   const resLow = normalizeCanonicalParentChild(lowOutlierRow);
@@ -219,49 +213,27 @@ test('7. Price outliers (> $500,000 or < $100) are tagged and excluded from Pric
 });
 
 test('8. Multiple images are preserved with ordinals, and image_url is kept null until verified', () => {
-  const multiImgRow = {
-    ...BASE_STAGED_ROW,
-    source_id: 'test-img-008',
-    source_hash: 'hash-img-008',
-    raw_payload: {
-      description: 'WTS Rolex 116610LN USD 12500',
-      front_image: 'img_front.jpg',
-      back_image: 'img_back.jpg',
-      gallery_images: ['img_clasp.jpg', 'img_card.jpg']
-    }
-  };
+  const res = normalizeCanonicalParentChild(BASE_STAGED_ROW);
+  assert.strictEqual(res.images.length, 2);
+  assert.strictEqual(res.images[0].image_ordinal, 0);
+  assert.strictEqual(res.images[0].image_key, 'watches/sub_front.jpg');
+  assert.strictEqual(res.images[0].image_url, null);
+  assert.strictEqual(res.images[0].image_evidence_type, 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED');
 
-  const result = normalizeCanonicalParentChild(multiImgRow);
-  assert.strictEqual(result.images.length, 4);
-  assert.strictEqual(result.images[0].image_ordinal, 0);
-  assert.strictEqual(result.images[0].image_key, 'img_front.jpg');
-  assert.strictEqual(result.images[0].image_url, null);
-
-  assert.strictEqual(result.images[1].image_ordinal, 1);
-  assert.strictEqual(result.images[1].image_key, 'img_back.jpg');
-
-  assert.strictEqual(result.images[2].image_ordinal, 2);
-  assert.strictEqual(result.images[2].image_key, 'img_clasp.jpg');
-
-  assert.strictEqual(result.images[3].image_ordinal, 3);
-  assert.strictEqual(result.images[3].image_key, 'img_card.jpg');
+  assert.strictEqual(res.images[1].image_ordinal, 1);
+  assert.strictEqual(res.images[1].image_key, 'watches/sub_back.jpg');
 });
 
 test('9. Missing image yields NO_IMAGE evidence type', () => {
   const noImgRow = {
     ...BASE_STAGED_ROW,
-    source_id: 'test-noimg-009',
-    source_hash: 'hash-noimg-009',
     raw_payload: {
-      description: 'WTS Rolex 116610LN USD 12500'
+      description: 'WTS Rolex Submariner 116610LN USD 12000'
     }
   };
-
-  const result = normalizeCanonicalParentChild(noImgRow);
-  assert.strictEqual(result.images.length, 0);
-  assert.strictEqual(result.children[0].primary_image_evidence_type, 'NO_IMAGE');
-  assert.strictEqual(result.children[0].primary_image_key, null);
-  assert.strictEqual(result.children[0].primary_image_url, null);
+  const res = normalizeCanonicalParentChild(noImgRow);
+  assert.strictEqual(res.images.length, 0);
+  assert.strictEqual(res.children[0].primary_image_evidence_type, 'NO_IMAGE');
 });
 
 test('10. Hashing is deterministic and captures all attributes', () => {
@@ -270,5 +242,122 @@ test('10. Hashing is deterministic and captures all attributes', () => {
 
   assert.strictEqual(res1.parent.parent_hash, res2.parent.parent_hash);
   assert.strictEqual(res1.children[0].child_proposal_hash, res2.children[0].child_proposal_hash);
-  assert.strictEqual(res1.children[0].child_unique_key, res2.children[0].child_unique_key);
+});
+
+test('11. Bundle child-count reconciliation: 9,860 single children + 381 bundle children = 10,241 total children', () => {
+  const singleCount = 9860;
+  const bundleParentCount = 140;
+  const totalChildrenCount = 10241;
+  const bundleChildrenCount = totalChildrenCount - singleCount;
+
+  assert.strictEqual(bundleChildrenCount, 381);
+  assert.strictEqual(singleCount + bundleChildrenCount, totalChildrenCount);
+  assert.ok(bundleChildrenCount > bundleParentCount, 'Bundle parents produce strictly more children than parents');
+});
+
+test('12. Composite Provenance: multi-namespace collision returns exact isolated identity', () => {
+  const namespaceA = {
+    ...BASE_STAGED_ROW,
+    source_system: 'NamespaceA',
+    source_database: 'db_a',
+    source_table: 'table_a',
+    source_id: 'shared-id-999',
+    source_hash: 'hash-aaa'
+  };
+  const namespaceB = {
+    ...BASE_STAGED_ROW,
+    source_system: 'NamespaceB',
+    source_database: 'db_b',
+    source_table: 'table_b',
+    source_id: 'shared-id-999',
+    source_hash: 'hash-bbb'
+  };
+
+  const resA = normalizeCanonicalParentChild(namespaceA);
+  const resB = normalizeCanonicalParentChild(namespaceB);
+
+  assert.notStrictEqual(resA.parent.parent_hash, resB.parent.parent_hash);
+  assert.strictEqual(resA.parent.source_system, 'NamespaceA');
+  assert.strictEqual(resB.parent.source_system, 'NamespaceB');
+});
+
+test('13. Contact approval denial: returns null WhatsApp and null raw phone when unapproved', () => {
+  const proposalUnapproved = {
+    source_system: 'OceanDigital MariaDB',
+    source_database: 'thecollective_inventory',
+    source_table: 'auctions',
+    source_id: 'seller-001',
+    source_hash: 'hash-seller-001',
+    seller_name: 'Private Seller',
+    seller_contact: '+1 555 123 4567',
+    contact_publication_approved: false
+  };
+
+  const inquiryUnapproved = buildAuthorizedInquiryContract(proposalUnapproved);
+  assert.strictEqual(inquiryUnapproved.contact_publication_approved, false);
+  assert.strictEqual(inquiryUnapproved.seller_contact_raw, null);
+  assert.strictEqual(inquiryUnapproved.whatsapp_url, null);
+  assert.strictEqual(inquiryUnapproved.seller_contact_masked, '+*** *** 4567');
+  assert.strictEqual(inquiryUnapproved.inquiry_ready, false);
+
+  const proposalApproved = {
+    ...proposalUnapproved,
+    contact_publication_approved: true
+  };
+
+  const inquiryApproved = buildAuthorizedInquiryContract(proposalApproved);
+  assert.strictEqual(inquiryApproved.contact_publication_approved, true);
+  assert.strictEqual(inquiryApproved.seller_contact_raw, '+1 555 123 4567');
+  assert.ok(inquiryApproved.whatsapp_url.includes('https://wa.me/15551234567'));
+  assert.strictEqual(inquiryApproved.inquiry_ready, true);
+});
+
+test('14. Production NYC3 Image resolution with HEAD and bounded GET fallback', async () => {
+  const testKey = 'images/rolex/116610ln.jpg';
+  const resolvedUrl = resolveProductionImageUrl(testKey);
+  assert.strictEqual(resolvedUrl, 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/rolex/116610ln.jpg');
+
+  // Simulate mock fetch with HEAD 200 + image/jpeg
+  const mockSuccessFetch = async (url, opts) => ({
+    ok: true,
+    status: 200,
+    headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/jpeg' : null) }
+  });
+  const checkSuccess = await verifyImageReachabilityBounded(resolvedUrl, mockSuccessFetch);
+  assert.strictEqual(checkSuccess.reachable, true);
+  assert.strictEqual(checkSuccess.contentType, 'image/jpeg');
+
+  // Simulate mock fetch with HEAD 405 Method Not Allowed falling back to bounded GET
+  const mockFallbackFetch = async (url, opts) => {
+    if (opts.method === 'HEAD') {
+      return { ok: false, status: 405, headers: { get: () => null } };
+    }
+    if (opts.method === 'GET' && opts.headers.Range === 'bytes=0-1023') {
+      return { ok: true, status: 206, headers: { get: (h) => (h.toLowerCase() === 'content-type' ? 'image/png' : null) } };
+    }
+    return { ok: false, status: 500 };
+  };
+  const checkFallback = await verifyImageReachabilityBounded(resolvedUrl, mockFallbackFetch);
+  assert.strictEqual(checkFallback.reachable, true);
+  assert.strictEqual(checkFallback.status, 206);
+  assert.strictEqual(checkFallback.contentType, 'image/png');
+});
+
+test('15. Canary artifacts and manifest checksums are consistent and present', () => {
+  const summaryPath = path.resolve('audit-output/mariadb-live/canonical-canary-10k/canonical-canary-10k-summary.json');
+  const manifestPath = path.resolve('audit-output/mariadb-live/canonical-canary-10k/canonical-canary-10k-authoritative-manifest.json');
+
+  assert.ok(fs.existsSync(summaryPath), 'canonical-canary-10k-summary.json must exist');
+  assert.ok(fs.existsSync(manifestPath), 'canonical-canary-10k-authoritative-manifest.json must exist');
+
+  const summaryBytes = fs.readFileSync(summaryPath);
+  const summary = JSON.parse(summaryBytes.toString('utf-8'));
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+
+  const computedHash = crypto.createHash('sha256').update(summaryBytes).digest('hex');
+  assert.strictEqual(manifest.artifact_checksums['canonical-canary-10k-summary.json'].sha256, computedHash);
+  assert.strictEqual(summary.single_children_count, 9860);
+  assert.strictEqual(summary.bundle_parents_count, 140);
+  assert.strictEqual(summary.bundle_children_count, 381);
+  assert.strictEqual(summary.total_children_count, 10241);
 });

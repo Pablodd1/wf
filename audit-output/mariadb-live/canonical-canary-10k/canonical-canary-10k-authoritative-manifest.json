@@ -1,0 +1,116 @@
+{
+  "contract": "wf-canonical-10k-canary-manifest-v1",
+  "timestamp": "2026-08-30T23:08:41.436Z",
+  "classification": "CANONICAL_CANARY_10K_VERIFIED",
+  "summary": {
+    "contract": "wf-canonical-10k-canary-v1",
+    "timestamp": "2026-08-30T22:55:43.956Z",
+    "canary_inputs_processed": 10000,
+    "parents_count": 10000,
+    "single_children_count": 9860,
+    "bundle_parents_count": 140,
+    "bundle_children_count": 381,
+    "total_children_count": 10241,
+    "trading_floor_eligible_count": 2127,
+    "trading_floor_eligible_pct": "20.77%",
+    "price_research_eligible_count": 2,
+    "price_research_eligible_pct": "0.02%",
+    "price_outliers_count": 6,
+    "currency_distribution": {
+      "MISSING_PRICE": 4523,
+      "AMBIGUOUS_BARE_DOLLAR_HELD": 3931,
+      "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 1098,
+      "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX": 413,
+      "VERIFIED_EXPLICIT_USD": 136,
+      "VERIFIED_EXPLICIT_EUR": 90,
+      "VERIFIED_EXPLICIT_SAR": 2,
+      "VERIFIED_EXPLICIT_GBP": 7,
+      "VERIFIED_EXPLICIT_AED": 36,
+      "VERIFIED_EXPLICIT_MYR": 1,
+      "VERIFIED_EXPLICIT_AUD": 3,
+      "VERIFIED_EXPLICIT_CNY": 1
+    },
+    "image_evidence": {
+      "total_extracted_keys": 10000,
+      "production_spaces_root": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/",
+      "sample_reachability_checked": 100,
+      "sample_reachable": 0,
+      "sample_unreachable": 100
+    },
+    "idempotency_recorded_runs": {
+      "pass_1": {
+        "parents": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 10000
+        },
+        "children": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 10241
+        }
+      },
+      "pass_2": {
+        "parents": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 10000
+        },
+        "children": {
+          "inserted": 0,
+          "updated": 0,
+          "unchanged": 10241
+        }
+      }
+    },
+    "public_before_after_comparison": {
+      "trading_floor_ready_view": {
+        "before_count": 96340,
+        "after_count": 96340,
+        "delta": 0
+      },
+      "price_research_ready_view": {
+        "before_count": 31848,
+        "after_count": 31848,
+        "delta": 0
+      },
+      "public_raw_messages": {
+        "before_count": 10000,
+        "after_count": 10000,
+        "delta": 0
+      },
+      "public_watch_records": {
+        "before_count": 15145237,
+        "after_count": 15145237,
+        "delta": 0
+      }
+    },
+    "exact_public_lineage_audit": {
+      "raw_messages_id_overlap": 0,
+      "watch_records_id_overlap": 0,
+      "watch_records_key_overlap": 0,
+      "watch_records_hash_overlap": 0,
+      "tf_view_hash_overlap": 0,
+      "pr_view_hash_overlap": 0,
+      "public_isolation_proven": true
+    },
+    "public_isolation_verified": true,
+    "raw_checkpoint_preserved_at_951750": true,
+    "cursor_boundary": {
+      "first_row": {
+        "created_on": "2025-01-08 13:28:49",
+        "source_id": "7534d09b-28b9-4052-8005-228c32f972df"
+      },
+      "last_row": {
+        "created_on": "2025-02-28T14:04:06.000Z",
+        "source_id": "d91c0a88-2b07-419c-ab3a-de0409d5de5c"
+      }
+    }
+  },
+  "artifact_checksums": {
+    "canonical-canary-10k-summary.json": {
+      "sha256": "291fa0186f53cb505ae80fe4190f69966f89a7c9fe512ee19f285c3b1e50453d",
+      "size_bytes": 2814
+    }
+  }
+}

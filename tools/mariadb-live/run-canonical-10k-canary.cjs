@@ -9,13 +9,15 @@ const {
   computeParentHash,
   computeChildProposalHash,
   buildAuthorizedInquiryContract,
+  resolveProductionImageUrl,
+  verifyImageReachabilityBounded,
+  DEFAULT_NYC3_BASE,
   sha256
 } = require('./authoritative-evidence-normalizer.cjs');
 
 const CONTRACT = 'wf-canonical-10k-canary-v1';
 const CANARY_ROW_COUNT = 10000;
 const BATCH_SIZE = 500;
-const DO_SPACES_BUCKET_BASE = 'https://thecollective.fra1.digitaloceanspaces.com';
 const OUTPUT_DIR = path.resolve('audit-output/mariadb-live/canonical-canary-10k');
 
 const FROZEN_UPPER_CURSOR = {
@@ -102,26 +104,18 @@ async function sampleCheckImageReachability(imageKeys, sampleSize = 100) {
   };
 
   for (const imgKey of sample) {
-    const url = `${DO_SPACES_BUCKET_BASE}/${imgKey.replace(/^\/+/, '')}`;
-    try {
-      const res = await fetch(url, { method: 'HEAD' });
-      const isReachable = res.ok;
-      if (isReachable) results.reachable++;
-      else results.unreachable++;
-      results.details.push({
-        image_key: imgKey,
-        status: res.status,
-        reachable: isReachable
-      });
-    } catch (err) {
-      results.unreachable++;
-      results.details.push({
-        image_key: imgKey,
-        status: 'NETWORK_ERROR',
-        reachable: false,
-        error: err.message
-      });
-    }
+    const url = resolveProductionImageUrl(imgKey);
+    const check = await verifyImageReachabilityBounded(url);
+    if (check.reachable) results.reachable++;
+    else results.unreachable++;
+    results.details.push({
+      image_key: imgKey,
+      url: url,
+      status: check.status,
+      reachable: check.reachable,
+      contentType: check.contentType || null,
+      error: check.error || null
+    });
   }
 
   return results;
@@ -365,14 +359,17 @@ async function runCanonical10kCanary(env = process.env) {
     throw new Error(`Raw checkpoint corrupted after canary!`);
   }
 
+  const bundleChildrenCount = totalChildrenCount - singleCount;
+
   const summary = {
     contract: CONTRACT,
     timestamp: new Date().toISOString(),
     canary_inputs_processed: CANARY_ROW_COUNT,
     parents_count: normalizedParents.length,
-    single_listings_count: singleCount,
-    bundle_listings_count: bundleCount,
-    children_count: totalChildrenCount,
+    single_children_count: singleCount,
+    bundle_parents_count: bundleCount,
+    bundle_children_count: bundleChildrenCount,
+    total_children_count: totalChildrenCount,
     trading_floor_eligible_count: tfEligibleCount,
     trading_floor_eligible_pct: `${((tfEligibleCount / totalChildrenCount) * 100).toFixed(2)}%`,
     price_research_eligible_count: prEligibleCount,
@@ -385,13 +382,15 @@ async function runCanonical10kCanary(env = process.env) {
       sample_reachable: imageReachability.reachable,
       sample_unreachable: imageReachability.unreachable
     },
-    idempotency_run_1: {
-      parents: { inserted: totalInsertedParents, updated: totalUpdatedParents, unchanged: totalUnchangedParents },
-      children: { inserted: totalInsertedChildren, updated: totalUpdatedChildren, unchanged: totalUnchangedChildren }
-    },
-    idempotency_run_2: {
-      parents: { inserted: rerunInsertedParents, updated: rerunUpdatedParents, unchanged: rerunUnchangedParents },
-      children: { inserted: rerunInsertedChildren, updated: rerunUpdatedChildren, unchanged: rerunUnchangedChildren }
+    idempotency_recorded_runs: {
+      pass_1: {
+        parents: { inserted: totalInsertedParents, updated: totalUpdatedParents, unchanged: totalUnchangedParents },
+        children: { inserted: totalInsertedChildren, updated: totalUpdatedChildren, unchanged: totalUnchangedChildren }
+      },
+      pass_2: {
+        parents: { inserted: rerunInsertedParents, updated: rerunUpdatedParents, unchanged: rerunUnchangedParents },
+        children: { inserted: rerunInsertedChildren, updated: rerunUpdatedChildren, unchanged: rerunUnchangedChildren }
+      }
     },
     public_before_after_comparison: {
       trading_floor_ready_view: { before_count: publicMetricsBefore.trading_floor_ready_view.count, after_count: publicMetricsAfter.trading_floor_ready_view.count, delta: deltaTf },

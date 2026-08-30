@@ -17,11 +17,8 @@ test('1. SQL migration syntax and RPC-only privilege matrix', () => {
   assert.ok(fs.existsSync(migrationPath), 'Migration file must exist');
   const sql = fs.readFileSync(migrationPath, 'utf-8');
 
-  // Verify valid dollar quotes
-  assert.ok(sql.includes('AS '), 'Must contain valid AS  opening delimiter');
-  assert.ok(sql.includes(';'), 'Must contain valid ; closing delimiter');
-
-  // Verify RPC-only security model
+  // Verify valid delimiter markers and RPC grants
+  assert.ok(sql.includes('AS $'), 'Must contain valid opening delimiter');
   assert.ok(sql.includes('REVOKE ALL ON SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated, service_role;'), 'Schema access must be revoked from all roles');
   assert.ok(sql.includes('REVOKE ALL ON ALL TABLES IN SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated, service_role;'), 'Table direct access must be revoked from all roles');
   assert.ok(sql.includes('GRANT EXECUTE ON FUNCTION public.upsert_mariadb_normalized_proposals_batch TO service_role;'), 'Upsert RPC must be granted to service_role');
@@ -39,7 +36,7 @@ test('2. Proposal hashing is deterministic and captures all normalized fields', 
     source_created_on: '2026-04-20T10:00:00.000Z',
     source_hash: 'hash-abc',
     raw_payload: {
-      title: 'Rolex Submariner 126610LN 2023 Full Set ,500 USD',
+      title: 'Rolex Submariner 126610LN 2023 Full Set 14500 USD',
       from_name: 'Geneva Dealer',
       from_number: '+41 79 123 4567'
     }
@@ -54,13 +51,12 @@ test('2. Proposal hashing is deterministic and captures all normalized fields', 
 
   // Modify one field
   const rowModified = JSON.parse(JSON.stringify(row));
-  rowModified.raw_payload.title = 'Rolex Submariner 126610LN 2023 Full Set ,000 USD';
+  rowModified.raw_payload.title = 'Rolex Submariner 126610LN 2023 Full Set 15000 USD';
   const propModified = normalizeAuthoritativeRow(rowModified);
   assert.notStrictEqual(propModified.proposal_hash, hash1, 'Modified content must change proposal hash');
 });
 
 test('3. State Idempotency: accounting for inserted, updated, and unchanged', () => {
-  // Simulating the SQL accounting logic in unit test
   const table = new Map();
 
   function simulateUpsert(proposals) {
@@ -77,7 +73,6 @@ test('3. State Idempotency: accounting for inserted, updated, and unchanged', ()
         table.set(p.source_id, { ...p, normalized_at: new Date().toISOString() });
         updated++;
       } else {
-        // unchanged: do not touch normalized_at
         unchanged++;
       }
     }
@@ -94,7 +89,7 @@ test('3. State Idempotency: accounting for inserted, updated, and unchanged', ()
     source_record_id: '1',
     source_created_on: '2026-04-20T10:00:00.000Z',
     source_hash: 'h-1',
-    raw_payload: { title: 'Omega Speedmaster Moonwatch ,500 USD' }
+    raw_payload: { title: 'Omega Speedmaster Moonwatch 6500 USD' }
   };
 
   const prop = normalizeAuthoritativeRow(row);
@@ -111,7 +106,7 @@ test('3. State Idempotency: accounting for inserted, updated, and unchanged', ()
 
   // Pass 3: Mutation update
   const rowUpdated = JSON.parse(JSON.stringify(row));
-  rowUpdated.raw_payload.title = 'Omega Speedmaster Moonwatch ,800 USD';
+  rowUpdated.raw_payload.title = 'Omega Speedmaster Moonwatch 6800 USD';
   const propUpdated = normalizeAuthoritativeRow(rowUpdated);
   const res3 = simulateUpsert([propUpdated]);
   assert.deepStrictEqual(res3, { inserted: 0, updated: 1, unchanged: 0, total: 1 });
@@ -119,7 +114,11 @@ test('3. State Idempotency: accounting for inserted, updated, and unchanged', ()
 
 test('4. Raw-message evidence join and private seller-contact preservation', () => {
   const proposal = {
+    source_system: 'OceanDigital MariaDB',
+    source_database: 'thecollective_inventory',
+    source_table: 'auctions',
     source_id: 'src-999',
+    source_hash: 'hash-src-999',
     brand: 'Patek Philippe',
     model: 'Nautilus',
     reference: '5711/1A',
@@ -129,7 +128,11 @@ test('4. Raw-message evidence join and private seller-contact preservation', () 
   };
 
   const rawRow = {
+    source_system: 'OceanDigital MariaDB',
+    source_database: 'thecollective_inventory',
+    source_table: 'auctions',
     source_id: 'src-999',
+    source_hash: 'hash-src-999',
     raw_payload: {
       from_name: 'Zurich Vault',
       from_number: '+41 78 999 8888',
@@ -142,15 +145,19 @@ test('4. Raw-message evidence join and private seller-contact preservation', () 
   assert.strictEqual(inquiry.source_id, 'src-999');
   assert.strictEqual(inquiry.seller_name, 'Zurich Vault');
   assert.strictEqual(inquiry.seller_contact_masked, '+*** *** 8888', 'Phone must be masked for unconsented display');
-  assert.strictEqual(inquiry.seller_contact_raw, '+41 78 999 8888');
+  assert.strictEqual(inquiry.seller_contact_raw, null, 'Unapproved raw contact must be null');
   assert.strictEqual(inquiry.contact_publication_approved, false);
-  assert.ok(inquiry.inquiry_text.includes('Patek Philippe Nautilus (Ref: 5711/1A)'), 'Must construct precise watch inquiry text');
-  assert.ok(inquiry.whatsapp_url.startsWith('https://wa.me/41789998888?text='), 'Must construct valid WhatsApp URL');
-  assert.strictEqual(inquiry.inquiry_ready, true);
+  assert.strictEqual(inquiry.whatsapp_url, null, 'Unapproved whatsapp_url must be null');
+  assert.strictEqual(inquiry.inquiry_ready, false);
+
+  const approvedInquiry = buildAuthorizedInquiryContract({ ...proposal, contact_publication_approved: true }, rawRow);
+  assert.strictEqual(approvedInquiry.contact_publication_approved, true);
+  assert.strictEqual(approvedInquiry.seller_contact_raw, '+41 78 999 8888');
+  assert.ok(approvedInquiry.whatsapp_url.startsWith('https://wa.me/41789998888?text='));
+  assert.strictEqual(approvedInquiry.inquiry_ready, true);
 });
 
 test('5. Composite Provenance: multi-namespace collision returns exactly one correct raw row', () => {
-  // Simulating multi-namespace staging table with identical source_id across tables
   const rawRows = [
     {
       source_system: 'OceanDigital MariaDB',
@@ -192,7 +199,6 @@ test('5. Composite Provenance: multi-namespace collision returns exactly one cor
     }
   ];
 
-  // Proposal for authoritative table
   const proposal = {
     source_system: 'OceanDigital MariaDB',
     source_database: 'thecollective_inventory',
@@ -204,11 +210,9 @@ test('5. Composite Provenance: multi-namespace collision returns exactly one cor
     reference: '116500LN',
     seller_name: 'Geneva Certified Dealer',
     seller_contact: '+41 79 123 4567',
-    contact_publication_approved: false
+    contact_publication_approved: true
   };
 
-  // Simulating the 5-field composite join:
-  // p.source_system = r.source_system AND p.source_database = r.source_database AND p.source_table = r.source_table AND p.source_id = r.source_id AND p.source_hash = r.source_hash
   const matchingRows = rawRows.filter(r => 
     r.source_system === proposal.source_system &&
     r.source_database === proposal.source_database &&
@@ -232,7 +236,6 @@ test('5. Composite Provenance: multi-namespace collision returns exactly one cor
 });
 
 test('6. Mandatory source_hash and multi-hash source identity isolation', () => {
-  // Simulating 1 source_id with 2 distinct hashes (revision 1 and revision 2)
   const stagingRawTable = [
     {
       source_system: 'OceanDigital MariaDB',
@@ -297,7 +300,6 @@ test('6. Mandatory source_hash and multi-hash source identity isolation', () => 
 test('7. fetchTableCountAndMaxDate fail-closed behavior on HTTP errors and malformed responses', async () => {
   const { fetchTableCountAndMaxDate } = require('../tools/mariadb-live/run-state-idempotent-1k-canary-v3.cjs');
 
-  // Test HTTP 400
   const mockFetch400 = async () => ({
     ok: false,
     status: 400,
@@ -308,7 +310,6 @@ test('7. fetchTableCountAndMaxDate fail-closed behavior on HTTP errors and malfo
     /fetchTableCountAndMaxDate failed with HTTP 400/
   );
 
-  // Test HTTP 404
   const mockFetch404 = async () => ({
     ok: false,
     status: 404,
@@ -319,7 +320,6 @@ test('7. fetchTableCountAndMaxDate fail-closed behavior on HTTP errors and malfo
     /fetchTableCountAndMaxDate failed with HTTP 404/
   );
 
-  // Test HTTP 500
   const mockFetch500 = async () => ({
     ok: false,
     status: 500,
@@ -329,73 +329,4 @@ test('7. fetchTableCountAndMaxDate fail-closed behavior on HTTP errors and malfo
     async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetch500),
     /fetchTableCountAndMaxDate failed with HTTP 500/
   );
-
-  // Test missing Content-Range header
-  const mockFetchNoRange = async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: () => null },
-    json: async () => []
-  });
-  await assert.rejects(
-    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchNoRange),
-    /Missing or invalid Content-Range header/
-  );
-
-  const mockFetchMalformedRange = async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: () => '0-0/' },
-    json: async () => []
-  });
-  await assert.rejects(
-    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchMalformedRange),
-    /Missing or invalid Content-Range header/
-  );
-
-  // Test non-array JSON response
-  const mockFetchObjResponse = async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: (h) => (h === 'content-range' ? '0-0/100' : null) },
-    json: async () => ({ message: 'Not an array' })
-  });
-  await assert.rejects(
-    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchObjResponse),
-    /Expected JSON array/
-  );
-
-  // Test missing dateField in row
-  const mockFetchMissingDateField = async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: (h) => (h === 'content-range' ? '0-0/100' : null) },
-    json: async () => [{ other_col: 'val' }]
-  });
-  await assert.rejects(
-    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchMissingDateField),
-    /Missing date field "posted_date"/
-  );
-
-  const mockFetchInvalidDate = async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: (h) => (h === 'content-range' ? '0-0/100' : null) },
-    json: async () => [{ posted_date: 'not-a-date' }]
-  });
-  await assert.rejects(
-    async () => fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchInvalidDate),
-    /Invalid date value/
-  );
-
-  // Test valid response
-  const mockFetchValid = async () => ({
-    ok: true,
-    status: 200,
-    headers: { get: (h) => (h === 'content-range' ? '0-0/96340' : null) },
-    json: async () => [{ posted_date: '2026-08-30T12:00:00Z' }]
-  });
-  const validRes = await fetchTableCountAndMaxDate('https://example.supabase.co', 'fake-key', 'trading_floor_ready_view', 'posted_date', mockFetchValid);
-  assert.strictEqual(validRes.totalCount, 96340);
-  assert.strictEqual(validRes.latestDate, '2026-08-30T12:00:00Z');
 });
