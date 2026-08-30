@@ -14,16 +14,16 @@ const {
 const { normalizeDialValue } = require('../../api/_lib/dial-normalization.cjs');
 const { normalizeWatchCondition, normalizeWatchDial } = require('../../api/_lib/watch-condition-normalization.cjs');
 
-const DO_SPACES_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings';
-
 function sha256(content) {
   if (content === null || content === undefined) return null;
   return crypto.createHash('sha256').update(String(content)).digest('hex');
 }
 
 /**
- * Resolves source text evidence using strict precedence:
- * description -> title -> comments
+ * Resolves source text evidence using strict precedence across proven MariaDB schema columns:
+ * 1. raw_payload.description
+ * 2. raw_payload.title
+ * 3. raw_payload.comments
  * Returns { text: string | null, source: 'description' | 'title' | 'comments' | null }
  */
 function resolveSourceTextEvidence(stagedRow) {
@@ -45,11 +45,6 @@ function resolveSourceTextEvidence(stagedRow) {
   const comments = typeof raw.comments === 'string' ? raw.comments.trim() : '';
   if (comments.length > 0) {
     return { text: comments, source: 'comments' };
-  }
-
-  // Fallback: check stagedRow.raw_message if available
-  if (typeof stagedRow.raw_message === 'string' && stagedRow.raw_message.trim().length > 0) {
-    return { text: stagedRow.raw_message.trim(), source: 'raw_message' };
   }
 
   return { text: null, source: null };
@@ -85,9 +80,9 @@ function extractYearFromText(text) {
  * 2. Deterministic derived field: listing_text_evidence, listing_text_source, listing_text_sha256 (precedence: description -> title -> comments).
  * 3. Price, currency, year, condition, and intent come EXCLUSIVELY from listing_text_evidence.
  * 4. Zero fallbacks to raw.type, raw.price, raw.currency, raw.year, raw.condition.
- * 5. Identity metadata labeled explicitly by provenance.
- * 6. DigitalOcean image URL set to null until reachable; evidence type set to IMAGE_KEY_PRESERVED_URL_UNVERIFIED.
- * 7. Unknown intent held from publication.
+ * 5. Distinct trading_floor_status vs price_research_status (unpriced listings can be Trading Floor ready).
+ * 6. Dealer ratings not published without source review evidence.
+ * 7. DigitalOcean image URL set to null until reachable; evidence type set to IMAGE_KEY_PRESERVED_URL_UNVERIFIED.
  * 8. Missing source text routed to MISSING_SOURCE_TEXT.
  */
 function normalizeAuthoritativeRow(stagedRow, options = {}) {
@@ -223,23 +218,35 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     currencyStatus = 'AMBIGUOUS_BARE_DOLLAR_HELD';
   }
 
-  // 8. Seller Identity & Zero-Rating Semantics
+  // 8. Seller Identity & Zero-Rating / Unverified Rating Semantics
   const sellerName = raw.from_name ? String(raw.from_name).trim() : null;
   const sellerContact = null; // Strictly private: no contact publication
   const sellerActivityCount = raw.dealer_activity_count !== undefined ? Number(raw.dealer_activity_count) : null;
   
-  // Zero-rating semantics: 0 or missing is unrated (null), not 0 stars
+  // Rule 5: Do not publish dealer ratings without source review evidence
   const rawRating = raw.dealer_rating !== undefined && raw.dealer_rating !== null ? Number(raw.dealer_rating) : null;
-  const sellerRating = (rawRating !== null && rawRating > 0) ? rawRating : null;
-  const sellerRatingStatus = sellerRating !== null ? 'SOURCE_RATED' : 'UNRATED_SELLER';
-  const sellerReviewEvidence = (sellerRating !== null && raw.dealer_rating_evidence) ? String(raw.dealer_rating_evidence) : null;
+  const hasReviewEvidence = Boolean(raw.dealer_rating_evidence && String(raw.dealer_rating_evidence).trim());
+  
+  let sellerRating = null;
+  let sellerRatingStatus = 'UNRATED_SELLER';
+  let sellerReviewEvidence = null;
+
+  if (rawRating !== null && rawRating > 0) {
+    if (hasReviewEvidence) {
+      sellerRating = rawRating;
+      sellerRatingStatus = 'SOURCE_REVIEW_VERIFIED';
+      sellerReviewEvidence = String(raw.dealer_rating_evidence).trim();
+    } else {
+      sellerRating = null; // Held: do not publish without review evidence
+      sellerRatingStatus = 'HELD_MISSING_REVIEW_EVIDENCE';
+    }
+  }
   const location = raw.region || raw.origin || raw.location || null;
 
   // 9. DigitalOcean Image Key & Reachability Rule:
-  // Since Spaces URL returns 404 and is not verified reachable, return image_url = null
-  // and image_evidence_type = IMAGE_KEY_PRESERVED_URL_UNVERIFIED (never SOURCE_LISTING_IMAGE).
+  // Return image_url = null until reachability and origin lineage are proven
   const imageKey = raw.front_image || raw.image || null;
-  const imageUrl = null; // Unreachable / unverified: return null per CTO directive
+  const imageUrl = null;
   const imageEvidenceType = imageKey ? 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED' : 'NO_IMAGE';
 
   // 10. Bundle Parent-Child Lineage
@@ -254,58 +261,69 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     }))
   } : null;
 
-  // 11. Eligibility Rules & Review Flags
+  // 11. Separate Trading Floor Status from Price Research Status
   const reviewFlags = [];
   const exclusionReasons = [];
 
+  let tradingFloorStatus = 'HELD_UNKNOWN';
+  let tradingFloorEligible = false;
+
   if (!hasTextEvidence) {
+    tradingFloorStatus = 'HELD_MISSING_SOURCE_TEXT';
     reviewFlags.push('MISSING_SOURCE_TEXT');
     exclusionReasons.push('SOURCE_TEXT_ABSENT');
-  }
-
-  // Unknown Intent Rule: Unknown intent must be held from WTS/WTB publication
-  if (intent === null) {
-    reviewFlags.push('UNKNOWN_INTENT');
-    exclusionReasons.push('INTENT_UNKNOWN_HELD_FROM_PUBLICATION');
-  }
-
-  let tradingFloorEligible = false;
-  if (!hasTextEvidence) {
-    tradingFloorEligible = false;
   } else if (isBundle) {
+    tradingFloorStatus = 'HELD_BUNDLE_UNSPLIT';
     reviewFlags.push('HELD_BUNDLE_REVIEW');
     exclusionReasons.push('BUNDLE_PARENT_UNSPLIT');
   } else if (!brand && !reference) {
+    tradingFloorStatus = 'HELD_IDENTITY_INCOMPLETE';
     reviewFlags.push('INCOMPLETE_IDENTITY');
     exclusionReasons.push('IDENTITY_UNRECOGNIZED');
   } else if (intent === 'WITHDRAWN') {
+    tradingFloorStatus = 'HELD_WITHDRAWN';
     exclusionReasons.push('LISTING_WITHDRAWN');
   } else if (intent === null) {
-    tradingFloorEligible = false; // Held from publication due to unknown intent
-  } else {
+    tradingFloorStatus = 'HELD_INTENT_UNKNOWN';
+    reviewFlags.push('UNKNOWN_INTENT');
+    exclusionReasons.push('INTENT_UNKNOWN_HELD_FROM_PUBLICATION');
+  } else if (intent === 'WTS') {
+    tradingFloorStatus = 'ELIGIBLE_WTS';
+    tradingFloorEligible = true;
+  } else if (intent === 'WTB') {
+    tradingFloorStatus = 'ELIGIBLE_WTB';
     tradingFloorEligible = true;
   }
 
-  // Strict Price Research Gate:
+  // Price Research Status:
   // Requires: Trading Floor eligible + strict WTS intent + verified USD price + complete brand/ref
+  let priceResearchStatus = 'INELIGIBLE_OTHER';
   let priceResearchEligible = false;
-  if (tradingFloorEligible
-      && intent === 'WTS'
-      && brand
-      && reference
-      && priceUsd !== null
-      && Number.isFinite(priceUsd)
-      && priceUsd > 0
-      && currencyStatus === 'VERIFIED_EXPLICIT_USD') {
-    priceResearchEligible = true;
-  } else {
-    if (intent !== 'WTS' && intent !== null) exclusionReasons.push('INTENT_NOT_WTS');
-    if (priceUsd === null) {
-      if (currencyStatus.startsWith('AMBIGUOUS')) reviewFlags.push('AMBIGUOUS_BARE_DOLLAR_HELD');
-      else if (currencyStatus.includes('USDT')) reviewFlags.push('USDT_HELD_FOR_FX_PROOF');
-      else if (currencyStatus.includes('HKD')) reviewFlags.push('HKD_HELD_FOR_FX_PROOF');
-      else reviewFlags.push('MISSING_PRICE_OR_CURRENCY');
+
+  if (!tradingFloorEligible) {
+    priceResearchStatus = 'INELIGIBLE_TRADING_FLOOR_HOLD';
+  } else if (intent !== 'WTS') {
+    priceResearchStatus = 'INELIGIBLE_NOT_WTS';
+    exclusionReasons.push('INTENT_NOT_WTS');
+  } else if (!brand || !reference) {
+    priceResearchStatus = 'INELIGIBLE_IDENTITY_INCOMPLETE';
+  } else if (priceUsd === null) {
+    if (currencyStatus.startsWith('AMBIGUOUS')) {
+      priceResearchStatus = 'INELIGIBLE_AMBIGUOUS_CURRENCY';
+      reviewFlags.push('AMBIGUOUS_BARE_DOLLAR_HELD');
+    } else if (currencyStatus.includes('USDT')) {
+      priceResearchStatus = 'INELIGIBLE_USDT_HELD_FOR_FX';
+      reviewFlags.push('USDT_HELD_FOR_FX_PROOF');
+    } else if (currencyStatus.includes('HKD')) {
+      priceResearchStatus = 'INELIGIBLE_HKD_HELD_FOR_FX';
+      reviewFlags.push('HKD_HELD_FOR_FX_PROOF');
+    } else {
+      priceResearchStatus = 'INELIGIBLE_MISSING_PRICE';
+      reviewFlags.push('MISSING_PRICE_OR_CURRENCY');
     }
+  } else if (currencyStatus === 'VERIFIED_EXPLICIT_USD' && Number.isFinite(priceUsd) && priceUsd > 0) {
+    priceResearchStatus = 'ELIGIBLE_VERIFIED_USD';
+    priceResearchEligible = true;
   }
 
   // Reconciliation Category
@@ -314,7 +332,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     reconciliationCategory = 'REVIEW_REQUIRED';
   }
 
-  const parserVersion = 'authoritative-normalizer-v8-precedence-text-evidence';
+  const parserVersion = 'authoritative-normalizer-v9-separated-status';
 
   return {
     source_id: sourceId,
@@ -361,7 +379,9 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     bundle_parent_id: bundleParentId,
     bundle_child_lineage: bundleChildLineage,
     is_bundle: isBundle,
+    trading_floor_status: tradingFloorStatus,
     trading_floor_eligible: tradingFloorEligible,
+    price_research_status: priceResearchStatus,
     price_research_eligible: priceResearchEligible,
     reconciliation_category: reconciliationCategory,
     review_flags: reviewFlags,
@@ -375,6 +395,5 @@ module.exports = {
   resolveSourceTextEvidence,
   resolveStrictIntentFromText,
   extractYearFromText,
-  sha256,
-  DO_SPACES_BASE
+  sha256
 };
