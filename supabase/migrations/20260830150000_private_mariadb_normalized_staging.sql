@@ -1,7 +1,7 @@
 -- ============================================================================
 -- Migration: 20260830150000_private_mariadb_normalized_staging.sql
 -- Description: Private Resumable Normalization Staging Schema & Security-Definer Procedures
--- Isolation: Service-role only, strict namespace enforcement, zero public mutations
+-- Isolation: RPC-only private security model, service-role only RPC execution, zero public access
 -- ============================================================================
 
 BEGIN;
@@ -105,7 +105,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = wf_canonical_staging, pg_catalog
-AS $
+AS $$
 DECLARE
   v_res JSONB;
 BEGIN
@@ -151,7 +151,7 @@ BEGIN
 
   RETURN COALESCE(v_res, '[]'::jsonb);
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.get_mariadb_private_staged_auctions_batch FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_mariadb_private_staged_auctions_batch TO service_role;
@@ -164,7 +164,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = wf_canonical_staging, pg_catalog
-AS $
+AS $$
 DECLARE
   v_inserted INT := 0;
 BEGIN
@@ -267,7 +267,7 @@ BEGIN
   GET DIAGNOSTICS v_inserted = ROW_COUNT;
   RETURN jsonb_build_object('upserted_proposals', v_inserted);
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.upsert_mariadb_normalized_proposals_batch FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.upsert_mariadb_normalized_proposals_batch TO service_role;
@@ -292,7 +292,7 @@ RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = wf_canonical_staging, pg_catalog
-AS $
+AS $$
 BEGIN
   INSERT INTO wf_canonical_staging.mariadb_normalization_checkpoints (
     job_name, frozen_cursor_created_on, frozen_cursor_source_id, expected_staged_rows,
@@ -320,15 +320,13 @@ BEGIN
 
   RETURN jsonb_build_object('checkpoint_updated', TRUE, 'job_name', p_job_name, 'status', p_status);
 END;
-$;
+$$;
 
 REVOKE ALL ON FUNCTION public.update_mariadb_normalization_checkpoint FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.update_mariadb_normalization_checkpoint TO service_role;
 
--- 6. Private Schema Isolation Security Enforcement
-REVOKE ALL ON SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated;
-GRANT USAGE ON SCHEMA wf_canonical_staging TO service_role;
-REVOKE ALL ON ALL TABLES IN SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated;
-GRANT ALL ON ALL TABLES IN SCHEMA wf_canonical_staging TO service_role;
+-- 6. RPC-Only Private Security Model: Zero direct access to staging tables
+REVOKE ALL ON SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON ALL TABLES IN SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated, service_role;
 
 COMMIT;
