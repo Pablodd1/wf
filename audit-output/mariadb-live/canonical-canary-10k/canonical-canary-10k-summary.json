@@ -28,10 +28,17 @@
   },
   "image_evidence": {
     "total_extracted_keys": 10000,
-    "production_spaces_root": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/",
+    "production_spaces_root": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/",
     "sample_reachability_checked": 100,
-    "sample_reachable": 0,
-    "sample_unreachable": 100
+    "sample_reachable": 100,
+    "sample_unreachable": 0,
+    "pattern_breakdown": {
+      "listings/full/": "100/100",
+      "listings/": "0/100",
+      "listings/images/": "0/100",
+      "full/": "0/100",
+      "bucket root": "0/100"
+    }
   },
   "idempotency_recorded_runs": {
     "pass_1": {

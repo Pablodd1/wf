@@ -150,9 +150,77 @@ BEGIN
     ALTER TABLE wf_canonical_staging.mariadb_normalized_children
       ADD CONSTRAINT chk_mariadb_children_pos_usd_price CHECK (price_usd IS NULL OR price_usd > 0);
   END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'wf_canonical_staging.mariadb_normalized_children'::regclass
+      AND conname = 'chk_mariadb_children_intent'
+  ) THEN
+    ALTER TABLE wf_canonical_staging.mariadb_normalized_children
+      ADD CONSTRAINT chk_mariadb_children_intent CHECK (intent IS NULL OR intent IN ('WTS', 'WTB', 'PRICE_CHECK', 'UNKNOWN'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'wf_canonical_staging.mariadb_normalized_children'::regclass
+      AND conname = 'chk_mariadb_children_reconciliation_category'
+  ) THEN
+    ALTER TABLE wf_canonical_staging.mariadb_normalized_children
+      ADD CONSTRAINT chk_mariadb_children_reconciliation_category CHECK (reconciliation_category IN ('SINGLE_RECORD', 'BUNDLE_ITEM', 'SPLIT_CHILD', 'MULTI_OFFER'));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'wf_canonical_staging.mariadb_normalized_children'::regclass
+      AND conname = 'chk_mariadb_children_currency_status'
+  ) THEN
+    ALTER TABLE wf_canonical_staging.mariadb_normalized_children
+      ADD CONSTRAINT chk_mariadb_children_currency_status CHECK (currency_status IN (
+        'VERIFIED_EXPLICIT_USD', 'VERIFIED_EXPLICIT_EUR', 'VERIFIED_EXPLICIT_GBP', 'VERIFIED_EXPLICIT_HKD',
+        'VERIFIED_EXPLICIT_SGD', 'VERIFIED_EXPLICIT_AED', 'VERIFIED_EXPLICIT_SAR', 'VERIFIED_EXPLICIT_AUD',
+        'VERIFIED_EXPLICIT_JPY', 'VERIFIED_EXPLICIT_CHF', 'VERIFIED_EXPLICIT_CAD', 'VERIFIED_EXPLICIT_USDT_HELD_FOR_FX',
+        'AMBIGUOUS_BARE_DOLLAR_HELD', 'MISSING_PRICE', 'UNKNOWN_CURRENCY'
+      ));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'wf_canonical_staging.mariadb_normalized_children'::regclass
+      AND conname = 'chk_mariadb_children_trading_floor_status'
+  ) THEN
+    ALTER TABLE wf_canonical_staging.mariadb_normalized_children
+      ADD CONSTRAINT chk_mariadb_children_trading_floor_status CHECK (trading_floor_status IN (
+        'ELIGIBLE_WTS', 'ELIGIBLE_WTB', 'HELD_UNPRICED', 'HELD_INTENT_UNKNOWN', 'HELD_AMBIGUOUS_CURRENCY',
+        'HELD_FOREIGN_CURRENCY', 'HELD_UNKNOWN'
+      ));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'wf_canonical_staging.mariadb_normalized_children'::regclass
+      AND conname = 'chk_mariadb_children_price_research_status'
+  ) THEN
+    ALTER TABLE wf_canonical_staging.mariadb_normalized_children
+      ADD CONSTRAINT chk_mariadb_children_price_research_status CHECK (price_research_status IN (
+        'ELIGIBLE_VERIFIED_USD', 'INELIGIBLE_NOT_WTS', 'INELIGIBLE_MISSING_PRICE', 'INELIGIBLE_AMBIGUOUS_CURRENCY',
+        'INELIGIBLE_FOREIGN_CURRENCY_HELD_FOR_FX', 'INELIGIBLE_USDT_HELD_FOR_FX', 'INELIGIBLE_IDENTITY_INCOMPLETE',
+        'INELIGIBLE_OUTLIER_EXCLUDED', 'INELIGIBLE_UNKNOWN'
+      ));
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conrelid = 'wf_canonical_staging.mariadb_normalized_children'::regclass
+      AND conname = 'chk_mariadb_children_image_evidence_type'
+  ) THEN
+    ALTER TABLE wf_canonical_staging.mariadb_normalized_children
+      ADD CONSTRAINT chk_mariadb_children_image_evidence_type CHECK (primary_image_evidence_type IN (
+        'IMAGE_KEY_PRESERVED_URL_UNVERIFIED', 'IMAGE_URL_VERIFIED', 'NO_IMAGE', 'IMAGE_UNAVAILABLE'
+      ));
+  END IF;
 END $$;
 
--- 6. Image Supersession & Scoped Constraints
+-- 6. Image Versioning & Scope Separation
 ALTER TABLE wf_canonical_staging.mariadb_normalized_images
   ADD COLUMN IF NOT EXISTS scope TEXT NOT NULL DEFAULT 'CHILD',
   ADD COLUMN IF NOT EXISTS parser_version TEXT NOT NULL DEFAULT 'authoritative-canonical-v10-parent-child',
@@ -171,12 +239,20 @@ BEGIN
   END IF;
 END $$;
 
+DROP INDEX IF EXISTS wf_canonical_staging.uq_mariadb_norm_images_key;
+DROP INDEX IF EXISTS wf_canonical_staging.uq_mariadb_norm_images_active;
+DROP INDEX IF EXISTS wf_canonical_staging.uq_mariadb_norm_images_parent_active;
+DROP INDEX IF EXISTS wf_canonical_staging.uq_mariadb_norm_images_child_active;
 ALTER TABLE wf_canonical_staging.mariadb_normalized_images
   DROP CONSTRAINT IF EXISTS uq_mariadb_norm_images_key;
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_mariadb_norm_images_active
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mariadb_norm_images_parent_active
   ON wf_canonical_staging.mariadb_normalized_images (parent_id, image_ordinal, image_key)
-  WHERE is_active = TRUE;
+  WHERE is_active = TRUE AND scope = 'PARENT';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_mariadb_norm_images_child_active
+  ON wf_canonical_staging.mariadb_normalized_images (parent_id, child_id, image_ordinal, image_key)
+  WHERE is_active = TRUE AND scope = 'CHILD';
 
 -- 7. Expanded Immutable-Parent Trigger
 CREATE OR REPLACE FUNCTION wf_canonical_staging.trg_fn_guard_immutable_parent_evidence()
@@ -419,10 +495,14 @@ BEGIN
 
           v_inserted_children := v_inserted_children + 1;
         ELSIF v_existing_child_hash IS DISTINCT FROM v_new_child_hash THEN
-          -- Version-preserving replacement: Mark prior child inactive and insert new active child
+          -- Version-preserving replacement: Mark prior child and its images inactive
           UPDATE wf_canonical_staging.mariadb_normalized_children
           SET is_active = FALSE, superseded_at = NOW(), superseded_by_parser_version = v_new_parser_version
           WHERE id = v_child_id;
+
+          UPDATE wf_canonical_staging.mariadb_normalized_images
+          SET is_active = FALSE, superseded_at = NOW()
+          WHERE child_id = v_child_id AND is_active = TRUE;
 
           INSERT INTO wf_canonical_staging.mariadb_normalized_children (
             parent_id, parent_source_id, parent_source_hash, child_ordinal, child_unique_key,
@@ -496,8 +576,7 @@ BEGIN
                 v_new_parser_version,
                 TRUE
               )
-              ON CONFLICT (parent_id, image_ordinal, image_key) WHERE is_active = TRUE DO UPDATE SET
-                child_id = EXCLUDED.child_id,
+              ON CONFLICT (parent_id, child_id, image_ordinal, image_key) WHERE is_active = TRUE AND scope = 'CHILD' DO UPDATE SET
                 image_url = EXCLUDED.image_url,
                 image_evidence_type = EXCLUDED.image_evidence_type,
                 parser_version = EXCLUDED.parser_version,
@@ -538,7 +617,6 @@ DECLARE
   v_parent RECORD;
   v_child RECORD;
   v_images JSONB;
-  v_raw RECORD;
   v_masked_phone TEXT;
   v_inquiry_text TEXT;
   v_whatsapp_url TEXT;
@@ -595,15 +673,6 @@ BEGIN
   )) INTO v_images
   FROM wf_canonical_staging.mariadb_normalized_images i
   WHERE i.parent_id = v_parent.id AND (i.child_id = v_child.id OR i.child_id IS NULL) AND i.is_active = TRUE;
-
-  SELECT source_id, source_created_on, raw_message
-  INTO v_raw
-  FROM wf_canonical_staging.mariadb_raw_source_rows
-  WHERE source_system = p_source_system
-    AND source_database = p_source_database
-    AND source_table = p_source_table
-    AND source_id = p_source_id
-    AND source_hash = p_source_hash;
 
   v_raw_contact := v_parent.seller_contact;
   v_is_approved := COALESCE(v_parent.contact_publication_approved, FALSE);
@@ -699,11 +768,11 @@ BEGIN
       'normalized_at', v_child.normalized_at
     ),
     'images', COALESCE(v_images, '[]'::jsonb),
-    'raw_source', CASE WHEN v_raw IS NOT NULL THEN jsonb_build_object(
-      'source_id', v_raw.source_id,
-      'source_created_on', v_raw.source_created_on,
-      'raw_message', v_raw.raw_message
-    ) ELSE NULL END,
+    'raw_source_meta', jsonb_build_object(
+      'source_id', v_parent.source_id,
+      'source_created_on', v_parent.source_created_on,
+      'has_raw_evidence', true
+    ),
     'authorized_inquiry', jsonb_build_object(
       'source_system', v_parent.source_system,
       'source_database', v_parent.source_database,
@@ -721,10 +790,62 @@ BEGIN
 END;
 $$;
 
--- 10. Function-Specific Privileges & Access Revocation (No Global Function Revocation)
+-- 10. Dedicated Internal Service-Role Evidence RPC (Auditors / Reprocessors Only)
+CREATE OR REPLACE FUNCTION public.get_mariadb_canonical_internal_evidence(
+  p_source_id TEXT,
+  p_source_system TEXT,
+  p_source_database TEXT,
+  p_source_table TEXT,
+  p_source_hash TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS $$
+DECLARE
+  v_raw RECORD;
+BEGIN
+  IF p_source_id IS NULL OR p_source_system IS NULL OR
+     p_source_database IS NULL OR p_source_table IS NULL OR
+     p_source_hash IS NULL THEN
+    RAISE EXCEPTION 'get_mariadb_canonical_internal_evidence: All composite provenance arguments are mandatory';
+  END IF;
+
+  SELECT source_id, source_system, source_database, source_table, source_hash, source_record_id,
+         source_created_on, raw_message, raw_payload
+  INTO v_raw
+  FROM wf_canonical_staging.mariadb_raw_source_rows
+  WHERE source_system = p_source_system
+    AND source_database = p_source_database
+    AND source_table = p_source_table
+    AND source_id = p_source_id
+    AND source_hash = p_source_hash;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('error', 'RAW_SOURCE_NOT_FOUND', 'source_id', p_source_id);
+  END IF;
+
+  RETURN jsonb_build_object(
+    'source_id', v_raw.source_id,
+    'source_system', v_raw.source_system,
+    'source_database', v_raw.source_database,
+    'source_table', v_raw.source_table,
+    'source_hash', v_raw.source_hash,
+    'source_record_id', v_raw.source_record_id,
+    'source_created_on', v_raw.source_created_on,
+    'raw_message', v_raw.raw_message,
+    'raw_payload', v_raw.raw_payload
+  );
+END;
+$$;
+
+-- 11. Function-Specific Privileges & Access Revocation (No Global Function Revocation)
 REVOKE ALL ON FUNCTION public.upsert_mariadb_canonical_batch(JSONB) FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON FUNCTION public.get_mariadb_canonical_child_detail(TEXT, TEXT, TEXT, TEXT, TEXT, INT) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.get_mariadb_canonical_internal_evidence(TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
 
 GRANT USAGE ON SCHEMA wf_canonical_staging TO service_role;
 GRANT EXECUTE ON FUNCTION public.upsert_mariadb_canonical_batch(JSONB) TO service_role;
 GRANT EXECUTE ON FUNCTION public.get_mariadb_canonical_child_detail(TEXT, TEXT, TEXT, TEXT, TEXT, INT) TO service_role;
+GRANT EXECUTE ON FUNCTION public.get_mariadb_canonical_internal_evidence(TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;

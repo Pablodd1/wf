@@ -110,8 +110,10 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   if (!stagedRow.source_system) throw new Error('Missing required source_system');
   if (!stagedRow.source_database) throw new Error('Missing required source_database');
   if (!stagedRow.source_table) throw new Error('Missing required source_table');
-  const sourceRecordId = stagedRow.source_record_id ? String(stagedRow.source_record_id) : (stagedRow.raw_payload && stagedRow.raw_payload.id ? String(stagedRow.raw_payload.id) : null);
-  if (!sourceRecordId) throw new Error('Missing required source_record_id');
+  if (!stagedRow.source_record_id || typeof stagedRow.source_record_id !== 'string' || stagedRow.source_record_id.trim() === '') {
+    throw new Error('Missing required source_record_id');
+  }
+  const sourceRecordId = String(stagedRow.source_record_id);
 
   if (!stagedRow.source_system || typeof stagedRow.source_system !== 'string' || stagedRow.source_system.trim() === '') {
     throw new Error('Missing required source_system');
@@ -480,7 +482,7 @@ function computeProposalHash(contract) {
   return crypto.createHash('sha256').update(JSON.stringify(payload, Object.keys(payload).sort())).digest('hex');
 }
 
-const DEFAULT_NYC3_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/';
+const DEFAULT_NYC3_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/';
 
 function resolveProductionImageUrl(imageKey, bucketBase = process.env.DO_SPACES_BUCKET_BASE || DEFAULT_NYC3_BASE) {
   if (!imageKey || typeof imageKey !== 'string') return null;

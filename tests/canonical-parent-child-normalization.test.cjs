@@ -315,7 +315,7 @@ test('13. Contact approval denial: returns null WhatsApp and null raw phone when
 test('14. Production NYC3 Image resolution with HEAD and bounded GET fallback', async () => {
   const testKey = 'images/rolex/116610ln.jpg';
   const resolvedUrl = resolveProductionImageUrl(testKey);
-  assert.strictEqual(resolvedUrl, 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/rolex/116610ln.jpg');
+  assert.strictEqual(resolvedUrl, 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/images/rolex/116610ln.jpg');
 
   // Simulate mock fetch with HEAD 200 + image/jpeg
   const mockSuccessFetch = async (url, opts) => ({
@@ -348,13 +348,16 @@ test('15. Canary artifacts and manifest checksums are consistent and present', (
   const manifestPath = path.join(artifactDir, 'canonical-canary-10k-authoritative-manifest.json');
   assert.ok(fs.existsSync(manifestPath), 'canonical-canary-10k-authoritative-manifest.json must exist');
 
-  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
-  assert.strictEqual(manifest.single_children_count, 9860);
-  assert.strictEqual(manifest.bundle_parents_count, 140);
-  assert.strictEqual(manifest.bundle_children_count, 381);
-  assert.strictEqual(manifest.total_children_count, 10241);
+  const summaryPath = path.join(artifactDir, 'canonical-canary-10k-summary.json');
+  assert.ok(fs.existsSync(summaryPath), 'canonical-canary-10k-summary.json must exist');
+  const summary = JSON.parse(fs.readFileSync(summaryPath, 'utf-8'));
+  assert.strictEqual(summary.single_children_count, 9860);
+  assert.strictEqual(summary.bundle_parents_count, 140);
+  assert.strictEqual(summary.bundle_children_count, 381);
+  assert.strictEqual(summary.total_children_count, 10241);
 
-  for (const [fname, meta] of Object.entries(manifest.artifact_checksums)) {
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
+  for (const [fname, meta] of Object.entries(manifest.artifacts)) {
     const fpath = path.join(artifactDir, fname);
     assert.ok(fs.existsSync(fpath), `Artifact ${fname} must exist on disk`);
     const fileBytes = fs.readFileSync(fpath);
