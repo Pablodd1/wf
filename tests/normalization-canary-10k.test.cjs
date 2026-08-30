@@ -2,96 +2,191 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {
   normalizeStagedRow,
-  parsePriceAndCurrency,
-  parseIntent,
-  parseBundleAndLineage
+  resolveStrictIntent,
+  processStagedRowsLocally
 } = require('../tools/mariadb-live/run-normalization-canary-10k.cjs');
 
-test('1. explicit null for missing/ambiguous price and no USD assumption for bare $', () => {
-  // Bare $ test
-  const bareDollar = parsePriceAndCurrency({ price: '15000', currency: '$' });
-  assert.equal(bareDollar.price_amount, null);
-  assert.equal(bareDollar.price_currency, null);
-  assert.equal(bareDollar.currency_status, 'AMBIGUOUS_BARE_DOLLAR_HELD');
+test('1. never default unknown intent to WTS - return null / REVIEW_REQUIRED without explicit evidence', () => {
+  // Explicit buy -> WTB
+  assert.equal(resolveStrictIntent({ type: 'buy' }), 'WTB');
+  assert.equal(resolveStrictIntent({ title: 'WTB Rolex Submariner' }), 'WTB');
 
-  // Missing price test
-  const missingPrice = parsePriceAndCurrency({ price: '0', currency: 'USD' });
-  assert.equal(missingPrice.price_amount, null);
-  assert.equal(missingPrice.price_currency, null);
-  assert.equal(missingPrice.currency_status, 'MISSING_PRICE');
+  // Explicit sale -> WTS
+  assert.equal(resolveStrictIntent({ type: 'sale' }), 'WTS');
+  assert.equal(resolveStrictIntent({ title: 'WTS Daytona 116500' }), 'WTS');
 
-  // Explicit USD test
-  const explicitUsd = parsePriceAndCurrency({ price: '14500', currency: 'USD' });
-  assert.equal(explicitUsd.price_amount, 14500);
-  assert.equal(explicitUsd.price_currency, 'USD');
-  assert.equal(explicitUsd.currency_status, 'VERIFIED_EXPLICIT_USD');
-
-  // Explicit HKD test
-  const explicitHkd = parsePriceAndCurrency({ price: '970000', currency: 'HKD' });
-  assert.equal(explicitHkd.price_amount, 970000);
-  assert.equal(explicitHkd.price_currency, 'HKD');
-  assert.equal(explicitHkd.currency_status, 'VERIFIED_EXPLICIT_HKD');
+  // Ambiguous / no cue -> null (NEVER defaulted to WTS)
+  assert.equal(resolveStrictIntent({ type: '', title: 'Rolex Submariner 126610LN' }), null);
+  assert.equal(resolveStrictIntent({ type: null, title: 'Just a watch reference 5711' }), null);
 });
 
-test('2. WTS and WTB intent separation', () => {
-  const wtbRow = { type: 'buy', title: 'Looking for Rolex Daytona 116500' };
-  assert.equal(parseIntent(wtbRow), 'WTB');
-
-  const wtsRow = { type: 'sale', title: 'For Sale: Patek Philippe 5711' };
-  assert.equal(parseIntent(wtsRow), 'WTS');
-});
-
-test('3. bundles held out of publication', () => {
-  const bundleRow = {
-    is_bundle: 1,
-    title: 'PP Multi-Piece Set',
-    description: '7118/1R white\n5968A used\n5712R used'
+test('2. bundle detection uses raw is_bundle plus deterministic candidate splitter and holds multi-candidate rows', () => {
+  // Raw is_bundle = 1
+  const explicitBundle = {
+    source_id: 'bundle-001',
+    source_hash: '1'.repeat(64),
+    source_created_on: '2025-01-10T10:00:00.000Z',
+    raw_payload: {
+      is_bundle: 1,
+      brand: 'Patek Philippe',
+      title: 'Patek Bundle',
+      type: 'sale'
+    }
   };
-  const bundleInfo = parseBundleAndLineage(bundleRow);
-  assert.equal(bundleInfo.is_bundle, true);
-  assert.equal(bundleInfo.bundle_status, 'BUNDLE_PARENT_LINEAGE_HELD');
-  assert.equal(bundleInfo.publication_eligibility, 'HELD_BUNDLE_REVIEW');
+  const norm1 = normalizeStagedRow(explicitBundle);
+  assert.equal(norm1.bundle_lineage.held_out_of_publication, true);
+  assert.equal(norm1.publication_eligibility, 'HELD_BUNDLE_REVIEW');
+  assert.equal(norm1.reconciliation_category, 'REVIEW_REQUIRED');
+
+  // Multi-candidate text (split by existing deterministic splitter)
+  const multiCandidate = {
+    source_id: 'bundle-002',
+    source_hash: '2'.repeat(64),
+    source_created_on: '2025-01-10T10:00:00.000Z',
+    raw_payload: {
+      is_bundle: 0,
+      type: 'sale',
+      title: '116500LN Daytona\n126610LN Submariner'
+    }
+  };
+  const norm2 = normalizeStagedRow(multiCandidate);
+  assert.equal(norm2.bundle_lineage.is_multi_candidate, true);
+  assert.equal(norm2.bundle_lineage.held_out_of_publication, true);
+  assert.equal(norm2.publication_eligibility, 'HELD_BUNDLE_REVIEW');
 });
 
-test('4. single listing retains contact, image, and raw evidence with exact reconciliation', () => {
-  const stagedRow = {
-    source_id: 'test-row-001',
-    source_hash: 'a'.repeat(64),
-    source_created_on: '2025-11-19T02:00:00.000Z',
-    source_record_id: 'mysql_auctions_test-row-001',
+test('3. price research eligibility requires explicit price and explicit currency evidence - bare $ is review-held', () => {
+  // Bare $ -> AMBIGUOUS_BARE_DOLLAR_HELD
+  const bareDollarRow = {
+    source_id: 'price-001',
+    source_hash: '3'.repeat(64),
+    source_created_on: '2025-01-10T10:00:00.000Z',
+    raw_payload: {
+      type: 'sale',
+      brand: 'Rolex',
+      model: 'Submariner',
+      reference: '126610LN',
+      price: '14500',
+      currency: '$'
+    }
+  };
+  const normBare = normalizeStagedRow(bareDollarRow);
+  assert.equal(normBare.currency_status, 'AMBIGUOUS_BARE_DOLLAR_HELD');
+  assert.equal(normBare.price_research_eligible, false);
+  assert.equal(normBare.reconciliation_category, 'REVIEW_REQUIRED');
+
+  // Explicit USD -> VERIFIED_EXPLICIT_USD & eligible
+  const explicitUsdRow = {
+    source_id: 'price-002',
+    source_hash: '4'.repeat(64),
+    source_created_on: '2025-01-10T10:00:00.000Z',
+    raw_payload: {
+      type: 'sale',
+      brand: 'Rolex',
+      model: 'Submariner',
+      reference: '126610LN',
+      price: '14500',
+      currency: 'USD'
+    }
+  };
+  const normUsd = normalizeStagedRow(explicitUsdRow);
+  assert.equal(normUsd.currency_status.startsWith('VERIFIED_EXPLICIT_USD'), true);
+  assert.equal(normUsd.price_amount, 14500);
+  assert.equal(normUsd.price_currency, 'USD');
+  assert.equal(normUsd.price_research_eligible, true);
+  assert.equal(normUsd.publication_eligibility, 'ELIGIBLE_NORMALIZED');
+  assert.equal(normUsd.reconciliation_category, 'NORMALIZED_PROPOSAL');
+});
+
+test('4. every output proposal retains all required evidence fields', () => {
+  const row = {
+    source_id: 'evidence-001',
+    source_hash: 'e'.repeat(64),
+    source_created_on: '2025-01-15T12:00:00.000Z',
     source_system: 'OceanDigital MariaDB',
     source_database: 'thecollective_inventory',
     source_table: 'auctions',
-    captured_at: '2026-08-30T00:00:00.000Z',
+    source_record_id: 'mysql_auctions_evidence-001',
+    raw_message: 'Rolex Daytona 116500LN 28000 USD Full Set',
     raw_payload: {
-      brand: 'Audemars Piguet',
-      model: 'Royal Oak',
-      reference: '15500ST',
-      price: '38000',
-      currency: 'USD',
       type: 'sale',
-      front_image: 'ap_15500_front.jpg',
+      brand: 'Rolex',
+      model: 'Daytona',
+      reference: '116500LN',
+      price: '28000',
+      currency: 'USD',
+      front_image: 'daytona_front.jpg',
       from_name: 'Geneva Dealer',
       from_number: '41791234567',
       phone_code: 41,
       dealer_rating: 5,
+      origin: 'WhatsApp',
+      region: 'Europe',
       is_bundle: 0
     }
   };
 
-  const norm = normalizeStagedRow(stagedRow);
-  assert.equal(norm.brand, 'Audemars Piguet');
-  assert.equal(norm.model, 'Royal Oak');
-  assert.equal(norm.reference, '15500ST');
-  assert.equal(norm.intent, 'WTS');
-  assert.equal(norm.price_amount, 38000);
-  assert.equal(norm.price_currency, 'USD');
-  assert.equal(norm.image_key, 'ap_15500_front.jpg');
-  assert.equal(norm.contact_evidence.from_name, 'Geneva Dealer');
-  assert.equal(norm.contact_evidence.from_number, '41791234567');
-  assert.equal(norm.is_bundle, false);
-  assert.equal(norm.normalization_status, 'NORMALIZED');
-  assert.equal(norm.source_hash, 'a'.repeat(64));
+  const p = normalizeStagedRow(row);
+  assert.equal(p.source_id, 'evidence-001');
+  assert.equal(p.source_hash, 'e'.repeat(64));
+  assert.equal(p.source_cursor, '2025-01-15T12:00:00.000Z');
+  assert.equal(p.raw_message, 'Rolex Daytona 116500LN 28000 USD Full Set');
+  assert.equal(p.front_image_key, 'daytona_front.jpg');
+  assert.equal(p.seller_contact_evidence.from_name, 'Geneva Dealer');
+  assert.equal(p.seller_contact_evidence.from_number, '41791234567');
+  assert.equal(p.bundle_lineage.held_out_of_publication, false);
+  assert.equal(p.reconciliation_category, 'NORMALIZED_PROPOSAL');
+});
+
+test('5. local processing writes JSONL/CSV artifacts and proves exact reconciliation: input = proposals + review + errors', () => {
+  const sampleRows = [
+    {
+      source_id: 'row-1',
+      source_hash: '1'.repeat(64),
+      source_created_on: '2025-01-10T10:00:00.000Z',
+      source_system: 'OceanDigital MariaDB',
+      source_database: 'thecollective_inventory',
+      source_table: 'auctions',
+      raw_payload: { type: 'sale', brand: 'Rolex', model: 'Submariner', reference: '126610LN', price: '14500', currency: 'USD' }
+    },
+    {
+      source_id: 'row-2',
+      source_hash: '2'.repeat(64),
+      source_created_on: '2025-01-10T10:01:00.000Z',
+      source_system: 'OceanDigital MariaDB',
+      source_database: 'thecollective_inventory',
+      source_table: 'auctions',
+      raw_payload: { is_bundle: 1, type: 'sale', brand: 'Patek', title: 'Bundle' }
+    },
+    {
+      source_id: 'row-3',
+      source_hash: '3'.repeat(64),
+      source_created_on: '2025-01-10T10:02:00.000Z',
+      source_system: 'OceanDigital MariaDB',
+      source_database: 'thecollective_inventory',
+      source_table: 'auctions',
+      raw_payload: { type: null, brand: 'Rolex', price: '10000', currency: '$' }
+    }
+  ];
+
+  const testDir = path.resolve('audit-output/mariadb-live/test-norm-canary');
+  const result = processStagedRowsLocally(sampleRows, { outputDir: testDir });
+
+  assert.equal(result.reconciliation.total_inputs, 3);
+  assert.equal(result.reconciliation.normalized_proposals, 1);
+  assert.equal(result.reconciliation.review_required, 2);
+  assert.equal(result.reconciliation.errors, 0);
+  assert.equal(result.reconciliation.exact_reconciliation, true);
+
+  assert.equal(fs.existsSync(path.join(testDir, 'proposals.jsonl')), true);
+  assert.equal(fs.existsSync(path.join(testDir, 'proposals.csv')), true);
+  assert.equal(fs.existsSync(path.join(testDir, 'manifest.json')), true);
+  assert.equal(fs.existsSync(path.join(testDir, 'error-reasons.json')), true);
+
+  // Cleanup test output
+  fs.rmSync(testDir, { recursive: true, force: true });
 });
