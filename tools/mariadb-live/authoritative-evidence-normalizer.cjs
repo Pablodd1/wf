@@ -93,7 +93,8 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   if (!stagedRow.source_system) throw new Error('Missing required source_system');
   if (!stagedRow.source_database) throw new Error('Missing required source_database');
   if (!stagedRow.source_table) throw new Error('Missing required source_table');
-  if (!stagedRow.source_record_id) throw new Error('Missing required source_record_id');
+  const sourceRecordId = stagedRow.source_record_id ? String(stagedRow.source_record_id) : (stagedRow.raw_payload && stagedRow.raw_payload.id ? String(stagedRow.raw_payload.id) : null);
+  if (!sourceRecordId) throw new Error('Missing required source_record_id');
 
   // Strict namespace boundary assertion
   if (stagedRow.source_system !== 'OceanDigital MariaDB' ||
@@ -107,7 +108,6 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   const sourceSystem = String(stagedRow.source_system);
   const sourceDatabase = String(stagedRow.source_database);
   const sourceTable = String(stagedRow.source_table);
-  const sourceRecordId = String(stagedRow.source_record_id);
 
   const raw = stagedRow.raw_payload || {};
 
@@ -334,7 +334,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
 
   const parserVersion = 'authoritative-normalizer-v9-separated-status';
 
-  return {
+  const contractObj = {
     source_id: sourceId,
     source_hash: sourceHash,
     source_cursor: postedAt,
@@ -388,10 +388,114 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     exclusion_reasons: exclusionReasons,
     parser_version: parserVersion
   };
+
+  contractObj.proposal_hash = computeProposalHash(contractObj);
+  return contractObj;
+}
+
+function computeProposalHash(contract) {
+  const fields = [
+    'source_id',
+    'source_hash',
+    'source_system',
+    'source_database',
+    'source_table',
+    'source_record_id',
+    'source_observed_at',
+    'posted_at',
+    'listing_text_source',
+    'listing_text_sha256',
+    'brand',
+    'model',
+    'reference',
+    'dial_color',
+    'year',
+    'condition',
+    'intent',
+    'original_price_amount',
+    'original_price_currency',
+    'currency_evidence',
+    'price_usd',
+    'fx_rate',
+    'fx_source',
+    'fx_date',
+    'currency_status',
+    'seller_name',
+    'seller_contact',
+    'contact_publication_approved',
+    'seller_activity_count',
+    'seller_rating',
+    'seller_rating_status',
+    'seller_review_evidence',
+    'location',
+    'image_key',
+    'image_url',
+    'image_evidence_type',
+    'bundle_parent_id',
+    'bundle_child_lineage',
+    'is_bundle',
+    'trading_floor_status',
+    'trading_floor_eligible',
+    'price_research_status',
+    'price_research_eligible',
+    'review_flags',
+    'exclusion_reasons',
+    'parser_version'
+  ];
+
+  const payload = {};
+  for (const k of fields) {
+    payload[k] = contract[k] === undefined ? null : contract[k];
+  }
+  return crypto.createHash('sha256').update(JSON.stringify(payload, Object.keys(payload).sort())).digest('hex');
+}
+
+function buildAuthorizedInquiryContract(proposal, rawRow = null) {
+  const sellerName = proposal.seller_name || (rawRow && rawRow.raw_payload && rawRow.raw_payload.from_name) || 'Seller';
+  const sellerContact = proposal.seller_contact || (rawRow && rawRow.raw_payload && rawRow.raw_payload.from_number) || null;
+  const brand = proposal.brand || 'Watch';
+  const model = proposal.model || '';
+  const ref = proposal.reference ? ` (Ref: ${proposal.reference})` : '';
+  const itemDesc = `${brand}${model ? ' ' + model : ''}${ref}`.trim();
+  
+  const inquiryText = `Hi ${sellerName}, I am inquiring about your listing for ${itemDesc} listed on WatchFlow. Is this piece still available?`;
+  
+  let cleanPhone = null;
+  let whatsappUrl = null;
+  if (sellerContact) {
+    cleanPhone = sellerContact.replace(/[^\d+]/g, '');
+    if (cleanPhone.startsWith('+')) {
+      cleanPhone = cleanPhone.slice(1);
+    }
+    whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(inquiryText)}`;
+  }
+
+  let maskedContact = null;
+  if (sellerContact) {
+    const digitsOnly = sellerContact.replace(/\D/g, '');
+    if (digitsOnly.length > 4) {
+      maskedContact = `+*** *** ${digitsOnly.slice(-4)}`;
+    } else {
+      maskedContact = '[PRIVATE_SELLER_CONTACT]';
+    }
+  }
+
+  return {
+    source_id: proposal.source_id,
+    seller_name: sellerName,
+    seller_contact_masked: maskedContact,
+    seller_contact_raw: sellerContact,
+    contact_publication_approved: Boolean(proposal.contact_publication_approved),
+    inquiry_text: inquiryText,
+    whatsapp_url: whatsappUrl,
+    inquiry_ready: Boolean(sellerContact && sellerContact.length >= 7)
+  };
 }
 
 module.exports = {
   normalizeAuthoritativeRow,
+  computeProposalHash,
+  buildAuthorizedInquiryContract,
   resolveSourceTextEvidence,
   resolveStrictIntentFromText,
   extractYearFromText,
