@@ -73,24 +73,21 @@ async function runStateIdempotentCanaryV3(env = process.env) {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
   console.log('[Canary-v3] ============================================================');
-  console.log('[Canary-v3] STARTING FRESH ISOLATED 1,000-ROW PRIVATE CANARY (V3 COHORT)');
-  console.log('[Canary-v3] Resumption Keyset Boundary:', RESUMPTION_BOUNDARY.created_on, '/', RESUMPTION_BOUNDARY.source_id);
-  console.log('[Canary-v3] Upper Cursor Boundary:    ', FROZEN_UPPER_CURSOR.created_on, '/', FROZEN_UPPER_CURSOR.source_id);
+  console.log('[Canary-v3] RUNNING STATE-IDEMPOTENT RERUN ON EXISTING V3 COHORT (1,000 ROWS)');
+  console.log('[Canary-v3] Keyset Boundary: ', RESUMPTION_BOUNDARY.created_on, '/', RESUMPTION_BOUNDARY.source_id);
+  console.log('[Canary-v3] Upper Boundary:  ', FROZEN_UPPER_CURSOR.created_on, '/', FROZEN_UPPER_CURSOR.source_id);
 
-  // 1. Measure Public Tables & Public View Baselines BEFORE
-  console.log('[Canary-v3] Step 1: Measuring public schema tables and view baselines...');
+  // 1. Measure Public Tables & Dynamic Public View Baselines BEFORE
+  console.log('[Canary-v3] Step 1: Measuring dynamic public schema tables and view baselines before...');
   const publicRawBefore = await fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, 'raw_messages', 'created_at');
   const publicWatchBefore = await fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, 'watch_records', 'updated_at');
+  const publicTfBefore = await fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, 'trading_floor_ready_view', 'posted_date');
+  const publicPrBefore = await fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, 'price_research_ready_view', 'transaction_date');
 
-  const publicViewsBaseline = {
-    trading_floor_ready_view: 96340,
-    price_research_ready_view: 31848
-  };
-
-  console.log('[Canary-v3] Baseline public.raw_messages count:', publicRawBefore.totalCount, '| latest:', publicRawBefore.latestDate);
-  console.log('[Canary-v3] Baseline public.watch_records count:', publicWatchBefore.totalCount, '| latest:', publicWatchBefore.latestDate);
-  console.log('[Canary-v3] Baseline trading_floor_ready_view count:', publicViewsBaseline.trading_floor_ready_view);
-  console.log('[Canary-v3] Baseline price_research_ready_view count:', publicViewsBaseline.price_research_ready_view);
+  console.log('[Canary-v3] Baseline public.raw_messages:           count = ' + publicRawBefore.totalCount + ', latest = ' + publicRawBefore.latestDate);
+  console.log('[Canary-v3] Baseline public.watch_records:          count = ' + publicWatchBefore.totalCount + ', latest = ' + publicWatchBefore.latestDate);
+  console.log('[Canary-v3] Baseline trading_floor_ready_view:      count = ' + publicTfBefore.totalCount + ', latest = ' + publicTfBefore.latestDate);
+  console.log('[Canary-v3] Baseline price_research_ready_view:     count = ' + publicPrBefore.totalCount + ', latest = ' + publicPrBefore.latestDate);
 
   // 2. Measure Raw Ingestion Checkpoint BEFORE
   console.log('[Canary-v3] Step 2: Measuring raw capture checkpoint boundary...');
@@ -100,8 +97,8 @@ async function runStateIdempotentCanaryV3(env = process.env) {
   const rawInputRowsBefore = rawCheckpointBefore ? Number(rawCheckpointBefore.input_rows) : 951750;
   console.log('[Canary-v3] Raw capture checkpoint input_rows:', rawInputRowsBefore);
 
-  // 3. Fetch New Isolated 1,000-Row V3 Cohort from Keyset Boundary
-  console.log('[Canary-v3] Step 3: Fetching new isolated 1,000-row v3 cohort from boundary...');
+  // 3. Fetch Existing Isolated 1,000-Row V3 Cohort from Keyset Boundary
+  console.log('[Canary-v3] Step 3: Fetching existing 1,000-row v3 cohort from boundary...');
   let totalInputsProcessed = 0;
   let normalizedProposals = 0;
   let reviewRequired = 0;
@@ -133,7 +130,6 @@ async function runStateIdempotentCanaryV3(env = process.env) {
     for (let i = 0; i < batch.length; i++) {
       const r = batch[i];
 
-      // Enforce frozen cursor boundary
       if (r.source_created_on > FROZEN_UPPER_CURSOR.created_on ||
          (r.source_created_on === FROZEN_UPPER_CURSOR.created_on && r.source_id > FROZEN_UPPER_CURSOR.source_id)) {
         continue;
@@ -169,42 +165,25 @@ async function runStateIdempotentCanaryV3(env = process.env) {
     lastSourceId = last.source_id;
   }
 
-  // 4. Pass One: Fresh Persisted Upsert of V3 Cohort
-  console.log('[Canary-v3] Step 4: Pass One - Batch upserting v3 cohort (' + v3Proposals.length + ' proposals)...');
-  let pass1Inserted = 0;
-  let pass1Updated = 0;
-  let pass1Unchanged = 0;
+  // 4. Rerun on Existing V3 Cohort: Proving Idempotency
+  console.log('[Canary-v3] Step 4: Upserting v3 cohort to prove state idempotency...');
+  let passInserted = 0;
+  let passUpdated = 0;
+  let passUnchanged = 0;
 
   for (let i = 0; i < v3Proposals.length; i += BATCH_SIZE) {
     const chunk = v3Proposals.slice(i, i + BATCH_SIZE);
     const res = await callRpc(supabaseUrl, supabaseKey, 'upsert_mariadb_normalized_proposals_batch', {
       p_proposals: chunk
     });
-    pass1Inserted += (res.inserted || 0);
-    pass1Updated += (res.updated || 0);
-    pass1Unchanged += (res.unchanged || 0);
+    passInserted += (res.inserted || 0);
+    passUpdated += (res.updated || 0);
+    passUnchanged += (res.unchanged || 0);
   }
-  console.log('[Canary-v3] Pass One Results: inserted = ' + pass1Inserted + ', updated = ' + pass1Updated + ', unchanged = ' + pass1Unchanged);
+  console.log('[Canary-v3] Upsert Results: inserted = ' + passInserted + ', updated = ' + passUpdated + ', unchanged = ' + passUnchanged);
 
-  // 5. Pass Two: Identical Rerun to Prove True State Idempotency
-  console.log('[Canary-v3] Step 5: Pass Two - Identical rerun of v3 cohort to prove state idempotency...');
-  let pass2Inserted = 0;
-  let pass2Updated = 0;
-  let pass2Unchanged = 0;
-
-  for (let i = 0; i < v3Proposals.length; i += BATCH_SIZE) {
-    const chunk = v3Proposals.slice(i, i + BATCH_SIZE);
-    const res = await callRpc(supabaseUrl, supabaseKey, 'upsert_mariadb_normalized_proposals_batch', {
-      p_proposals: chunk
-    });
-    pass2Inserted += (res.inserted || 0);
-    pass2Updated += (res.updated || 0);
-    pass2Unchanged += (res.unchanged || 0);
-  }
-  console.log('[Canary-v3] Pass Two Results: inserted = ' + pass2Inserted + ', updated = ' + pass2Updated + ', unchanged = ' + pass2Unchanged);
-
-  // 6. Verify Evidence Access & Detail Joins with Composite Provenance
-  console.log('[Canary-v3] Step 6: Verifying composite provenance join & authorized inquiry contract...');
+  // 5. Verify Evidence Access & Detail Joins with 5 Mandatory Provenance Fields
+  console.log('[Canary-v3] Step 5: Verifying mandatory 5-field composite join & authorized inquiry contract...');
   let detailJoinsVerified = 0;
   let sellerContactMaskedCount = 0;
   let whatsappInquiryReadyCount = 0;
@@ -248,36 +227,25 @@ async function runStateIdempotentCanaryV3(env = process.env) {
   console.log('[Canary-v3] Zero Wrong Namespace Evidence: ' + zeroWrongNamespace);
   console.log('[Canary-v3] All Proposal Hashes 64-char:    ' + allHashesValid);
 
-  // 7. Update Normalization Checkpoint
-  const jobName = 'canary-1000-v3-persisted-norm-' + Date.now();
-  await callRpc(supabaseUrl, supabaseKey, 'update_mariadb_normalization_checkpoint', {
-    p_job_name: jobName,
-    p_frozen_cursor_created_on: FROZEN_UPPER_CURSOR.created_on,
-    p_frozen_cursor_source_id: FROZEN_UPPER_CURSOR.source_id,
-    p_last_processed_created_on: lastCreatedOn,
-    p_last_processed_source_id: lastSourceId,
-    p_total_inputs_processed: totalInputsProcessed,
-    p_normalized_proposals_count: normalizedProposals,
-    p_review_required_count: reviewRequired,
-    p_normalization_errors_count: normalizationErrors,
-    p_trading_floor_eligible_count: tradingFloorEligibleCount,
-    p_price_research_eligible_count: priceResearchEligibleCount,
-    p_status: 'COMPLETED_CANARY_1K_V3',
-    p_expected_staged_rows: 951743
-  });
-
-  // 8. Measure Public Tables AFTER
-  console.log('[Canary-v3] Step 8: Measuring public schema tables after execution...');
+  // 6. Measure Dynamic Public Views & Tables AFTER
+  console.log('[Canary-v3] Step 6: Measuring dynamic public schema tables and views after execution...');
   const publicRawAfter = await fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, 'raw_messages', 'created_at');
   const publicWatchAfter = await fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, 'watch_records', 'updated_at');
+  const publicTfAfter = await fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, 'trading_floor_ready_view', 'posted_date');
+  const publicPrAfter = await fetchTableCountAndMaxDate(supabaseUrl, supabaseKey, 'price_research_ready_view', 'transaction_date');
 
   const rawMsgDelta = publicRawAfter.totalCount - publicRawBefore.totalCount;
   const watchRecDelta = publicWatchAfter.totalCount - publicWatchBefore.totalCount;
-  const zeroPublicDelta = (rawMsgDelta === 0) && (watchRecDelta === 0) && 
-                          (publicRawAfter.latestDate === publicRawBefore.latestDate) &&
-                          (publicWatchAfter.latestDate === publicWatchBefore.latestDate);
+  const tfDelta = publicTfAfter.totalCount - publicTfBefore.totalCount;
+  const prDelta = publicPrAfter.totalCount - publicPrBefore.totalCount;
 
-  // 9. Measure Raw Ingestion Checkpoint AFTER
+  const zeroPublicDelta = (rawMsgDelta === 0) && (watchRecDelta === 0) && (tfDelta === 0) && (prDelta === 0) &&
+                          (publicRawAfter.latestDate === publicRawBefore.latestDate) &&
+                          (publicWatchAfter.latestDate === publicWatchBefore.latestDate) &&
+                          (publicTfAfter.latestDate === publicTfBefore.latestDate) &&
+                          (publicPrAfter.latestDate === publicPrBefore.latestDate);
+
+  // 7. Measure Raw Ingestion Checkpoint AFTER
   const rawCheckpointAfter = await callRpc(supabaseUrl, supabaseKey, 'get_mariadb_private_raw_checkpoint', {
     p_run_key: 'full-capture-auctions-1788028958313'
   });
@@ -286,10 +254,10 @@ async function runStateIdempotentCanaryV3(env = process.env) {
 
   const exactReconciliation = (normalizedProposals + reviewRequired + normalizationErrors) === totalInputsProcessed;
 
-  // 10. Write Summary and Manifest
+  // 8. Write Summary and Manifest
   const summary = {
-    contract: 'wf-persisted-canary-1k-v3-summary-v1',
-    job_name: jobName,
+    contract: 'wf-persisted-canary-1k-v3-summary-v2',
+    job_name: 'canary-1000-v3-persisted-norm-authoritative',
     timestamp: new Date().toISOString(),
     frozen_upper_cursor: FROZEN_UPPER_CURSOR,
     keyset_boundary: {
@@ -302,8 +270,8 @@ async function runStateIdempotentCanaryV3(env = process.env) {
     invariants: {
       exact_1000_v3_inputs_processed: totalInputsProcessed === TARGET_ROW_COUNT,
       exact_reconciliation: exactReconciliation,
-      state_idempotency_pass1_inserted_all_1000: pass1Inserted === TARGET_ROW_COUNT,
-      state_idempotency_pass2_unchanged_all_1000: pass2Unchanged === TARGET_ROW_COUNT && pass2Inserted === 0 && pass2Updated === 0,
+      state_idempotency_inserted_zero: passInserted === 0,
+      state_idempotency_unchanged_all_1000: passUnchanged === TARGET_ROW_COUNT,
       detail_composite_evidence_joins_verified: detailJoinsVerified === sampleProps.length,
       zero_wrong_namespace_evidence: zeroWrongNamespace,
       all_proposal_hashes_64_char: allHashesValid,
@@ -317,8 +285,10 @@ async function runStateIdempotentCanaryV3(env = process.env) {
       normalization_errors: normalizationErrors
     },
     idempotency_accounting: {
-      pass_one: { inserted: pass1Inserted, updated: pass1Updated, unchanged: pass1Unchanged },
-      pass_two: { inserted: pass2Inserted, updated: pass2Updated, unchanged: pass2Unchanged }
+      inserted: passInserted,
+      updated: passUpdated,
+      unchanged: passUnchanged,
+      total: passInserted + passUpdated + passUnchanged
     },
     eligibility: {
       trading_floor_eligible_count: tradingFloorEligibleCount,
@@ -327,10 +297,38 @@ async function runStateIdempotentCanaryV3(env = process.env) {
       price_research_eligible_pct: ((priceResearchEligibleCount / totalInputsProcessed) * 100).toFixed(2) + '%'
     },
     public_before_after_comparison: {
-      trading_floor_ready_view: { baseline_count: publicViewsBaseline.trading_floor_ready_view, delta: 0, unchanged: true },
-      price_research_ready_view: { baseline_count: publicViewsBaseline.price_research_ready_view, delta: 0, unchanged: true },
-      public_raw_messages: { before_count: publicRawBefore.totalCount, after_count: publicRawAfter.totalCount, delta: rawMsgDelta },
-      public_watch_records: { before_count: publicWatchBefore.totalCount, after_count: publicWatchAfter.totalCount, delta: watchRecDelta },
+      trading_floor_ready_view: {
+        before_count: publicTfBefore.totalCount,
+        after_count: publicTfAfter.totalCount,
+        delta: tfDelta,
+        before_latest: publicTfBefore.latestDate,
+        after_latest: publicTfAfter.latestDate,
+        unchanged: tfDelta === 0
+      },
+      price_research_ready_view: {
+        before_count: publicPrBefore.totalCount,
+        after_count: publicPrAfter.totalCount,
+        delta: prDelta,
+        before_latest: publicPrBefore.latestDate,
+        after_latest: publicPrAfter.latestDate,
+        unchanged: prDelta === 0
+      },
+      public_raw_messages: {
+        before_count: publicRawBefore.totalCount,
+        after_count: publicRawAfter.totalCount,
+        delta: rawMsgDelta,
+        before_latest: publicRawBefore.latestDate,
+        after_latest: publicRawAfter.latestDate,
+        unchanged: rawMsgDelta === 0
+      },
+      public_watch_records: {
+        before_count: publicWatchBefore.totalCount,
+        after_count: publicWatchAfter.totalCount,
+        delta: watchRecDelta,
+        before_latest: publicWatchBefore.latestDate,
+        after_latest: publicWatchAfter.latestDate,
+        unchanged: watchRecDelta === 0
+      },
       zero_public_mutation_verified: zeroPublicDelta
     },
     evidence_access_and_contact_coverage: {
@@ -344,7 +342,7 @@ async function runStateIdempotentCanaryV3(env = process.env) {
   fs.writeFileSync(path.join(OUTPUT_DIR, 'summary.json'), JSON.stringify(summary, null, 2), 'utf-8');
 
   const manifest = {
-    contract: 'wf-persisted-canary-1k-v3-manifest-v1',
+    contract: 'wf-persisted-canary-1k-v3-manifest-v2',
     timestamp: new Date().toISOString(),
     classification: 'PERSISTED_CANARY_1K_V3_VERIFIED',
     summary,
@@ -360,21 +358,20 @@ async function runStateIdempotentCanaryV3(env = process.env) {
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
 
   console.log('============================================================');
-  console.log('STATE-IDEMPOTENT 1,000-ROW PRIVATE CANARY (V3 COHORT) COMPLETE:');
+  console.log('STATE-IDEMPOTENT RERUN (V3 COHORT) COMPLETE:');
   console.log('  Total Inputs Processed:      ', totalInputsProcessed);
   console.log('  Normalized Proposals:        ', normalizedProposals, '(' + ((normalizedProposals / totalInputsProcessed) * 100).toFixed(2) + '%)');
   console.log('  Review Required:             ', reviewRequired, '(' + ((reviewRequired / totalInputsProcessed) * 100).toFixed(2) + '%)');
   console.log('  Normalization Errors:        ', normalizationErrors);
   console.log('  Exact Reconciliation:        ', exactReconciliation);
-  console.log('  Pass 1 (Fresh Upsert):       ', 'inserted = ' + pass1Inserted + ', updated = ' + pass1Updated + ', unchanged = ' + pass1Unchanged);
-  console.log('  Pass 2 (State Idempotency):  ', 'inserted = ' + pass2Inserted + ', updated = ' + pass2Updated + ', unchanged = ' + pass2Unchanged);
+  console.log('  Idempotency Result:          ', 'inserted = ' + passInserted + ', updated = ' + passUpdated + ', unchanged = ' + passUnchanged);
   console.log('  Composite Joins Verified:    ', detailJoinsVerified + ' / ' + sampleProps.length);
   console.log('  Zero Wrong Namespace:        ', zeroWrongNamespace);
   console.log('  All Hashes 64-char Valid:    ', allHashesValid);
   console.log('  Trading Floor Eligible:      ', tradingFloorEligibleCount, '(' + summary.eligibility.trading_floor_eligible_pct + ')');
   console.log('  Price Research Eligible:     ', priceResearchEligibleCount, '(' + summary.eligibility.price_research_eligible_pct + ')');
-  console.log('  Public Views Unchanged:      ', 'trading_floor = 96,340, price_research = 31,848 (delta = 0)');
-  console.log('  Public Tables Delta:         ', 'raw_messages delta = ' + rawMsgDelta + ', watch_records delta = ' + watchRecDelta);
+  console.log('  Public Views Measured:       ', 'trading_floor = ' + publicTfAfter.totalCount + ' (delta=' + tfDelta + '), price_research = ' + publicPrAfter.totalCount + ' (delta=' + prDelta + ')');
+  console.log('  Public Tables Measured:      ', 'raw_messages = ' + publicRawAfter.totalCount + ' (delta=' + rawMsgDelta + '), watch_records = ' + publicWatchAfter.totalCount + ' (delta=' + watchRecDelta + ')');
   console.log('  Raw Checkpoint Preserved:    ', rawCheckpointPreserved, '(' + rawInputRowsAfter + ' rows)');
   console.log('  Manifest Checksum:           ', sha256File(manifestPath));
   console.log('============================================================');

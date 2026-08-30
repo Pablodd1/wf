@@ -200,10 +200,10 @@ DROP FUNCTION IF EXISTS public.get_mariadb_normalized_proposal_detail(TEXT, TEXT
 
 CREATE OR REPLACE FUNCTION public.get_mariadb_normalized_proposal_detail(
   p_source_id TEXT,
-  p_source_system TEXT DEFAULT 'OceanDigital MariaDB',
-  p_source_database TEXT DEFAULT 'thecollective_inventory',
-  p_source_table TEXT DEFAULT 'auctions',
-  p_source_hash TEXT DEFAULT NULL
+  p_source_system TEXT,
+  p_source_database TEXT,
+  p_source_table TEXT,
+  p_source_hash TEXT
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -213,6 +213,10 @@ AS $$
 DECLARE
   v_res JSONB;
 BEGIN
+  IF p_source_id IS NULL OR p_source_system IS NULL OR p_source_database IS NULL OR p_source_table IS NULL OR p_source_hash IS NULL THEN
+    RAISE EXCEPTION 'All 5 provenance fields are mandatory: source_system, source_database, source_table, source_id, source_hash';
+  END IF;
+
   SELECT jsonb_build_object(
     'proposal', to_jsonb(p),
     'raw_source', jsonb_build_object(
@@ -245,11 +249,11 @@ BEGIN
       'contact_publication_approved', p.contact_publication_approved,
       'inquiry_text', 'Hi ' || COALESCE(p.seller_name, r.raw_payload->>'from_name', 'Seller') || ', I am inquiring about your listing for ' || COALESCE(p.brand, 'Watch') || COALESCE(' ' || p.model, '') || COALESCE(' (Ref: ' || p.reference || ')', '') || ' listed on WatchFlow. Is this piece still available?',
       'whatsapp_url', CASE 
-        WHEN COALESCE(p.seller_contact, r.raw_payload->>'from_number') IS NOT NULL 
-        THEN 'https://wa.me/' || regexp_replace(COALESCE(p.seller_contact, r.raw_payload->>'from_number'), '^\+', '')
+        WHEN COALESCE(p.seller_contact, r.raw_payload->>'from_number') IS NOT NULL AND length(regexp_replace(COALESCE(p.seller_contact, r.raw_payload->>'from_number'), '\D', '', 'g')) >= 7
+        THEN 'https://wa.me/' || regexp_replace(COALESCE(p.seller_contact, r.raw_payload->>'from_number'), '\D', '', 'g') || '?text=' || replace(replace(replace(replace('Hi ' || COALESCE(p.seller_name, r.raw_payload->>'from_name', 'Seller') || ', I am inquiring about your listing for ' || COALESCE(p.brand, 'Watch') || COALESCE(' ' || p.model, '') || COALESCE(' (Ref: ' || p.reference || ')', '') || ' listed on WatchFlow. Is this piece still available?', ' ', '%20'), '(', '%28'), ')', '%29'), '?', '%3F')
         ELSE NULL
       END,
-      'inquiry_ready', (COALESCE(p.seller_contact, r.raw_payload->>'from_number') IS NOT NULL AND length(COALESCE(p.seller_contact, r.raw_payload->>'from_number')) >= 7)
+      'inquiry_ready', (COALESCE(p.seller_contact, r.raw_payload->>'from_number') IS NOT NULL AND length(regexp_replace(COALESCE(p.seller_contact, r.raw_payload->>'from_number'), '\D', '', 'g')) >= 7)
     )
   ) INTO v_res
   FROM wf_canonical_staging.mariadb_normalized_proposals p
@@ -263,8 +267,12 @@ BEGIN
     AND p.source_database = p_source_database
     AND p.source_table = p_source_table
     AND p.source_id = p_source_id
-    AND (p_source_hash IS NULL OR p.source_hash = p_source_hash)
-  LIMIT 1;
+    AND p.source_hash = p_source_hash;
+
+  IF v_res IS NULL THEN
+    RAISE EXCEPTION 'No matching proposal and raw source found for composite provenance: %:%:%:%:%',
+      p_source_system, p_source_database, p_source_table, p_source_id, p_source_hash;
+  END IF;
 
   RETURN v_res;
 END;

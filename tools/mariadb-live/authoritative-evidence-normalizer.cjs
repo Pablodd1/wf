@@ -460,14 +460,13 @@ function buildAuthorizedInquiryContract(proposal, rawRow = null) {
   
   const inquiryText = `Hi ${sellerName}, I am inquiring about your listing for ${itemDesc} listed on WatchFlow. Is this piece still available?`;
   
-  let cleanPhone = null;
+  let digitsOnlyPhone = null;
   let whatsappUrl = null;
   if (sellerContact) {
-    cleanPhone = sellerContact.replace(/[^\d+]/g, '');
-    if (cleanPhone.startsWith('+')) {
-      cleanPhone = cleanPhone.slice(1);
+    digitsOnlyPhone = sellerContact.replace(/\D/g, '');
+    if (digitsOnlyPhone.length >= 7) {
+      whatsappUrl = `https://wa.me/${digitsOnlyPhone}?text=${encodeURIComponent(inquiryText)}`;
     }
-    whatsappUrl = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(inquiryText)}`;
   }
 
   let maskedContact = null;
@@ -481,14 +480,18 @@ function buildAuthorizedInquiryContract(proposal, rawRow = null) {
   }
 
   return {
+    source_system: proposal.source_system || (rawRow && rawRow.source_system) || 'OceanDigital MariaDB',
+    source_database: proposal.source_database || (rawRow && rawRow.source_database) || 'thecollective_inventory',
+    source_table: proposal.source_table || (rawRow && rawRow.source_table) || 'auctions',
     source_id: proposal.source_id,
+    source_hash: proposal.source_hash || (rawRow && rawRow.source_hash) || null,
     seller_name: sellerName,
     seller_contact_masked: maskedContact,
     seller_contact_raw: sellerContact,
     contact_publication_approved: Boolean(proposal.contact_publication_approved),
     inquiry_text: inquiryText,
     whatsapp_url: whatsappUrl,
-    inquiry_ready: Boolean(sellerContact && sellerContact.length >= 7)
+    inquiry_ready: Boolean(digitsOnlyPhone && digitsOnlyPhone.length >= 7)
   };
 }
 

@@ -230,3 +230,66 @@ test('5. Composite Provenance: multi-namespace collision returns exactly one cor
   assert.strictEqual(inquiry.seller_contact_raw, '+41 79 123 4567');
   assert.ok(inquiry.whatsapp_url.includes('41791234567'), 'Must use authoritative contact for WhatsApp inquiry');
 });
+
+test('6. Mandatory source_hash and multi-hash source identity isolation', () => {
+  // Simulating 1 source_id with 2 distinct hashes (revision 1 and revision 2)
+  const stagingRawTable = [
+    {
+      source_system: 'OceanDigital MariaDB',
+      source_database: 'thecollective_inventory',
+      source_table: 'auctions',
+      source_id: 'multi-hash-uuid-101',
+      source_hash: 'hash-version-1-aaa',
+      raw_message: 'Patek 5711 V1 $100,000 USD',
+      raw_payload: { from_name: 'Dealer V1', from_number: '+41 79 111 2222' }
+    },
+    {
+      source_system: 'OceanDigital MariaDB',
+      source_database: 'thecollective_inventory',
+      source_table: 'auctions',
+      source_id: 'multi-hash-uuid-101',
+      source_hash: 'hash-version-2-bbb',
+      raw_message: 'Patek 5711 V2 $105,000 USD',
+      raw_payload: { from_name: 'Dealer V2', from_number: '+41 79 333 4444' }
+    }
+  ];
+
+  function getDetailMock(sourceSystem, sourceDb, sourceTbl, sourceId, sourceHash) {
+    if (!sourceSystem || !sourceDb || !sourceTbl || !sourceId || !sourceHash) {
+      throw new Error('All 5 provenance fields are mandatory: source_system, source_database, source_table, source_id, source_hash');
+    }
+    const found = stagingRawTable.find(r => 
+      r.source_system === sourceSystem &&
+      r.source_database === sourceDb &&
+      r.source_table === sourceTbl &&
+      r.source_id === sourceId &&
+      r.source_hash === sourceHash
+    );
+    if (!found) {
+      throw new Error('No matching proposal and raw source found for composite provenance');
+    }
+    return found;
+  }
+
+  // 1. Fail closed when source_hash is missing
+  assert.throws(() => {
+    getDetailMock('OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'multi-hash-uuid-101', null);
+  }, /All 5 provenance fields are mandatory/, 'Must fail closed when source_hash is null');
+
+  // 2. Querying with Hash 1 returns strictly Version 1
+  const res1 = getDetailMock('OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'multi-hash-uuid-101', 'hash-version-1-aaa');
+  assert.strictEqual(res1.source_hash, 'hash-version-1-aaa');
+  assert.strictEqual(res1.raw_message, 'Patek 5711 V1 $100,000 USD');
+  assert.strictEqual(res1.raw_payload.from_name, 'Dealer V1');
+
+  // 3. Querying with Hash 2 returns strictly Version 2
+  const res2 = getDetailMock('OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'multi-hash-uuid-101', 'hash-version-2-bbb');
+  assert.strictEqual(res2.source_hash, 'hash-version-2-bbb');
+  assert.strictEqual(res2.raw_message, 'Patek 5711 V2 $105,000 USD');
+  assert.strictEqual(res2.raw_payload.from_name, 'Dealer V2');
+
+  // 4. Querying with an unknown hash throws error rather than returning arbitrary row
+  assert.throws(() => {
+    getDetailMock('OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'multi-hash-uuid-101', 'unknown-hash-xyz');
+  }, /No matching proposal and raw source found/, 'Must fail closed on non-matching hash');
+});

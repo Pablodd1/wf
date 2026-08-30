@@ -1,11 +1,11 @@
 {
-  "contract": "wf-persisted-canary-1k-v3-manifest-v1",
-  "timestamp": "2026-08-30T21:35:19.484Z",
+  "contract": "wf-persisted-canary-1k-v3-manifest-v2",
+  "timestamp": "2026-08-30T21:44:56.594Z",
   "classification": "PERSISTED_CANARY_1K_V3_VERIFIED",
   "summary": {
-    "contract": "wf-persisted-canary-1k-v3-summary-v1",
-    "job_name": "canary-1000-v3-persisted-norm-1788125718485",
-    "timestamp": "2026-08-30T21:35:19.482Z",
+    "contract": "wf-persisted-canary-1k-v3-summary-v2",
+    "job_name": "canary-1000-v3-persisted-norm-authoritative",
+    "timestamp": "2026-08-30T21:44:56.592Z",
     "frozen_upper_cursor": {
       "created_on": "2026-04-28T15:50:43.000Z",
       "source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
@@ -23,8 +23,8 @@
     "invariants": {
       "exact_1000_v3_inputs_processed": true,
       "exact_reconciliation": true,
-      "state_idempotency_pass1_inserted_all_1000": true,
-      "state_idempotency_pass2_unchanged_all_1000": true,
+      "state_idempotency_inserted_zero": true,
+      "state_idempotency_unchanged_all_1000": true,
       "detail_composite_evidence_joins_verified": true,
       "zero_wrong_namespace_evidence": true,
       "all_proposal_hashes_64_char": true,
@@ -38,16 +38,10 @@
       "normalization_errors": 0
     },
     "idempotency_accounting": {
-      "pass_one": {
-        "inserted": 1000,
-        "updated": 0,
-        "unchanged": 0
-      },
-      "pass_two": {
-        "inserted": 0,
-        "updated": 0,
-        "unchanged": 1000
-      }
+      "inserted": 0,
+      "updated": 0,
+      "unchanged": 1000,
+      "total": 1000
     },
     "eligibility": {
       "trading_floor_eligible_count": 197,
@@ -57,24 +51,36 @@
     },
     "public_before_after_comparison": {
       "trading_floor_ready_view": {
-        "baseline_count": 96340,
+        "before_count": 96340,
+        "after_count": 96340,
         "delta": 0,
+        "before_latest": null,
+        "after_latest": null,
         "unchanged": true
       },
       "price_research_ready_view": {
-        "baseline_count": 31848,
+        "before_count": 31848,
+        "after_count": 31848,
         "delta": 0,
+        "before_latest": null,
+        "after_latest": null,
         "unchanged": true
       },
       "public_raw_messages": {
         "before_count": 10000,
         "after_count": 10000,
-        "delta": 0
+        "delta": 0,
+        "before_latest": "2026-08-10T12:59:57.16665+00:00",
+        "after_latest": "2026-08-10T12:59:57.16665+00:00",
+        "unchanged": true
       },
       "public_watch_records": {
         "before_count": 0,
         "after_count": 0,
-        "delta": 0
+        "delta": 0,
+        "before_latest": null,
+        "after_latest": null,
+        "unchanged": true
       },
       "zero_public_mutation_verified": true
     },
@@ -87,8 +93,8 @@
   },
   "artifact_checksums": {
     "summary.json": {
-      "sha256": "b29ee42810d534b715e32a691417c9eb43ed2f25a55a16ba19cae99dc67e06a3",
-      "size_bytes": 2367
+      "sha256": "9eaaacd6c9af67f04af5de99db2da103ac1bf0aef9126ed62b504408e82b270a",
+      "size_bytes": 2638
     }
   }
 }

@@ -7,6 +7,6 @@ RUN npm ci --omit=dev
 
 COPY . .
 
-ENV WF_START_COMMAND="node tools/mariadb-live/run-full-private-capture.cjs"
+ENV WF_START_COMMAND="node tools/shadow-reprocess/railway-worker.cjs"
 
-CMD ["sh", "-c", "exec ${WF_START_COMMAND:-node tools/mariadb-live/run-full-private-capture.cjs}"]
+CMD ["sh", "-c", "exec ${WF_START_COMMAND:-node tools/shadow-reprocess/railway-worker.cjs}"]
