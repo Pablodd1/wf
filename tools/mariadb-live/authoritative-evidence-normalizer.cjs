@@ -14,6 +14,23 @@ const {
 const { normalizeDialValue } = require('../../api/_lib/dial-normalization.cjs');
 const { normalizeWatchCondition, normalizeWatchDial } = require('../../api/_lib/watch-condition-normalization.cjs');
 
+const BRAND_HEADERS = [
+  [/\b(?:patek\s*philippe|patek|pp)\b/i, 'Patek Philippe'],
+  [/\b(?:audemars\s*piguet|audemars|ap)\b/i, 'Audemars Piguet'],
+  [/\b(?:vacheron\s*constantin|vacheron|vc)\b/i, 'Vacheron Constantin'],
+  [/\b(?:richard\s*mille|rm)\b/i, 'Richard Mille'],
+  [/\brolex\b/i, 'Rolex'],
+  [/\bcartier\b/i, 'Cartier'],
+  [/\bchopard\b/i, 'Chopard'],
+  [/\bomega\b/i, 'Omega'],
+  [/\bhublot\b/i, 'Hublot'],
+  [/\btudor\b/i, 'Tudor'],
+  [/\bbreitling\b/i, 'Breitling'],
+  [/\bpanerai\b/i, 'Panerai'],
+  [/\biwc\b/i, 'IWC'],
+  [/\bjaeger[- ]lecoultre|jlc\b/i, 'Jaeger-LeCoultre']
+];
+
 function sha256(content) {
   if (content === null || content === undefined) return null;
   return crypto.createHash('sha256').update(String(content)).digest('hex');
@@ -150,6 +167,16 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
   if (reference) {
     brand = inferBrandFromReference(reference);
     if (brand) brandSourceEvidence = 'listing_text_reference_inferred';
+  }
+
+  if (!brand && hasTextEvidence) {
+    for (const [pat, brandName] of BRAND_HEADERS) {
+      if (pat.test(listingTextEvidence)) {
+        brand = brandName;
+        brandSourceEvidence = 'listing_text_brand_token';
+        break;
+      }
+    }
   }
 
   // Label source metadata identity separately if text lacked explicit match
@@ -495,12 +522,383 @@ function buildAuthorizedInquiryContract(proposal, rawRow = null) {
   };
 }
 
+function computeParentHash(parent) {
+  const fields = [
+    'source_system',
+    'source_database',
+    'source_table',
+    'source_id',
+    'source_hash',
+    'source_record_id',
+    'source_created_on',
+    'source_observed_at',
+    'posted_at',
+    'raw_message_original',
+    'listing_text_source',
+    'listing_text_sha256',
+    'is_bundle',
+    'child_count',
+    'bundle_structure_type',
+    'seller_name',
+    'seller_contact',
+    'contact_publication_approved',
+    'seller_activity_count',
+    'seller_rating',
+    'seller_rating_status',
+    'seller_review_evidence',
+    'location',
+    'parser_version',
+    'review_flags'
+  ];
+  const payload = {};
+  for (const k of fields) {
+    payload[k] = parent[k] === undefined ? null : parent[k];
+  }
+  return crypto.createHash('sha256').update(JSON.stringify(payload, Object.keys(payload).sort())).digest('hex');
+}
+
+function computeChildProposalHash(child) {
+  const fields = [
+    'parent_source_id',
+    'parent_source_hash',
+    'child_ordinal',
+    'brand',
+    'model',
+    'reference',
+    'dial_color',
+    'year',
+    'condition',
+    'intent',
+    'original_price_amount',
+    'original_price_currency',
+    'currency_evidence',
+    'price_usd',
+    'fx_rate',
+    'fx_source',
+    'fx_date',
+    'currency_status',
+    'is_outlier',
+    'outlier_reason',
+    'primary_image_key',
+    'primary_image_url',
+    'primary_image_evidence_type',
+    'trading_floor_status',
+    'trading_floor_eligible',
+    'price_research_status',
+    'price_research_eligible',
+    'reconciliation_category',
+    'review_flags',
+    'exclusion_reasons',
+    'parser_version'
+  ];
+  const payload = {};
+  for (const k of fields) {
+    payload[k] = child[k] === undefined ? null : child[k];
+  }
+  return crypto.createHash('sha256').update(JSON.stringify(payload, Object.keys(payload).sort())).digest('hex');
+}
+
+function normalizeCanonicalParentChild(stagedRow, options = {}) {
+  // First run base authoritative row extraction
+  const base = normalizeAuthoritativeRow(stagedRow, options);
+  const raw = stagedRow.raw_payload || {};
+  const rawMessageOriginal = stagedRow.raw_message || base.listing_text_evidence || '';
+
+  const candidates = base.listing_text_evidence ? segmentDealerMessage(base.listing_text_evidence) : [];
+  const isMultiOffer = candidates.length > 1;
+  const isExplicitBundle = Number(raw.is_bundle) === 1;
+  const isBundle = isExplicitBundle || isMultiOffer;
+
+  // Extract all images
+  const images = [];
+  const rawImages = [];
+  if (raw.front_image) rawImages.push({ key: String(raw.front_image).trim(), type: 'SOURCE_LISTING_IMAGE' });
+  if (raw.image && raw.image !== raw.front_image) rawImages.push({ key: String(raw.image).trim(), type: 'SOURCE_LISTING_IMAGE' });
+  if (raw.back_image && raw.back_image !== raw.front_image && raw.back_image !== raw.image) {
+    rawImages.push({ key: String(raw.back_image).trim(), type: 'SOURCE_LISTING_IMAGE' });
+  }
+  if (Array.isArray(raw.gallery_images)) {
+    for (const g of raw.gallery_images) {
+      if (g && typeof g === 'string' && !rawImages.some(i => i.key === g.trim())) {
+        rawImages.push({ key: g.trim(), type: 'SOURCE_LISTING_IMAGE' });
+      }
+    }
+  }
+
+  rawImages.forEach((img, idx) => {
+    images.push({
+      image_ordinal: idx,
+      image_key: img.key,
+      image_url: null, // Keep null until proven reachable
+      image_evidence_type: 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED'
+    });
+  });
+
+  const primaryImg = images[0] || {
+    image_key: null,
+    image_url: null,
+    image_evidence_type: 'NO_IMAGE'
+  };
+
+  const children = [];
+
+  if (isMultiOffer && candidates.length > 1) {
+    // Generate multi-offer children
+    candidates.forEach((cand, idx) => {
+      const candRef = cand.reference || null;
+      let candBrand = candRef ? inferBrandFromReference(candRef) : null;
+      if (!candBrand && cand.rawLine) {
+        for (const [pat, bName] of BRAND_HEADERS) {
+          if (pat.test(cand.rawLine)) {
+            candBrand = bName;
+            break;
+          }
+        }
+      }
+      let candModel = null;
+      let candDial = null;
+      let candCondition = null;
+      let candYear = null;
+
+      if (cand.rawLine) {
+        candDial = normalizeWatchDial(null, cand.rawLine);
+        if (candDial) {
+          const nd = normalizeDialValue(candDial);
+          if (nd && nd.known) candDial = nd.value;
+        }
+        candCondition = normalizeWatchCondition(null, cand.rawLine);
+        candYear = extractYearFromText(cand.rawLine);
+      }
+
+      const candPrices = cand.rawLine ? extractPriceCandidates(cand.rawLine) : [];
+      const autoPrices = candPrices.filter(c => c.evidence_status === 'AUTO_APPROVED' && !c.review_required);
+      const candPrimaryPrice = autoPrices[0] || null;
+
+      let origAmount = null;
+      let origCurr = null;
+      let currEv = null;
+      let pUsd = null;
+      let fxR = null;
+      let fxS = null;
+      let fxD = null;
+      let currStatus = 'MISSING_PRICE';
+
+      if (candPrimaryPrice) {
+        origAmount = candPrimaryPrice.amount_original;
+        origCurr = candPrimaryPrice.currency_original;
+        currEv = candPrimaryPrice.currency_evidence || 'explicit_listing_text_token';
+        if (origCurr === 'USD') {
+          pUsd = candPrimaryPrice.amount_usd || origAmount;
+          fxR = 1.0;
+          fxS = '1:1_PARITY_PROOF';
+          fxD = base.posted_at ? String(base.posted_at).slice(0, 10) : null;
+          currStatus = 'VERIFIED_EXPLICIT_USD';
+        } else if (origCurr === 'USDT') {
+          currStatus = 'VERIFIED_EXPLICIT_USDT_HELD_FOR_FX';
+        } else if (origCurr === 'HKD') {
+          currStatus = 'VERIFIED_EXPLICIT_HKD_HELD_FOR_FX';
+        } else {
+          currStatus = 'VERIFIED_EXPLICIT_' + origCurr;
+        }
+      } else if (candPrices.some(c => c.review_reason === 'CURRENCY_AMBIGUOUS' || c.parser_rule === 'bare_dollar')) {
+        currStatus = 'AMBIGUOUS_BARE_DOLLAR_HELD';
+      }
+
+      // Outlier check
+      let isOutlier = false;
+      let outlierReason = null;
+      if (pUsd !== null && (pUsd > 500000 || pUsd < 100)) {
+        isOutlier = true;
+        outlierReason = pUsd > 500000 ? 'PRICE_HIGH_OUTLIER' : 'PRICE_LOW_OUTLIER';
+      }
+
+      const childFlags = [];
+      const childExclusions = [];
+      let tfStatus = 'HELD_UNKNOWN';
+      let tfEligible = false;
+
+      if (!candBrand && !candRef) {
+        tfStatus = 'HELD_IDENTITY_INCOMPLETE';
+        childFlags.push('INCOMPLETE_IDENTITY');
+        childExclusions.push('IDENTITY_UNRECOGNIZED');
+      } else if (base.intent === 'WITHDRAWN') {
+        tfStatus = 'HELD_WITHDRAWN';
+        childExclusions.push('LISTING_WITHDRAWN');
+      } else if (base.intent === null) {
+        tfStatus = 'HELD_INTENT_UNKNOWN';
+        childFlags.push('UNKNOWN_INTENT');
+        childExclusions.push('INTENT_UNKNOWN_HELD_FROM_PUBLICATION');
+      } else if (base.intent === 'WTS') {
+        tfStatus = 'ELIGIBLE_WTS';
+        tfEligible = true;
+      } else if (base.intent === 'WTB') {
+        tfStatus = 'ELIGIBLE_WTB';
+        tfEligible = true;
+      }
+
+      let prStatus = 'INELIGIBLE_OTHER';
+      let prEligible = false;
+      if (!tfEligible) {
+        prStatus = 'INELIGIBLE_TRADING_FLOOR_HOLD';
+      } else if (base.intent !== 'WTS') {
+        prStatus = 'INELIGIBLE_NOT_WTS';
+        childExclusions.push('INTENT_NOT_WTS');
+      } else if (!candBrand || !candRef) {
+        prStatus = 'INELIGIBLE_IDENTITY_INCOMPLETE';
+      } else if (pUsd === null) {
+        if (currStatus.startsWith('AMBIGUOUS')) {
+          prStatus = 'INELIGIBLE_AMBIGUOUS_CURRENCY';
+          childFlags.push('AMBIGUOUS_BARE_DOLLAR_HELD');
+        } else if (currStatus.includes('USDT')) {
+          prStatus = 'INELIGIBLE_USDT_HELD_FOR_FX';
+          childFlags.push('USDT_HELD_FOR_FX_PROOF');
+        } else if (currStatus.includes('HKD')) {
+          prStatus = 'INELIGIBLE_HKD_HELD_FOR_FX';
+          childFlags.push('HKD_HELD_FOR_FX_PROOF');
+        } else {
+          prStatus = 'INELIGIBLE_MISSING_PRICE';
+          childFlags.push('MISSING_PRICE_OR_CURRENCY');
+        }
+      } else if (currStatus === 'VERIFIED_EXPLICIT_USD' && Number.isFinite(pUsd) && pUsd > 0 && !isOutlier) {
+        prStatus = 'ELIGIBLE_VERIFIED_USD';
+        prEligible = true;
+      }
+
+      let reconCat = (childFlags.length > 0 || !tfEligible) ? 'REVIEW_REQUIRED' : 'NORMALIZED_PROPOSAL';
+
+      const childObj = {
+        parent_source_id: base.source_id,
+        parent_source_hash: base.source_hash,
+        child_ordinal: idx,
+        brand: candBrand || null,
+        model: candModel || null,
+        reference: candRef || null,
+        dial_color: candDial || null,
+        year: candYear || null,
+        condition: candCondition || null,
+        intent: base.intent || null,
+        original_price_amount: origAmount,
+        original_price_currency: origCurr,
+        currency_evidence: currEv,
+        price_usd: pUsd,
+        fx_rate: fxR,
+        fx_source: fxS,
+        fx_date: fxD,
+        currency_status: currStatus,
+        is_outlier: isOutlier,
+        outlier_reason: outlierReason,
+        primary_image_key: primaryImg.image_key,
+        primary_image_url: primaryImg.image_url,
+        primary_image_evidence_type: primaryImg.image_evidence_type,
+        trading_floor_status: tfStatus,
+        trading_floor_eligible: tfEligible,
+        price_research_status: prStatus,
+        price_research_eligible: prEligible,
+        reconciliation_category: reconCat,
+        review_flags: childFlags,
+        exclusion_reasons: childExclusions,
+        parser_version: 'authoritative-canonical-v10-parent-child',
+        images: images
+      };
+
+      childObj.child_proposal_hash = computeChildProposalHash(childObj);
+      childObj.child_unique_key = `${base.source_id}:c:${idx}:${childObj.child_proposal_hash}`;
+      children.push(childObj);
+    });
+  } else {
+    // Single child (ordinal 0)
+    let isOutlier = false;
+    let outlierReason = null;
+    if (base.price_usd !== null && (base.price_usd > 500000 || base.price_usd < 100)) {
+      isOutlier = true;
+      outlierReason = base.price_usd > 500000 ? 'PRICE_HIGH_OUTLIER' : 'PRICE_LOW_OUTLIER';
+    }
+
+    const singleChild = {
+      parent_source_id: base.source_id,
+      parent_source_hash: base.source_hash,
+      child_ordinal: 0,
+      brand: base.brand || null,
+      model: base.model || null,
+      reference: base.reference || null,
+      dial_color: base.dial_color || null,
+      year: base.year || null,
+      condition: base.condition || null,
+      intent: base.intent || null,
+      original_price_amount: base.original_price_amount,
+      original_price_currency: base.original_price_currency,
+      currency_evidence: base.currency_evidence,
+      price_usd: base.price_usd,
+      fx_rate: base.fx_rate,
+      fx_source: base.fx_source,
+      fx_date: base.fx_date,
+      currency_status: base.currency_status,
+      is_outlier: isOutlier,
+      outlier_reason: outlierReason,
+      primary_image_key: primaryImg.image_key,
+      primary_image_url: primaryImg.image_url,
+      primary_image_evidence_type: primaryImg.image_evidence_type,
+      trading_floor_status: base.trading_floor_status,
+      trading_floor_eligible: base.trading_floor_eligible,
+      price_research_status: (isOutlier && base.price_research_eligible) ? 'INELIGIBLE_OUTLIER_EXCLUDED' : base.price_research_status,
+      price_research_eligible: isOutlier ? false : base.price_research_eligible,
+      reconciliation_category: base.reconciliation_category,
+      review_flags: base.review_flags,
+      exclusion_reasons: base.exclusion_reasons,
+      parser_version: 'authoritative-canonical-v10-parent-child',
+      images: images
+    };
+
+    singleChild.child_proposal_hash = computeChildProposalHash(singleChild);
+    singleChild.child_unique_key = `${base.source_id}:c:0:${singleChild.child_proposal_hash}`;
+    children.push(singleChild);
+  }
+
+  const parent = {
+    source_system: base.source_system,
+    source_database: base.source_database,
+    source_table: base.source_table,
+    source_id: base.source_id,
+    source_hash: base.source_hash,
+    source_record_id: base.source_record_id,
+    source_created_on: base.posted_at,
+    source_observed_at: base.source_observed_at,
+    posted_at: base.posted_at,
+    raw_message_original: rawMessageOriginal,
+    listing_text_source: base.listing_text_source,
+    listing_text_sha256: base.listing_text_sha256,
+    raw_payload: raw,
+    is_bundle: isBundle,
+    child_count: children.length,
+    bundle_structure_type: isMultiOffer ? 'MULTI_OFFER_BUNDLE' : (isExplicitBundle ? 'MULTI_ITEM_CANONICAL' : 'SINGLE'),
+    seller_name: base.seller_name,
+    seller_contact: base.seller_contact,
+    contact_publication_approved: false,
+    seller_activity_count: base.seller_activity_count,
+    seller_rating: base.seller_rating,
+    seller_rating_status: base.seller_rating_status,
+    seller_review_evidence: base.seller_review_evidence,
+    location: base.location,
+    parser_version: 'authoritative-canonical-v10-parent-child',
+    review_flags: base.review_flags,
+    children: children
+  };
+
+  parent.parent_hash = computeParentHash(parent);
+
+  return { parent, children, images };
+}
+
 module.exports = {
   normalizeAuthoritativeRow,
+  normalizeCanonicalParentChild,
   computeProposalHash,
+  computeParentHash,
+  computeChildProposalHash,
   buildAuthorizedInquiryContract,
   resolveSourceTextEvidence,
   resolveStrictIntentFromText,
   extractYearFromText,
   sha256
 };
+
