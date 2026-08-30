@@ -148,3 +148,85 @@ test('4. Raw-message evidence join and private seller-contact preservation', () 
   assert.ok(inquiry.whatsapp_url.startsWith('https://wa.me/41789998888?text='), 'Must construct valid WhatsApp URL');
   assert.strictEqual(inquiry.inquiry_ready, true);
 });
+
+test('5. Composite Provenance: multi-namespace collision returns exactly one correct raw row', () => {
+  // Simulating multi-namespace staging table with identical source_id across tables
+  const rawRows = [
+    {
+      source_system: 'OceanDigital MariaDB',
+      source_database: 'thecollective_inventory',
+      source_table: 'auctions_w1_b250',
+      source_id: 'colliding-uuid-001',
+      source_hash: 'hash-benchmark-w1',
+      raw_message: 'BENCHMARK ROW MESSAGE DO NOT USE',
+      raw_payload: {
+        from_name: 'Benchmark Seller',
+        from_number: '+1 555 111 2222',
+        title: 'Benchmark listing'
+      }
+    },
+    {
+      source_system: 'OceanDigital MariaDB',
+      source_database: 'thecollective_inventory',
+      source_table: 'auctions',
+      source_id: 'colliding-uuid-001',
+      source_hash: 'hash-authoritative-real',
+      raw_message: 'Rolex Daytona 116500LN White Dial 2022 Full Set $28,000 USD',
+      raw_payload: {
+        from_name: 'Geneva Certified Dealer',
+        from_number: '+41 79 123 4567',
+        title: 'Rolex Daytona 116500LN White Dial 2022 Full Set $28,000 USD'
+      }
+    },
+    {
+      source_system: 'OceanDigital MariaDB',
+      source_database: 'thecollective_inventory',
+      source_table: 'auctions_w16_b250',
+      source_id: 'colliding-uuid-001',
+      source_hash: 'hash-benchmark-w16',
+      raw_message: 'BENCHMARK W16 ROW MESSAGE',
+      raw_payload: {
+        from_name: 'W16 Seller',
+        from_number: '+1 555 333 4444'
+      }
+    }
+  ];
+
+  // Proposal for authoritative table
+  const proposal = {
+    source_system: 'OceanDigital MariaDB',
+    source_database: 'thecollective_inventory',
+    source_table: 'auctions',
+    source_id: 'colliding-uuid-001',
+    source_hash: 'hash-authoritative-real',
+    brand: 'Rolex',
+    model: 'Daytona',
+    reference: '116500LN',
+    seller_name: 'Geneva Certified Dealer',
+    seller_contact: '+41 79 123 4567',
+    contact_publication_approved: false
+  };
+
+  // Simulating the 5-field composite join:
+  // p.source_system = r.source_system AND p.source_database = r.source_database AND p.source_table = r.source_table AND p.source_id = r.source_id AND p.source_hash = r.source_hash
+  const matchingRows = rawRows.filter(r => 
+    r.source_system === proposal.source_system &&
+    r.source_database === proposal.source_database &&
+    r.source_table === proposal.source_table &&
+    r.source_id === proposal.source_id &&
+    r.source_hash === proposal.source_hash
+  );
+
+  assert.strictEqual(matchingRows.length, 1, 'Must return exactly one row under composite provenance');
+  const matchedRaw = matchingRows[0];
+
+  assert.strictEqual(matchedRaw.source_table, 'auctions', 'Must match exact authoritative table, not benchmark namespace');
+  assert.strictEqual(matchedRaw.source_hash, 'hash-authoritative-real', 'Must match exact cryptographic source hash');
+  assert.strictEqual(matchedRaw.raw_message, 'Rolex Daytona 116500LN White Dial 2022 Full Set $28,000 USD');
+
+  const inquiry = buildAuthorizedInquiryContract(proposal, matchedRaw);
+  assert.strictEqual(inquiry.seller_name, 'Geneva Certified Dealer');
+  assert.strictEqual(inquiry.seller_contact_masked, '+*** *** 4567');
+  assert.strictEqual(inquiry.seller_contact_raw, '+41 79 123 4567');
+  assert.ok(inquiry.whatsapp_url.includes('41791234567'), 'Must use authoritative contact for WhatsApp inquiry');
+});
