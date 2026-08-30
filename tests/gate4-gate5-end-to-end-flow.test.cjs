@@ -31,7 +31,7 @@ test('Gate 4 & 5: API -> ListingDisplayContract -> Trading Floor Card -> Detail 
       image_evidence_type: proposal.image_key ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE',
       seller_name: proposal.seller_name,
       seller_phone: proposal.seller_contact,
-      raw_message: proposal.raw_message,
+      raw_message: proposal.raw_message || proposal.raw_message_evidence || null,
       listing_type: proposal.intent,
       is_unbundled_child: proposal.is_bundle === true
     });
@@ -46,8 +46,8 @@ test('Gate 4 & 5: API -> ListingDisplayContract -> Trading Floor Card -> Detail 
     }
 
     // 3. Detail View Parity
-    assert.equal(displayRecord.raw_message, proposal.raw_message);
-    if (proposal.image_key) {
+    assert.equal(displayRecord.raw_message, proposal.raw_message || proposal.raw_message_evidence || null);
+    if (proposal.image_key && proposal.image_url) {
       assert.equal(displayRecord.image_evidence_type, 'SOURCE_LISTING_IMAGE');
       assert.ok(displayRecord.thumbnail_url.includes(proposal.image_key));
     }

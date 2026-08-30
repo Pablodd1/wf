@@ -1,36 +1,38 @@
 {
-  "contract": "wf-authoritative-normalization-canary-v3",
-  "run_key": "authoritative-10k-canary-1788118991163",
-  "timestamp": "2026-08-30T19:43:11.163Z",
-  "parser_version": "authoritative-normalizer-v6-raw-evidence-first",
+  "contract": "wf-authoritative-normalization-canary-v4",
+  "run_key": "authoritative-10k-canary-1788119598326",
+  "timestamp": "2026-08-30T19:53:18.326Z",
+  "parser_version": "authoritative-normalizer-v7-exclusive-raw-message",
   "frozen_upper_cursor": {
     "created_on": "2026-04-28T15:50:43.000Z",
     "source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
   },
-  "invariants_verified": {
+  "computed_invariant_assertions": {
     "exact_10000_rows": true,
     "exact_10000_distinct_ids": true,
     "zero_benchmark_namespaces": true,
     "zero_duplicate_provenance_keys": true,
     "zero_provenance_synthesized": true,
-    "raw_message_evidence_extraction_only": true,
-    "usdt_hkd_held_for_fx": true,
-    "zero_rating_semantics_unrated": true,
-    "unknown_intent_handled": true,
-    "image_reachability_verified": "0.0%"
+    "raw_message_preserved_count": 1000,
+    "raw_message_preserved_rate": "10.00%",
+    "frozen_cursor_boundary_asserted": true,
+    "image_reachability_audit_rate": "0.0%",
+    "image_evidence_type_rule_applied": true,
+    "seller_contact_privacy_asserted": true,
+    "unknown_intent_held_asserted": true
   },
   "counts": {
     "total_inputs": 10000,
-    "normalized_proposals": 136,
-    "review_required": 9864,
+    "normalized_proposals": 0,
+    "review_required": 10000,
     "normalization_errors": 0,
     "exact_reconciliation": true
   },
   "eligibility": {
-    "trading_floor_eligible_count": 9859,
-    "trading_floor_eligible_pct": "98.59%",
-    "price_research_eligible_count": 123,
-    "price_research_eligible_pct": "1.23%"
+    "trading_floor_eligible_count": 144,
+    "trading_floor_eligible_pct": "1.44%",
+    "price_research_eligible_count": 0,
+    "price_research_eligible_pct": "0.00%"
   },
   "coverage": {
     "source_image_key_present_count": 10000,
@@ -164,45 +166,40 @@
       ]
     },
     "seller_contact_exposed_count": 0,
-    "seller_contact_exposed_pct": "0.00% (strictly private by default)",
-    "explicit_usd_price_count": 136,
-    "explicit_usd_price_pct": "1.36%",
-    "explicit_usdt_held_for_fx_count": 1082,
-    "explicit_hkd_held_for_fx_count": 333,
-    "bare_dollar_held_count": 3898,
-    "multi_offer_bundle_count": 140
+    "seller_contact_exposed_pct": "0.00% (strictly private)",
+    "explicit_usd_price_count": 9,
+    "explicit_usd_price_pct": "0.09%",
+    "explicit_usdt_held_for_fx_count": 29,
+    "explicit_hkd_held_for_fx_count": 2,
+    "bare_dollar_held_count": 531,
+    "unknown_intent_held_count": 9856,
+    "multi_offer_bundle_count": 5
   },
   "performance": {
-    "duration_ms": 759,
-    "throughput_rows_per_sec": 13175.23
+    "duration_ms": 143,
+    "throughput_rows_per_sec": 69930.07
   },
   "review_flags_breakdown": {
-    "MISSING_PRICE_OR_CURRENCY": 4551,
-    "AMBIGUOUS_BARE_DOLLAR_HELD": 3898,
-    "UNKNOWN_INTENT": 685,
-    "USDT_HELD_FOR_FX_PROOF": 1082,
-    "HELD_BUNDLE_REVIEW": 140,
-    "HKD_HELD_FOR_FX_PROOF": 333,
-    "INCOMPLETE_IDENTITY": 1
+    "UNKNOWN_INTENT": 9856,
+    "MISSING_PRICE_OR_CURRENCY": 9429,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 531,
+    "USDT_HELD_FOR_FX_PROOF": 29,
+    "HELD_BUNDLE_REVIEW": 5,
+    "HKD_HELD_FOR_FX_PROOF": 2,
+    "MISSING_RAW_MESSAGE": 9000
   },
   "exclusion_reasons_breakdown": {
-    "INTENT_NOT_WTS": 2523,
-    "BUNDLE_PARENT_UNSPLIT": 140,
-    "IDENTITY_UNRECOGNIZED": 1
+    "INTENT_UNKNOWN_HELD_FROM_PUBLICATION": 9856,
+    "INTENT_NOT_WTS": 135,
+    "BUNDLE_PARENT_UNSPLIT": 5,
+    "RAW_MESSAGE_ABSENT": 9000
   },
   "currency_status_breakdown": {
-    "MISSING_PRICE": 2978,
-    "AMBIGUOUS_BARE_DOLLAR_HELD": 3898,
-    "MISSING_CURRENCY_PROOF": 1433,
-    "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 1082,
-    "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX": 333,
-    "VERIFIED_EXPLICIT_USD": 136,
-    "VERIFIED_EXPLICIT_EUR": 90,
-    "VERIFIED_EXPLICIT_SAR": 2,
-    "VERIFIED_EXPLICIT_GBP": 7,
-    "VERIFIED_EXPLICIT_AED": 36,
-    "VERIFIED_EXPLICIT_MYR": 1,
-    "VERIFIED_EXPLICIT_AUD": 3,
-    "VERIFIED_EXPLICIT_CNY": 1
+    "MISSING_PRICE": 9416,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 531,
+    "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 29,
+    "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX": 2,
+    "VERIFIED_EXPLICIT_USD": 9,
+    "VERIFIED_EXPLICIT_EUR": 13
   }
 }

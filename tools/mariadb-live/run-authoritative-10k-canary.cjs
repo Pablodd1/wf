@@ -4,7 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { normalizeAuthoritativeRow, DO_SPACES_BASE } = require('./authoritative-evidence-normalizer.cjs');
+const { normalizeAuthoritativeRow, DO_SPACES_BASE, sha256 } = require('./authoritative-evidence-normalizer.cjs');
 
 const FROZEN_UPPER_CURSOR = {
   created_on: '2026-04-28T15:50:43.000Z',
@@ -62,7 +62,7 @@ async function runAuthoritativeCanary(env = process.env) {
 
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-  console.log('[Authoritative-10k-Canary] Fetching exactly ' + TARGET_ROW_COUNT.toLocaleString() + ' rows from MariaDB private raw staging (Strict Namespace: OceanDigital MariaDB/thecollective_inventory/auctions)...');
+  console.log('[Authoritative-10k-Canary] Fetching exactly ' + TARGET_ROW_COUNT.toLocaleString() + ' rows from MariaDB private raw staging...');
 
   const stagedRows = [];
   const seenIds = new Set();
@@ -129,43 +129,46 @@ async function runAuthoritativeCanary(env = process.env) {
   }
 
   // ============================================================
-  // STRICT INVARIANT ASSERTIONS (FAIL UNLESS ALL PASS)
+  // COMPUTED DATASET INVARIANT ASSERTIONS (DYNAMICALLY EVALUATED)
   // ============================================================
-  console.log('[Authoritative-10k-Canary] Validating strict dataset invariants on ' + stagedRows.length + ' rows...');
+  console.log('[Authoritative-10k-Canary] Computing dynamic dataset invariant assertions...');
 
-  // Assertion 1: Exactly 10,000 rows returned
-  if (stagedRows.length !== TARGET_ROW_COUNT) {
-    throw new Error('FAIL: Expected exactly ' + TARGET_ROW_COUNT + ' rows, got ' + stagedRows.length);
-  }
-
-  // Assertion 2: Exactly 10,000 distinct source IDs exist
   const distinctSourceIds = new Set(stagedRows.map(r => r.source_id));
-  if (distinctSourceIds.size !== TARGET_ROW_COUNT) {
-    throw new Error('FAIL: Expected ' + TARGET_ROW_COUNT + ' distinct source IDs, found ' + distinctSourceIds.size);
-  }
-
-  // Assertion 3: Zero benchmark namespaces exist
-  const invalidNamespace = stagedRows.find(r => 
-    r.source_system !== 'OceanDigital MariaDB' ||
-    r.source_database !== 'thecollective_inventory' ||
-    r.source_table !== 'auctions'
-  );
-  if (invalidNamespace) {
-    throw new Error('FAIL: Benchmark namespace violation found in record ' + invalidNamespace.source_id);
-  }
-
-  // Assertion 4: Zero duplicate provenance identities exist
   const provenanceKeys = new Set(stagedRows.map(r => r.source_system + ':' + r.source_database + ':' + r.source_table + ':' + r.source_id));
-  if (provenanceKeys.size !== TARGET_ROW_COUNT) {
-    throw new Error('FAIL: Duplicate provenance identities found: ' + provenanceKeys.size + ' unique vs ' + TARGET_ROW_COUNT + ' total');
-  }
+  
+  const rawMessagePreservedCount = stagedRows.filter(r => (
+    (typeof r.raw_message === 'string' && r.raw_message.trim().length > 0) ||
+    (typeof r.raw_payload?.description === 'string' && r.raw_payload.description.trim().length > 0)
+  )).length;
 
-  console.log('✔ All 4 strict dataset assertions passed: 10,000 distinct, verified-provenance auctions rows.');
+  const computedInvariants = {
+    exact_10000_rows: stagedRows.length === TARGET_ROW_COUNT,
+    exact_10000_distinct_ids: distinctSourceIds.size === TARGET_ROW_COUNT,
+    zero_benchmark_namespaces: stagedRows.every(r => r.source_system === 'OceanDigital MariaDB' && r.source_database === 'thecollective_inventory' && r.source_table === 'auctions'),
+    zero_duplicate_provenance_keys: provenanceKeys.size === TARGET_ROW_COUNT,
+    zero_provenance_synthesized: stagedRows.every(r => Boolean(r.source_id && r.source_hash && r.source_system && r.source_database && r.source_table && r.source_record_id)),
+    raw_message_preserved_count: rawMessagePreservedCount,
+    raw_message_preserved_rate: ((rawMessagePreservedCount / TARGET_ROW_COUNT) * 100).toFixed(2) + '%',
+    frozen_cursor_boundary_asserted: stagedRows.every(r => (
+      r.source_created_on < FROZEN_UPPER_CURSOR.created_on ||
+      (r.source_created_on === FROZEN_UPPER_CURSOR.created_on && r.source_id <= FROZEN_UPPER_CURSOR.source_id)
+    ))
+  };
+
+  // Fail closed if required dataset invariants fail
+  if (!computedInvariants.exact_10000_rows) throw new Error('FAIL: exact_10000_rows is false');
+  if (!computedInvariants.exact_10000_distinct_ids) throw new Error('FAIL: exact_10000_distinct_ids is false');
+  if (!computedInvariants.zero_benchmark_namespaces) throw new Error('FAIL: zero_benchmark_namespaces is false');
+  if (!computedInvariants.zero_duplicate_provenance_keys) throw new Error('FAIL: zero_duplicate_provenance_keys is false');
+  if (!computedInvariants.zero_provenance_synthesized) throw new Error('FAIL: zero_provenance_synthesized is false');
+  if (!computedInvariants.frozen_cursor_boundary_asserted) throw new Error('FAIL: frozen_cursor_boundary_asserted is false');
+
+  console.log('✔ All computed dataset assertions passed dynamically on 10,000 distinct auctions records.');
 
   // ============================================================
   // DETERMINISTIC EVIDENCE-FIRST NORMALIZATION
   // ============================================================
-  console.log('[Authoritative-10k-Canary] Normalizing rows using evidence-first raw message parser...');
+  console.log('[Authoritative-10k-Canary] Normalizing rows using exclusive raw_message parser...');
   const startTime = Date.now();
 
   let normalizedProposals = 0;
@@ -180,9 +183,11 @@ async function runAuthoritativeCanary(env = process.env) {
   let explicitUsdtCount = 0;
   let explicitHkdCount = 0;
   let bareDollarHeldCount = 0;
+  let unknownIntentCount = 0;
   let multiOfferBundleCount = 0;
 
   const proposals = [];
+  const redactedProposals = [];
   const reviewFlagsBreakdown = {};
   const exclusionReasonsBreakdown = {};
   const currencyStatusBreakdown = {};
@@ -194,15 +199,20 @@ async function runAuthoritativeCanary(env = process.env) {
       const contract = normalizeAuthoritativeRow(row);
       proposals.push(contract);
 
+      // Create strictly redacted copy for committed artifacts (mask raw message & phone)
+      const redacted = { ...contract };
+      redacted.raw_message_evidence = '[REDACTED_EVIDENCE_SHA256:' + contract.raw_message_sha256 + ']';
+      redacted.seller_contact = null; // Strictly private
+      redactedProposals.push(redacted);
+
       if (contract.image_key) {
         imageKeyPresentCount++;
         allImageKeys.push(contract.image_key);
       }
 
       if (contract.is_bundle) multiOfferBundleCount++;
-      if (contract.currency_status === 'VERIFIED_EXPLICIT_USD' || contract.currency_status === 'VERIFIED_EXPLICIT_USD_FROM_METADATA') {
-        explicitUsdPriceCount++;
-      }
+      if (contract.intent === null) unknownIntentCount++;
+      if (contract.currency_status === 'VERIFIED_EXPLICIT_USD') explicitUsdPriceCount++;
       if (contract.currency_status === 'VERIFIED_EXPLICIT_USDT_HELD_FOR_FX') explicitUsdtCount++;
       if (contract.currency_status === 'VERIFIED_EXPLICIT_HKD_HELD_FOR_FX') explicitHkdCount++;
       if (contract.currency_status === 'AMBIGUOUS_BARE_DOLLAR_HELD') bareDollarHeldCount++;
@@ -239,32 +249,32 @@ async function runAuthoritativeCanary(env = process.env) {
   }
 
   // ============================================================
-  // IMAGE URL REACHABILITY SAMPLE VERIFICATION
+  // IMAGE URL REACHABILITY SAMPLE AUDIT
   // ============================================================
-  console.log('[Authoritative-10k-Canary] Testing DigitalOcean Spaces image URL reachability sample...');
+  console.log('[Authoritative-10k-Canary] Auditing DigitalOcean Spaces image URL reachability...');
   const imageReachabilityReport = await testImageReachabilitySample(allImageKeys, 15);
   fs.writeFileSync(path.join(OUTPUT_DIR, 'image-reachability-sample.json'), JSON.stringify(imageReachabilityReport, null, 2), 'utf-8');
 
-  // Write proposals.jsonl
-  const jsonlLines = proposals.map(p => JSON.stringify(p)).join('\n');
+  // Write redacted proposals.jsonl (Zero raw messages or contacts committed)
+  const jsonlLines = redactedProposals.map(p => JSON.stringify(p)).join('\n');
   fs.writeFileSync(path.join(OUTPUT_DIR, 'proposals.jsonl'), jsonlLines, 'utf-8');
 
-  // Write proposals.csv
+  // Write redacted proposals.csv
   const csvHeaders = [
-    'source_id', 'source_cursor', 'brand', 'model', 'reference', 'dial_color',
+    'source_id', 'source_cursor', 'brand', 'brand_source_evidence', 'reference', 'reference_source_evidence',
     'year', 'condition', 'intent', 'original_price_amount', 'original_price_currency',
-    'price_usd', 'currency_status', 'seller_name', 'seller_contact', 'image_key',
-    'trading_floor_eligible', 'price_research_eligible', 'is_bundle'
+    'price_usd', 'currency_status', 'seller_name', 'seller_contact', 'image_key', 'image_evidence_type',
+    'trading_floor_eligible', 'price_research_eligible', 'is_bundle', 'raw_message_sha256'
   ];
   const csvRows = [csvHeaders.join(',')];
-  for (const p of proposals) {
+  for (const p of redactedProposals) {
     const vals = [
       JSON.stringify(p.source_id || ''),
       JSON.stringify(p.source_cursor || ''),
       JSON.stringify(p.brand || ''),
-      JSON.stringify(p.model || ''),
+      JSON.stringify(p.brand_source_evidence || ''),
       JSON.stringify(p.reference || ''),
-      JSON.stringify(p.dial_color || ''),
+      JSON.stringify(p.reference_source_evidence || ''),
       p.year !== null ? p.year : '',
       JSON.stringify(p.condition || ''),
       JSON.stringify(p.intent || ''),
@@ -275,32 +285,29 @@ async function runAuthoritativeCanary(env = process.env) {
       JSON.stringify(p.seller_name || ''),
       JSON.stringify(p.seller_contact || ''),
       JSON.stringify(p.image_key || ''),
+      JSON.stringify(p.image_evidence_type || ''),
       p.trading_floor_eligible ? 'true' : 'false',
       p.price_research_eligible ? 'true' : 'false',
-      p.is_bundle ? 'true' : 'false'
+      p.is_bundle ? 'true' : 'false',
+      JSON.stringify(p.raw_message_sha256 || '')
     ];
     csvRows.push(vals.join(','));
   }
   fs.writeFileSync(path.join(OUTPUT_DIR, 'proposals.csv'), csvRows.join('\n'), 'utf-8');
 
-  // Write summary.json
+  // Write summary.json with computed assertions
   const summary = {
-    contract: 'wf-authoritative-normalization-canary-v3',
+    contract: 'wf-authoritative-normalization-canary-v4',
     run_key: 'authoritative-10k-canary-' + Date.now(),
     timestamp: new Date().toISOString(),
-    parser_version: 'authoritative-normalizer-v6-raw-evidence-first',
+    parser_version: 'authoritative-normalizer-v7-exclusive-raw-message',
     frozen_upper_cursor: FROZEN_UPPER_CURSOR,
-    invariants_verified: {
-      exact_10000_rows: stagedRows.length === 10000,
-      exact_10000_distinct_ids: distinctSourceIds.size === 10000,
-      zero_benchmark_namespaces: true,
-      zero_duplicate_provenance_keys: provenanceKeys.size === 10000,
-      zero_provenance_synthesized: true,
-      raw_message_evidence_extraction_only: true,
-      usdt_hkd_held_for_fx: true,
-      zero_rating_semantics_unrated: true,
-      unknown_intent_handled: true,
-      image_reachability_verified: imageReachabilityReport.reachability_pct
+    computed_invariant_assertions: {
+      ...computedInvariants,
+      image_reachability_audit_rate: imageReachabilityReport.reachability_pct,
+      image_evidence_type_rule_applied: redactedProposals.every(p => p.image_url === null && p.image_evidence_type !== 'SOURCE_LISTING_IMAGE'),
+      seller_contact_privacy_asserted: redactedProposals.every(p => p.seller_contact === null),
+      unknown_intent_held_asserted: redactedProposals.filter(p => p.intent === null).every(p => !p.trading_floor_eligible && !p.price_research_eligible)
     },
     counts: {
       total_inputs: TARGET_ROW_COUNT,
@@ -320,12 +327,13 @@ async function runAuthoritativeCanary(env = process.env) {
       source_image_key_present_pct: ((imageKeyPresentCount / TARGET_ROW_COUNT) * 100).toFixed(2) + '%',
       image_reachability_sample: imageReachabilityReport,
       seller_contact_exposed_count: 0,
-      seller_contact_exposed_pct: '0.00% (strictly private by default)',
+      seller_contact_exposed_pct: '0.00% (strictly private)',
       explicit_usd_price_count: explicitUsdPriceCount,
       explicit_usd_price_pct: ((explicitUsdPriceCount / TARGET_ROW_COUNT) * 100).toFixed(2) + '%',
       explicit_usdt_held_for_fx_count: explicitUsdtCount,
       explicit_hkd_held_for_fx_count: explicitHkdCount,
       bare_dollar_held_count: bareDollarHeldCount,
+      unknown_intent_held_count: unknownIntentCount,
       multi_offer_bundle_count: multiOfferBundleCount
     },
     performance: {
@@ -341,9 +349,10 @@ async function runAuthoritativeCanary(env = process.env) {
 
   // Write authoritative manifest with exact artifact checksums
   const manifest = {
-    contract: 'wf-authoritative-10k-canary-manifest-v3',
+    contract: 'wf-authoritative-10k-canary-manifest-v4',
     timestamp: new Date().toISOString(),
-    classification: 'CANARY_EVIDENCE_REPRODUCIBLE',
+    classification: 'CANARY_EVIDENCE_REPRODUCIBLE_REDACTED',
+    disclaimer: 'Committed artifacts contain redacted message hashes only. Raw seller messages and contacts are strictly excluded.',
     summary,
     artifact_checksums: {
       'proposals.jsonl': {
@@ -369,7 +378,7 @@ async function runAuthoritativeCanary(env = process.env) {
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), 'utf-8');
 
   console.log('============================================================');
-  console.log('REBUILT AUTHORITATIVE 10,000-ROW CANARY RESULTS:');
+  console.log('AUTHORITATIVE 10,000-ROW CANARY RE-RUN COMPLETE:');
   console.log('  Total Inputs:           ', summary.counts.total_inputs);
   console.log('  Normalized Proposals:   ', summary.counts.normalized_proposals);
   console.log('  Review Required:        ', summary.counts.review_required);
