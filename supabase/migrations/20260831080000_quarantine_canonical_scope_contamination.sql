@@ -1,0 +1,173 @@
+-- supabase/migrations/20260831080000_quarantine_canonical_scope_contamination.sql
+-- Transactional quarantine and cleanup of non-auctions benchmark namespace records from active canonical tables.
+
+DO $$
+DECLARE
+  v_non_auction_parents_count BIGINT;
+  v_archived_parents_count BIGINT;
+  v_non_auction_children_count BIGINT;
+  v_archived_children_count BIGINT;
+  v_non_auction_images_count BIGINT;
+  v_archived_images_count BIGINT;
+  v_remaining_non_auction_parents BIGINT;
+  v_remaining_orphan_children BIGINT;
+  v_remaining_orphan_images BIGINT;
+BEGIN
+  -- 1. Create quarantine archive tables preserving lineage and columns
+  CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_quarantine_canonical_parents (
+    LIKE wf_canonical_staging.mariadb_normalized_parents INCLUDING ALL,
+    quarantined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    quarantine_reason TEXT NOT NULL DEFAULT 'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION'
+  );
+
+  CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_quarantine_canonical_children (
+    LIKE wf_canonical_staging.mariadb_normalized_children INCLUDING ALL,
+    quarantined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    quarantine_reason TEXT NOT NULL DEFAULT 'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION'
+  );
+
+  CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_quarantine_canonical_images (
+    LIKE wf_canonical_staging.mariadb_normalized_images INCLUDING ALL,
+    quarantined_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    quarantine_reason TEXT NOT NULL DEFAULT 'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION'
+  );
+
+  -- 2. Count non-auctions contaminated records before archive
+  SELECT COUNT(*) INTO v_non_auction_parents_count
+  FROM wf_canonical_staging.mariadb_normalized_parents
+  WHERE source_table <> 'auctions'
+     OR source_system <> 'OceanDigital MariaDB'
+     OR source_database <> 'thecollective_inventory';
+
+  SELECT COUNT(*) INTO v_non_auction_children_count
+  FROM wf_canonical_staging.mariadb_normalized_children c
+  JOIN wf_canonical_staging.mariadb_normalized_parents p ON c.parent_id = p.id
+  WHERE p.source_table <> 'auctions'
+     OR p.source_system <> 'OceanDigital MariaDB'
+     OR p.source_database <> 'thecollective_inventory';
+
+  SELECT COUNT(*) INTO v_non_auction_images_count
+  FROM wf_canonical_staging.mariadb_normalized_images img
+  JOIN wf_canonical_staging.mariadb_normalized_parents p ON img.parent_id = p.id
+  WHERE p.source_table <> 'auctions'
+     OR p.source_system <> 'OceanDigital MariaDB'
+     OR p.source_database <> 'thecollective_inventory';
+
+  -- 3. Archive contaminated parents
+  INSERT INTO wf_canonical_staging.mariadb_quarantine_canonical_parents (
+    id, source_system, source_database, source_table, source_id, source_hash, source_record_id,
+    source_created_on, source_observed_at, posted_at, raw_message_original, listing_text_source,
+    listing_text_sha256, raw_payload, is_bundle, child_count, bundle_structure_type, seller_name,
+    seller_contact, contact_publication_approved, seller_activity_count, seller_rating,
+    seller_rating_status, seller_review_evidence, location, parser_version, review_flags,
+    parent_hash, created_at, updated_at, quarantined_at, quarantine_reason
+  )
+  SELECT
+    id, source_system, source_database, source_table, source_id, source_hash, source_record_id,
+    source_created_on, source_observed_at, posted_at, raw_message_original, listing_text_source,
+    listing_text_sha256, raw_payload, is_bundle, child_count, bundle_structure_type, seller_name,
+    seller_contact, contact_publication_approved, seller_activity_count, seller_rating,
+    seller_rating_status, seller_review_evidence, location, parser_version, review_flags,
+    parent_hash, created_at, updated_at, NOW(), 'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION'
+  FROM wf_canonical_staging.mariadb_normalized_parents
+  WHERE source_table <> 'auctions'
+     OR source_system <> 'OceanDigital MariaDB'
+     OR source_database <> 'thecollective_inventory'
+  ON CONFLICT (id) DO NOTHING;
+
+  -- 4. Archive contaminated children
+  INSERT INTO wf_canonical_staging.mariadb_quarantine_canonical_children (
+    id, parent_id, child_ordinal, child_unique_key, child_proposal_hash, intent,
+    brand, model, reference, dial_color, configuration, condition, year, original_price_amount,
+    original_price_currency, price_usd, fx_rate, fx_source, fx_date, currency_evidence_status,
+    currency_status, price_research_status, price_research_eligible, trading_floor_status,
+    trading_floor_eligible, reconciliation_category, primary_image_key, primary_image_evidence_type,
+    parser_version, review_flags, is_active, created_at, superseded_at, quarantined_at, quarantine_reason
+  )
+  SELECT
+    c.id, c.parent_id, c.child_ordinal, c.child_unique_key, c.child_proposal_hash, c.intent,
+    c.brand, c.model, c.reference, c.dial_color, c.configuration, c.condition, c.year, c.original_price_amount,
+    c.original_price_currency, c.price_usd, c.fx_rate, c.fx_source, c.fx_date, c.currency_evidence_status,
+    c.currency_status, c.price_research_status, c.price_research_eligible, c.trading_floor_status,
+    c.trading_floor_eligible, c.reconciliation_category, c.primary_image_key, c.primary_image_evidence_type,
+    c.parser_version, c.review_flags, c.is_active, c.created_at, c.superseded_at, NOW(), 'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION'
+  FROM wf_canonical_staging.mariadb_normalized_children c
+  JOIN wf_canonical_staging.mariadb_quarantine_canonical_parents p ON c.parent_id = p.id
+  ON CONFLICT (id) DO NOTHING;
+
+  -- 5. Archive contaminated images
+  INSERT INTO wf_canonical_staging.mariadb_quarantine_canonical_images (
+    id, parent_id, child_id, scope, image_ordinal, image_key, image_url,
+    image_evidence_type, is_active, created_at, superseded_at, quarantined_at, quarantine_reason
+  )
+  SELECT
+    img.id, img.parent_id, img.child_id, img.scope, img.image_ordinal, img.image_key, img.image_url,
+    img.image_evidence_type, img.is_active, img.created_at, img.superseded_at, NOW(), 'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION'
+  FROM wf_canonical_staging.mariadb_normalized_images img
+  JOIN wf_canonical_staging.mariadb_quarantine_canonical_parents p ON img.parent_id = p.id
+  ON CONFLICT (id) DO NOTHING;
+
+  -- 6. Verify exact archive readback in transaction
+  SELECT COUNT(*) INTO v_archived_parents_count
+  FROM wf_canonical_staging.mariadb_quarantine_canonical_parents;
+
+  SELECT COUNT(*) INTO v_archived_children_count
+  FROM wf_canonical_staging.mariadb_quarantine_canonical_children;
+
+  SELECT COUNT(*) INTO v_archived_images_count
+  FROM wf_canonical_staging.mariadb_quarantine_canonical_images;
+
+  IF v_archived_parents_count < v_non_auction_parents_count THEN
+    RAISE EXCEPTION 'QUARANTINE_READBACK_FAILURE: Expected % archived parents, got %', v_non_auction_parents_count, v_archived_parents_count;
+  END IF;
+
+  IF v_archived_children_count < v_non_auction_children_count THEN
+    RAISE EXCEPTION 'QUARANTINE_READBACK_FAILURE: Expected % archived children, got %', v_non_auction_children_count, v_archived_children_count;
+  END IF;
+
+  IF v_archived_images_count < v_non_auction_images_count THEN
+    RAISE EXCEPTION 'QUARANTINE_READBACK_FAILURE: Expected % archived images, got %', v_non_auction_images_count, v_archived_images_count;
+  END IF;
+
+  -- 7. Remove quarantined rows from active canonical tables
+  DELETE FROM wf_canonical_staging.mariadb_normalized_images
+  WHERE parent_id IN (SELECT id FROM wf_canonical_staging.mariadb_quarantine_canonical_parents);
+
+  DELETE FROM wf_canonical_staging.mariadb_normalized_children
+  WHERE parent_id IN (SELECT id FROM wf_canonical_staging.mariadb_quarantine_canonical_parents);
+
+  DELETE FROM wf_canonical_staging.mariadb_normalized_parents
+  WHERE id IN (SELECT id FROM wf_canonical_staging.mariadb_quarantine_canonical_parents);
+
+  -- 8. Post-cleanup assertions
+  SELECT COUNT(*) INTO v_remaining_non_auction_parents
+  FROM wf_canonical_staging.mariadb_normalized_parents
+  WHERE source_table <> 'auctions'
+     OR source_system <> 'OceanDigital MariaDB'
+     OR source_database <> 'thecollective_inventory';
+
+  IF v_remaining_non_auction_parents > 0 THEN
+    RAISE EXCEPTION 'QUARANTINE_POST_ASSERTION_FAILURE: % non-auctions parents still remain in active table', v_remaining_non_auction_parents;
+  END IF;
+
+  SELECT COUNT(*) INTO v_remaining_orphan_children
+  FROM wf_canonical_staging.mariadb_normalized_children c
+  LEFT JOIN wf_canonical_staging.mariadb_normalized_parents p ON c.parent_id = p.id
+  WHERE p.id IS NULL;
+
+  IF v_remaining_orphan_children > 0 THEN
+    RAISE EXCEPTION 'QUARANTINE_POST_ASSERTION_FAILURE: % orphan children found after quarantine delete', v_remaining_orphan_children;
+  END IF;
+
+  SELECT COUNT(*) INTO v_remaining_orphan_images
+  FROM wf_canonical_staging.mariadb_normalized_images img
+  LEFT JOIN wf_canonical_staging.mariadb_normalized_parents p ON img.parent_id = p.id
+  WHERE p.id IS NULL;
+
+  IF v_remaining_orphan_images > 0 THEN
+    RAISE EXCEPTION 'QUARANTINE_POST_ASSERTION_FAILURE: % orphan images found after quarantine delete', v_remaining_orphan_images;
+  END IF;
+
+  RAISE NOTICE 'QUARANTINE_CLEANUP_SUCCESS: Archived and removed % parents, % children, % images.',
+    v_non_auction_parents_count, v_non_auction_children_count, v_non_auction_images_count;
+END $$;
