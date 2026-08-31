@@ -69,9 +69,9 @@ def run_milestone_normalizer():
   if cp_row:
     raw_cursor_date = cp_row[1]
     if hasattr(raw_cursor_date, 'strftime'):
-      last_created_on = raw_cursor_date.strftime('%Y-%m-%d %H:%M:%S')
+      last_created_on = raw_cursor_date.strftime('%Y-%m-%dT%H:%M:%S.000Z')
     else:
-      last_created_on = str(raw_cursor_date).replace('+00:00', '') if raw_cursor_date else None
+      last_created_on = str(raw_cursor_date).replace('+00:00', '').replace(' ', 'T') if raw_cursor_date else None
     last_source_id = str(cp_row[2]) if cp_row[2] else None
     total_processed = cp_row[3] or 0
     normalized_proposals = cp_row[4] or 0
