@@ -54,55 +54,33 @@ BEGIN
      OR p.source_database <> 'thecollective_inventory';
 
   -- 3. Archive contaminated parents
-  INSERT INTO wf_canonical_staging.mariadb_quarantine_canonical_parents (
-    id, source_system, source_database, source_table, source_id, source_hash, source_record_id,
-    source_created_on, source_observed_at, posted_at, raw_message_original, listing_text_source,
-    listing_text_sha256, raw_payload, is_bundle, child_count, bundle_structure_type, seller_name,
-    seller_contact, contact_publication_approved, seller_activity_count, seller_rating,
-    seller_rating_status, seller_review_evidence, location, parser_version, review_flags,
-    parent_hash, created_at, updated_at, quarantined_at, quarantine_reason
-  )
+  INSERT INTO wf_canonical_staging.mariadb_quarantine_canonical_parents
   SELECT
-    id, source_system, source_database, source_table, source_id, source_hash, source_record_id,
-    source_created_on, source_observed_at, posted_at, raw_message_original, listing_text_source,
-    listing_text_sha256, raw_payload, is_bundle, child_count, bundle_structure_type, seller_name,
-    seller_contact, contact_publication_approved, seller_activity_count, seller_rating,
-    seller_rating_status, seller_review_evidence, location, parser_version, review_flags,
-    parent_hash, created_at, updated_at, NOW(), 'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION'
-  FROM wf_canonical_staging.mariadb_normalized_parents
-  WHERE source_table <> 'auctions'
-     OR source_system <> 'OceanDigital MariaDB'
-     OR source_database <> 'thecollective_inventory'
+    p.*,
+    NOW() AS quarantined_at,
+    'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION' AS quarantine_reason
+  FROM wf_canonical_staging.mariadb_normalized_parents p
+  WHERE p.source_table <> 'auctions'
+     OR p.source_system <> 'OceanDigital MariaDB'
+     OR p.source_database <> 'thecollective_inventory'
   ON CONFLICT (id) DO NOTHING;
 
   -- 4. Archive contaminated children
-  INSERT INTO wf_canonical_staging.mariadb_quarantine_canonical_children (
-    id, parent_id, child_ordinal, child_unique_key, child_proposal_hash, intent,
-    brand, model, reference, dial_color, configuration, condition, year, original_price_amount,
-    original_price_currency, price_usd, fx_rate, fx_source, fx_date, currency_evidence_status,
-    currency_status, price_research_status, price_research_eligible, trading_floor_status,
-    trading_floor_eligible, reconciliation_category, primary_image_key, primary_image_evidence_type,
-    parser_version, review_flags, is_active, created_at, superseded_at, quarantined_at, quarantine_reason
-  )
+  INSERT INTO wf_canonical_staging.mariadb_quarantine_canonical_children
   SELECT
-    c.id, c.parent_id, c.child_ordinal, c.child_unique_key, c.child_proposal_hash, c.intent,
-    c.brand, c.model, c.reference, c.dial_color, c.configuration, c.condition, c.year, c.original_price_amount,
-    c.original_price_currency, c.price_usd, c.fx_rate, c.fx_source, c.fx_date, c.currency_evidence_status,
-    c.currency_status, c.price_research_status, c.price_research_eligible, c.trading_floor_status,
-    c.trading_floor_eligible, c.reconciliation_category, c.primary_image_key, c.primary_image_evidence_type,
-    c.parser_version, c.review_flags, c.is_active, c.created_at, c.superseded_at, NOW(), 'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION'
+    c.*,
+    NOW() AS quarantined_at,
+    'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION' AS quarantine_reason
   FROM wf_canonical_staging.mariadb_normalized_children c
   JOIN wf_canonical_staging.mariadb_quarantine_canonical_parents p ON c.parent_id = p.id
   ON CONFLICT (id) DO NOTHING;
 
   -- 5. Archive contaminated images
-  INSERT INTO wf_canonical_staging.mariadb_quarantine_canonical_images (
-    id, parent_id, child_id, scope, image_ordinal, image_key, image_url,
-    image_evidence_type, is_active, created_at, superseded_at, quarantined_at, quarantine_reason
-  )
+  INSERT INTO wf_canonical_staging.mariadb_quarantine_canonical_images
   SELECT
-    img.id, img.parent_id, img.child_id, img.scope, img.image_ordinal, img.image_key, img.image_url,
-    img.image_evidence_type, img.is_active, img.created_at, img.superseded_at, NOW(), 'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION'
+    img.*,
+    NOW() AS quarantined_at,
+    'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION' AS quarantine_reason
   FROM wf_canonical_staging.mariadb_normalized_images img
   JOIN wf_canonical_staging.mariadb_quarantine_canonical_parents p ON img.parent_id = p.id
   ON CONFLICT (id) DO NOTHING;
