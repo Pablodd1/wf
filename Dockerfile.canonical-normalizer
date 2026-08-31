@@ -1,0 +1,31 @@
+# Dockerfile.canonical-normalizer
+# Deterministic, non-fallback Dockerfile for Scoped Canonical Milestone Normalizer
+FROM python:3.11-slim-bookworm
+
+WORKDIR /app
+
+# Install Node.js 22 for fast authoritative JavaScript parser
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    gnupg \
+    && mkdir -p /etc/apt/keyrings \
+    && curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg \
+    && echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_22.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends nodejs \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install psycopg2-binary
+RUN pip install --no-cache-dir psycopg2-binary
+
+# Copy application files
+COPY . /app
+
+# Pin commit SHA and deterministic unbuffered environment
+ARG GIT_COMMIT_SHA=HEAD
+ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA} \
+    PYTHONUNBUFFERED=1 \
+    RAILWAY_RESTART_POLICY=never
+
+CMD ["python", "tools/mariadb-live/run_scoped_canonical_normalizer.py"]
