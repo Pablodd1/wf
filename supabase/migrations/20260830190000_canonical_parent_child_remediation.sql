@@ -442,6 +442,42 @@ BEGIN
       RAISE EXCEPTION 'upsert_mariadb_canonical_batch: Every parent must contain a children JSON array (got %)', COALESCE(jsonb_typeof(v_parent->'children'), 'null');
     END IF;
 
+    -- Enforce child_count = jsonb_array_length(children)
+    IF COALESCE((v_parent->>'child_count')::int, 0) <> jsonb_array_length(v_parent->'children') THEN
+      RAISE EXCEPTION 'upsert_mariadb_canonical_batch: parent child_count (%) does not match children array length (%)',
+        v_parent->>'child_count', jsonb_array_length(v_parent->'children');
+    END IF;
+
+    -- Validate child ordinals are unique and contiguous from 0 to child_count - 1
+    IF jsonb_array_length(v_parent->'children') > 0 THEN
+      DECLARE
+        v_expected_ord INT := 0;
+        v_seen_ordinals INT[] := ARRAY[]::int[];
+        v_c JSONB;
+        v_ord INT;
+      BEGIN
+        FOR v_c IN SELECT * FROM jsonb_array_elements(v_parent->'children')
+        LOOP
+          v_ord := (v_c->>'child_ordinal')::int;
+          IF v_ord IS NULL OR v_ord < 0 THEN
+            RAISE EXCEPTION 'upsert_mariadb_canonical_batch: child_ordinal must be a non-negative integer (got %)', v_c->>'child_ordinal';
+          END IF;
+          IF v_ord = ANY(v_seen_ordinals) THEN
+            RAISE EXCEPTION 'upsert_mariadb_canonical_batch: duplicate child_ordinal % in children array', v_ord;
+          END IF;
+          v_seen_ordinals := array_append(v_seen_ordinals, v_ord);
+        END LOOP;
+
+        FOR v_expected_ord IN 0 .. (jsonb_array_length(v_parent->'children') - 1)
+        LOOP
+          IF NOT (v_expected_ord = ANY(v_seen_ordinals)) THEN
+            RAISE EXCEPTION 'upsert_mariadb_canonical_batch: non-contiguous child ordinals; missing ordinal % (child_count=%)',
+              v_expected_ord, jsonb_array_length(v_parent->'children');
+          END IF;
+        END LOOP;
+      END;
+    END IF;
+
     -- Supersession: Deactivate active images belonging to children removed by a smaller child set (or all if children is empty [])
     UPDATE wf_canonical_staging.mariadb_normalized_images
     SET is_active = FALSE, superseded_at = NOW()
@@ -465,6 +501,27 @@ BEGIN
       -- Validate images is an array (mandatory, missing/null/scalar must throw)
       IF (v_child->'images') IS NULL OR jsonb_typeof(v_child->'images') <> 'array' THEN
         RAISE EXCEPTION 'upsert_mariadb_canonical_batch: Every child must contain an images JSON array (got %)', COALESCE(jsonb_typeof(v_child->'images'), 'null');
+      END IF;
+
+      -- Validate image ordinals are non-negative and unique within each child
+      IF jsonb_array_length(v_child->'images') > 0 THEN
+        DECLARE
+          v_img_seen_ordinals INT[] := ARRAY[]::int[];
+          v_im JSONB;
+          v_im_ord INT;
+        BEGIN
+          FOR v_im IN SELECT * FROM jsonb_array_elements(v_child->'images')
+          LOOP
+            v_im_ord := (v_im->>'image_ordinal')::int;
+            IF v_im_ord IS NULL OR v_im_ord < 0 THEN
+              RAISE EXCEPTION 'upsert_mariadb_canonical_batch: image_ordinal must be a non-negative integer (got %)', v_im->>'image_ordinal';
+            END IF;
+            IF v_im_ord = ANY(v_img_seen_ordinals) THEN
+              RAISE EXCEPTION 'upsert_mariadb_canonical_batch: duplicate image_ordinal % in child images array', v_im_ord;
+            END IF;
+            v_img_seen_ordinals := array_append(v_img_seen_ordinals, v_im_ord);
+          END LOOP;
+        END;
       END IF;
 
       v_new_child_hash := v_child->>'child_proposal_hash';
@@ -883,11 +940,28 @@ END;
 $$;
 
 -- 11. Function-Specific Privileges & Access Revocation (No Global Function Revocation)
-REVOKE ALL ON FUNCTION public.upsert_mariadb_canonical_batch(JSONB) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.get_mariadb_canonical_child_detail(TEXT, TEXT, TEXT, TEXT, TEXT, INT) FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON FUNCTION public.get_mariadb_canonical_internal_evidence(TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC, anon, authenticated;
+DO $$
+BEGIN
+  REVOKE ALL ON FUNCTION public.upsert_mariadb_canonical_batch(JSONB) FROM PUBLIC;
+  REVOKE ALL ON FUNCTION public.get_mariadb_canonical_child_detail(TEXT, TEXT, TEXT, TEXT, TEXT, INT) FROM PUBLIC;
+  REVOKE ALL ON FUNCTION public.get_mariadb_canonical_internal_evidence(TEXT, TEXT, TEXT, TEXT, TEXT) FROM PUBLIC;
 
-GRANT USAGE ON SCHEMA wf_canonical_staging TO service_role;
-GRANT EXECUTE ON FUNCTION public.upsert_mariadb_canonical_batch(JSONB) TO service_role;
-GRANT EXECUTE ON FUNCTION public.get_mariadb_canonical_child_detail(TEXT, TEXT, TEXT, TEXT, TEXT, INT) TO service_role;
-GRANT EXECUTE ON FUNCTION public.get_mariadb_canonical_internal_evidence(TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL ON FUNCTION public.upsert_mariadb_canonical_batch(JSONB) FROM anon;
+    REVOKE ALL ON FUNCTION public.get_mariadb_canonical_child_detail(TEXT, TEXT, TEXT, TEXT, TEXT, INT) FROM anon;
+    REVOKE ALL ON FUNCTION public.get_mariadb_canonical_internal_evidence(TEXT, TEXT, TEXT, TEXT, TEXT) FROM anon;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL ON FUNCTION public.upsert_mariadb_canonical_batch(JSONB) FROM authenticated;
+    REVOKE ALL ON FUNCTION public.get_mariadb_canonical_child_detail(TEXT, TEXT, TEXT, TEXT, TEXT, INT) FROM authenticated;
+    REVOKE ALL ON FUNCTION public.get_mariadb_canonical_internal_evidence(TEXT, TEXT, TEXT, TEXT, TEXT) FROM authenticated;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN
+    GRANT USAGE ON SCHEMA wf_canonical_staging TO service_role;
+    GRANT EXECUTE ON FUNCTION public.upsert_mariadb_canonical_batch(JSONB) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.get_mariadb_canonical_child_detail(TEXT, TEXT, TEXT, TEXT, TEXT, INT) TO service_role;
+    GRANT EXECUTE ON FUNCTION public.get_mariadb_canonical_internal_evidence(TEXT, TEXT, TEXT, TEXT, TEXT) TO service_role;
+  END IF;
+END $$;

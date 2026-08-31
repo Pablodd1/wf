@@ -1,9 +1,18 @@
 {
-  "contract": "wf-ephemeral-canonical-migration-tests-v2",
-  "generated_at": "2026-08-31T00:08:03.413Z",
+  "contract": "wf-ephemeral-canonical-migration-tests-v3",
+  "target_fingerprint": {
+    "database_name": "railway",
+    "server_version": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+    "non_production_assertion": "CONFIRMED_NON_PRODUCTION_DISPOSABLE_DATABASE",
+    "migration_file": "supabase/migrations/20260830190000_canonical_parent_child_remediation.sql",
+    "migration_sha256": "44d948bc32196a773e51f997fa8b2ab602993ce6ac636ed721e4a8eaf484b270",
+    "execution_start_utc": "2026-08-31T00:26:42.813951+00:00",
+    "execution_end_utc": "2026-08-31T00:26:49.951960+00:00",
+    "duration_seconds": 7.138009
+  },
   "status": "PASSED",
-  "total_tests": 10,
-  "passed_tests": 10,
+  "total_tests": 16,
+  "passed_tests": 16,
   "failed_tests": 0,
   "test_cases": [
     {
@@ -34,25 +43,55 @@
     {
       "test": "TEST_F_IMAGE_ORDINAL_CHANGE_REGRESSION",
       "passed": true,
-      "detail": "OldOrdinal0Active=false, NewOrdinal1Active=true (deactivated upon ordinal shift)"
+      "detail": "OldOrdinal0Active=False, NewOrdinal1Active=True"
     },
     {
-      "test": "TEST_G_PARENT_MANDATORY_CHILDREN_ARRAY",
+      "test": "TEST_G_CHILD_COUNT_MISMATCH_REJECTED",
       "passed": true,
-      "detail": "MissingChildrenRejected=true, ActiveChildrenAfterEmpty=0"
+      "detail": "Correctly raised exception when child_count did not match children array length"
     },
     {
-      "test": "TEST_H_CHILD_MANDATORY_IMAGES_ARRAY",
+      "test": "TEST_H_NON_CONTIGUOUS_CHILD_ORDINALS_REJECTED",
       "passed": true,
-      "detail": "MissingImagesRejected=true"
+      "detail": "Correctly raised exception when child ordinals had gaps"
     },
     {
-      "test": "TEST_I_INVALID_SCOPE_CONSTRAINT",
+      "test": "TEST_I_DUPLICATE_CHILD_ORDINALS_REJECTED",
+      "passed": true,
+      "detail": "Correctly raised exception on duplicate child ordinals"
+    },
+    {
+      "test": "TEST_J_NEGATIVE_CHILD_ORDINAL_REJECTED",
+      "passed": true,
+      "detail": "Correctly raised exception on negative child ordinal"
+    },
+    {
+      "test": "TEST_K_DUPLICATE_IMAGE_ORDINALS_REJECTED",
+      "passed": true,
+      "detail": "Correctly raised exception on duplicate image ordinals within same child"
+    },
+    {
+      "test": "TEST_L_NEGATIVE_IMAGE_ORDINAL_REJECTED",
+      "passed": true,
+      "detail": "Correctly raised exception on negative image ordinal"
+    },
+    {
+      "test": "TEST_M_PARENT_MANDATORY_CHILDREN_ARRAY",
+      "passed": true,
+      "detail": "MissingChildrenRejected=True, ActiveChildrenAfterEmpty=0"
+    },
+    {
+      "test": "TEST_N_CHILD_MANDATORY_IMAGES_ARRAY",
+      "passed": true,
+      "detail": "MissingImagesRejected=True"
+    },
+    {
+      "test": "TEST_O_INVALID_SCOPE_CONSTRAINT",
       "passed": true,
       "detail": "chk_mariadb_images_scope_child_id successfully prevented PARENT scope with non-null child_id"
     },
     {
-      "test": "TEST_J_MALFORMED_ARRAYS_FAIL_CLOSED",
+      "test": "TEST_P_MALFORMED_ARRAYS_FAIL_CLOSED",
       "passed": true,
       "detail": "upsert_mariadb_canonical_batch successfully rejected non-array JSONB batch"
     }

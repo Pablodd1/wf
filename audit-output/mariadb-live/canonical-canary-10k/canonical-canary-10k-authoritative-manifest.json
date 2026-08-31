@@ -1,6 +1,6 @@
 {
   "contract": "wf-canonical-canary-10k-authoritative-manifest-v3",
-  "generated_at": "2026-08-31T00:08:11.645Z",
+  "generated_at": "2026-08-31T00:26:56.510Z",
   "artifacts_directory": "audit-output/mariadb-live/canonical-canary-10k",
   "total_artifacts": 7,
   "total_code_files": 10,
@@ -32,13 +32,13 @@
     },
     "preview_migration_smoke_test.json": {
       "bytes": 2134,
-      "sha256": "01f247574a7f023560219eea6389f0c401f66b7b5ab2b6332a9e78a4cabc8930",
-      "last_modified": "2026-08-31T00:07:36.085Z"
+      "sha256": "851097d307bf659e7fd277f624a5edd52a992b7aa6a49472c6ad33f16dff8631",
+      "last_modified": "2026-08-31T00:26:54.375Z"
     },
     "ephemeral_migration_test_results.json": {
-      "bytes": 1841,
-      "sha256": "aa2a242fcf0e5778a5b3228151cdbdcd219dcd5a1f10bf9d8046f272030e24a8",
-      "last_modified": "2026-08-31T00:08:03.414Z"
+      "bytes": 3524,
+      "sha256": "cc1e9fe117610c35be29d3e4b1181cf1f1653f92233cbd962a22887ca788ff65",
+      "last_modified": "2026-08-31T00:26:49.953Z"
     }
   },
   "verified_code_and_migrations": {
@@ -78,9 +78,9 @@
       "last_modified": "2026-08-31T00:07:24.947Z"
     },
     "tools/mariadb-live/ephemeral_migration_tester.py": {
-      "bytes": 22034,
-      "sha256": "bd2c2bbe7287fd0fd83fbc67877fb4e0363f65519410556fe6410f7d08c81f13",
-      "last_modified": "2026-08-31T00:07:21.985Z"
+      "bytes": 27551,
+      "sha256": "11cd86b0e1daf2632be092f9a1a5a1053d3e35463765ebb6ea20b6c30039d91c",
+      "last_modified": "2026-08-31T00:26:22.430Z"
     },
     "tools/mariadb-live/generate_checksum_manifest.cjs": {
       "bytes": 3205,
@@ -88,9 +88,9 @@
       "last_modified": "2026-08-30T23:51:39.030Z"
     },
     "supabase/migrations/20260830190000_canonical_parent_child_remediation.sql": {
-      "bytes": 39926,
-      "sha256": "b61baab5da38118b18afcd58cb414da840eae66343b6d6edd5f140b9e70193a6",
-      "last_modified": "2026-08-31T00:06:14.254Z"
+      "bytes": 43433,
+      "sha256": "44d948bc32196a773e51f997fa8b2ab602993ce6ac636ed721e4a8eaf484b270",
+      "last_modified": "2026-08-31T00:26:40.028Z"
     }
   }
 }
