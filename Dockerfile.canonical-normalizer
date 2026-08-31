@@ -28,4 +28,4 @@ ENV GIT_COMMIT_SHA=${GIT_COMMIT_SHA} \
     PYTHONUNBUFFERED=1 \
     RAILWAY_RESTART_POLICY=never
 
-CMD ["python", "tools/mariadb-live/test_quarantine_on_ephemeral_db.py"]
+CMD ["python", "-c", "import sys; print('Canonical normalizer standing by. Replicas: 0. Restart: NEVER.'); sys.exit(0)"]
