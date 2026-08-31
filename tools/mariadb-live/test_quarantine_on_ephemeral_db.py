@@ -55,11 +55,11 @@ def run_test():
       listing_text_source, listing_text_sha256, child_count, is_bundle, bundle_structure_type,
       parser_version, parent_hash
     ) VALUES 
-    ('11111111-1111-1111-1111-111111111111', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'src-1', 'h1', 'rec-1', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw1', '{{}}', 't1', '{hex64_1}', 1, false, 'SINGLE', 'v1', '{hex64_1}'),
-    ('22222222-2222-2222-2222-222222222222', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'src-2', 'h2', 'rec-2', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw2', '{{}}', 't2', '{hex64_2}', 1, false, 'SINGLE', 'v1', '{hex64_2}'),
-    ('33333333-3333-3333-3333-333333333333', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_bench_100k_w1_b250', 'src-3', 'h3', 'rec-3', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw3', '{{}}', 't3', '{hex64_3}', 1, false, 'SINGLE', 'v1', '{hex64_3}'),
-    ('44444444-4444-4444-4444-444444444444', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_bench_100k_w4_b250', 'src-4', 'h4', 'rec-4', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw4', '{{}}', 't4', '{hex64_4}', 1, false, 'SINGLE', 'v1', '{hex64_4}'),
-    ('55555555-5555-5555-5555-555555555555', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_w1_b250', 'src-5', 'h5', 'rec-5', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw5', '{{}}', 't5', '{hex64_5}', 1, false, 'SINGLE', 'v1', '{hex64_5}');
+    ('11111111-1111-1111-1111-111111111111', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'src-1', '{hex64_1}', 'rec-1', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw1', '{{}}', 't1', '{hex64_1}', 1, false, 'SINGLE', 'v1', '{hex64_1}'),
+    ('22222222-2222-2222-2222-222222222222', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'src-2', '{hex64_2}', 'rec-2', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw2', '{{}}', 't2', '{hex64_2}', 1, false, 'SINGLE', 'v1', '{hex64_2}'),
+    ('33333333-3333-3333-3333-333333333333', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_bench_100k_w1_b250', 'src-3', '{hex64_3}', 'rec-3', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw3', '{{}}', 't3', '{hex64_3}', 1, false, 'SINGLE', 'v1', '{hex64_3}'),
+    ('44444444-4444-4444-4444-444444444444', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_bench_100k_w4_b250', 'src-4', '{hex64_4}', 'rec-4', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw4', '{{}}', 't4', '{hex64_4}', 1, false, 'SINGLE', 'v1', '{hex64_4}'),
+    ('55555555-5555-5555-5555-555555555555', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_w1_b250', 'src-5', '{hex64_5}', 'rec-5', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw5', '{{}}', 't5', '{hex64_5}', 1, false, 'SINGLE', 'v1', '{hex64_5}');
   """)
 
   # Insert children
