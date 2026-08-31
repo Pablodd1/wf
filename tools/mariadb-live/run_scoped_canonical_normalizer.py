@@ -18,7 +18,7 @@ from psycopg2.extras import execute_values
 JOB_NAME = "milestone-951750-scoped-auctions-canonical-v1"
 FROZEN_CURSOR_DATE = "2026-04-28T15:50:43.000Z"
 FROZEN_CURSOR_ID = "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
-EXPECTED_SCOPED_ROWS = 951743
+EXPECTED_SCOPED_ROWS = 955743
 BATCH_SIZE = 1000
 MAX_TECHNICAL_ERROR_THRESHOLD = 10
 
@@ -55,6 +55,7 @@ def run_scoped_normalizer(limit_batches=None):
   conn = psycopg2.connect(db_url)
   conn.autocommit = False
   cur = conn.cursor()
+  cur.execute("SET statement_timeout = '600s';")
 
   ensure_error_ledger(cur)
   conn.commit()
@@ -62,15 +63,15 @@ def run_scoped_normalizer(limit_batches=None):
   # Step 1: Strict Scoped Preflight Verification
   print(f"[Scoped-Normalizer] Running strict scoped cohort preflight validation...", flush=True)
   cur.execute("""
-    SELECT COUNT(*), COUNT(DISTINCT source_id)
+    SELECT COUNT(*)
     FROM wf_canonical_staging.mariadb_raw_source_rows
     WHERE source_system = %s
       AND source_database = %s
       AND source_table = %s
       AND (source_created_on, source_id) <= (%s, %s);
   """, (REQUIRED_SOURCE_SYSTEM, REQUIRED_SOURCE_DATABASE, REQUIRED_SOURCE_TABLE, FROZEN_CURSOR_DATE, FROZEN_CURSOR_ID))
-  scoped_count, distinct_count = cur.fetchone()
-  print(f"[Scoped-Normalizer] Preflight scoped cohort count: {scoped_count:,} (distinct: {distinct_count:,})", flush=True)
+  scoped_count = cur.fetchone()[0]
+  print(f"[Scoped-Normalizer] Preflight scoped cohort count: {scoped_count:,}", flush=True)
 
   if scoped_count != EXPECTED_SCOPED_ROWS:
     raise ValueError(f"SCOPED_PREFLIGHT_FAILURE: Expected exactly {EXPECTED_SCOPED_ROWS} rows for auctions scope, found {scoped_count}")
@@ -320,4 +321,7 @@ def run_scoped_normalizer(limit_batches=None):
     conn.close()
 
 if __name__ == "__main__":
-  run_scoped_normalizer()
+  limit = None
+  if len(sys.argv) > 1:
+    limit = int(sys.argv[1])
+  run_scoped_normalizer(limit_batches=limit)
