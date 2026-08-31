@@ -17,13 +17,14 @@ def run_test():
   conn.autocommit = True
   cur = conn.cursor()
 
-  print("Ensuring Supabase stub roles exist on disposable PostgreSQL...")
+  print("Ensuring Supabase stub roles and schema exist on disposable PostgreSQL...")
   cur.execute("""
     DO $$ BEGIN
       IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon; END IF;
       IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated; END IF;
       IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role; END IF;
     END $$;
+    CREATE SCHEMA IF NOT EXISTS wf_canonical_staging;
   """)
 
   schema_name = "test_quarantine_clean"
