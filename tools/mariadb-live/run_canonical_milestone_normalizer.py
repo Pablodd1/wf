@@ -141,10 +141,9 @@ def run_milestone_normalizer():
         has_more = False
         break
 
-      batch_parents = []
-
+      raw_batch = []
       for r in rows:
-        raw_row = {
+        raw_batch.append({
           "source_id": r[0],
           "source_system": r[1],
           "source_database": r[2],
@@ -154,15 +153,18 @@ def run_milestone_normalizer():
           "source_created_on": r[6],
           "raw_message": r[7],
           "raw_payload": r[8]
-        }
+        })
 
-        # Send to node worker
-        worker.stdin.write(json.dumps(raw_row) + "\n")
-        worker.stdin.flush()
-        line = worker.stdout.readline()
-        res = json.loads(line)
+      # Send entire batch array to node worker
+      worker.stdin.write(json.dumps(raw_batch) + "\n")
+      worker.stdin.flush()
+      line = worker.stdout.readline()
+      batch_results = json.loads(line)
 
+      batch_parents = []
+      for idx, res in enumerate(batch_results):
         total_processed += 1
+        r = rows[idx]
 
         if res.get("success"):
           parent = res["parent"]
