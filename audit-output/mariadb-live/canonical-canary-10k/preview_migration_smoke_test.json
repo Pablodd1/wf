@@ -1,12 +1,12 @@
 {
   "contract": "wf-migration-smoke-test-v2",
-  "generated_at": "2026-08-30T23:51:32.507Z",
+  "generated_at": "2026-08-31T00:07:36.083Z",
   "migration_file": "supabase/migrations/20260830190000_canonical_parent_child_remediation.sql",
   "status": "PASSED",
   "execution_environment_policy": "Production execution strictly forbidden. Run only on Supabase preview branch or ephemeral local PostgreSQL.",
   "checks_summary": {
-    "total_checks": 7,
-    "passed_checks": 7,
+    "total_checks": 9,
+    "passed_checks": 9,
     "failed_checks": 0
   },
   "checks": [
@@ -43,7 +43,17 @@
     {
       "check": "json_array_type_validation",
       "passed": true,
-      "detail": "JSONB array type must be validated before array iteration or length calculation"
+      "detail": "JSONB array type must be strictly validated; missing/non-array must throw exception"
+    },
+    {
+      "check": "image_scope_child_id_constraint",
+      "passed": true,
+      "detail": "Check constraint chk_mariadb_images_scope_child_id enforces scope and child_id nullability"
+    },
+    {
+      "check": "composite_image_sync_key",
+      "passed": true,
+      "detail": "Image synchronization must match both image_ordinal and image_key composite identity"
     }
   ]
 }

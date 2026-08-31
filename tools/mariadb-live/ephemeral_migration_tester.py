@@ -1,11 +1,37 @@
 # tools/mariadb-live/ephemeral_migration_tester.py
 import os
+import sys
 import psycopg2
 import json
 import uuid
+import datetime
+
+PROD_IDENTIFIERS = [
+  "bptrvfncppbjnchsaxtb",
+  "aws-0-us-west-1.pooler.supabase.com"
+]
 
 def run_ephemeral_migration_tests():
-  conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+  ephemeral_url = os.environ.get("EPHEMERAL_DATABASE_URL")
+  prod_url = os.environ.get("DATABASE_URL")
+
+  if not ephemeral_url:
+    print("FATAL: EPHEMERAL_DATABASE_URL is required to run the migration test suite.", file=sys.stderr)
+    print("Migration tester must NEVER run against production DATABASE_URL.", file=sys.stderr)
+    print("Please provide a disposable local PostgreSQL database or Supabase preview branch.", file=sys.stderr)
+    sys.exit(1)
+
+  for prod_id in PROD_IDENTIFIERS:
+    if prod_id in ephemeral_url:
+      print(f"FATAL: PRODUCTION_TARGET_REJECTED: EPHEMERAL_DATABASE_URL contains production identifier '{prod_id}'.", file=sys.stderr)
+      sys.exit(1)
+
+  if prod_url and ephemeral_url == prod_url:
+    print("FATAL: PRODUCTION_TARGET_REJECTED: EPHEMERAL_DATABASE_URL is identical to production DATABASE_URL.", file=sys.stderr)
+    sys.exit(1)
+
+  print(f"Connecting to verified disposable database...")
+  conn = psycopg2.connect(ephemeral_url)
   conn.autocommit = True
   cur = conn.cursor()
 
@@ -123,8 +149,6 @@ def run_ephemeral_migration_tests():
 
   # Replace schema references for isolated ephemeral execution
   ephemeral_migration_sql = migration_sql.replace("wf_canonical_staging", test_schema)
-  
-  # Prefix test functions in ephemeral schema to avoid clobbering public functions
   ephemeral_migration_sql = ephemeral_migration_sql.replace("public.upsert_mariadb_canonical_batch", f"{test_schema}.upsert_mariadb_canonical_batch")
   ephemeral_migration_sql = ephemeral_migration_sql.replace("public.get_mariadb_canonical_child_detail", f"{test_schema}.get_mariadb_canonical_child_detail")
   ephemeral_migration_sql = ephemeral_migration_sql.replace("public.get_mariadb_canonical_internal_evidence", f"{test_schema}.get_mariadb_canonical_internal_evidence")
@@ -324,10 +348,78 @@ def run_ephemeral_migration_tests():
     "detail": f"Child0ActiveImages={child0_active_images} (historical row preserved as inactive)"
   })
 
-  # TEST F: Invalid Scope Constraints
+  # TEST F: Image Ordinal Change Regression (Key changes ordinal from 0 to 1)
+  payload_ordinal_change = json.loads(json.dumps(payload_removed_img))
+  # Change ordinal of sub_front.jpg from 0 to 1, and add a new image at ordinal 0
+  payload_ordinal_change[0]["children"][0]["images"] = [
+    {"image_ordinal": 0, "image_key": "listings/full/new_front.jpg", "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/new_front.jpg", "image_evidence_type": "IMAGE_URL_VERIFIED"},
+    {"image_ordinal": 1, "image_key": "listings/full/sub_front.jpg", "image_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/sub_front.jpg", "image_evidence_type": "IMAGE_URL_VERIFIED"}
+  ]
+
+  cur.execute(f"SELECT {test_schema}.upsert_mariadb_canonical_batch(%s);", (json.dumps(payload_ordinal_change),))
+
+  # Verify (image_ordinal=0, image_key='listings/full/sub_front.jpg') is now inactive
+  cur.execute(f"""
+    SELECT is_active FROM {test_schema}.mariadb_normalized_images
+    WHERE child_id = (SELECT id FROM {test_schema}.mariadb_normalized_children WHERE is_active = TRUE)
+      AND image_ordinal = 0 AND image_key = 'listings/full/sub_front.jpg';
+  """)
+  old_sub_front_active = cur.fetchone()[0]
+
+  # Verify (image_ordinal=1, image_key='listings/full/sub_front.jpg') is now active
+  cur.execute(f"""
+    SELECT is_active FROM {test_schema}.mariadb_normalized_images
+    WHERE child_id = (SELECT id FROM {test_schema}.mariadb_normalized_children WHERE is_active = TRUE)
+      AND image_ordinal = 1 AND image_key = 'listings/full/sub_front.jpg';
+  """)
+  new_sub_front_active = cur.fetchone()[0]
+
+  test_results.append({
+    "test": "TEST_F_IMAGE_ORDINAL_CHANGE_REGRESSION",
+    "passed": (old_sub_front_active is False) and (new_sub_front_active is True),
+    "detail": f"OldOrdinal0Active={old_sub_front_active}, NewOrdinal1Active={new_sub_front_active}"
+  })
+
+  # TEST G: Parent Mandatory Children Array (missing/null/scalar must throw, [] intentionally removes all children)
+  parent_missing_children_passed = False
+  try:
+    payload_bad_parent = json.loads(json.dumps(payload_initial))
+    del payload_bad_parent[0]["children"]
+    cur.execute(f"SELECT {test_schema}.upsert_mariadb_canonical_batch(%s);", (json.dumps(payload_bad_parent),))
+  except psycopg2.errors.RaiseException as e:
+    parent_missing_children_passed = "Every parent must contain a children JSON array" in str(e)
+
+  payload_empty_children = json.loads(json.dumps(payload_initial))
+  payload_empty_children[0]["child_count"] = 0
+  payload_empty_children[0]["children"] = []
+  cur.execute(f"SELECT {test_schema}.upsert_mariadb_canonical_batch(%s);", (json.dumps(payload_empty_children),))
+  cur.execute(f"SELECT COUNT(*) FROM {test_schema}.mariadb_normalized_children WHERE is_active = TRUE;")
+  active_children_after_empty = cur.fetchone()[0]
+
+  test_results.append({
+    "test": "TEST_G_PARENT_MANDATORY_CHILDREN_ARRAY",
+    "passed": parent_missing_children_passed and active_children_after_empty == 0,
+    "detail": f"MissingChildrenRejected={parent_missing_children_passed}, ActiveChildrenAfterEmpty={active_children_after_empty}"
+  })
+
+  # TEST H: Child Mandatory Images Array (missing/null/scalar must throw)
+  child_missing_images_passed = False
+  try:
+    payload_bad_child = json.loads(json.dumps(payload_initial))
+    del payload_bad_child[0]["children"][0]["images"]
+    cur.execute(f"SELECT {test_schema}.upsert_mariadb_canonical_batch(%s);", (json.dumps(payload_bad_child),))
+  except psycopg2.errors.RaiseException as e:
+    child_missing_images_passed = "Every child must contain an images JSON array" in str(e)
+
+  test_results.append({
+    "test": "TEST_H_CHILD_MANDATORY_IMAGES_ARRAY",
+    "passed": child_missing_images_passed,
+    "detail": f"MissingImagesRejected={child_missing_images_passed}"
+  })
+
+  # TEST I: Invalid Scope Constraints
   scope_test_passed = False
   try:
-    # Attempt to insert PARENT scope with non-null child_id
     cur.execute(f"""
       INSERT INTO {test_schema}.mariadb_normalized_images (
         parent_id, child_id, scope, image_ordinal, image_key, parser_version, is_active
@@ -341,28 +433,26 @@ def run_ephemeral_migration_tests():
         TRUE
       );
     """)
-  except psycopg2.errors.CheckViolation as e:
+  except psycopg2.errors.CheckViolation:
     scope_test_passed = True
-    print("Caught expected check violation on invalid scope:", e.pgerror)
 
   test_results.append({
-    "test": "TEST_F_INVALID_SCOPE_CONSTRAINT",
+    "test": "TEST_I_INVALID_SCOPE_CONSTRAINT",
     "passed": scope_test_passed,
     "detail": "chk_mariadb_images_scope_child_id successfully prevented PARENT scope with non-null child_id"
   })
 
-  # TEST G: Malformed Arrays Validation
+  # TEST J: Malformed Batch JSON
   malformed_test_passed = False
   try:
     cur.execute(f"SELECT {test_schema}.upsert_mariadb_canonical_batch('\"not_an_array\"'::jsonb);")
-  except psycopg2.errors.RaiseException as e:
+  except psycopg2.errors.RaiseException:
     malformed_test_passed = True
-    print("Caught expected exception on malformed array:", e.pgerror)
 
   test_results.append({
-    "test": "TEST_G_MALFORMED_ARRAYS_FAIL_CLOSED",
+    "test": "TEST_J_MALFORMED_ARRAYS_FAIL_CLOSED",
     "passed": malformed_test_passed,
-    "detail": "upsert_mariadb_canonical_batch successfully rejected non-array JSONB"
+    "detail": "upsert_mariadb_canonical_batch successfully rejected non-array JSONB batch"
   })
 
   # Cleanup Ephemeral Schema
@@ -374,8 +464,8 @@ def run_ephemeral_migration_tests():
   all_passed = all(t["passed"] for t in test_results)
 
   summary = {
-    "contract": "wf-ephemeral-canonical-migration-tests-v1",
-    "generated_at": "2026-08-30T23:50:00.000Z",
+    "contract": "wf-ephemeral-canonical-migration-tests-v2",
+    "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     "status": "PASSED" if all_passed else "FAILED",
     "total_tests": len(test_results),
     "passed_tests": sum(1 for t in test_results if t["passed"]),

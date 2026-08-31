@@ -5,11 +5,33 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { execSync } = require('node:child_process');
 
-function runEphemeralMigrationTests() {
-  console.log('Running ephemeral migration test suite against isolated PostgreSQL schema...');
+const PROD_IDENTIFIERS = [
+  'bptrvfncppbjnchsaxtb',
+  'aws-0-us-west-1.pooler.supabase.com'
+];
+
+function runEphemeralMigrationTests(ephemeralDbUrl) {
+  const targetUrl = ephemeralDbUrl || process.env.EPHEMERAL_DATABASE_URL;
+  const prodUrl = process.env.DATABASE_URL;
+
+  if (!targetUrl) {
+    throw new Error('EPHEMERAL_DATABASE_URL is required to run migration tests. Never target production DATABASE_URL.');
+  }
+
+  for (const prodId of PROD_IDENTIFIERS) {
+    if (targetUrl.includes(prodId)) {
+      throw new Error(`PRODUCTION_TARGET_REJECTED: EPHEMERAL_DATABASE_URL contains production identifier '${prodId}'.`);
+    }
+  }
+
+  if (prodUrl && targetUrl === prodUrl) {
+    throw new Error('PRODUCTION_TARGET_REJECTED: EPHEMERAL_DATABASE_URL is identical to production DATABASE_URL.');
+  }
+
+  console.log('Running ephemeral migration test suite against verified disposable database...');
   const pyScript = path.resolve(__dirname, 'ephemeral_migration_tester.py');
-  const cmd = `railway run -p 17fe5ba8-5b46-4c32-a8b2-e2e26c92fa18 -e production -s wf-mariadb-shadow python "${pyScript}"`;
-  const output = execSync(cmd, { encoding: 'utf-8' });
+  const env = { ...process.env, EPHEMERAL_DATABASE_URL: targetUrl };
+  const output = execSync(`python "${pyScript}"`, { env, encoding: 'utf-8' });
   console.log(output);
 
   const reportPath = path.resolve('audit-output/mariadb-live/canonical-canary-10k/ephemeral_migration_test_results.json');
@@ -26,7 +48,7 @@ if (require.main === module) {
     const res = runEphemeralMigrationTests();
     if (res.status !== 'PASSED') process.exit(1);
   } catch (err) {
-    console.error('FATAL:', err);
+    console.error('FATAL:', err.message);
     process.exit(1);
   }
 }

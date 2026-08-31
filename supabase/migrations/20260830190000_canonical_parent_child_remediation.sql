@@ -437,7 +437,12 @@ BEGIN
       v_unchanged_parents := v_unchanged_parents + 1;
     END IF;
 
-    -- Supersession: Deactivate active images belonging to children removed by a smaller child set
+    -- Validate children is an array (mandatory, missing/null/scalar must throw)
+    IF (v_parent->'children') IS NULL OR jsonb_typeof(v_parent->'children') <> 'array' THEN
+      RAISE EXCEPTION 'upsert_mariadb_canonical_batch: Every parent must contain a children JSON array (got %)', COALESCE(jsonb_typeof(v_parent->'children'), 'null');
+    END IF;
+
+    -- Supersession: Deactivate active images belonging to children removed by a smaller child set (or all if children is empty [])
     UPDATE wf_canonical_staging.mariadb_normalized_images
     SET is_active = FALSE, superseded_at = NOW()
     WHERE parent_id = v_parent_id
@@ -445,205 +450,184 @@ BEGIN
       AND child_id IN (
         SELECT id FROM wf_canonical_staging.mariadb_normalized_children
         WHERE parent_id = v_parent_id AND is_active = TRUE
-          AND child_ordinal >= COALESCE(
-            CASE
-              WHEN (v_parent->'children') IS NOT NULL AND jsonb_typeof(v_parent->'children') = 'array'
-              THEN jsonb_array_length(v_parent->'children')
-              ELSE 0
-            END,
-            0
-          )
+          AND child_ordinal >= jsonb_array_length(v_parent->'children')
       );
 
-    -- Supersession: Deactivate active children with higher ordinals if child count decreased
+    -- Supersession: Deactivate active children with higher ordinals if child count decreased (or all if children is empty [])
     UPDATE wf_canonical_staging.mariadb_normalized_children
     SET is_active = FALSE, superseded_at = NOW(), superseded_by_parser_version = v_new_parser_version
     WHERE parent_id = v_parent_id AND is_active = TRUE
-      AND child_ordinal >= COALESCE(
-        CASE
-          WHEN (v_parent->'children') IS NOT NULL AND jsonb_typeof(v_parent->'children') = 'array'
-          THEN jsonb_array_length(v_parent->'children')
-          ELSE 0
-        END,
-        0
-      );
+      AND child_ordinal >= jsonb_array_length(v_parent->'children');
 
     -- Process Children (Version-preserving replacement)
-    IF (v_parent->'children') IS NOT NULL AND jsonb_typeof(v_parent->'children') = 'array' THEN
-      FOR v_child IN SELECT * FROM jsonb_array_elements(v_parent->'children')
+    FOR v_child IN SELECT * FROM jsonb_array_elements(v_parent->'children')
+    LOOP
+      -- Validate images is an array (mandatory, missing/null/scalar must throw)
+      IF (v_child->'images') IS NULL OR jsonb_typeof(v_child->'images') <> 'array' THEN
+        RAISE EXCEPTION 'upsert_mariadb_canonical_batch: Every child must contain an images JSON array (got %)', COALESCE(jsonb_typeof(v_child->'images'), 'null');
+      END IF;
+
+      v_new_child_hash := v_child->>'child_proposal_hash';
+      v_child_ordinal := (v_child->>'child_ordinal')::int;
+
+      SELECT id, child_proposal_hash INTO v_child_id, v_existing_child_hash
+      FROM wf_canonical_staging.mariadb_normalized_children
+      WHERE parent_id = v_parent_id
+        AND child_ordinal = v_child_ordinal
+        AND is_active = TRUE;
+
+      IF v_child_id IS NULL THEN
+        INSERT INTO wf_canonical_staging.mariadb_normalized_children (
+          parent_id, parent_source_id, parent_source_hash, child_ordinal, child_unique_key,
+          brand, model, reference, dial_color, year, condition, intent,
+          original_price_amount, original_price_currency, currency_evidence,
+          price_usd, fx_rate, fx_source, fx_date, currency_status,
+          is_outlier, outlier_reason, primary_image_key, primary_image_url, primary_image_evidence_type,
+          trading_floor_status, trading_floor_eligible, price_research_status, price_research_eligible,
+          reconciliation_category, review_flags, exclusion_reasons, parser_version, child_proposal_hash,
+          is_active, normalized_at
+        ) VALUES (
+          v_parent_id,
+          v_parent->>'source_id',
+          v_parent->>'source_hash',
+          v_child_ordinal,
+          v_child->>'child_unique_key',
+          v_child->>'brand',
+          v_child->>'model',
+          v_child->>'reference',
+          v_child->>'dial_color',
+          (v_child->>'year')::int,
+          v_child->>'condition',
+          v_child->>'intent',
+          (v_child->>'original_price_amount')::numeric,
+          v_child->>'original_price_currency',
+          v_child->>'currency_evidence',
+          (v_child->>'price_usd')::numeric,
+          (v_child->>'fx_rate')::numeric,
+          v_child->>'fx_source',
+          (v_child->>'fx_date')::date,
+          COALESCE(v_child->>'currency_status', 'MISSING_PRICE'),
+          COALESCE((v_child->>'is_outlier')::boolean, false),
+          v_child->>'outlier_reason',
+          v_child->>'primary_image_key',
+          v_child->>'primary_image_url',
+          COALESCE(v_child->>'primary_image_evidence_type', 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED'),
+          COALESCE(v_child->>'trading_floor_status', 'HELD_UNKNOWN'),
+          COALESCE((v_child->>'trading_floor_eligible')::boolean, false),
+          COALESCE(v_child->>'price_research_status', 'INELIGIBLE_UNKNOWN'),
+          COALESCE((v_child->>'price_research_eligible')::boolean, false),
+          COALESCE(v_child->>'reconciliation_category', 'SINGLE_RECORD'),
+          COALESCE(v_child->'review_flags', '[]'::jsonb),
+          COALESCE(v_child->'exclusion_reasons', '[]'::jsonb),
+          v_new_parser_version,
+          v_new_child_hash,
+          TRUE,
+          NOW()
+        ) RETURNING id INTO v_child_id;
+
+        v_inserted_children := v_inserted_children + 1;
+      ELSIF v_existing_child_hash IS DISTINCT FROM v_new_child_hash THEN
+        -- Version-preserving replacement: Mark prior child and its images inactive
+        UPDATE wf_canonical_staging.mariadb_normalized_children
+        SET is_active = FALSE, superseded_at = NOW(), superseded_by_parser_version = v_new_parser_version
+        WHERE id = v_child_id;
+
+        UPDATE wf_canonical_staging.mariadb_normalized_images
+        SET is_active = FALSE, superseded_at = NOW()
+        WHERE child_id = v_child_id AND is_active = TRUE;
+
+        INSERT INTO wf_canonical_staging.mariadb_normalized_children (
+          parent_id, parent_source_id, parent_source_hash, child_ordinal, child_unique_key,
+          brand, model, reference, dial_color, year, condition, intent,
+          original_price_amount, original_price_currency, currency_evidence,
+          price_usd, fx_rate, fx_source, fx_date, currency_status,
+          is_outlier, outlier_reason, primary_image_key, primary_image_url, primary_image_evidence_type,
+          trading_floor_status, trading_floor_eligible, price_research_status, price_research_eligible,
+          reconciliation_category, review_flags, exclusion_reasons, parser_version, child_proposal_hash,
+          is_active, normalized_at
+        ) VALUES (
+          v_parent_id,
+          v_parent->>'source_id',
+          v_parent->>'source_hash',
+          v_child_ordinal,
+          v_child->>'child_unique_key',
+          v_child->>'brand',
+          v_child->>'model',
+          v_child->>'reference',
+          v_child->>'dial_color',
+          (v_child->>'year')::int,
+          v_child->>'condition',
+          v_child->>'intent',
+          (v_child->>'original_price_amount')::numeric,
+          v_child->>'original_price_currency',
+          v_child->>'currency_evidence',
+          (v_child->>'price_usd')::numeric,
+          (v_child->>'fx_rate')::numeric,
+          v_child->>'fx_source',
+          (v_child->>'fx_date')::date,
+          COALESCE(v_child->>'currency_status', 'MISSING_PRICE'),
+          COALESCE((v_child->>'is_outlier')::boolean, false),
+          v_child->>'outlier_reason',
+          v_child->>'primary_image_key',
+          v_child->>'primary_image_url',
+          COALESCE(v_child->>'primary_image_evidence_type', 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED'),
+          COALESCE(v_child->>'trading_floor_status', 'HELD_UNKNOWN'),
+          COALESCE((v_child->>'trading_floor_eligible')::boolean, false),
+          COALESCE(v_child->>'price_research_status', 'INELIGIBLE_UNKNOWN'),
+          COALESCE((v_child->>'price_research_eligible')::boolean, false),
+          COALESCE(v_child->>'reconciliation_category', 'SINGLE_RECORD'),
+          COALESCE(v_child->'review_flags', '[]'::jsonb),
+          COALESCE(v_child->'exclusion_reasons', '[]'::jsonb),
+          v_new_parser_version,
+          v_new_child_hash,
+          TRUE,
+          NOW()
+        ) RETURNING id INTO v_child_id;
+
+        v_updated_children := v_updated_children + 1;
+      ELSE
+        v_unchanged_children := v_unchanged_children + 1;
+      END IF;
+
+      -- Synchronize Child Images using composite (image_ordinal, image_key)
+      -- Deactivate active images for this child that are absent from the new payload
+      UPDATE wf_canonical_staging.mariadb_normalized_images
+      SET is_active = FALSE, superseded_at = NOW()
+      WHERE parent_id = v_parent_id
+        AND child_id = v_child_id
+        AND is_active = TRUE
+        AND scope = 'CHILD'
+        AND (image_ordinal, image_key) NOT IN (
+          SELECT COALESCE((img->>'image_ordinal')::int, 0), (img->>'image_key')::text
+          FROM jsonb_array_elements(v_child->'images') img
+          WHERE img->>'image_key' IS NOT NULL
+        );
+
+      FOR v_img IN SELECT * FROM jsonb_array_elements(v_child->'images')
       LOOP
-        v_new_child_hash := v_child->>'child_proposal_hash';
-        v_child_ordinal := (v_child->>'child_ordinal')::int;
-
-        SELECT id, child_proposal_hash INTO v_child_id, v_existing_child_hash
-        FROM wf_canonical_staging.mariadb_normalized_children
-        WHERE parent_id = v_parent_id
-          AND child_ordinal = v_child_ordinal
-          AND is_active = TRUE;
-
-        IF v_child_id IS NULL THEN
-          INSERT INTO wf_canonical_staging.mariadb_normalized_children (
-            parent_id, parent_source_id, parent_source_hash, child_ordinal, child_unique_key,
-            brand, model, reference, dial_color, year, condition, intent,
-            original_price_amount, original_price_currency, currency_evidence,
-            price_usd, fx_rate, fx_source, fx_date, currency_status,
-            is_outlier, outlier_reason, primary_image_key, primary_image_url, primary_image_evidence_type,
-            trading_floor_status, trading_floor_eligible, price_research_status, price_research_eligible,
-            reconciliation_category, review_flags, exclusion_reasons, parser_version, child_proposal_hash,
-            is_active, normalized_at
+        IF (v_img->>'image_key') IS NOT NULL THEN
+          INSERT INTO wf_canonical_staging.mariadb_normalized_images (
+            parent_id, child_id, scope, image_ordinal, image_key, image_url, image_evidence_type,
+            parser_version, is_active
           ) VALUES (
             v_parent_id,
-            v_parent->>'source_id',
-            v_parent->>'source_hash',
-            v_child_ordinal,
-            v_child->>'child_unique_key',
-            v_child->>'brand',
-            v_child->>'model',
-            v_child->>'reference',
-            v_child->>'dial_color',
-            (v_child->>'year')::int,
-            v_child->>'condition',
-            v_child->>'intent',
-            (v_child->>'original_price_amount')::numeric,
-            v_child->>'original_price_currency',
-            v_child->>'currency_evidence',
-            (v_child->>'price_usd')::numeric,
-            (v_child->>'fx_rate')::numeric,
-            v_child->>'fx_source',
-            (v_child->>'fx_date')::date,
-            COALESCE(v_child->>'currency_status', 'MISSING_PRICE'),
-            COALESCE((v_child->>'is_outlier')::boolean, false),
-            v_child->>'outlier_reason',
-            v_child->>'primary_image_key',
-            v_child->>'primary_image_url',
-            COALESCE(v_child->>'primary_image_evidence_type', 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED'),
-            COALESCE(v_child->>'trading_floor_status', 'HELD_UNKNOWN'),
-            COALESCE((v_child->>'trading_floor_eligible')::boolean, false),
-            COALESCE(v_child->>'price_research_status', 'INELIGIBLE_UNKNOWN'),
-            COALESCE((v_child->>'price_research_eligible')::boolean, false),
-            COALESCE(v_child->>'reconciliation_category', 'SINGLE_RECORD'),
-            COALESCE(v_child->'review_flags', '[]'::jsonb),
-            COALESCE(v_child->'exclusion_reasons', '[]'::jsonb),
+            v_child_id,
+            'CHILD',
+            COALESCE((v_img->>'image_ordinal')::int, 0),
+            v_img->>'image_key',
+            v_img->>'image_url',
+            COALESCE(v_img->>'image_evidence_type', 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED'),
             v_new_parser_version,
-            v_new_child_hash,
-            TRUE,
-            NOW()
-          ) RETURNING id INTO v_child_id;
-
-          v_inserted_children := v_inserted_children + 1;
-        ELSIF v_existing_child_hash IS DISTINCT FROM v_new_child_hash THEN
-          -- Version-preserving replacement: Mark prior child and its images inactive
-          UPDATE wf_canonical_staging.mariadb_normalized_children
-          SET is_active = FALSE, superseded_at = NOW(), superseded_by_parser_version = v_new_parser_version
-          WHERE id = v_child_id;
-
-          UPDATE wf_canonical_staging.mariadb_normalized_images
-          SET is_active = FALSE, superseded_at = NOW()
-          WHERE child_id = v_child_id AND is_active = TRUE;
-
-          INSERT INTO wf_canonical_staging.mariadb_normalized_children (
-            parent_id, parent_source_id, parent_source_hash, child_ordinal, child_unique_key,
-            brand, model, reference, dial_color, year, condition, intent,
-            original_price_amount, original_price_currency, currency_evidence,
-            price_usd, fx_rate, fx_source, fx_date, currency_status,
-            is_outlier, outlier_reason, primary_image_key, primary_image_url, primary_image_evidence_type,
-            trading_floor_status, trading_floor_eligible, price_research_status, price_research_eligible,
-            reconciliation_category, review_flags, exclusion_reasons, parser_version, child_proposal_hash,
-            is_active, normalized_at
-          ) VALUES (
-            v_parent_id,
-            v_parent->>'source_id',
-            v_parent->>'source_hash',
-            v_child_ordinal,
-            v_child->>'child_unique_key',
-            v_child->>'brand',
-            v_child->>'model',
-            v_child->>'reference',
-            v_child->>'dial_color',
-            (v_child->>'year')::int,
-            v_child->>'condition',
-            v_child->>'intent',
-            (v_child->>'original_price_amount')::numeric,
-            v_child->>'original_price_currency',
-            v_child->>'currency_evidence',
-            (v_child->>'price_usd')::numeric,
-            (v_child->>'fx_rate')::numeric,
-            v_child->>'fx_source',
-            (v_child->>'fx_date')::date,
-            COALESCE(v_child->>'currency_status', 'MISSING_PRICE'),
-            COALESCE((v_child->>'is_outlier')::boolean, false),
-            v_child->>'outlier_reason',
-            v_child->>'primary_image_key',
-            v_child->>'primary_image_url',
-            COALESCE(v_child->>'primary_image_evidence_type', 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED'),
-            COALESCE(v_child->>'trading_floor_status', 'HELD_UNKNOWN'),
-            COALESCE((v_child->>'trading_floor_eligible')::boolean, false),
-            COALESCE(v_child->>'price_research_status', 'INELIGIBLE_UNKNOWN'),
-            COALESCE((v_child->>'price_research_eligible')::boolean, false),
-            COALESCE(v_child->>'reconciliation_category', 'SINGLE_RECORD'),
-            COALESCE(v_child->'review_flags', '[]'::jsonb),
-            COALESCE(v_child->'exclusion_reasons', '[]'::jsonb),
-            v_new_parser_version,
-            v_new_child_hash,
-            TRUE,
-            NOW()
-          ) RETURNING id INTO v_child_id;
-
-          v_updated_children := v_updated_children + 1;
-        ELSE
-          v_unchanged_children := v_unchanged_children + 1;
-        END IF;
-
-        -- Synchronize Child Images (preserve historical inactive rows, deactivate absent active rows)
-        IF (v_child->'images') IS NOT NULL AND jsonb_typeof(v_child->'images') = 'array' THEN
-          -- Deactivate active images for this child that are absent from the new payload
-          UPDATE wf_canonical_staging.mariadb_normalized_images
-          SET is_active = FALSE, superseded_at = NOW()
-          WHERE parent_id = v_parent_id
-            AND child_id = v_child_id
-            AND is_active = TRUE
-            AND scope = 'CHILD'
-            AND image_key NOT IN (
-              SELECT (img->>'image_key')::text
-              FROM jsonb_array_elements(v_child->'images') img
-              WHERE img->>'image_key' IS NOT NULL
-            );
-
-          FOR v_img IN SELECT * FROM jsonb_array_elements(v_child->'images')
-          LOOP
-            IF (v_img->>'image_key') IS NOT NULL THEN
-              INSERT INTO wf_canonical_staging.mariadb_normalized_images (
-                parent_id, child_id, scope, image_ordinal, image_key, image_url, image_evidence_type,
-                parser_version, is_active
-              ) VALUES (
-                v_parent_id,
-                v_child_id,
-                'CHILD',
-                COALESCE((v_img->>'image_ordinal')::int, 0),
-                v_img->>'image_key',
-                v_img->>'image_url',
-                COALESCE(v_img->>'image_evidence_type', 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED'),
-                v_new_parser_version,
-                TRUE
-              )
-              ON CONFLICT (parent_id, child_id, image_ordinal, image_key) WHERE is_active = TRUE AND scope = 'CHILD' DO UPDATE SET
-                image_url = EXCLUDED.image_url,
-                image_evidence_type = EXCLUDED.image_evidence_type,
-                parser_version = EXCLUDED.parser_version,
-                is_active = TRUE;
-            END IF;
-          END LOOP;
-        ELSE
-          -- Deactivate all active images for this child if images array is absent
-          UPDATE wf_canonical_staging.mariadb_normalized_images
-          SET is_active = FALSE, superseded_at = NOW()
-          WHERE parent_id = v_parent_id
-            AND child_id = v_child_id
-            AND is_active = TRUE
-            AND scope = 'CHILD';
+            TRUE
+          )
+          ON CONFLICT (parent_id, child_id, image_ordinal, image_key) WHERE is_active = TRUE AND scope = 'CHILD' DO UPDATE SET
+            image_url = EXCLUDED.image_url,
+            image_evidence_type = EXCLUDED.image_evidence_type,
+            parser_version = EXCLUDED.parser_version,
+            is_active = TRUE;
         END IF;
       END LOOP;
-    END IF;
+    END LOOP;
   END LOOP;
 
   RETURN jsonb_build_object(

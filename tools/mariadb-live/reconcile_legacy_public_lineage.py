@@ -3,6 +3,7 @@ import os
 import psycopg2
 import hashlib
 import json
+import datetime
 
 def sha256(text):
   if not text or not isinstance(text, str):
@@ -40,13 +41,19 @@ def reconcile_legacy_lineage():
   cur.close()
   conn.close()
 
-  print(f"Fetched {len(rows)} rows. Analyzing independent hash comparisons...")
+  print(f"Fetched {len(rows)} rows. Analyzing granular classifications...")
 
   samples = []
   classification_breakdown = {
-    "EXACT_EXISTING": 0,
-    "CONFLICTING_EXISTING": 0,
-    "MISSING_PUBLIC": 0
+    "BOTH_EXACT": 0,
+    "WATCH_EXACT_RAW_CONFLICT": 0,
+    "RAW_EXACT_WATCH_CONFLICT": 0,
+    "BOTH_CONFLICT": 0,
+    "WATCH_EXACT_RAW_MISSING": 0,
+    "RAW_EXACT_WATCH_MISSING": 0,
+    "WATCH_CONFLICT_RAW_MISSING": 0,
+    "RAW_CONFLICT_WATCH_MISSING": 0,
+    "BOTH_MISSING_PUBLIC": 0
   }
 
   watch_record_exact_matches = 0
@@ -70,7 +77,7 @@ def reconcile_legacy_lineage():
     watch_rec_hash = sha256(watch_rec_text)
     raw_msg_hash = sha256(raw_msg_text)
 
-    # Independent hash matches (strict equality, requiring non-null on both sides)
+    # Independent strict hash equality
     watch_rec_matches = bool(canonical_hash and watch_rec_hash and (canonical_hash == watch_rec_hash))
     raw_msg_matches = bool(canonical_hash and raw_msg_hash and (canonical_hash == raw_msg_hash))
 
@@ -79,23 +86,30 @@ def reconcile_legacy_lineage():
     if raw_msg_matches:
       raw_message_exact_matches += 1
 
-    # Strict Classification: Never classify missing hashes as exact
-    classification = "MISSING_PUBLIC"
-    if watch_rec_id is not None or raw_msg_id is not None:
-      if watch_rec_id is not None:
-        if watch_rec_matches:
-          classification = "EXACT_EXISTING"
-        else:
-          classification = "CONFLICTING_EXISTING"
-      elif raw_msg_id is not None:
-        if raw_msg_matches:
-          classification = "EXACT_EXISTING"
-        else:
-          classification = "CONFLICTING_EXISTING"
+    # Granular Category Attribution
+    if watch_rec_id is not None and raw_msg_id is not None:
+      if watch_rec_matches and raw_msg_matches:
+        category = "BOTH_EXACT"
+      elif watch_rec_matches and not raw_msg_matches:
+        category = "WATCH_EXACT_RAW_CONFLICT"
+      elif raw_msg_matches and not watch_rec_matches:
+        category = "RAW_EXACT_WATCH_CONFLICT"
+      else:
+        category = "BOTH_CONFLICT"
+    elif watch_rec_id is not None and raw_msg_id is None:
+      if watch_rec_matches:
+        category = "WATCH_EXACT_RAW_MISSING"
+      else:
+        category = "WATCH_CONFLICT_RAW_MISSING"
+    elif raw_msg_id is not None and watch_rec_id is None:
+      if raw_msg_matches:
+        category = "RAW_EXACT_WATCH_MISSING"
+      else:
+        category = "RAW_CONFLICT_WATCH_MISSING"
     else:
-      classification = "MISSING_PUBLIC"
+      category = "BOTH_MISSING_PUBLIC"
 
-    classification_breakdown[classification] += 1
+    classification_breakdown[category] += 1
 
     if len(samples) < 50:
       samples.append({
@@ -111,12 +125,12 @@ def reconcile_legacy_lineage():
         "canonical_posted_at": posted_at,
         "public_watch_record_created_at": watch_rec_created_at,
         "public_raw_message_created_at": raw_msg_created_at,
-        "classification": classification
+        "classification": category
       })
 
   report = {
-    "contract": "wf-legacy-public-lineage-reconciliation-v2",
-    "generated_at": "2026-08-30T23:50:00.000Z",
+    "contract": "wf-legacy-public-lineage-reconciliation-v3",
+    "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
     "total_canary_parents_inspected": len(rows),
     "public_isolation_proven": False,
     "isolation_notes": "public_isolation_proven = false because source_record_id was historically present in public.watch_records (10,000 matches) and public.raw_messages (9,999 matches) from an unhardened legacy import on July 10, 2026. Zero public records were modified, inserted, or updated during the current canary.",
@@ -144,7 +158,7 @@ def reconcile_legacy_lineage():
   with open("audit-output/mariadb-live/canonical-canary-10k/legacy_public_lineage_reconciliation.json", "w", encoding="utf-8") as f:
     json.dump(report, f, indent=2)
 
-  print("RECONCILIATION_REPORT_V2_GENERATED:")
+  print("RECONCILIATION_REPORT_V3_GENERATED:")
   print(json.dumps({
     "total_parents": report["total_canary_parents_inspected"],
     "independent_hash_metrics": report["independent_hash_metrics"],

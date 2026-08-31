@@ -74,14 +74,32 @@ function smokeTestMigrationFile() {
     detail: 'Customer-safe detail RPC must not return unredacted raw_message; internal evidence RPC must be separate'
   });
 
-  // Check 7: Array checks before length/iteration
-  const hasArrayLengthSafeguards = sql.includes("jsonb_typeof(p_parents) <> 'array'") &&
-                                   sql.includes("jsonb_typeof(v_parent->'children') = 'array'") &&
-                                   sql.includes("jsonb_typeof(v_child->'images') = 'array'");
+  // Check 7: Mandatory Array checks before iteration
+  const hasArrayMandatorySafeguards = sql.includes("jsonb_typeof(p_parents) <> 'array'") &&
+                                      sql.includes("jsonb_typeof(v_parent->'children') <> 'array'") &&
+                                      sql.includes("jsonb_typeof(v_child->'images') <> 'array'");
   checks.push({
     check: 'json_array_type_validation',
-    passed: hasArrayLengthSafeguards,
-    detail: 'JSONB array type must be validated before array iteration or length calculation'
+    passed: hasArrayMandatorySafeguards,
+    detail: 'JSONB array type must be strictly validated; missing/non-array must throw exception'
+  });
+
+  // Check 8: Image scope check constraint
+  const hasScopeConstraint = sql.includes('chk_mariadb_images_scope_child_id') &&
+                             sql.includes("(scope = 'PARENT' AND child_id IS NULL)") &&
+                             sql.includes("(scope = 'CHILD' AND child_id IS NOT NULL)");
+  checks.push({
+    check: 'image_scope_child_id_constraint',
+    passed: hasScopeConstraint,
+    detail: 'Check constraint chk_mariadb_images_scope_child_id enforces scope and child_id nullability'
+  });
+
+  // Check 9: Image synchronization by (image_ordinal, image_key) composite key
+  const hasCompositeImageSync = sql.includes('(image_ordinal, image_key) NOT IN');
+  checks.push({
+    check: 'composite_image_sync_key',
+    passed: hasCompositeImageSync,
+    detail: 'Image synchronization must match both image_ordinal and image_key composite identity'
   });
 
   const allPassed = checks.every(c => c.passed);

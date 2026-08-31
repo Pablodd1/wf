@@ -10,5 +10,6 @@
   "watch_records_parent_hash_overlap": 0,
   "tf_view_overlap": 0,
   "pr_view_overlap": 0,
-  "public_isolation_proven": false
+  "public_isolation_proven": false,
+  "generated_at": "2026-08-31T00:07:58.104Z"
 }
