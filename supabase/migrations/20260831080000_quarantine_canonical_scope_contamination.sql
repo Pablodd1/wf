@@ -1,5 +1,14 @@
--- supabase/migrations/20260831080000_quarantine_canonical_scope_contamination.sql
--- Transactional quarantine and cleanup of non-auctions benchmark namespace records from active canonical tables.
+CREATE INDEX IF NOT EXISTS idx_mariadb_norm_children_parent_id
+  ON wf_canonical_staging.mariadb_normalized_children(parent_id);
+
+CREATE INDEX IF NOT EXISTS idx_mariadb_norm_images_parent_id
+  ON wf_canonical_staging.mariadb_normalized_images(parent_id);
+
+CREATE INDEX IF NOT EXISTS idx_mariadb_norm_images_child_id
+  ON wf_canonical_staging.mariadb_normalized_images(child_id);
+
+CREATE INDEX IF NOT EXISTS idx_mariadb_norm_parents_source_table
+  ON wf_canonical_staging.mariadb_normalized_parents(source_table);
 
 DO $$
 DECLARE
@@ -32,26 +41,25 @@ BEGIN
     quarantine_reason TEXT NOT NULL DEFAULT 'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION'
   );
 
-  -- 2. Count non-auctions contaminated records before archive
-  SELECT COUNT(*) INTO v_non_auction_parents_count
+  -- 2. Identify contaminated parent IDs in a temporary table with index
+  CREATE TEMP TABLE _quarantine_parent_ids ON COMMIT DROP AS
+  SELECT id
   FROM wf_canonical_staging.mariadb_normalized_parents
   WHERE source_table <> 'auctions'
      OR source_system <> 'OceanDigital MariaDB'
      OR source_database <> 'thecollective_inventory';
 
+  CREATE INDEX ON _quarantine_parent_ids(id);
+
+  SELECT COUNT(*) INTO v_non_auction_parents_count FROM _quarantine_parent_ids;
+
   SELECT COUNT(*) INTO v_non_auction_children_count
   FROM wf_canonical_staging.mariadb_normalized_children c
-  JOIN wf_canonical_staging.mariadb_normalized_parents p ON c.parent_id = p.id
-  WHERE p.source_table <> 'auctions'
-     OR p.source_system <> 'OceanDigital MariaDB'
-     OR p.source_database <> 'thecollective_inventory';
+  JOIN _quarantine_parent_ids q ON c.parent_id = q.id;
 
   SELECT COUNT(*) INTO v_non_auction_images_count
   FROM wf_canonical_staging.mariadb_normalized_images img
-  JOIN wf_canonical_staging.mariadb_normalized_parents p ON img.parent_id = p.id
-  WHERE p.source_table <> 'auctions'
-     OR p.source_system <> 'OceanDigital MariaDB'
-     OR p.source_database <> 'thecollective_inventory';
+  JOIN _quarantine_parent_ids q ON img.parent_id = q.id;
 
   -- 3. Archive contaminated parents
   INSERT INTO wf_canonical_staging.mariadb_quarantine_canonical_parents
@@ -60,9 +68,7 @@ BEGIN
     NOW() AS quarantined_at,
     'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION' AS quarantine_reason
   FROM wf_canonical_staging.mariadb_normalized_parents p
-  WHERE p.source_table <> 'auctions'
-     OR p.source_system <> 'OceanDigital MariaDB'
-     OR p.source_database <> 'thecollective_inventory'
+  JOIN _quarantine_parent_ids q ON p.id = q.id
   ON CONFLICT (id) DO NOTHING;
 
   -- 4. Archive contaminated children
@@ -72,7 +78,7 @@ BEGIN
     NOW() AS quarantined_at,
     'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION' AS quarantine_reason
   FROM wf_canonical_staging.mariadb_normalized_children c
-  JOIN wf_canonical_staging.mariadb_quarantine_canonical_parents p ON c.parent_id = p.id
+  JOIN _quarantine_parent_ids q ON c.parent_id = q.id
   ON CONFLICT (id) DO NOTHING;
 
   -- 5. Archive contaminated images
@@ -82,7 +88,7 @@ BEGIN
     NOW() AS quarantined_at,
     'BENCHMARK_NAMESPACE_SCOPE_CONTAMINATION' AS quarantine_reason
   FROM wf_canonical_staging.mariadb_normalized_images img
-  JOIN wf_canonical_staging.mariadb_quarantine_canonical_parents p ON img.parent_id = p.id
+  JOIN _quarantine_parent_ids q ON img.parent_id = q.id
   ON CONFLICT (id) DO NOTHING;
 
   -- 6. Verify exact archive readback in transaction
@@ -108,14 +114,17 @@ BEGIN
   END IF;
 
   -- 7. Remove quarantined rows from active canonical tables
-  DELETE FROM wf_canonical_staging.mariadb_normalized_images
-  WHERE parent_id IN (SELECT id FROM wf_canonical_staging.mariadb_quarantine_canonical_parents);
+  DELETE FROM wf_canonical_staging.mariadb_normalized_images img
+  USING _quarantine_parent_ids q
+  WHERE img.parent_id = q.id;
 
-  DELETE FROM wf_canonical_staging.mariadb_normalized_children
-  WHERE parent_id IN (SELECT id FROM wf_canonical_staging.mariadb_quarantine_canonical_parents);
+  DELETE FROM wf_canonical_staging.mariadb_normalized_children c
+  USING _quarantine_parent_ids q
+  WHERE c.parent_id = q.id;
 
-  DELETE FROM wf_canonical_staging.mariadb_normalized_parents
-  WHERE id IN (SELECT id FROM wf_canonical_staging.mariadb_quarantine_canonical_parents);
+  DELETE FROM wf_canonical_staging.mariadb_normalized_parents p
+  USING _quarantine_parent_ids q
+  WHERE p.id = q.id;
 
   -- 8. Post-cleanup assertions
   SELECT COUNT(*) INTO v_remaining_non_auction_parents
