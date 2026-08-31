@@ -116,22 +116,22 @@ def run_milestone_normalizer():
           SELECT source_id, source_system, source_database, source_table, source_hash, source_record_id,
                  source_created_on, raw_message, raw_payload
           FROM wf_canonical_staging.mariadb_raw_source_rows
-          WHERE (source_created_on > %s::text OR (source_created_on = %s::text AND source_id > %s::text))
-            AND (source_created_on < %s::text OR (source_created_on = %s::text AND source_id <= %s::text))
+          WHERE (source_created_on, source_id) > (%s, %s)
+            AND (source_created_on, source_id) <= (%s, %s)
           ORDER BY source_created_on ASC, source_id ASC
           LIMIT %s;
         """
-        params = (str(last_created_on), str(last_created_on), str(last_source_id), str(FROZEN_CURSOR_DATE), str(FROZEN_CURSOR_DATE), str(FROZEN_CURSOR_ID), BATCH_SIZE)
+        params = (str(last_created_on), str(last_source_id), str(FROZEN_CURSOR_DATE), str(FROZEN_CURSOR_ID), BATCH_SIZE)
       else:
         query = """
           SELECT source_id, source_system, source_database, source_table, source_hash, source_record_id,
                  source_created_on, raw_message, raw_payload
           FROM wf_canonical_staging.mariadb_raw_source_rows
-          WHERE (source_created_on < %s::text OR (source_created_on = %s::text AND source_id <= %s::text))
+          WHERE (source_created_on, source_id) <= (%s, %s)
           ORDER BY source_created_on ASC, source_id ASC
           LIMIT %s;
         """
-        params = (str(FROZEN_CURSOR_DATE), str(FROZEN_CURSOR_DATE), str(FROZEN_CURSOR_ID), BATCH_SIZE)
+        params = (str(FROZEN_CURSOR_DATE), str(FROZEN_CURSOR_ID), BATCH_SIZE)
 
       cur.execute(query, params)
       rows = cur.fetchall()

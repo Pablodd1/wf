@@ -16,9 +16,9 @@ if (!dbUrl) {
 
 console.log('Starting canonical milestone normalizer process...');
 const pyScript = path.resolve('tools/mariadb-live/run_canonical_milestone_normalizer.py');
-const env = { ...process.env, DATABASE_URL: dbUrl };
+const env = { ...process.env, DATABASE_URL: dbUrl, PYTHONUNBUFFERED: '1' };
 
-const proc = spawn('python', [pyScript], { env, stdio: 'inherit' });
+const proc = spawn('python', ['-u', pyScript], { env, stdio: 'inherit' });
 
 proc.on('exit', (code) => {
   console.log(`Normalizer process exited with code ${code}`);
