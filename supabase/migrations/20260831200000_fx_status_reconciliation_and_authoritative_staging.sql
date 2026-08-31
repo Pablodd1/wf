@@ -30,11 +30,14 @@ ALTER TABLE wf_canonical_staging.mariadb_quarantine_canonical_children
     'INELIGIBLE_OUTLIER_EXCLUDED', 'INELIGIBLE_FOREIGN_CURRENCY_HELD', 'INELIGIBLE_OTHER', 'INELIGIBLE_UNKNOWN'
   ));
 
--- 3. Idempotent Backfill for priced foreign currency rows
+-- 3. Idempotent Backfill for proven non-USD currencies with unresolved USD conversion
 UPDATE wf_canonical_staging.mariadb_normalized_children
 SET price_research_status = 'INELIGIBLE_FX_UNRESOLVED'
 WHERE original_price_amount IS NOT NULL 
   AND original_price_amount > 0 
+  AND original_price_currency IS NOT NULL
+  AND original_price_currency NOT IN ('USD')
+  AND currency_status NOT IN ('MISSING_PRICE', 'AMBIGUOUS_BARE_DOLLAR_HELD')
   AND price_research_status = 'INELIGIBLE_MISSING_PRICE';
 
 -- 4. Authoritative Raw Staging Table Structure

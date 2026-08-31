@@ -235,6 +235,46 @@ def test_page_boundary_straddling_deduplication(conn):
   p2_first_date = page_2[0][1]
   p2_first_id = page_2[0][0]
   assert (p2_first_date, p2_first_id) > (p1_last_date, p1_last_id), "Keyset cursor failed monotonic ordering!"
+def test_real_five_version_boundary_and_winning_hashes(conn):
+  """Asserts that 1,000 multi-version source IDs resolve to exactly one authoritative row with the winning ISO UTC hash."""
+  print("Running test_real_five_version_boundary_and_winning_hashes...")
+  cur = conn.cursor()
+
+  artifact_path = "audit-output/mariadb-live/canonical-scope-contamination/cohort_4k_duplicate_source_ids_reconciliation.json"
+  with open(artifact_path, "r", encoding="utf-8") as f:
+    artifact_data = json.load(f)
+
+  dup_ids = list(artifact_data.get("duplicate_records", {}).keys())
+  assert len(dup_ids) == 1000, f"Expected 1,000 duplicated source IDs in artifact, found {len(dup_ids)}"
+
+  sample_dup_ids = dup_ids[:100]
+
+  # Query all raw versions for sample IDs (must be > 1 version per ID in raw table)
+  cur.execute("""
+    SELECT source_id, source_hash, source_created_on
+    FROM wf_canonical_staging.mariadb_raw_source_rows
+    WHERE source_id = ANY(%s::text[])
+      AND source_system = 'OceanDigital MariaDB'
+      AND source_database = 'thecollective_inventory'
+      AND source_table = 'auctions';
+  """, (sample_dup_ids,))
+  raw_version_rows = cur.fetchall()
+  assert len(raw_version_rows) >= len(sample_dup_ids) * 2, f"Expected multiple raw versions, found {len(raw_version_rows)}"
+
+  # Query winning versions from authoritative dataset
+  cur.execute("""
+    SELECT source_id, source_hash, source_created_on, selected_by_provenance
+    FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
+    WHERE source_id = ANY(%s::text[]);
+  """, (sample_dup_ids,))
+  winning_rows = cur.fetchall()
+  assert len(winning_rows) == len(sample_dup_ids), f"Expected {len(sample_dup_ids)} winning rows, got {len(winning_rows)}"
+
+  for wr in winning_rows:
+    sid, shash, screated, prov = wr
+    assert screated.endswith("Z") and "T" in screated, f"Winning version {sid} does not have ISO UTC format: {screated}"
+    assert prov == "AUTHORITATIVE_CAPTURE_PROVENANCE_V1", f"Unexpected provenance: {prov}"
+
   print("  -> PASSED")
 
 if __name__ == "__main__":
@@ -247,7 +287,8 @@ if __name__ == "__main__":
     test_eligibility_classification_rules(conn)
     test_cross_field_priced_not_missing(conn)
     test_page_boundary_straddling_deduplication(conn)
-    print("\nALL 7 REGRESSION TESTS PASSED SUCCESSFULLY!")
+    test_real_five_version_boundary_and_winning_hashes(conn)
+    print("\nALL 8 REGRESSION TESTS PASSED SUCCESSFULLY!")
   finally:
     conn.rollback()
     conn.close()

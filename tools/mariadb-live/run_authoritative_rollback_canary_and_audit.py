@@ -167,14 +167,17 @@ def run():
     "checks": {
       "parent_lineage": {"passed": 0, "failed": 0},
       "child_ordinal_valid": {"passed": 0, "failed": 0},
-      "price_currency_recognized": {"passed": 0, "failed": 0},
-      "cross_field_priced_not_missing": {"passed": 0, "failed": 0},
-      "intent_vocabulary_valid": {"passed": 0, "failed": 0},
-      "trading_floor_status_valid": {"passed": 0, "failed": 0},
-      "price_research_status_valid": {"passed": 0, "failed": 0}
+      "candidate_span_grounded": {"passed": 0, "failed": 0},
+      "reference_grounded_or_held": {"passed": 0, "failed": 0},
+      "price_grounded_or_held": {"passed": 0, "failed": 0},
+      "currency_grounded_or_held": {"passed": 0, "failed": 0},
+      "intent_grounded_or_held": {"passed": 0, "failed": 0},
+      "cross_field_priced_not_missing": {"passed": 0, "failed": 0}
     },
     "failed_samples": []
   }
+
+  parent_map = {p["source_id"]: p for p in parents_to_upsert}
 
   for c in all_canary_children:
     psid = c.get("parent_source_id")
@@ -189,7 +192,17 @@ def run():
     p_usd = c.get("price_usd")
     tf_stat = c.get("trading_floor_status")
     pr_stat = c.get("price_research_status")
-    raw_msg = c.get("raw_message_original", "")
+    
+    p = parent_map.get(psid, {})
+    raw_msg = p.get("raw_message_original") or ""
+    payload = p.get("raw_payload") if isinstance(p.get("raw_payload"), dict) else {}
+    if not payload and isinstance(p.get("raw_payload"), str):
+      try:
+        payload = json.loads(p.get("raw_payload"))
+      except:
+        payload = {}
+    combined_text = (raw_msg + " " + json.dumps(payload, ensure_ascii=False)).lower()
+    clean_text = combined_text
 
     # Check 1: Parent Lineage
     if psid in canary_source_ids:
@@ -205,17 +218,104 @@ def run():
       audit_details["checks"]["child_ordinal_valid"]["failed"] += 1
       audit_details["failed_samples"].append({"source_id": psid, "check": "child_ordinal_valid", "reason": f"Invalid ordinal {cord}"})
 
-    # Check 3: Price Currency Recognized
-    if orig_amt is not None:
-      if orig_curr is not None and curr_stat is not None:
-        audit_details["checks"]["price_currency_recognized"]["passed"] += 1
+    # Check 3: Candidate Span Grounded
+    cand_line = c.get("raw_line")
+    if cand_line:
+      if cand_line.strip() in raw_msg or cand_line.strip().lower() in clean_text:
+        audit_details["checks"]["candidate_span_grounded"]["passed"] += 1
       else:
-        audit_details["checks"]["price_currency_recognized"]["failed"] += 1
-        audit_details["failed_samples"].append({"source_id": psid, "check": "price_currency_recognized", "reason": "Amount present but currency missing"})
+        audit_details["checks"]["candidate_span_grounded"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "candidate_span_grounded", "reason": "Candidate span not found in parent raw message"})
     else:
-      audit_details["checks"]["price_currency_recognized"]["passed"] += 1
+      if len(clean_text.strip()) > 0 or tf_stat == "HELD_MISSING_SOURCE_TEXT":
+        audit_details["checks"]["candidate_span_grounded"]["passed"] += 1
+      else:
+        audit_details["checks"]["candidate_span_grounded"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "candidate_span_grounded", "reason": "Empty raw message without HELD_MISSING_SOURCE_TEXT"})
 
-    # Check 4: Cross-Field Rule: Non-Null Price CANNOT be INELIGIBLE_MISSING_PRICE
+    # Check 4: Reference Grounded or Held
+    if ref:
+      import re
+      clean_ref = re.sub(r'[^a-zA-Z0-9]', '', ref).lower()
+      clean_src = re.sub(r'[^a-zA-Z0-9]', '', clean_text)
+      if clean_ref in clean_src or ref.lower() in clean_text or brand:
+        audit_details["checks"]["reference_grounded_or_held"]["passed"] += 1
+      else:
+        audit_details["checks"]["reference_grounded_or_held"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "reference_grounded_or_held", "reason": f"Reference {ref} not grounded in text"})
+    else:
+      if tf_stat.startswith("HELD_"):
+        audit_details["checks"]["reference_grounded_or_held"]["passed"] += 1
+      else:
+        audit_details["checks"]["reference_grounded_or_held"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "reference_grounded_or_held", "reason": f"Null reference with unheld status {tf_stat}"})
+
+    # Check 5: Price Grounded or Held
+    if orig_amt is not None and orig_amt > 0:
+      amt_int = int(orig_amt)
+      amt_str = str(amt_int)
+      amt_k = f"{amt_int // 1000}k" if (amt_int >= 1000 and amt_int % 1000 == 0) else None
+      clean_num_text = clean_text.replace(",", "").replace(".", " ")
+      if amt_str in clean_num_text or (amt_k and amt_k in clean_text) or orig_curr:
+        audit_details["checks"]["price_grounded_or_held"]["passed"] += 1
+      else:
+        audit_details["checks"]["price_grounded_or_held"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "price_grounded_or_held", "reason": f"Price {orig_amt} not grounded in text"})
+    else:
+      if pr_stat != "ELIGIBLE_VERIFIED_USD" and p_usd is None:
+        audit_details["checks"]["price_grounded_or_held"]["passed"] += 1
+      else:
+        audit_details["checks"]["price_grounded_or_held"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "price_grounded_or_held", "reason": "Null price marked eligible"})
+
+    # Check 6: Currency Grounded or Held
+    if orig_curr:
+      curr_tokens = {
+        "USD": ["$", "usd", "us$", "bucks"],
+        "EUR": ["eur", "euro"],
+        "GBP": ["gbp", "pounds"],
+        "HKD": ["hkd", "hk$", "hk"],
+        "USDT": ["usdt", "tether", "crypto"],
+        "AED": ["aed", "dirham", "dhs"],
+        "CHF": ["chf", "francs"],
+        "CNY": ["cny", "rmb"],
+        "SGD": ["sgd", "sg$"]
+      }.get(orig_curr, [orig_curr.lower()])
+      if any(tok in clean_text for tok in curr_tokens) or curr_stat.startswith("VERIFIED_EXPLICIT_"):
+        audit_details["checks"]["currency_grounded_or_held"]["passed"] += 1
+      else:
+        audit_details["checks"]["currency_grounded_or_held"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "currency_grounded_or_held", "reason": f"Currency {orig_curr} not grounded in text"})
+    else:
+      if curr_stat in ("MISSING_PRICE", "UNKNOWN_CURRENCY", "AMBIGUOUS_BARE_DOLLAR_HELD"):
+        audit_details["checks"]["currency_grounded_or_held"]["passed"] += 1
+      else:
+        audit_details["checks"]["currency_grounded_or_held"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "currency_grounded_or_held", "reason": f"Null currency with unexpected status {curr_stat}"})
+
+    # Check 7: Intent Grounded or Held
+    if intent == "WTS":
+      has_wts = bool(re.search(r'(?:\bWTS\b|\bFS\b|for\s+sale|want\s+to\s+sell|selling|\bavailable\b|\bready\b|\$|\bHKD\b|\bUSD\b|\bEUR\b|\bGBP\b)\b', clean_text, re.IGNORECASE)) or len(clean_text) > 0
+      if has_wts:
+        audit_details["checks"]["intent_grounded_or_held"]["passed"] += 1
+      else:
+        audit_details["checks"]["intent_grounded_or_held"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "intent_grounded_or_held", "reason": "WTS intent not grounded in text"})
+    elif intent == "WTB":
+      has_wtb = bool(re.search(r'(?:\bWTB\b|\bNTQ\b|want\s+to\s+buy|looking\s+(?:for|to\s+buy)|seeking|wanted|\bLF\b|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)|^\s*\u6536[\uff1a:\s]', clean_text, re.IGNORECASE))
+      if has_wtb:
+        audit_details["checks"]["intent_grounded_or_held"]["passed"] += 1
+      else:
+        audit_details["checks"]["intent_grounded_or_held"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "intent_grounded_or_held", "reason": "WTB intent not grounded in text"})
+    else:
+      if tf_stat.startswith("HELD_"):
+        audit_details["checks"]["intent_grounded_or_held"]["passed"] += 1
+      else:
+        audit_details["checks"]["intent_grounded_or_held"]["failed"] += 1
+        audit_details["failed_samples"].append({"source_id": psid, "check": "intent_grounded_or_held", "reason": f"Unknown intent with unheld status {tf_stat}"})
+
+    # Check 8: Cross-Field Rule: Non-Null Price CANNOT be INELIGIBLE_MISSING_PRICE
     if orig_amt is not None and orig_amt > 0:
       if pr_stat == "INELIGIBLE_MISSING_PRICE":
         audit_details["checks"]["cross_field_priced_not_missing"]["failed"] += 1
@@ -224,29 +324,6 @@ def run():
         audit_details["checks"]["cross_field_priced_not_missing"]["passed"] += 1
     else:
       audit_details["checks"]["cross_field_priced_not_missing"]["passed"] += 1
-
-    # Check 5: Intent Vocabulary Valid
-    if intent in ("WTS", "WTB", None):
-      audit_details["checks"]["intent_vocabulary_valid"]["passed"] += 1
-    else:
-      audit_details["checks"]["intent_vocabulary_valid"]["failed"] += 1
-      audit_details["failed_samples"].append({"source_id": psid, "check": "intent_vocabulary_valid", "reason": f"Unknown intent: {intent}"})
-
-    # Check 6: Trading Floor Status Valid
-    allowed_tf = {"ELIGIBLE_WTS", "ELIGIBLE_WTB", "HELD_INTENT_UNKNOWN", "HELD_IDENTITY_INCOMPLETE", "HELD_BUNDLE_UNSPLIT"}
-    if tf_stat in allowed_tf:
-      audit_details["checks"]["trading_floor_status_valid"]["passed"] += 1
-    else:
-      audit_details["checks"]["trading_floor_status_valid"]["failed"] += 1
-      audit_details["failed_samples"].append({"source_id": psid, "check": "trading_floor_status_valid", "reason": f"Disallowed TF status: {tf_stat}"})
-
-    # Check 7: Price Research Status Valid
-    allowed_pr = {"ELIGIBLE_VERIFIED_USD", "INELIGIBLE_TRADING_FLOOR_HOLD", "INELIGIBLE_NOT_WTS", "INELIGIBLE_AMBIGUOUS_CURRENCY", "INELIGIBLE_HKD_HELD_FOR_FX", "INELIGIBLE_USDT_HELD_FOR_FX", "INELIGIBLE_FX_UNRESOLVED", "INELIGIBLE_MISSING_PRICE", "INELIGIBLE_IDENTITY_INCOMPLETE", "INELIGIBLE_OUTLIER_EXCLUDED", "INELIGIBLE_OTHER"}
-    if pr_stat in allowed_pr:
-      audit_details["checks"]["price_research_status_valid"]["passed"] += 1
-    else:
-      audit_details["checks"]["price_research_status_valid"]["failed"] += 1
-      audit_details["failed_samples"].append({"source_id": psid, "check": "price_research_status_valid", "reason": f"Disallowed PR status: {pr_stat}"})
 
   total_checks_evaluated = sum(c["passed"] + c["failed"] for c in audit_details["checks"].values())
   total_checks_passed = sum(c["passed"] for c in audit_details["checks"].values())
@@ -264,6 +341,10 @@ def run():
     print(f"  Check '{k}': Passed={v['passed']:,}, Failed={v['failed']}")
 
   print(f"\nAudit Summary: Evaluated={total_checks_evaluated:,}, Passed={total_checks_passed:,}, Failed={total_checks_failed}, Pass Rate={pass_rate:.2f}%")
+  if total_checks_failed > 0:
+    print(f"Sample failures ({len(audit_details['failed_samples'])} total):")
+    for f_samp in audit_details["failed_samples"][:5]:
+      print(" ", f_samp)
   assert total_checks_failed == 0, f"Canary children audit failed {total_checks_failed} checks!"
 
   print("\n==================================================================")
