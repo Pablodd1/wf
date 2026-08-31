@@ -1,0 +1,7 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.canonical-normalizer"
+
+[deploy]
+startCommand = "python tools/mariadb-live/test_quarantine_on_ephemeral_db.py"
+restartPolicyType = "NEVER"

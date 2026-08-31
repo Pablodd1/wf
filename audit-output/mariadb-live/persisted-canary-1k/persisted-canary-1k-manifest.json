@@ -1,0 +1,40 @@
+{
+  "contract": "wf-persisted-canary-1k-manifest-v1",
+  "timestamp": "2026-08-30T20:59:08.339Z",
+  "classification": "PERSISTED_CANARY_1K_VERIFIED",
+  "summary": {
+    "contract": "wf-persisted-canary-1k-summary-v1",
+    "job_name": "canary-1000-persisted-norm-1788123490350",
+    "timestamp": "2026-08-30T20:59:08.337Z",
+    "frozen_upper_cursor": {
+      "created_on": "2026-04-28T15:50:43.000Z",
+      "source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
+    },
+    "invariants": {
+      "exact_1000_inputs_processed": true,
+      "exact_reconciliation_formula": true,
+      "idempotency_rerun_verified": true,
+      "raw_capture_checkpoint_preserved_at_951750": true,
+      "zero_public_table_mutations_asserted": true
+    },
+    "counts": {
+      "total_inputs_processed": 1000,
+      "normalized_proposals": 135,
+      "review_required": 865,
+      "normalization_errors": 0,
+      "exact_reconciliation": true
+    },
+    "eligibility": {
+      "trading_floor_eligible_count": 144,
+      "trading_floor_eligible_pct": "14.40%",
+      "price_research_eligible_count": 0,
+      "price_research_eligible_pct": "0.00%"
+    }
+  },
+  "artifact_checksums": {
+    "summary.json": {
+      "sha256": "704f0a963b30b162fad2679d07b4dec6daa9efaeba67672612abc03b42434adc",
+      "size_bytes": 911
+    }
+  }
+}

@@ -449,6 +449,59 @@ $$;
 REVOKE ALL ON FUNCTION public.get_mariadb_private_raw_errors FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.get_mariadb_private_raw_errors TO service_role;
 
+-- 8b. Private Staged Auctions Keyset Batch Stored Procedure (Namespace-Isolated)
+CREATE OR REPLACE FUNCTION public.get_mariadb_private_staged_auctions_batch(
+  p_limit INT DEFAULT 1000,
+  p_last_created_on TEXT DEFAULT NULL,
+  p_last_source_id TEXT DEFAULT NULL,
+  p_source_system TEXT DEFAULT 'OceanDigital MariaDB',
+  p_source_database TEXT DEFAULT 'thecollective_inventory',
+  p_source_table TEXT DEFAULT 'auctions'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS $$
+DECLARE
+  v_res JSONB;
+BEGIN
+  IF p_last_created_on IS NULL OR p_last_source_id IS NULL THEN
+    SELECT jsonb_agg(sub) INTO v_res FROM (
+      SELECT 
+        r.id, r.source_system, r.source_database, r.source_table, r.source_id,
+        r.source_record_id, r.source_created_on, r.source_hash, r.raw_message,
+        r.raw_payload, r.captured_at
+      FROM wf_canonical_staging.mariadb_raw_source_rows r
+      WHERE r.source_system = p_source_system
+        AND r.source_database = p_source_database
+        AND r.source_table = p_source_table
+      ORDER BY r.source_created_on ASC, r.source_id ASC
+      LIMIT p_limit
+    ) sub;
+  ELSE
+    SELECT jsonb_agg(sub) INTO v_res FROM (
+      SELECT 
+        r.id, r.source_system, r.source_database, r.source_table, r.source_id,
+        r.source_record_id, r.source_created_on, r.source_hash, r.raw_message,
+        r.raw_payload, r.captured_at
+      FROM wf_canonical_staging.mariadb_raw_source_rows r
+      WHERE r.source_system = p_source_system
+        AND r.source_database = p_source_database
+        AND r.source_table = p_source_table
+        AND (r.source_created_on > p_last_created_on OR (r.source_created_on = p_last_created_on AND r.source_id > p_last_source_id))
+      ORDER BY r.source_created_on ASC, r.source_id ASC
+      LIMIT p_limit
+    ) sub;
+  END IF;
+
+  RETURN COALESCE(v_res, '[]'::jsonb);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_mariadb_private_staged_auctions_batch FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_mariadb_private_staged_auctions_batch TO service_role;
+
 -- 9. Checkpoint Finalization Stored Procedure with Full Reconciliation Assertion
 CREATE OR REPLACE FUNCTION public.finalize_mariadb_private_raw_checkpoint(
   p_run_key TEXT,

@@ -1,0 +1,14 @@
+{
+  "summary": {
+    "total_inputs": 10000,
+    "normalized_eligible": 104,
+    "review_required": 9896,
+    "errors": 0
+  },
+  "flags_breakdown": {
+    "MISSING_PRICE": 3540,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 5071,
+    "MISSING_CURRENCY_PROOF": 1272,
+    "INCOMPLETE_IDENTITY": 364
+  }
+}

@@ -1,0 +1,275 @@
+{
+  "contract": "wf-authoritative-10k-canary-manifest-v6",
+  "timestamp": "2026-08-30T20:28:23.961Z",
+  "classification": "CANARY_EVIDENCE_REPRODUCIBLE_FULLY_REDACTED",
+  "disclaimer": "Committed artifacts contain redacted evidence hashes, redacted seller handles, and redacted image keys only. Raw seller text, handles, phones, and media keys are strictly excluded.",
+  "summary": {
+    "contract": "wf-authoritative-normalization-canary-v6",
+    "run_key": "authoritative-10k-canary-1788121703954",
+    "timestamp": "2026-08-30T20:28:23.954Z",
+    "parser_version": "authoritative-normalizer-v9-separated-status",
+    "frozen_upper_cursor": {
+      "created_on": "2026-04-28T15:50:43.000Z",
+      "source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
+    },
+    "source_text_precedence_census": {
+      "resolved_from_description_count": 0,
+      "resolved_from_description_pct": "0.00%",
+      "resolved_from_title_count": 10000,
+      "resolved_from_title_pct": "100.00%",
+      "resolved_from_comments_count": 0,
+      "resolved_from_comments_pct": "0.00%",
+      "total_source_text_coverage_count": 10000,
+      "total_source_text_coverage_pct": "100.00%",
+      "missing_source_text_count": 0,
+      "missing_source_text_pct": "0.00%"
+    },
+    "duplicate_text_cluster_analysis": {
+      "distinct_text_hashes": 9875,
+      "distinct_text_hash_pct": "98.75%",
+      "unique_singleton_texts": 9752,
+      "pair_reposts_2x": 121,
+      "multi_reposts_3x_plus": 2,
+      "provenance_capture_duplicates": "0.00% (All 10,000 records have unique source_id and unique timestamp)"
+    },
+    "computed_invariant_assertions": {
+      "exact_10000_rows": true,
+      "exact_10000_distinct_ids": true,
+      "zero_benchmark_namespaces": true,
+      "zero_duplicate_provenance_keys": true,
+      "zero_provenance_synthesized": true,
+      "frozen_cursor_boundary_asserted": true,
+      "image_reachability_audit_rate": "0.0%",
+      "image_evidence_type_rule_applied": true,
+      "seller_contact_privacy_asserted": true,
+      "seller_name_redacted_asserted": true,
+      "image_key_redacted_asserted": true,
+      "dealer_rating_review_evidence_rule_asserted": true,
+      "unknown_intent_held_asserted": true
+    },
+    "counts": {
+      "total_inputs": 10000,
+      "normalized_proposals": 1840,
+      "review_required": 8160,
+      "normalization_errors": 0,
+      "exact_reconciliation": true
+    },
+    "eligibility": {
+      "trading_floor_eligible_count": 2002,
+      "trading_floor_eligible_pct": "20.02%",
+      "price_research_eligible_count": 2,
+      "price_research_eligible_pct": "0.02%"
+    },
+    "coverage": {
+      "source_image_key_present_count": 10000,
+      "source_image_key_present_pct": "100.00%",
+      "image_reachability_sample": {
+        "total_images_in_cohort": 10000,
+        "sample_size_tested": 15,
+        "reachable_count": 0,
+        "reachability_pct": "0.0%",
+        "sample_results": [
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:8e3b28354cdc0368bbf492903de32d6f0fb8091df528facc98c49e3eaca08e00]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:8e3b28354cdc0368bbf492903de32d6f0fb8091df528facc98c49e3eaca08e00]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:fbc3bc995645d73b791f84058b6bba156c67f8c73050cd1f556554950756fc97]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:fbc3bc995645d73b791f84058b6bba156c67f8c73050cd1f556554950756fc97]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:30795244113faf9ea2212552203052a613a2f08fd817922d3d7b119e0cb617b5]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:30795244113faf9ea2212552203052a613a2f08fd817922d3d7b119e0cb617b5]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:2837feaad0c90952ec0e0e658f8a4da10269aeb502b3c8210c680d7151905af0]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:2837feaad0c90952ec0e0e658f8a4da10269aeb502b3c8210c680d7151905af0]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:871d47e250939d8d8cb0e022e1d9b2c98272de958618624e1f61f1839af0df34]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:871d47e250939d8d8cb0e022e1d9b2c98272de958618624e1f61f1839af0df34]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:33a710196172963d8d893630c3d26527e3c055d676d2833f73d63fa39788610c]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:33a710196172963d8d893630c3d26527e3c055d676d2833f73d63fa39788610c]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:430e8c27d4cd0430a5789270dc8b2c3b992a469a0d637d908caf31bc5c7a57ec]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:430e8c27d4cd0430a5789270dc8b2c3b992a469a0d637d908caf31bc5c7a57ec]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:c4a8db48c7bec0f282fc127de4f7fca302609b1014ac4eeaf360f1bbdf7fea86]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:c4a8db48c7bec0f282fc127de4f7fca302609b1014ac4eeaf360f1bbdf7fea86]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:828cd92e7ae1b16d0724941e72650aee52dc2f581e2119e3ccb1b2705c02ab4f]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:828cd92e7ae1b16d0724941e72650aee52dc2f581e2119e3ccb1b2705c02ab4f]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:810d7ad385b59739d32258add96037b45cf4c1c93a7d5f2122ad0a7d3610f7ce]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:810d7ad385b59739d32258add96037b45cf4c1c93a7d5f2122ad0a7d3610f7ce]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:661039314cd4b644899fade7052653634cb55d2d5be13fdb03c3669681170b00]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:661039314cd4b644899fade7052653634cb55d2d5be13fdb03c3669681170b00]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:32c3b534afdf103a4c12d57d74e52a4c506b8adfbbe576c414685ac06e8968e5]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:32c3b534afdf103a4c12d57d74e52a4c506b8adfbbe576c414685ac06e8968e5]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:6676e78acc95a615f6e06552427ffdc26afbf5f83b3f862a2071b28531eee9ca]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:6676e78acc95a615f6e06552427ffdc26afbf5f83b3f862a2071b28531eee9ca]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:356f65126af355e11c739a3fc02cb364fdc81f8f3b8f5b7134bf9e8254925757]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:356f65126af355e11c739a3fc02cb364fdc81f8f3b8f5b7134bf9e8254925757]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          },
+          {
+            "image_key": "[REDACTED_IMAGE_KEY:623d96bdfdfb8d55424d538f2727de200020a90cec287b5d43cf34d08dd00bcb]",
+            "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:623d96bdfdfb8d55424d538f2727de200020a90cec287b5d43cf34d08dd00bcb]",
+            "http_status": 404,
+            "content_type": "application/xml",
+            "content_length": "252",
+            "reachable": false
+          }
+        ]
+      },
+      "seller_contact_exposed_count": 0,
+      "seller_contact_exposed_pct": "0.00% (strictly private)",
+      "dealer_ratings_published_count": 0,
+      "dealer_ratings_published_pct": "0.00% (Held without explicit source review evidence)",
+      "explicit_usd_price_count": 136,
+      "explicit_usd_price_pct": "1.36%",
+      "explicit_usdt_held_for_fx_count": 1082,
+      "explicit_hkd_held_for_fx_count": 333,
+      "bare_dollar_held_count": 3898,
+      "unknown_intent_held_count": 7953,
+      "multi_offer_bundle_count": 140
+    },
+    "performance": {
+      "duration_ms": 1593,
+      "throughput_rows_per_sec": 6277.46
+    },
+    "status_distributions": {
+      "trading_floor_status": {
+        "HELD_INTENT_UNKNOWN": 7857,
+        "ELIGIBLE_WTB": 1831,
+        "ELIGIBLE_WTS": 171,
+        "HELD_BUNDLE_UNSPLIT": 140,
+        "HELD_IDENTITY_INCOMPLETE": 1
+      },
+      "price_research_status": {
+        "INELIGIBLE_TRADING_FLOOR_HOLD": 7998,
+        "INELIGIBLE_NOT_WTS": 1831,
+        "INELIGIBLE_AMBIGUOUS_CURRENCY": 141,
+        "INELIGIBLE_MISSING_PRICE": 18,
+        "INELIGIBLE_HKD_HELD_FOR_FX": 3,
+        "INELIGIBLE_IDENTITY_INCOMPLETE": 7,
+        "ELIGIBLE_VERIFIED_USD": 2
+      },
+      "currency_status": {
+        "MISSING_PRICE": 4411,
+        "AMBIGUOUS_BARE_DOLLAR_HELD": 3898,
+        "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 1082,
+        "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX": 333,
+        "VERIFIED_EXPLICIT_USD": 136,
+        "VERIFIED_EXPLICIT_EUR": 90,
+        "VERIFIED_EXPLICIT_SAR": 2,
+        "VERIFIED_EXPLICIT_GBP": 7,
+        "VERIFIED_EXPLICIT_AED": 36,
+        "VERIFIED_EXPLICIT_MYR": 1,
+        "VERIFIED_EXPLICIT_AUD": 3,
+        "VERIFIED_EXPLICIT_CNY": 1
+      }
+    },
+    "review_flags_breakdown": {
+      "UNKNOWN_INTENT": 7857,
+      "AMBIGUOUS_BARE_DOLLAR_HELD": 141,
+      "MISSING_PRICE_OR_CURRENCY": 18,
+      "HELD_BUNDLE_REVIEW": 140,
+      "INCOMPLETE_IDENTITY": 1,
+      "HKD_HELD_FOR_FX_PROOF": 3
+    },
+    "exclusion_reasons_breakdown": {
+      "INTENT_UNKNOWN_HELD_FROM_PUBLICATION": 7857,
+      "INTENT_NOT_WTS": 1831,
+      "BUNDLE_PARENT_UNSPLIT": 140,
+      "IDENTITY_UNRECOGNIZED": 1
+    }
+  },
+  "artifact_checksums": {
+    "proposals.jsonl": {
+      "sha256": "64ea4fa0c8b9a5ba868b4a7af6abb686a40a022a7b52a670d4d9bfe7214c043b",
+      "size_bytes": 20958535
+    },
+    "proposals.csv": {
+      "sha256": "0242b59bf35ef2285f20e009f73d857167c8c4dcef12ada7ef1d6d0506935bae",
+      "size_bytes": 5564393
+    },
+    "summary.json": {
+      "sha256": "a6f5e19c6a911c98ba51eeafe02e06486c51476bebc601709273ce86c91ab517",
+      "size_bytes": 10732
+    },
+    "image-reachability-sample.json": {
+      "sha256": "fcad8117503e843887e19ff22aecde5993481485eef0ae58b608fcd4dcb27e26",
+      "size_bytes": 5935
+    }
+  }
+}

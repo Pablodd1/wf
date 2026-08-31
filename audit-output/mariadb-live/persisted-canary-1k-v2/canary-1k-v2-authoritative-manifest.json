@@ -1,0 +1,81 @@
+{
+  "contract": "wf-persisted-canary-1k-v2-manifest-v1",
+  "timestamp": "2026-08-30T21:15:06.555Z",
+  "classification": "PERSISTED_CANARY_1K_V2_VERIFIED",
+  "summary": {
+    "contract": "wf-persisted-canary-1k-v2-summary-v1",
+    "job_name": "canary-1000-v2-persisted-norm-1788124505701",
+    "timestamp": "2026-08-30T21:15:06.554Z",
+    "frozen_upper_cursor": {
+      "created_on": "2026-04-28T15:50:43.000Z",
+      "source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
+    },
+    "keyset_boundary": {
+      "initial_resumption_cursor": {
+        "created_on": "2025-02-02T05:30:06.000Z",
+        "source_id": "0432be99-4990-4d56-a178-79ce94438773"
+      },
+      "final_processed_cursor": {
+        "created_on": "2025-02-08T11:30:05.000Z",
+        "source_id": "57e193fd-473a-44e6-bc7e-a26772c37da6"
+      }
+    },
+    "invariants": {
+      "exact_1000_v2_inputs_processed": true,
+      "exact_reconciliation": true,
+      "state_idempotency_pass1_inserted_all_1000": true,
+      "state_idempotency_pass2_unchanged_all_1000": true,
+      "detail_evidence_joins_verified": true,
+      "raw_capture_checkpoint_preserved_at_951750": true,
+      "zero_public_delta_measured": true
+    },
+    "counts": {
+      "total_v2_inputs": 1000,
+      "normalized_proposals": 158,
+      "review_required": 842,
+      "normalization_errors": 0
+    },
+    "idempotency_accounting": {
+      "pass_one": {
+        "inserted": 1000,
+        "updated": 0,
+        "unchanged": 0
+      },
+      "pass_two": {
+        "inserted": 0,
+        "updated": 0,
+        "unchanged": 1000
+      }
+    },
+    "eligibility": {
+      "trading_floor_eligible_count": 160,
+      "trading_floor_eligible_pct": "16.00%",
+      "price_research_eligible_count": 0,
+      "price_research_eligible_pct": "0.00%"
+    },
+    "public_before_after_comparison": {
+      "public_raw_messages": {
+        "before_count": 10000,
+        "after_count": 10000,
+        "delta": 0
+      },
+      "public_watch_records": {
+        "before_count": 0,
+        "after_count": 0,
+        "delta": 0
+      },
+      "zero_public_mutation_verified": true
+    },
+    "evidence_access_and_contact_coverage": {
+      "provenance_links_valid_count": 1000,
+      "seller_contact_masked_in_detail_rpc": true,
+      "whatsapp_inquiry_ready_ratio": "100.00%"
+    }
+  },
+  "artifact_checksums": {
+    "summary.json": {
+      "sha256": "e3520b86d135e16a428ad0fd391ff14008dd9c33bdfe49d07f1a2edbbe27f3dd",
+      "size_bytes": 1994
+    }
+  }
+}

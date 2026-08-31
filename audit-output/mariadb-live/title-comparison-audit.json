@@ -1,0 +1,38 @@
+{
+  "contract": "wf-title-vs-raw-message-audit-v1",
+  "timestamp": "2026-08-30T20:38:49.775Z",
+  "total_canary_cohort": 10000,
+  "populated_raw_message_count": 1000,
+  "exact_comparison_audit": {
+    "exact_string_equality_count": 1000,
+    "exact_string_equality_pct": "100.00%",
+    "sha256_hash_equality_count": 1000,
+    "sha256_hash_equality_pct": "100.00%",
+    "trimmed_string_equality_count": 1000,
+    "trimmed_string_equality_pct": "100.00%",
+    "mismatch_count": 0
+  },
+  "length_distributions": {
+    "populated_raw_message_lengths": {
+      "min": 8,
+      "max": 254,
+      "mean": 75.96,
+      "median": 69,
+      "stdDev": 43.06
+    },
+    "populated_title_lengths": {
+      "min": 8,
+      "max": 254,
+      "mean": 75.96,
+      "median": 69,
+      "stdDev": 43.06
+    },
+    "all_10k_title_lengths": {
+      "min": 3,
+      "max": 508,
+      "mean": 72.13,
+      "median": 60,
+      "stdDev": 49.63
+    }
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "run_key": "norm-canary-10k-1788085355015",
+  "contract": "wf-normalization-canary-v1",
+  "timestamp": "2026-08-30T10:22:35.015Z",
+  "sample_size": 10000,
+  "first_cursor": {
+    "created_on": "2025-01-08 13:28:49",
+    "source_id": "7534d09b-28b9-4052-8005-228c32f972df"
+  },
+  "last_cursor": {
+    "created_on": "2025-01-30 09:45:07",
+    "source_id": "36c67b9e-981a-4764-ae69-5160f60f990a"
+  },
+  "ruleset_version": "v4-strict-no-bare-dollar-bundles-held",
+  "exact_reconciliation": true
+}
