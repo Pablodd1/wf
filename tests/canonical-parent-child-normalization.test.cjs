@@ -366,3 +366,48 @@ test('15. Canary artifacts and manifest checksums are consistent and present', (
     assert.strictEqual(meta.bytes, fileBytes.length, `Byte length mismatch for artifact ${fname}`);
   }
 });
+
+test('16. Authoritative normalization status vocabulary matches SQL CHECK constraints and covers all emitted statuses', () => {
+  const { NORMALIZATION_STATUS_CONTRACT } = require('../tools/mariadb-live/normalization-status-contract.cjs');
+  const migrationPath = path.resolve('supabase/migrations/20260830190000_canonical_parent_child_remediation.sql');
+  const migrationSql = fs.readFileSync(migrationPath, 'utf-8');
+
+  // Verify SQL CHECK constraints contain every status in the contract
+  for (const [field, values] of Object.entries(NORMALIZATION_STATUS_CONTRACT)) {
+    if (['scope', 'bundle_structure_type', 'seller_rating_status'].includes(field)) continue;
+    for (const val of values) {
+      assert.ok(migrationSql.includes(`'${val}'`), `Migration CHECK constraints must include ${field} value '${val}'`);
+    }
+  }
+
+  // Regression fixtures covering various normalizer status outputs
+  const fixtures = [
+    { text: 'Rolex 116610LN 12500 USD', expectedCurr: 'VERIFIED_EXPLICIT_USD', expectedTF: 'HELD_INTENT_UNKNOWN' },
+    { text: 'WTS Rolex 116610LN 12500 USD', expectedCurr: 'VERIFIED_EXPLICIT_USD', expectedTF: 'ELIGIBLE_WTS' },
+    { text: 'WTB Rolex 116610LN 12500 USD', expectedCurr: 'VERIFIED_EXPLICIT_USD', expectedTF: 'ELIGIBLE_WTB' },
+    { text: 'WTS Rolex 116610LN € 10000', expectedCurr: 'VERIFIED_EXPLICIT_EUR', expectedTF: 'ELIGIBLE_WTS' },
+    { text: 'WTS Rolex 116610LN HKD 95000', expectedCurr: 'VERIFIED_EXPLICIT_HKD_HELD_FOR_FX', expectedTF: 'ELIGIBLE_WTS' },
+    { text: 'WTS Rolex 116610LN 12500 USDT', expectedCurr: 'VERIFIED_EXPLICIT_USDT_HELD_FOR_FX', expectedTF: 'ELIGIBLE_WTS' },
+    { text: 'WTS Rolex 116610LN CNY 88000', expectedCurr: 'VERIFIED_EXPLICIT_CNY', expectedTF: 'ELIGIBLE_WTS' },
+    { text: 'WTS Rolex 116610LN MYR 55000', expectedCurr: 'VERIFIED_EXPLICIT_MYR', expectedTF: 'ELIGIBLE_WTS' },
+    { text: 'WTS Rolex 116610LN $12500', expectedCurr: 'AMBIGUOUS_BARE_DOLLAR_HELD', expectedTF: 'ELIGIBLE_WTS' },
+    { text: 'WTS Rolex 116610LN', expectedCurr: 'MISSING_PRICE', expectedTF: 'ELIGIBLE_WTS' },
+    { text: 'WTB unknown stuff without brand or ref', expectedCurr: 'MISSING_PRICE', expectedTF: 'HELD_IDENTITY_INCOMPLETE' }
+  ];
+
+  for (const fix of fixtures) {
+    const row = {
+      ...BASE_STAGED_ROW,
+      raw_message: fix.text,
+      raw_payload: { ...BASE_STAGED_ROW.raw_payload, description: fix.text }
+    };
+    const res = normalizeCanonicalParentChild(row);
+    const child = res.children[0];
+    assert.strictEqual(child.currency_status, fix.expectedCurr, `Currency status mismatch for "${fix.text}"`);
+    assert.strictEqual(child.trading_floor_status, fix.expectedTF, `Trading floor status mismatch for "${fix.text}"`);
+    assert.ok(NORMALIZATION_STATUS_CONTRACT.currency_status.includes(child.currency_status));
+    assert.ok(NORMALIZATION_STATUS_CONTRACT.trading_floor_status.includes(child.trading_floor_status));
+    assert.ok(NORMALIZATION_STATUS_CONTRACT.price_research_status.includes(child.price_research_status));
+    assert.ok(NORMALIZATION_STATUS_CONTRACT.reconciliation_category.includes(child.reconciliation_category));
+  }
+});

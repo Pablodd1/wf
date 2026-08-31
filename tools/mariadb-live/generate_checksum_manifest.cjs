@@ -19,10 +19,12 @@ function generateChecksumManifest() {
     'image_reachability_verification.json',
     'legacy_public_lineage_reconciliation.json',
     'preview_migration_smoke_test.json',
-    'ephemeral_migration_test_results.json'
+    'ephemeral_migration_test_results.json',
+    'migration_compatibility_preflight.json'
   ];
 
   const toolsToManifest = [
+    'tools/mariadb-live/normalization-status-contract.cjs',
     'tools/mariadb-live/authoritative-evidence-normalizer.cjs',
     'tools/mariadb-live/verify_image_reachability_100.cjs',
     'tools/mariadb-live/reconcile_legacy_public_lineage.cjs',
@@ -31,6 +33,8 @@ function generateChecksumManifest() {
     'tools/mariadb-live/preview_migration_smoke_test.cjs',
     'tools/mariadb-live/ephemeral_migration_tester.cjs',
     'tools/mariadb-live/ephemeral_migration_tester.py',
+    'tools/mariadb-live/migration_compatibility_preflight.cjs',
+    'tools/mariadb-live/migration_compatibility_preflight.py',
     'tools/mariadb-live/generate_checksum_manifest.cjs',
     'supabase/migrations/20260830190000_canonical_parent_child_remediation.sql'
   ];

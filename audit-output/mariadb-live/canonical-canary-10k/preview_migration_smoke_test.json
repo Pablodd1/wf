@@ -1,6 +1,6 @@
 {
   "contract": "wf-migration-smoke-test-v2",
-  "generated_at": "2026-08-31T00:26:54.373Z",
+  "generated_at": "2026-08-31T00:35:44.258Z",
   "migration_file": "supabase/migrations/20260830190000_canonical_parent_child_remediation.sql",
   "status": "PASSED",
   "execution_environment_policy": "Production execution strictly forbidden. Run only on Supabase preview branch or ephemeral local PostgreSQL.",
