@@ -144,10 +144,53 @@ def test_eligibility_classification_rules(conn):
   allowed_pr_statuses = {
     "ELIGIBLE_VERIFIED_USD", "INELIGIBLE_TRADING_FLOOR_HOLD", "INELIGIBLE_NOT_WTS",
     "INELIGIBLE_AMBIGUOUS_CURRENCY", "INELIGIBLE_HKD_HELD_FOR_FX", "INELIGIBLE_USDT_HELD_FOR_FX",
-    "INELIGIBLE_MISSING_PRICE", "INELIGIBLE_IDENTITY_INCOMPLETE", "INELIGIBLE_OUTLIER_EXCLUDED",
-    "INELIGIBLE_OTHER"
+    "INELIGIBLE_FX_UNRESOLVED", "INELIGIBLE_MISSING_PRICE", "INELIGIBLE_IDENTITY_INCOMPLETE",
+    "INELIGIBLE_OUTLIER_EXCLUDED", "INELIGIBLE_FOREIGN_CURRENCY_HELD", "INELIGIBLE_OTHER", "INELIGIBLE_UNKNOWN"
   }
   assert pr_statuses.issubset(allowed_pr_statuses), f"Disallowed price research statuses found: {pr_statuses - allowed_pr_statuses}"
+  print("  -> PASSED")
+
+def test_cross_field_priced_not_missing(conn):
+  """Asserts that rows with non-null original price are NEVER classified as INELIGIBLE_MISSING_PRICE."""
+  print("Running test_cross_field_priced_not_missing...")
+  cur = conn.cursor()
+  cur.execute("""
+    SELECT COUNT(*) 
+    FROM wf_canonical_staging.mariadb_normalized_children
+    WHERE original_price_amount IS NOT NULL 
+      AND original_price_amount > 0 
+      AND price_research_status = 'INELIGIBLE_MISSING_PRICE';
+  """)
+  invalid_count = cur.fetchone()[0]
+  assert invalid_count == 0, f"Found {invalid_count} priced rows incorrectly classified as INELIGIBLE_MISSING_PRICE!"
+
+  # Validate node normalizer contract on foreign currency rows
+  import subprocess, json
+  test_rows = [
+    {
+      "source_id": "00000000-0000-0000-0000-000000000001",
+      "source_hash": "0000000000000000000000000000000000000000000000000000000000000001",
+      "source_system": "OceanDigital MariaDB",
+      "source_database": "thecollective_inventory",
+      "source_table": "auctions",
+      "source_record_id": "test_eur_1",
+      "source_created_on": "2026-01-01T00:00:00.000Z",
+      "raw_message": "FS: Rolex Submariner 126610LN 2023 full set 12500 EUR",
+      "raw_payload": {"title": "Rolex Submariner", "description": "FS: Rolex Submariner 126610LN 2023 full set 12500 EUR"}
+    }
+  ]
+  worker = subprocess.Popen(
+    ["node", "tools/mariadb-live/normalize_chunk_worker.cjs"],
+    stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+  )
+  worker.stdin.write(json.dumps(test_rows) + "\n")
+  worker.stdin.flush()
+  out = json.loads(worker.stdout.readline())
+  worker.terminate()
+
+  child = out[0]["parent"]["children"][0]
+  assert child["original_price_amount"] == 12500
+  assert child["price_research_status"] == "INELIGIBLE_FX_UNRESOLVED", f"Expected INELIGIBLE_FX_UNRESOLVED, got {child['price_research_status']}"
   print("  -> PASSED")
 
 if __name__ == "__main__":
@@ -158,7 +201,8 @@ if __name__ == "__main__":
     test_namespace_isolation_and_quarantine_integrity(conn)
     test_rollback_behavior_and_zero_public_delta(conn)
     test_eligibility_classification_rules(conn)
-    print("\nALL 5 REGRESSION TESTS PASSED SUCCESSFULLY!")
+    test_cross_field_priced_not_missing(conn)
+    print("\nALL 6 REGRESSION TESTS PASSED SUCCESSFULLY!")
   finally:
     conn.rollback()
     conn.close()

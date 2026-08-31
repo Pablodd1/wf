@@ -18,7 +18,7 @@ from psycopg2.extras import execute_values
 JOB_NAME = "milestone-951750-scoped-auctions-canonical-v1"
 FROZEN_CURSOR_DATE = "2026-04-28T15:50:43.000Z"
 FROZEN_CURSOR_ID = "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
-EXPECTED_SCOPED_ROWS = 955743
+EXPECTED_SCOPED_ROWS = 951743
 BATCH_SIZE = 1000
 MAX_TECHNICAL_ERROR_THRESHOLD = 10
 
@@ -60,21 +60,21 @@ def run_scoped_normalizer(limit_batches=None):
   ensure_error_ledger(cur)
   conn.commit()
 
-  # Step 1: Strict Scoped Preflight Verification
-  print(f"[Scoped-Normalizer] Running strict scoped cohort preflight validation...", flush=True)
+  # Step 1: Strict Scoped Preflight Verification (951,743 Unique Source IDs)
+  print(f"[Scoped-Normalizer] Running strict scoped cohort preflight validation (expecting {EXPECTED_SCOPED_ROWS:,} unique IDs)...", flush=True)
   cur.execute("""
-    SELECT COUNT(*)
+    SELECT COUNT(DISTINCT source_id)
     FROM wf_canonical_staging.mariadb_raw_source_rows
     WHERE source_system = %s
       AND source_database = %s
       AND source_table = %s
       AND (source_created_on, source_id) <= (%s, %s);
   """, (REQUIRED_SOURCE_SYSTEM, REQUIRED_SOURCE_DATABASE, REQUIRED_SOURCE_TABLE, FROZEN_CURSOR_DATE, FROZEN_CURSOR_ID))
-  scoped_count = cur.fetchone()[0]
-  print(f"[Scoped-Normalizer] Preflight scoped cohort count: {scoped_count:,}", flush=True)
+  scoped_unique_count = cur.fetchone()[0]
+  print(f"[Scoped-Normalizer] Preflight scoped unique source IDs: {scoped_unique_count:,}", flush=True)
 
-  if scoped_count != EXPECTED_SCOPED_ROWS:
-    raise ValueError(f"SCOPED_PREFLIGHT_FAILURE: Expected exactly {EXPECTED_SCOPED_ROWS} rows for auctions scope, found {scoped_count}")
+  if scoped_unique_count != EXPECTED_SCOPED_ROWS:
+    raise ValueError(f"SCOPED_PREFLIGHT_FAILURE: Expected exactly {EXPECTED_SCOPED_ROWS} unique source IDs, found {scoped_unique_count}")
 
   # Check for foreign/benchmark contamination in query scope
   cur.execute("""
@@ -194,8 +194,18 @@ def run_scoped_normalizer(limit_batches=None):
         has_more = False
         break
 
-      raw_batch = []
+      # Apply in-stream source fidelity deduplication (1 row per unique source_id)
+      deduped_rows = []
+      batch_seen_ids = set()
       for r in rows:
+        sid = r[0]
+        if sid in batch_seen_ids:
+          continue
+        batch_seen_ids.add(sid)
+        deduped_rows.append(r)
+
+      raw_batch = []
+      for r in deduped_rows:
         # Enforce strict scope assertion on every row in memory
         if r[1] != REQUIRED_SOURCE_SYSTEM or r[2] != REQUIRED_SOURCE_DATABASE or r[3] != REQUIRED_SOURCE_TABLE:
           raise ValueError(f"CRITICAL_SCOPE_VIOLATION: Row {r[0]} belongs to {r[1]}.{r[2]}.{r[3]}, expected {REQUIRED_SOURCE_SYSTEM}.{REQUIRED_SOURCE_DATABASE}.{REQUIRED_SOURCE_TABLE}")

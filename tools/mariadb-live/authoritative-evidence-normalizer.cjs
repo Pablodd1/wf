@@ -352,9 +352,9 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     } else if (currencyStatus.includes('USDT')) {
       priceResearchStatus = 'INELIGIBLE_USDT_HELD_FOR_FX';
       reviewFlags.push('USDT_HELD_FOR_FX_PROOF');
-    } else if (currencyStatus.includes('HKD')) {
-      priceResearchStatus = 'INELIGIBLE_HKD_HELD_FOR_FX';
-      reviewFlags.push('HKD_HELD_FOR_FX_PROOF');
+    } else if (originalPriceAmount !== null && Number.isFinite(originalPriceAmount) && originalPriceAmount > 0) {
+      priceResearchStatus = 'INELIGIBLE_FX_UNRESOLVED';
+      reviewFlags.push('FX_UNRESOLVED_HELD');
     } else {
       priceResearchStatus = 'INELIGIBLE_MISSING_PRICE';
       reviewFlags.push('MISSING_PRICE_OR_CURRENCY');
@@ -847,6 +847,9 @@ function normalizeCanonicalParentChild(stagedRow, options = {}) {
         } else if (currStatus.includes('HKD')) {
           prStatus = 'INELIGIBLE_HKD_HELD_FOR_FX';
           childFlags.push('HKD_HELD_FOR_FX_PROOF');
+        } else if (origAmount !== null && Number.isFinite(origAmount) && origAmount > 0) {
+          prStatus = 'INELIGIBLE_FX_UNRESOLVED';
+          childFlags.push('FX_UNRESOLVED_HELD');
         } else {
           prStatus = 'INELIGIBLE_MISSING_PRICE';
           childFlags.push('MISSING_PRICE_OR_CURRENCY');
