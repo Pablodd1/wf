@@ -4,46 +4,32 @@ import sys
 import psycopg2
 import json
 import datetime
+from pathlib import Path
 
-NORMALIZATION_STATUS_CONTRACT = {
-  "intent": [
-    "WTS", "WTB", "PRICE_CHECK", "WITHDRAWN", "UNKNOWN"
-  ],
-  "currency_status": [
-    "VERIFIED_EXPLICIT_USD", "VERIFIED_EXPLICIT_EUR", "VERIFIED_EXPLICIT_GBP", "VERIFIED_EXPLICIT_HKD",
-    "VERIFIED_EXPLICIT_SGD", "VERIFIED_EXPLICIT_AED", "VERIFIED_EXPLICIT_SAR", "VERIFIED_EXPLICIT_AUD",
-    "VERIFIED_EXPLICIT_JPY", "VERIFIED_EXPLICIT_CHF", "VERIFIED_EXPLICIT_CAD", "VERIFIED_EXPLICIT_CNY",
-    "VERIFIED_EXPLICIT_MYR", "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX", "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX",
-    "AMBIGUOUS_BARE_DOLLAR_HELD", "MISSING_PRICE", "UNKNOWN_CURRENCY"
-  ],
-  "trading_floor_status": [
-    "ELIGIBLE_WTS", "ELIGIBLE_WTB", "HELD_INTENT_UNKNOWN", "HELD_IDENTITY_INCOMPLETE",
-    "HELD_MISSING_SOURCE_TEXT", "HELD_BUNDLE_UNSPLIT", "HELD_WITHDRAWN", "HELD_UNPRICED",
-    "HELD_AMBIGUOUS_CURRENCY", "HELD_FOREIGN_CURRENCY", "HELD_UNKNOWN"
-  ],
-  "price_research_status": [
-    "ELIGIBLE_VERIFIED_USD", "INELIGIBLE_TRADING_FLOOR_HOLD", "INELIGIBLE_NOT_WTS",
-    "INELIGIBLE_AMBIGUOUS_CURRENCY", "INELIGIBLE_MISSING_PRICE", "INELIGIBLE_IDENTITY_INCOMPLETE",
-    "INELIGIBLE_HKD_HELD_FOR_FX", "INELIGIBLE_USDT_HELD_FOR_FX", "INELIGIBLE_OUTLIER_HIGH",
-    "INELIGIBLE_OUTLIER_LOW", "INELIGIBLE_FOREIGN_CURRENCY_HELD", "INELIGIBLE_OTHER", "INELIGIBLE_UNKNOWN"
-  ],
-  "reconciliation_category": [
-    "SINGLE_RECORD", "BUNDLE_ITEM", "SPLIT_CHILD", "MULTI_OFFER", "NORMALIZED_PROPOSAL", "REVIEW_REQUIRED"
-  ],
-  "primary_image_evidence_type": [
-    "IMAGE_KEY_PRESERVED_URL_UNVERIFIED", "IMAGE_URL_VERIFIED", "NO_IMAGE", "IMAGE_UNAVAILABLE"
-  ]
-}
+def load_status_contract():
+  contract_path = Path(__file__).parent / "normalization-status-contract.json"
+  if not contract_path.exists():
+    contract_path = Path("tools/mariadb-live/normalization-status-contract.json")
+  with open(contract_path, "r", encoding="utf-8") as f:
+    return json.load(f)
 
 def run_compatibility_preflight():
-  conn = psycopg2.connect(os.environ.get("DATABASE_URL"))
+  contract = load_status_contract()
+  db_url = os.environ.get("DATABASE_URL")
+  if not db_url:
+    print("FATAL: DATABASE_URL is required for compatibility preflight.", file=sys.stderr)
+    sys.exit(1)
+
+  conn = psycopg2.connect(db_url)
+  # Explicit read-only transaction
+  conn.set_session(readonly=True, autocommit=False)
   cur = conn.cursor()
 
   def get_distinct_counts(table, col):
     cur.execute(f"SELECT {col}, COUNT(*) FROM wf_canonical_staging.{table} GROUP BY {col} ORDER BY 2 DESC;")
     return cur.fetchall()
 
-  print("Querying distinct stored values from wf_canonical_staging tables...")
+  print("Querying distinct stored values in READ ONLY transaction...")
 
   audits = {
     "intent": get_distinct_counts("mariadb_normalized_children", "intent"),
@@ -54,6 +40,7 @@ def run_compatibility_preflight():
     "primary_image_evidence_type": get_distinct_counts("mariadb_normalized_children", "primary_image_evidence_type")
   }
 
+  conn.rollback() # End read-only transaction safely
   cur.close()
   conn.close()
 
@@ -61,7 +48,7 @@ def run_compatibility_preflight():
   breakdown_summary = {}
 
   for field, counts in audits.items():
-    allowed_set = set(NORMALIZATION_STATUS_CONTRACT[field])
+    allowed_set = set(contract.get(field, []))
     field_counts = {}
     for val, count in counts:
       key_name = val if val is not None else "NULL"
@@ -84,7 +71,7 @@ def run_compatibility_preflight():
     "incompatible_values_count": len(incompatibilities),
     "incompatibilities": incompatibilities,
     "stored_canary_status_counts": breakdown_summary,
-    "status_contract_vocabulary": NORMALIZATION_STATUS_CONTRACT
+    "status_contract_vocabulary": contract
   }
 
   out_path = "audit-output/mariadb-live/canonical-canary-10k/migration_compatibility_preflight.json"

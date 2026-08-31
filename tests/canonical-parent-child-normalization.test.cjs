@@ -372,30 +372,68 @@ test('16. Authoritative normalization status vocabulary matches SQL CHECK constr
   const migrationPath = path.resolve('supabase/migrations/20260830190000_canonical_parent_child_remediation.sql');
   const migrationSql = fs.readFileSync(migrationPath, 'utf-8');
 
-  // Verify SQL CHECK constraints contain every status in the contract
-  for (const [field, values] of Object.entries(NORMALIZATION_STATUS_CONTRACT)) {
-    if (['scope', 'bundle_structure_type', 'seller_rating_status'].includes(field)) continue;
-    for (const val of values) {
-      assert.ok(migrationSql.includes(`'${val}'`), `Migration CHECK constraints must include ${field} value '${val}'`);
-    }
+  // Exact Bidirectional Equality: Extract allowed values from SQL constraints and compare with contract
+  function extractSqlConstraintValues(sql, constraintName) {
+    const regex = new RegExp(`ADD CONSTRAINT ${constraintName} CHECK \\([^)]*?IN \\(([\\s\\S]*?)\\)\\)`, 'i');
+    const match = sql.match(regex);
+    if (!match) throw new Error(`Could not find constraint ${constraintName} in migration SQL`);
+    const rawItems = match[1].match(/'([^']+)'/g);
+    return rawItems ? rawItems.map(s => s.replace(/'/g, '')) : [];
   }
 
-  // Regression fixtures covering various normalizer status outputs
-  const fixtures = [
-    { text: 'Rolex 116610LN 12500 USD', expectedCurr: 'VERIFIED_EXPLICIT_USD', expectedTF: 'HELD_INTENT_UNKNOWN' },
-    { text: 'WTS Rolex 116610LN 12500 USD', expectedCurr: 'VERIFIED_EXPLICIT_USD', expectedTF: 'ELIGIBLE_WTS' },
-    { text: 'WTB Rolex 116610LN 12500 USD', expectedCurr: 'VERIFIED_EXPLICIT_USD', expectedTF: 'ELIGIBLE_WTB' },
-    { text: 'WTS Rolex 116610LN € 10000', expectedCurr: 'VERIFIED_EXPLICIT_EUR', expectedTF: 'ELIGIBLE_WTS' },
-    { text: 'WTS Rolex 116610LN HKD 95000', expectedCurr: 'VERIFIED_EXPLICIT_HKD_HELD_FOR_FX', expectedTF: 'ELIGIBLE_WTS' },
-    { text: 'WTS Rolex 116610LN 12500 USDT', expectedCurr: 'VERIFIED_EXPLICIT_USDT_HELD_FOR_FX', expectedTF: 'ELIGIBLE_WTS' },
-    { text: 'WTS Rolex 116610LN CNY 88000', expectedCurr: 'VERIFIED_EXPLICIT_CNY', expectedTF: 'ELIGIBLE_WTS' },
-    { text: 'WTS Rolex 116610LN MYR 55000', expectedCurr: 'VERIFIED_EXPLICIT_MYR', expectedTF: 'ELIGIBLE_WTS' },
-    { text: 'WTS Rolex 116610LN $12500', expectedCurr: 'AMBIGUOUS_BARE_DOLLAR_HELD', expectedTF: 'ELIGIBLE_WTS' },
-    { text: 'WTS Rolex 116610LN', expectedCurr: 'MISSING_PRICE', expectedTF: 'ELIGIBLE_WTS' },
-    { text: 'WTB unknown stuff without brand or ref', expectedCurr: 'MISSING_PRICE', expectedTF: 'HELD_IDENTITY_INCOMPLETE' }
+  const constraintFieldMap = {
+    chk_mariadb_children_intent: 'intent',
+    chk_mariadb_children_reconciliation_category: 'reconciliation_category',
+    chk_mariadb_children_currency_status: 'currency_status',
+    chk_mariadb_children_trading_floor_status: 'trading_floor_status',
+    chk_mariadb_children_price_research_status: 'price_research_status',
+    chk_mariadb_children_image_evidence_type: 'primary_image_evidence_type',
+    chk_mariadb_images_scope: 'scope'
+  };
+
+  for (const [constraintName, fieldName] of Object.entries(constraintFieldMap)) {
+    const extracted = extractSqlConstraintValues(migrationSql, constraintName).sort();
+    const contractVals = [...NORMALIZATION_STATUS_CONTRACT[fieldName]].sort();
+    assert.deepStrictEqual(
+      extracted,
+      contractVals,
+      `Exact bidirectional mismatch for ${constraintName} (${fieldName}): SQL has [${extracted}], Contract has [${contractVals}]`
+    );
+  }
+
+  // Regression fixtures covering every single parser-supported currency
+  const currencyFixtures = [
+    { text: 'WTS Rolex 116610LN 12500 USD', expectedCurr: 'VERIFIED_EXPLICIT_USD' },
+    { text: 'WTS Rolex 116610LN 12500 USDT', expectedCurr: 'VERIFIED_EXPLICIT_USDT_HELD_FOR_FX' },
+    { text: 'WTS Rolex 116610LN HKD 95000', expectedCurr: 'VERIFIED_EXPLICIT_HKD_HELD_FOR_FX' },
+    { text: 'WTS Rolex 116610LN EUR 10000', expectedCurr: 'VERIFIED_EXPLICIT_EUR' },
+    { text: 'WTS Rolex 116610LN GBP 8500', expectedCurr: 'VERIFIED_EXPLICIT_GBP' },
+    { text: 'WTS Rolex 116610LN CHF 11000', expectedCurr: 'VERIFIED_EXPLICIT_CHF' },
+    { text: 'WTS Rolex 116610LN SGD 16000', expectedCurr: 'VERIFIED_EXPLICIT_SGD' },
+    { text: 'WTS Rolex 116610LN AED 45000', expectedCurr: 'VERIFIED_EXPLICIT_AED' },
+    { text: 'WTS Rolex 116610LN SAR 46000', expectedCurr: 'VERIFIED_EXPLICIT_SAR' },
+    { text: 'WTS Rolex 116610LN CNY 88000', expectedCurr: 'VERIFIED_EXPLICIT_CNY' },
+    { text: 'WTS Rolex 116610LN JPY 1800000', expectedCurr: 'VERIFIED_EXPLICIT_JPY' },
+    { text: 'WTS Rolex 116610LN KRW 16000000', expectedCurr: 'VERIFIED_EXPLICIT_KRW' },
+    { text: 'WTS Rolex 116610LN THB 420000', expectedCurr: 'VERIFIED_EXPLICIT_THB' },
+    { text: 'WTS Rolex 116610LN CAD 16500', expectedCurr: 'VERIFIED_EXPLICIT_CAD' },
+    { text: 'WTS Rolex 116610LN AUD 18500', expectedCurr: 'VERIFIED_EXPLICIT_AUD' },
+    { text: 'WTS Rolex 116610LN NZD 20000', expectedCurr: 'VERIFIED_EXPLICIT_NZD' },
+    { text: 'WTS Rolex 116610LN MYR 55000', expectedCurr: 'VERIFIED_EXPLICIT_MYR' },
+    { text: 'WTS Rolex 116610LN IDR 190000000', expectedCurr: 'VERIFIED_EXPLICIT_IDR' },
+    { text: 'WTS Rolex 116610LN INR 1000000', expectedCurr: 'VERIFIED_EXPLICIT_INR' },
+    { text: 'WTS Rolex 116610LN PHP 700000', expectedCurr: 'VERIFIED_EXPLICIT_PHP' },
+    { text: 'WTS Rolex 116610LN TWD 390000', expectedCurr: 'VERIFIED_EXPLICIT_TWD' },
+    { text: 'WTS Rolex 116610LN VND 300000000', expectedCurr: 'VERIFIED_EXPLICIT_VND' },
+    { text: 'WTS Rolex 116610LN BRL 65000', expectedCurr: 'VERIFIED_EXPLICIT_BRL' },
+    { text: 'WTS Rolex 116610LN MXN 220000', expectedCurr: 'VERIFIED_EXPLICIT_MXN' },
+    { text: 'WTS Rolex 116610LN ZAR 230000', expectedCurr: 'VERIFIED_EXPLICIT_ZAR' },
+    { text: 'WTS Rolex 116610LN SEK 130000', expectedCurr: 'VERIFIED_EXPLICIT_SEK' },
+    { text: 'WTS Rolex 116610LN NOK 135000', expectedCurr: 'VERIFIED_EXPLICIT_NOK' },
+    { text: 'WTS Rolex 116610LN DKK 85000', expectedCurr: 'VERIFIED_EXPLICIT_DKK' }
   ];
 
-  for (const fix of fixtures) {
+  for (const fix of currencyFixtures) {
     const row = {
       ...BASE_STAGED_ROW,
       raw_message: fix.text,
@@ -404,10 +442,31 @@ test('16. Authoritative normalization status vocabulary matches SQL CHECK constr
     const res = normalizeCanonicalParentChild(row);
     const child = res.children[0];
     assert.strictEqual(child.currency_status, fix.expectedCurr, `Currency status mismatch for "${fix.text}"`);
-    assert.strictEqual(child.trading_floor_status, fix.expectedTF, `Trading floor status mismatch for "${fix.text}"`);
     assert.ok(NORMALIZATION_STATUS_CONTRACT.currency_status.includes(child.currency_status));
-    assert.ok(NORMALIZATION_STATUS_CONTRACT.trading_floor_status.includes(child.trading_floor_status));
-    assert.ok(NORMALIZATION_STATUS_CONTRACT.price_research_status.includes(child.price_research_status));
-    assert.ok(NORMALIZATION_STATUS_CONTRACT.reconciliation_category.includes(child.reconciliation_category));
+  }
+
+  // Regression fixtures covering every status path
+  const statusPathFixtures = [
+    { text: 'Rolex 116610LN 12500 USD', expectedIntent: null, expectedTF: 'HELD_INTENT_UNKNOWN', expectedPR: 'INELIGIBLE_TRADING_FLOOR_HOLD' },
+    { text: 'WTS Rolex 116610LN 12500 USD', expectedIntent: 'WTS', expectedTF: 'ELIGIBLE_WTS', expectedPR: 'ELIGIBLE_VERIFIED_USD' },
+    { text: 'WTB Rolex 116610LN 12500 USD', expectedIntent: 'WTB', expectedTF: 'ELIGIBLE_WTB', expectedPR: 'INELIGIBLE_NOT_WTS' },
+    { text: 'WTS Rolex 116610LN $12500', expectedIntent: 'WTS', expectedTF: 'ELIGIBLE_WTS', expectedPR: 'INELIGIBLE_AMBIGUOUS_CURRENCY' },
+    { text: 'WTS Rolex 116610LN', expectedIntent: 'WTS', expectedTF: 'ELIGIBLE_WTS', expectedPR: 'INELIGIBLE_MISSING_PRICE' },
+    { text: 'WTS Rolex 116610LN 600000 USD', expectedIntent: 'WTS', expectedTF: 'ELIGIBLE_WTS', expectedPR: 'INELIGIBLE_OUTLIER_EXCLUDED' },
+    { text: 'WTS Rolex 116610LN 50 USD', expectedIntent: 'WTS', expectedTF: 'ELIGIBLE_WTS', expectedPR: 'INELIGIBLE_OUTLIER_EXCLUDED' },
+    { text: 'WTB unknown stuff without brand or ref', expectedIntent: 'WTB', expectedTF: 'HELD_IDENTITY_INCOMPLETE', expectedPR: 'INELIGIBLE_TRADING_FLOOR_HOLD' }
+  ];
+
+  for (const fix of statusPathFixtures) {
+    const row = {
+      ...BASE_STAGED_ROW,
+      raw_message: fix.text,
+      raw_payload: { ...BASE_STAGED_ROW.raw_payload, description: fix.text }
+    };
+    const res = normalizeCanonicalParentChild(row);
+    const child = res.children[0];
+    assert.strictEqual(child.intent, fix.expectedIntent, `Intent mismatch for "${fix.text}"`);
+    assert.strictEqual(child.trading_floor_status, fix.expectedTF, `Trading floor mismatch for "${fix.text}"`);
+    assert.strictEqual(child.price_research_status, fix.expectedPR, `Price research mismatch for "${fix.text}"`);
   }
 });

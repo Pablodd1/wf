@@ -24,6 +24,7 @@ function generateChecksumManifest() {
   ];
 
   const toolsToManifest = [
+    'tools/mariadb-live/normalization-status-contract.json',
     'tools/mariadb-live/normalization-status-contract.cjs',
     'tools/mariadb-live/authoritative-evidence-normalizer.cjs',
     'tools/mariadb-live/verify_image_reachability_100.cjs',

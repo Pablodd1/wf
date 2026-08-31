@@ -1,91 +1,10 @@
 // tools/mariadb-live/normalization-status-contract.cjs
 'use strict';
 
-const NORMALIZATION_STATUS_CONTRACT = Object.freeze({
-  intent: Object.freeze([
-    'WTS',
-    'WTB',
-    'PRICE_CHECK',
-    'WITHDRAWN',
-    'UNKNOWN'
-  ]),
-  currency_status: Object.freeze([
-    'VERIFIED_EXPLICIT_USD',
-    'VERIFIED_EXPLICIT_EUR',
-    'VERIFIED_EXPLICIT_GBP',
-    'VERIFIED_EXPLICIT_HKD',
-    'VERIFIED_EXPLICIT_SGD',
-    'VERIFIED_EXPLICIT_AED',
-    'VERIFIED_EXPLICIT_SAR',
-    'VERIFIED_EXPLICIT_AUD',
-    'VERIFIED_EXPLICIT_JPY',
-    'VERIFIED_EXPLICIT_CHF',
-    'VERIFIED_EXPLICIT_CAD',
-    'VERIFIED_EXPLICIT_CNY',
-    'VERIFIED_EXPLICIT_MYR',
-    'VERIFIED_EXPLICIT_USDT_HELD_FOR_FX',
-    'VERIFIED_EXPLICIT_HKD_HELD_FOR_FX',
-    'AMBIGUOUS_BARE_DOLLAR_HELD',
-    'MISSING_PRICE',
-    'UNKNOWN_CURRENCY'
-  ]),
-  trading_floor_status: Object.freeze([
-    'ELIGIBLE_WTS',
-    'ELIGIBLE_WTB',
-    'HELD_INTENT_UNKNOWN',
-    'HELD_IDENTITY_INCOMPLETE',
-    'HELD_MISSING_SOURCE_TEXT',
-    'HELD_BUNDLE_UNSPLIT',
-    'HELD_WITHDRAWN',
-    'HELD_UNPRICED',
-    'HELD_AMBIGUOUS_CURRENCY',
-    'HELD_FOREIGN_CURRENCY',
-    'HELD_UNKNOWN'
-  ]),
-  price_research_status: Object.freeze([
-    'ELIGIBLE_VERIFIED_USD',
-    'INELIGIBLE_TRADING_FLOOR_HOLD',
-    'INELIGIBLE_NOT_WTS',
-    'INELIGIBLE_AMBIGUOUS_CURRENCY',
-    'INELIGIBLE_MISSING_PRICE',
-    'INELIGIBLE_IDENTITY_INCOMPLETE',
-    'INELIGIBLE_HKD_HELD_FOR_FX',
-    'INELIGIBLE_USDT_HELD_FOR_FX',
-    'INELIGIBLE_OUTLIER_HIGH',
-    'INELIGIBLE_OUTLIER_LOW',
-    'INELIGIBLE_FOREIGN_CURRENCY_HELD',
-    'INELIGIBLE_OTHER',
-    'INELIGIBLE_UNKNOWN'
-  ]),
-  reconciliation_category: Object.freeze([
-    'SINGLE_RECORD',
-    'BUNDLE_ITEM',
-    'SPLIT_CHILD',
-    'MULTI_OFFER',
-    'NORMALIZED_PROPOSAL',
-    'REVIEW_REQUIRED'
-  ]),
-  image_evidence_type: Object.freeze([
-    'IMAGE_KEY_PRESERVED_URL_UNVERIFIED',
-    'IMAGE_URL_VERIFIED',
-    'NO_IMAGE',
-    'IMAGE_UNAVAILABLE'
-  ]),
-  scope: Object.freeze([
-    'PARENT',
-    'CHILD'
-  ]),
-  bundle_structure_type: Object.freeze([
-    'SINGLE',
-    'MULTI_OFFER_BUNDLE'
-  ]),
-  seller_rating_status: Object.freeze([
-    'UNRATED_SELLER',
-    'SOURCE_REVIEW_VERIFIED',
-    'HELD_MISSING_REVIEW_EVIDENCE',
-    'UNVERIFIED_NO_PUBLIC_REVIEWS',
-    'EXPLICIT_SOURCE_REVIEWS'
-  ])
-});
+const fs = require('node:fs');
+const path = require('node:path');
+
+const contractJsonPath = path.resolve(__dirname, 'normalization-status-contract.json');
+const NORMALIZATION_STATUS_CONTRACT = Object.freeze(JSON.parse(fs.readFileSync(contractJsonPath, 'utf-8')));
 
 module.exports = { NORMALIZATION_STATUS_CONTRACT };

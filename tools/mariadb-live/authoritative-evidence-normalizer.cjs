@@ -13,6 +13,7 @@ const {
 
 const { normalizeDialValue } = require('../../api/_lib/dial-normalization.cjs');
 const { normalizeWatchCondition, normalizeWatchDial } = require('../../api/_lib/watch-condition-normalization.cjs');
+const { NORMALIZATION_STATUS_CONTRACT } = require('./normalization-status-contract.cjs');
 
 const BRAND_HEADERS = [
   [/\b(?:patek\s*philippe|patek|pp)\b/i, 'Patek Philippe'],
@@ -329,6 +330,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
 
   // Price Research Status:
   // Requires: Trading Floor eligible + strict WTS intent + verified USD price + complete brand/ref
+  const isOutlier = (priceUsd !== null && (priceUsd > 500000 || priceUsd < 100));
   let priceResearchStatus = 'INELIGIBLE_OTHER';
   let priceResearchEligible = false;
 
@@ -339,6 +341,10 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     exclusionReasons.push('INTENT_NOT_WTS');
   } else if (!brand || !reference) {
     priceResearchStatus = 'INELIGIBLE_IDENTITY_INCOMPLETE';
+  } else if (isOutlier) {
+    priceResearchStatus = 'INELIGIBLE_OUTLIER_EXCLUDED';
+    reviewFlags.push('PRICE_OUTLIER_HELD');
+    exclusionReasons.push('PRICE_OUTLIER_EXCLUDED');
   } else if (priceUsd === null) {
     if (currencyStatus.startsWith('AMBIGUOUS')) {
       priceResearchStatus = 'INELIGIBLE_AMBIGUOUS_CURRENCY';
@@ -421,8 +427,39 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     parser_version: parserVersion
   };
 
+  validateNormalizationStatuses(contractObj);
   contractObj.proposal_hash = computeProposalHash(contractObj);
   return contractObj;
+}
+
+function validateNormalizationStatuses(obj) {
+  if (obj.intent !== undefined && obj.intent !== null && !NORMALIZATION_STATUS_CONTRACT.intent.includes(obj.intent)) {
+    throw new Error(`Invalid intent status: "${obj.intent}"`);
+  }
+  if (obj.currency_status !== undefined && obj.currency_status !== null && !NORMALIZATION_STATUS_CONTRACT.currency_status.includes(obj.currency_status)) {
+    throw new Error(`Invalid currency_status: "${obj.currency_status}"`);
+  }
+  if (obj.trading_floor_status !== undefined && obj.trading_floor_status !== null && !NORMALIZATION_STATUS_CONTRACT.trading_floor_status.includes(obj.trading_floor_status)) {
+    throw new Error(`Invalid trading_floor_status: "${obj.trading_floor_status}"`);
+  }
+  if (obj.price_research_status !== undefined && obj.price_research_status !== null && !NORMALIZATION_STATUS_CONTRACT.price_research_status.includes(obj.price_research_status)) {
+    throw new Error(`Invalid price_research_status: "${obj.price_research_status}"`);
+  }
+  if (obj.reconciliation_category !== undefined && obj.reconciliation_category !== null && !NORMALIZATION_STATUS_CONTRACT.reconciliation_category.includes(obj.reconciliation_category)) {
+    throw new Error(`Invalid reconciliation_category: "${obj.reconciliation_category}"`);
+  }
+  if (obj.image_evidence_type !== undefined && obj.image_evidence_type !== null && !NORMALIZATION_STATUS_CONTRACT.primary_image_evidence_type.includes(obj.image_evidence_type)) {
+    throw new Error(`Invalid image_evidence_type: "${obj.image_evidence_type}"`);
+  }
+  if (obj.primary_image_evidence_type !== undefined && obj.primary_image_evidence_type !== null && !NORMALIZATION_STATUS_CONTRACT.primary_image_evidence_type.includes(obj.primary_image_evidence_type)) {
+    throw new Error(`Invalid primary_image_evidence_type: "${obj.primary_image_evidence_type}"`);
+  }
+  if (obj.bundle_structure_type !== undefined && obj.bundle_structure_type !== null && !NORMALIZATION_STATUS_CONTRACT.bundle_structure_type.includes(obj.bundle_structure_type)) {
+    throw new Error(`Invalid bundle_structure_type: "${obj.bundle_structure_type}"`);
+  }
+  if (obj.seller_rating_status !== undefined && obj.seller_rating_status !== null && !NORMALIZATION_STATUS_CONTRACT.seller_rating_status.includes(obj.seller_rating_status)) {
+    throw new Error(`Invalid seller_rating_status: "${obj.seller_rating_status}"`);
+  }
 }
 
 function computeProposalHash(contract) {
@@ -925,7 +962,7 @@ function normalizeCanonicalParentChild(stagedRow, options = {}) {
     raw_payload: raw,
     is_bundle: isBundle,
     child_count: children.length,
-    bundle_structure_type: isMultiOffer ? 'MULTI_OFFER_BUNDLE' : (isExplicitBundle ? 'MULTI_ITEM_CANONICAL' : 'SINGLE'),
+    bundle_structure_type: isMultiOffer ? 'MULTI_OFFER_BUNDLE' : 'SINGLE',
     seller_name: base.seller_name,
     seller_contact: base.seller_contact,
     contact_publication_approved: false,
@@ -938,6 +975,9 @@ function normalizeCanonicalParentChild(stagedRow, options = {}) {
     review_flags: base.review_flags,
     children: children
   };
+
+  validateNormalizationStatuses(parent);
+  children.forEach(c => validateNormalizationStatuses(c));
 
   parent.parent_hash = computeParentHash(parent);
 
