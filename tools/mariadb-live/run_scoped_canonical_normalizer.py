@@ -28,6 +28,7 @@ REQUIRED_SOURCE_TABLE = "auctions"
 
 def ensure_error_ledger(cur):
   cur.execute("""
+    CREATE SCHEMA IF NOT EXISTS wf_canonical_staging;
     CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_normalization_errors (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       job_name TEXT NOT NULL,
