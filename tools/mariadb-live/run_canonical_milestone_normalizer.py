@@ -67,8 +67,12 @@ def run_milestone_normalizer():
   pr_eligible = 0
 
   if cp_row:
-    last_created_on = cp_row[1]
-    last_source_id = cp_row[2]
+    raw_cursor_date = cp_row[1]
+    if hasattr(raw_cursor_date, 'strftime'):
+      last_created_on = raw_cursor_date.strftime('%Y-%m-%d %H:%M:%S')
+    else:
+      last_created_on = str(raw_cursor_date).replace('+00:00', '') if raw_cursor_date else None
+    last_source_id = str(cp_row[2]) if cp_row[2] else None
     total_processed = cp_row[3] or 0
     normalized_proposals = cp_row[4] or 0
     review_required = cp_row[5] or 0
@@ -112,22 +116,22 @@ def run_milestone_normalizer():
           SELECT source_id, source_system, source_database, source_table, source_hash, source_record_id,
                  source_created_on, raw_message, raw_payload
           FROM wf_canonical_staging.mariadb_raw_source_rows
-          WHERE (source_created_on > %s OR (source_created_on = %s AND source_id > %s))
-            AND (source_created_on < %s OR (source_created_on = %s AND source_id <= %s))
+          WHERE (source_created_on > %s::text OR (source_created_on = %s::text AND source_id > %s::text))
+            AND (source_created_on < %s::text OR (source_created_on = %s::text AND source_id <= %s::text))
           ORDER BY source_created_on ASC, source_id ASC
           LIMIT %s;
         """
-        params = (last_created_on, last_created_on, last_source_id, FROZEN_CURSOR_DATE, FROZEN_CURSOR_DATE, FROZEN_CURSOR_ID, BATCH_SIZE)
+        params = (str(last_created_on), str(last_created_on), str(last_source_id), str(FROZEN_CURSOR_DATE), str(FROZEN_CURSOR_DATE), str(FROZEN_CURSOR_ID), BATCH_SIZE)
       else:
         query = """
           SELECT source_id, source_system, source_database, source_table, source_hash, source_record_id,
                  source_created_on, raw_message, raw_payload
           FROM wf_canonical_staging.mariadb_raw_source_rows
-          WHERE (source_created_on < %s OR (source_created_on = %s AND source_id <= %s))
+          WHERE (source_created_on < %s::text OR (source_created_on = %s::text AND source_id <= %s::text))
           ORDER BY source_created_on ASC, source_id ASC
           LIMIT %s;
         """
-        params = (FROZEN_CURSOR_DATE, FROZEN_CURSOR_DATE, FROZEN_CURSOR_ID, BATCH_SIZE)
+        params = (str(FROZEN_CURSOR_DATE), str(FROZEN_CURSOR_DATE), str(FROZEN_CURSOR_ID), BATCH_SIZE)
 
       cur.execute(query, params)
       rows = cur.fetchall()
