@@ -22,10 +22,14 @@ def run_test():
   cur.execute(f"CREATE SCHEMA {schema_name};")
   cur.execute(f"SET search_path TO {schema_name}, public;")
 
-  print("Applying base schema migration on disposable database...")
+  print("Applying base schema migrations on disposable database...")
+  with open("supabase/migrations/20260830183000_private_canonical_parent_child_staging.sql", "r", encoding="utf-8") as f:
+    create_sql = f.read().replace("wf_canonical_staging.", f"{schema_name}.")
+  cur.execute(create_sql)
+
   with open("supabase/migrations/20260830190000_canonical_parent_child_remediation.sql", "r", encoding="utf-8") as f:
-    base_sql = f.read().replace("wf_canonical_staging.", f"{schema_name}.")
-  cur.execute(base_sql)
+    remediation_sql = f.read().replace("wf_canonical_staging.", f"{schema_name}.")
+  cur.execute(remediation_sql)
 
   # Insert 2 genuine auctions parents and 3 benchmark parents
   cur.execute(f"""
