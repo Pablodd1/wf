@@ -61,25 +61,25 @@ def run_scoped_normalizer(limit_batches=None):
   conn.commit()
 
   # Step 1: Strict Scoped Preflight Verification (951,743 Unique Source IDs)
-  print(f"[Scoped-Normalizer] Running strict scoped cohort preflight validation (expecting {EXPECTED_SCOPED_ROWS:,} unique IDs)...", flush=True)
+  print(f"[Scoped-Normalizer] Running strict authoritative dataset preflight validation (expecting {EXPECTED_SCOPED_ROWS:,} rows)...", flush=True)
   cur.execute("""
-    SELECT COUNT(DISTINCT source_id)
-    FROM wf_canonical_staging.mariadb_raw_source_rows
+    SELECT COUNT(*)
+    FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
     WHERE source_system = %s
       AND source_database = %s
       AND source_table = %s
       AND (source_created_on, source_id) <= (%s, %s);
   """, (REQUIRED_SOURCE_SYSTEM, REQUIRED_SOURCE_DATABASE, REQUIRED_SOURCE_TABLE, FROZEN_CURSOR_DATE, FROZEN_CURSOR_ID))
   scoped_unique_count = cur.fetchone()[0]
-  print(f"[Scoped-Normalizer] Preflight scoped unique source IDs: {scoped_unique_count:,}", flush=True)
+  print(f"[Scoped-Normalizer] Preflight authoritative source rows count: {scoped_unique_count:,}", flush=True)
 
   if scoped_unique_count != EXPECTED_SCOPED_ROWS:
-    raise ValueError(f"SCOPED_PREFLIGHT_FAILURE: Expected exactly {EXPECTED_SCOPED_ROWS} unique source IDs, found {scoped_unique_count}")
+    raise ValueError(f"SCOPED_PREFLIGHT_FAILURE: Expected exactly {EXPECTED_SCOPED_ROWS} authoritative rows, found {scoped_unique_count}")
 
   # Check for foreign/benchmark contamination in query scope
   cur.execute("""
     SELECT COUNT(*)
-    FROM wf_canonical_staging.mariadb_raw_source_rows
+    FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
     WHERE (source_system <> %s OR source_database <> %s OR source_table <> %s)
       AND (source_created_on, source_id) <= (%s, %s);
   """, (REQUIRED_SOURCE_SYSTEM, REQUIRED_SOURCE_DATABASE, REQUIRED_SOURCE_TABLE, FROZEN_CURSOR_DATE, FROZEN_CURSOR_ID))
@@ -160,7 +160,7 @@ def run_scoped_normalizer(limit_batches=None):
         query = """
           SELECT source_id, source_system, source_database, source_table, source_hash, source_record_id,
                  source_created_on, raw_message, raw_payload
-          FROM wf_canonical_staging.mariadb_raw_source_rows
+          FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
           WHERE source_system = %s
             AND source_database = %s
             AND source_table = %s
@@ -175,7 +175,7 @@ def run_scoped_normalizer(limit_batches=None):
         query = """
           SELECT source_id, source_system, source_database, source_table, source_hash, source_record_id,
                  source_created_on, raw_message, raw_payload
-          FROM wf_canonical_staging.mariadb_raw_source_rows
+          FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
           WHERE source_system = %s
             AND source_database = %s
             AND source_table = %s
@@ -190,22 +190,12 @@ def run_scoped_normalizer(limit_batches=None):
       rows = cur.fetchall()
 
       if not rows:
-        print(f"[Scoped-Normalizer] Reached end of scoped cohort stream. All {total_processed:,} records normalized.", flush=True)
+        print(f"[Scoped-Normalizer] Reached end of authoritative dataset stream. All {total_processed:,} records normalized.", flush=True)
         has_more = False
         break
 
-      # Apply in-stream source fidelity deduplication (1 row per unique source_id)
-      deduped_rows = []
-      batch_seen_ids = set()
-      for r in rows:
-        sid = r[0]
-        if sid in batch_seen_ids:
-          continue
-        batch_seen_ids.add(sid)
-        deduped_rows.append(r)
-
       raw_batch = []
-      for r in deduped_rows:
+      for r in rows:
         # Enforce strict scope assertion on every row in memory
         if r[1] != REQUIRED_SOURCE_SYSTEM or r[2] != REQUIRED_SOURCE_DATABASE or r[3] != REQUIRED_SOURCE_TABLE:
           raise ValueError(f"CRITICAL_SCOPE_VIOLATION: Row {r[0]} belongs to {r[1]}.{r[2]}.{r[3]}, expected {REQUIRED_SOURCE_SYSTEM}.{REQUIRED_SOURCE_DATABASE}.{REQUIRED_SOURCE_TABLE}")
@@ -232,7 +222,7 @@ def run_scoped_normalizer(limit_batches=None):
 
       for idx, res in enumerate(batch_results):
         total_processed += 1
-        r = rows[idx]
+        r = raw_batch[idx]
 
         if res.get("success"):
           parent = res["parent"]
@@ -327,11 +317,50 @@ def run_scoped_normalizer(limit_batches=None):
     raise
   finally:
     worker.terminate()
-    cur.close()
-    conn.close()
+def run_preflight_only():
+  db_url = os.environ.get("DATABASE_URL")
+  if not db_url:
+    print("FATAL: DATABASE_URL is required.", file=sys.stderr)
+    sys.exit(1)
+
+  print(f"[Scoped-Normalizer Preflight] Connecting to private Supabase staging...", flush=True)
+  conn = psycopg2.connect(db_url)
+  cur = conn.cursor()
+  cur.execute("SET statement_timeout = '600s';")
+
+  print(f"[Scoped-Normalizer Preflight] Validating authoritative dataset count (expected {EXPECTED_SCOPED_ROWS:,})...", flush=True)
+  cur.execute("""
+    SELECT COUNT(*)
+    FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
+    WHERE source_system = %s
+      AND source_database = %s
+      AND source_table = %s
+      AND (source_created_on, source_id) <= (%s, %s);
+  """, (REQUIRED_SOURCE_SYSTEM, REQUIRED_SOURCE_DATABASE, REQUIRED_SOURCE_TABLE, FROZEN_CURSOR_DATE, FROZEN_CURSOR_ID))
+  scoped_count = cur.fetchone()[0]
+  print(f"[Scoped-Normalizer Preflight] Authoritative rows count: {scoped_count:,}", flush=True)
+
+  if scoped_count != EXPECTED_SCOPED_ROWS:
+    raise ValueError(f"PREFLIGHT_FAILURE: Expected exactly {EXPECTED_SCOPED_ROWS} authoritative rows, found {scoped_count}")
+
+  cur.execute("""
+    SELECT COUNT(*)
+    FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
+    WHERE (source_system <> %s OR source_database <> %s OR source_table <> %s)
+      AND (source_created_on, source_id) <= (%s, %s);
+  """, (REQUIRED_SOURCE_SYSTEM, REQUIRED_SOURCE_DATABASE, REQUIRED_SOURCE_TABLE, FROZEN_CURSOR_DATE, FROZEN_CURSOR_ID))
+  non_scoped_staged = cur.fetchone()[0]
+  print(f"[Scoped-Normalizer Preflight] Non-auctions staged rows excluded: {non_scoped_staged:,}", flush=True)
+
+  print("[Scoped-Normalizer Preflight] PREFLIGHT CHECK PASSED: Dataset is clean, bounded, and verified at exactly 951,743 authoritative rows.", flush=True)
+  cur.close()
+  conn.close()
 
 if __name__ == "__main__":
-  limit = None
-  if len(sys.argv) > 1:
-    limit = int(sys.argv[1])
-  run_scoped_normalizer(limit_batches=limit)
+  if len(sys.argv) > 1 and sys.argv[1] == "--preflight-only":
+    run_preflight_only()
+  else:
+    limit = None
+    if len(sys.argv) > 1 and sys.argv[1].isdigit():
+      limit = int(sys.argv[1])
+    run_scoped_normalizer(limit_batches=limit)

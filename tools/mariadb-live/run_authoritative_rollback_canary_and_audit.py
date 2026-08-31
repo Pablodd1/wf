@@ -16,25 +16,9 @@ def run():
     sys.exit(1)
 
   conn = psycopg2.connect(db_url)
-  conn.autocommit = True
+  conn.autocommit = False
   cur = conn.cursor()
   cur.execute("SET statement_timeout = '600s';")
-
-  # Terminate any stale backends holding locks
-  try:
-    cur.execute("""
-      SELECT pg_terminate_backend(pid)
-      FROM pg_stat_activity
-      WHERE pid <> pg_backend_pid()
-        AND datname = current_database()
-        AND state IN ('idle in transaction', 'idle in transaction (aborted)', 'active')
-        AND query_start < NOW() - INTERVAL '30 seconds';
-    """)
-    cur.fetchall()
-  except Exception as e:
-    print(f"Warning clearing backends: {e}")
-
-  conn.autocommit = False
 
   print("==================================================================")
   print("STAGE 1: Baseline Measurement Before Rollback Canary")
@@ -59,7 +43,7 @@ def run():
   cur.execute("""
     SELECT r.source_id, r.source_system, r.source_database, r.source_table, r.source_hash,
            r.source_record_id, r.source_created_on, r.raw_message, r.raw_payload
-    FROM wf_canonical_staging.mariadb_raw_source_rows r
+    FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows r
     LEFT JOIN wf_canonical_staging.mariadb_normalized_parents p
       ON r.source_system = p.source_system
      AND r.source_database = p.source_database

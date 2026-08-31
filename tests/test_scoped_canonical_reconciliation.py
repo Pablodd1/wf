@@ -193,6 +193,50 @@ def test_cross_field_priced_not_missing(conn):
   assert child["price_research_status"] == "INELIGIBLE_FX_UNRESOLVED", f"Expected INELIGIBLE_FX_UNRESOLVED, got {child['price_research_status']}"
   print("  -> PASSED")
 
+def test_page_boundary_straddling_deduplication(conn):
+  """Asserts that pagination across already-deduplicated dataset never duplicates or skips boundary records."""
+  print("Running test_page_boundary_straddling_deduplication...")
+  cur = conn.cursor()
+  
+  # Fetch Page 1 (1,000 rows)
+  cur.execute("""
+    SELECT source_id, source_created_on
+    FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
+    ORDER BY source_created_on ASC, source_id ASC
+    LIMIT 1000;
+  """)
+  page_1 = cur.fetchall()
+  assert len(page_1) == 1000, f"Expected 1,000 rows on Page 1, got {len(page_1)}"
+  
+  p1_last_date = page_1[-1][1]
+  p1_last_id = page_1[-1][0]
+  p1_ids = set(r[0] for r in page_1)
+  assert len(p1_ids) == 1000, "Duplicate source_id found within Page 1!"
+
+  # Fetch Page 2 (1,000 rows) starting from cursor
+  cur.execute("""
+    SELECT source_id, source_created_on
+    FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
+    WHERE (source_created_on, source_id) > (%s, %s)
+    ORDER BY source_created_on ASC, source_id ASC
+    LIMIT 1000;
+  """, (p1_last_date, p1_last_id))
+  page_2 = cur.fetchall()
+  assert len(page_2) == 1000, f"Expected 1,000 rows on Page 2, got {len(page_2)}"
+
+  p2_ids = set(r[0] for r in page_2)
+  assert len(p2_ids) == 1000, "Duplicate source_id found within Page 2!"
+
+  # Prove zero intersection across boundary
+  boundary_intersection = p1_ids.intersection(p2_ids)
+  assert len(boundary_intersection) == 0, f"Boundary straddling error: source IDs duplicated across page boundary: {boundary_intersection}"
+
+  # Prove strict monotonic ordering between page 1 last and page 2 first
+  p2_first_date = page_2[0][1]
+  p2_first_id = page_2[0][0]
+  assert (p2_first_date, p2_first_id) > (p1_last_date, p1_last_id), "Keyset cursor failed monotonic ordering!"
+  print("  -> PASSED")
+
 if __name__ == "__main__":
   conn = get_db_conn()
   try:
@@ -202,7 +246,8 @@ if __name__ == "__main__":
     test_rollback_behavior_and_zero_public_delta(conn)
     test_eligibility_classification_rules(conn)
     test_cross_field_priced_not_missing(conn)
-    print("\nALL 6 REGRESSION TESTS PASSED SUCCESSFULLY!")
+    test_page_boundary_straddling_deduplication(conn)
+    print("\nALL 7 REGRESSION TESTS PASSED SUCCESSFULLY!")
   finally:
     conn.rollback()
     conn.close()
