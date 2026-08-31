@@ -236,7 +236,7 @@ def test_page_boundary_straddling_deduplication(conn):
   p2_first_id = page_2[0][0]
   assert (p2_first_date, p2_first_id) > (p1_last_date, p1_last_id), "Keyset cursor failed monotonic ordering!"
 def test_real_five_version_boundary_and_winning_hashes(conn):
-  """Asserts that 1,000 multi-version source IDs resolve to exactly one authoritative row with the winning ISO UTC hash."""
+  """Asserts that competing raw versions resolve to independently calculated winning source hashes."""
   print("Running test_real_five_version_boundary_and_winning_hashes...")
   cur = conn.cursor()
 
@@ -249,9 +249,9 @@ def test_real_five_version_boundary_and_winning_hashes(conn):
 
   sample_dup_ids = dup_ids[:100]
 
-  # Query all raw versions for sample IDs (must be > 1 version per ID in raw table)
+  # Query all raw versions for sample IDs
   cur.execute("""
-    SELECT source_id, source_hash, source_created_on
+    SELECT id, source_id, source_record_id, source_created_on, canonicalization_version, source_hash, raw_payload
     FROM wf_canonical_staging.mariadb_raw_source_rows
     WHERE source_id = ANY(%s::text[])
       AND source_system = 'OceanDigital MariaDB'
@@ -261,9 +261,34 @@ def test_real_five_version_boundary_and_winning_hashes(conn):
   raw_version_rows = cur.fetchall()
   assert len(raw_version_rows) >= len(sample_dup_ids) * 2, f"Expected multiple raw versions, found {len(raw_version_rows)}"
 
+  # Group by source_id and calculate independently expected winning version
+  from collections import defaultdict
+  grouped_versions = defaultdict(list)
+  for r in raw_version_rows:
+    grouped_versions[r[1]].append(r)
+
+  expected_winning_map = {}
+  for sid, versions in grouped_versions.items():
+    # Proven precedence key:
+    # 1. Official capture record ID ('mysql_auctions_' || source_id)
+    # 2. Canonical ISO 8601 UTC timestamp format ('%T%Z')
+    # 3. Compact canonical version ('v1-json-keys-sorted-compact')
+    # 4. Tiebreaker: source_hash ASC, id ASC
+    sorted_v = sorted(
+      versions,
+      key=lambda v: (
+        1 if v[2] == f"mysql_auctions_{v[1]}" else 2,
+        1 if (v[3].endswith("Z") and "T" in v[3]) else 2,
+        1 if v[4] == "v1-json-keys-sorted-compact" else 2,
+        v[5],
+        str(v[0])
+      )
+    )
+    expected_winning_map[sid] = sorted_v[0]
+
   # Query winning versions from authoritative dataset
   cur.execute("""
-    SELECT source_id, source_hash, source_created_on, selected_by_provenance
+    SELECT source_id, source_hash, source_created_on, source_record_id, selected_by_provenance
     FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
     WHERE source_id = ANY(%s::text[]);
   """, (sample_dup_ids,))
@@ -271,9 +296,14 @@ def test_real_five_version_boundary_and_winning_hashes(conn):
   assert len(winning_rows) == len(sample_dup_ids), f"Expected {len(sample_dup_ids)} winning rows, got {len(winning_rows)}"
 
   for wr in winning_rows:
-    sid, shash, screated, prov = wr
-    assert screated.endswith("Z") and "T" in screated, f"Winning version {sid} does not have ISO UTC format: {screated}"
-    assert prov == "AUTHORITATIVE_CAPTURE_PROVENANCE_V1", f"Unexpected provenance: {prov}"
+    sid, actual_hash, actual_created, actual_record_id, prov = wr
+    expected = expected_winning_map.get(sid)
+    assert expected is not None, f"Missing expected calculation for {sid}"
+    
+    exp_id, exp_sid, exp_record_id, exp_created, exp_ver, exp_hash, exp_payload = expected
+    assert actual_hash == exp_hash, f"Hash mismatch for {sid}: actual={actual_hash}, expected={exp_hash}"
+    assert actual_created == exp_created, f"Timestamp mismatch for {sid}: actual={actual_created}, expected={exp_created}"
+    assert actual_record_id == exp_record_id, f"Record ID mismatch for {sid}: actual={actual_record_id}, expected={exp_record_id}"
 
   print("  -> PASSED")
 

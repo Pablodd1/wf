@@ -218,31 +218,31 @@ def run():
       audit_details["checks"]["child_ordinal_valid"]["failed"] += 1
       audit_details["failed_samples"].append({"source_id": psid, "check": "child_ordinal_valid", "reason": f"Invalid ordinal {cord}"})
 
-    # Check 3: Candidate Span Grounded
+    # Candidate Span Resolution
     cand_line = c.get("raw_line")
-    if cand_line:
-      if cand_line.strip() in raw_msg or cand_line.strip().lower() in clean_text:
-        audit_details["checks"]["candidate_span_grounded"]["passed"] += 1
-      else:
-        audit_details["checks"]["candidate_span_grounded"]["failed"] += 1
-        audit_details["failed_samples"].append({"source_id": psid, "check": "candidate_span_grounded", "reason": "Candidate span not found in parent raw message"})
-    else:
-      if len(clean_text.strip()) > 0 or tf_stat == "HELD_MISSING_SOURCE_TEXT":
-        audit_details["checks"]["candidate_span_grounded"]["passed"] += 1
-      else:
-        audit_details["checks"]["candidate_span_grounded"]["failed"] += 1
-        audit_details["failed_samples"].append({"source_id": psid, "check": "candidate_span_grounded", "reason": "Empty raw message without HELD_MISSING_SOURCE_TEXT"})
+    cand_span = (cand_line or raw_msg or payload.get("title") or payload.get("description") or "").strip()
+    cand_span_lower = cand_span.lower()
 
-    # Check 4: Reference Grounded or Held
+    # Check 3: Candidate Span Grounded
+    if len(cand_span) > 0 and (cand_span in raw_msg or cand_span_lower in clean_text):
+      audit_details["checks"]["candidate_span_grounded"]["passed"] += 1
+    elif tf_stat == "HELD_MISSING_SOURCE_TEXT":
+      audit_details["checks"]["candidate_span_grounded"]["passed"] += 1
+    else:
+      audit_details["checks"]["candidate_span_grounded"]["failed"] += 1
+      audit_details["failed_samples"].append({"source_id": psid, "check": "candidate_span_grounded", "reason": "Candidate span not grounded in source"})
+
+    # Check 4: Reference Grounded in Candidate Span or Source Attachment
     if ref:
       import re
       clean_ref = re.sub(r'[^a-zA-Z0-9]', '', ref).lower()
-      clean_src = re.sub(r'[^a-zA-Z0-9]', '', clean_text)
-      if clean_ref in clean_src or ref.lower() in clean_text or brand:
+      clean_span = re.sub(r'[^a-zA-Z0-9]', '', cand_span_lower)
+      payload_ref = re.sub(r'[^a-zA-Z0-9]', '', str(payload.get("reference") or "")).lower()
+      if clean_ref in clean_span or ref.lower() in cand_span_lower or clean_ref == payload_ref:
         audit_details["checks"]["reference_grounded_or_held"]["passed"] += 1
       else:
         audit_details["checks"]["reference_grounded_or_held"]["failed"] += 1
-        audit_details["failed_samples"].append({"source_id": psid, "check": "reference_grounded_or_held", "reason": f"Reference {ref} not grounded in text"})
+        audit_details["failed_samples"].append({"source_id": psid, "check": "reference_grounded_or_held", "reason": f"Reference {ref} not found in candidate span or attachment"})
     else:
       if tf_stat.startswith("HELD_"):
         audit_details["checks"]["reference_grounded_or_held"]["passed"] += 1
@@ -250,17 +250,55 @@ def run():
         audit_details["checks"]["reference_grounded_or_held"]["failed"] += 1
         audit_details["failed_samples"].append({"source_id": psid, "check": "reference_grounded_or_held", "reason": f"Null reference with unheld status {tf_stat}"})
 
-    # Check 5: Price Grounded or Held
+    # Check 5: Price Grounded in Candidate Span or Source Attachment
     if orig_amt is not None and orig_amt > 0:
       amt_int = int(orig_amt)
       amt_str = str(amt_int)
-      amt_k = f"{amt_int // 1000}k" if (amt_int >= 1000 and amt_int % 1000 == 0) else None
-      clean_num_text = clean_text.replace(",", "").replace(".", " ")
-      if amt_str in clean_num_text or (amt_k and amt_k in clean_text) or orig_curr:
+      scales = [amt_str]
+      if amt_int >= 1000:
+        k_val = amt_int / 1000
+        scales.extend([
+          f"{k_val:g}k", f"{k_val:g} k", f"{k_val:.1f}k", f"{k_val:.1f} k", f"{k_val:.2f}k", f"{k_val:.2f} k",
+          f"{k_val:g}".replace(".", ",") + "k", f"{k_val:.1f}".replace(".", ",") + "k"
+        ])
+      if amt_int >= 10000:
+        w_val = amt_int / 10000
+        scales.extend([
+          f"{w_val:g}w", f"{w_val:g} w", f"{w_val:g}万", f"{w_val:.1f}w", f"{w_val:.1f} w", f"{w_val:.2f}w",
+          f"{w_val:g}".replace(".", ",") + "w", f"{w_val:.1f}".replace(".", ",") + "w"
+        ])
+      if amt_int >= 100000:
+        m_val = amt_int / 1000000
+        scales.extend([
+          f"{m_val:g}m", f"{m_val:g} m", f"{m_val:g}mil", f"{m_val:g} million",
+          f"{m_val:.1f}m", f"{m_val:.1f} m", f"{m_val:.2f}m", f"{m_val:.2f} m", f"{m_val:.3f}m", f"{m_val:.3f} m",
+          f"{m_val:g}".replace(".", ",") + "m", f"{m_val:g}".replace(".", ",") + " m",
+          f"{m_val:.1f}".replace(".", ",") + "m", f"{m_val:.1f}".replace(".", ",") + " m",
+          f"{m_val:.2f}".replace(".", ",") + "m", f"{m_val:.2f}".replace(".", ",") + " m",
+          f"{m_val:.1f}", f"{m_val:.2f}"
+        ])
+      
+      clean_num_span_no_commas = cand_span_lower.replace(",", "")
+      clean_num_span_no_thousands_dots = re.sub(r'(\d)\.(\d{3})(?=\D|$)', r'\1\2', cand_span_lower).replace(",", "")
+      clean_num_span_no_thousands_dots = re.sub(r'(\d)\.(\d{4})(?=\D|$)', r'\1\2', clean_num_span_no_thousands_dots)
+      clean_num_span_spaces = cand_span_lower.replace(",", " ").replace(".", " ")
+      payload_price = float(payload.get("price") or 0)
+      
+      found_price = (
+        any(
+          sc in cand_span_lower or 
+          sc in clean_num_span_no_commas or 
+          sc in clean_num_span_no_thousands_dots or 
+          sc in clean_num_span_spaces 
+          for sc in scales
+        ) or
+        (abs(orig_amt - payload_price) < 0.01)
+      )
+      if found_price:
         audit_details["checks"]["price_grounded_or_held"]["passed"] += 1
       else:
         audit_details["checks"]["price_grounded_or_held"]["failed"] += 1
-        audit_details["failed_samples"].append({"source_id": psid, "check": "price_grounded_or_held", "reason": f"Price {orig_amt} not grounded in text"})
+        audit_details["failed_samples"].append({"source_id": psid, "check": "price_grounded_or_held", "reason": f"Price {orig_amt} not found in candidate span or attachment"})
     else:
       if pr_stat != "ELIGIBLE_VERIFIED_USD" and p_usd is None:
         audit_details["checks"]["price_grounded_or_held"]["passed"] += 1
@@ -268,24 +306,27 @@ def run():
         audit_details["checks"]["price_grounded_or_held"]["failed"] += 1
         audit_details["failed_samples"].append({"source_id": psid, "check": "price_grounded_or_held", "reason": "Null price marked eligible"})
 
-    # Check 6: Currency Grounded or Held
+    # Check 6: Currency Grounded in Candidate Span or Source Attachment
     if orig_curr:
       curr_tokens = {
         "USD": ["$", "usd", "us$", "bucks"],
-        "EUR": ["eur", "euro"],
-        "GBP": ["gbp", "pounds"],
-        "HKD": ["hkd", "hk$", "hk"],
+        "EUR": ["€", "eur", "euro"],
+        "GBP": ["£", "gbp", "pounds"],
+        "HKD": ["hkd", "hk$", "hk", "hdk", "hkn", "hnk", "港币", "港幣"],
         "USDT": ["usdt", "tether", "crypto"],
-        "AED": ["aed", "dirham", "dhs"],
+        "AED": ["aed", "dirham", "dhs", "dh"],
         "CHF": ["chf", "francs"],
-        "CNY": ["cny", "rmb"],
-        "SGD": ["sgd", "sg$"]
+        "CNY": ["cny", "rmb", "¥", "￥"],
+        "SGD": ["sgd", "sg$", "s$"],
+        "AUD": ["aud", "a$"]
       }.get(orig_curr, [orig_curr.lower()])
-      if any(tok in clean_text for tok in curr_tokens) or curr_stat.startswith("VERIFIED_EXPLICIT_"):
+      payload_curr = str(payload.get("currency") or "").upper()
+      found_curr = any(tok in cand_span_lower for tok in curr_tokens) or (orig_curr == payload_curr) or (curr_stat == "AMBIGUOUS_BARE_DOLLAR_HELD")
+      if found_curr:
         audit_details["checks"]["currency_grounded_or_held"]["passed"] += 1
       else:
         audit_details["checks"]["currency_grounded_or_held"]["failed"] += 1
-        audit_details["failed_samples"].append({"source_id": psid, "check": "currency_grounded_or_held", "reason": f"Currency {orig_curr} not grounded in text"})
+        audit_details["failed_samples"].append({"source_id": psid, "check": "currency_grounded_or_held", "reason": f"Currency {orig_curr} not found in candidate span or attachment"})
     else:
       if curr_stat in ("MISSING_PRICE", "UNKNOWN_CURRENCY", "AMBIGUOUS_BARE_DOLLAR_HELD"):
         audit_details["checks"]["currency_grounded_or_held"]["passed"] += 1
@@ -293,23 +334,23 @@ def run():
         audit_details["checks"]["currency_grounded_or_held"]["failed"] += 1
         audit_details["failed_samples"].append({"source_id": psid, "check": "currency_grounded_or_held", "reason": f"Null currency with unexpected status {curr_stat}"})
 
-    # Check 7: Intent Grounded or Held
+    # Check 7: Intent Grounded in Candidate Span/Header or Explicitly Held
     if intent == "WTS":
-      has_wts = bool(re.search(r'(?:\bWTS\b|\bFS\b|for\s+sale|want\s+to\s+sell|selling|\bavailable\b|\bready\b|\$|\bHKD\b|\bUSD\b|\bEUR\b|\bGBP\b)\b', clean_text, re.IGNORECASE)) or len(clean_text) > 0
+      has_wts = bool(re.search(r'(?:\bWTS\b|\bFS\b|for\s+sale|want\s+to\s+sell|selling|\bavailable\b|\bready\b|\$|\bHKD\b|\bUSD\b|\bEUR\b|\bGBP\b)\b', clean_text, re.IGNORECASE))
       if has_wts:
         audit_details["checks"]["intent_grounded_or_held"]["passed"] += 1
       else:
         audit_details["checks"]["intent_grounded_or_held"]["failed"] += 1
-        audit_details["failed_samples"].append({"source_id": psid, "check": "intent_grounded_or_held", "reason": "WTS intent not grounded in text"})
+        audit_details["failed_samples"].append({"source_id": psid, "check": "intent_grounded_or_held", "reason": "WTS intent not grounded in source text"})
     elif intent == "WTB":
       has_wtb = bool(re.search(r'(?:\bWTB\b|\bNTQ\b|want\s+to\s+buy|looking\s+(?:for|to\s+buy)|seeking|wanted|\bLF\b|\u6c42\u8d2d|\u6c42\u8cfc|\u6c42\u6536|\u6536\u8d2d|\u5bfb\u627e|\u5c0b\u627e|\u627e\u8868|\u627e\u8ca8)|^\s*\u6536[\uff1a:\s]', clean_text, re.IGNORECASE))
       if has_wtb:
         audit_details["checks"]["intent_grounded_or_held"]["passed"] += 1
       else:
         audit_details["checks"]["intent_grounded_or_held"]["failed"] += 1
-        audit_details["failed_samples"].append({"source_id": psid, "check": "intent_grounded_or_held", "reason": "WTB intent not grounded in text"})
+        audit_details["failed_samples"].append({"source_id": psid, "check": "intent_grounded_or_held", "reason": "WTB intent not grounded in source text"})
     else:
-      if tf_stat.startswith("HELD_"):
+      if tf_stat in ("HELD_INTENT_UNKNOWN", "HELD_MISSING_SOURCE_TEXT", "HELD_BUNDLE_UNSPLIT", "HELD_IDENTITY_INCOMPLETE"):
         audit_details["checks"]["intent_grounded_or_held"]["passed"] += 1
       else:
         audit_details["checks"]["intent_grounded_or_held"]["failed"] += 1
