@@ -12,7 +12,7 @@ from pathlib import Path
 JOB_NAME = "milestone-951750-canonical-normalization"
 FROZEN_CURSOR_DATE = "2026-04-28T15:50:43.000Z"
 FROZEN_CURSOR_ID = "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
-BATCH_SIZE = 500
+BATCH_SIZE = 1000
 REPORT_INTERVAL = 10000
 
 def run_milestone_normalizer():
