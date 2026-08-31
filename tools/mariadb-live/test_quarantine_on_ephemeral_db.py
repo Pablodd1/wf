@@ -41,6 +41,12 @@ def run_test():
     remediation_sql = f.read().replace("wf_canonical_staging.", f"{schema_name}.")
   cur.execute(remediation_sql)
 
+  hex64_1 = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  hex64_2 = "1123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  hex64_3 = "2123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  hex64_4 = "3123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+  hex64_5 = "4123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+
   # Insert 2 genuine auctions parents and 3 benchmark parents
   cur.execute(f"""
     INSERT INTO {schema_name}.mariadb_normalized_parents (
@@ -49,11 +55,11 @@ def run_test():
       listing_text_source, listing_text_sha256, child_count, is_bundle, bundle_structure_type,
       parser_version, parent_hash
     ) VALUES 
-    ('11111111-1111-1111-1111-111111111111', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'src-1', 'h1', 'rec-1', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw1', '{{}}', 't1', 's1', 1, false, 'SINGLE', 'v1', 'ph1'),
-    ('22222222-2222-2222-2222-222222222222', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'src-2', 'h2', 'rec-2', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw2', '{{}}', 't2', 's2', 1, false, 'SINGLE', 'v1', 'ph2'),
-    ('33333333-3333-3333-3333-333333333333', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_bench_100k_w1_b250', 'src-3', 'h3', 'rec-3', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw3', '{{}}', 't3', 's3', 1, false, 'SINGLE', 'v1', 'ph3'),
-    ('44444444-4444-4444-4444-444444444444', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_bench_100k_w4_b250', 'src-4', 'h4', 'rec-4', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw4', '{{}}', 't4', 's4', 1, false, 'SINGLE', 'v1', 'ph4'),
-    ('55555555-5555-5555-5555-555555555555', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_w1_b250', 'src-5', 'h5', 'rec-5', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw5', '{{}}', 't5', 's5', 1, false, 'SINGLE', 'v1', 'ph5');
+    ('11111111-1111-1111-1111-111111111111', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'src-1', 'h1', 'rec-1', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw1', '{{}}', 't1', '{hex64_1}', 1, false, 'SINGLE', 'v1', '{hex64_1}'),
+    ('22222222-2222-2222-2222-222222222222', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions', 'src-2', 'h2', 'rec-2', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw2', '{{}}', 't2', '{hex64_2}', 1, false, 'SINGLE', 'v1', '{hex64_2}'),
+    ('33333333-3333-3333-3333-333333333333', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_bench_100k_w1_b250', 'src-3', 'h3', 'rec-3', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw3', '{{}}', 't3', '{hex64_3}', 1, false, 'SINGLE', 'v1', '{hex64_3}'),
+    ('44444444-4444-4444-4444-444444444444', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_bench_100k_w4_b250', 'src-4', 'h4', 'rec-4', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw4', '{{}}', 't4', '{hex64_4}', 1, false, 'SINGLE', 'v1', '{hex64_4}'),
+    ('55555555-5555-5555-5555-555555555555', 'OceanDigital MariaDB', 'thecollective_inventory', 'auctions_w1_b250', 'src-5', 'h5', 'rec-5', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', '2025-07-21T00:00:00.000Z', 'raw5', '{{}}', 't5', '{hex64_5}', 1, false, 'SINGLE', 'v1', '{hex64_5}');
   """)
 
   # Insert children
@@ -63,11 +69,11 @@ def run_test():
       currency_status, trading_floor_status, price_research_status, reconciliation_category,
       primary_image_evidence_type, parser_version, is_active
     ) VALUES
-    ('a1111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 0, 'k1', 'ch1', 'WTS', 'VERIFIED_EXPLICIT_USD', 'ELIGIBLE_WTS', 'ELIGIBLE_VERIFIED_USD', 'SINGLE_RECORD', 'NO_IMAGE', 'v1', true),
-    ('a2222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 0, 'k2', 'ch2', 'WTS', 'VERIFIED_EXPLICIT_USD', 'ELIGIBLE_WTS', 'ELIGIBLE_VERIFIED_USD', 'SINGLE_RECORD', 'NO_IMAGE', 'v1', true),
-    ('a3333333-3333-3333-3333-333333333333', '33333333-3333-3333-3333-333333333333', 0, 'k3', 'ch3', 'WTS', 'VERIFIED_EXPLICIT_USD', 'ELIGIBLE_WTS', 'ELIGIBLE_VERIFIED_USD', 'SINGLE_RECORD', 'NO_IMAGE', 'v1', true),
-    ('a4444444-4444-4444-4444-444444444444', '44444444-4444-4444-4444-444444444444', 0, 'k4', 'ch4', 'WTS', 'VERIFIED_EXPLICIT_USD', 'ELIGIBLE_WTS', 'ELIGIBLE_VERIFIED_USD', 'SINGLE_RECORD', 'NO_IMAGE', 'v1', true),
-    ('a5555555-5555-5555-5555-555555555555', '55555555-5555-5555-5555-555555555555', 0, 'k5', 'ch5', 'WTS', 'VERIFIED_EXPLICIT_USD', 'ELIGIBLE_WTS', 'ELIGIBLE_VERIFIED_USD', 'SINGLE_RECORD', 'NO_IMAGE', 'v1', true);
+    ('a1111111-1111-1111-1111-111111111111', '11111111-1111-1111-1111-111111111111', 0, 'k1', '{hex64_1}', 'WTS', 'VERIFIED_EXPLICIT_USD', 'ELIGIBLE_WTS', 'ELIGIBLE_VERIFIED_USD', 'SINGLE_RECORD', 'NO_IMAGE', 'v1', true),
+    ('a2222222-2222-2222-2222-222222222222', '22222222-2222-2222-2222-222222222222', 0, 'k2', '{hex64_2}', 'WTS', 'VERIFIED_EXPLICIT_USD', 'ELIGIBLE_WTS', 'ELIGIBLE_VERIFIED_USD', 'SINGLE_RECORD', 'NO_IMAGE', 'v1', true),
+    ('a3333333-3333-3333-3333-333333333333', '33333333-3333-3333-3333-333333333333', 0, 'k3', '{hex64_3}', 'WTS', 'VERIFIED_EXPLICIT_USD', 'ELIGIBLE_WTS', 'ELIGIBLE_VERIFIED_USD', 'SINGLE_RECORD', 'NO_IMAGE', 'v1', true),
+    ('a4444444-4444-4444-4444-444444444444', '44444444-4444-4444-4444-444444444444', 0, 'k4', '{hex64_4}', 'WTS', 'VERIFIED_EXPLICIT_USD', 'ELIGIBLE_WTS', 'ELIGIBLE_VERIFIED_USD', 'SINGLE_RECORD', 'NO_IMAGE', 'v1', true),
+    ('a5555555-5555-5555-5555-555555555555', '55555555-5555-5555-5555-555555555555', 0, 'k5', '{hex64_5}', 'WTS', 'VERIFIED_EXPLICIT_USD', 'ELIGIBLE_WTS', 'ELIGIBLE_VERIFIED_USD', 'SINGLE_RECORD', 'NO_IMAGE', 'v1', true);
   """)
 
   # Insert images
