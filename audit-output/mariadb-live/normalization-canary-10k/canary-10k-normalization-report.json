@@ -1,0 +1,82 @@
+{
+  "contract": "wf-authoritative-normalization-canary-v7",
+  "run_key": "authoritative-10k-canary-1788301198244",
+  "timestamp": "2026-09-01T22:19:58.244Z",
+  "parser_version": "authoritative-normalizer-v9-separated-status",
+  "source_text_precedence_census": {
+    "resolved_from_description_count": 0,
+    "resolved_from_description_pct": "0.00%",
+    "resolved_from_title_count": 10000,
+    "resolved_from_title_pct": "100.00%",
+    "resolved_from_comments_count": 0,
+    "resolved_from_comments_pct": "0.00%",
+    "missing_source_text_count": 0,
+    "missing_source_text_pct": "0.00%"
+  },
+  "reconciliation_summary": {
+    "total_authoritative_rows_input": 10000,
+    "normalized_proposals_count": 1768,
+    "review_required_count": 8232,
+    "normalization_errors_count": 0,
+    "exact_reconciliation": true
+  },
+  "business_eligibility_summary": {
+    "trading_floor_eligible_count": 1933,
+    "trading_floor_eligible_pct": "19.33%",
+    "price_research_eligible_count": 2,
+    "price_research_eligible_pct": "0.02%",
+    "multi_offer_bundles_count": 140,
+    "unknown_intent_count": 7953,
+    "images_present_count": 10000,
+    "images_present_pct": "100.00%"
+  },
+  "currency_evidence_summary": {
+    "explicit_usd_prices_count": 136,
+    "explicit_usdt_prices_count": 1082,
+    "explicit_hkd_prices_count": 333,
+    "bare_dollar_held_count": 3898
+  },
+  "trading_floor_status_breakdown": {
+    "HELD_INTENT_UNKNOWN": 7624,
+    "ELIGIBLE_WTB": 1766,
+    "ELIGIBLE_WTS": 167,
+    "HELD_IDENTITY_INCOMPLETE": 303,
+    "HELD_BUNDLE_UNSPLIT": 140
+  },
+  "price_research_status_breakdown": {
+    "INELIGIBLE_TRADING_FLOOR_HOLD": 8067,
+    "INELIGIBLE_NOT_WTS": 1766,
+    "INELIGIBLE_AMBIGUOUS_CURRENCY": 143,
+    "INELIGIBLE_MISSING_PRICE": 16,
+    "INELIGIBLE_FX_UNRESOLVED": 6,
+    "ELIGIBLE_VERIFIED_USD": 2
+  },
+  "currency_status_breakdown": {
+    "MISSING_PRICE": 4411,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 3898,
+    "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 1082,
+    "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX": 333,
+    "VERIFIED_EXPLICIT_USD": 136,
+    "VERIFIED_EXPLICIT_EUR": 90,
+    "VERIFIED_EXPLICIT_SAR": 2,
+    "VERIFIED_EXPLICIT_GBP": 7,
+    "VERIFIED_EXPLICIT_AED": 36,
+    "VERIFIED_EXPLICIT_MYR": 1,
+    "VERIFIED_EXPLICIT_AUD": 3,
+    "VERIFIED_EXPLICIT_CNY": 1
+  },
+  "top_review_flags": {
+    "UNKNOWN_INTENT": 7624,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 143,
+    "INCOMPLETE_IDENTITY": 303,
+    "MISSING_PRICE_OR_CURRENCY": 16,
+    "HELD_BUNDLE_REVIEW": 140,
+    "FX_UNRESOLVED_HELD": 6
+  },
+  "top_exclusion_reasons": {
+    "INTENT_UNKNOWN_HELD_FROM_PUBLICATION": 7624,
+    "INTENT_NOT_WTS": 1766,
+    "IDENTITY_UNRECOGNIZED": 303,
+    "BUNDLE_PARENT_UNSPLIT": 140
+  }
+}

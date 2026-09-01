@@ -6,31 +6,6 @@
   "sample_results": [
     {
       "image_key": "[REDACTED_IMAGE_KEY:8e3b28354cdc0368bbf492903de32d6f0fb8091df528facc98c49e3eaca08e00]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:8e3b28354cdc0368bbf492903de32d6f0fb8091df528facc98c49e3eaca08e00]",
-      "http_status": 404,
-      "content_type": "application/xml",
-      "content_length": "252",
-      "reachable": false
-    },
-    {
-      "image_key": "[REDACTED_IMAGE_KEY:fbc3bc995645d73b791f84058b6bba156c67f8c73050cd1f556554950756fc97]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:fbc3bc995645d73b791f84058b6bba156c67f8c73050cd1f556554950756fc97]",
-      "http_status": 404,
-      "content_type": "application/xml",
-      "content_length": "252",
-      "reachable": false
-    },
-    {
-      "image_key": "[REDACTED_IMAGE_KEY:30795244113faf9ea2212552203052a613a2f08fd817922d3d7b119e0cb617b5]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:30795244113faf9ea2212552203052a613a2f08fd817922d3d7b119e0cb617b5]",
-      "http_status": 404,
-      "content_type": "application/xml",
-      "content_length": "252",
-      "reachable": false
-    },
-    {
-      "image_key": "[REDACTED_IMAGE_KEY:2837feaad0c90952ec0e0e658f8a4da10269aeb502b3c8210c680d7151905af0]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:2837feaad0c90952ec0e0e658f8a4da10269aeb502b3c8210c680d7151905af0]",
       "http_status": 404,
       "content_type": "application/xml",
       "content_length": "252",
@@ -38,15 +13,6 @@
     },
     {
       "image_key": "[REDACTED_IMAGE_KEY:871d47e250939d8d8cb0e022e1d9b2c98272de958618624e1f61f1839af0df34]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:871d47e250939d8d8cb0e022e1d9b2c98272de958618624e1f61f1839af0df34]",
-      "http_status": 404,
-      "content_type": "application/xml",
-      "content_length": "252",
-      "reachable": false
-    },
-    {
-      "image_key": "[REDACTED_IMAGE_KEY:33a710196172963d8d893630c3d26527e3c055d676d2833f73d63fa39788610c]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:33a710196172963d8d893630c3d26527e3c055d676d2833f73d63fa39788610c]",
       "http_status": 404,
       "content_type": "application/xml",
       "content_length": "252",
@@ -54,23 +20,6 @@
     },
     {
       "image_key": "[REDACTED_IMAGE_KEY:430e8c27d4cd0430a5789270dc8b2c3b992a469a0d637d908caf31bc5c7a57ec]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:430e8c27d4cd0430a5789270dc8b2c3b992a469a0d637d908caf31bc5c7a57ec]",
-      "http_status": 404,
-      "content_type": "application/xml",
-      "content_length": "252",
-      "reachable": false
-    },
-    {
-      "image_key": "[REDACTED_IMAGE_KEY:c4a8db48c7bec0f282fc127de4f7fca302609b1014ac4eeaf360f1bbdf7fea86]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:c4a8db48c7bec0f282fc127de4f7fca302609b1014ac4eeaf360f1bbdf7fea86]",
-      "http_status": 404,
-      "content_type": "application/xml",
-      "content_length": "252",
-      "reachable": false
-    },
-    {
-      "image_key": "[REDACTED_IMAGE_KEY:828cd92e7ae1b16d0724941e72650aee52dc2f581e2119e3ccb1b2705c02ab4f]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:828cd92e7ae1b16d0724941e72650aee52dc2f581e2119e3ccb1b2705c02ab4f]",
       "http_status": 404,
       "content_type": "application/xml",
       "content_length": "252",
@@ -78,7 +27,6 @@
     },
     {
       "image_key": "[REDACTED_IMAGE_KEY:810d7ad385b59739d32258add96037b45cf4c1c93a7d5f2122ad0a7d3610f7ce]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:810d7ad385b59739d32258add96037b45cf4c1c93a7d5f2122ad0a7d3610f7ce]",
       "http_status": 404,
       "content_type": "application/xml",
       "content_length": "252",
@@ -86,31 +34,6 @@
     },
     {
       "image_key": "[REDACTED_IMAGE_KEY:661039314cd4b644899fade7052653634cb55d2d5be13fdb03c3669681170b00]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:661039314cd4b644899fade7052653634cb55d2d5be13fdb03c3669681170b00]",
-      "http_status": 404,
-      "content_type": "application/xml",
-      "content_length": "252",
-      "reachable": false
-    },
-    {
-      "image_key": "[REDACTED_IMAGE_KEY:32c3b534afdf103a4c12d57d74e52a4c506b8adfbbe576c414685ac06e8968e5]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:32c3b534afdf103a4c12d57d74e52a4c506b8adfbbe576c414685ac06e8968e5]",
-      "http_status": 404,
-      "content_type": "application/xml",
-      "content_length": "252",
-      "reachable": false
-    },
-    {
-      "image_key": "[REDACTED_IMAGE_KEY:6676e78acc95a615f6e06552427ffdc26afbf5f83b3f862a2071b28531eee9ca]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:6676e78acc95a615f6e06552427ffdc26afbf5f83b3f862a2071b28531eee9ca]",
-      "http_status": 404,
-      "content_type": "application/xml",
-      "content_length": "252",
-      "reachable": false
-    },
-    {
-      "image_key": "[REDACTED_IMAGE_KEY:356f65126af355e11c739a3fc02cb364fdc81f8f3b8f5b7134bf9e8254925757]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:356f65126af355e11c739a3fc02cb364fdc81f8f3b8f5b7134bf9e8254925757]",
       "http_status": 404,
       "content_type": "application/xml",
       "content_length": "252",
@@ -118,7 +41,69 @@
     },
     {
       "image_key": "[REDACTED_IMAGE_KEY:623d96bdfdfb8d55424d538f2727de200020a90cec287b5d43cf34d08dd00bcb]",
-      "image_url": "https://[REDACTED_STORAGE_ORIGIN]/[REDACTED_IMAGE_KEY:623d96bdfdfb8d55424d538f2727de200020a90cec287b5d43cf34d08dd00bcb]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:cd0bca7d0929c1519198203d379635b6acca93a91631a32842da2cbf8547a6c5]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:3a1e6a46b9c6757df5bf9c3285944d5bf01d04ecce78fd20094e6e0432cbefa4]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:aad40b5b2bb0a6b4e86718906338eb13a89f1c0dac5c79757c2560f97a5a2b88]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:ac252660595098119c73ace0682e78fcad8e27ffc7aa0d5d50f8737f3d45a5b2]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:42da5a81a2cbaf529953a40b678571b9e34c5da779efc3a56b6039f4b9f83536]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:87c240cb0bf62386c1675240a8446f2b208f6ec6a513e51762573f11e06e9deb]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:4cc5a3da168892b8c948e21d6b4b96a4df1784a9347828a7af0e4d0a04ab007c]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:f011cd8b5930f958c8b933ee8fc5a5e01de9f80c518f848132c2fd525f3776f1]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:578ffe203daabcad04e685f3401a1a40ab5fe74d9295a229966a2c89f1d19283]",
       "http_status": 404,
       "content_type": "application/xml",
       "content_length": "252",
