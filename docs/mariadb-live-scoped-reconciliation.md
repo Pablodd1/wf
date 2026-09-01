@@ -1,4 +1,4 @@
-﻿# MariaDB Live Scoped Reconciliation Report
+# MariaDB Live Scoped Reconciliation Report
 
 ## Scope & Contract
 - **Contract**: `wf-mariadb-scoped-reconciliation-v1`
@@ -12,16 +12,16 @@
   - Upper: `(2026-08-29 14:42:32, f1bdf67a-3723-41c6-a1e3-35c5ca9138b0)`
 
 ## Reconciliation Metrics
-| Metric | Count |
-| :--- | :--- |
-| **Current MariaDB Boundary Count** | **1,486,554** |
-| **Distinct Scoped Staged IDs** | **1,487,325** |
-| **Distinct Scoped Error IDs** | **8** |
-| **Overlap (Staged ∩ Errors)** | **0** |
-| **Union (Staged ∪ Errors)** | **1,487,333** |
-| **Captured IDs Absent from Current MariaDB** (Historical source drift deletions retained) | **779** |
-| **Current MariaDB IDs Absent from Capture** (Capture skips) | **0** |
-| **Exact Capture Completeness Rate** | **100.00%** |
+| Metric | Count | Description |
+| :--- | :--- | :--- |
+| **Distinct Scoped Staged Listings** | **1,487,325** | Valid distinct source listings in authoritative cohort |
+| **Distinct Scoped Error IDs** | **8** | Losslessly recorded malformed/corrupt JSON error rows |
+| **Total Unique Source Inputs** | **1,487,333** | Distinct valid listings ($1,487,325$) + capture errors ($8$) |
+| **Current MariaDB Boundary Count** | **1,486,554** | Live active source rows in MariaDB within frozen boundary |
+| **Captured IDs Absent from Current MariaDB** | **779** | Historical listings captured prior to source hard-deletions (retained) |
+| **Current MariaDB IDs Absent from Capture** | **0** | **Zero missing rows** ($100.00\%$ capture completeness) |
+| **Exact Capture Completeness Rate** | **100.00%** | $\frac{1,486,554 - 0}{1,486,554} = 1.0000$ |
+| **Retained Alternate Versions** | **5,000** | Duplicate historical snapshots preserved in `mariadb_raw_source_alternate_versions` (not additional source listings) |
 
 ## Artifact Checksum
 - `audit-output/mariadb-live/strict_scoped_source_reconciliation.json` SHA-256:

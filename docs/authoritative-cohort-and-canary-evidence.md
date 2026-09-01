@@ -1,17 +1,16 @@
-﻿# Authoritative Cohort Census & 10,000-Row Normalization Canary Report
-
 ## 1. Global Authoritative Cohort Census
 - **Contract**: `wf-mariadb-authoritative-cohort-census-v1`
-- **Total Authoritative Rows**: **1,487,325**
-- **Distinct Source IDs**: **1,487,325** (100.00% strictly unique, zero duplicates)
+- **Total Authoritative Listings**: **1,487,325** (100.00% strictly unique, zero duplicate IDs)
+- **Lossless Capture Errors**: **8** (malformed JSON / control-character errors)
+- **Total Unique Source Inputs**: **1,487,333** ($1,487,325 + 8$)
 - **Source Namespace**: `OceanDigital MariaDB / thecollective_inventory / auctions`
 - **Frozen Date Range**: `2025-01-08T13:28:49.000Z` to `2026-08-29T14:42:32.000Z`
 - **Listing Type Intent**: `sale` (1,238,777 rows), `search` (248,548 rows)
 - **Provenance Ledgers**:
-  - `mariadb_authoritative_raw_source_rows`: **1,487,325**
-  - `mariadb_raw_source_alternate_versions`: **5,000**
-  - `mariadb_raw_import_errors`: **8**
-  - Total Raw Inputs Represented: **1,492,333**
+  - `mariadb_authoritative_raw_source_rows`: **1,487,325** distinct source listings
+  - `mariadb_raw_source_alternate_versions`: **5,000** duplicate historical snapshots retained for auditing (not additional source listings)
+  - `mariadb_raw_import_errors`: **8** lossless error rows
+  - Total Raw Database Staging Records: **1,492,333** ($1,487,325\text{ authoritative} + 5,000\text{ alternate versions} + 8\text{ errors}$)
 
 ## 2. 10,000-Row Normalization Canary Validation
 - **Run Key**: `authoritative-10k-canary-1788301198244`

@@ -1,4 +1,4 @@
-﻿"use strict";
+"use strict";
 
 const mysql = require("mysql2/promise");
 const { Client } = require("pg");
@@ -63,10 +63,17 @@ async function runScopedReconciliation(env = process.env) {
   const mariadbCount = mRows.length;
   await mConn.end();
 
-  // 2. PostgreSQL Staging with Exact Lower and Upper Boundaries
+  // 2. PostgreSQL Staging with Exact Lower and Upper Boundaries and Strict Verified TLS
+  const pgSslConfig = {
+    rejectUnauthorized: true
+  };
+  if (env.PGSSLROOTCERT && fs.existsSync(env.PGSSLROOTCERT)) {
+    pgSslConfig.ca = fs.readFileSync(env.PGSSLROOTCERT).toString();
+  }
+
   const pgClient = new Client({
     connectionString: env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
+    ssl: pgSslConfig
   });
   await pgClient.connect();
 
