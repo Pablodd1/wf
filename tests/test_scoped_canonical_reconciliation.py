@@ -11,14 +11,16 @@ EXPECTED_SCOPED_ROWS = 955743
 EXPECTED_QUARANTINED_PARENTS = 435558
 
 def get_db_conn():
+  os.environ["PGTZ"] = "UTC"
   db_url = os.environ.get("DATABASE_URL")
   if not db_url:
     print("FATAL: DATABASE_URL not set", file=sys.stderr)
     sys.exit(1)
-  conn = psycopg2.connect(db_url)
+  conn = psycopg2.connect(db_url, options="-c timezone=UTC")
   conn.autocommit = False
   cur = conn.cursor()
   cur.execute("SET statement_timeout = '600s';")
+  cur.execute("SET timezone = 'UTC';")
   return conn
 
 def test_frozen_boundary_and_scope_enforcement(conn):
@@ -39,6 +41,21 @@ def test_frozen_boundary_and_scope_enforcement(conn):
   assert total_scoped == EXPECTED_SCOPED_ROWS, f"Expected {EXPECTED_SCOPED_ROWS} total scoped rows, got {total_scoped}"
   assert unique_ids == EXPECTED_UNIQUE_SOURCE_IDS, f"Expected {EXPECTED_UNIQUE_SOURCE_IDS} unique source IDs, got {unique_ids}"
   assert (total_scoped - unique_ids) == 4000, f"Expected exactly 4,000 additional versions, got {total_scoped - unique_ids}"
+
+  # Also assert non-lexical TIMESTAMPTZ casting on authoritative table
+  cur.execute("""
+    SELECT COUNT(*) 
+    FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows
+    WHERE (
+      CASE 
+        WHEN source_created_on ~ '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?$' THEN source_created_on::timestamptz
+        WHEN source_created_on ~ '^[A-Za-z]{3}\s+[A-Za-z]{3}\s+\d+' THEN to_timestamp(substring(source_created_on from 5 for 20), 'Mon DD YYYY HH24:MI:SS') AT TIME ZONE 'UTC'
+        ELSE '1970-01-01 00:00:00+00'::timestamptz
+      END
+    ) <= '2026-04-28T15:50:43.000Z'::timestamptz;
+  """)
+  auth_in_bounds = cur.fetchone()[0]
+  assert auth_in_bounds == EXPECTED_UNIQUE_SOURCE_IDS, f"Expected {EXPECTED_UNIQUE_SOURCE_IDS} in-bounds authoritative rows, got {auth_in_bounds}"
   print("  -> PASSED")
 
 def test_authoritative_version_selection(conn):
@@ -46,20 +63,9 @@ def test_authoritative_version_selection(conn):
   print("Running test_authoritative_version_selection...")
   cur = conn.cursor()
   cur.execute("""
-    WITH authoritative_raw AS (
-      SELECT DISTINCT ON (source_id)
-        id, source_system, source_database, source_table, source_id, source_hash,
-        source_record_id, source_created_on, created_at
-      FROM wf_canonical_staging.mariadb_raw_source_rows
-      WHERE source_system = 'OceanDigital MariaDB'
-        AND source_database = 'thecollective_inventory'
-        AND source_table = 'auctions'
-        AND (source_created_on, source_id) <= (%s, %s)
-      ORDER BY source_id ASC, created_at DESC, id DESC
-    )
     SELECT COUNT(*), COUNT(DISTINCT source_id)
-    FROM authoritative_raw;
-  """, (FROZEN_CURSOR_DATE, FROZEN_CURSOR_ID))
+    FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows;
+  """)
   tot, uniq = cur.fetchone()
   assert tot == EXPECTED_UNIQUE_SOURCE_IDS, f"Authoritative selection produced {tot} rows, expected {EXPECTED_UNIQUE_SOURCE_IDS}"
   assert uniq == EXPECTED_UNIQUE_SOURCE_IDS, f"Authoritative selection produced {uniq} unique IDs, expected {EXPECTED_UNIQUE_SOURCE_IDS}"

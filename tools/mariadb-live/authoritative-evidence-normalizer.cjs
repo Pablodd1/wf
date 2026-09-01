@@ -885,7 +885,7 @@ function normalizeCanonicalParentChild(stagedRow, options = {}) {
         outlier_reason: outlierReason,
         primary_image_key: primaryImg.image_key,
         primary_image_url: primaryImg.image_url,
-        primary_image_evidence_type: primaryImg.image_evidence_type,
+        primary_image_evidence_type: primaryImg.image_key ? 'PARENT_ATTACHMENT_UNASSIGNED_TO_CHILD' : 'NO_IMAGE',
         trading_floor_status: tfStatus,
         trading_floor_eligible: tfEligible,
         price_research_status: prStatus,
