@@ -1,181 +1,435 @@
 {
-  "contract": "wf-canonical-image-reachability-v2",
-  "timestamp": "2026-09-01T22:43:00.000Z",
-  "canonical_path_template": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/{key}",
+  "contract": "wf-stratified-image-reachability-v2",
+  "timestamp": "2026-09-01T23:05:12.099232+00:00",
+  "storage_origin": "https://thecollective-prod.nyc3.digitaloceanspaces.com",
+  "resolver_candidates": [
+    "canonical_listings_full",
+    "legacy_listings_root",
+    "source_relative_path",
+    "source_absolute_url"
+  ],
+  "request_methods": [
+    "HEAD",
+    "GET_RANGE_0_0"
+  ],
   "overall_metrics": {
+    "total_sample_candidates_loaded": 15,
     "total_sample_tested": 15,
     "total_reachable": 15,
     "overall_reachability_pct": "100.0%"
   },
   "stratified_results": {
-    "2025_H1_Early": {
-      "sample_size": 5,
+    "2025_H1_Early__bare_filename": {
+      "stratum_total_available": 5,
+      "sample_tested": 5,
       "reachable_count": 5,
-      "reachability_pct": "100.0%",
-      "sample_details": [
+      "reachability_percentage": "100.0%",
+      "sample_audit": [
         {
-          "source_id": "01b019b0-0cc1-4d19-a72e-61d2ec303d9a",
-          "created_on": "2025-04-24T14:49:11.000Z",
-          "image_key": "680a87a792884_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/680a87a792884_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "206dc8f9-8038-45e2-83db-170cfd374c3a",
+          "created_on": "2025-01-08T13:28:57.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "661039314cd4b644899fade7052653634cb55d2d5be13fdb03c3669681170b00",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "d71f6bc497ad327478bb9a3adbb15ab1636cecb4e665a10394bafd5e8999f055",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "d71f6bc497ad327478bb9a3adbb15ab1636cecb4e665a10394bafd5e8999f055",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b0819a-9ccc-47f8-a674-042115bfe848",
-          "created_on": "2025-02-10T14:00:12.000Z",
-          "image_key": "67aa4cbcc1fa3_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67aa4cbcc1fa3_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "44b4c97d-db9b-4bdb-8cca-eb47c47b9943",
+          "created_on": "2025-01-08T13:28:54.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "430e8c27d4cd0430a5789270dc8b2c3b992a469a0d637d908caf31bc5c7a57ec",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "a8d8145c599489d7251732a3832f80875663e412fda09dfb119cd1039ca7fcea",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "a8d8145c599489d7251732a3832f80875663e412fda09dfb119cd1039ca7fcea",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b1c4f5-9d4a-4d00-9e44-b428d9cad652",
-          "created_on": "2025-05-29T10:16:49.000Z",
-          "image_key": "68386c5139f54_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/68386c5139f54_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "7534d09b-28b9-4052-8005-228c32f972df",
+          "created_on": "2025-01-08T13:28:49.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "8e3b28354cdc0368bbf492903de32d6f0fb8091df528facc98c49e3eaca08e00",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "390c31bd2946aafe5827dfdf9ecbb5c4505757cb147d72a46b74331fcd2545cf",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "390c31bd2946aafe5827dfdf9ecbb5c4505757cb147d72a46b74331fcd2545cf",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b1c915-2311-47d1-a1f1-dc608e16cd2d",
-          "created_on": "2025-04-04T16:46:42.000Z",
-          "image_key": "67f04532d5a41_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67f04532d5a41_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "78c18595-57a7-48b2-a308-3de24ae011e2",
+          "created_on": "2025-01-08T13:28:56.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "810d7ad385b59739d32258add96037b45cf4c1c93a7d5f2122ad0a7d3610f7ce",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "124f7a52407f8a9b23d594a848aaf8548f2f787ba1d79b6a6bc337b78d58688f",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "124f7a52407f8a9b23d594a848aaf8548f2f787ba1d79b6a6bc337b78d58688f",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b2683d-7b53-4575-8527-b2cacfa505c5",
-          "created_on": "2025-04-17T20:53:52.000Z",
-          "image_key": "6801a29ff2660_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/6801a29ff2660_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "d4a65ed5-d08c-4031-aaf0-361bfa4f1348",
+          "created_on": "2025-01-08T13:28:52.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "871d47e250939d8d8cb0e022e1d9b2c98272de958618624e1f61f1839af0df34",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "7a3e14defe4752c16251072d0d44844e81efd0c3f5dcc74bbd6ff990e8129c0b",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "7a3e14defe4752c16251072d0d44844e81efd0c3f5dcc74bbd6ff990e8129c0b",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         }
       ]
     },
-    "2025_H2_Mid": {
-      "sample_size": 5,
+    "2025_H2_Mid__bare_filename": {
+      "stratum_total_available": 5,
+      "sample_tested": 5,
       "reachable_count": 5,
-      "reachability_pct": "100.0%",
-      "sample_details": [
+      "reachability_percentage": "100.0%",
+      "sample_audit": [
         {
-          "source_id": "01afffb1-e8ac-4108-8cb4-f0577b7b8830",
-          "created_on": "2025-12-26T12:13:24.000Z",
-          "image_key": "694ec233f19dd_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/694ec233f19dd_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "0c51c060-839e-49b5-a203-bbd7178a6c90",
+          "created_on": "2025-07-01T00:04:06.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "44215784410b04cb49c65ae16b716309ee309d82a21ff5ff69651e6dd2acf724",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "0315ae6fcbd67d0d9aa48ec34b6916caa5bd6fdf1d417cbc91f47d2b582da847",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "0315ae6fcbd67d0d9aa48ec34b6916caa5bd6fdf1d417cbc91f47d2b582da847",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b07723-bab0-4887-a360-0a5509a99041",
-          "created_on": "2025-12-04T02:41:49.000Z",
-          "image_key": "69313b3d38fc4_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69313b3d38fc4_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "145bea5b-f351-401f-8434-7266e5fe7e4e",
+          "created_on": "2025-07-01T00:03:08.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "d1c2ac48a59446dcde67fabfc4a9811d6d957b5dfba0fe02afe36cb62b560bc7",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "e606c256bd843168c09caf0dd1007ff08c724d033f1bed722a84ecbf037b8d1a",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "e606c256bd843168c09caf0dd1007ff08c724d033f1bed722a84ecbf037b8d1a",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b1167b-f7d5-49a8-bbc5-c150c0fc92bd",
-          "created_on": "2025-10-22T15:48:07.000Z",
-          "image_key": "68f934f7241d2_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/68f934f7241d2_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "80ab3ff0-a645-4f5c-a07d-0091f8480ee1",
+          "created_on": "2025-07-01T00:04:07.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "7daf7fc1751ab99c005e71d6fc7a61034fb0fa7d60abffe4fe43527519a69b65",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "204839d2952bb22d44845d0dbdedee101ad6ec6a883912c3b824eb9bd3b46a76",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "204839d2952bb22d44845d0dbdedee101ad6ec6a883912c3b824eb9bd3b46a76",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b1225e-1af5-49e4-ad87-ed719f1aa3eb",
-          "created_on": "2025-08-04T02:42:54.000Z",
-          "image_key": "6890566e3a6d6_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/6890566e3a6d6_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "b7af6b7a-7365-4a6f-8638-a52237b5d8de",
+          "created_on": "2025-07-01T00:08:04.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "b8a6e38ff38ec908f9e824a89723d63f569baccb919fa70808e70ad6859f2a85",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "6e227a22819f3cdd939bd262e1223bc4a527bed5d1659202fcf9c017389528f9",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "6e227a22819f3cdd939bd262e1223bc4a527bed5d1659202fcf9c017389528f9",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b147e1-8209-415d-81e9-b5781136b754",
-          "created_on": "2025-11-05T14:12:53.000Z",
-          "image_key": "690ba1b5d085d_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/690ba1b5d085d_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "c20e3354-b70b-4ce4-9ce6-c239087f8d00",
+          "created_on": "2025-07-01T00:03:09.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "587953d8968483dac48f6d2b677d90e03c624aacd0abdb5b0c5002d626ec641e",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "7e54c93977c3434c6db4360cffb7da4668637d73749194d3bf759c4e97a1a49b",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "7e54c93977c3434c6db4360cffb7da4668637d73749194d3bf759c4e97a1a49b",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         }
       ]
     },
-    "2026_YTD_Recent": {
-      "sample_size": 5,
+    "2026_YTD_Recent__bare_filename": {
+      "stratum_total_available": 5,
+      "sample_tested": 5,
       "reachable_count": 5,
-      "reachability_pct": "100.0%",
-      "sample_details": [
+      "reachability_percentage": "100.0%",
+      "sample_audit": [
         {
-          "source_id": "01afdd28-c311-462d-9b07-32a54cc03981",
-          "created_on": "2026-03-09T17:48:37.000Z",
-          "image_key": "69af40353dcb2_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69af40353dcb2_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "0a929ca5-6b7a-4855-b283-018d1b5b898a",
+          "created_on": "2026-01-01T00:04:11.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "ed776a99d5e52acaa4429ea98c304dd05af9c09c7a5d4ed7efa1d2ce1fe71cf8",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "6864e354b97bd3b18306173ebceec8fb6f12549be76f3329ebbd7d2a85613e2b",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "6864e354b97bd3b18306173ebceec8fb6f12549be76f3329ebbd7d2a85613e2b",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01afe9e5-4826-4c8a-bad1-e1322dc0a8a6",
-          "created_on": "2026-01-10T03:30:57.000Z",
-          "image_key": "69620e410efe0_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69620e410efe0_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "446cd673-2ae1-4306-b609-5c2f29d89ec6",
+          "created_on": "2026-01-01T00:04:30.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "05a693ba23e1b6d9655a1db59ac4f1a2e28d4290997610d2138d953a3029e0c7",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "b4e98f70bce9f943449ff82a50ccf356e6650b7014df2d79b9b99a437409a512",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "b4e98f70bce9f943449ff82a50ccf356e6650b7014df2d79b9b99a437409a512",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b00aad-3397-4e0c-8b10-03fd7d7c604b",
-          "created_on": "2026-07-19T03:48:28.000Z",
-          "image_key": "6a5bb1dc79c03_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/6a5bb1dc79c03_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "78a08f61-c6f3-402b-9fab-9875a6cb2d97",
+          "created_on": "2026-01-01T00:03:03.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "11ca2e277a5255e3e7cbe75e5d6a41ab5e39f659eb8ada57a27116335c1ad805",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "f87737f85f8f857d479b4287afd33b97ac807a5a6bb62f5f7445c12033d45a09",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "f87737f85f8f857d479b4287afd33b97ac807a5a6bb62f5f7445c12033d45a09",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b00ea2-8492-4f1d-a73b-ea5dc876bcfc",
-          "created_on": "2026-04-06T10:52:48.000Z",
-          "image_key": "69d3c8c070dd7_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69d3c8c070dd7_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "9a04a6a1-6632-4288-8035-4205734c7aaa",
+          "created_on": "2026-01-01T00:02:33.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "2008cc3319591332238786e541bce586c6ef03556db3684126d2a5838115b817",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "eff13dd4579d2abc2f053f76873df00bd686027f5ad7d93305502b8a4d3bbe68",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "eff13dd4579d2abc2f053f76873df00bd686027f5ad7d93305502b8a4d3bbe68",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         },
         {
-          "source_id": "01b00f97-229d-4f47-877c-e6310ba0b452",
-          "created_on": "2026-02-02T04:54:23.000Z",
-          "image_key": "6980744f41983_front_image.jpg",
-          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/6980744f41983_front_image.jpg",
-          "head_status": 200,
-          "get_status": 206,
-          "content_type": "image/jpeg",
-          "reachable": true
+          "source_id": "baea3ee0-2244-4a40-8ee7-67b44c1ae9b9",
+          "created_on": "2026-01-01T00:03:56.000Z",
+          "key_format": "bare_filename",
+          "key_hash": "fc0b9e85a1ce72384ea549815b243619f1c7b70fb89331f13ed0afe9d12643d3",
+          "reachable": true,
+          "resolved_candidate": "canonical_listings_full",
+          "attempts": [
+            {
+              "candidate": "canonical_listings_full",
+              "method": "HEAD",
+              "url_sha256": "ae39cc0475a96cf1eb5bfd8f2c8ce527670a0984d2a2ade8c5ac0c3515fbff04",
+              "http_status": 200,
+              "content_type": "image/jpeg",
+              "reachable": true
+            },
+            {
+              "candidate": "canonical_listings_full",
+              "method": "GET",
+              "url_sha256": "ae39cc0475a96cf1eb5bfd8f2c8ce527670a0984d2a2ade8c5ac0c3515fbff04",
+              "http_status": 206,
+              "content_type": "image/jpeg",
+              "reachable": true
+            }
+          ]
         }
       ]
     }

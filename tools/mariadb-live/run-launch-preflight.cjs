@@ -14,6 +14,13 @@ const { createClient } = require('@supabase/supabase-js');
 const fs = require('node:fs');
 const path = require('node:path');
 
+const EXPECTED_CHECKPOINT = Object.freeze({
+  runKey: 'full-capture-auctions-1788028958313',
+  inputRows: 1487333,
+  captureErrorRows: 8,
+  manifestSha256: 'fd545df7a5668c28ede4f2c721a9539fcb6f7cf755302a975052b23270b8adb1'
+});
+
 async function runLaunchPreflight() {
   console.log('============================================================');
   console.log('MARIADB FULL CAPTURE LAUNCH PREFLIGHT (ZERO-ROW / BUILD-ONLY)');
@@ -58,11 +65,21 @@ async function runLaunchPreflight() {
   const testCp = await fetchCheckpointState(supabase, 'non-existent-probe-key');
   console.log('PostgreSQL Checkpoint RPC Functional (Returned null for probe key as expected)');
 
-  const actualCp = await fetchCheckpointState(supabase, 'full-capture-auctions-1788028958313');
-  if (!actualCp) throw new Error('Primary checkpoint full-capture-auctions-1788028958313 not found');
-  console.log('Primary Checkpoint Status: input_rows = ' + actualCp.input_rows + ', capture_errors = ' + actualCp.capture_errors_count + ', status = ' + actualCp.status);
-  if (Number(actualCp.input_rows) !== 951750 || Number(actualCp.capture_errors_count) !== 7) {
-    throw new Error('Checkpoint mismatch: expected 951,750 inputs and 7 errors, got ' + actualCp.input_rows + ' inputs and ' + actualCp.capture_errors_count + ' errors');
+  const actualCp = await fetchCheckpointState(supabase, EXPECTED_CHECKPOINT.runKey);
+  if (!actualCp) throw new Error('Primary checkpoint ' + EXPECTED_CHECKPOINT.runKey + ' not found');
+  const actualCaptureErrors = Number(actualCp.capture_error_rows ?? actualCp.capture_errors_count);
+  console.log('Primary Checkpoint Status: input_rows = ' + actualCp.input_rows + ', capture_errors = ' + actualCaptureErrors + ', status = ' + actualCp.status);
+  if (
+    Number(actualCp.input_rows) !== EXPECTED_CHECKPOINT.inputRows ||
+    actualCaptureErrors !== EXPECTED_CHECKPOINT.captureErrorRows ||
+    actualCp.manifest_sha256 !== EXPECTED_CHECKPOINT.manifestSha256
+  ) {
+    throw new Error(
+      'Checkpoint mismatch: expected ' + EXPECTED_CHECKPOINT.inputRows + ' inputs, ' +
+      EXPECTED_CHECKPOINT.captureErrorRows + ' errors, and manifest ' +
+      EXPECTED_CHECKPOINT.manifestSha256 + '; received ' + actualCp.input_rows +
+      ' inputs, ' + actualCaptureErrors + ' errors, and manifest ' + actualCp.manifest_sha256
+    );
   }
 
   // 4. Verify Comprehensive Security Audit
@@ -94,7 +111,15 @@ async function runLaunchPreflight() {
       schema_usage: auditData.schema_usage,
       function_privileges: auditData.function_privileges
     },
-    launch_gate_status: 'READY_FOR_FINAL_AUTHORIZATION'
+    checkpoint_state: {
+      run_key: EXPECTED_CHECKPOINT.runKey,
+      input_rows: Number(actualCp.input_rows),
+      capture_error_rows: actualCaptureErrors,
+      status: actualCp.status,
+      manifest_sha256: actualCp.manifest_sha256
+    },
+    source_rows_after_checkpoint: Math.max(0, Number(manifest.total_source_rows) - Number(actualCp.input_rows)),
+    launch_gate_status: 'BLOCKED_PENDING_CTO_AUTHORIZATION'
   };
 
   const outputDir = path.resolve('audit-output/mariadb-live/launch-preflight');
@@ -102,7 +127,7 @@ async function runLaunchPreflight() {
   fs.writeFileSync(path.join(outputDir, 'launch-preflight-report.json'), JSON.stringify(preflightReport, null, 2));
 
   console.log('============================================================');
-  console.log('LAUNCH PREFLIGHT PASSED: READY FOR FINAL AUTHORIZATION');
+  console.log('LAUNCH PREFLIGHT PASSED: EXECUTION REMAINS BLOCKED PENDING CTO AUTHORIZATION');
   console.log('============================================================');
 
   return preflightReport;

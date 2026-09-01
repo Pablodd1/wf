@@ -77,24 +77,30 @@ test("Authoritative Precedence: Cross-page duplicate source IDs select globally 
   }
 });
 
-test("Materialization Swap Contract: Prohibits DROP CASCADE and preserves attached consumer views", () => {
+test("Materialization refresh contract preserves the stable table and attached dependencies", () => {
   const materializerSource = fs.readFileSync("tools/mariadb-live/materialize_full_authoritative_cohort.py", "utf-8");
 
   assert.strictEqual(
-    materializerSource.includes("DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows CASCADE"),
+    /DROP\s+TABLE[^;]*\bCASCADE\b/i.test(materializerSource),
     false,
-    "Must NOT use DROP TABLE ... CASCADE on consumer view target"
+    "Materializer must never use CASCADE"
+  );
+
+  assert.strictEqual(
+    materializerSource.includes("TRUNCATE TABLE wf_canonical_staging.mariadb_authoritative_raw_source_rows;"),
+    true,
+    "Must refresh the existing stable table instead of replacing its relation OID"
+  );
+
+  assert.strictEqual(
+    materializerSource.includes("LOCK TABLE wf_canonical_staging.mariadb_authoritative_raw_source_rows IN ACCESS EXCLUSIVE MODE;"),
+    true,
+    "Must serialize the transactional stable-table refresh"
   );
 
   assert.strictEqual(
     materializerSource.includes("CREATE OR REPLACE VIEW wf_canonical_staging.mariadb_authoritative_raw_source_rows AS"),
-    true,
-    "Must use CREATE OR REPLACE VIEW stable consumer view pattern"
-  );
-
-  assert.strictEqual(
-    materializerSource.includes("DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_old;"),
-    true,
-    "Must drop old physical table strictly without CASCADE"
+    false,
+    "Must not attempt an implicit live table-to-view conversion"
   );
 });

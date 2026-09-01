@@ -22,14 +22,14 @@ UPPER_ID = "f1bdf67a-3723-41c6-a1e3-35c5ca9138b0"
 EXPECTED_AUTHORITATIVE_ROWS = 1487325
 
 print("================================================================================")
-print("MATERIALIZE FULL AUTHORITATIVE CAPTURE COHORT VIA ATOMIC SWAP")
+print("MATERIALIZE FULL AUTHORITATIVE CAPTURE COHORT VIA ATOMIC REFRESH")
 print("================================================================================\n")
 
 print("Step 1: Creating versioned build table mariadb_authoritative_raw_source_rows_build...")
 cur.execute("""
   CREATE SCHEMA IF NOT EXISTS wf_canonical_staging;
 
-  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_build CASCADE;
+  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_build;
   CREATE TABLE wf_canonical_staging.mariadb_authoritative_raw_source_rows_build (
     source_id TEXT PRIMARY KEY,
     source_system TEXT NOT NULL,
@@ -91,7 +91,7 @@ for h in hex_chars:
     conn.commit()
     print(f"  Slice [{h}]: inserted {inserted:,} rows (total: {total_inserted:,})")
 
-print(f"\nStep 3: Validating build table before atomic swap...")
+print(f"\nStep 3: Validating build table before atomic refresh...")
 cur.execute("""
   SELECT COUNT(*), COUNT(DISTINCT source_id)
   FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows_build;
@@ -102,25 +102,86 @@ build_distinct = r[1]
 print(f"Build Table Metrics: {build_count:,} total rows, {build_distinct:,} distinct source IDs.")
 
 if build_count != EXPECTED_AUTHORITATIVE_ROWS or build_distinct != EXPECTED_AUTHORITATIVE_ROWS:
-    raise RuntimeError(f"Validation FAILED before swap: build_count={build_count}, distinct={build_distinct}, expected={EXPECTED_AUTHORITATIVE_ROWS}")
+    raise RuntimeError(f"Validation FAILED before refresh: build_count={build_count}, distinct={build_distinct}, expected={EXPECTED_AUTHORITATIVE_ROWS}")
 
-print("Validation PASSED. Executing dependency-preserving atomic table swap...")
+print("Validation PASSED. Preparing dependency-preserving atomic refresh...")
 cur.execute("""
-  BEGIN;
-  -- 1. Swap build table into active table
-  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_old;
-  ALTER TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_active RENAME TO mariadb_authoritative_raw_source_rows_old;
-  ALTER TABLE wf_canonical_staging.mariadb_authoritative_raw_source_rows_build RENAME TO mariadb_authoritative_raw_source_rows_active;
-
-  -- 2. Update consumer view so downstream dependent views remain 100% intact
-  CREATE OR REPLACE VIEW wf_canonical_staging.mariadb_authoritative_raw_source_rows AS
-    SELECT * FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows_active;
-
-  -- 3. Drop old table strictly WITHOUT CASCADE to guarantee zero broken dependencies
-  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_old;
-  COMMIT;
+  SELECT c.relkind
+  FROM pg_catalog.pg_class c
+  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'wf_canonical_staging'
+    AND c.relname = 'mariadb_authoritative_raw_source_rows';
 """)
-print("Dependency-preserving atomic swap completed successfully.")
+stable_relation = cur.fetchone()
+if not stable_relation or stable_relation[0] not in ("r", "p"):
+    raise RuntimeError(
+        "Stable authoritative relation must already be a table or partitioned table; "
+        "refusing an implicit table-to-view conversion"
+    )
+
+cur.execute("""
+  SELECT DISTINCT dependent_ns.nspname, dependent.relname
+  FROM pg_catalog.pg_depend dependency
+  JOIN pg_catalog.pg_rewrite rewrite ON rewrite.oid = dependency.objid
+  JOIN pg_catalog.pg_class dependent ON dependent.oid = rewrite.ev_class
+  JOIN pg_catalog.pg_namespace dependent_ns ON dependent_ns.oid = dependent.relnamespace
+  WHERE dependency.refobjid = 'wf_canonical_staging.mariadb_authoritative_raw_source_rows'::regclass
+    AND dependent.oid <> dependency.refobjid
+  ORDER BY dependent_ns.nspname, dependent.relname;
+""")
+dependent_views = [f"{schema}.{name}" for schema, name in cur.fetchall()]
+print(f"Dependency audit: {len(dependent_views)} attached view(s): {dependent_views}")
+
+cur.execute("""
+  SELECT constraint_record.conname, constraint_record.conrelid::regclass::text
+  FROM pg_catalog.pg_constraint constraint_record
+  WHERE constraint_record.contype = 'f'
+    AND constraint_record.confrelid =
+      'wf_canonical_staging.mariadb_authoritative_raw_source_rows'::regclass
+  ORDER BY constraint_record.conname;
+""")
+inbound_foreign_keys = cur.fetchall()
+if inbound_foreign_keys:
+    raise RuntimeError(
+        "Stable authoritative table has inbound foreign keys; transactional TRUNCATE "
+        f"would require CASCADE and is therefore refused: {inbound_foreign_keys}"
+    )
+
+# Preserve the stable table OID so every existing view, function, privilege and
+# foreign-key dependency continues to reference the same relation. TRUNCATE and
+# INSERT are transactional in PostgreSQL: any validation failure rolls back the
+# entire refresh. This intentionally favors dependency safety over zero downtime.
+conn.commit()
+try:
+    cur.execute("LOCK TABLE wf_canonical_staging.mariadb_authoritative_raw_source_rows IN ACCESS EXCLUSIVE MODE;")
+    cur.execute("TRUNCATE TABLE wf_canonical_staging.mariadb_authoritative_raw_source_rows;")
+    cur.execute("""
+      INSERT INTO wf_canonical_staging.mariadb_authoritative_raw_source_rows (
+        source_id, source_system, source_database, source_table, source_record_id,
+        source_created_on, source_hash, raw_message, raw_payload, raw_staging_id,
+        selected_by_provenance, created_at
+      )
+      SELECT source_id, source_system, source_database, source_table, source_record_id,
+             source_created_on, source_hash, raw_message, raw_payload, raw_staging_id,
+             selected_by_provenance, created_at
+      FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows_build;
+    """)
+    cur.execute("""
+      SELECT COUNT(*), COUNT(DISTINCT source_id)
+      FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows;
+    """)
+    refreshed_count, refreshed_distinct = cur.fetchone()
+    if refreshed_count != EXPECTED_AUTHORITATIVE_ROWS or refreshed_distinct != EXPECTED_AUTHORITATIVE_ROWS:
+        raise RuntimeError(
+            f"Stable-table validation failed: count={refreshed_count}, "
+            f"distinct={refreshed_distinct}, expected={EXPECTED_AUTHORITATIVE_ROWS}"
+        )
+    conn.commit()
+except Exception:
+    conn.rollback()
+    raise
+
+print("Dependency-preserving atomic refresh completed successfully.")
 
 # Step 4: Re-materialize alternate versions table
 print("\nStep 4: Re-materializing alternate versions table for auditing...")
@@ -157,20 +218,53 @@ cur.execute("""
     AND r.source_database = 'thecollective_inventory'
     AND r.source_table = 'auctions';
 
-  BEGIN;
-  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions_old;
-  ALTER TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions_active RENAME TO mariadb_raw_source_alternate_versions_old;
-  ALTER TABLE wf_canonical_staging.mariadb_raw_source_alternate_versions_build RENAME TO mariadb_raw_source_alternate_versions_active;
-
-  CREATE OR REPLACE VIEW wf_canonical_staging.mariadb_raw_source_alternate_versions AS
-    SELECT * FROM wf_canonical_staging.mariadb_raw_source_alternate_versions_active;
-
-  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions_old;
-  COMMIT;
 """)
-alt_inserted = cur.rowcount
 conn.commit()
-print(f"Preserved {alt_inserted:,} alternate source versions via dependency-preserving view swap.")
+
+cur.execute("""
+  SELECT c.relkind
+  FROM pg_catalog.pg_class c
+  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+  WHERE n.nspname = 'wf_canonical_staging'
+    AND c.relname = 'mariadb_raw_source_alternate_versions';
+""")
+alternate_relation = cur.fetchone()
+if not alternate_relation or alternate_relation[0] not in ("r", "p"):
+    raise RuntimeError(
+        "Stable alternate-version relation must already be a table or partitioned table; "
+        "refusing an implicit table-to-view conversion"
+    )
+
+cur.execute("SELECT COUNT(*) FROM wf_canonical_staging.mariadb_raw_source_alternate_versions_build;")
+expected_alternate_rows = cur.fetchone()[0]
+conn.commit()
+try:
+    cur.execute("LOCK TABLE wf_canonical_staging.mariadb_raw_source_alternate_versions IN ACCESS EXCLUSIVE MODE;")
+    cur.execute("TRUNCATE TABLE wf_canonical_staging.mariadb_raw_source_alternate_versions;")
+    cur.execute("""
+      INSERT INTO wf_canonical_staging.mariadb_raw_source_alternate_versions (
+        id, source_id, source_system, source_database, source_table, source_record_id,
+        source_created_on, source_hash, raw_message, raw_payload, raw_staging_id,
+        version_rank, created_at
+      )
+      SELECT id, source_id, source_system, source_database, source_table, source_record_id,
+             source_created_on, source_hash, raw_message, raw_payload, raw_staging_id,
+             version_rank, created_at
+      FROM wf_canonical_staging.mariadb_raw_source_alternate_versions_build;
+    """)
+    cur.execute("SELECT COUNT(*) FROM wf_canonical_staging.mariadb_raw_source_alternate_versions;")
+    refreshed_alternate_rows = cur.fetchone()[0]
+    if refreshed_alternate_rows != expected_alternate_rows:
+        raise RuntimeError(
+            f"Alternate-version validation failed: count={refreshed_alternate_rows}, "
+            f"expected={expected_alternate_rows}"
+        )
+    conn.commit()
+except Exception:
+    conn.rollback()
+    raise
+
+print(f"Preserved {expected_alternate_rows:,} alternate source versions via dependency-preserving atomic refresh.")
 
 cur.close()
 conn.close()

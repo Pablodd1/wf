@@ -52,11 +52,13 @@
 - **Image Lineage & Canonical Path Contract Reachability**:
   - Images Present: 10,000 (100.00%)
   - Canonical Resolver Template: `https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/{key}`
-  - Reachability across Early 2025, Mid 2025, Recent 2026 Strata (HEAD & GET): **100.0% Reachable**
+  - Bounded reachability sample: **15/15 reachable** across Early 2025, Mid 2025, and Recent 2026 strata.
+  - Both request modes passed: **15/15 HEAD** (`200 image/jpeg`) and **15/15 bounded GET** (`206 image/jpeg`).
+  - All sampled keys were bare filenames resolved through `/listings/full/{key}`. This bounded sample does not prove global archive reachability.
 
 ## 3. Artifact Checksums (SHA-256)
 - `authoritative_cohort_census.json`: `659ecf02fef972a912567ea348981fcae1346387ca7ea03eef5ea2aeb8095697`
 - `canary-10k-normalization-report.json`: `3d5483fbe2e92c256087522d992fcaefd5e4a83424168c83a746a782e44f0b2f`
 - `canary-10k-authoritative-manifest.json`: `8df67145780a1575454641662fbff049ff63a4ba81f574d6c2ceba6a5eec591b`
 - `canary-10k-cross-tab-analysis.json`: `21743442056f6ff5009040b9c1d02a52a80b40be7f432000c375d843a5be944e`
-- `stratified-image-reachability.json`: `f485b0d0614f1efb49ecfa3898f04df90a98f10ea76037e584f738e411bcf035`
+- `stratified-image-reachability.json`: `c2875f44fb2b78ebfad2cf282691bbb8c1931d264765f1f99d33889e9151b316`
