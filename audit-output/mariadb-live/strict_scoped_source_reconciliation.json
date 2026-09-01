@@ -1,0 +1,53 @@
+{
+  "contract": "wf-mariadb-scoped-reconciliation-v1",
+  "run_key": "full-capture-auctions-1788028958313",
+  "boundary": {
+    "source_system": "OceanDigital MariaDB",
+    "source_database": "thecollective_inventory",
+    "source_table": "auctions",
+    "lower_boundary": {
+      "created_on": "2025-01-08 13:28:49",
+      "id": "7534d09b-28b9-4052-8005-228c32f972df"
+    },
+    "upper_boundary": {
+      "created_on": "2026-08-29 14:42:32",
+      "id": "f1bdf67a-3723-41c6-a1e3-35c5ca9138b0"
+    }
+  },
+  "counts": {
+    "current_mariadb_boundary_count": 1486554,
+    "current_mariadb_distinct_ids": 1486554,
+    "distinct_scoped_staged_ids": 1487325,
+    "distinct_scoped_error_ids": 8,
+    "overlap_staged_and_errors": 0,
+    "union_captured_ids": 1487333,
+    "captured_absent_from_current_mariadb": 779,
+    "current_mariadb_absent_from_capture": 0,
+    "capture_completeness_rate": 1.0
+  },
+  "drift_details": {
+    "sample_deleted_source_ids": [
+      "00287a58-6204-4203-891b-4be1a9702cb0",
+      "003de757-b99b-4157-beff-1ca0580ce531",
+      "0081f005-08b1-4cb1-866c-972b6ed0df53",
+      "00e3a9d1-03f0-40f1-a207-3e3c25e492a4",
+      "00fae06c-0e89-4dbc-bf5d-d4d65648cd0f",
+      "034b82f8-5cb1-4524-9679-9690b4647c4c",
+      "0376b6f7-a5e5-45be-89a8-b60b32543020",
+      "039c2da9-1da6-4bd6-bb42-179007fefefc",
+      "043f95a6-993b-47cd-8a4d-a94969338a96",
+      "046549c8-3935-4030-81e6-3c7838ac3778",
+      "04e0c89e-f472-4c71-b2c1-ea82a13ba94a",
+      "0502f59b-81c6-4dad-ac77-f2aa8dd39079",
+      "05f4b9f0-3ea4-413b-bcf4-b214281fd0c9",
+      "065d4021-952d-4ec1-8142-7e931617dd4b",
+      "06bf80b2-dce6-4739-b6cd-076b4b09354f",
+      "06ebb4ce-c68f-456b-895b-9b868ad70e34",
+      "07714ad0-d674-4a38-b105-7814d023a133",
+      "07a84c63-5e8a-42a9-a723-741280cd6197",
+      "07d23a33-20d1-492b-aefc-ed5f8d7667b4",
+      "084bd10b-8966-4fd4-82ed-47f5ce1cbe1d"
+    ],
+    "sample_unmigrated_source_ids": []
+  }
+}
