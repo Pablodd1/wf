@@ -1,5 +1,4 @@
-﻿"use strict";
-
+const fs = require("node:fs");
 const test = require("node:test");
 const assert = require("node:assert");
 
@@ -76,4 +75,26 @@ test("Authoritative Precedence: Cross-page duplicate source IDs select globally 
     assert.strictEqual(selected.source_record_id, `mysql_auctions_${testSourceId}`);
     assert.strictEqual(selected.source_created_on, "2025-05-10T12:00:00.000Z");
   }
+});
+
+test("Materialization Swap Contract: Prohibits DROP CASCADE and preserves attached consumer views", () => {
+  const materializerSource = fs.readFileSync("tools/mariadb-live/materialize_full_authoritative_cohort.py", "utf-8");
+
+  assert.strictEqual(
+    materializerSource.includes("DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows CASCADE"),
+    false,
+    "Must NOT use DROP TABLE ... CASCADE on consumer view target"
+  );
+
+  assert.strictEqual(
+    materializerSource.includes("CREATE OR REPLACE VIEW wf_canonical_staging.mariadb_authoritative_raw_source_rows AS"),
+    true,
+    "Must use CREATE OR REPLACE VIEW stable consumer view pattern"
+  );
+
+  assert.strictEqual(
+    materializerSource.includes("DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_old;"),
+    true,
+    "Must drop old physical table strictly without CASCADE"
+  );
 });

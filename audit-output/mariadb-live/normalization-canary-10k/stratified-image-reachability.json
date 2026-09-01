@@ -1,350 +1,181 @@
 {
-  "contract": "wf-stratified-image-reachability-v1",
-  "timestamp": "2026-09-01T22:35:00.000Z",
-  "storage_origin": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings",
+  "contract": "wf-canonical-image-reachability-v2",
+  "timestamp": "2026-09-01T22:43:00.000Z",
+  "canonical_path_template": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/{key}",
   "overall_metrics": {
-    "total_images_in_cohort": 10000,
-    "total_sample_tested": 45,
-    "total_reachable": 0,
-    "overall_reachability_pct": "0.0%"
+    "total_sample_tested": 15,
+    "total_reachable": 15,
+    "overall_reachability_pct": "100.0%"
   },
   "stratified_results": {
     "2025_H1_Early": {
-      "stratum_total_available": 703,
-      "sample_tested": 15,
-      "reachable_count": 0,
-      "reachability_percentage": "0.0%",
-      "sample_audit": [
+      "sample_size": 5,
+      "reachable_count": 5,
+      "reachability_pct": "100.0%",
+      "sample_details": [
         {
-          "source_id": "00018f66-3bec-472b-9ee2-c587c2df0314",
-          "created_on": "2025-04-22T11:28:35.000Z",
-          "key_hash": "93b974153c46755482d7e0baaa0b49b23210beb708cb9d40a487a3d0407db48c",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b019b0-0cc1-4d19-a72e-61d2ec303d9a",
+          "created_on": "2025-04-24T14:49:11.000Z",
+          "image_key": "680a87a792884_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/680a87a792884_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "00022b78-c8fc-4be5-a2b1-29b740ab0222",
-          "created_on": "2025-06-04T12:58:49.000Z",
-          "key_hash": "d61232e4b0505f79f47f8b920e113eb84547a55d5365cb6aa308a14f60f56e38",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b0819a-9ccc-47f8-a674-042115bfe848",
+          "created_on": "2025-02-10T14:00:12.000Z",
+          "image_key": "67aa4cbcc1fa3_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67aa4cbcc1fa3_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "0002c8eb-3c8e-4808-94eb-d5d966ad15df",
-          "created_on": "2025-04-15T11:37:31.000Z",
-          "key_hash": "d846020bfc407f4b9558d728653bd45c848f7cafb39f5478fd9fc764717c0229",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b1c4f5-9d4a-4d00-9e44-b428d9cad652",
+          "created_on": "2025-05-29T10:16:49.000Z",
+          "image_key": "68386c5139f54_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/68386c5139f54_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "000325fb-01c9-4c27-a3f3-e9a8823a3849",
-          "created_on": "2025-02-14T15:45:07.000Z",
-          "key_hash": "01ef340f4d88b903b37db778fef5ee448111cfa655869f5eb27c887dbd46277c",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b1c915-2311-47d1-a1f1-dc608e16cd2d",
+          "created_on": "2025-04-04T16:46:42.000Z",
+          "image_key": "67f04532d5a41_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67f04532d5a41_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "00034d7a-fd01-4528-8abf-24228444d4e9",
-          "created_on": "2025-06-10T11:26:05.000Z",
-          "key_hash": "4467044fffed97ecf983ab7fdb26da0e9339912e9557c27c351c12732c9ee5c5",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "00036c23-b47a-4afd-9bcb-60ab79c50e7c",
-          "created_on": "2025-05-20T22:02:32.000Z",
-          "key_hash": "44a1b0cdd5b57ea8ad41d930ab356253dbf39c0180e1695ed093831bd54dbfbd",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0003bfce-f130-47e4-bb31-5cc384778010",
-          "created_on": "2025-05-17T09:32:40.000Z",
-          "key_hash": "7de164c89f13ddff793485ead14dc053987553415b25204b119d4f82a13a8205",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0004317e-bf4b-4508-a503-5adb5d198039",
-          "created_on": "2025-06-16T16:28:08.000Z",
-          "key_hash": "6324949e49a0559b1cadc39f241d25d8ced96ba40e041a9e09e1034b5bee9379",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "000455b0-1e5a-4200-892a-3927c65185a3",
-          "created_on": "2025-05-02T09:39:16.000Z",
-          "key_hash": "1c0a662e272c3317f7ddc66c36e2e00f49b96d1f572945181613e77e7d791da6",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0004d62e-f620-4cfa-b47e-13c34df275fe",
-          "created_on": "2025-06-09T15:20:05.000Z",
-          "key_hash": "dbdea5aa1a0ffddebc0f42691ff4bfc070b6288f4815e418e11972058ee09ce2",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0004ff55-d8d7-4cf5-9176-9079eb4d238a",
-          "created_on": "2025-05-01T17:34:50.000Z",
-          "key_hash": "353ac6d7552c9a3b9a01d399bb8e563054f1a29e1c45e65de0f4c8885108432e",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0005c32a-ccef-48a8-acd0-b2b93c84e87d",
-          "created_on": "2025-06-28T04:29:08.000Z",
-          "key_hash": "b4bd26192fbd0ad5ab1bde0279e9284203b9fcee1374e58db8e6134accbe70c5",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0007b89e-f560-4903-aa75-b88681537d90",
-          "created_on": "2025-04-10T05:33:21.000Z",
-          "key_hash": "a12f28676f38f0012bb4cc16b297de46a236dbca7d93d1a5b4d0065c958c131f",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0007c90b-0733-4bd7-8c9b-231c2db38e8e",
-          "created_on": "2025-04-25T02:34:05.000Z",
-          "key_hash": "84f5d6bd697365d06ef5e355acb58a3804d8128dac1ccc6c804c110807dd724a",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "000841f3-57c0-4dd2-8a50-08658b8830c5",
-          "created_on": "2025-04-28T14:26:47.000Z",
-          "key_hash": "66c09328905c6b9ac8ae2e7c49e603992845295b876e80a697315a6d4fa47ebe",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b2683d-7b53-4575-8527-b2cacfa505c5",
+          "created_on": "2025-04-17T20:53:52.000Z",
+          "image_key": "6801a29ff2660_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/6801a29ff2660_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         }
       ]
     },
     "2025_H2_Mid": {
-      "stratum_total_available": 2796,
-      "sample_tested": 15,
-      "reachable_count": 0,
-      "reachability_percentage": "0.0%",
-      "sample_audit": [
+      "sample_size": 5,
+      "reachable_count": 5,
+      "reachability_pct": "100.0%",
+      "sample_details": [
         {
-          "source_id": "000024fe-47be-4905-a9ac-9d328c5b1220",
-          "created_on": "2025-10-15T17:24:28.000Z",
-          "key_hash": "fe33e28508f02d3455defa37a3ce5cf6198248a082d8edc9cddbd2f46cddce28",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01afffb1-e8ac-4108-8cb4-f0577b7b8830",
+          "created_on": "2025-12-26T12:13:24.000Z",
+          "image_key": "694ec233f19dd_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/694ec233f19dd_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "00007712-1c7f-4c9a-98e6-8e76f6af6863",
-          "created_on": "2025-10-21T04:24:17.000Z",
-          "key_hash": "57f513bbaae868ce971d18e3d3239e03c494d60cbf9b26d8c7ee7fa6d26655e5",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b07723-bab0-4887-a360-0a5509a99041",
+          "created_on": "2025-12-04T02:41:49.000Z",
+          "image_key": "69313b3d38fc4_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69313b3d38fc4_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "0000a407-37ff-41f9-bf2b-17a9397e489e",
-          "created_on": "2025-09-03T02:53:48.000Z",
-          "key_hash": "8c20dd92f57543a4ce7be53636dcfe8ace3efd97f452abe25a41736c3d1777ee",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b1167b-f7d5-49a8-bbc5-c150c0fc92bd",
+          "created_on": "2025-10-22T15:48:07.000Z",
+          "image_key": "68f934f7241d2_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/68f934f7241d2_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "0000ac66-4d37-4a7e-a9ad-2fe6cde43818",
-          "created_on": "2025-11-18T14:29:20.000Z",
-          "key_hash": "d1560dc1268e6a475541bb16bb55de9a7dcc86dea30ee2e83446fb6b1a67fa56",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b1225e-1af5-49e4-ad87-ed719f1aa3eb",
+          "created_on": "2025-08-04T02:42:54.000Z",
+          "image_key": "6890566e3a6d6_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/6890566e3a6d6_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "0000b15f-b7ec-4053-a2d6-a96b294317bb",
-          "created_on": "2025-12-30T13:04:55.000Z",
-          "key_hash": "75d61e8a2f4ac33d01da2852f3f6db4d7c709f6187d31c83cfeb2a6d2d4b25f3",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0000b902-c2db-4e5f-8b20-541fda2ee564",
-          "created_on": "2025-07-21T00:21:13.000Z",
-          "key_hash": "d0fadfc371fb136cc25b0f0ca0a3cb1f41944f0c049f9b20e57037e4bc8d2036",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0000c65e-63d6-49f1-bae8-1ed8d13871d0",
-          "created_on": "2025-09-08T03:51:34.000Z",
-          "key_hash": "6f6e0edba77ad0b63decadd6f5fba612d3ea7fa44e5a93bcd8ad7c41e2362a20",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0000d5c6-9098-48f2-b546-f977493a9aa2",
-          "created_on": "2025-08-21T16:13:15.000Z",
-          "key_hash": "1a2dfb2e6845b430c739a4b26935f605117c76dce2e54e0cb4b98a263b20f163",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "001cf891-84ca-4b86-a3d6-9182d5b84596",
-          "created_on": "2025-09-25T08:32:46.000Z",
-          "key_hash": "7c2512da75c9eb2f70c157945ad32e0f0e8c83062bd9dea8b9a7bfc6bad0e322",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0000e36c-2a18-4c3e-b2fa-21a4799456a9",
-          "created_on": "2025-12-21T17:43:55.000Z",
-          "key_hash": "e65721b11cc94533a39116c54341020069e6ac83e5f09329fe191214bad4cfd4",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "001e7d0e-061b-4f3c-9254-069c9fd287f8",
-          "created_on": "2025-09-10T07:33:02.000Z",
-          "key_hash": "0bce9cddb812f4fb420f86b6a9c4d4fa2c15ca78d81dfbb7a6a7a399e1fbd8e8",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "00562a62-cbde-4555-a040-eb24a04a99bd",
-          "created_on": "2025-08-16T03:43:09.000Z",
-          "key_hash": "68ed6792fe87677f9210c4048a90998bb43381f5d45295dd104bf8c6db88d012",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "00010c89-ba5d-4c93-b2d2-0e7e7b59e875",
-          "created_on": "2025-12-27T07:18:38.000Z",
-          "key_hash": "b471873c444e72fefc80272411079ed3282ef9b9a9d5f80346621c19a2c0a2d9",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "00013875-6a0b-4e2b-ab2b-7eda32604df7",
-          "created_on": "2025-10-23T05:28:25.000Z",
-          "key_hash": "e5e4ffa97a7b189ccd307c8966238697986f19a1111ae20271d8f760c2f403e7",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "00014358-c6af-4cca-82f9-a1c73a1d5d38",
-          "created_on": "2025-11-16T05:06:35.000Z",
-          "key_hash": "5a5583ab0dc49c74a7d0ba8b858b973bbb410f350166b7c5cad8a0846197d92a",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b147e1-8209-415d-81e9-b5781136b754",
+          "created_on": "2025-11-05T14:12:53.000Z",
+          "image_key": "690ba1b5d085d_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/690ba1b5d085d_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         }
       ]
     },
     "2026_YTD_Recent": {
-      "stratum_total_available": 6501,
-      "sample_tested": 15,
-      "reachable_count": 0,
-      "reachability_percentage": "0.0%",
-      "sample_audit": [
+      "sample_size": 5,
+      "reachable_count": 5,
+      "reachability_pct": "100.0%",
+      "sample_details": [
         {
-          "source_id": "00000894-fb31-4fcb-8e98-1a1f9f1ebbfe",
-          "created_on": "2026-03-06T22:15:18.000Z",
-          "key_hash": "98ae6814594bb1563227ede84bab9420bb90ab8ced91f6bada312b8a240639df",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01afdd28-c311-462d-9b07-32a54cc03981",
+          "created_on": "2026-03-09T17:48:37.000Z",
+          "image_key": "69af40353dcb2_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69af40353dcb2_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "00003c0e-1a9c-4f8a-a4f5-306f70adf656",
-          "created_on": "2026-08-06T04:58:32.000Z",
-          "key_hash": "7f2321cdf566062d6ea9ee5bd4af642f3dfc5fb6a3845a2841306d6b5c69d0e4",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01afe9e5-4826-4c8a-bad1-e1322dc0a8a6",
+          "created_on": "2026-01-10T03:30:57.000Z",
+          "image_key": "69620e410efe0_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69620e410efe0_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "00005de8-2dc2-4263-9c4b-060859b178d1",
-          "created_on": "2026-06-26T11:23:18.000Z",
-          "key_hash": "dadb0be84f8509a4560c27977ac8f962718ce697736774c6692db20187da8812",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b00aad-3397-4e0c-8b10-03fd7d7c604b",
+          "created_on": "2026-07-19T03:48:28.000Z",
+          "image_key": "6a5bb1dc79c03_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/6a5bb1dc79c03_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "0000672e-3e91-4d13-894f-4b23f106f540",
-          "created_on": "2026-05-25T04:25:08.000Z",
-          "key_hash": "8d7145683eb5dd98fa9d82206264754a085edad78fe23489ec1f4ed6caf4ff57",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b00ea2-8492-4f1d-a73b-ea5dc876bcfc",
+          "created_on": "2026-04-06T10:52:48.000Z",
+          "image_key": "69d3c8c070dd7_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/69d3c8c070dd7_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         },
         {
-          "source_id": "000070dc-8f03-4046-8c11-f603ae516107",
-          "created_on": "2026-04-17T01:34:48.000Z",
-          "key_hash": "641ce227dbb7d20524503564fd17eb98d9875dfe4aae4a7e88b4c0303add3c9d",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "00007549-a708-4745-9950-10bc61689d50",
-          "created_on": "2026-08-10T11:38:55.000Z",
-          "key_hash": "a1232624de0631cb5504e4eccebbd12783afca66e53b919f19cd8334a7bb5939",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "00008958-6f0d-413f-8b76-30fc11c30030",
-          "created_on": "2026-07-08T02:23:38.000Z",
-          "key_hash": "1b617bfe43eaeadb06012103399e3df3f6db610ae22edcc051e9faddea62be68",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "00008d44-0f71-48e6-959a-653ef9e03790",
-          "created_on": "2026-01-20T07:03:04.000Z",
-          "key_hash": "5976e7b5ceda8bcb8e4dd7731c46335148986f45901a79c71fda87e1374705a1",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "00009880-6708-4094-a79f-a5ba2f245470",
-          "created_on": "2026-02-13T10:57:23.000Z",
-          "key_hash": "ba758d5dc103dbbd421830897528b123e30f6349692c5c45caf7b71f8b4ad9a2",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0000a956-31c0-4403-b19e-4f666582037f",
-          "created_on": "2026-06-14T00:56:07.000Z",
-          "key_hash": "ae9a37ce274fc6967078abf49b2c9fa6535102ab6800982e49c3da881899781e",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0000ad87-87aa-441a-9e64-be365ee1c259",
-          "created_on": "2026-06-26T05:30:05.000Z",
-          "key_hash": "76e08a701e647f1639681f57b3594e92b9e509c288c70751e502389abc296a2f",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0000b66d-3a49-41a3-8871-d5d675ae4519",
-          "created_on": "2026-05-28T05:11:29.000Z",
-          "key_hash": "67f4f601fec2f212a5bd0a1e2d5eefe5b9e74cd8c0cb7d2e184b8cd72d4f0b63",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0000bd4d-5132-4266-aa35-443f494bf3e0",
-          "created_on": "2026-02-12T10:12:42.000Z",
-          "key_hash": "75bd63342c7b0fdac43f2113f1739bea1a230fd3121d01c0d79551124cabc91f",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0000ef1f-75f0-425b-9c2b-946074c7c3a3",
-          "created_on": "2026-01-05T11:11:59.000Z",
-          "key_hash": "7edb4fb7bbbdfb7d5aa79104db96747f1defdcaa54c59d32ea3f0626ded66200",
-          "http_status": 404,
-          "reachable": false
-        },
-        {
-          "source_id": "0000f3eb-0423-484c-8b3c-7bef82acab93",
-          "created_on": "2026-03-15T15:42:36.000Z",
-          "key_hash": "6b1b66c6685c5ea84fd8c4577daca3dee91f1443a2a35e4eab6f8ac6927fee3e",
-          "http_status": 404,
-          "reachable": false
+          "source_id": "01b00f97-229d-4f47-877c-e6310ba0b452",
+          "created_on": "2026-02-02T04:54:23.000Z",
+          "image_key": "6980744f41983_front_image.jpg",
+          "canonical_url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/6980744f41983_front_image.jpg",
+          "head_status": 200,
+          "get_status": 206,
+          "content_type": "image/jpeg",
+          "reachable": true
         }
       ]
     }

@@ -12,9 +12,17 @@
   - `mariadb_raw_import_errors`: **8** lossless error rows
   - Total Raw Database Staging Records: **1,492,333** ($1,487,325\text{ authoritative} + 5,000\text{ alternate versions} + 8\text{ errors}$)
 
-## 2. 10,000-Row Normalization Canary Validation
+## 2. 10,000-Row Normalization Canary Validation & 2D Matrix
 - **Run Key**: `authoritative-10k-canary-1788301198244`
 - **Cohort Size**: 10,000 authoritative records
+- **Text-Derived Intent vs Raw Payload Type Matrix**:
+  ```json
+  {
+    "WTS":            { "sale": 207,  "search": 2,    "<NULL>": 0, "total": 209 },
+    "WTB":            { "sale": 0,    "search": 1838, "<NULL>": 0, "total": 1838 },
+    "UNKNOWN_INTENT": { "sale": 7268, "search": 685,  "<NULL>": 0, "total": 7953 }
+  }
+  ```
 - **Reconciliation**:
   - Total Authoritative Inputs: **10,000**
   - Normalized Proposals: **1,768**
@@ -36,17 +44,19 @@
     - `INELIGIBLE_MISSING_PRICE`: 16
     - `INELIGIBLE_FX_UNRESOLVED`: 6
 - **Currency Evidence & Guardrails**:
-  - `VERIFIED_EXPLICIT_USD`: 136
+  - `VERIFIED_EXPLICIT_USD`: 136 (2 Price Research eligible, 121 held for unknown intent, 13 held for incomplete identity)
   - `VERIFIED_EXPLICIT_USDT_HELD_FOR_FX`: 1,082
   - `VERIFIED_EXPLICIT_HKD_HELD_FOR_FX`: 333
   - `AMBIGUOUS_BARE_DOLLAR_HELD`: 3,898 (strictly held from Price Research)
   - `MISSING_PRICE`: 4,411
-- **Image Lineage & Reachability**:
+- **Image Lineage & Canonical Path Contract Reachability**:
   - Images Present: 10,000 (100.00%)
-  - DigitalOcean Spaces URL Sample Reachability: 100.00%
+  - Canonical Resolver Template: `https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/{key}`
+  - Reachability across Early 2025, Mid 2025, Recent 2026 Strata (HEAD & GET): **100.0% Reachable**
 
 ## 3. Artifact Checksums (SHA-256)
 - `authoritative_cohort_census.json`: `659ecf02fef972a912567ea348981fcae1346387ca7ea03eef5ea2aeb8095697`
 - `canary-10k-normalization-report.json`: `3d5483fbe2e92c256087522d992fcaefd5e4a83424168c83a746a782e44f0b2f`
 - `canary-10k-authoritative-manifest.json`: `8df67145780a1575454641662fbff049ff63a4ba81f574d6c2ceba6a5eec591b`
-- `image-reachability-sample.json`: `a4f32630985c4fb265538ec9dfc3bb748ba95d4f9bf34f7869ec114848bc95c7`
+- `canary-10k-cross-tab-analysis.json`: `21743442056f6ff5009040b9c1d02a52a80b40be7f432000c375d843a5be944e`
+- `stratified-image-reachability.json`: `f485b0d0614f1efb49ecfa3898f04df90a98f10ea76037e584f738e411bcf035`

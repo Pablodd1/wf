@@ -104,21 +104,28 @@ print(f"Build Table Metrics: {build_count:,} total rows, {build_distinct:,} dist
 if build_count != EXPECTED_AUTHORITATIVE_ROWS or build_distinct != EXPECTED_AUTHORITATIVE_ROWS:
     raise RuntimeError(f"Validation FAILED before swap: build_count={build_count}, distinct={build_distinct}, expected={EXPECTED_AUTHORITATIVE_ROWS}")
 
-print("Validation PASSED. Executing atomic table swap...")
+print("Validation PASSED. Executing dependency-preserving atomic table swap...")
 cur.execute("""
   BEGIN;
-  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_old CASCADE;
-  ALTER TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows RENAME TO mariadb_authoritative_raw_source_rows_old;
-  ALTER TABLE wf_canonical_staging.mariadb_authoritative_raw_source_rows_build RENAME TO mariadb_authoritative_raw_source_rows;
-  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_old CASCADE;
+  -- 1. Swap build table into active table
+  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_old;
+  ALTER TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_active RENAME TO mariadb_authoritative_raw_source_rows_old;
+  ALTER TABLE wf_canonical_staging.mariadb_authoritative_raw_source_rows_build RENAME TO mariadb_authoritative_raw_source_rows_active;
+
+  -- 2. Update consumer view so downstream dependent views remain 100% intact
+  CREATE OR REPLACE VIEW wf_canonical_staging.mariadb_authoritative_raw_source_rows AS
+    SELECT * FROM wf_canonical_staging.mariadb_authoritative_raw_source_rows_active;
+
+  -- 3. Drop old table strictly WITHOUT CASCADE to guarantee zero broken dependencies
+  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_authoritative_raw_source_rows_old;
   COMMIT;
 """)
-print("Atomic table swap completed successfully.")
+print("Dependency-preserving atomic swap completed successfully.")
 
-# Step 4: Populate alternate versions table
+# Step 4: Re-materialize alternate versions table
 print("\nStep 4: Re-materializing alternate versions table for auditing...")
 cur.execute("""
-  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions_build CASCADE;
+  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions_build;
   CREATE TABLE wf_canonical_staging.mariadb_raw_source_alternate_versions_build (
     id UUID PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
     source_id TEXT NOT NULL,
@@ -144,22 +151,26 @@ cur.execute("""
     r.source_created_on, r.source_hash, r.raw_message, r.raw_payload, r.id,
     2 AS version_rank
   FROM wf_canonical_staging.mariadb_raw_source_rows r
-  JOIN wf_canonical_staging.mariadb_authoritative_raw_source_rows a ON a.source_id = r.source_id
+  JOIN wf_canonical_staging.mariadb_authoritative_raw_source_rows_active a ON a.source_id = r.source_id
   WHERE r.id <> a.raw_staging_id
     AND r.source_system = 'OceanDigital MariaDB'
     AND r.source_database = 'thecollective_inventory'
     AND r.source_table = 'auctions';
 
   BEGIN;
-  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions_old CASCADE;
-  ALTER TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions RENAME TO mariadb_raw_source_alternate_versions_old;
-  ALTER TABLE wf_canonical_staging.mariadb_raw_source_alternate_versions_build RENAME TO mariadb_raw_source_alternate_versions;
-  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions_old CASCADE;
+  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions_old;
+  ALTER TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions_active RENAME TO mariadb_raw_source_alternate_versions_old;
+  ALTER TABLE wf_canonical_staging.mariadb_raw_source_alternate_versions_build RENAME TO mariadb_raw_source_alternate_versions_active;
+
+  CREATE OR REPLACE VIEW wf_canonical_staging.mariadb_raw_source_alternate_versions AS
+    SELECT * FROM wf_canonical_staging.mariadb_raw_source_alternate_versions_active;
+
+  DROP TABLE IF EXISTS wf_canonical_staging.mariadb_raw_source_alternate_versions_old;
   COMMIT;
 """)
 alt_inserted = cur.rowcount
 conn.commit()
-print(f"Preserved {alt_inserted:,} alternate source versions via atomic swap.")
+print(f"Preserved {alt_inserted:,} alternate source versions via dependency-preserving view swap.")
 
 cur.close()
 conn.close()
