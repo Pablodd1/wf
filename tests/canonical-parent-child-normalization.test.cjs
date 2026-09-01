@@ -371,6 +371,8 @@ test('16. Authoritative normalization status vocabulary matches SQL CHECK constr
   const { NORMALIZATION_STATUS_CONTRACT } = require('../tools/mariadb-live/normalization-status-contract.cjs');
   const migrationPath = path.resolve('supabase/migrations/20260830190000_canonical_parent_child_remediation.sql');
   const migrationSql = fs.readFileSync(migrationPath, 'utf-8');
+  const fxMigrationPath = path.resolve('supabase/migrations/20260831200000_fx_status_reconciliation_and_authoritative_staging.sql');
+  const fxMigrationSql = fs.readFileSync(fxMigrationPath, 'utf-8');
 
   // Exact Bidirectional Equality: Extract allowed values from SQL constraints and compare with contract
   function extractSqlConstraintValues(sql, constraintName) {
@@ -392,7 +394,12 @@ test('16. Authoritative normalization status vocabulary matches SQL CHECK constr
   };
 
   for (const [constraintName, fieldName] of Object.entries(constraintFieldMap)) {
-    const extracted = extractSqlConstraintValues(migrationSql, constraintName).sort();
+    // The FX reconciliation migration replaces this constraint after the base
+    // parent/child schema is installed, so validate the effective definition.
+    const effectiveMigrationSql = constraintName === 'chk_mariadb_children_price_research_status'
+      ? fxMigrationSql
+      : migrationSql;
+    const extracted = extractSqlConstraintValues(effectiveMigrationSql, constraintName).sort();
     const contractVals = [...NORMALIZATION_STATUS_CONTRACT[fieldName]].sort();
     assert.deepStrictEqual(
       extracted,
