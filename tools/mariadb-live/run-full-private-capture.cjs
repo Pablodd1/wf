@@ -355,6 +355,9 @@ async function runCaptureLoop(options = {}) {
       finalStatus = 'COPYING_RAW';
     } else {
       // Invariants required before RAW_STAGED finalization
+      if (cumulativeInputRows !== manifest.total_source_rows) {
+        throw new Error(`RAW_STAGED Precondition Failed: cumulative_input_rows (${cumulativeInputRows}) != total_source_rows (${manifest.total_source_rows})`);
+      }
       if (lastSourceId !== manifest.upper_boundary.id || lastCreatedOn !== manifest.upper_boundary.created_on) {
         throw new Error(`RAW_STAGED Precondition Failed: final cursor (${lastCreatedOn}, ${lastSourceId}) != upper boundary (${manifest.upper_boundary.created_on}, ${manifest.upper_boundary.id})`);
       }
