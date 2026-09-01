@@ -309,7 +309,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     tradingFloorStatus = 'HELD_BUNDLE_UNSPLIT';
     reviewFlags.push('HELD_BUNDLE_REVIEW');
     exclusionReasons.push('BUNDLE_PARENT_UNSPLIT');
-  } else if (!brand && !reference) {
+  } else if (!brand || !reference) {
     tradingFloorStatus = 'HELD_IDENTITY_INCOMPLETE';
     reviewFlags.push('INCOMPLETE_IDENTITY');
     exclusionReasons.push('IDENTITY_UNRECOGNIZED');
@@ -809,7 +809,7 @@ function normalizeCanonicalParentChild(stagedRow, options = {}) {
       let tfStatus = 'HELD_UNKNOWN';
       let tfEligible = false;
 
-      if (!candBrand && !candRef) {
+      if (!candBrand || !candRef) {
         tfStatus = 'HELD_IDENTITY_INCOMPLETE';
         childFlags.push('INCOMPLETE_IDENTITY');
         childExclusions.push('IDENTITY_UNRECOGNIZED');
