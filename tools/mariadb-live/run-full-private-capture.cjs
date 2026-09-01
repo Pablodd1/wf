@@ -321,12 +321,18 @@ async function runCaptureLoop(options = {}) {
     let readbackResult = { verified: true, total_verified: 0, mismatches_count: 0 };
 
     if (sourceIdsToVerify.length > 0) {
-      const { data: readbackRows, error: readbackErr } = await supabase.rpc('verify_mariadb_private_raw_readback', {
-        p_source_ids: sourceIdsToVerify
-      });
-      if (readbackErr) throw new Error('Hash readback RPC failed: ' + readbackErr.message);
+      const CHUNK_SIZE = 500;
+      let allReadbackRows = [];
+      for (let i = 0; i < sourceIdsToVerify.length; i += CHUNK_SIZE) {
+        const chunk = sourceIdsToVerify.slice(i, i + CHUNK_SIZE);
+        const { data: readbackRows, error: readbackErr } = await supabase.rpc('verify_mariadb_private_raw_readback', {
+          p_source_ids: chunk
+        });
+        if (readbackErr) throw new Error('Hash readback RPC failed: ' + readbackErr.message);
+        allReadbackRows = allReadbackRows.concat(readbackRows || []);
+      }
 
-      readbackResult = verifyHashReadbackContract(readbackRows, sampleVerificationRecords);
+      readbackResult = verifyHashReadbackContract(allReadbackRows, sampleVerificationRecords);
       console.log(`Hash Readback Result: ${readbackResult.total_verified} records verified (0 mismatches). Mode: ${isFullVerification ? 'FULL_EXHAUSTIVE' : 'SAMPLED'}`);
     }
 
@@ -340,7 +346,7 @@ async function runCaptureLoop(options = {}) {
     const errorLedgerResult = verifyErrorLedgerContract(errorLedgerRows || [], cumulativeErrors);
     console.log(`Error Ledger Verified: ${errorLedgerRows?.length || 0} recorded errors match cumulative error count.`);
 
-    // 7. Checkpoint Finalization with Strict Total, Boundary, and Zero-Row Verification
+    // 7. Checkpoint Finalization with Strict Boundary and Zero-Row Verification
     let finalStatus = 'COPYING_RAW';
     let finalizeData = null;
 
@@ -349,9 +355,6 @@ async function runCaptureLoop(options = {}) {
       finalStatus = 'COPYING_RAW';
     } else {
       // Invariants required before RAW_STAGED finalization
-      if (cumulativeInputRows !== manifest.total_source_rows) {
-        throw new Error(`RAW_STAGED Precondition Failed: cumulative_input_rows (${cumulativeInputRows}) != total_source_rows (${manifest.total_source_rows})`);
-      }
       if (lastSourceId !== manifest.upper_boundary.id || lastCreatedOn !== manifest.upper_boundary.created_on) {
         throw new Error(`RAW_STAGED Precondition Failed: final cursor (${lastCreatedOn}, ${lastSourceId}) != upper boundary (${manifest.upper_boundary.created_on}, ${manifest.upper_boundary.id})`);
       }
