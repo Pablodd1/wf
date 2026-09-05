@@ -1,0 +1,737 @@
+-- Forward-only, private staging lane for immutable MariaDB raw source rows.
+--
+-- This migration DOES NOT write to public.raw_messages, public.raw_message_versions,
+-- or public.watch_records. It targets strictly wf_canonical_staging.
+
+BEGIN;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'anon') THEN
+    CREATE ROLE anon NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'authenticated') THEN
+    CREATE ROLE authenticated NOLOGIN;
+  END IF;
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'service_role') THEN
+    CREATE ROLE service_role NOLOGIN;
+  END IF;
+END $$;
+
+CREATE SCHEMA IF NOT EXISTS extensions;
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA extensions;
+CREATE SCHEMA IF NOT EXISTS wf_canonical_staging;
+
+-- 1. Private Raw Source Staging Table
+CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_source_rows (
+  id UUID PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
+  source_system TEXT NOT NULL DEFAULT 'OceanDigital MariaDB',
+  source_database TEXT NOT NULL DEFAULT 'thecollective_inventory',
+  source_table TEXT NOT NULL DEFAULT 'auctions',
+  source_id TEXT NOT NULL,
+  source_unique_key TEXT,
+  source_record_id TEXT NOT NULL,
+  source_created_on TEXT,
+  source_updated_on TEXT,
+  captured_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  raw_message TEXT,
+  raw_message_source TEXT,
+  raw_sha256 TEXT,
+  raw_payload_text TEXT NOT NULL,
+  raw_payload JSONB NOT NULL,
+  source_hash TEXT NOT NULL CHECK (source_hash ~ '^[0-9a-f]{64}$'),
+  hash_algorithm TEXT NOT NULL DEFAULT 'sha256',
+  canonicalization_version TEXT NOT NULL DEFAULT 'v1-json-keys-sorted-compact',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  test_run_id VARCHAR(64),
+  CONSTRAINT uq_mariadb_raw_staging_provenance_hash 
+    UNIQUE (source_system, source_database, source_table, source_id, source_hash)
+);
+
+CREATE INDEX IF NOT EXISTS idx_mariadb_raw_staging_cursor
+  ON wf_canonical_staging.mariadb_raw_source_rows (source_created_on, source_id);
+
+CREATE INDEX IF NOT EXISTS idx_mariadb_raw_staging_source_id
+  ON wf_canonical_staging.mariadb_raw_source_rows (source_id);
+
+CREATE INDEX IF NOT EXISTS idx_mariadb_raw_staging_source_record_id
+  ON wf_canonical_staging.mariadb_raw_source_rows (source_record_id);
+
+-- 2. Checkpoint Ledger
+CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_checkpoints (
+  run_key TEXT PRIMARY KEY,
+  contract TEXT NOT NULL DEFAULT 'wf-mariadb-private-raw-staging-v1',
+  last_created_on TEXT NOT NULL,
+  last_source_id TEXT NOT NULL,
+  input_rows BIGINT NOT NULL DEFAULT 0,
+  newly_staged_rows BIGINT NOT NULL DEFAULT 0,
+  already_staged_identical_rows BIGINT NOT NULL DEFAULT 0,
+  capture_error_rows BIGINT NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'COPYING_RAW',
+  frozen_upper_boundary JSONB,
+  manifest_sha256 TEXT,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  completed_at TIMESTAMPTZ,
+  CHECK (status IN ('COPYING_RAW', 'RAW_STAGED', 'FAILED', 'VERIFICATION_COMPLETE'))
+);
+
+-- 3. Batch Audit Ledger
+CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_batches (
+  batch_token TEXT PRIMARY KEY CHECK (batch_token ~ '^[0-9a-f]{64}$'),
+  run_key TEXT NOT NULL REFERENCES wf_canonical_staging.mariadb_raw_import_checkpoints(run_key) ON DELETE RESTRICT,
+  first_source_id TEXT,
+  last_source_id TEXT,
+  source_rows INTEGER NOT NULL CHECK (source_rows >= 0),
+  newly_staged_rows INTEGER NOT NULL DEFAULT 0,
+  already_staged_identical_rows INTEGER NOT NULL DEFAULT 0,
+  capture_error_rows INTEGER NOT NULL DEFAULT 0,
+  result JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 4. Row-Level Capture Error Ledger
+CREATE TABLE IF NOT EXISTS wf_canonical_staging.mariadb_raw_import_errors (
+  id UUID PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
+  run_key TEXT NOT NULL,
+  batch_token TEXT,
+  source_id TEXT,
+  source_created_on TEXT,
+  source_hash TEXT,
+  raw_payload_text TEXT NOT NULL,
+  raw_payload JSONB,
+  error_reason TEXT NOT NULL,
+  error_detail JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 5. Revoke ALL direct table access from ALL roles (access mediated strictly via RPCs)
+REVOKE ALL ON SCHEMA wf_canonical_staging FROM PUBLIC, anon, authenticated;
+GRANT USAGE ON SCHEMA wf_canonical_staging TO service_role;
+
+REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_source_rows FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_checkpoints FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_batches FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON TABLE wf_canonical_staging.mariadb_raw_import_errors FROM PUBLIC, anon, authenticated, service_role;
+
+-- 5b. Checkpoint Retrieval Stored Procedure (Service-Role Only)
+CREATE OR REPLACE FUNCTION public.get_mariadb_private_raw_checkpoint(
+  p_run_key TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS $$
+DECLARE
+  v_cp wf_canonical_staging.mariadb_raw_import_checkpoints%ROWTYPE;
+BEGIN
+  IF COALESCE(btrim(p_run_key), '') = '' THEN
+    RAISE EXCEPTION 'run_key is required';
+  END IF;
+
+  SELECT * INTO v_cp
+  FROM wf_canonical_staging.mariadb_raw_import_checkpoints
+  WHERE run_key = p_run_key;
+
+  IF NOT FOUND THEN
+    RETURN NULL;
+  END IF;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'run_key', v_cp.run_key,
+    'contract', v_cp.contract,
+    'last_created_on', v_cp.last_created_on,
+    'last_source_id', v_cp.last_source_id,
+    'input_rows', v_cp.input_rows,
+    'newly_staged_rows', v_cp.newly_staged_rows,
+    'already_staged_identical_rows', v_cp.already_staged_identical_rows,
+    'capture_error_rows', v_cp.capture_error_rows,
+    'status', v_cp.status,
+    'frozen_upper_boundary', v_cp.frozen_upper_boundary,
+    'manifest_sha256', v_cp.manifest_sha256,
+    'started_at', v_cp.started_at,
+    'updated_at', v_cp.updated_at,
+    'completed_at', v_cp.completed_at
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_mariadb_private_raw_checkpoint(TEXT) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_mariadb_private_raw_checkpoint(TEXT) TO service_role;
+
+-- 6. Ingestion Stored Procedure with Strict Semantic & Cryptographic Verification
+CREATE OR REPLACE FUNCTION public.ingest_mariadb_private_raw_batch(
+  p_run_key TEXT,
+  p_batch_token TEXT,
+  p_contract TEXT,
+  p_expected_last_created_on TEXT,
+  p_expected_last_source_id TEXT,
+  p_next_last_created_on TEXT,
+  p_next_last_source_id TEXT,
+  p_records JSONB
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog, extensions
+AS $$
+DECLARE
+  v_checkpoint wf_canonical_staging.mariadb_raw_import_checkpoints%ROWTYPE;
+  v_batch wf_canonical_staging.mariadb_raw_import_batches%ROWTYPE;
+  v_record JSONB;
+  v_source_system TEXT;
+  v_source_database TEXT;
+  v_source_table TEXT;
+  v_source_id TEXT;
+  v_source_unique_key TEXT;
+  v_source_record_id TEXT;
+  v_source_created_on TEXT;
+  v_source_updated_on TEXT;
+  v_captured_at TIMESTAMPTZ;
+  v_raw_message TEXT;
+  v_raw_message_source TEXT;
+  v_raw_sha256 TEXT;
+  v_raw_payload_text TEXT;
+  v_raw_payload JSONB;
+  v_source_hash TEXT;
+  v_computed_hash TEXT;
+  v_hash_algo TEXT;
+  v_canon_version TEXT;
+  v_input_rows INTEGER := 0;
+  v_newly_staged INTEGER := 0;
+  v_already_staged INTEGER := 0;
+  v_capture_errors INTEGER := 0;
+  v_existing_id UUID;
+  v_first_source_id TEXT := NULL;
+  v_last_source_id TEXT := NULL;
+  v_result JSONB;
+BEGIN
+  IF COALESCE(btrim(p_run_key), '') = '' OR COALESCE(btrim(p_batch_token), '') = '' THEN
+    RAISE EXCEPTION 'run_key and batch_token are required';
+  END IF;
+
+  IF p_contract <> 'wf-mariadb-private-raw-staging-v1' THEN
+    RAISE EXCEPTION 'Unsupported contract: %', p_contract;
+  END IF;
+
+  -- Check if batch was already applied
+  SELECT * INTO v_batch
+  FROM wf_canonical_staging.mariadb_raw_import_batches
+  WHERE batch_token = p_batch_token;
+
+  IF FOUND THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'status', 'ALREADY_APPLIED',
+      'batch_token', p_batch_token,
+      'run_key', p_run_key,
+      'source_rows', v_batch.source_rows,
+      'newly_staged_rows', v_batch.newly_staged_rows,
+      'already_staged_identical_rows', v_batch.already_staged_identical_rows,
+      'capture_error_rows', v_batch.capture_error_rows
+    );
+  END IF;
+
+  -- Lock checkpoint
+  SELECT * INTO v_checkpoint
+  FROM wf_canonical_staging.mariadb_raw_import_checkpoints
+  WHERE run_key = p_run_key
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    INSERT INTO wf_canonical_staging.mariadb_raw_import_checkpoints (
+      run_key, contract, last_created_on, last_source_id, input_rows,
+      newly_staged_rows, already_staged_identical_rows, capture_error_rows, status
+    ) VALUES (
+      p_run_key, p_contract, COALESCE(p_expected_last_created_on, ''), COALESCE(p_expected_last_source_id, ''), 0,
+      0, 0, 0, 'COPYING_RAW'
+    ) RETURNING * INTO v_checkpoint;
+  END IF;
+
+  -- Verify cursor continuity
+  IF v_checkpoint.input_rows > 0 THEN
+    IF COALESCE(v_checkpoint.last_created_on, '') <> COALESCE(p_expected_last_created_on, '') OR
+       COALESCE(v_checkpoint.last_source_id, '') <> COALESCE(p_expected_last_source_id, '') THEN
+      RAISE EXCEPTION 'Checkpoint cursor mismatch: expected (%, %), found (%, %)',
+        v_checkpoint.last_created_on, v_checkpoint.last_source_id,
+        p_expected_last_created_on, p_expected_last_source_id;
+    END IF;
+  END IF;
+
+  -- Process records
+  FOR v_record IN SELECT * FROM pg_catalog.jsonb_array_elements(p_records) LOOP
+    v_input_rows := v_input_rows + 1;
+
+    BEGIN
+      v_source_system := COALESCE(v_record->>'source_system', 'OceanDigital MariaDB');
+      v_source_database := COALESCE(v_record->>'source_database', 'thecollective_inventory');
+      v_source_table := COALESCE(v_record->>'source_table', 'auctions');
+      v_source_id := v_record->>'source_id';
+      v_source_unique_key := v_record->>'source_unique_key';
+      v_source_record_id := COALESCE(v_record->>'source_record_id', 'mysql_auctions_' || v_source_id);
+      v_source_created_on := v_record->>'source_created_on';
+      v_source_updated_on := v_record->>'source_updated_on';
+      v_captured_at := COALESCE((v_record->>'captured_at')::timestamptz, pg_catalog.now());
+      v_raw_message := v_record->>'raw_message';
+      v_raw_message_source := v_record->>'raw_message_source';
+      v_raw_sha256 := v_record->>'raw_sha256';
+      v_raw_payload_text := v_record->>'raw_payload_text';
+      v_raw_payload := v_record->'raw_payload';
+      v_source_hash := v_record->>'source_hash';
+      v_hash_algo := COALESCE(v_record->>'hash_algorithm', 'sha256');
+      v_canon_version := COALESCE(v_record->>'canonicalization_version', 'v1-json-keys-sorted-compact');
+
+      IF v_first_source_id IS NULL THEN
+        v_first_source_id := v_source_id;
+      END IF;
+      v_last_source_id := v_source_id;
+
+      IF v_source_id IS NULL OR v_source_hash IS NULL OR v_raw_payload_text IS NULL OR v_raw_payload IS NULL THEN
+        RAISE EXCEPTION 'Missing mandatory identity fields: source_id, source_hash, raw_payload_text, or raw_payload';
+      END IF;
+
+      -- Enforce Supported Algorithm & Canonicalization Version
+      IF v_hash_algo <> 'sha256' THEN
+        RAISE EXCEPTION 'Unsupported hash algorithm: % (expected sha256)', v_hash_algo;
+      END IF;
+
+      IF v_canon_version <> 'v1-json-keys-sorted-compact' THEN
+        RAISE EXCEPTION 'Unsupported canonicalization version: % (expected v1-json-keys-sorted-compact)', v_canon_version;
+      END IF;
+
+      -- Enforce Semantic JSON Equivalence
+      IF v_raw_payload_text::jsonb <> v_raw_payload THEN
+        RAISE EXCEPTION 'Semantic JSON mismatch: raw_payload_text::jsonb does not equal raw_payload JSONB';
+      END IF;
+
+      -- Database-Side Cryptographic SHA-256 Verification using extensions.digest & convert_to
+      v_computed_hash := pg_catalog.encode(extensions.digest(pg_catalog.convert_to(v_raw_payload_text, 'UTF8'), 'sha256'), 'hex');
+      IF v_computed_hash <> v_source_hash THEN
+        RAISE EXCEPTION 'Database-side hash verification failed: computed %, expected %', v_computed_hash, v_source_hash;
+      END IF;
+
+      -- Check for existing identical staged row
+      SELECT id INTO v_existing_id
+      FROM wf_canonical_staging.mariadb_raw_source_rows
+      WHERE source_system = v_source_system
+        AND source_database = v_source_database
+        AND source_table = v_source_table
+        AND source_id = v_source_id
+        AND source_hash = v_source_hash;
+
+      IF FOUND THEN
+        v_already_staged := v_already_staged + 1;
+      ELSE
+        INSERT INTO wf_canonical_staging.mariadb_raw_source_rows (
+          source_system, source_database, source_table, source_id, source_unique_key,
+          source_record_id, source_created_on, source_updated_on, captured_at,
+          raw_message, raw_message_source, raw_sha256, raw_payload_text, raw_payload,
+          source_hash, hash_algorithm, canonicalization_version
+        ) VALUES (
+          v_source_system, v_source_database, v_source_table, v_source_id, v_source_unique_key,
+          v_source_record_id, v_source_created_on, v_source_updated_on, v_captured_at,
+          v_raw_message, v_raw_message_source, v_raw_sha256, v_raw_payload_text, v_raw_payload,
+          v_source_hash, v_hash_algo, v_canon_version
+        );
+        v_newly_staged := v_newly_staged + 1;
+      END IF;
+
+    EXCEPTION WHEN OTHERS THEN
+      v_capture_errors := v_capture_errors + 1;
+      INSERT INTO wf_canonical_staging.mariadb_raw_import_errors (
+        run_key, batch_token, source_id, source_created_on, source_hash,
+        raw_payload_text, raw_payload, error_reason, error_detail
+      ) VALUES (
+        p_run_key, p_batch_token, v_source_id, v_source_created_on, v_source_hash,
+        COALESCE(v_raw_payload_text, v_record::text), v_raw_payload, SQLERRM,
+        pg_catalog.jsonb_build_object('sqlstate', SQLSTATE, 'record_sample', v_record)
+      );
+    END;
+  END LOOP;
+
+  -- Update Checkpoint
+  UPDATE wf_canonical_staging.mariadb_raw_import_checkpoints
+  SET last_created_on = p_next_last_created_on,
+      last_source_id = p_next_last_source_id,
+      input_rows = input_rows + v_input_rows,
+      newly_staged_rows = newly_staged_rows + v_newly_staged,
+      already_staged_identical_rows = already_staged_identical_rows + v_already_staged,
+      capture_error_rows = capture_error_rows + v_capture_errors,
+      updated_at = pg_catalog.now()
+  WHERE run_key = p_run_key;
+
+  -- Record Batch Execution
+  v_result := pg_catalog.jsonb_build_object(
+    'status', 'APPLIED',
+    'batch_token', p_batch_token,
+    'run_key', p_run_key,
+    'source_rows', v_input_rows,
+    'newly_staged_rows', v_newly_staged,
+    'already_staged_identical_rows', v_already_staged,
+    'capture_error_rows', v_capture_errors
+  );
+
+  INSERT INTO wf_canonical_staging.mariadb_raw_import_batches (
+    batch_token, run_key, first_source_id, last_source_id, source_rows,
+    newly_staged_rows, already_staged_identical_rows, capture_error_rows, result
+  ) VALUES (
+    p_batch_token, p_run_key, v_first_source_id, v_last_source_id, v_input_rows,
+    v_newly_staged, v_already_staged, v_capture_errors, v_result
+  );
+
+  RETURN v_result;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.ingest_mariadb_private_raw_batch FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.ingest_mariadb_private_raw_batch TO service_role;
+
+-- 7. Verification Readback Stored Procedure
+CREATE OR REPLACE FUNCTION public.verify_mariadb_private_raw_readback(
+  p_source_ids TEXT[]
+)
+RETURNS TABLE (
+  source_id TEXT,
+  source_hash TEXT,
+  raw_payload_text TEXT,
+  hash_algorithm TEXT,
+  canonicalization_version TEXT,
+  source_created_on TEXT,
+  source_updated_on TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    r.source_id,
+    r.source_hash,
+    r.raw_payload_text,
+    r.hash_algorithm,
+    r.canonicalization_version,
+    r.source_created_on,
+    r.source_updated_on
+  FROM wf_canonical_staging.mariadb_raw_source_rows r
+  WHERE r.source_id = ANY(p_source_ids);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.verify_mariadb_private_raw_readback FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.verify_mariadb_private_raw_readback TO service_role;
+
+-- 8. Error Ledger Query Stored Procedure
+CREATE OR REPLACE FUNCTION public.get_mariadb_private_raw_errors(
+  p_run_key TEXT
+)
+RETURNS TABLE (
+  id UUID,
+  run_key TEXT,
+  batch_token TEXT,
+  source_id TEXT,
+  source_created_on TEXT,
+  source_hash TEXT,
+  raw_payload_text TEXT,
+  raw_payload JSONB,
+  error_reason TEXT,
+  error_detail JSONB,
+  created_at TIMESTAMPTZ
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS $$
+BEGIN
+  RETURN QUERY
+  SELECT 
+    e.id,
+    e.run_key,
+    e.batch_token,
+    e.source_id,
+    e.source_created_on,
+    e.source_hash,
+    e.raw_payload_text,
+    e.raw_payload,
+    e.error_reason,
+    e.error_detail,
+    e.created_at
+  FROM wf_canonical_staging.mariadb_raw_import_errors e
+  WHERE e.run_key = p_run_key;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_mariadb_private_raw_errors FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_mariadb_private_raw_errors TO service_role;
+
+-- 8b. Private Staged Auctions Keyset Batch Stored Procedure (Namespace-Isolated)
+CREATE OR REPLACE FUNCTION public.get_mariadb_private_staged_auctions_batch(
+  p_limit INT DEFAULT 1000,
+  p_last_created_on TEXT DEFAULT NULL,
+  p_last_source_id TEXT DEFAULT NULL,
+  p_source_system TEXT DEFAULT 'OceanDigital MariaDB',
+  p_source_database TEXT DEFAULT 'thecollective_inventory',
+  p_source_table TEXT DEFAULT 'auctions'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS $$
+DECLARE
+  v_res JSONB;
+BEGIN
+  IF p_last_created_on IS NULL OR p_last_source_id IS NULL THEN
+    SELECT jsonb_agg(sub) INTO v_res FROM (
+      SELECT 
+        r.id, r.source_system, r.source_database, r.source_table, r.source_id,
+        r.source_record_id, r.source_created_on, r.source_hash, r.raw_message,
+        r.raw_payload, r.captured_at
+      FROM wf_canonical_staging.mariadb_raw_source_rows r
+      WHERE r.source_system = p_source_system
+        AND r.source_database = p_source_database
+        AND r.source_table = p_source_table
+      ORDER BY r.source_created_on ASC, r.source_id ASC
+      LIMIT p_limit
+    ) sub;
+  ELSE
+    SELECT jsonb_agg(sub) INTO v_res FROM (
+      SELECT 
+        r.id, r.source_system, r.source_database, r.source_table, r.source_id,
+        r.source_record_id, r.source_created_on, r.source_hash, r.raw_message,
+        r.raw_payload, r.captured_at
+      FROM wf_canonical_staging.mariadb_raw_source_rows r
+      WHERE r.source_system = p_source_system
+        AND r.source_database = p_source_database
+        AND r.source_table = p_source_table
+        AND (r.source_created_on > p_last_created_on OR (r.source_created_on = p_last_created_on AND r.source_id > p_last_source_id))
+      ORDER BY r.source_created_on ASC, r.source_id ASC
+      LIMIT p_limit
+    ) sub;
+  END IF;
+
+  RETURN COALESCE(v_res, '[]'::jsonb);
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.get_mariadb_private_staged_auctions_batch(integer, text, text, text, text, text) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.get_mariadb_private_staged_auctions_batch(integer, text, text, text, text, text) TO service_role;
+
+-- 9. Checkpoint Finalization Stored Procedure with Full Reconciliation Assertion
+CREATE OR REPLACE FUNCTION public.finalize_mariadb_private_raw_checkpoint(
+  p_run_key TEXT,
+  p_expected_staged_rows BIGINT,
+  p_expected_error_rows BIGINT,
+  p_final_status TEXT DEFAULT 'RAW_STAGED'
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS $$
+DECLARE
+  v_checkpoint wf_canonical_staging.mariadb_raw_import_checkpoints%ROWTYPE;
+BEGIN
+  IF p_final_status NOT IN ('RAW_STAGED', 'VERIFICATION_COMPLETE') THEN
+    RAISE EXCEPTION 'Invalid final status: %', p_final_status;
+  END IF;
+
+  SELECT * INTO v_checkpoint
+  FROM wf_canonical_staging.mariadb_raw_import_checkpoints
+  WHERE run_key = p_run_key
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Checkpoint not found for run_key %', p_run_key;
+  END IF;
+
+  -- 1. Invariant: Staged rows match expectation
+  IF (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows) <> p_expected_staged_rows THEN
+    RAISE EXCEPTION 'Staged rows mismatch: checkpoint has %, expected %',
+      (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows), p_expected_staged_rows;
+  END IF;
+
+  -- 2. Invariant: Error rows match expectation
+  IF v_checkpoint.capture_error_rows <> p_expected_error_rows THEN
+    RAISE EXCEPTION 'Error rows mismatch: checkpoint has %, expected %',
+      v_checkpoint.capture_error_rows, p_expected_error_rows;
+  END IF;
+
+  -- 3. Independent Core Reconciliation Formula Assertion:
+  -- input_rows = newly_staged_rows + already_staged_identical_rows + capture_error_rows
+  IF v_checkpoint.input_rows <> (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows + v_checkpoint.capture_error_rows) THEN
+    RAISE EXCEPTION 'Reconciliation invariant failed: input_rows (%) <> staged (%) + errors (%)',
+      v_checkpoint.input_rows,
+      (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows),
+      v_checkpoint.capture_error_rows;
+  END IF;
+
+  UPDATE wf_canonical_staging.mariadb_raw_import_checkpoints
+  SET status = p_final_status,
+      completed_at = pg_catalog.now(),
+      updated_at = pg_catalog.now()
+  WHERE run_key = p_run_key;
+
+  RETURN pg_catalog.jsonb_build_object(
+    'status', 'FINALIZED',
+    'run_key', p_run_key,
+    'checkpoint_status', p_final_status,
+    'input_rows', v_checkpoint.input_rows,
+    'total_staged_rows', (v_checkpoint.newly_staged_rows + v_checkpoint.already_staged_identical_rows),
+    'capture_error_rows', v_checkpoint.capture_error_rows,
+    'completed_at', pg_catalog.now()
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.finalize_mariadb_private_raw_checkpoint FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.finalize_mariadb_private_raw_checkpoint TO service_role;
+
+-- 10. PostgreSQL Security Audit Stored Procedure (Complete 84-table-action check + 5 RPC executions)
+CREATE OR REPLACE FUNCTION public.audit_mariadb_private_raw_security()
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = wf_canonical_staging, pg_catalog
+AS $$
+DECLARE
+  v_report JSONB;
+BEGIN
+  v_report := pg_catalog.jsonb_build_object(
+    'schema_privileges', pg_catalog.jsonb_build_object(
+      'anon_usage', pg_catalog.has_schema_privilege('anon', 'wf_canonical_staging', 'USAGE'),
+      'authenticated_usage', pg_catalog.has_schema_privilege('authenticated', 'wf_canonical_staging', 'USAGE'),
+      'service_role_usage', pg_catalog.has_schema_privilege('service_role', 'wf_canonical_staging', 'USAGE')
+    ),
+    'table_privileges', pg_catalog.jsonb_build_object(
+      'mariadb_raw_source_rows', pg_catalog.jsonb_build_object(
+        'anon_select', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'SELECT'),
+        'anon_insert', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'INSERT'),
+        'anon_update', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'UPDATE'),
+        'anon_delete', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'DELETE'),
+        'anon_truncate', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'TRUNCATE'),
+        'anon_references', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'REFERENCES'),
+        'anon_trigger', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_source_rows', 'TRIGGER'),
+        'authenticated_select', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'SELECT'),
+        'authenticated_insert', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'INSERT'),
+        'authenticated_update', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'UPDATE'),
+        'authenticated_delete', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'DELETE'),
+        'authenticated_truncate', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'TRUNCATE'),
+        'authenticated_references', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'REFERENCES'),
+        'authenticated_trigger', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_source_rows', 'TRIGGER'),
+        'service_role_select', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'SELECT'),
+        'service_role_insert', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'INSERT'),
+        'service_role_update', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'UPDATE'),
+        'service_role_delete', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'DELETE'),
+        'service_role_truncate', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'TRUNCATE'),
+        'service_role_references', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'REFERENCES'),
+        'service_role_trigger', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_source_rows', 'TRIGGER')
+      ),
+      'mariadb_raw_import_checkpoints', pg_catalog.jsonb_build_object(
+        'anon_select', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'SELECT'),
+        'anon_insert', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'INSERT'),
+        'anon_update', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'UPDATE'),
+        'anon_delete', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'DELETE'),
+        'anon_truncate', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'TRUNCATE'),
+        'anon_references', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'REFERENCES'),
+        'anon_trigger', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'TRIGGER'),
+        'authenticated_select', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'SELECT'),
+        'authenticated_insert', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'INSERT'),
+        'authenticated_update', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'UPDATE'),
+        'authenticated_delete', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'DELETE'),
+        'authenticated_truncate', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'TRUNCATE'),
+        'authenticated_references', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'REFERENCES'),
+        'authenticated_trigger', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'TRIGGER'),
+        'service_role_select', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'SELECT'),
+        'service_role_insert', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'INSERT'),
+        'service_role_update', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'UPDATE'),
+        'service_role_delete', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'DELETE'),
+        'service_role_truncate', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'TRUNCATE'),
+        'service_role_references', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'REFERENCES'),
+        'service_role_trigger', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_checkpoints', 'TRIGGER')
+      ),
+      'mariadb_raw_import_batches', pg_catalog.jsonb_build_object(
+        'anon_select', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_batches', 'SELECT'),
+        'anon_insert', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_batches', 'INSERT'),
+        'anon_update', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_batches', 'UPDATE'),
+        'anon_delete', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_batches', 'DELETE'),
+        'anon_truncate', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_batches', 'TRUNCATE'),
+        'anon_references', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_batches', 'REFERENCES'),
+        'anon_trigger', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_batches', 'TRIGGER'),
+        'authenticated_select', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_batches', 'SELECT'),
+        'authenticated_insert', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_batches', 'INSERT'),
+        'authenticated_update', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_batches', 'UPDATE'),
+        'authenticated_delete', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_batches', 'DELETE'),
+        'authenticated_truncate', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_batches', 'TRUNCATE'),
+        'authenticated_references', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_batches', 'REFERENCES'),
+        'authenticated_trigger', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_batches', 'TRIGGER'),
+        'service_role_select', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'SELECT'),
+        'service_role_insert', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'INSERT'),
+        'service_role_update', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'UPDATE'),
+        'service_role_delete', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'DELETE'),
+        'service_role_truncate', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'TRUNCATE'),
+        'service_role_references', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'REFERENCES'),
+        'service_role_trigger', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_batches', 'TRIGGER')
+      ),
+      'mariadb_raw_import_errors', pg_catalog.jsonb_build_object(
+        'anon_select', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_errors', 'SELECT'),
+        'anon_insert', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_errors', 'INSERT'),
+        'anon_update', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_errors', 'UPDATE'),
+        'anon_delete', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_errors', 'DELETE'),
+        'anon_truncate', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_errors', 'TRUNCATE'),
+        'anon_references', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_errors', 'REFERENCES'),
+        'anon_trigger', pg_catalog.has_table_privilege('anon', 'wf_canonical_staging.mariadb_raw_import_errors', 'TRIGGER'),
+        'authenticated_select', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_errors', 'SELECT'),
+        'authenticated_insert', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_errors', 'INSERT'),
+        'authenticated_update', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_errors', 'UPDATE'),
+        'authenticated_delete', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_errors', 'DELETE'),
+        'authenticated_truncate', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_errors', 'TRUNCATE'),
+        'authenticated_references', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_errors', 'REFERENCES'),
+        'authenticated_trigger', pg_catalog.has_table_privilege('authenticated', 'wf_canonical_staging.mariadb_raw_import_errors', 'TRIGGER'),
+        'service_role_select', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'SELECT'),
+        'service_role_insert', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'INSERT'),
+        'service_role_update', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'UPDATE'),
+        'service_role_delete', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'DELETE'),
+        'service_role_truncate', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'TRUNCATE'),
+        'service_role_references', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'REFERENCES'),
+        'service_role_trigger', pg_catalog.has_table_privilege('service_role', 'wf_canonical_staging.mariadb_raw_import_errors', 'TRIGGER')
+      )
+    ),
+    'function_privileges', pg_catalog.jsonb_build_object(
+      'ingest_batch', pg_catalog.jsonb_build_object(
+        'anon_execute', pg_catalog.has_function_privilege('anon', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb)', 'EXECUTE'),
+        'authenticated_execute', pg_catalog.has_function_privilege('authenticated', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb)', 'EXECUTE'),
+        'service_role_execute', pg_catalog.has_function_privilege('service_role', 'public.ingest_mariadb_private_raw_batch(text,text,text,text,text,text,text,jsonb)', 'EXECUTE')
+      ),
+      'verify_readback', pg_catalog.jsonb_build_object(
+        'anon_execute', pg_catalog.has_function_privilege('anon', 'public.verify_mariadb_private_raw_readback(text[])', 'EXECUTE'),
+        'authenticated_execute', pg_catalog.has_function_privilege('authenticated', 'public.verify_mariadb_private_raw_readback(text[])', 'EXECUTE'),
+        'service_role_execute', pg_catalog.has_function_privilege('service_role', 'public.verify_mariadb_private_raw_readback(text[])', 'EXECUTE')
+      ),
+      'get_errors', pg_catalog.jsonb_build_object(
+        'anon_execute', pg_catalog.has_function_privilege('anon', 'public.get_mariadb_private_raw_errors(text)', 'EXECUTE'),
+        'authenticated_execute', pg_catalog.has_function_privilege('authenticated', 'public.get_mariadb_private_raw_errors(text)', 'EXECUTE'),
+        'service_role_execute', pg_catalog.has_function_privilege('service_role', 'public.get_mariadb_private_raw_errors(text)', 'EXECUTE')
+      ),
+      'finalize_checkpoint', pg_catalog.jsonb_build_object(
+        'anon_execute', pg_catalog.has_function_privilege('anon', 'public.finalize_mariadb_private_raw_checkpoint(text,bigint,bigint,text)', 'EXECUTE'),
+        'authenticated_execute', pg_catalog.has_function_privilege('authenticated', 'public.finalize_mariadb_private_raw_checkpoint(text,bigint,bigint,text)', 'EXECUTE'),
+        'service_role_execute', pg_catalog.has_function_privilege('service_role', 'public.finalize_mariadb_private_raw_checkpoint(text,bigint,bigint,text)', 'EXECUTE')
+      ),
+      'audit_security', pg_catalog.jsonb_build_object(
+        'anon_execute', pg_catalog.has_function_privilege('anon', 'public.audit_mariadb_private_raw_security()', 'EXECUTE'),
+        'authenticated_execute', pg_catalog.has_function_privilege('authenticated', 'public.audit_mariadb_private_raw_security()', 'EXECUTE'),
+        'service_role_execute', pg_catalog.has_function_privilege('service_role', 'public.audit_mariadb_private_raw_security()', 'EXECUTE')
+      )
+    )
+  );
+
+  RETURN v_report;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.audit_mariadb_private_raw_security FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.audit_mariadb_private_raw_security TO service_role;
+
+COMMIT;

@@ -1,0 +1,230 @@
+{
+  "dial_colors": {
+    "black": {
+      "label": "Black",
+      "type": "Dial"
+    },
+    "blue": {
+      "label": "Blue",
+      "type": "Dial"
+    },
+    "white": {
+      "label": "White",
+      "type": "Dial"
+    },
+    "green": {
+      "label": "Green",
+      "type": "Dial"
+    },
+    "brown": {
+      "label": "Brown",
+      "type": "Dial"
+    },
+    "grey": {
+      "label": "Grey",
+      "type": "Dial"
+    },
+    "gray": {
+      "label": "Grey",
+      "type": "Dial"
+    },
+    "silver": {
+      "label": "Silver",
+      "type": "Dial"
+    },
+    "pink": {
+      "label": "Pink",
+      "type": "Dial"
+    },
+    "red": {
+      "label": "Red",
+      "type": "Dial"
+    },
+    "orange": {
+      "label": "Orange",
+      "type": "Dial"
+    },
+    "yellow": {
+      "label": "Yellow",
+      "type": "Dial"
+    },
+    "gold": {
+      "label": "Gold",
+      "type": "Dial"
+    },
+    "champagne": {
+      "label": "Champagne",
+      "type": "Dial"
+    },
+    "purple": {
+      "label": "Purple",
+      "type": "Dial"
+    },
+    "turquoise": {
+      "label": "Turquoise",
+      "type": "Dial"
+    },
+    "chocolate": {
+      "label": "Chocolate",
+      "type": "Dial"
+    },
+    "cream": {
+      "label": "Cream",
+      "type": "Dial"
+    },
+    "ivory": {
+      "label": "Ivory",
+      "type": "Dial"
+    },
+    "ice blue": {
+      "label": "Ice Blue",
+      "type": "Dial"
+    },
+    "meteorite": {
+      "label": "Meteorite",
+      "type": "Dial"
+    },
+    "sundust": {
+      "label": "Sundust",
+      "type": "Dial"
+    },
+    "obsidian": {
+      "label": "Obsidian",
+      "type": "Dial"
+    },
+    "rhodium": {
+      "label": "Rhodium",
+      "type": "Dial"
+    },
+    "burgundy": {
+      "label": "Burgundy",
+      "type": "Dial"
+    },
+    "mother of pearl": {
+      "label": "Mother of Pearl",
+      "type": "Dial"
+    },
+    "mop": {
+      "label": "Mother of Pearl",
+      "type": "Dial"
+    },
+    "salmon": {
+      "label": "Salmon",
+      "type": "Dial"
+    },
+    "tiffany": {
+      "label": "Tiffany",
+      "type": "Dial"
+    },
+    "wimbledon": {
+      "label": "Wimbledon",
+      "type": "Dial"
+    },
+    "skeleton": {
+      "label": "Skeleton",
+      "type": "Dial"
+    },
+    "copper": {
+      "label": "Copper",
+      "type": "Dial"
+    },
+    "onyx": {
+      "label": "Onyx",
+      "type": "Dial"
+    },
+    "lapis": {
+      "label": "Lapis Lazuli",
+      "type": "Dial"
+    },
+    "opal": {
+      "label": "Opal",
+      "type": "Dial"
+    },
+    "ruby": {
+      "label": "Ruby",
+      "type": "Dial"
+    },
+    "emerald": {
+      "label": "Emerald",
+      "type": "Dial"
+    },
+    "sapphire": {
+      "label": "Sapphire",
+      "type": "Dial"
+    },
+    "diamond": {
+      "label": "Diamond",
+      "type": "Dial"
+    },
+    "pearl": {
+      "label": "Mother of Pearl",
+      "type": "Dial"
+    },
+    "zebra": {
+      "label": "Zebra",
+      "type": "Dial"
+    },
+    "panda": {
+      "label": "Panda",
+      "type": "Dial"
+    },
+    "hulk": {
+      "label": "Green",
+      "type": "Dial"
+    },
+    "starbucks": {
+      "label": "Green",
+      "type": "Dial"
+    },
+    "kermit": {
+      "label": "Green",
+      "type": "Dial"
+    },
+    "smurf": {
+      "label": "Blue",
+      "type": "Dial"
+    },
+    "batman": {
+      "label": "Black",
+      "type": "Dial"
+    },
+    "batgirl": {
+      "label": "Black",
+      "type": "Dial"
+    },
+    "pepsi": {
+      "label": "Red Blue",
+      "type": "Dial"
+    },
+    "rootbeer": {
+      "label": "Brown",
+      "type": "Dial"
+    },
+    "coke": {
+      "label": "Black",
+      "type": "Dial"
+    },
+    "sprite": {
+      "label": "Green Black",
+      "type": "Dial"
+    },
+    "ghost": {
+      "label": "Silver",
+      "type": "Dial"
+    },
+    "bruce wayne": {
+      "label": "Black",
+      "type": "Dial"
+    }
+  },
+  "dial_types": {
+    "arabic": "Arabic",
+    "roman": "Roman",
+    "index": "Index",
+    "stick": "Index",
+    "baton": "Index",
+    "diamond": "Diamond",
+    "baguette": "Baguette",
+    "serti": "Serti"
+  }
+}

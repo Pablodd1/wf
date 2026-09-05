@@ -1,0 +1,310 @@
+name: Reconcile verified Supabase migration ledger
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Inspect only, or mark only verified migrations as applied
+        required: true
+        default: inspect
+        type: choice
+        options:
+          - inspect
+          - repair
+      confirmation:
+        description: Type INSPECT_LEDGER or REPAIR_VERIFIED_LEDGER
+        required: true
+        type: string
+
+concurrency:
+  group: supabase-migration-ledger-reconcile
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    if: >-
+      (inputs.mode == 'inspect' && inputs.confirmation == 'INSPECT_LEDGER') ||
+      (inputs.mode == 'repair' && inputs.confirmation == 'REPAIR_VERIFIED_LEDGER')
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Validate secrets and resolve IPv4 pooler target
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PGPASSWORD"
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_PROJECT_REF"
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
+      - name: Link production project
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase link \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --password "$PGPASSWORD"
+
+      - name: Verify durable schema evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align \
+            --field-separator=$'\t' > /tmp/ledger-verification.tsv <<'SQL'
+          WITH checks(version, ready, evidence) AS (
+            VALUES
+              ('20260718190000',
+                to_regclass('public.dealer_directory_import_staging') IS NOT NULL
+                  AND to_regclass('public.idx_dealers_slug_unique') IS NOT NULL
+                  AND to_regclass('public.idx_dealers_directory_source_unique') IS NOT NULL
+                  AND to_regclass('public.idx_dealer_directory_staging_status') IS NOT NULL
+                  AND to_regclass('public.idx_dealer_directory_staging_source') IS NOT NULL
+                  AND to_regclass('public.dealer_profile_stats') IS NOT NULL
+                  AND (SELECT count(*) = 13 FROM information_schema.columns
+                       WHERE table_schema = 'public' AND table_name = 'dealers'
+                         AND column_name IN ('slug','company_name','country_code','city','rating','review_count',
+                           'whatsapp_group_count','avatar_url','directory_url','directory_source_id',
+                           'profile_summary','metadata','last_synced_at')),
+                'dealer profile columns, staging table, indexes, and stats view'),
+              ('20260719140000',
+                to_regclass('public.price_remediation_review') IS NOT NULL
+                  AND to_regclass('public.idx_price_remediation_review_queue') IS NOT NULL
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                    WHERE oid = to_regclass('public.price_remediation_review')), false),
+                'price remediation review table, queue index, and RLS'),
+              ('20260719170000',
+                to_regclass('public.dealer_profile_stats') IS NOT NULL
+                  AND pg_get_viewdef(to_regclass('public.dealer_profile_stats'), true) ILIKE '%listing_date%'
+                  AND pg_get_viewdef(to_regclass('public.dealer_profile_stats'), true) ILIKE '%dated_posts%'
+                  AND pg_get_viewdef(to_regclass('public.dealer_profile_stats'), true) ILIKE '%undated_posts%',
+                'superseding dealer stats view preserves original listing dates'),
+              ('20260719230000',
+                to_regprocedure('public.apply_dial_only_review_decision(text,text,text,jsonb)') IS NOT NULL
+                  AND has_function_privilege('service_role',
+                    to_regprocedure('public.apply_dial_only_review_decision(text,text,text,jsonb)'), 'EXECUTE'),
+                'dial-only review function and service-role execution'),
+              ('20260719231000',
+                to_regclass('public.normalization_promotion_audit') IS NOT NULL
+                  AND to_regclass('public.idx_normalization_promotion_audit_source') IS NOT NULL
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                    WHERE oid = to_regclass('public.normalization_promotion_audit')), false),
+                'promotion audit table, source index, and RLS'),
+              ('20260719232000',
+                to_regprocedure('public.apply_price_review_decision(bigint,text,text)') IS NOT NULL
+                  AND has_function_privilege('service_role',
+                    to_regprocedure('public.apply_price_review_decision(bigint,text,text)'), 'EXECUTE'),
+                'price review function and service-role execution'),
+              ('20260719234000',
+                to_regclass('public.media_manifest') IS NOT NULL
+                  AND to_regprocedure('public.enqueue_normalization_shadow_work()') IS NOT NULL
+                  AND NOT has_table_privilege('anon', to_regclass('public.media_manifest'), 'SELECT')
+                  AND NOT has_table_privilege('authenticated',
+                    to_regclass('public.media_manifest'), 'SELECT')
+                  AND has_table_privilege('service_role',
+                    to_regclass('public.media_manifest'), 'SELECT')
+                  AND NOT has_function_privilege('anon',
+                    to_regprocedure('public.enqueue_normalization_shadow_work()'), 'EXECUTE')
+                  AND has_function_privilege('service_role',
+                    to_regprocedure('public.enqueue_normalization_shadow_work()'), 'EXECUTE'),
+                'media and normalization enqueue privileges'),
+              ('20260720090000',
+                to_regclass('public.ai_api_quota_windows') IS NOT NULL
+                  AND to_regclass('public.idx_ai_api_quota_windows_updated') IS NOT NULL
+                  AND to_regprocedure('public.consume_ai_api_quota(text,text,integer,integer)') IS NOT NULL
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                    WHERE oid = to_regclass('public.ai_api_quota_windows')), false),
+                'AI quota table, index, function, and RLS'),
+              ('20260720113000',
+                to_regprocedure('public.is_unsplit_bundle_parent(text)') IS NOT NULL
+                  AND to_regprocedure('public.unsplit_bundle_parent_ids(text[])') IS NOT NULL
+                  AND to_regclass('public.trading_floor_listings') IS NOT NULL
+                  AND to_regclass('public.dealer_profile_stats') IS NOT NULL
+                  AND EXISTS (SELECT 1 FROM pg_policies WHERE schemaname = 'public'
+                    AND tablename = 'watch_records' AND policyname = 'trading_floor_public_read')
+                  AND pg_get_viewdef(to_regclass('public.trading_floor_listings'), true)
+                    ILIKE '%is_unsplit_bundle_parent%',
+                'bundle gates, public policy, floor view, and dealer stats'),
+              ('20260720190000',
+                to_regclass('public.watch_staging') IS NOT NULL
+                  AND to_regclass('public.unbundled_staging_review_audit') IS NOT NULL
+                  AND to_regclass('public.idx_watch_staging_batch_review') IS NOT NULL
+                  AND to_regclass('public.idx_unbundled_review_audit_staging') IS NOT NULL
+                  AND to_regprocedure(
+                    'public.apply_unbundled_staging_review_decision(uuid,text,text,text,boolean)') IS NOT NULL
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                       WHERE oid = to_regclass('public.unbundled_staging_review_audit')), false)
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                       WHERE oid = to_regclass('public.watch_staging')), false)
+                  AND NOT has_table_privilege('anon',
+                    to_regclass('public.watch_staging'), 'SELECT')
+                  AND NOT has_table_privilege('authenticated',
+                    to_regclass('public.watch_staging'), 'SELECT')
+                  AND has_table_privilege('service_role',
+                    to_regclass('public.watch_staging'), 'SELECT'),
+                'unbundled staging tables, indexes, review function, and RLS'),
+              ('20260720220000',
+                to_regclass('public.seller_listing_lineage_staging') IS NOT NULL
+                  AND to_regclass('public.idx_seller_lineage_staging_status') IS NOT NULL
+                  AND to_regclass('public.idx_seller_lineage_staging_source_record') IS NOT NULL
+                  AND to_regclass('public.idx_seller_lineage_staging_identity') IS NOT NULL
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                       WHERE oid = to_regclass('public.seller_listing_lineage_staging')), false),
+                'private seller lineage table, indexes, and RLS'),
+              ('20260721010000',
+                EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public'
+                  AND table_name = 'dealers' AND column_name = 'auth_user_id')
+                  AND to_regclass('public.idx_dealers_auth_user_unique') IS NOT NULL
+                  AND to_regclass('public.dealer_listing_submissions') IS NOT NULL
+                  AND to_regclass('public.idx_dealer_submissions_review_created') IS NOT NULL
+                  AND to_regclass('public.idx_dealer_submissions_user_created') IS NOT NULL
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                       WHERE oid = to_regclass('public.dealer_listing_submissions')), false),
+                'dealer auth link, submissions table, indexes, and RLS'),
+              ('20260721020000',
+                to_regclass('public.dealer_account_preferences') IS NOT NULL
+                  AND to_regclass('public.dealer_support_tickets') IS NOT NULL
+                  AND to_regclass('public.idx_dealer_tickets_user_created') IS NOT NULL
+                  AND to_regclass('public.idx_dealer_tickets_status_created') IS NOT NULL
+                  AND COALESCE((SELECT bool_and(relrowsecurity) FROM pg_class
+                       WHERE oid IN (to_regclass('public.dealer_account_preferences'),
+                         to_regclass('public.dealer_support_tickets'))), false),
+                'dealer preferences and tickets tables, indexes, and RLS'),
+              ('20260721120000',
+                to_regclass('public.seller_child_lineage_staging') IS NOT NULL
+                  AND to_regclass('public.idx_seller_child_lineage_review') IS NOT NULL
+                  AND to_regclass('public.idx_seller_child_lineage_parent') IS NOT NULL
+                  AND to_regclass('public.idx_seller_child_lineage_seller_config') IS NOT NULL
+                  AND (SELECT count(*) = 3 FROM pg_constraint
+                       WHERE conrelid = to_regclass('public.seller_child_lineage_staging')
+                         AND conname IN ('seller_child_lineage_parent_fk',
+                           'seller_child_lineage_intent_gate',
+                           'seller_child_lineage_image_evidence_gate'))
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                       WHERE oid = to_regclass('public.seller_child_lineage_staging')), false),
+                'child lineage table, constraints, indexes, and RLS'),
+              ('20260721150000',
+                to_regprocedure(
+                  'public.apply_unbundled_human_review_action(uuid,text,text,text,jsonb)') IS NOT NULL
+                  AND EXISTS (SELECT 1 FROM pg_constraint
+                    WHERE conrelid = to_regclass('public.unbundled_staging_review_audit')
+                      AND conname = 'unbundled_staging_review_audit_decision_check'),
+                'human correction function and decision constraint'),
+              ('20260721170000',
+                to_regclass('public.duplicate_review_candidates') IS NOT NULL
+                  AND to_regclass('public.idx_duplicate_review_candidates_queue') IS NOT NULL
+                  AND to_regclass('public.idx_duplicate_review_candidates_duplicate') IS NOT NULL
+                  AND to_regprocedure(
+                    'public.apply_duplicate_review_decision(uuid,text,text,text)') IS NOT NULL
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                       WHERE oid = to_regclass('public.duplicate_review_candidates')), false),
+                'duplicate queue, indexes, decision function, and RLS'),
+              ('20260722093000',
+                to_regprocedure('public.reject_price_review_decision(bigint,text,text)') IS NOT NULL
+                  AND has_function_privilege('service_role',
+                    to_regprocedure('public.reject_price_review_decision(bigint,text,text)'), 'EXECUTE'),
+                'price rejection function and service-role execution'),
+              ('20260722120000',
+                to_regclass('public.trading_floor_market_listings') IS NOT NULL
+                  AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
+                    ILIKE '%price_usd%'
+                  AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
+                    ILIKE '%listing_type%'
+                  AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
+                    ILIKE '%brand%'
+                  AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
+                    ILIKE '%reference%'
+                  AND pg_get_viewdef(to_regclass('public.trading_floor_market_listings'), true)
+                    ILIKE '%dial_color%',
+                'strict publication view and identity/price/intent gates'),
+              ('20260722143000',
+                (SELECT count(*) = 3 FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = 'watch_records'
+                   AND column_name IN ('model','catalog_confirmed','catalog_match'))
+                  AND col_description(to_regclass('public.watch_records'),
+                    (SELECT attnum FROM pg_attribute WHERE attrelid =
+                      to_regclass('public.watch_records') AND attname = 'catalog_confirmed')) IS NOT NULL,
+                'catalog provenance columns and comments'),
+              ('20260722170000',
+                to_regclass('public.idx_shadow_v4_bundle_parent_source') IS NOT NULL
+                  AND pg_get_indexdef(to_regclass('public.idx_shadow_v4_bundle_parent_source'))
+                    ILIKE '%candidate_count%',
+                'partial bundle-parent lookup index'),
+              ('20260722180000',
+                to_regclass('public.idx_watch_records_reference_created_at_desc') IS NOT NULL
+                  AND pg_get_indexdef(to_regclass('public.idx_watch_records_reference_created_at_desc'))
+                    ILIKE '%reference%created_at%id%',
+                'reference/date/keyset index'),
+              ('20260724223000',
+                to_regclass('public.reviewer_contact_access_audit') IS NOT NULL
+                  AND to_regclass('public.idx_reviewer_contact_access_created') IS NOT NULL
+                  AND to_regclass('public.idx_reviewer_contact_access_reviewer') IS NOT NULL
+                  AND COALESCE((SELECT relrowsecurity FROM pg_class
+                       WHERE oid = to_regclass('public.reviewer_contact_access_audit')), false)
+                  AND NOT has_table_privilege('anon',
+                    to_regclass('public.reviewer_contact_access_audit'), 'SELECT')
+                  AND NOT has_table_privilege('authenticated',
+                    to_regclass('public.reviewer_contact_access_audit'), 'SELECT')
+                  AND has_table_privilege('service_role',
+                    to_regclass('public.reviewer_contact_access_audit'), 'SELECT'),
+                'private contact audit table, indexes, RLS, and privileges')
+          )
+          SELECT version, ready, evidence FROM checks ORDER BY version;
+          SQL
+
+          {
+            echo "## Production migration ledger evidence"
+            echo
+            echo "| Version | Verified | Durable evidence |"
+            echo "|---|---:|---|"
+            while IFS=$'\t' read -r version ready evidence; do
+              evidence="${evidence%$'\r'}"
+              echo "| \`$version\` | $ready | $evidence |"
+            done < /tmp/ledger-verification.tsv
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          cat /tmp/ledger-verification.tsv
+
+      - name: Repair verified ledger entries
+        if: ${{ inputs.mode == 'repair' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          repaired=0
+          unresolved=0
+          while IFS=$'\t' read -r version ready _evidence; do
+            if [[ "$ready" == "t" ]]; then
+              supabase migration repair "$version" --status applied
+              repaired=$((repaired + 1))
+            else
+              echo "::warning title=Unverified migration::$version was not marked applied."
+              unresolved=$((unresolved + 1))
+            fi
+          done < /tmp/ledger-verification.tsv
+
+          echo "Repaired verified versions: $repaired" >> "$GITHUB_STEP_SUMMARY"
+          echo "Unresolved versions: $unresolved" >> "$GITHUB_STEP_SUMMARY"
+          supabase migration list
+
+          if (( unresolved > 0 )); then
+            echo "Ledger remains partially unresolved; no migration SQL was replayed."
+            exit 2
+          fi

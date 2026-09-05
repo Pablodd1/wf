@@ -1,0 +1,69 @@
+{
+  "contract": "wf-migration-integration-results-v2",
+  "timestamp": "2026-09-04T14:47:29Z",
+  "staging_run_id": "disp_int_run_1788533238_97399239",
+  "git_commit_sha": "753c2f741786c40cfba719797742f90c3fc174df",
+  "database_engine": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "migrations_applied": [
+    {
+      "migration": "20260829120000_private_mariadb_raw_staging.sql",
+      "status": "APPLIED",
+      "duration_ms": 389.66
+    },
+    {
+      "migration": "20260830150000_private_mariadb_normalized_staging.sql",
+      "status": "APPLIED",
+      "duration_ms": 145.05
+    },
+    {
+      "migration": "20260902130000_v2_canary_forward_migration.sql",
+      "status": "APPLIED",
+      "duration_ms": 175.0
+    }
+  ],
+  "external_dependent_view_preserved": true,
+  "views_verified": {
+    "public.trading_floor_ready_view_v2": {
+      "valid": true,
+      "count": 0
+    },
+    "public.price_research_ready_view_v2": {
+      "valid": true,
+      "count": 0
+    },
+    "public.listing_display_detail_view_v2": {
+      "valid": true,
+      "count": 0
+    },
+    "public.seller_listing_analytics_view_v2": {
+      "valid": true,
+      "count": 0
+    }
+  },
+  "partition_reconciliation": {
+    "status": "PASS",
+    "method": "wf_canonical_staging.reconcile_raw_partitions()",
+    "exact_duplicate_ledger_count": 1,
+    "quarantined_conflict_count": 1
+  },
+  "fixtures_exercised": 15,
+  "keyset_pagination": {
+    "status": "PASS",
+    "order": "priced_rank ASC, image_rank ASC, price_usd DESC NULLS LAST, source_created_at DESC, listing_id ASC",
+    "retrieved_count": 14,
+    "duplicates": 0,
+    "skips": 0
+  },
+  "repost_deduplication": {
+    "case_a_shared_repost_key_collapsed": true,
+    "case_b_separate_watches_preserved": true
+  },
+  "concurrent_mutation_snapshot_tested": {
+    "isolation_level": "REPEATABLE READ",
+    "two_independent_connections": true,
+    "snapshot_leak_detected": false,
+    "status": "PASS"
+  },
+  "disposable_marker_verified": true,
+  "status": "PASS"
+}

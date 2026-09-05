@@ -1,0 +1,53 @@
+{
+  "contract": "wf-browser-smoke-results-v2",
+  "timestamp": "2026-09-04T15:35:10Z",
+  "test_suite": "tests/staging-browser-smoke.test.cjs",
+  "environment": {
+    "staging_deployment_url": "http://127.0.0.1:3001",
+    "disposable_database": "PostgreSQL 18.6 (interchange.proxy.rlwy.net:38261)",
+    "browser_engine": "Microsoft Edge / Chrome Headless (CDP Protocol)",
+    "fixtures_inserted": 14,
+    "fixtures_cleaned_up": true
+  },
+  "static_and_gate_assertions": {
+    "1_fails_closed_when_authorization_flag_missing": "PASSED",
+    "2_fails_closed_when_deployment_url_missing_or_whitespace": "PASSED",
+    "3_refuses_production_domains": "PASSED (watchfacts-poc, luxuryapp-wf, wf-production-00b9)",
+    "4_genuine_staging_gate_verified": "PASSED"
+  },
+  "empirical_browser_execution": {
+    "5_genuine_browser_smoke_test_against_staging": "PASSED (3099.8ms)",
+    "trading_floor": {
+      "url": "http://127.0.0.1:3001/#/trading",
+      "root_element_rendered": true,
+      "cards_rendered": true,
+      "duplicate_listing_ids_on_page": 0,
+      "target_fixture_rendered": "browser-fixture-04 (Rolex Daytona 116500LN White New $32,000)",
+      "formatted_price_usd_present": true,
+      "image_behavior_truthful": true,
+      "deterministic_ordering": "Priced WTS items first, descending price (PASSED)",
+      "next_page_cursor_exercised": true,
+      "console_errors_count": 0,
+      "network_errors_count": 0,
+      "screenshot_artifact": "audit-output/mariadb-live/browser-trading-floor.png"
+    },
+    "price_research": {
+      "url": "http://127.0.0.1:3001/#/price-research?brand=Patek+Philippe&reference=7128%2F1G&dial=Blue&condition=New",
+      "root_element_rendered": true,
+      "cohort_brand_rendered": "Patek Philippe",
+      "cohort_reference_rendered": "7128/1G",
+      "iqr_formula_multiplier_rendered": true,
+      "unresolved_cohort_behavior": "Rolex NONEXISTENT999999 gracefully renders developing/empty stats without median price (PASSED)",
+      "console_errors_count": 0,
+      "network_errors_count": 0,
+      "screenshot_artifact": "audit-output/mariadb-live/browser-price-research.png"
+    }
+  },
+  "railway_disposable_project_status": {
+    "total_wf_v2_projects_audited": 13,
+    "all_wf_v2_projects_deleted": true,
+    "active_wf_v2_projects_remaining": 0,
+    "proof": "railway list --json confirms deletedAt is populated for all 13 wf-v2-* projects; zero active remain."
+  },
+  "overall_verdict": "BROWSER_INTEGRATION_PASSED"
+}

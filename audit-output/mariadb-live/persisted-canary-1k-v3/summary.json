@@ -1,0 +1,89 @@
+{
+  "contract": "wf-persisted-canary-1k-v3-summary-v2",
+  "job_name": "canary-1000-v3-persisted-norm-authoritative",
+  "timestamp": "2026-08-30T21:44:56.592Z",
+  "frozen_upper_cursor": {
+    "created_on": "2026-04-28T15:50:43.000Z",
+    "source_id": "3cddaf9f-9f36-4633-a08e-59a6dfdca057"
+  },
+  "keyset_boundary": {
+    "initial_resumption_cursor": {
+      "created_on": "2025-02-08T11:30:05.000Z",
+      "source_id": "57e193fd-473a-44e6-bc7e-a26772c37da6"
+    },
+    "final_processed_cursor": {
+      "created_on": "2025-02-14T17:45:25.000Z",
+      "source_id": "ee9fdbd8-09fc-4379-9405-9d22f63443cf"
+    }
+  },
+  "invariants": {
+    "exact_1000_v3_inputs_processed": true,
+    "exact_reconciliation": true,
+    "state_idempotency_inserted_zero": true,
+    "state_idempotency_unchanged_all_1000": true,
+    "detail_composite_evidence_joins_verified": true,
+    "zero_wrong_namespace_evidence": true,
+    "all_proposal_hashes_64_char": true,
+    "raw_capture_checkpoint_preserved_at_951750": true,
+    "zero_public_delta_measured": true
+  },
+  "counts": {
+    "total_v3_inputs": 1000,
+    "normalized_proposals": 183,
+    "review_required": 817,
+    "normalization_errors": 0
+  },
+  "idempotency_accounting": {
+    "inserted": 0,
+    "updated": 0,
+    "unchanged": 1000,
+    "total": 1000
+  },
+  "eligibility": {
+    "trading_floor_eligible_count": 197,
+    "trading_floor_eligible_pct": "19.70%",
+    "price_research_eligible_count": 0,
+    "price_research_eligible_pct": "0.00%"
+  },
+  "public_before_after_comparison": {
+    "trading_floor_ready_view": {
+      "before_count": 96340,
+      "after_count": 96340,
+      "delta": 0,
+      "before_latest": null,
+      "after_latest": null,
+      "unchanged": true
+    },
+    "price_research_ready_view": {
+      "before_count": 31848,
+      "after_count": 31848,
+      "delta": 0,
+      "before_latest": null,
+      "after_latest": null,
+      "unchanged": true
+    },
+    "public_raw_messages": {
+      "before_count": 10000,
+      "after_count": 10000,
+      "delta": 0,
+      "before_latest": "2026-08-10T12:59:57.16665+00:00",
+      "after_latest": "2026-08-10T12:59:57.16665+00:00",
+      "unchanged": true
+    },
+    "public_watch_records": {
+      "before_count": 0,
+      "after_count": 0,
+      "delta": 0,
+      "before_latest": null,
+      "after_latest": null,
+      "unchanged": true
+    },
+    "zero_public_mutation_verified": true
+  },
+  "evidence_access_and_contact_coverage": {
+    "provenance_links_valid_count": 1000,
+    "composite_provenance_5_fields_joined": true,
+    "seller_contact_masked_in_detail_rpc": true,
+    "whatsapp_inquiry_ready_ratio": "100.00%"
+  }
+}

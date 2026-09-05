@@ -1,0 +1,54 @@
+name: QNSA Patek missing-field recoverability read-only
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type READ_ONLY_PATEK_MISSING_FIELD_RECOVERABILITY
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-patek-missing-field-recoverability-readonly
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
+      MYSQL_PORT: ${{ secrets.MYSQL_PORT }}
+      MYSQL_USER: ${{ secrets.MYSQL_USER }}
+      MYSQL_PASS: ${{ secrets.MYSQL_PASS }}
+      MYSQL_DB: thecollective_inventory
+      AUDIT_BRAND: Patek Philippe
+      AUDIT_OUTPUT_DIR: audit-output/patek-missing-field-recoverability
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts
+      - name: Validate read-only authorization
+        shell: pwsh
+        env:
+          CONFIRMATION: ${{ inputs.confirmation }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:CONFIRMATION -cne 'READ_ONLY_PATEK_MISSING_FIELD_RECOVERABILITY') { throw 'Exact read-only confirmation required.' }
+          if (-not $env:SUPABASE_ACCESS_TOKEN -or -not $env:MYSQL_HOST) { throw 'Private read-only credentials unavailable.' }
+          node tools/audit/rolex-missing-field-recoverability-readonly.cjs --validate-only
+      - name: Run private Patek recoverability census
+        run: node tools/audit/rolex-missing-field-recoverability-readonly.cjs
+      - name: Upload privacy-safe Patek evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-patek-missing-field-recoverability-${{ github.run_id }}
+          path: audit-output/patek-missing-field-recoverability/*
+          if-no-files-found: error
+          retention-days: 14

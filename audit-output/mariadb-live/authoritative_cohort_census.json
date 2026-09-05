@@ -1,0 +1,26 @@
+{
+  "contract": "wf-mariadb-authoritative-cohort-census-v1",
+  "timestamp": "2026-09-01T22:20:00.000Z",
+  "cohort_metrics": {
+    "total_authoritative_rows": 1487325,
+    "distinct_source_ids": 1487325,
+    "is_strictly_unique": true,
+    "date_range": {
+      "min_created_on": "2025-01-08T13:28:49.000Z",
+      "max_created_on": "2026-08-29T14:42:32.000Z"
+    }
+  },
+  "provenance_reconciliation": {
+    "authoritative_rows": 1487325,
+    "alternate_versions_retained": 5000,
+    "lossless_errors_routed": 8,
+    "total_raw_inputs_represented": 1492333
+  },
+  "type_distribution": {
+    "sale": 1238777,
+    "search": 248548
+  },
+  "top_currency_distribution": {
+    "<NULL>": 1487325
+  }
+}

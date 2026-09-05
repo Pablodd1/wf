@@ -1,0 +1,39 @@
+{
+  "currencies": {
+    "usd": "USD",
+    "$": "USD",
+    "usdt": "USDT",
+    "usdcoin": "USDT",
+    "hkd": "HKD",
+    "hk$": "HKD",
+    "hkd$": "HKD",
+    "eur": "EUR",
+    "\u20ac": "EUR",
+    "euro": "EUR",
+    "gbp": "GBP",
+    "\u00a3": "GBP",
+    "pound": "GBP",
+    "chf": "CHF",
+    "swiss franc": "CHF",
+    "aed": "AED",
+    "dirham": "AED",
+    "sgd": "SGD",
+    "sg$": "SGD",
+    "jpy": "JPY",
+    "\u00a5": "JPY",
+    "yen": "JPY",
+    "cny": "CNY",
+    "rmb": "CNY",
+    "\u5143": "CNY",
+    "cad": "CAD",
+    "aud": "AUD"
+  },
+  "price_multipliers": {
+    "k": 1000,
+    "m": 1000000,
+    "mil": 1000000,
+    "mn": 1000000,
+    "\u4e07": 10000,
+    "w": 10000
+  }
+}

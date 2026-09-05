@@ -1,0 +1,198 @@
+{
+  "contract": "wf-full-private-normalization-audit-v2",
+  "run_key": "authoritative-full-normalization-v1",
+  "timestamp": "2026-09-02T08:05:00.000Z",
+  "provenance": {
+    "reviewed_code_execution_sha": "b9c0145c2e153dd82c936b7b4e02361f1f3e5fd9",
+    "artifact_commit_sha": "6dc68772d1ad2454e87a5a83eca5aece2db2ba00",
+    "clean_worktree_proven": true,
+    "worktree_status_porcelain": "CLEAN",
+    "railway_live_service_status": "UNVERIFIED_CLI_UNAVAILABLE",
+    "worker_services": [
+      "wf-mariadb-shadow",
+      "wf-mariadb-canonical-normalizer"
+    ],
+    "source_disconnection": "source: null (GitHub disconnected)",
+    "restart_policy": "NEVER",
+    "running_replicas": 0
+  },
+  "frozen_input_boundary": {
+    "lower_tuple": "(2025-01-08T13:28:49.000Z, 7534d09b-28b9-4052-8005-228c32f972df)",
+    "upper_tuple": "(2026-08-29T14:42:32.000Z, f1bdf67a-3723-41c6-a1e3-35c5ca9138b0)",
+    "frozen_checkpoint": "full-capture-auctions-1788028958313",
+    "manifest_sha256": "fd545df7a5668c28ede4f2c721a9539fcb6f7cf755302a975052b23270b8adb1"
+  },
+  "canary_reconciliation": {
+    "canary_input": 10000,
+    "normalized": 1768,
+    "review_required": 8232,
+    "errors": 0,
+    "reconciliation_passed": true
+  },
+  "full_reconciliation": {
+    "authoritative_listings_input": 1487325,
+    "lossless_capture_errors": 8,
+    "total_unique_inputs_represented": 1487333,
+    "normalized_proposals_count": 136453,
+    "review_required_count": 1350872,
+    "normalization_errors_count": 0,
+    "exact_reconciliation_proven": true
+  },
+  "invariant_verification": {
+    "destination_count_exact": true,
+    "distinct_source_id_count_exact": true,
+    "reconciliation_sum_exact": true,
+    "tf_status_sum_exact": true,
+    "tf_eligible_equivalence": true,
+    "pr_status_sum_exact": true,
+    "pr_eligible_equivalence": true,
+    "intent_matrix_sum_exact": true,
+    "currency_status_sum_exact": true,
+    "zero_null_source_ids": true,
+    "zero_null_source_hashes": true,
+    "zero_source_hash_mismatches": true,
+    "all_invariants_passed": true
+  },
+  "intent_vs_raw_type_matrix": {
+    "WTS": {
+      "sale": 50330,
+      "search": 2732,
+      "<NULL>": 0,
+      "total": 53062
+    },
+    "WTB": {
+      "sale": 734,
+      "search": 177226,
+      "<NULL>": 0,
+      "total": 177960
+    },
+    "UNKNOWN_INTENT": {
+      "sale": 1187713,
+      "search": 68590,
+      "<NULL>": 0,
+      "total": 1256303
+    }
+  },
+  "pricing_and_currency_summary": {
+    "explicit_usd_count": 82580,
+    "explicit_usdt_count": 78857,
+    "explicit_hkd_count": 114508,
+    "bare_dollar_held_count": 452551,
+    "missing_price_count": 697413
+  },
+  "price_research_eligibility_summary": {
+    "eligible_count": 858,
+    "eligible_pct": "0.06%",
+    "status_breakdown": {
+      "INELIGIBLE_TRADING_FLOOR_HOLD": 1338171,
+      "INELIGIBLE_NOT_WTS": 135595,
+      "INELIGIBLE_AMBIGUOUS_CURRENCY": 7898,
+      "INELIGIBLE_FX_UNRESOLVED": 2913,
+      "INELIGIBLE_MISSING_PRICE": 1612,
+      "ELIGIBLE_VERIFIED_USD": 858,
+      "INELIGIBLE_USDT_HELD_FOR_FX": 234,
+      "INELIGIBLE_OUTLIER_EXCLUDED": 44
+    }
+  },
+  "trading_floor_eligibility_summary": {
+    "eligible_count": 149154,
+    "eligible_pct": "10.03%",
+    "status_breakdown": {
+      "HELD_INTENT_UNKNOWN": 720835,
+      "HELD_BUNDLE_UNSPLIT": 487015,
+      "ELIGIBLE_WTB": 135595,
+      "HELD_IDENTITY_INCOMPLETE": 129518,
+      "ELIGIBLE_WTS": 13559,
+      "HELD_MISSING_SOURCE_TEXT": 803
+    }
+  },
+  "lineage_and_evidence_summary": {
+    "total_single_listings": 1000310,
+    "total_multi_offer_bundles": 487015,
+    "image_key_present_count": 1487278,
+    "image_key_present_pct": "100.00%",
+    "seller_evidence_present_count": 1461052,
+    "seller_evidence_present_pct": "98.23%"
+  },
+  "review_reasons_breakdown": {
+    "UNKNOWN_INTENT": 720835,
+    "HELD_BUNDLE_REVIEW": 487015,
+    "INCOMPLETE_IDENTITY": 129518,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 7898,
+    "FX_UNRESOLVED_HELD": 2913,
+    "MISSING_PRICE_OR_CURRENCY": 1612,
+    "MISSING_SOURCE_TEXT": 803,
+    "USDT_HELD_FOR_FX_PROOF": 234,
+    "PRICE_OUTLIER_HELD": 44
+  },
+  "currency_status_breakdown": {
+    "MISSING_PRICE": 697413,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 452551,
+    "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX": 114508,
+    "VERIFIED_EXPLICIT_USD": 82580,
+    "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 78857,
+    "VERIFIED_EXPLICIT_EUR": 46852,
+    "VERIFIED_EXPLICIT_AED": 10362,
+    "VERIFIED_EXPLICIT_GBP": 3529,
+    "VERIFIED_EXPLICIT_SAR": 291,
+    "VERIFIED_EXPLICIT_AUD": 146,
+    "VERIFIED_EXPLICIT_CNY": 92,
+    "VERIFIED_EXPLICIT_CHF": 75,
+    "VERIFIED_EXPLICIT_MYR": 28,
+    "VERIFIED_EXPLICIT_CAD": 11,
+    "VERIFIED_EXPLICIT_IDR": 9,
+    "VERIFIED_EXPLICIT_BRL": 8,
+    "VERIFIED_EXPLICIT_SGD": 8,
+    "VERIFIED_EXPLICIT_THB": 2,
+    "VERIFIED_EXPLICIT_MXN": 2,
+    "VERIFIED_EXPLICIT_JPY": 1
+  },
+  "private_table_row_totals": {
+    "mariadb_authoritative_raw_source_rows": 1487325,
+    "mariadb_raw_import_errors": 8,
+    "mariadb_raw_source_alternate_versions": 5000,
+    "mariadb_normalized_proposals_v2": 1487325
+  },
+  "public_table_zero_delta_proofs": {
+    "public.watch_records": {
+      "row_count": 15154163,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.normalized_records": {
+      "row_count": 0,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.normalization_promotion_audit": {
+      "row_count": 431,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.trading_floor_ready_view": {
+      "row_count": 96340,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.price_research_ready_view": {
+      "row_count": 31848,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.live_ingest": {
+      "row_count": 4288,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.mariadb_raw_import_batches": {
+      "row_count": 24,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.mariadb_raw_import_checkpoints": {
+      "row_count": 3,
+      "delta": 0,
+      "zero_delta_proven": true
+    }
+  }
+}

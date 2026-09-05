@@ -1,0 +1,32 @@
+{
+  "contract": "wf-price-statistics-results-v2",
+  "timestamp": "2026-09-04T13:30:00Z",
+  "methodology": "Tukey Boxplot with 3.0 * IQR Outlier Boundary and Repost Group Deduplication",
+  "repost_deduplication": {
+    "repost_group_key": "COALESCE(seller_id, seller_display_name, source_id) | brand | ref | dial | condition | round(price_usd)",
+    "policy": "Preserves separate source observations in view while including exactly 1 qualified WTS observation per repost group in statistics calculation",
+    "disposable_db_measured_result": "Rolex 126610LN cohort with 3 raw rows (1 duplicate repost) evaluated to qualified_count = 2"
+  },
+  "example_cohort": {
+    "brand": "Patek Philippe",
+    "reference": "7128/1G",
+    "dial": "Blue",
+    "condition": "New",
+    "count": 4,
+    "q1": 122250.0,
+    "median": 124000.0,
+    "q3": 125250.0,
+    "iqr": 3000.0,
+    "lower_fence": 113250.0,
+    "upper_fence": 134250.0,
+    "iqr_multiplier": 3.0
+  },
+  "exclusion_filters": {
+    "wtb_strictly_excluded": true,
+    "unknown_intent_strictly_excluded": true,
+    "bare_dollar_held_from_statistics": true,
+    "usdt_held_for_fx_proof": true,
+    "outliers_outside_fences_excluded": true,
+    "cohorts_with_fewer_than_two_observations_return_null": true
+  }
+}

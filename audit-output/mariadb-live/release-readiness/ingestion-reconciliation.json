@@ -1,0 +1,25 @@
+{
+  "contract": "wf-ingestion-reconciliation-v2",
+  "timestamp": "2026-09-04T13:30:00Z",
+  "authoritative_table": "mariadb_authoritative_raw_source_rows",
+  "capture_metrics": {
+    "legacy_checkpoint_rows": 951750,
+    "authoritative_private_rows": 1487325,
+    "current_mariadb_boundary_rows": 1486554,
+    "capture_union_total": 1487333,
+    "captured_ids_now_absent_upstream": 779,
+    "current_upstream_ids_absent_from_capture": 0,
+    "lossless_capture_errors": 8,
+    "alternate_versions_count": 5000,
+    "total_represented_inputs": 1492333
+  },
+  "authoritative_breakdown": {
+    "mariadb_authoritative_raw_source_rows": 1487325,
+    "mariadb_raw_import_errors": 8,
+    "authoritative_plus_errors": 1487333,
+    "raw_source_alternate_versions": 5000,
+    "total_represented_inputs": 1492333,
+    "normalized_proposals_v2": 1487325
+  },
+  "reconciliation_explanation": "The legacy checkpoint of 951,750 was an obsolete intermediate marker. Authoritative private ingestion captured 1,487,325 unique rows (+ 8 error rows = 1,487,333). With 5,000 alternate versions, total represented inputs equal 1,492,333. Comparing against the current MariaDB boundary of 1,486,554 rows proves that 0 current upstream rows are missing from the capture union. The 779 IDs captured that are now absent upstream represent deleted or purged listings preserved in the immutable capture journal."
+}

@@ -1,0 +1,91 @@
+{
+  "contract": "wf-measured-privilege-matrix-v2",
+  "timestamp": "2026-09-04T14:47:29Z",
+  "database_engine": "PostgreSQL 18.6 (Debian 18.6-1.pgdg13+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 14.2.0-19) 14.2.0, 64-bit",
+  "staging_run_id": "disp_int_run_1788533238_97399239",
+  "git_commit_sha": "753c2f741786c40cfba719797742f90c3fc174df",
+  "audit_method": "direct_query_information_schema",
+  "roles_audited": [
+    "anon",
+    "authenticated",
+    "service_role"
+  ],
+  "wf_canonical_staging_tables": {
+    "mariadb_canary_published_listings_v2": {
+      "anon": [],
+      "authenticated": [],
+      "service_role": [
+        "SELECT"
+      ],
+      "PUBLIC": []
+    }
+  },
+  "canary_views": {
+    "listing_display_detail_view_v2": {
+      "anon": [],
+      "authenticated": [],
+      "service_role": [
+        "SELECT"
+      ],
+      "PUBLIC": []
+    },
+    "price_research_ready_view_v2": {
+      "anon": [],
+      "authenticated": [],
+      "service_role": [
+        "SELECT"
+      ],
+      "PUBLIC": []
+    },
+    "seller_listing_analytics_view_v2": {
+      "anon": [],
+      "authenticated": [],
+      "service_role": [
+        "SELECT"
+      ],
+      "PUBLIC": []
+    },
+    "trading_floor_ready_view_v2": {
+      "anon": [],
+      "authenticated": [],
+      "service_role": [
+        "SELECT"
+      ],
+      "PUBLIC": []
+    }
+  },
+  "canary_rpcs": {
+    "get_price_research_canary_keyset_v2": {
+      "anon": [],
+      "authenticated": [],
+      "service_role": [
+        "EXECUTE"
+      ],
+      "PUBLIC": []
+    },
+    "get_price_research_scoped_stats_v2": {
+      "anon": [],
+      "authenticated": [],
+      "service_role": [
+        "EXECUTE"
+      ],
+      "PUBLIC": []
+    },
+    "get_trading_floor_canary_count": {
+      "anon": [],
+      "authenticated": [],
+      "service_role": [
+        "EXECUTE"
+      ],
+      "PUBLIC": []
+    },
+    "get_trading_floor_canary_keyset": {
+      "anon": [],
+      "authenticated": [],
+      "service_role": [
+        "EXECUTE"
+      ],
+      "PUBLIC": []
+    }
+  }
+}

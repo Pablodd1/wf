@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Curated Luxury Extractor</title>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f1117;color:#e4e6ef;min-height:100vh}
+.container{max-width:1000px;margin:0 auto;padding:20px}
+.header{display:flex;align-items:center;gap:12px;margin-bottom:20px}
+.logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#60a5fa,#818cf8);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff}
+.header h1{font-size:18px;font-weight:600}
+.header .tag{font-size:10px;color:#7a7f94;background:#1a1d28;padding:2px 10px;border-radius:99px;border:1px solid #2a2d3a}
+.instructions{background:#1a1d28;border:1px solid #2a2d3a;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:13px;color:#7a7f94;line-height:1.6}
+.instructions strong{color:#e4e6ef}
+.input-area{margin-bottom:14px}
+textarea{width:100%;min-height:140px;resize:vertical;background:#1a1d28;border:1px solid #2a2d3a;border-radius:12px;padding:14px;color:#e4e6ef;font-size:13px;font-family:monospace;line-height:1.5;outline:none}
+textarea:focus{border-color:#818cf8}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+.btn{padding:9px 20px;border-radius:10px;font-size:13px;font-weight:500;cursor:pointer;border:none;display:inline-flex;align-items:center;gap:5px;transition:all .15s}
+.btn-extract{background:linear-gradient(135deg,#60a5fa,#818cf8);color:#fff}
+.btn-extract:hover{opacity:.9}
+.btn-download{background:#22c55e;color:#0f1117}
+.btn-download:disabled{opacity:.3;cursor:not-allowed;background:#2a2d3a;color:#7a7f94}
+.btn-download:hover:not(:disabled){opacity:.9}
+.btn-clear{background:#1a1d28;color:#e4e6ef;border:1px solid #2a2d3a;margin-left:auto}
+.btn-clear:hover{border-color:#7a7f94}
+.btn-ai{background:#a855f7;color:#fff;font-size:11px;padding:4px 10px;border-radius:6px}
+.btn-ai:hover{opacity:.85}
+.btn-ai:disabled{opacity:.3;cursor:not-allowed}
+.btn-accept{background:rgba(34,197,94,.15);color:#22c55e;border:1px solid #22c55e;font-size:11px;padding:3px 10px;border-radius:6px}
+.btn-accept:hover{background:rgba(34,197,94,.25)}
+.btn-reject{background:rgba(239,68,68,.15);color:#ef4444;border:1px solid #ef4444;font-size:11px;padding:3px 10px;border-radius:6px}
+.btn-reject:hover{background:rgba(239,68,68,.25)}
+.stats{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;font-size:12px}
+.stat{padding:4px 12px;border-radius:8px;border:1px solid #2a2d3a}
+.stat.clean{color:#22c55e;background:rgba(34,197,94,.1);border-color:#22c55e}
+.stat.partial{color:#eab308;background:rgba(234,179,8,.1);border-color:#eab308}
+.stat.issues{color:#ef4444;background:rgba(239,68,68,.1);border-color:#ef4444}
+.stat.total{color:#e4e6ef;background:#1a1d28}
+.results{display:none}
+.results.visible{display:block}
+.watch-card{background:#1a1d28;border:1px solid #2a2d3a;border-radius:12px;padding:14px 16px;margin-bottom:10px;transition:all .15s}
+.watch-card.clean{border-left:3px solid #22c55e}
+.watch-card.partial{border-left:3px solid #eab308}
+.watch-card.issues{border-left:3px solid #ef4444}
+.watch-header{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}
+.watch-ref{font-size:15px;font-weight:600;font-family:monospace;cursor:pointer}
+.badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:500}
+.badge.clean{background:rgba(34,197,94,.1);color:#22c55e}
+.badge.partial{background:rgba(234,179,8,.1);color:#eab308}
+.badge.issues{background:rgba(239,68,68,.1);color:#ef4444}
+.conf-badge{font-size:10px;padding:2px 8px;border-radius:99px;font-weight:600}
+.conf-badge.high{background:rgba(34,197,94,.12);color:#22c55e}
+.conf-badge.med{background:rgba(234,179,8,.12);color:#eab308}
+.conf-badge.low{background:rgba(239,68,68,.12);color:#ef4444}
+.watch-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:4px 16px;font-size:12px}
+.field{display:flex;gap:4px;align-items:center;min-height:28px}
+.field-label{color:#7a7f94;min-width:45px;font-size:11px;flex-shrink:0}
+.field-value{color:#e4e6ef}
+.field-input{background:#0f1117;border:1px solid #3a3d4a;border-radius:6px;color:#e4e6ef;font-size:12px;padding:3px 8px;width:100%;outline:none;font-family:inherit}
+.field-input:focus{border-color:#818cf8}
+.field-input.edited{background:rgba(168,85,247,.1);border-color:#a855f7}
+.watch-raw{margin-top:6px;padding-top:6px;border-top:1px solid #2a2d3a;font-size:11px;color:#5a5f74;font-family:monospace;word-break:break-all;line-height:1.4}
+.watch-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;align-items:center}
+.watch-notes{margin-top:6px;font-size:11px;color:#eab308;font-style:italic}
+.footer{text-align:center;padding:20px;font-size:12px;color:#5a5f74;border-top:1px solid #2a2d3a;margin-top:20px}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.anim-pulse{animation:pulse 1s ease-in-out infinite}
+@media(max-width:600px){body{padding:0}.container{padding:12px}.watch-fields{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="container">
+<div class="header">
+<div class="logo">WF</div>
+<h1>Curated Luxury Extractor</h1>
+<span class="tag">demo v2</span>
+</div>
+
+<div class="instructions">
+<strong>Paste watch descriptions</strong> from WhatsApp, forums, or dealer listings. Click <strong>Extract</strong> to parse.
+<strong>Edit any field</strong> directly — the confidence re-scores automatically.
+Use <strong>AI Fix</strong> on individual rows for Kimi-powered analysis.
+Click <strong>Download Excel Report</strong> for a colored file with legend.
+</div>
+
+<div class="input-area">
+<textarea id="input" placeholder="Example:&#10;5167A 2013 fullset 510k hkd&#10;*5980/1AR* Patek Two Tone *2014* *103k USD*&#10;??7010R Purple 2024Y Like New 538K ??5712/1A Blue 2020Y HKD970K&#10;Sold Order 5968A Aug 2024 142k USD">5167A  2013 fullset  510k hkd
+? Patek Philippe Aquanaut Luce 5268/461G Available ?  ?? 38.8mm ?? 2026 ?? Unworn  ?? $570,000
+*5980/1AR* Patek Two Tone *2014* *103k USD*
+*5968A* Patek Chronograph Stainless Steel *Aug 2024 142k USD*
+5168G 2022 $91k
+5712/1a 2013 $105k
+2016 Patek 5712/1a full set $116k + lab
+Patek Philippe 5930G-001 Blue World Time Chrono With papers $49,000
+??7010R Purple 2024Y Like New 538K ??5712/1A Blue 2020Y HKD970K ??5968G Green 2024Y HKD930K ??5167A 2020Y HKD583K
+? 5036/1G-013 ? Full Set 2002 ? 510,000 HKD 65,000 USD</textarea>
+</div>
+
+<div class="actions">
+<button class="btn btn-extract" onclick="extractAll()">&#9654; Extract</button>
+<button class="btn btn-download" onclick="downloadExcel()" id="btn-excel" disabled>&#8595; Download Excel Report</button>
+<button class="btn btn-clear" id="btn-clear" onclick="clearAll()">Clear</button>
+</div>
+
+<div class="stats" id="stats"></div>
+<div class="results" id="results"></div>
+<div id="summary" style="display:none;margin-top:16px;padding:16px;background:#1a1d28;border-radius:12px;border:1px solid #2a2d3a">
+<h3 style="font-size:15px;font-weight:600;margin-bottom:10px">Report Summary</h3>
+<div id="summaryBody" style="font-size:13px;color:#7a7f94;line-height:1.7"></div>
+</div>
+</div>
+<div class="footer">Curated Luxury Extractor v2 — inline edit &middot; auto re-score &middot; colored Excel with legend</div>
+
+<script>
+// ===== REFERENCE CATALOG =====
+var REFS = {};
+function ar(r,b){REFS[r]=b}
+ar('5167A','Patek Philippe');ar('5167/1A','Patek Philippe');ar('5712/1A','Patek Philippe');ar('5712/1a','Patek Philippe');ar('5712/1R','Patek Philippe');ar('5711/1A','Patek Philippe');ar('5711/1R','Patek Philippe');ar('5980/1AR','Patek Philippe');ar('5980R','Patek Philippe');ar('5968A','Patek Philippe');ar('5968G','Patek Philippe');ar('5267/200A','Patek Philippe');ar('5268/461G','Patek Philippe');ar('5168G','Patek Philippe');ar('5170J','Patek Philippe');ar('5172G','Patek Philippe');ar('5930G','Patek Philippe');ar('5930G-001','Patek Philippe');ar('7010R','Patek Philippe');ar('5036/1G','Patek Philippe');ar('5036/1G-013','Patek Philippe');ar('5726','Patek Philippe');ar('5726/1A','Patek Philippe');ar('3729','Patek Philippe');ar('5270P','Patek Philippe');ar('5204G','Patek Philippe');ar('5370P','Patek Philippe');ar('5531R','Patek Philippe');ar('5740G','Patek Philippe');ar('6002G','Patek Philippe');ar('6104G','Patek Philippe');ar('6301P','Patek Philippe');ar('705R','Patek Philippe');ar('7118/1A','Patek Philippe');ar('7280A','Patek Philippe');ar('7234G','Patek Philippe');ar('7243G','Patek Philippe');ar('4947/1A','Patek Philippe');ar('4948/1A','Patek Philippe');ar('5520P','Patek Philippe');ar('5738G','Patek Philippe');ar('5160G','Patek Philippe');ar('5270P-001','Patek Philippe');ar('6300G-010','Patek Philippe');ar('116610LV','Rolex');ar('116610LN','Rolex');ar('126610LV','Rolex');ar('126610LN','Rolex');ar('124060','Rolex');ar('116500LN','Rolex');ar('116518LN','Rolex');ar('116519LN','Rolex');ar('116520','Rolex');ar('116710BLNR','Rolex');ar('126710BLRO','Rolex');ar('116613LB','Rolex');ar('116718LN','Rolex');ar('228238','Rolex');ar('228235','Rolex');ar('279171','Rolex');ar('279174','Rolex');ar('278274','Rolex');ar('278240','Rolex');ar('114060','Rolex');ar('214270','Rolex');ar('216570','Rolex');ar('226570','Rolex');ar('326933','Rolex');ar('326934','Rolex');ar('326935','Rolex');ar('326936','Rolex');ar('326938','Rolex');ar('15500ST','Audemars Piguet');ar('15510ST','Audemars Piguet');ar('15400ST','Audemars Piguet');ar('15450ST','Audemars Piguet');ar('15202ST','Audemars Piguet');ar('16202ST','Audemars Piguet');ar('15720ST','Audemars Piguet');ar('15710ST','Audemars Piguet');ar('14790ST','Audemars Piguet');ar('15300ST','Audemars Piguet');ar('26176FO','Audemars Piguet');ar('26331ST','Audemars Piguet');ar('26703ST','Audemars Piguet');ar('26574ST','Audemars Piguet');ar('26615ST','Audemars Piguet');ar('26393ST','Audemars Piguet');ar('26394ST','Audemars Piguet');ar('26420ST','Audemars Piguet');ar('26405CE','Audemars Piguet');
+ar('RM 011','Richard Mille');ar('RM 030','Richard Mille');ar('RM 055','Richard Mille');ar('RM 35-01','Richard Mille');ar('RM 35-02','Richard Mille');ar('RM 11-03','Richard Mille');ar('RM 27-03','Richard Mille');ar('RM 52-01','Richard Mille');ar('RM 52-05','Richard Mille');ar('RM 67-02','Richard Mille');
+var SORTED = Object.keys(REFS).sort(function(a,b){return b.length-a.length;});
+function esc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
+
+var data = []; // all parsed entries will be stored here
+
+// ===== PARSER =====
+function parseLine(line){
+  var t=line.trim();if(!t||t.length<5)return null;
+  var e={raw:t,brand:'',ref:'',year:null,price_usd:null,price_hkd:null,condition:'',includes:'',issues:[],edited:{},aiUsed:false};
+  for(var i=0;i<SORTED.length;i++){if(new RegExp('\\b'+esc(SORTED[i])+'\\b','i').test(t)){e.ref=SORTED[i].toUpperCase();e.brand=REFS[SORTED[i]];break;}}
+  if(!e.ref){var m=t.match(/(\d{3,4}\/[A-Z0-9]+[A-Za-z]?|\b[A-Z]{1,2}\d{3,4}[A-Z]?\b)/);if(m)e.ref=m[1].toUpperCase();}
+  var ym=t.match(/\b(20[0-2]\d)[Yy]/);if(!ym)ym=t.match(/\b(19[7-9]\d|20[0-2]\d)\b/);if(ym)e.year=parseInt(ym[1]);
+  function tn(s){var n=parseFloat(s.replace(/,/g,''));return isNaN(n)?null:n}
+  var hkdK=t.match(/(?:HKD|HK\$)\s*(\d{1,4}(?:\.\d)?)\s*[kK]\b/i);var hkdK2=t.match(/(\d{1,4}(?:\.\d)?)\s*[kK]\s*(?:HKD|hkd)/);
+  var hkdFull=t.match(/(?:HKD|HK\$)\s*(\d{1,3}(?:,\d{3})*(?:\.\d)?)/i);var hkdK3=t.match(/(?:\s|^)(\d{1,4}(?:\.\d)?)\s*[kK]\s*hkd/i);
+  var hkdFull2=t.match(/(\d{1,3}(?:,\d{3})+)\s*HKD/i);
+  var h=null;if(hkdK)h=tn(hkdK[1])*1000;else if(hkdK2)h=tn(hkdK2[1])*1000;else if(hkdFull)h=tn(hkdFull[1]);else if(hkdK3)h=tn(hkdK3[1])*1000;else if(hkdFull2)h=tn(hkdFull2[1]);
+  if(h!==null)e.price_hkd=h;
+  var usdKLabel=t.match(/(\d{1,3}(?:\.\d)?)\s*[kK]\s+(?:USD|usd|dollar)/);var usdKAsterisk=t.match(/\*(\d{1,3}(?:\.\d)?)\s*[kK]\s*(?:USD|usd)/);
+  var usdDollarK=t.match(/\$\s*(\d{1,3}(?:\.\d)?)\s*[kK]\b(?!\s*hkd)/);var usdCommaLabel=t.match(/(\d{1,3}(?:,\d{3})+)\s*(?:USD|usd)/);
+  var usdDollarFull=t.match(/\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d{2})?)\b/);var usdBareK=t.match(/(\d{1,4}(?:\.\d)?)\s*[kK]\b(?!\s*(?:hkd|HKD|HK\$))/);
+  var u=null;if(usdKLabel)u=tn(usdKLabel[1])*1000;else if(usdKAsterisk)u=tn(usdKAsterisk[1])*1000;else if(usdDollarK)u=tn(usdDollarK[1])*1000;else if(usdCommaLabel)u=tn(usdCommaLabel[1]);else if(usdDollarFull&&!/HKD/i.test(t))u=tn(usdDollarFull[1]);else if(usdBareK&&!/HKD/i.test(t)&&!/HK\$/.test(t))u=tn(usdBareK[1])*1000;
+  if(u!==null)e.price_usd=u;
+  var tl=t.toLowerCase();if(tl.indexOf('unworn')!==-1)e.condition='Unworn';else if(tl.indexOf('like new')!==-1)e.condition='Like New';else if(/\bnew\b/.test(tl))e.condition='Unworn';else if(tl.indexOf('mint')!==-1)e.condition='Mint';else if(tl.indexOf('excellent')!==-1)e.condition='Excellent';else if(tl.indexOf('good')!==-1)e.condition='Good';else if(tl.indexOf('fair')!==-1)e.condition='Fair';else if(tl.indexOf('used')!==-1)e.condition='Used';
+  if(/full set|fullset|complete set/i.test(t))e.includes='Full Set';else if(/papers|box and papers/i.test(t))e.includes='Papers';else if(/\bpaper\b/i.test(t))e.includes='Papers';
+  if(!e.ref)e.issues.push('No reference found');if(!e.price_usd&&!e.price_hkd)e.issues.push('No price found');if(!e.year)e.issues.push('No year found');
+  return e;
+}
+
+function getConfidence(e){
+  var s=0,f=[];
+  if(e.brand&&e.brand!==''){s+=30}else{f.push('UNKNOWN_BRAND')}
+  if(e.ref&&e.ref!==''){s+=25}else{f.push('MISSING_REF')}
+  if(e.year){s+=20}else{f.push('MISSING_YEAR')}
+  if(e.price_usd||e.price_hkd){s+=20;if((e.price_usd||0)>=1000&&(e.price_usd||0)<=2000000)s+=5}else{f.push('MISSING_PRICE')}
+  if(e.condition&&e.condition!=='')s+=3;
+  if(e.includes&&e.includes!=='')s+=2;
+  return{score:Math.min(100,Math.round(s)),flags:f};
+}
+
+function getLabel(e){var c=getConfidence(e);if(c.score>=85)return'CLEAN';if(c.score>=55)return'PARTIAL';return'ISSUES'}
+function getStatusClass(e){var l=getLabel(e);return l==='CLEAN'?'clean':(l==='PARTIAL'?'partial':'issues')}
+function getConfClass(c){return c>=85?'high':(c>=55?'med':'low')}
+function numStr(n){return Math.round(n).toLocaleString()}
+
+// ===== SPLIT COMPOUND =====
+function splitCompound(line){
+  var found=[];for(var i=0;i<SORTED.length;i++){if(new RegExp('\\b'+esc(SORTED[i])+'\\b','i').test(line))found.push(SORTED[i]);}
+  if(found.length<=1)return[line];
+  var f=line.split(new RegExp('(?='+found.map(function(r){return esc(r)}).join('|')+')','i')).filter(Boolean);
+  var r=[];for(var i=0;i<f.length;i++){var g=f[i].trim().replace(/^\?{2,}\s*/,'');if(!g)continue;if(found.some(function(rr){return new RegExp('\\b'+esc(rr)+'\\b','i').test(g)}))r.push(g);}
+  return r.length>1?r:[line];
+}
+
+// ===== EXTRACT =====
+function extractAll(){
+  var text=document.getElementById('input').value;if(!text.trim())return;
+  var raw=text.split('\n').filter(function(l){return l.trim()});
+  var all=[];for(var i=0;i<raw.length;i++){var x=splitCompound(raw[i]);for(var j=0;j<x.length;j++)all.push(x[j]);}
+  var seen={},uniq=[];for(var i=0;i<all.length;i++){var l=all[i].trim();if(!seen[l]){seen[l]=true;uniq.push(l);}}
+  
+  data=uniq.map(function(l){return parseLine(l)}).filter(Boolean);
+  renderResults();
+}
+
+function renderResults(){
+  var el=document.getElementById('results'),sel=document.getElementById('stats');
+  el.className='results visible';
+  var clean=0,partial=0,issues=0,html='';
+  
+  for(var i=0;i<data.length;i++){
+    var e=data[i],c=getConfidence(e),cls=getStatusClass(e),lab=getLabel(e),cc=getConfClass(c.score);
+    if(lab==='CLEAN')clean++;else if(lab==='PARTIAL')partial++;else issues++;
+    
+    var priceStr='';
+    if(e.price_usd)priceStr+='$'+numStr(e.price_usd)+' USD';
+    if(e.price_usd&&e.price_hkd)priceStr+=' | ';
+    if(e.price_hkd)priceStr+='HK$'+numStr(e.price_hkd);
+    if(!priceStr)priceStr='--';
+    if(e.edited.price_usd!==undefined||e.edited.price_hkd!==undefined)priceStr=e.edited.price_usd?'$'+numStr(e.edited.price_usd)+' USD':'HK$'+numStr(e.edited.price_hkd);
+    
+    var issuesHtml='';
+    if(c.flags.length){issuesHtml='<span style="color:#eab308;font-size:11px">&#9888; '+c.flags.join(', ')+'</span>'}
+    if(e.issues.length&&!c.flags.length){issuesHtml='<span style="color:#7a7f94;font-size:11px">'+e.issues.join('; ')+'</span>'}
+    
+    var editNote='';
+    if(Object.keys(e.edited).length>0)editNote='<span style="color:#a855f7;font-size:11px;font-style:italic">&#9998; manually edited</span>';
+    if(e.aiUsed)editNote+='<span style="color:#a855f7;font-size:11px;margin-left:6px">&#129302; AI assisted</span>';
+    
+    var brandVal=e.edited.brand!==undefined?e.edited.brand:e.brand||'';
+    var refVal=e.edited.ref!==undefined?e.edited.ref:e.ref||'';
+    var yearVal=e.edited.year!==undefined?e.edited.year:(e.year||'');
+    var condVal=e.edited.condition!==undefined?e.edited.condition:e.condition||'';
+    var incVal=e.edited.includes!==undefined?e.edited.includes:e.includes||'';
+    var usdVal=e.edited.price_usd!==undefined?e.edited.price_usd:(e.price_usd||'');
+    var hkdVal=e.edited.price_hkd!==undefined?e.edited.price_hkd:(e.price_hkd||'');
+    
+    html+='<div class="watch-card '+cls+'" id="card-'+i+'">';
+    html+='<div class="watch-header">';
+    html+='<span class="badge '+cls+'">'+lab+'</span>';
+    html+='<span class="watch-ref">'+(refVal||'???')+'</span>';
+    html+='<span class="conf-badge '+cc+'">'+c.score+'%</span>';
+    html+=issuesHtml;
+    html+='<span style="margin-left:auto;display:flex;gap:4px;flex-wrap:wrap">';
+    html+='<button class="btn btn-ai" onclick="aiFix('+i+')" id="ai-btn-'+i+'">&#129302; AI Fix</button>';
+    if(Object.keys(e.edited).length>0)html+='<button class="btn btn-accept" onclick="acceptEdit('+i+')">&#10003; Accept</button>';
+    html+='</span>';
+    html+='</div>';
+    
+    html+='<div class="watch-fields">';
+    // Brand
+    html+='<div class="field"><span class="field-label">Brand</span><input class="field-input'+(e.edited.brand!==undefined?' edited':'')+'" value="'+htmlEsc(brandVal)+'" onchange="editField('+i+',\'brand\',this.value)"></div>';
+    // Reference
+    html+='<div class="field"><span class="field-label">Ref</span><input class="field-input'+(e.edited.ref!==undefined?' edited':'')+'" value="'+htmlEsc(refVal)+'" onchange="editField('+i+',\'ref\',this.value)"></div>';
+    // Year
+    html+='<div class="field"><span class="field-label">Year</span><input class="field-input'+(e.edited.year!==undefined?' edited':'')+'" value="'+yearVal+'" onchange="editField('+i+',\'year\',this.value)"></div>';
+    // Price
+    html+='<div class="field"><span class="field-label">Price</span><input class="field-input'+(e.edited.price_usd!==undefined?' edited':'')+'" value="'+htmlEsc(priceStr)+'" onchange="editPrice('+i+',this.value)"></div>';
+    // Condition
+    html+='<div class="field"><span class="field-label">Cond</span><input class="field-input'+(e.edited.condition!==undefined?' edited':'')+'" value="'+htmlEsc(condVal)+'" onchange="editField('+i+',\'condition\',this.value)"></div>';
+    // Set
+    html+='<div class="field"><span class="field-label">Set</span><input class="field-input'+(e.edited.includes!==undefined?' edited':'')+'" value="'+htmlEsc(incVal)+'" onchange="editField('+i+',\'includes\',this.value)"></div>';
+    html+='</div>';
+    
+    html+='<div style="margin-top:4px;display:flex;gap:8px;font-size:11px;color:#5a5f74;flex-wrap:wrap">';
+    html+=editNote;
+    html+='<span>Raw: '+htmlEsc(e.raw.length>80?e.raw.slice(0,80)+'...':e.raw)+'</span>';
+    html+='</div>';
+    
+    html+='<div id="ai-result-'+i+'" style="display:none;margin-top:6px;padding:8px;background:rgba(168,85,247,.08);border-radius:8px;font-size:12px;color:#d8b4fe;line-height:1.5"></div>';
+    html+='</div>';
+  }
+  
+  el.innerHTML=html;
+  
+  sel.innerHTML='<span class="stat total">'+data.length+' watches</span><span class="stat clean">'+clean+' clean</span><span class="stat partial">'+partial+' partial</span><span class="stat issues">'+issues+' issues</span>';
+  document.getElementById('btn-excel').disabled=false;
+  
+  // Summary
+  var sum=document.getElementById('summary');
+  sum.style.display='block';
+  document.getElementById('summaryBody').innerHTML=
+    '<b>Total:</b> '+data.length+' watches &bull; <span style="color:#22c55e"><b>'+clean+' clean</b></span> &bull; <span style="color:#eab308"><b>'+partial+' partial</b></span> &bull; <span style="color:#ef4444"><b>'+issues+' issues</b></span><br>'+
+    '<b>Data ready:</b> Download the colored Excel report below to share with clients.';
+}
+
+function htmlEsc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+// ===== INLINE EDITING =====
+function editField(idx,field,val){
+  if(!data[idx])return;
+  data[idx].edited[field]=val||'';
+  renderResults();
+}
+
+function editPrice(idx,val){
+  if(!data[idx])return;
+  // Try to parse USD $ or HKD HK$
+  var usdM=val.match(/\$\s*(\d[\d,]*)/);
+  var hkdM=val.match(/(?:HK\$|HKD)\s*(\d[\d,]*)/i);
+  if(usdM)data[idx].edited.price_usd=parseFloat(usdM[1].replace(/,/g,''));
+  else if(hkdM)data[idx].edited.price_hkd=parseFloat(hkdM[1].replace(/,/g,''));
+  else{
+    var numM=val.match(/(\d[\d,]*\.?\d*)/);
+    if(numM)data[idx].edited.price_usd=parseFloat(numM[1].replace(/,/g,''));
+  }
+  renderResults();
+}
+
+function acceptEdit(idx){
+  if(!data[idx])return;
+  var e=data[idx];
+  for(var k in e.edited){
+    if(k==='price_usd'||k==='price_hkd')e[k]=parseFloat(e.edited[k])||0;
+    else if(k==='year')e[k]=parseInt(e.edited[k])||null;
+    else e[k]=e.edited[k];
+  }
+  e.edited={};
+  renderResults();
+}
+
+function clearAll(){
+  data=[];
+  document.getElementById('input').value='';
+  document.getElementById('results').className='results';
+  document.getElementById('stats').innerHTML='';
+  document.getElementById('btn-excel').disabled=true;
+  document.getElementById('summary').style.display='none';
+}
+
+// ===== AI FIX (per row, uses Kimi via moonshot.ai API) =====
+function aiFix(idx){
+  if(!data[idx])return;
+  var btn=document.getElementById('ai-btn-'+idx);
+  var resultDiv=document.getElementById('ai-result-'+idx);
+  btn.disabled=true;
+  btn.innerHTML='&#129302; Analyzing...';
+  resultDiv.style.display='block';
+  resultDiv.innerHTML='<span class="anim-pulse">&#129302; Calling Kimi AI to refine this entry...</span>';
+  
+  var e=data[idx];
+  var prompt='You are a luxury watch data extraction assistant. Given this raw dealer message, extract the watch details accurately as JSON. Respond ONLY with valid JSON, no other text.\n\nRaw message: '+e.raw+'\n\nCurrent best guess: '+JSON.stringify({brand:e.brand,ref:e.ref,year:e.year,price_usd:e.price_usd,price_hkd:e.price_hkd,condition:e.condition,includes:e.includes})+'\n\nReturn JSON: {"brand":"...","ref":"...","year":2024,"price_usd":null,"price_hkd":500000,"condition":"Unworn","includes":"Full Set","notes":"..."}. Use null for unknown fields. Price in HKD if the original text uses HKD. Year must be a number or null. For "full set" set includes to "Full Set".';
+  
+  // Use Kimi API via moonshot.ai
+  var xhr=new XMLHttpRequest();
+  xhr.open('POST','https://api.moonshot.ai/v1/chat/completions');
+  xhr.setRequestHeader('Content-Type','application/json');
+  xhr.setRequestHeader('Authorization','Bearer sk-1XNLBAweSi3m11fzZm5CDVKSgKnGSGoLfE7rdQZqLbQQv20N');
+  xhr.onload=function(){
+    btn.disabled=false;
+    btn.innerHTML='&#129302; AI Fix';
+    if(xhr.status===200){
+      try{
+        var resp=JSON.parse(xhr.responseText);
+        var text=resp.choices[0].message.content;
+        // Extract JSON from response
+        var jsonM=text.match(/\{[\s\S]*\}/);
+        if(jsonM){
+          var ai=JSON.parse(jsonM[0]);
+          resultDiv.innerHTML='<b>AI Suggestion</b><br><pre style="margin-top:4px;font-size:11px;color:#d8b4fe">'+htmlEsc(JSON.stringify(ai,null,2))+'</pre><div style="margin-top:8px"><button class="btn btn-accept" onclick="applyAIFix('+idx+')">Apply AI Suggestions</button> <button class="btn btn-reject" onclick="dismissAI('+idx+')">Dismiss</button></div>';
+          data[idx]._aiSuggestion=ai;
+          data[idx]._aiResultDiv=resultDiv;
+        }else{
+          resultDiv.innerHTML='<span style="color:#eab308">Could not parse AI response. Raw: '+htmlEsc(text.slice(0,200))+'</span>';
+        }
+      }catch(ex){
+        resultDiv.innerHTML='<span style="color:#ef4444">AI parse error: '+htmlEsc(ex.message)+'</span>';
+      }
+    }else{
+      // Fallback to a best-effort extraction
+      resultDiv.innerHTML='<span style="color:#eab308">AI unavailable (status '+xhr.status+'). Try manual edit instead.</span>';
+    }
+  };
+  xhr.onerror=function(){
+    btn.disabled=false;
+    btn.innerHTML='&#129302; AI Fix';
+    resultDiv.innerHTML='<span style="color:#ef4444">Network error. Edit manually.</span>';
+  };
+  
+  var body={model:'moonshot-v1-8k',messages:[{role:'user',content:prompt}],temperature:0.1,max_tokens:500};
+  xhr.send(JSON.stringify(body));
+}
+
+function applyAIFix(idx){
+  if(!data[idx]||!data[idx]._aiSuggestion)return;
+  var ai=data[idx]._aiSuggestion;
+  var e=data[idx];
+  if(ai.brand&&ai.brand!==e.brand)e.edited.brand=ai.brand;
+  if(ai.ref&&ai.ref!==e.ref)e.edited.ref=ai.ref;
+  if(ai.year&&ai.year!==e.year)e.edited.year=ai.year;
+  if(ai.price_usd&&ai.price_usd!==e.price_usd)e.edited.price_usd=ai.price_usd;
+  if(ai.price_hkd&&ai.price_hkd!==e.price_hkd)e.edited.price_hkd=ai.price_hkd;
+  if(ai.condition&&ai.condition!==e.condition)e.edited.condition=ai.condition;
+  if(ai.includes&&ai.includes!==e.includes)e.edited.includes=ai.includes;
+  e.aiUsed=true;
+  if(e._aiResultDiv)e._aiResultDiv.style.display='none';
+  renderResults();
+}
+
+function dismissAI(idx){
+  if(!data[idx])return;
+  if(data[idx]._aiResultDiv)data[idx]._aiResultDiv.style.display='none';
+}
+
+// ===== DOWNLOAD COLORED EXCEL =====
+function downloadExcel(){
+  if(!data||!data.length)return;
+  
+  var GREEN='FF22C55E',YELLOW='FFEAB308',RED='FFEF4444';
+  var LG='FFE8F5E9',LY='FFFFF8E1',LR='FFFFEBEE';
+  var HBG='FF1A1D28';
+  
+  function rc(e){var l=getLabel(e);return l==='CLEAN'?LG:(l==='PARTIAL'?LY:LR)}
+  function lb(e){return getLabel(e)}
+  function getBrand(e){return e.edited.brand!==undefined?e.edited.brand:e.brand}
+  function getRef(e){return e.edited.ref!==undefined?e.edited.ref:e.ref}
+  function getYear(e){return e.edited.year!==undefined?e.edited.year:e.year}
+  function getCond(e){return e.edited.condition!==undefined?e.edited.condition:e.condition}
+  function getInc(e){return e.edited.includes!==undefined?e.edited.includes:e.includes}
+  function getUSD(e){return e.edited.price_usd!==undefined?e.edited.price_usd:e.price_usd}
+  function getHKD(e){return e.edited.price_hkd!==undefined?e.edited.price_hkd:e.price_hkd}
+  
+  var h=['Status','Confidence','Reference','Brand','Year','Price USD','Price HKD','Condition','Set','Issues','Raw Text'];
+  var d=[h];
+  for(var i=0;i<data.length;i++){
+    var x=data[i],c=getConfidence(x),l=lb(x);
+    d.push([l,c.score+'%',getRef(x),getBrand(x),getYear(x),getUSD(x)?'$'+numStr(getUSD(x)):'',getHKD(x)?'HK$'+numStr(getHKD(x)):'',getCond(x),getInc(x),c.flags.join(', '),x.raw]);
+  }
+  
+  var ws=XLSX.utils.aoa_to_sheet(d);
+  ws['!cols']=[{wch:12},{wch:10},{wch:14},{wch:18},{wch:8},{wch:16},{wch:16},{wch:14},{wch:12},{wch:24},{wch:50}];
+  
+  for(var c=0;c<11;c++){
+    var ref=XLSX.utils.encode_cell({r:0,c:c});
+    if(!ws[ref])ws[ref]={};
+    ws[ref].s={fill:{patternType:'solid',fgColor:{rgb:HBG}},font:{color:{rgb:'FFFFFFFF'},bold:true,sz:11}};
+  }
+  for(var i=0;i<data.length;i++){
+    var ri=i+1,fc=rc(data[i]);
+    for(var c=0;c<11;c++){
+      var ref=XLSX.utils.encode_cell({r:ri,c:c});
+      if(!ws[ref])ws[ref]={};
+      ws[ref].s={fill:{patternType:'solid',fgColor:{rgb:fc}}};
+    }
+  }
+  
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Extracted Watches');
+  
+  var cleanCount=data.filter(function(x){return getLabel(x)==='CLEAN'}).length;
+  var partialCount=data.filter(function(x){return getLabel(x)==='PARTIAL'}).length;
+  var issuesCount=data.filter(function(x){return getLabel(x)==='ISSUES'}).length;
+  
+  var ld=[['Curated Luxury Extractor - Color Legend'],[''],['Status','Color','Description','Confidence Range'],
+    ['CLEAN','GREEN','All fields parsed correctly, no missing data','85-100%'],
+    ['PARTIAL','YELLOW','Missing 1-2 fields - review suggested','55-84%'],
+    ['ISSUES','RED','Multiple fields missing - needs manual lookup','0-54%'],
+    [''],['Generated: '+new Date().toLocaleString()],
+    ['Total watches: '+data.length],
+    ['CLEAN: '+cleanCount],
+    ['PARTIAL: '+partialCount],
+    ['ISSUES: '+issuesCount]];
+  var ws2=XLSX.utils.aoa_to_sheet(ld);
+  ws2['!cols']=[{wch:12},{wch:12},{wch:50},{wch:20}];
+  
+  var fm={3:LG,4:LY,5:LR};
+  for(var r2 in fm){
+    for(var c=0;c<4;c++){
+      var ref=XLSX.utils.encode_cell({r:parseInt(r2),c:c});
+      if(!ws2[ref])ws2[ref]={};
+      ws2[ref].s={fill:{patternType:'solid',fgColor:{rgb:fm[r2]}},font:{bold:true}};
+    }
+  }
+  
+  XLSX.utils.book_append_sheet(wb,ws2,'Color Legend');
+  
+  var out=XLSX.write(wb,{bookType:'xlsx',bookSST:false,type:'array'});
+  var blob=new Blob([out],{type:'application/octet-stream'});
+  var a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='wf-extract-report-'+Date.now()+'.xlsx';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// Auto-extract on load
+extractAll();
+</script>
+</body>
+</html>

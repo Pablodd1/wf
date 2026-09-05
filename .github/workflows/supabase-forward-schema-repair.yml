@@ -1,0 +1,121 @@
+name: Apply forward schema repair
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_FORWARD_SCHEMA_REPAIR to continue
+        required: true
+        type: string
+
+concurrency:
+  group: supabase-forward-schema-repair
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ inputs.confirmation == 'APPLY_FORWARD_SCHEMA_REPAIR' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PGPASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+
+      - name: Resolve database target
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
+      - name: Apply allowlisted forward repair
+        shell: bash
+        run: |
+          set -euo pipefail
+          migration="supabase/migrations/20260725010000_harden_staging_and_market_contract.sql"
+          recovery="supabase/migrations/20260725023000_identity_image_publication_control.sql"
+          hardening="supabase/migrations/20260725033000_harden_verified_publication_gates.sql"
+          test -f "$migration"
+          test -f "$recovery"
+          test -f "$hardening"
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF to_regclass('public.trading_floor_market_listings') IS NULL
+              OR to_regclass('public.listing_identity_reviews') IS NULL
+              OR to_regclass('public.listing_image_reviews') IS NULL THEN
+              RAISE EXCEPTION 'Base recovery migrations must be applied before hardening';
+            END IF;
+          END
+          $$;
+          SQL
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$hardening"
+
+      - name: Verify private staging and public market contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF NOT COALESCE((SELECT relrowsecurity FROM pg_class
+                WHERE oid = to_regclass('public.watch_staging')), false) THEN
+              RAISE EXCEPTION 'watch_staging RLS is not enabled';
+            END IF;
+            IF has_table_privilege('anon', 'public.watch_staging', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.watch_staging', 'SELECT') THEN
+              RAISE EXCEPTION 'watch_staging remains publicly readable';
+            END IF;
+            IF NOT has_table_privilege('service_role', 'public.watch_staging', 'SELECT') THEN
+              RAISE EXCEPTION 'service_role cannot read watch_staging';
+            END IF;
+            IF to_regclass('public.trading_floor_market_listings') IS NULL THEN
+              RAISE EXCEPTION 'market view is missing';
+            END IF;
+            IF to_regclass('public.listing_identity_reviews') IS NULL
+              OR to_regclass('public.listing_image_reviews') IS NULL
+              OR to_regclass('public.listing_identity_review_events') IS NULL
+              OR to_regclass('public.listing_image_review_events') IS NULL
+              OR to_regclass('public.trading_floor_verified_listings') IS NULL THEN
+              RAISE EXCEPTION 'data recovery control plane is incomplete';
+            END IF;
+            IF has_table_privilege('anon', 'public.listing_identity_reviews', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.listing_image_reviews', 'SELECT') THEN
+              RAISE EXCEPTION 'private recovery ledgers are publicly readable';
+            END IF;
+          END
+          $$;
+
+          SET statement_timeout = '15s';
+          SELECT id, brand, reference, listing_type, price_usd
+          FROM public.trading_floor_market_listings
+          ORDER BY created_at DESC, id DESC
+          LIMIT 10;
+          SQL

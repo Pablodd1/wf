@@ -1,0 +1,90 @@
+name: QNSA Zenith identity reconciliation
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_ZENITH_IDENTITY or APPLY_QNSA_ZENITH_IDENTITY
+        required: true
+        type: string
+      mode:
+        description: Read-only audit or bounded apply
+        required: true
+        default: audit
+        type: choice
+        options: [audit, apply]
+      normalization_run_key:
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+      reconciliation_run_key:
+        required: true
+        default: zenith-identity-20260814-v1
+        type: string
+
+concurrency:
+  group: qnsa-zenith-identity-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      NORMALIZED_RUN_KEY: ${{ inputs.normalization_run_key }}
+      RECONCILIATION_RUN_KEY: ${{ inputs.reconciliation_run_key }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate authorization
+        shell: pwsh
+        run: |
+          $expected=if('${{ inputs.mode }}' -eq 'apply'){'APPLY_QNSA_ZENITH_IDENTITY'}else{'AUDIT_QNSA_ZENITH_IDENTITY'}
+          if('${{ inputs.confirmation }}' -cne $expected){throw "Confirmation must be $expected"}
+          if($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh' -or -not $env:SUPABASE_ACCESS_TOKEN){throw 'Pinned QNSA credentials unavailable'}
+          foreach($key in @($env:NORMALIZED_RUN_KEY,$env:RECONCILIATION_RUN_KEY)){if($key -notmatch '^[A-Za-z0-9._:-]{1,100}$'){throw 'Invalid run key'}}
+      - name: Apply forward reconciliation contract
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
+          $sql=Get-Content -Raw supabase/migrations/20260814190000_qnsa_zenith_identity_reconciliation.sql
+          if($sql -match '(?i)(UPDATE|DELETE|INSERT\s+INTO)\s+(public\.)?(raw_messages|raw_message_versions)'){throw 'Immutable raw write detected'}
+          if($sql -match '(?i)(INSERT\s+INTO|DELETE\s+FROM)\s+staging\.listings'){throw 'Listing cardinality mutation detected'}
+          $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body|Out-Null
+      - name: Audit immutable Zenith identity evidence
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
+          $sql="SELECT public.audit_qnsa_zenith_identity_reconciliation('$env:NORMALIZED_RUN_KEY') evidence;"
+          # The Management API read-only role cannot EXECUTE security-definer
+          # functions. This function is declared STABLE and contains one SELECT;
+          # use the administrative query role without adding a write statement.
+          $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
+          $result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $e=$result[0].evidence;$e|ConvertTo-Json -Depth 6|Set-Content zenith-identity-audit.json;$e|ConvertTo-Json -Depth 6
+          if([long]$e.cohort_rows -ne 464){throw 'Zenith identity cohort drifted from the frozen 464-row census'}
+          if([long]$e.release_safe_rows -lt 400 -or [long]$e.quarantine_rows -lt 1){throw 'Zenith safe/quarantine census is outside reviewed bounds'}
+          if([long]$e.release_safe_rows+[long]$e.quarantine_rows -ne 464){throw 'Zenith identity census does not reconcile'}
+      - name: Apply bounded reconciliation
+        if: inputs.mode == 'apply'
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
+          $sql="SELECT public.apply_qnsa_zenith_identity_reconciliation('$env:NORMALIZED_RUN_KEY','$env:RECONCILIATION_RUN_KEY') evidence;"
+          $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
+          $result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $e=$result[0].evidence;$e|ConvertTo-Json -Depth 6|Set-Content zenith-identity-apply.json;$e|ConvertTo-Json -Depth 6
+          if([long]$e.cohort_rows -ne 464 -or [long]$e.release_safe_rows+[long]$e.quarantine_rows -ne 464){throw 'Zenith apply census failed'}
+          if([long]$e.staging_row_delta -ne 0 -or [long]$e.raw_rows_mutated -ne 0){throw 'Immutable/cardinality gate failed'}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-zenith-identity-reconciliation
+          path: |
+            zenith-identity-audit.json
+            zenith-identity-apply.json
+          if-no-files-found: error

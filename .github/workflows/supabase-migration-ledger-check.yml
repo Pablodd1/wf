@@ -1,0 +1,55 @@
+name: Inspect Supabase production migration ledger
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type INSPECT_PRODUCTION_MIGRATION_LEDGER to continue
+        required: true
+        type: string
+
+concurrency:
+  group: supabase-migration-ledger-check
+  cancel-in-progress: false
+
+jobs:
+  inspect:
+    if: ${{ inputs.confirmation == 'INSPECT_PRODUCTION_MIGRATION_LEDGER' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+
+      - name: Link production project locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase link \
+            --project-ref "$SUPABASE_PROJECT_REF" \
+            --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Show migration ledger only
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase migration list
+          echo "Ledger inspection complete; no migration was applied."

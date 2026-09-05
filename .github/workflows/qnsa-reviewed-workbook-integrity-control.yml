@@ -1,0 +1,273 @@
+name: QNSA reviewed workbook integrity control
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Audit only, bounded canary, or full exact-plan reconciliation
+        required: true
+        default: audit
+        type: choice
+        options: [audit, canary, full]
+      confirmation:
+        description: Exact mode-specific authorization token
+        required: true
+        type: string
+      confirm_project:
+        description: Type the canonical QNSA project ref
+        required: true
+        type: string
+      max_identity:
+        description: Canary identity rows (combined canary maximum is 10)
+        required: true
+        default: '0'
+        type: string
+      max_price:
+        description: Canary three-brand price rows (combined maximum is 10)
+        required: true
+        default: '0'
+        type: string
+      max_legacy:
+        description: Canary legacy drift rows (combined maximum is 10)
+        required: true
+        default: '0'
+        type: string
+      max_residual:
+        description: Canary residual-identity rows (three fixed classes; combined maximum is 10)
+        required: true
+        default: '3'
+        type: string
+      max_promotion:
+        description: Canary exact raw USD/USDT promotions (combined maximum is 10)
+        required: true
+        default: '3'
+        type: string
+      prior_canary_run_id:
+        description: Successful matching canary workflow run ID; required for full
+        required: false
+        type: string
+
+concurrency:
+  group: qnsa-reviewed-workbook-integrity-control
+  cancel-in-progress: false
+
+jobs:
+  integrity-control:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      actions: read
+      contents: read
+    env:
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      IDENTITY_MANIFEST: data/reviewed-workbook-integrity/identity-conflicts-245.csv
+      RESIDUAL_IDENTITY_MANIFEST: data/reviewed-workbook-integrity/residual-identity-conflicts-84.csv
+      PRICE_MANIFEST: data/reviewed-workbook-integrity/three-brand-price-regressions-36.csv
+      DRIFT_MANIFEST: data/reviewed-workbook-integrity/legacy-ledger-price-drift-252.csv
+      PROMOTION_MANIFEST: data/reviewed-workbook-integrity/exact-raw-usd-promotions-111.csv
+      OUTPUT_DIR: audit-output/qnsa-reviewed-workbook-integrity
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Validate authorization, target, manifests, and canary bounds
+        shell: pwsh
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+          INPUT_CONFIRM_PROJECT: ${{ inputs.confirm_project }}
+          INPUT_MAX_IDENTITY: ${{ inputs.max_identity }}
+          INPUT_MAX_PRICE: ${{ inputs.max_price }}
+          INPUT_MAX_LEGACY: ${{ inputs.max_legacy }}
+          INPUT_MAX_RESIDUAL: ${{ inputs.max_residual }}
+          INPUT_MAX_PROMOTION: ${{ inputs.max_promotion }}
+          INPUT_PRIOR_CANARY_RUN_ID: ${{ inputs.prior_canary_run_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $mode = $env:INPUT_MODE
+          $expected = switch ($mode) {
+            'audit' { 'AUDIT_QNSA_REVIEWED_WORKBOOK_INTEGRITY' }
+            'canary' { 'APPLY_QNSA_REVIEWED_WORKBOOK_CANARY' }
+            'full' { 'APPLY_QNSA_REVIEWED_WORKBOOK_FULL_AFTER_CANARY' }
+            default { throw 'Unsupported mode.' }
+          }
+          if ($env:INPUT_CONFIRMATION -cne $expected) { throw "Confirmation must exactly match $expected." }
+          if ($env:INPUT_CONFIRM_PROJECT -cne $env:SUPABASE_PROJECT_REF -or
+              $env:SUPABASE_PROJECT_REF -cne 'qnsafosakvonzgfcsphh') {
+            throw 'Workflow is pinned to canonical QNSA and requires explicit project confirmation.'
+          }
+          foreach ($manifest in @($env:IDENTITY_MANIFEST, $env:RESIDUAL_IDENTITY_MANIFEST, $env:PRICE_MANIFEST, $env:DRIFT_MANIFEST, $env:PROMOTION_MANIFEST)) {
+            if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) { throw "Required exact manifest is missing: $manifest" }
+          }
+          $maxIdentity = 0
+          $maxPrice = 0
+          $maxLegacy = 0
+          $maxResidual = 0
+          $maxPromotion = 0
+          if (-not [int]::TryParse($env:INPUT_MAX_IDENTITY, [ref]$maxIdentity) -or
+              -not [int]::TryParse($env:INPUT_MAX_PRICE, [ref]$maxPrice) -or
+              -not [int]::TryParse($env:INPUT_MAX_LEGACY, [ref]$maxLegacy) -or
+              -not [int]::TryParse($env:INPUT_MAX_RESIDUAL, [ref]$maxResidual) -or
+              -not [int]::TryParse($env:INPUT_MAX_PROMOTION, [ref]$maxPromotion) -or
+              $maxIdentity -lt 0 -or $maxPrice -lt 0 -or $maxLegacy -lt 0 -or $maxResidual -lt 0 -or $maxPromotion -lt 0) { throw 'Canary limits must be non-negative integers.' }
+          if ($mode -eq 'canary' -and (($maxIdentity + $maxPrice + $maxLegacy + $maxResidual + $maxPromotion) -lt 1 -or ($maxIdentity + $maxPrice + $maxLegacy + $maxResidual + $maxPromotion) -gt 10)) {
+            throw 'Canary must request 1..10 total exact rows.'
+          }
+          if ($mode -eq 'full' -and $env:INPUT_PRIOR_CANARY_RUN_ID -notmatch '^[0-9]+$') {
+            throw 'Full mode requires a numeric prior_canary_run_id.'
+          }
+
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Retrieve successful prior canary receipt
+        if: inputs.mode == 'full'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_PRIOR_CANARY_RUN_ID: ${{ inputs.prior_canary_run_id }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $runId = $env:INPUT_PRIOR_CANARY_RUN_ID
+          $run = gh run view $runId --repo $env:GITHUB_REPOSITORY --json conclusion,event,workflowName | ConvertFrom-Json
+          if ($run.conclusion -cne 'success' -or $run.event -cne 'workflow_dispatch' -or
+              $run.workflowName -cne 'QNSA reviewed workbook integrity control') {
+            throw 'Prior run is not a successful canary-capable integrity-control workflow run.'
+          }
+          New-Item -ItemType Directory -Force -Path prior-canary | Out-Null
+          gh run download $runId --repo $env:GITHUB_REPOSITORY `
+            --name qnsa-reviewed-workbook-integrity-receipt --dir prior-canary
+          $reports = @(Get-ChildItem prior-canary -Recurse -File -Filter execution-report.json)
+          if ($reports.Count -ne 1) { throw 'Prior run artifact must contain exactly one execution-report.json.' }
+          "CANARY_REPORT=$($reports[0].FullName)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Retrieve QNSA service credential without logging it
+        if: inputs.mode != 'audit'
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $keys = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/api-keys?reveal=true" -Headers $headers
+          $server = $keys | Where-Object { $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret') } | Select-Object -First 1
+          if (-not $server) { throw 'QNSA service credential was not available.' }
+          Write-Output "::add-mask::$($server.api_key)"
+          "SUPABASE_SERVICE_ROLE_KEY=$($server.api_key)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "SUPABASE_URL=https://$env:SUPABASE_PROJECT_REF.supabase.co" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Verify QNSA recovery or capture exact pre-change snapshot
+        if: inputs.mode == 'full'
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $backup = Invoke-RestMethod `
+            -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/backups" `
+            -Headers $headers
+          New-Item -ItemType Directory -Force -Path $env:OUTPUT_DIR | Out-Null
+          if ($backup.pitr_enabled -ne $true) {
+            & node tools/intake/snapshot-reviewed-workbook-integrity.cjs `
+              --identity-manifest $env:IDENTITY_MANIFEST `
+              --residual-identity-manifest $env:RESIDUAL_IDENTITY_MANIFEST `
+              --price-manifest $env:PRICE_MANIFEST `
+              --drift-price-manifest $env:DRIFT_MANIFEST `
+              --promotion-manifest $env:PROMOTION_MANIFEST `
+              --output-dir $env:OUTPUT_DIR `
+              --confirm-project $env:SUPABASE_PROJECT_REF `
+              --run-sha $env:GITHUB_SHA
+            if ($LASTEXITCODE -ne 0) { throw 'Exact pre-change recovery snapshot failed.' }
+          }
+          $snapshot = "$env:OUTPUT_DIR/recovery-snapshot.json"
+          [ordered]@{
+            checked_at = (Get-Date).ToUniversalTime().ToString('o')
+            project_ref = $env:SUPABASE_PROJECT_REF
+            pitr_enabled = [bool]$backup.pitr_enabled
+            walg_enabled = [bool]$backup.walg_enabled
+            completed_backup_count = @($backup.backups | Where-Object { $_.status -eq 'COMPLETED' }).Count
+            exact_snapshot_captured = Test-Path -LiteralPath $snapshot -PathType Leaf
+            exact_snapshot_sha256 = if (Test-Path -LiteralPath $snapshot -PathType Leaf) {
+              (Get-FileHash -Algorithm SHA256 -LiteralPath $snapshot).Hash.ToLowerInvariant()
+            } else { $null }
+          } | ConvertTo-Json | Set-Content -LiteralPath "$env:OUTPUT_DIR/recovery-proof.json" -Encoding utf8
+
+      - name: Execute exact guarded audit or canary
+        if: inputs.mode != 'full'
+        shell: pwsh
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+          INPUT_CONFIRM_PROJECT: ${{ inputs.confirm_project }}
+          INPUT_MAX_IDENTITY: ${{ inputs.max_identity }}
+          INPUT_MAX_PRICE: ${{ inputs.max_price }}
+          INPUT_MAX_LEGACY: ${{ inputs.max_legacy }}
+          INPUT_MAX_RESIDUAL: ${{ inputs.max_residual }}
+          INPUT_MAX_PROMOTION: ${{ inputs.max_promotion }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $arguments = @(
+            'tools/intake/apply-reviewed-workbook-integrity-canary.cjs',
+            '--mode', $env:INPUT_MODE,
+            '--identity-manifest', $env:IDENTITY_MANIFEST,
+            '--residual-identity-manifest', $env:RESIDUAL_IDENTITY_MANIFEST,
+            '--price-manifest', $env:PRICE_MANIFEST,
+            '--drift-price-manifest', $env:DRIFT_MANIFEST,
+            '--promotion-manifest', $env:PROMOTION_MANIFEST,
+            '--output-dir', $env:OUTPUT_DIR,
+            '--confirm-project', $env:INPUT_CONFIRM_PROJECT,
+            '--confirm', $env:INPUT_CONFIRMATION,
+            '--max-identity', $env:INPUT_MAX_IDENTITY,
+            '--max-price', $env:INPUT_MAX_PRICE,
+            '--max-legacy', $env:INPUT_MAX_LEGACY,
+            '--max-residual', $env:INPUT_MAX_RESIDUAL,
+            '--max-promotion', $env:INPUT_MAX_PROMOTION,
+            '--run-sha', $env:GITHUB_SHA
+          )
+          & node @arguments
+          if ($LASTEXITCODE -ne 0) { throw "Integrity control failed with exit code $LASTEXITCODE." }
+
+      - name: Execute exact guarded atomic full plan
+        if: inputs.mode == 'full'
+        shell: pwsh
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          INPUT_CONFIRMATION: ${{ inputs.confirmation }}
+          INPUT_CONFIRM_PROJECT: ${{ inputs.confirm_project }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & node tools/intake/apply-reviewed-workbook-integrity-canary.cjs `
+            --mode full `
+            --identity-manifest $env:IDENTITY_MANIFEST `
+            --residual-identity-manifest $env:RESIDUAL_IDENTITY_MANIFEST `
+            --price-manifest $env:PRICE_MANIFEST `
+            --drift-price-manifest $env:DRIFT_MANIFEST `
+            --promotion-manifest $env:PROMOTION_MANIFEST `
+            --output-dir $env:OUTPUT_DIR `
+            --confirm-project $env:INPUT_CONFIRM_PROJECT `
+            --confirm $env:INPUT_CONFIRMATION `
+            --run-sha $env:GITHUB_SHA `
+            --canary-report $env:CANARY_REPORT
+          if ($LASTEXITCODE -ne 0) { throw "Atomic integrity control failed with exit code $LASTEXITCODE." }
+
+      - name: Persist plan, receipt, and resumable checkpoint
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-reviewed-workbook-integrity-receipt
+          path: |
+            audit-output/qnsa-reviewed-workbook-integrity/control-plan.json
+            audit-output/qnsa-reviewed-workbook-integrity/execution-checkpoint.json
+            audit-output/qnsa-reviewed-workbook-integrity/execution-report.json
+            audit-output/qnsa-reviewed-workbook-integrity/recovery-proof.json
+            audit-output/qnsa-reviewed-workbook-integrity/recovery-snapshot.json
+          if-no-files-found: warn
+          retention-days: 30

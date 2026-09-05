@@ -1,0 +1,119 @@
+name: QNSA Rolex null-only source completion
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        required: true
+        type: choice
+        options: [schema, verify, canary, full, rollback]
+      run_key:
+        required: true
+        type: string
+      confirmation:
+        required: true
+        type: string
+      census_run_id:
+        description: Successful read-only recoverability run ID
+        required: false
+        type: string
+      manifest_sha256:
+        description: Exact candidate-manifest SHA-256
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: qnsa-rolex-null-only-source-completion-production
+  cancel-in-progress: false
+
+jobs:
+  complete:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_URL: https://qnsafosakvonzgfcsphh.supabase.co
+      MODE: ${{ inputs.mode }}
+      RUN_KEY: ${{ inputs.run_key }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+      CENSUS_RUN_ID: ${{ inputs.census_run_id }}
+      MANIFEST_SHA256: ${{ inputs.manifest_sha256 }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        if: inputs.mode != 'schema' && inputs.mode != 'verify'
+        with:
+          node-version: 22
+      - name: Validate exact authorization
+        shell: pwsh
+        run: |
+          $ErrorActionPreference='Stop'
+          if ($env:RUN_KEY -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_.:-]{5,119}$') { throw 'Invalid run key.' }
+          $expected=switch($env:MODE){'schema'{"INSTALL_SCHEMA_$($env:RUN_KEY)"};'verify'{"VERIFY_$($env:RUN_KEY)"};'canary'{"ACTIVATE_CANARY_$($env:RUN_KEY)"};'full'{"ACTIVATE_FULL_$($env:RUN_KEY)"};'rollback'{"ROLLBACK_$($env:RUN_KEY)"};default{throw 'Unsupported mode.'}}
+          if($env:CONFIRMATION -cne $expected){throw "Exact confirmation required: $expected"}
+          if(-not $env:SUPABASE_ACCESS_TOKEN){throw 'Management token unavailable.'}
+          if($env:MODE -ne 'schema' -and $env:MODE -ne 'rollback' -and $env:MODE -ne 'verify'){
+            if($env:CENSUS_RUN_ID -notmatch '^\d+$' -or $env:MANIFEST_SHA256 -notmatch '^[0-9a-f]{64}$'){throw 'Pinned census run and manifest SHA required.'}
+          }
+      - name: Install private null-only contract
+        if: inputs.mode == 'schema'
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
+          $sql=Get-Content -Raw 'supabase/migrations/20260822175000_qnsa_rolex_null_only_source_completion.sql'
+          $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body|Out-Null
+      - name: Install dependencies
+        if: inputs.mode != 'schema' && inputs.mode != 'verify'
+        run: npm ci --ignore-scripts
+      - name: Download pinned read-only candidate manifest
+        if: inputs.mode != 'schema' && inputs.mode != 'rollback' && inputs.mode != 'verify'
+        uses: actions/download-artifact@v4
+        with:
+          name: qnsa-rolex-missing-field-recoverability-${{ inputs.census_run_id }}
+          path: candidate-input
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.census_run_id }}
+      - name: Resolve service key without exposing it
+        if: inputs.mode != 'schema' && inputs.mode != 'verify'
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
+          $keys=Invoke-RestMethod -Method Get -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/api-keys" -Headers $headers
+          $service=@($keys|Where-Object{$_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret')})|Select-Object -First 1
+          if(-not $service.api_key){throw 'Service key unavailable.'};"::add-mask::$($service.api_key)"
+          "SUPABASE_SERVICE_ROLE_KEY=$($service.api_key)"|Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+      - name: Apply exact null-only completion
+        if: inputs.mode != 'schema' && inputs.mode != 'verify'
+        shell: pwsh
+        run: |
+          if($env:MODE -eq 'rollback'){
+            node tools/mariadb-live/run-rolex-null-only-source-completion.cjs --mode $env:MODE --run-key $env:RUN_KEY `
+              --confirm $env:CONFIRMATION | Tee-Object completion-result.json
+          }else{
+            node tools/mariadb-live/run-rolex-null-only-source-completion.cjs --mode $env:MODE --run-key $env:RUN_KEY `
+              --confirm $env:CONFIRMATION --manifest candidate-input/candidate-manifest.json `
+              --manifest-sha256 $env:MANIFEST_SHA256 | Tee-Object completion-result.json
+          }
+      - name: Verify null-only run state
+        if: inputs.mode != 'schema'
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"};$key=$env:RUN_KEY.Replace("'","''")
+          $sql="SELECT jsonb_build_object('run_key',r.run_key,'mode',r.mode,'status',r.status,'expected',r.expected_count,'database_bytes',pg_database_size(current_database()),'proposals',(SELECT count(*) FROM public.qnsa_rolex_null_only_completion_proposals p WHERE p.run_key=r.run_key),'snapshots',(SELECT count(*) FROM public.qnsa_rolex_null_only_completion_snapshots s WHERE s.run_key=r.run_key),'prior_populated_price_violations',(SELECT count(*) FROM public.qnsa_rolex_null_only_completion_snapshots s JOIN public.qnsa_rolex_null_only_completion_proposals p USING(run_key,listing_id) WHERE s.run_key=r.run_key AND p.proposed_price_usd IS NOT NULL AND COALESCE(s.prior_price_usd,s.prior_price_normalized,0)>0),'current_price_mismatches',(SELECT count(*) FROM public.qnsa_rolex_null_only_completion_proposals p JOIN staging.listings l ON l.id=p.listing_id WHERE p.run_key=r.run_key AND p.proposed_price_usd IS NOT NULL AND l.price_usd IS DISTINCT FROM p.proposed_price_usd)) evidence FROM public.qnsa_rolex_null_only_completion_runs r WHERE r.run_key='$key';"
+          $body=@{query=$sql;read_only=$true}|ConvertTo-Json;$result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $result[0].evidence|ConvertTo-Json|Set-Content completion-readback.json
+      - uses: actions/upload-artifact@v4
+        if: always() && inputs.mode != 'schema'
+        with:
+          name: qnsa-rolex-null-only-completion-${{ github.run_id }}
+          path: |
+            completion-result.json
+            completion-readback.json
+          if-no-files-found: warn
+          retention-days: 30

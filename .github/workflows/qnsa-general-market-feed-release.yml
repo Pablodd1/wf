@@ -1,0 +1,119 @@
+name: QNSA general market feed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type RELEASE_QNSA_GENERAL_MARKET_FEED
+        required: true
+        type: string
+
+concurrency:
+  group: qnsa-general-market-feed-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: ${{ inputs.confirmation == 'RELEASE_QNSA_GENERAL_MARKET_FEED' }}
+    runs-on: windows-latest
+    environment: production
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_RUN_KEY: mariadb-normalized-20260811-codex-v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compile in rollback transaction and audit source lane
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812120000_qnsa_general_market_feed_index_hotfix.sql')
+          $compile = "BEGIN;`n$migration`nROLLBACK;"
+          $body = @{ query = $compile; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+          $auditSql = @"
+          SELECT jsonb_build_object(
+            'database_gib', round(pg_database_size(current_database())::numeric / 1073741824, 3),
+            'run_rows', count(*),
+            'invalid_lineage', count(*) FILTER (WHERE raw_message_version_id IS NULL OR source_record_id IS NULL),
+            'bundle_or_child_rows', count(*) FILTER (WHERE parent_id IS NOT NULL OR COALESCE(is_bundle,false)),
+            'watch_rows', count(*) FILTER (WHERE upper(category)='WATCH'),
+            'handbag_rows', count(*) FILTER (WHERE upper(category)='HANDBAG'),
+            'jewelry_rows', count(*) FILTER (WHERE upper(category)='JEWELRY'),
+            'accessory_rows', count(*) FILTER (WHERE upper(category)='ACCESSORY')
+          ) AS audit
+          FROM staging.listings
+          WHERE normalization_run_key = '$env:EXPECTED_RUN_KEY';
+          "@
+          $body = @{ query = $auditSql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $audit = $result[0].audit
+          $audit | ConvertTo-Json -Depth 4
+          if ([long]$audit.run_rows -ne 603678 -or [long]$audit.invalid_lineage -ne 0 -or [long]$audit.bundle_or_child_rows -ne 0) {
+            throw 'Reconciled staging boundary changed; refusing release.'
+          }
+
+      - name: Apply forward market feed contract
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $migration = [string](Get-Content -Raw 'supabase/migrations/20260812120000_qnsa_general_market_feed_index_hotfix.sql')
+          $body = @{ query = [string]$migration; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          Start-Sleep -Seconds 3
+
+      - name: Reconcile counts and bounded customer pages
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SELECT jsonb_build_object(
+            'all_rows', count(*),
+            'rolex_rows', count(*) FILTER (WHERE category='WATCH' AND brand_normalized='Rolex'),
+            'patek_rows', count(*) FILTER (WHERE category='WATCH' AND brand_normalized='Patek Philippe'),
+            'handbag_rows', count(*) FILTER (WHERE category='HANDBAG'),
+            'jewelry_rows', count(*) FILTER (WHERE category='JEWELRY'),
+            'accessory_rows', count(*) FILTER (WHERE category='ACCESSORY'),
+            'bundle_or_child_rows', count(*) FILTER (WHERE parent_id IS NOT NULL OR COALESCE(is_bundle,false))
+          ) AS evidence
+          FROM staging.listings
+          WHERE normalization_run_key='$env:EXPECTED_RUN_KEY';
+          "@
+          $body = @{ query = $sql; read_only = $true } | ConvertTo-Json -Depth 4
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $evidence = $result[0].evidence
+          $evidence | ConvertTo-Json -Depth 8
+          if ([long]$evidence.all_rows -ne 603678 -or [long]$evidence.rolex_rows -lt 1 -or [long]$evidence.patek_rows -lt 1 -or
+              [long]$evidence.handbag_rows -lt 1 -or [long]$evidence.jewelry_rows -lt 1 -or [long]$evidence.accessory_rows -lt 1 -or
+              [long]$evidence.bundle_or_child_rows -ne 0) {
+            throw 'General market feed release reconciliation failed.'
+          }
+
+      - name: Smoke production API categories
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $base = 'https://watchfacts-poc.vercel.app/api/reviewed-market-inventory?pageSize=12'
+          $cases = @(
+            @{ name='all'; url=$base },
+            @{ name='Rolex'; url="$base&brand=Rolex" },
+            @{ name='Patek'; url="$base&brand=Patek%20Philippe" },
+            @{ name='handbags'; url="$base&item=handbags" },
+            @{ name='jewelry'; url="$base&item=jewelry" },
+            @{ name='accessories'; url="$base&item=accessories" }
+          )
+          foreach ($case in $cases) {
+            $response = Invoke-RestMethod -Uri "$($case.url)&release=$env:GITHUB_SHA" -TimeoutSec 45
+            if ($response.status -ne 'ok' -or [int]$response.count -lt 1) {
+              throw "Production Trading Floor smoke failed for $($case.name)."
+            }
+            Write-Output "$($case.name)=$($response.count)"
+          }

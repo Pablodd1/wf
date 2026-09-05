@@ -1,0 +1,149 @@
+name: Prepare or load frozen Rolex Patek shadow
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Prepare files only, or load the isolated shadow tables
+        required: true
+        type: choice
+        options:
+          - validate_only
+          - load_shadow
+          - reconcile_only
+        default: validate_only
+      confirmation:
+        description: Type PREPARE_QNSA_ROLEX_PATEK_FINAL_SHADOW, LOAD_QNSA_ROLEX_PATEK_FINAL_SHADOW_V1, or RECONCILE_QNSA_ROLEX_PATEK_FINAL_SHADOW_V1
+        required: true
+        type: string
+      final_freeze_run_id:
+        description: Exact successful final freeze run
+        required: true
+        default: '32953447624'
+        type: string
+      source_shadow_run_id:
+        description: Exact source current-inventory artifact run
+        required: true
+        default: '32934432129'
+        type: string
+      final_manifest_sha256:
+        description: Exact frozen cohort manifest SHA-256
+        required: true
+        default: 17d6d83186cd8e675830c881bcf16e0d3c011ba1835eecf90710a4c665e4472a
+        type: string
+
+concurrency:
+  group: qnsa-rolex-patek-final-shadow-load-${{ inputs.mode }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: >-
+      ${{ (inputs.mode == 'validate_only' && inputs.confirmation == 'PREPARE_QNSA_ROLEX_PATEK_FINAL_SHADOW') ||
+          (inputs.mode == 'load_shadow' && inputs.confirmation == 'LOAD_QNSA_ROLEX_PATEK_FINAL_SHADOW_V1') ||
+          (inputs.mode == 'reconcile_only' && inputs.confirmation == 'RECONCILE_QNSA_ROLEX_PATEK_FINAL_SHADOW_V1') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    environment: production
+    permissions:
+      actions: read
+      contents: read
+    env:
+      FINAL_FREEZE_ARTIFACT: ${{ github.workspace }}/.shadow-load/final-freeze
+      CURRENT_INVENTORY_SOURCE_ARTIFACT: ${{ github.workspace }}/.shadow-load/current-inventory-source
+      SHADOW_LOAD_OUTPUT: ${{ github.workspace }}/.shadow-load/output
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - name: Verify immutable inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${{ inputs.final_freeze_run_id }}" = '32953447624'
+          test "${{ inputs.source_shadow_run_id }}" = '32934432129'
+          test "${{ inputs.final_manifest_sha256 }}" = '17d6d83186cd8e675830c881bcf16e0d3c011ba1835eecf90710a4c665e4472a'
+          test "$SUPABASE_PROJECT_REF" = 'qnsafosakvonzgfcsphh'
+          test -n "$SUPABASE_ACCESS_TOKEN"
+
+      - uses: actions/checkout@v5
+
+      - name: Download exact frozen cohort artifact
+        if: ${{ inputs.mode != 'reconcile_only' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.final_freeze_run_id }}
+          name: PRIVATE-qnsa-rolex-patek-final-cohort-${{ inputs.final_freeze_run_id }}
+          path: ${{ env.FINAL_FREEZE_ARTIFACT }}
+
+      - name: Download exact source current-inventory artifact
+        if: ${{ inputs.mode != 'reconcile_only' }}
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: Pablodd1/wf
+          run-id: ${{ inputs.source_shadow_run_id }}
+          name: PRIVATE-qnsa-current-inventory-shadow-${{ inputs.source_shadow_run_id }}
+          path: ${{ env.CURRENT_INVENTORY_SOURCE_ARTIFACT }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: Verify and materialize immutable shadow load files
+        if: ${{ inputs.mode != 'reconcile_only' }}
+        run: npm run materialize:rolex-patek-final-shadow
+
+      - name: Verify load manifest remains shadow-only
+        if: ${{ inputs.mode != 'reconcile_only' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          jq -e '
+            .canonical_project_ref == "qnsafosakvonzgfcsphh" and
+            .status == "READY_TO_LOAD_SHADOW_ONLY" and
+            .final_freeze_run_id == "32953447624" and
+            .source_artifact_run_id == "32934432129" and
+            .final_manifest_sha256 == "17d6d83186cd8e675830c881bcf16e0d3c011ba1835eecf90710a4c665e4472a" and
+            .counts.Rolex.current == 1535763 and .counts.Rolex.wts == 1386508 and
+            .counts.Rolex.wtb == 149255 and .counts.Rolex.priceResearch >= 38521 and
+            .counts["Patek Philippe"].current == 937001 and
+            .counts["Patek Philippe"].wts == 884326 and .counts["Patek Philippe"].wtb == 52675 and
+            .counts["Patek Philippe"].priceResearch >= 45638 and
+            .canary == {requested:20,passed:20,failed:0} and
+            .source_switch == false and
+            .customer_endpoints_changed == false and
+            .production_source_tables_mutated == false
+          ' "$SHADOW_LOAD_OUTPUT/load-manifest.json"
+
+      - name: Upload compact load manifest
+        if: ${{ inputs.mode != 'reconcile_only' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-patek-final-shadow-load-manifest-${{ github.run_id }}
+          path: ${{ env.SHADOW_LOAD_OUTPUT }}/load-manifest.json
+          retention-days: 90
+
+      - name: Load and reconcile canonical QNSA shadow through API
+        if: ${{ inputs.mode == 'load_shadow' }}
+        run: node tools/audit/load-final-rolex-patek-shadow.cjs
+
+      - name: Reconcile previously loaded canonical QNSA shadow
+        if: ${{ inputs.mode == 'reconcile_only' }}
+        env:
+          SHADOW_RECONCILE_ONLY: 'true'
+          SHADOW_RUN_ID: 17d6d831-86cd-5e67-9830-c881bcf16e0d
+        run: node tools/audit/load-final-rolex-patek-shadow.cjs
+
+      - name: Upload shadow load result
+        if: ${{ inputs.mode != 'validate_only' && always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-patek-shadow-load-result-${{ github.run_id }}
+          path: ${{ env.SHADOW_LOAD_OUTPUT }}/load-result.json
+          if-no-files-found: ignore
+          retention-days: 90

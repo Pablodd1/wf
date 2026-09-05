@@ -1,0 +1,156 @@
+name: QNSA Rolex additive evidence restoration
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Install schema, dry-run, bounded canary, or full additive Rolex evidence pass
+        required: true
+        type: choice
+        options:
+          - schema_only
+          - dry-run
+          - canary
+          - full
+        default: dry-run
+      confirmation:
+        description: Exact mode-specific confirmation
+        required: true
+        type: string
+      canary_limit:
+        description: Canonical Rolex rows to inspect in canary mode
+        required: false
+        default: '1000'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qnsa-rolex-evidence-restoration-${{ inputs.mode }}
+  cancel-in-progress: false
+
+jobs:
+  restore:
+    environment: production
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_URL: https://qnsafosakvonzgfcsphh.supabase.co
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      ROLEX_EVIDENCE_MODE: ${{ inputs.mode }}
+      ROLEX_EVIDENCE_RUN_ID: 17d6d831-86cd-5e67-9830-c881bcf16e0d
+      ROLEX_EVIDENCE_CONFIRMATION: ${{ inputs.confirmation }}
+      ROLEX_EVIDENCE_CANARY_LIMIT: ${{ inputs.canary_limit }}
+      # Job-level env expressions cannot use the runner context. Keep the
+      # aggregate manifest in a fixed runner-local path so workflow_dispatch
+      # remains valid and the schema-only recovery can execute.
+      ROLEX_EVIDENCE_OUTPUT: /tmp/rolex-evidence-restoration.json
+      EXPECTED_MIGRATION_SHA256: cd90b816c081874f458e88cf493c06bf6f60aa646b5ae085c1460dcaa43f7103
+      EXPECTED_ORDERING_MIGRATION_SHA256: a30ac1237dda203df82cf80ba06d1b67c0747929252adfa84a6191870707d76f
+      EXPECTED_PERFORMANCE_MIGRATION_SHA256: e53229fffb078f172f0c3d00289516290518384947b52a1521dfda294495d901
+      EXPECTED_SCALAR_PAGE_MIGRATION_SHA256: 35a23350310e042a6bd93214d79aaac83acafc4d9dde40706cac321efcd5e2aa
+      EXPECTED_IMAGE_PAGE_MIGRATION_SHA256: 4ec3179836566613ce59271fbc4683814d278e59e6f24e997f6a65269779759e
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate target and authorization
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $expected = @{
+            schema_only = 'INSTALL_QNSA_ROLEX_EVIDENCE_SCHEMA_V1'
+            'dry-run' = 'DRY_RUN_QNSA_ROLEX_EVIDENCE_V1'
+            canary = 'APPLY_QNSA_ROLEX_EVIDENCE_CANARY_V1'
+            full = 'APPLY_QNSA_ROLEX_EVIDENCE_FULL_V1'
+          }
+          if ($env:PROJECT_REF -cne 'qnsafosakvonzgfcsphh') { throw 'Workflow is pinned to canonical QNSA.' }
+          if ($env:ROLEX_EVIDENCE_CONFIRMATION -cne $expected[$env:ROLEX_EVIDENCE_MODE]) {
+            throw 'Exact mode-specific confirmation is required.'
+          }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN is unavailable.' }
+
+      - run: npm ci
+
+      - name: Atomically install additive Rolex evidence schema
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $migrationPath = 'supabase/migrations/20260827150000_rolex_evidence_restoration_v1.sql'
+          $migration = (Get-Content -LiteralPath $migrationPath -Raw).Replace("`r`n", "`n")
+          $actualSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($migration))
+          ).ToLowerInvariant()
+          if ($actualSha -cne $env:EXPECTED_MIGRATION_SHA256) { throw 'Pinned migration SHA-256 mismatch.' }
+          $orderingPath = 'supabase/migrations/20260827170000_curated_luxury_single_input_first.sql'
+          $orderingMigration = (Get-Content -LiteralPath $orderingPath -Raw).Replace("`r`n", "`n")
+          $orderingSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($orderingMigration))
+          ).ToLowerInvariant()
+          if ($orderingSha -cne $env:EXPECTED_ORDERING_MIGRATION_SHA256) {
+            throw 'Pinned Rolex/Patek ordering migration SHA-256 mismatch.'
+          }
+          $performancePath = 'supabase/migrations/20260827180000_curated_luxury_single_input_first_performance.sql'
+          $performanceMigration = (Get-Content -LiteralPath $performancePath -Raw).Replace("`r`n", "`n")
+          $performanceSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($performanceMigration))
+          ).ToLowerInvariant()
+          if ($performanceSha -cne $env:EXPECTED_PERFORMANCE_MIGRATION_SHA256) {
+            throw 'Pinned Rolex/Patek performance migration SHA-256 mismatch.'
+          }
+          $scalarPagePath = 'supabase/migrations/20260827190000_curated_luxury_scalar_brand_lane_page.sql'
+          $scalarPageMigration = (Get-Content -LiteralPath $scalarPagePath -Raw).Replace("`r`n", "`n")
+          $scalarPageSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($scalarPageMigration))
+          ).ToLowerInvariant()
+          if ($scalarPageSha -cne $env:EXPECTED_SCALAR_PAGE_MIGRATION_SHA256) {
+            throw 'Pinned Rolex/Patek scalar-page migration SHA-256 mismatch.'
+          }
+          $imagePagePath = 'supabase/migrations/20260827200000_curated_luxury_verified_image_lane_page.sql'
+          $imagePageMigration = (Get-Content -LiteralPath $imagePagePath -Raw).Replace("`r`n", "`n")
+          $imagePageSha = [Convert]::ToHexString(
+            [Security.Cryptography.SHA256]::HashData([Text.UTF8Encoding]::new($false).GetBytes($imagePageMigration))
+          ).ToLowerInvariant()
+          if ($imagePageSha -cne $env:EXPECTED_IMAGE_PAGE_MIGRATION_SHA256) {
+            throw 'Pinned Rolex/Patek image-page migration SHA-256 mismatch.'
+          }
+          $sql = "BEGIN;`nSET LOCAL lock_timeout='5s';`nSET LOCAL statement_timeout='15min';`n$migration`n$orderingMigration`n$performanceMigration`n$scalarPageMigration`n$imagePageMigration`nCOMMIT;"
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 4
+          Invoke-RestMethod -Method Post `
+            -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" `
+            -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Resolve current QNSA service key without exposing it
+        if: ${{ inputs.mode != 'schema_only' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $keys = Invoke-RestMethod -Method Get `
+            -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/api-keys" -Headers $headers
+          $service = @($keys | Where-Object {
+            $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret')
+          }) | Select-Object -First 1
+          if (-not $service.api_key) { throw 'Current canonical QNSA service key is unavailable.' }
+          Write-Output "::add-mask::$($service.api_key)"
+          "SUPABASE_SERVICE_ROLE_KEY=$($service.api_key)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Run Rolex-only evidence pass
+        if: ${{ inputs.mode != 'schema_only' }}
+        run: npm run restore:rolex-evidence
+
+      - name: Upload aggregate-only reconciliation manifest
+        if: ${{ inputs.mode != 'schema_only' && always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-evidence-restoration-${{ inputs.mode }}-${{ github.run_id }}
+          path: ${{ env.ROLEX_EVIDENCE_OUTPUT }}
+          if-no-files-found: error
+          retention-days: 90

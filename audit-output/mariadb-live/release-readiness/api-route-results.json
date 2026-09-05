@@ -1,0 +1,9 @@
+{
+  "contract": "wf-api-route-results-v1",
+  "timestamp": "2026-09-04T09:48:46Z",
+  "total_routes_checked": 62,
+  "syntax_and_merge_marker_check": "PASSED (0 syntax errors, 0 merge markers)",
+  "frontend_api_parity": "62/62 frontend-referenced API routes matched with backend handlers",
+  "typescript_typecheck": "PASSED (tsc -b exit code 0)",
+  "production_vite_build": "PASSED (exit code 0, 2800 modules transformed)"
+}

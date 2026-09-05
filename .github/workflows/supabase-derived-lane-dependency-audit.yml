@@ -1,0 +1,129 @@
+name: Supabase derived-lane dependency audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_DERIVED_LANE_DEPENDENCIES
+        required: true
+        type: string
+
+jobs:
+  audit-derived-lane:
+    if: ${{ inputs.confirmation == 'AUDIT_DERIVED_LANE_DEPENDENCIES' }}
+    runs-on: windows-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+    steps:
+      - name: Query dependency and reclaim evidence
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @'
+          WITH target_relations AS (
+            SELECT unnest(ARRAY[
+              'staging.listings'::regclass,
+              'jobs.processing_jobs'::regclass,
+              'raw.payload_versions'::regclass,
+              'raw.payloads'::regclass
+            ]) AS relation_oid
+          ), relation_evidence AS (
+            SELECT
+              target.relation_oid::regclass::text AS relation_name,
+              pg_total_relation_size(target.relation_oid) AS total_bytes,
+              pg_relation_size(target.relation_oid) AS heap_bytes,
+              pg_indexes_size(target.relation_oid) AS index_bytes
+            FROM target_relations AS target
+          ), foreign_keys AS (
+            SELECT
+              constraint_row.conname AS constraint_name,
+              constraint_row.conrelid::regclass::text AS referencing_relation,
+              constraint_row.confrelid::regclass::text AS referenced_relation,
+              pg_get_constraintdef(constraint_row.oid, true) AS definition
+            FROM pg_constraint AS constraint_row
+            WHERE constraint_row.contype = 'f'
+              AND (
+                constraint_row.conrelid IN (SELECT relation_oid FROM target_relations)
+                OR constraint_row.confrelid IN (SELECT relation_oid FROM target_relations)
+              )
+            ORDER BY 2, 1
+          ), dependent_views AS (
+            SELECT DISTINCT
+              format('%I.%I', view_namespace.nspname, view_relation.relname) AS dependent_view,
+              format('%I.%I', source_namespace.nspname, source_relation.relname) AS source_relation
+            FROM pg_depend AS dependency
+            JOIN pg_rewrite AS rewrite_rule ON rewrite_rule.oid = dependency.objid
+            JOIN pg_class AS view_relation ON view_relation.oid = rewrite_rule.ev_class
+            JOIN pg_namespace AS view_namespace ON view_namespace.oid = view_relation.relnamespace
+            JOIN pg_class AS source_relation ON source_relation.oid = dependency.refobjid
+            JOIN pg_namespace AS source_namespace ON source_namespace.oid = source_relation.relnamespace
+            WHERE view_relation.relkind IN ('v', 'm')
+              AND source_relation.oid IN (SELECT relation_oid FROM target_relations)
+            ORDER BY 1, 2
+          ), non_internal_triggers AS (
+            SELECT
+              trigger_row.tgrelid::regclass::text AS relation_name,
+              trigger_row.tgname AS trigger_name,
+              pg_get_triggerdef(trigger_row.oid, true) AS definition
+            FROM pg_trigger AS trigger_row
+            WHERE trigger_row.tgrelid IN (SELECT relation_oid FROM target_relations)
+              AND trigger_row.tgisinternal IS FALSE
+            ORDER BY 1, 2
+          ), owned_sequences AS (
+            SELECT
+              sequence_relation.oid::regclass::text AS sequence_name,
+              table_relation.oid::regclass::text AS owning_relation,
+              table_attribute.attname AS owning_column
+            FROM pg_depend AS dependency
+            JOIN pg_class AS sequence_relation ON sequence_relation.oid = dependency.objid
+            JOIN pg_class AS table_relation ON table_relation.oid = dependency.refobjid
+            JOIN pg_attribute AS table_attribute
+              ON table_attribute.attrelid = table_relation.oid
+              AND table_attribute.attnum = dependency.refobjsubid
+            WHERE dependency.deptype = 'a'
+              AND sequence_relation.relkind = 'S'
+              AND table_relation.oid IN (SELECT relation_oid FROM target_relations)
+            ORDER BY 1
+          ), row_counts AS (
+            SELECT 'staging.listings'::text AS relation_name, count(*) AS row_count FROM staging.listings
+            UNION ALL
+            SELECT 'jobs.processing_jobs', count(*) FROM jobs.processing_jobs
+            UNION ALL
+            SELECT 'raw.payload_versions', count(*) FROM raw.payload_versions
+            UNION ALL
+            SELECT 'raw.payloads', count(*) FROM raw.payloads
+          )
+          SELECT jsonb_build_object(
+            'project_ref', 'qnsafosakvonzgfcsphh',
+            'audited_at', statement_timestamp(),
+            'read_only', true,
+            'database_bytes', pg_database_size(current_database()),
+            'target_total_bytes', (SELECT sum(total_bytes) FROM relation_evidence),
+            'relations', (SELECT jsonb_agg(to_jsonb(relation_evidence) ORDER BY total_bytes DESC) FROM relation_evidence),
+            'row_counts', (SELECT jsonb_agg(to_jsonb(row_counts) ORDER BY relation_name) FROM row_counts),
+            'foreign_keys', COALESCE((SELECT jsonb_agg(to_jsonb(foreign_keys)) FROM foreign_keys), '[]'::jsonb),
+            'dependent_views', COALESCE((SELECT jsonb_agg(to_jsonb(dependent_views)) FROM dependent_views), '[]'::jsonb),
+            'non_internal_triggers', COALESCE((SELECT jsonb_agg(to_jsonb(non_internal_triggers)) FROM non_internal_triggers), '[]'::jsonb),
+            'owned_sequences', COALESCE((SELECT jsonb_agg(to_jsonb(owned_sequences)) FROM owned_sequences), '[]'::jsonb),
+            'preserved_raw_messages', (SELECT count(*) FROM public.raw_messages),
+            'preserved_raw_message_versions', (SELECT count(*) FROM public.raw_message_versions),
+            'checkpoint', (
+              SELECT to_jsonb(checkpoint_row) - 'run_key'
+              FROM public.mariadb_raw_import_checkpoints AS checkpoint_row
+              ORDER BY updated_at DESC
+              LIMIT 1
+            )
+          ) AS cleanup_readiness;
+          '@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          if (-not $result -or -not $result[0].cleanup_readiness) {
+            throw 'Derived-lane dependency audit returned no evidence.'
+          }
+          $result[0].cleanup_readiness | ConvertTo-Json -Depth 10

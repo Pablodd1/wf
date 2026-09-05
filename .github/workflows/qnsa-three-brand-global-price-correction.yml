@@ -1,0 +1,232 @@
+name: QNSA three-brand global price correction
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: AUDIT is read-only; CANARY applies one 100-row page; RESUME continues bounded pages
+        required: true
+        default: AUDIT
+        type: choice
+        options: [AUDIT, CANARY, RESUME]
+      confirmation:
+        description: Type AUDIT_THREE_BRAND_FX, APPLY_THREE_BRAND_FX_CANARY, or RESUME_THREE_BRAND_FX
+        required: true
+        type: string
+      normalization_run_key:
+        description: Existing completed normalized-staging run
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+      correction_run_key:
+        description: Stable key reused for canary and every resume
+        required: true
+        default: rolex-patek-ap-global-fx-20260812-v1
+        type: string
+      database_limit_gib:
+        description: Confirmed database volume limit in GiB
+        required: true
+        type: string
+      minimum_headroom_gib:
+        description: Required free headroom in GiB
+        required: true
+        default: '2'
+        type: string
+      max_batches:
+        description: RESUME only, 1-500 batches of 100 rows
+        required: true
+        default: '20'
+        type: string
+      batch_delay_ms:
+        description: Delay between batches to protect customer reads
+        required: true
+        default: '2000'
+        type: string
+
+concurrency:
+  group: qnsa-three-brand-global-price-correction
+  cancel-in-progress: false
+
+jobs:
+  audit-or-correct:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXECUTION_MODE: ${{ inputs.mode }}
+      EXECUTION_CONFIRMATION: ${{ inputs.confirmation }}
+      NORMALIZED_RUN_KEY: ${{ inputs.normalization_run_key }}
+      CORRECTION_RUN_KEY: ${{ inputs.correction_run_key }}
+      CORRECTION_POLICY_VERSION: three-brand-global-dated-fx-v1
+      DATABASE_LIMIT_GIB: ${{ inputs.database_limit_gib }}
+      MINIMUM_HEADROOM_GIB: ${{ inputs.minimum_headroom_gib }}
+      MAX_PENDING_JOBS: '0'
+      MAX_FAILED_JOBS: '0'
+      CORRECTION_PAGE_SIZE: '100'
+      CORRECTION_MAX_BATCHES: ${{ inputs.mode == 'CANARY' && '1' || inputs.max_batches }}
+      CORRECTION_BATCH_DELAY_MS: ${{ inputs.batch_delay_ms }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Validate explicit authorization and bounds
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $expected = @{
+            AUDIT = 'AUDIT_THREE_BRAND_FX'
+            CANARY = 'APPLY_THREE_BRAND_FX_CANARY'
+            RESUME = 'RESUME_THREE_BRAND_FX'
+          }
+          if (-not $expected.ContainsKey($env:EXECUTION_MODE) -or $expected[$env:EXECUTION_MODE] -ne $env:EXECUTION_CONFIRMATION) { throw 'Confirmation does not match mode.' }
+          if (-not $env:SUPABASE_ACCESS_TOKEN -or $env:SUPABASE_PROJECT_REF -ne $env:EXPECTED_PROJECT_REF) { throw 'Pinned production project authorization is unavailable.' }
+          foreach ($key in @($env:NORMALIZED_RUN_KEY, $env:CORRECTION_RUN_KEY, $env:CORRECTION_POLICY_VERSION)) {
+            if ($key -notmatch '^[A-Za-z0-9._:-]{1,100}$') { throw 'Invalid run or policy key.' }
+          }
+          if ([double]$env:DATABASE_LIMIT_GIB -le 0 -or [double]$env:MINIMUM_HEADROOM_GIB -lt 0) { throw 'Capacity bounds are invalid.' }
+          if ([int]$env:CORRECTION_MAX_BATCHES -lt 1 -or [int]$env:CORRECTION_MAX_BATCHES -gt 500) { throw 'max_batches must be 1 to 500.' }
+          if ([int]$env:CORRECTION_BATCH_DELAY_MS -lt 0 -or [int]$env:CORRECTION_BATCH_DELAY_MS -gt 60000) { throw 'batch_delay_ms must be 0 to 60000.' }
+
+      - name: Read-only configured disk and utilization preflight
+        env:
+          DISK_AUDIT_PATH: qnsa-disk-capacity-audit.json
+        run: node tools/supabase/audit-disk-capacity.cjs
+
+      - name: Read-only bounded checkpoint, queue, and lineage preflight
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $run = $env:NORMALIZED_RUN_KEY.Replace("'", "''")
+          $sql = @"
+          SELECT jsonb_build_object(
+            'project_ref', '$($env:SUPABASE_PROJECT_REF)',
+            'pending_jobs', CASE WHEN EXISTS (SELECT 1 FROM jobs.processing_jobs WHERE lower(status::text) IN ('received','queued','processing') LIMIT 1) THEN 1 ELSE 0 END,
+            'failed_jobs', CASE WHEN EXISTS (SELECT 1 FROM jobs.processing_jobs WHERE lower(status::text) IN ('failed','dead_letter') LIMIT 1) THEN 1 ELSE 0 END,
+            'checkpoint', (SELECT jsonb_build_object('status', status, 'input_rows', input_rows, 'staged_rows', staged_rows,
+              'existing_rows', existing_rows, 'deferred_rows', deferred_rows, 'error_rows', error_rows,
+              'accounting_reconciled', input_rows = staged_rows + existing_rows + deferred_rows)
+              FROM staging.mariadb_normalization_import_checkpoints WHERE run_key = '$run'),
+            'eligible_brands_present', jsonb_build_object(
+              'Rolex', EXISTS (SELECT 1 FROM staging.listings l WHERE normalization_run_key = '$run'
+                AND brand_normalized = 'Rolex'
+                AND upper(COALESCE(category,'')) = 'WATCH' AND parent_id IS NULL AND COALESCE(is_bundle,false) = false
+                AND upper(COALESCE(listing_type,intent,'')) = 'WTS' AND NULLIF(btrim(reference_normalized),'') IS NOT NULL
+                AND COALESCE(provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
+                AND source_hash ~ '^[0-9a-f]{64}$'
+                AND lower(COALESCE(trading_floor_status,'')) NOT IN (
+                  'bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate',
+                  'withdrawn','rejected','hidden','deleted','archived')
+                AND upper(COALESCE(verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+                AND EXISTS (SELECT 1 FROM public.raw_message_versions v WHERE v.id=l.raw_message_version_id
+                  AND v.source_record_id=l.source_record_id AND v.source_hash=l.source_hash)
+                AND (COALESCE(price_usd,0)<=0 OR (upper(COALESCE(currency_normalized,'')) NOT IN ('USD','USDT')
+                  AND (COALESCE(conversion_rate,0)<=0 OR conversion_timestamp IS NULL OR NULLIF(btrim(conversion_source),'') IS NULL))) LIMIT 1),
+              'Patek Philippe', EXISTS (SELECT 1 FROM staging.listings l WHERE normalization_run_key = '$run'
+                AND brand_normalized = 'Patek Philippe' AND upper(COALESCE(category,'')) = 'WATCH'
+                AND parent_id IS NULL AND COALESCE(is_bundle,false) = false
+                AND upper(COALESCE(listing_type,intent,'')) = 'WTS' AND NULLIF(btrim(reference_normalized),'') IS NOT NULL
+                AND COALESCE(provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
+                AND source_hash ~ '^[0-9a-f]{64}$'
+                AND lower(COALESCE(trading_floor_status,'')) NOT IN ('bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate','withdrawn','rejected','hidden','deleted','archived')
+                AND upper(COALESCE(verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+                AND EXISTS (SELECT 1 FROM public.raw_message_versions v WHERE v.id=l.raw_message_version_id AND v.source_record_id=l.source_record_id AND v.source_hash=l.source_hash)
+                AND (COALESCE(price_usd,0)<=0 OR (upper(COALESCE(currency_normalized,'')) NOT IN ('USD','USDT') AND (COALESCE(conversion_rate,0)<=0 OR conversion_timestamp IS NULL OR NULLIF(btrim(conversion_source),'') IS NULL))) LIMIT 1),
+              'Audemars Piguet', EXISTS (SELECT 1 FROM staging.listings l WHERE normalization_run_key = '$run'
+                AND brand_normalized = 'Audemars Piguet' AND upper(COALESCE(category,'')) = 'WATCH'
+                AND parent_id IS NULL AND COALESCE(is_bundle,false) = false
+                AND upper(COALESCE(listing_type,intent,'')) = 'WTS' AND NULLIF(btrim(reference_normalized),'') IS NOT NULL
+                AND COALESCE(provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')='SINGLE_CANDIDATE'
+                AND source_hash ~ '^[0-9a-f]{64}$'
+                AND lower(COALESCE(trading_floor_status,'')) NOT IN ('bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate','withdrawn','rejected','hidden','deleted','archived')
+                AND upper(COALESCE(verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+                AND EXISTS (SELECT 1 FROM public.raw_message_versions v WHERE v.id=l.raw_message_version_id AND v.source_record_id=l.source_record_id AND v.source_hash=l.source_hash)
+                AND (COALESCE(price_usd,0)<=0 OR (upper(COALESCE(currency_normalized,'')) NOT IN ('USD','USDT') AND (COALESCE(conversion_rate,0)<=0 OR conversion_timestamp IS NULL OR NULLIF(btrim(conversion_source),'') IS NULL))) LIMIT 1)
+            )
+          ) AS preflight;
+          "@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $p = $result[0].preflight
+          $disk = Get-Content -Raw -LiteralPath 'qnsa-disk-capacity-audit.json' | ConvertFrom-Json
+          if (-not $p.checkpoint -or $p.checkpoint.status -ne 'NORMALIZATION_STAGED' -or [long]$p.checkpoint.error_rows -ne 0 -or -not $p.checkpoint.accounting_reconciled) { throw 'Completed reconciled normalization checkpoint is required.' }
+          if (-not [bool]$disk.gate.headroom_satisfied -or [double]$disk.disk.configured_size_gib -gt [double]$env:DATABASE_LIMIT_GIB) { throw 'Database headroom gate failed.' }
+          if ([long]$p.pending_jobs -gt [long]$env:MAX_PENDING_JOBS -or [long]$p.failed_jobs -gt [long]$env:MAX_FAILED_JOBS) { throw 'Processing queue gate failed.' }
+          "STAGING_ROWS_BEFORE=$($p.checkpoint.staged_rows)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          "RAW_ROWS_BEFORE=$($p.checkpoint.input_rows)" | Out-File $env:GITHUB_ENV -Encoding utf8 -Append
+          $evidence = [ordered]@{ disk = $disk; database = $p; row_baseline_source = 'RECONCILED_NORMALIZATION_CHECKPOINT' }
+          $evidence | ConvertTo-Json -Depth 10 | Set-Content -Encoding utf8 three-brand-fx-preflight.json
+
+      - name: Stop after read-only audit
+        if: ${{ inputs.mode == 'AUDIT' }}
+        run: echo "Read-only audit complete; no schema or data writes were executed."
+
+      - name: Install forward-only correction contract
+        if: ${{ inputs.mode != 'AUDIT' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260812220000_qnsa_three_brand_global_price_correction.sql'
+          if ($sql -match '(?i)(?:UPDATE|INSERT\s+INTO|DELETE\s+FROM)\s+(?:public\.)?(?:raw_message_versions|mariadb_raw_payloads|raw_payloads)') { throw 'Contract attempts an immutable raw write.' }
+          if ($sql -match '(?i)(?:INSERT\s+INTO|DELETE\s+FROM)\s+staging\.listings') { throw 'Contract attempts to create or remove staging rows.' }
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+
+      - name: Execute bounded resumable correction
+        if: ${{ inputs.mode != 'AUDIT' }}
+        run: node tools/mariadb-live/run-three-brand-price-correction.cjs
+
+      - name: Reconcile zero row delta, immutable raw count, accounting, and currencies
+        if: ${{ always() && inputs.mode != 'AUDIT' }}
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $key = $env:CORRECTION_RUN_KEY.Replace("'", "''")
+          $sql = @"
+          SELECT jsonb_build_object(
+            'run', (SELECT to_jsonb(r) - 'fx_snapshot' FROM staging.mariadb_three_brand_price_correction_runs r WHERE correction_run_key='$key'),
+            'staging_row_delta', CASE WHEN (SELECT initial_staging_rows FROM staging.mariadb_three_brand_price_correction_runs WHERE correction_run_key='$key')=$env:STAGING_ROWS_BEFORE THEN 0 ELSE 1 END,
+            'raw_immutability_verification', 'STATIC_WRITE_SURFACE_SCAN_PLUS_MIGRATION_GUARD',
+            'corrected_currency_counts', COALESCE((SELECT jsonb_object_agg(currency,row_count) FROM (
+              SELECT a.corrected_price->>'currency' currency, count(*) row_count
+              FROM staging.mariadb_price_policy_correction_audit a
+              JOIN staging.mariadb_price_policy_correction_batches b ON b.batch_token=a.batch_token
+              WHERE b.result->>'correction_run_key'='$key' GROUP BY a.corrected_price->>'currency') c), '{}'::jsonb),
+            'unsupported_currency_rows', CASE WHEN EXISTS (SELECT 1 FROM staging.mariadb_price_policy_correction_audit a
+              JOIN staging.mariadb_price_policy_correction_batches b ON b.batch_token=a.batch_token
+              WHERE b.result->>'correction_run_key'='$key'
+                AND a.corrected_price->>'currency' NOT IN (
+                  'USD','USDT','EUR','HKD','GBP','CHF','CNY','JPY','SGD','KRW','THB','CAD','AUD',
+                  'NZD','MYR','IDR','INR','PHP','BRL','MXN','ZAR','SEK','NOK','DKK') LIMIT 1) THEN 1 ELSE 0 END
+          ) AS reconciliation;
+          "@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $r = $result[0].reconciliation
+          if ([long]$r.staging_row_delta -ne 0 -or $r.raw_immutability_verification -ne 'STATIC_WRITE_SURFACE_SCAN_PLUS_MIGRATION_GUARD' -or [long]$r.unsupported_currency_rows -ne 0) { throw 'Row-delta, immutability, or currency reconciliation failed.' }
+          if ([long]$r.run.scanned_rows -ne ([long]$r.run.corrected_rows+[long]$r.run.skipped_rows)) { throw 'Checkpoint accounting failed.' }
+          if ($r.run.status -eq 'COMPLETE' -and [long]$r.run.scanned_rows -ne [long]$r.run.census_rows) { throw 'Completed census reconciliation failed.' }
+          $r | ConvertTo-Json -Depth 8 | Set-Content -Encoding utf8 three-brand-fx-reconciliation.json
+
+      - name: Upload sanitized audit evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-three-brand-global-fx-${{ github.run_id }}
+          path: |
+            three-brand-fx-preflight.json
+            three-brand-fx-reconciliation.json
+            qnsa-disk-capacity-audit.json
+          if-no-files-found: warn
+          retention-days: 30

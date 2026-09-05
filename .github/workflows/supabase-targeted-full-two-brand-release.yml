@@ -1,0 +1,172 @@
+name: Apply full Rolex and Patek release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_FULL_TWO_BRAND_RELEASE to continue
+        required: true
+        type: string
+
+concurrency:
+  group: supabase-targeted-full-two-brand-release
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ inputs.confirmation == 'APPLY_FULL_TWO_BRAND_RELEASE' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PGPASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+          psql --version
+
+      - name: Resolve IPv4 pooler target
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
+      - name: Verify prerequisites
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF to_regclass('public.watch_records') IS NULL
+              OR to_regclass('public.listing_identity_reviews') IS NULL
+              OR to_regclass('public.listing_image_reviews') IS NULL
+              OR to_regclass('public.media_manifest') IS NULL
+              OR to_regclass('public.trading_floor_market_listings') IS NULL
+              OR to_regprocedure('public.apply_listing_identity_review(text,text,text,text,jsonb,jsonb)') IS NULL
+              OR to_regprocedure('public.is_unsplit_bundle_parent(text)') IS NULL
+              OR to_regprocedure('public.is_listing_duplicate_eligible(text)') IS NULL THEN
+              RAISE EXCEPTION 'Full two-brand release prerequisites are missing';
+            END IF;
+          END
+          $$;
+          SQL
+
+      - name: Apply the single allowlisted migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          migration="supabase/migrations/20260727190000_full_rolex_patek_release.sql"
+          test -f "$migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$migration"
+
+      - name: Verify privacy, indexes, and bounded read performance
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          SET statement_timeout = '60s';
+          DO $$
+          BEGIN
+            IF to_regclass('public.two_brand_verified_trading_release') IS NULL
+              OR to_regclass('public.two_brand_identity_review_queue') IS NULL
+              OR to_regprocedure('public.two_brand_repost_signature(text,text,text,text,text,text,text,double precision)') IS NULL THEN
+              RAISE EXCEPTION 'Full two-brand release schema is incomplete';
+            END IF;
+            IF has_table_privilege('anon', 'public.two_brand_verified_trading_release', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.two_brand_verified_trading_release', 'SELECT')
+              OR has_table_privilege('anon', 'public.two_brand_identity_review_queue', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.two_brand_identity_review_queue', 'SELECT') THEN
+              RAISE EXCEPTION 'Private two-brand evidence is publicly readable';
+            END IF;
+            IF NOT has_table_privilege('service_role', 'public.two_brand_verified_trading_release', 'SELECT')
+              OR NOT has_table_privilege('service_role', 'public.two_brand_identity_review_queue', 'SELECT') THEN
+              RAISE EXCEPTION 'Service role lacks two-brand release privileges';
+            END IF;
+            IF (
+              SELECT count(*)
+              FROM pg_indexes
+              WHERE schemaname = 'public'
+                AND indexname IN (
+                  'idx_listing_identity_release_brand_status_record',
+                  'idx_listing_identity_review_brand_status_updated'
+                )
+            ) <> 2 THEN
+              RAISE EXCEPTION 'Two-brand release indexes are incomplete';
+            END IF;
+          END
+          $$;
+
+          SELECT id, brand, reference, created_at
+          FROM public.two_brand_verified_trading_release
+          ORDER BY created_at DESC NULLS LAST, id DESC
+          LIMIT 50;
+
+          SELECT record_id, brand, reference, created_at
+          FROM public.two_brand_identity_review_queue
+          ORDER BY record_id DESC
+          LIMIT 100;
+          SQL
+
+      - name: Publish exact release census
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          {
+            echo "## Full Rolex and Patek release census"
+            echo
+            echo '```text'
+            psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --field-separator=' | ' <<'SQL'
+          SET statement_timeout = '120s';
+          SELECT
+            brand,
+            count(*) AS customer_release_rows,
+            count(*) FILTER (WHERE has_images) AS visually_verified_image_rows,
+            count(*) FILTER (WHERE identity_review_status = 'HUMAN_APPROVED') AS human_approved_rows,
+            count(*) FILTER (WHERE identity_review_status = 'CATALOG_CONFIRMED') AS deterministic_catalog_rows
+          FROM public.two_brand_verified_trading_release
+          GROUP BY brand
+          ORDER BY brand;
+
+          SELECT
+            brand,
+            identity_status,
+            count(*) AS unresolved_identity_rows
+          FROM public.two_brand_identity_review_queue
+          GROUP BY brand, identity_status
+          ORDER BY brand, identity_status;
+
+          SQL
+            echo '```'
+            echo
+            echo "Actionable identity membership is evaluated only through bounded reviewer pages; a synchronous global disposition scan is intentionally excluded."
+            echo
+            echo "The migration changed no watch_records, image decisions, seller decisions, bundle decisions, or duplicate decisions."
+          } | tee -a "$GITHUB_STEP_SUMMARY"

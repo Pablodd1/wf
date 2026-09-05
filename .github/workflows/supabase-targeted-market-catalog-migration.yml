@@ -1,0 +1,108 @@
+name: Apply market and catalog schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_MARKET_CATALOG_SCHEMA to continue
+        required: true
+        type: string
+
+concurrency:
+  group: supabase-targeted-market-catalog-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ inputs.confirmation == 'APPLY_MARKET_CATALOG_SCHEMA' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PGPASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+
+      - name: Build allowlisted transaction
+        shell: bash
+        run: |
+          set -euo pipefail
+          market="supabase/migrations/20260722120000_strict_market_publication_view.sql"
+          catalog="supabase/migrations/20260722143000_catalog_model_provenance.sql"
+          test -f "$market"
+          test -f "$catalog"
+          {
+            printf 'BEGIN;\n'
+            cat "$market"
+            printf '\n'
+            cat "$catalog"
+            printf '\nCOMMIT;\n'
+          } > /tmp/market-catalog-schema.sql
+
+      - name: Resolve IPv4 pooler target
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
+      - name: Apply allowlisted schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file=/tmp/market-catalog-schema.sql
+
+      - name: Add Trading Floor indexes without blocking writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle_index="supabase/migrations/20260722170000_bundle_parent_lookup_index.sql"
+          reference_index="supabase/migrations/20260722180000_reference_created_at_index.sql"
+          test -f "$bundle_index"
+          test -f "$reference_index"
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$bundle_index"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$reference_index"
+
+      - name: Verify market view and catalog columns
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          view_count="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM information_schema.views WHERE table_schema = 'public' AND table_name = 'trading_floor_market_listings';")"
+          test "$view_count" = "1"
+
+          column_count="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'watch_records' AND column_name IN ('model', 'catalog_confirmed', 'catalog_match');")"
+          test "$column_count" = "3"
+
+          anon_select="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT has_table_privilege('anon', 'public.trading_floor_market_listings', 'SELECT');")"
+          test "$anon_select" = "t"
+
+          index_count="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM pg_indexes WHERE schemaname = 'public' AND indexname IN ('idx_shadow_v4_bundle_parent_source', 'idx_watch_records_reference_created_at_desc');")"
+          test "$index_count" = "2"
+
+          psql "$db_url" --set=ON_ERROR_STOP=1 --command="SET statement_timeout = '15s'; SELECT id FROM public.trading_floor_market_listings WHERE reference = '5712/1A' ORDER BY created_at DESC LIMIT 10; SELECT id FROM public.trading_floor_market_listings WHERE reference = '5712/1R' ORDER BY created_at DESC LIMIT 10; SELECT id FROM public.trading_floor_market_listings WHERE reference = '3712/1A' ORDER BY created_at DESC LIMIT 10; SELECT id FROM public.trading_floor_market_listings WHERE reference = '116500LN' ORDER BY created_at DESC LIMIT 10; SELECT id FROM public.trading_floor_market_listings WHERE reference = '52506' ORDER BY created_at DESC LIMIT 10;"

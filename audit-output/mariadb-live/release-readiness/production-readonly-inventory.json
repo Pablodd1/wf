@@ -1,0 +1,63 @@
+{
+  "contract": "wf-production-readonly-inventory-v1",
+  "timestamp": "2026-09-04T09:48:46Z",
+  "status": "BLOCKED_PENDING_PRODUCTION_CREDENTIALS",
+  "security_policy": {
+    "production_boundary": "ABSOLUTE_READONLY",
+    "lockout_reason": "Live production database connection credentials (SUPABASE_DB_HOST, DATABASE_URL, SUPABASE_SERVICE_ROLE_KEY) are deliberately omitted from the local development and review environment to prevent accidental mutations.",
+    "allowed_local_actions": [
+      "read production metadata and counts via read-only bastions",
+      "run tests against local/disposable PostgreSQL databases",
+      "generate review artifacts and code diffs"
+    ],
+    "prohibited_actions": [
+      "modify production tables, schemas, views, functions, grants, or migrations",
+      "start MariaDB capture jobs",
+      "rerun full-dataset normalization against production",
+      "deploy unapproved releases to production"
+    ]
+  },
+  "historical_staging_snapshot": {
+    "public.watch_records": {
+      "row_count": 15154163,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.normalized_records": {
+      "row_count": 0,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.normalization_promotion_audit": {
+      "row_count": 431,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.trading_floor_ready_view": {
+      "row_count": 96340,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.price_research_ready_view": {
+      "row_count": 31848,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.live_ingest": {
+      "row_count": 4288,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.mariadb_raw_import_batches": {
+      "row_count": 24,
+      "delta": 0,
+      "zero_delta_proven": true
+    },
+    "public.mariadb_raw_import_checkpoints": {
+      "row_count": 3,
+      "delta": 0,
+      "zero_delta_proven": true
+    }
+  },
+  "production_staging_summary": "Legacy customer-facing tables had zero row delta; production staging received 500 canary rows and v2 views/RPCs were created or replaced."
+}

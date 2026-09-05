@@ -1,0 +1,46 @@
+name: Supabase QNSA Rolex Patek completion audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_SCHEMA_READINESS
+        required: true
+        type: string
+
+jobs:
+  audit-completion:
+    if: ${{ inputs.confirmation == 'AUDIT_QNSA_SCHEMA_READINESS' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      # Job-level env expressions cannot use the runner context.
+      QNSA_COMPLETION_AUDIT_OUTPUT: /tmp/qnsa-rolex-patek-completion-audit.json
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Verify read-only audit contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$SUPABASE_PROJECT_REF" = 'qnsafosakvonzgfcsphh'
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          node --version
+          node --test tests/qnsa-rolex-patek-completion-audit.test.cjs
+
+      - name: Audit aggregate Rolex Patek completion evidence
+        run: node tools/audit/qnsa-rolex-patek-completion-audit.cjs
+
+      - name: Upload aggregate-only audit evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-rolex-patek-completion-audit-${{ github.run_id }}
+          path: ${{ env.QNSA_COMPLETION_AUDIT_OUTPUT }}
+          retention-days: 30
+          if-no-files-found: error

@@ -1,0 +1,57 @@
+name: QNSA four-brand public missing-field advisory
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: qnsa-four-brand-public-advisory
+  cancel-in-progress: false
+
+jobs:
+  build-advisory:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Crawl four public inventories without writes
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force -Path public-advisory | Out-Null
+          node tools/audit/generate-tudor-omega-missing-field-manifest.cjs `
+            --origin https://watchfacts-poc.vercel.app `
+            --output public-advisory/tudor-omega-missing.json
+          node tools/audit/build-cartier-zenith-missing-field-manifest.cjs `
+            --base-url https://watchfacts-poc.vercel.app `
+            --output public-advisory/cartier-zenith-missing.json
+
+      - name: Verify redacted advisory contract
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          node -e "const fs=require('fs');const paths=['public-advisory/tudor-omega-missing.json','public-advisory/cartier-zenith-missing.json'];for(const p of paths){const m=JSON.parse(fs.readFileSync(p));const rows=[...(m.proposals||[]),...(m.corrections||[]),...(m.owner_policy_tracked_only||[])];if(!rows.length)throw Error('empty advisory '+p);for(const r of rows){if(r.proposed_image_url||r.image_url||r.dealer_id||r.dealer_rating||r.contact_publication_approved)throw Error('forbidden media/dealer proposal '+p)}}"
+          $files = @('tudor-omega-missing.json','cartier-zenith-missing.json')
+          foreach ($file in $files) {
+            $hash = (Get-FileHash -LiteralPath (Join-Path 'public-advisory' $file) -Algorithm SHA256).Hash.ToLowerInvariant()
+            "- ``$file`` SHA-256: ``$hash``" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          }
+          "- Database writes: 0" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      - name: Upload short-lived redacted advisory
+        uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-four-brand-public-advisory-${{ github.run_id }}
+          path: public-advisory/*.json
+          if-no-files-found: error
+          retention-days: 3

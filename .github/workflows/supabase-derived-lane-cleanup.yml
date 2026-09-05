@@ -1,0 +1,157 @@
+name: Supabase derived-lane cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPROVE_QNSA_DERIVED_LANE_CLEANUP
+        required: true
+        type: string
+      expected_staging_listings:
+        description: Expected staging.listings row count from the immediately preceding audit
+        required: true
+        type: string
+      expected_processing_jobs:
+        description: Expected jobs.processing_jobs row count from the immediately preceding audit
+        required: true
+        type: string
+      expected_payload_versions:
+        description: Expected raw.payload_versions row count from the immediately preceding audit
+        required: true
+        type: string
+      expected_payloads:
+        description: Expected raw.payloads row count from the immediately preceding audit
+        required: true
+        type: string
+      expected_preserved_raw_messages:
+        description: Expected public.raw_messages count that must remain unchanged
+        required: true
+        type: string
+
+jobs:
+  clean-derived-lane:
+    if: ${{ inputs.confirmation == 'APPROVE_QNSA_DERIVED_LANE_CLEANUP' }}
+    runs-on: windows-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_STAGING_LISTINGS: ${{ inputs.expected_staging_listings }}
+      EXPECTED_PROCESSING_JOBS: ${{ inputs.expected_processing_jobs }}
+      EXPECTED_PAYLOAD_VERSIONS: ${{ inputs.expected_payload_versions }}
+      EXPECTED_PAYLOADS: ${{ inputs.expected_payloads }}
+      EXPECTED_PRESERVED_RAW_MESSAGES: ${{ inputs.expected_preserved_raw_messages }}
+    steps:
+      - name: Validate numeric preconditions
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          @(
+            'EXPECTED_STAGING_LISTINGS',
+            'EXPECTED_PROCESSING_JOBS',
+            'EXPECTED_PAYLOAD_VERSIONS',
+            'EXPECTED_PAYLOADS',
+            'EXPECTED_PRESERVED_RAW_MESSAGES'
+          ) | ForEach-Object {
+            $value = [Environment]::GetEnvironmentVariable($_)
+            $parsed = 0L
+            if (-not [Int64]::TryParse($value, [ref]$parsed) -or $parsed -lt 0) {
+              throw "$_ must be a non-negative integer"
+            }
+          }
+
+      - name: Atomically remove only the audited derived lane
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          DO `$cleanup`$
+          DECLARE
+            v_staging BIGINT;
+            v_jobs BIGINT;
+            v_versions BIGINT;
+            v_payloads BIGINT;
+            v_raw_messages BIGINT;
+            v_raw_message_versions BIGINT;
+            v_import_errors BIGINT;
+          BEGIN
+            IF current_database() IS NULL THEN
+              RAISE EXCEPTION 'Database identity is unavailable';
+            END IF;
+
+            PERFORM pg_advisory_xact_lock(hashtext('watchfacts:qnsa:derived-lane-cleanup'));
+
+            SELECT count(*) INTO v_staging FROM staging.listings;
+            SELECT count(*) INTO v_jobs FROM jobs.processing_jobs;
+            SELECT count(*) INTO v_versions FROM raw.payload_versions;
+            SELECT count(*) INTO v_payloads FROM raw.payloads;
+            SELECT count(*) INTO v_raw_messages FROM public.raw_messages;
+            SELECT count(*) INTO v_raw_message_versions FROM public.raw_message_versions;
+            SELECT COALESCE(sum(error_rows), 0) INTO v_import_errors
+            FROM public.mariadb_raw_import_checkpoints;
+
+            IF v_staging <> $($env:EXPECTED_STAGING_LISTINGS)::bigint
+              OR v_jobs <> $($env:EXPECTED_PROCESSING_JOBS)::bigint
+              OR v_versions <> $($env:EXPECTED_PAYLOAD_VERSIONS)::bigint
+              OR v_payloads <> $($env:EXPECTED_PAYLOADS)::bigint THEN
+              RAISE EXCEPTION
+                'Derived-lane counts changed after audit: staging=%, jobs=%, versions=%, payloads=%',
+                v_staging, v_jobs, v_versions, v_payloads;
+            END IF;
+
+            IF v_raw_messages <> $($env:EXPECTED_PRESERVED_RAW_MESSAGES)::bigint
+              OR v_raw_message_versions <> v_raw_messages
+              OR v_import_errors <> 0 THEN
+              RAISE EXCEPTION
+                'Immutable evidence precondition failed: raw_messages=%, raw_message_versions=%, import_errors=%',
+                v_raw_messages, v_raw_message_versions, v_import_errors;
+            END IF;
+
+            TRUNCATE TABLE
+              staging.listings,
+              jobs.processing_jobs,
+              raw.payload_versions,
+              raw.payloads;
+
+            IF EXISTS (SELECT 1 FROM staging.listings)
+              OR EXISTS (SELECT 1 FROM jobs.processing_jobs)
+              OR EXISTS (SELECT 1 FROM raw.payload_versions)
+              OR EXISTS (SELECT 1 FROM raw.payloads) THEN
+              RAISE EXCEPTION 'Derived-lane cleanup did not reach zero rows';
+            END IF;
+
+            IF (SELECT count(*) FROM public.raw_messages) <> v_raw_messages
+              OR (SELECT count(*) FROM public.raw_message_versions) <> v_raw_message_versions THEN
+              RAISE EXCEPTION 'Immutable evidence changed during derived-lane cleanup';
+            END IF;
+          END
+          `$cleanup`$;
+
+          SELECT jsonb_build_object(
+            'project_ref', 'qnsafosakvonzgfcsphh',
+            'completed_at', statement_timestamp(),
+            'derived_lane', jsonb_build_object(
+              'staging_listings', (SELECT count(*) FROM staging.listings),
+              'processing_jobs', (SELECT count(*) FROM jobs.processing_jobs),
+              'payload_versions', (SELECT count(*) FROM raw.payload_versions),
+              'payloads', (SELECT count(*) FROM raw.payloads)
+            ),
+            'preserved_evidence', jsonb_build_object(
+              'raw_messages', (SELECT count(*) FROM public.raw_messages),
+              'raw_message_versions', (SELECT count(*) FROM public.raw_message_versions),
+              'import_checkpoints', (SELECT count(*) FROM public.mariadb_raw_import_checkpoints),
+              'import_batches', (SELECT count(*) FROM public.mariadb_raw_import_batches)
+            ),
+            'database_bytes_after', pg_database_size(current_database())
+          ) AS cleanup_evidence;
+          "@
+          $body = @{ query = [string]$sql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          if (-not $result -or -not $result[0].cleanup_evidence) {
+            throw 'Derived-lane cleanup returned no completion evidence.'
+          }
+          $result[0].cleanup_evidence | ConvertTo-Json -Depth 8

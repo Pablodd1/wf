@@ -1,0 +1,20 @@
+{
+  "contract": "wf-fixed-source-provenance-verification-v1",
+  "executed_at": "2026-09-02T18:54:49.2206895Z",
+  "status": "NOT_EXECUTED_NO_READ_ONLY_CREDENTIALS",
+  "raw_contacts_or_payloads_emitted": false,
+  "fixed_source_ids": [
+    "2ccf95e8-78f6-4dab-9429-187e43bba662",
+    "a16ef456-d523-40a9-9d23-719320a8f2d9",
+    "6301d429-796d-4161-9b0c-d565eb94d549"
+  ],
+  "assertion_path": [
+    "immutable raw provenance and source_hash",
+    "normalized proposal and source_hash",
+    "canary relation and source_hash",
+    "security-invoker consumer view and source_hash",
+    "API record"
+  ],
+  "result": null,
+  "reason": "The query and regression harness are committed, but this review had no database/API credentials and was prohibited from using production."
+}

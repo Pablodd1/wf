@@ -1,0 +1,80 @@
+{
+  "contract": "wf-mariadb-private-raw-staging-v1",
+  "timestamp": "2026-09-01T23:07:46.616Z",
+  "tls_proof": {
+    "verified": true,
+    "transport": "TLS_CA_VERIFIED",
+    "tls_reject_unauthorized": true,
+    "ca_bytes": 2223,
+    "pinned_server_cert_sha256": "07:F7:B9:58:1B:79:C7:42:61:8D:3F:85:91:DC:54:9B:F1:6E:FB:C6:2E:45:0E:FD:9B:56:F7:54:D3:52:E1:97"
+  },
+  "source_boundary": {
+    "contract": "wf-mariadb-private-raw-staging-v1",
+    "source_system": "OceanDigital MariaDB",
+    "source_database": "thecollective_inventory",
+    "source_table": "auctions",
+    "isolation_level": "REPEATABLE READ (CONSISTENT SNAPSHOT, READ ONLY)",
+    "total_source_rows": 1508505,
+    "lower_boundary": {
+      "id": "7534d09b-28b9-4052-8005-228c32f972df",
+      "created_on": "2025-01-08T18:28:49.000Z",
+      "updated_on": null
+    },
+    "upper_boundary": {
+      "id": "b7bf9b99-36f5-4c81-babf-a2be0490d40b",
+      "created_on": "2026-09-01T23:07:25.000Z",
+      "updated_on": "2026-09-01T23:07:25.000Z"
+    },
+    "snapshot_timestamp": "2026-09-01T23:07:44.770Z",
+    "manifest_sha256": "babf2a3aac9710eb08a17360caf8779758cf273c3b94b3e4e3ea9b8b866932d9"
+  },
+  "database_security_audit": {
+    "direct_table_privileges_all_false": true,
+    "schema_usage": {
+      "anon": false,
+      "service_role": true,
+      "authenticated": false
+    },
+    "function_privileges": {
+      "get_errors": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "ingest_batch": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "audit_security": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "get_checkpoint": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "verify_readback": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      },
+      "finalize_checkpoint": {
+        "anon_execute": false,
+        "service_role_execute": true,
+        "authenticated_execute": false
+      }
+    }
+  },
+  "checkpoint_state": {
+    "run_key": "full-capture-auctions-1788028958313",
+    "input_rows": 1487333,
+    "capture_error_rows": 8,
+    "status": "PARTIAL",
+    "manifest_sha256": "fd545df7a5668c28ede4f2c721a9539fcb6f7cf755302a975052b23270b8adb1"
+  },
+  "source_rows_after_checkpoint": 21172,
+  "launch_gate_status": "BLOCKED_PENDING_CTO_AUTHORIZATION"
+}

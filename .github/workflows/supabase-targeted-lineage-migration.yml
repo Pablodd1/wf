@@ -1,0 +1,120 @@
+name: Apply private seller-lineage schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_PRIVATE_LINEAGE_SCHEMA to continue
+        required: true
+        type: string
+
+concurrency:
+  group: supabase-targeted-lineage-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ inputs.confirmation == 'APPLY_PRIVATE_LINEAGE_SCHEMA' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PGPASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+          psql --version
+
+      - name: Build allowlisted transaction
+        shell: bash
+        run: |
+          set -euo pipefail
+          first="supabase/migrations/20260720220000_seller_listing_lineage_staging.sql"
+          second="supabase/migrations/20260721120000_seller_child_lineage_staging.sql"
+          third="supabase/migrations/20260724223000_reviewer_contact_access_audit.sql"
+          test -f "$first"
+          test -f "$second"
+          test -f "$third"
+          {
+            printf 'BEGIN;\n'
+            cat "$first"
+            printf '\n'
+            cat "$second"
+            printf '\n'
+            cat "$third"
+            printf '\nCOMMIT;\n'
+          } > /tmp/private-lineage-schema.sql
+
+      - name: Resolve IPv4 pooler target
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The project's direct db.* endpoint is IPv6-only. Supavisor session mode
+          # is IPv4-compatible and supports this transactional DDL workflow.
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
+      - name: Apply allowlisted private schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql \
+            "$db_url" \
+            --set=ON_ERROR_STOP=1 \
+            --file=/tmp/private-lineage-schema.sql
+
+      - name: Verify private tables, RLS, and privileges
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          result="$(psql "$db_url" \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only --no-align \
+            --command="SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging', 'reviewer_contact_access_audit');")"
+          test "$result" = "3"
+
+          public_access="$(psql "$db_url" \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only --no-align \
+            --command="WITH tables(table_name) AS (VALUES ('seller_listing_lineage_staging'::text), ('seller_child_lineage_staging'::text), ('reviewer_contact_access_audit'::text)) SELECT count(*) FROM tables WHERE has_table_privilege('anon', format('public.%s', table_name), 'SELECT') OR has_table_privilege('authenticated', format('public.%s', table_name), 'SELECT');")"
+          test "$public_access" = "0"
+
+          rls_disabled="$(psql "$db_url" \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only --no-align \
+            --command="SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging', 'reviewer_contact_access_audit') AND c.relrowsecurity IS NOT TRUE;")"
+          test "$rls_disabled" = "0"
+
+          service_role_select="$(psql "$db_url" \
+            --set=ON_ERROR_STOP=1 \
+            --tuples-only --no-align \
+            --command="WITH tables(table_name) AS (VALUES ('seller_listing_lineage_staging'::text), ('seller_child_lineage_staging'::text), ('reviewer_contact_access_audit'::text)) SELECT count(*) FROM tables WHERE has_table_privilege('service_role', format('public.%s', table_name), 'SELECT');")"
+          test "$service_role_select" = "3"
+
+          psql "$db_url" \
+            --set=ON_ERROR_STOP=1 \
+            --command="SELECT table_name, grantee, privilege_type FROM information_schema.role_table_grants WHERE table_schema = 'public' AND table_name IN ('seller_listing_lineage_staging', 'seller_child_lineage_staging', 'reviewer_contact_access_audit') ORDER BY table_name, grantee, privilege_type;"

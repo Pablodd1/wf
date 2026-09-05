@@ -1,0 +1,218 @@
+name: Supabase local normalized staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type STAGE_RECONCILED_NORMALIZATION
+        required: true
+        type: string
+      mode:
+        description: Run a bounded 500-row canary or resume the complete staging import
+        required: true
+        default: canary
+        type: choice
+        options:
+          - canary
+          - full
+      run_key:
+        description: Stable idempotent normalized-staging run key
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+
+concurrency:
+  group: supabase-local-normalized-staging
+  cancel-in-progress: false
+
+jobs:
+  stage-normalized:
+    if: ${{ inputs.confirmation == 'STAGE_RECONCILED_NORMALIZATION' }}
+    runs-on: [self-hosted, Windows, X64, watchfacts-raw-import]
+    environment: production
+    timeout-minutes: 720
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_PROJECT_REF: qnsafosakvonzgfcsphh
+      EXPECTED_RAW_ROWS: '1394269'
+      RAW_IMPORT_RUN_KEY: mariadb-full-archive-20260810-codex-v1
+      NORMALIZED_RUN_KEY: ${{ inputs.run_key }}
+      RAW_INPUT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\full-archive-20260810-codex-v1\raw-records.jsonl
+      NORMALIZATION_MANIFEST: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\normalization-shards-v3-20260810-codex\full-normalization-manifest.json
+      IMPORT_OUTPUT: C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\normalized-staging-import-20260811-codex-v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate immutable local inputs
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:SUPABASE_PROJECT_REF -ne $env:EXPECTED_PROJECT_REF) {
+            throw 'Production Supabase project reference does not match the approved target.'
+          }
+          if ($env:NORMALIZED_RUN_KEY -notmatch '^[A-Za-z0-9._:-]{1,100}$') {
+            throw 'Invalid normalized run key.'
+          }
+          if (-not (Test-Path -LiteralPath $env:RAW_INPUT)) { throw 'Immutable raw archive is missing.' }
+          if (-not (Test-Path -LiteralPath $env:NORMALIZATION_MANIFEST)) { throw 'Normalization manifest is missing.' }
+          $manifest = Get-Content -Raw -LiteralPath $env:NORMALIZATION_MANIFEST | ConvertFrom-Json
+          if ($manifest.source_coverage_reconciled -ne $true -or
+              [long]$manifest.source_rows -ne [long]$env:EXPECTED_RAW_ROWS -or
+              [long]$manifest.difference -ne 0 -or
+              [long]$manifest.totals.error_rows -ne 0) {
+            throw 'Normalization manifest is incomplete or unreconciled.'
+          }
+
+      - name: Apply only the private normalized-staging contract
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $migrationPaths = @(
+            'supabase/migrations/20260811120000_mariadb_normalized_staging_import.sql',
+            'supabase/migrations/20260811193000_widen_normalized_source_fields.sql',
+            'supabase/migrations/20260812010000_dated_fx_normalized_staging_transport.sql'
+          )
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          foreach ($migrationPath in $migrationPaths) {
+            if (-not (Test-Path -LiteralPath $migrationPath)) { throw "Normalized-staging migration is missing: $migrationPath" }
+            $migrationSql = [string](Get-Content -Raw -LiteralPath $migrationPath)
+            if ($migrationSql -match '(?i)INSERT\s+INTO\s+public\.watch_records') {
+              throw "Normalized-staging migration attempts a public watch-record write: $migrationPath"
+            }
+            $body = @{ query = $migrationSql; read_only = $false } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body | Out-Null
+          }
+          $reload = @{ query = "NOTIFY pgrst, 'reload schema';"; read_only = $false } | ConvertTo-Json
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $reload | Out-Null
+          Start-Sleep -Seconds 3
+
+      - name: Verify raw completion and private staging boundary
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SELECT jsonb_build_object(
+            'raw_messages', (SELECT count(*) FROM public.raw_messages WHERE source_platform = 'mariadb'),
+            'raw_versions', (SELECT count(*) FROM public.raw_message_versions),
+            'raw_checkpoint', (
+              SELECT jsonb_build_object('status', status, 'input_rows', input_rows, 'error_rows', error_rows)
+              FROM public.mariadb_raw_import_checkpoints
+              WHERE run_key = '$($env:RAW_IMPORT_RUN_KEY)'
+            ),
+            'other_staging_rows', (
+              SELECT count(*) FROM staging.listings
+              WHERE normalization_run_key IS DISTINCT FROM '$($env:NORMALIZED_RUN_KEY)'
+            ),
+            'watch_records', (SELECT count(*) FROM public.watch_records)
+          ) AS preflight;
+          "@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $preflight = $result[0].preflight
+          if ([long]$preflight.raw_messages -ne [long]$env:EXPECTED_RAW_ROWS -or
+              [long]$preflight.raw_versions -ne [long]$env:EXPECTED_RAW_ROWS -or
+              $preflight.raw_checkpoint.status -ne 'RAW_COPY_COMPLETE' -or
+              [long]$preflight.raw_checkpoint.input_rows -ne [long]$env:EXPECTED_RAW_ROWS -or
+              [long]$preflight.raw_checkpoint.error_rows -ne 0 -or
+              [long]$preflight.other_staging_rows -ne 0) {
+            $preflight | ConvertTo-Json -Depth 6
+            throw 'Raw completion or private staging preflight failed.'
+          }
+          "WATCH_RECORDS_BEFORE=$($preflight.watch_records)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Retrieve existing server key for the pinned project
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $keys = Invoke-RestMethod -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/api-keys?reveal=true" -Headers $headers
+          $serverKey = $keys | Where-Object {
+            $_.api_key -and ($_.name -eq 'service_role' -or $_.type -eq 'secret')
+          } | Select-Object -First 1
+          if (-not $serverKey) { throw 'Existing server API key was not available for the pinned project.' }
+          "SUPABASE_SERVICE_ROLE_KEY=$($serverKey.api_key)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "SUPABASE_URL=https://$env:SUPABASE_PROJECT_REF.supabase.co" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Output "::add-mask::$($serverKey.api_key)"
+
+      - name: Stage normalized canary or resume full import
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $env:MARIADB_NORMALIZED_RAW_INPUT = $env:RAW_INPUT
+          $env:MARIADB_NORMALIZED_MANIFEST = $env:NORMALIZATION_MANIFEST
+          $env:MARIADB_RAW_IMPORT_RUN_KEY = $env:RAW_IMPORT_RUN_KEY
+          $env:MARIADB_NORMALIZED_RUN_KEY = $env:NORMALIZED_RUN_KEY
+          $env:MARIADB_NORMALIZED_BATCH_SIZE = '500'
+          $env:MARIADB_NORMALIZED_OUTPUT = $env:IMPORT_OUTPUT
+          if ('${{ inputs.mode }}' -eq 'canary') {
+            $env:MARIADB_NORMALIZED_MAX_ROWS = '500'
+          } else {
+            Remove-Item Env:MARIADB_NORMALIZED_MAX_ROWS -ErrorAction SilentlyContinue
+          }
+          node tools/mariadb-live/import-normalized-staging.cjs
+          if ($LASTEXITCODE -ne 0) { throw 'Normalized-staging importer failed.' }
+
+      - name: Reconcile staging and prove zero publication writes
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $reconciliationPath = Join-Path $env:IMPORT_OUTPUT 'reconciliation.json'
+          if (-not (Test-Path -LiteralPath $reconciliationPath)) { throw 'Staging reconciliation is missing.' }
+          $reconciliation = Get-Content -Raw -LiteralPath $reconciliationPath | ConvertFrom-Json
+          if ($reconciliation.reconciled -ne $true -or
+              [long]$reconciliation.error_rows -ne 0 -or
+              [long]$reconciliation.publication_writes -ne 0) {
+            throw 'Normalized-staging reconciliation failed.'
+          }
+          if ('${{ inputs.mode }}' -eq 'canary') {
+            if ($reconciliation.partial -ne $true -or [long]$reconciliation.input_rows -ne 500 -or $reconciliation.complete -eq $true) {
+              throw 'Bounded staging canary did not stop exactly at 500 rows.'
+            }
+          } elseif ($reconciliation.complete -ne $true -or [long]$reconciliation.input_rows -ne [long]$env:EXPECTED_RAW_ROWS) {
+            throw 'Full normalized-staging import is incomplete.'
+          }
+
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          SELECT jsonb_build_object(
+            'watch_records', (SELECT count(*) FROM public.watch_records),
+            'run_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key = '$($env:NORMALIZED_RUN_KEY)'),
+            'invalid_lineage', (SELECT count(*) FROM staging.listings WHERE normalization_run_key = '$($env:NORMALIZED_RUN_KEY)' AND (raw_message_version_id IS NULL OR source_hash IS NULL)),
+            'bundle_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key = '$($env:NORMALIZED_RUN_KEY)' AND (is_bundle IS TRUE OR parent_id IS NOT NULL)),
+            'public_image_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key = '$($env:NORMALIZED_RUN_KEY)' AND (public_image_eligible IS TRUE OR image_url IS NOT NULL)),
+            'non_pending_rows', (SELECT count(*) FROM staging.listings WHERE normalization_run_key = '$($env:NORMALIZED_RUN_KEY)' AND publication_review_status <> 'PENDING_REVIEW')
+          ) AS evidence;
+          "@
+          $body = @{ query = [string]$sql; read_only = $true } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          $evidence = $result[0].evidence
+          if ([long]$evidence.watch_records -ne [long]$env:WATCH_RECORDS_BEFORE -or
+              [long]$evidence.run_rows -ne ([long]$reconciliation.staged_rows + [long]$reconciliation.existing_rows) -or
+              [long]$evidence.invalid_lineage -ne 0 -or
+              [long]$evidence.bundle_rows -ne 0 -or
+              [long]$evidence.public_image_rows -ne 0 -or
+              [long]$evidence.non_pending_rows -ne 0) {
+            $evidence | ConvertTo-Json -Depth 5
+            throw 'Private staging safety evidence failed.'
+          }
+          $evidence | ConvertTo-Json -Depth 5
+
+      - name: Upload reconciliation only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mariadb-normalized-staging-${{ inputs.mode }}-${{ github.run_id }}
+          path: |
+            C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\normalized-staging-import-20260811-codex-v1\checkpoint.json
+            C:\Users\Owner\Documents\Codex\2026-08-05\study\wf-dealer-gate\audit-output\mariadb-live\normalized-staging-import-20260811-codex-v1\reconciliation.json
+          if-no-files-found: warn
+          retention-days: 7

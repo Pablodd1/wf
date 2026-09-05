@@ -1,0 +1,13 @@
+{
+  "contract": "wf-100k-text-clusters-v1",
+  "total_cohort_rows": 100000,
+  "distinct_listing_text_hashes": 87883,
+  "distinct_listing_text_hash_pct": "87.88%",
+  "cluster_size_distribution": {
+    "singletons_unique": 81298,
+    "pair_reposts_2x": 3996,
+    "clusters_3_to_5x": 2215,
+    "clusters_6x_plus": 374
+  },
+  "classification_policy": "All duplicate text clusters classified as SOURCE_REPOST_CANDIDATE pending seller/reference/image lineage resolution"
+}

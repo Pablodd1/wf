@@ -1,0 +1,125 @@
+name: Supabase immutable MariaDB raw import gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_IMMUTABLE_RAW_IMPORT_SCHEMA
+        required: true
+        type: string
+
+concurrency:
+  group: supabase-immutable-mariadb-raw-import-gate
+  cancel-in-progress: false
+
+jobs:
+  apply-schema:
+    if: ${{ inputs.confirmation == 'APPLY_IMMUTABLE_RAW_IMPORT_SCHEMA' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      MIGRATION_FILE: supabase/migrations/20260810103000_complete_immutable_mariadb_raw_import.sql
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate exact migration scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+          test -f "$MIGRATION_FILE"
+          grep -q "CREATE OR REPLACE FUNCTION public.complete_mariadb_raw_import" "$MIGRATION_FILE"
+          grep -q "GRANT EXECUTE ON FUNCTION public.ingest_mariadb_raw_batch" "$MIGRATION_FILE"
+          ! grep -Eiq "(INSERT|UPDATE|DELETE|TRUNCATE)[[:space:]]+(INTO[[:space:]]+|FROM[[:space:]]+)?public\.watch_records" "$MIGRATION_FILE"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Resolve production session pooler
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            "https://api.supabase.com/v1/projects/${SUPABASE_PROJECT_REF}/config/database/pooler" \
+            -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+            -o "$RUNNER_TEMP/pooler.json"
+          jq -c '[.[] | select(.database_type == "PRIMARY" and .pool_mode == "session")][0] // [.[] | select(.database_type == "PRIMARY")][0]' \
+            "$RUNNER_TEMP/pooler.json" > "$RUNNER_TEMP/primary-pooler.json"
+          jq -e '.db_host and .db_port and .db_user and .db_name' "$RUNNER_TEMP/primary-pooler.json" >/dev/null
+          echo "PGHOST=$(jq -r '.db_host' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGPORT=$(jq -r '.db_port' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGUSER=$(jq -r '.db_user' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+          echo "PGDATABASE=$(jq -r '.db_name' "$RUNNER_TEMP/primary-pooler.json")" >> "$GITHUB_ENV"
+
+      - name: Preflight and snapshot customer rows
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF to_regclass('public.raw_messages') IS NULL THEN
+                RAISE EXCEPTION 'public.raw_messages prerequisite is missing';
+              END IF;
+            END
+            \$\$;
+          "
+          echo "WATCH_RECORDS_BEFORE=$(psql -X -A -t -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.watch_records;')" >> "$GITHUB_ENV"
+
+      - name: Apply only the forward raw-import completion migration
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -f "$MIGRATION_FILE"
+
+      - name: Verify privacy, RPCs, and zero customer-row changes
+        shell: bash
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          psql -X -v ON_ERROR_STOP=1 -c "
+            DO \$\$
+            BEGIN
+              IF to_regclass('public.raw_message_versions') IS NULL
+                OR to_regclass('public.mariadb_raw_import_checkpoints') IS NULL
+                OR to_regclass('public.mariadb_raw_import_batches') IS NULL
+                OR to_regprocedure('public.ingest_mariadb_raw_batch(text,text,text,text,text,text,text,jsonb)') IS NULL
+                OR to_regprocedure('public.complete_mariadb_raw_import(text,bigint,text,text)') IS NULL THEN
+                RAISE EXCEPTION 'immutable raw-import control plane is incomplete';
+              END IF;
+              IF has_table_privilege('anon', 'public.raw_message_versions', 'SELECT')
+                OR has_table_privilege('authenticated', 'public.raw_message_versions', 'SELECT') THEN
+                RAISE EXCEPTION 'immutable raw versions are customer-readable';
+              END IF;
+              IF NOT has_function_privilege(
+                'service_role',
+                'public.ingest_mariadb_raw_batch(text,text,text,text,text,text,text,jsonb)',
+                'EXECUTE'
+              ) THEN
+                RAISE EXCEPTION 'service_role cannot execute immutable raw import';
+              END IF;
+            END
+            \$\$;
+          "
+          watch_records_after="$(psql -X -A -t -v ON_ERROR_STOP=1 -c 'SELECT count(*) FROM public.watch_records;')"
+          test "$watch_records_after" = "$WATCH_RECORDS_BEFORE"
+          echo "Immutable raw-import schema verified; watch_records unchanged at ${watch_records_after}."

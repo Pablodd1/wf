@@ -1,0 +1,59 @@
+name: QNSA reviewed workbook inventory bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        required: true
+        default: audit
+        type: choice
+        options: [audit, apply]
+      confirmation:
+        required: true
+        description: Type AUDIT_QNSA_WORKBOOK_BOOTSTRAP or APPLY_QNSA_WORKBOOK_BOOTSTRAP
+        type: string
+
+concurrency:
+  group: qnsa-reviewed-workbook-bootstrap-production
+  cancel-in-progress: false
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: qnsafosakvonzgfcsphh
+      MODE: ${{ inputs.mode }}
+      CONFIRMATION: ${{ inputs.confirmation }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate and compile/apply forward bootstrap
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'SUPABASE_ACCESS_TOKEN unavailable' }
+          if ($env:SUPABASE_PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Wrong Supabase project' }
+          $expected = if ($env:MODE -eq 'audit') { 'AUDIT_QNSA_WORKBOOK_BOOTSTRAP' } elseif ($env:MODE -eq 'apply') { 'APPLY_QNSA_WORKBOOK_BOOTSTRAP' } else { throw 'Invalid mode' }
+          if ($env:CONFIRMATION -ne $expected) { throw 'Confirmation mismatch' }
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          function Invoke-Query([string]$sql, [bool]$readOnly) {
+            $body = @{ query = $sql; read_only = $readOnly } | ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:SUPABASE_PROJECT_REF/database/query" -Headers $headers -ContentType 'application/json' -Body $body
+          }
+          $before = Invoke-Query "SELECT to_regclass('public.reviewed_workbook_inventory')::text AS table_name, to_regclass('public.reviewed_workbook_import_checkpoints')::text AS checkpoint_table, COALESCE((SELECT reltuples::bigint FROM pg_class WHERE oid=to_regclass('public.reviewed_workbook_inventory')),0) AS estimated_rows;" $true
+          $before | ConvertTo-Json -Depth 5
+          if ($env:MODE -eq 'apply' -and -not $before[0].table_name) {
+            $sql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260817000000_qnsa_reviewed_workbook_inventory_bootstrap.sql'
+            Invoke-Query $sql $false | Out-Null
+          }
+          if ($env:MODE -eq 'apply' -and -not $before[0].checkpoint_table) {
+            $checkpointSql = Get-Content -Raw -LiteralPath 'supabase/migrations/20260817001000_qnsa_reviewed_workbook_checkpoint_bootstrap.sql'
+            Invoke-Query $checkpointSql $false | Out-Null
+          }
+          $after = Invoke-Query "SELECT to_regclass('public.reviewed_workbook_inventory')::text AS table_name, to_regclass('public.reviewed_workbook_import_checkpoints')::text AS checkpoint_table, to_regclass('public.idx_reviewed_workbook_inventory_brand_image_price')::text AS brand_index, to_regclass('public.idx_reviewed_workbook_verified_reference_wts')::text AS price_index, COALESCE((SELECT reltuples::bigint FROM pg_class WHERE oid=to_regclass('public.reviewed_workbook_inventory')),0) AS estimated_rows;" $true
+          $after | ConvertTo-Json -Depth 5
+          if ($env:MODE -eq 'apply' -and (-not $after[0].table_name -or -not $after[0].checkpoint_table -or -not $after[0].brand_index -or -not $after[0].price_index)) { throw 'Bootstrap reconciliation failed' }

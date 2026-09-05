@@ -1,0 +1,231 @@
+name: QNSA Zenith reviewed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_ZENITH or ENABLE_QNSA_ZENITH
+        required: true
+        type: string
+      mode:
+        required: true
+        default: audit
+        type: choice
+        options: [audit, enable]
+      run_key:
+        required: true
+        default: mariadb-normalized-20260811-codex-v1
+        type: string
+
+concurrency:
+  group: qnsa-zenith-reviewed-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      RUN_KEY: ${{ inputs.run_key }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate authorization
+        shell: pwsh
+        run: |
+          $expected = if ('${{ inputs.mode }}' -eq 'enable') { 'ENABLE_QNSA_ZENITH' } else { 'AUDIT_QNSA_ZENITH' }
+          if ('${{ inputs.confirmation }}' -cne $expected) { throw "Confirmation must be $expected" }
+          if ($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Wrong Supabase target' }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'Missing Supabase access token' }
+      - name: Apply forward release contract
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @(
+            Get-Content -Raw supabase/migrations/20260814180000_qnsa_zenith_reviewed_release.sql
+            Get-Content -Raw supabase/migrations/20260814184500_qnsa_zenith_customer_feed.sql
+            Get-Content -Raw supabase/migrations/20260814184600_qnsa_zenith_customer_feed_admin_grant.sql
+            Get-Content -Raw supabase/migrations/20260814191000_qnsa_zenith_global_price_order.sql
+            Get-Content -Raw supabase/migrations/20260814192000_qnsa_zenith_source_price_display_order.sql
+          ) -join "`n"
+          if ($sql -match '(?i)(DELETE|TRUNCATE|UPDATE)\s+(FROM\s+)?(staging\.listings|public\.raw_messages|public\.raw_message_versions)') {
+            throw 'Immutable source mutation detected'
+          }
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
+          Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body | Out-Null
+      - name: Smoke ordered Zenith customer RPC directly
+        shell: pwsh
+        run: |
+          $headers=@{Authorization="Bearer $env:SUPABASE_ACCESS_TOKEN"}
+          $sql=@"
+          WITH payload AS (
+            SELECT public.qnsa_zenith_display_ordered_page(0,50,NULL) value
+          ), rows AS (
+            SELECT row_data FROM payload,
+              LATERAL jsonb_array_elements(value->'rows') row_data
+          )
+          SELECT jsonb_build_object(
+            'rows',count(*),
+            'images',count(*) FILTER (WHERE (row_data->>'has_exact_source_image')::boolean),
+            'source_price_signals',count(*) FILTER (WHERE (row_data->>'source_price_signal')::boolean),
+            'has_more',(SELECT (value->>'has_more')::boolean FROM payload)
+          ) evidence FROM rows;
+          "@
+          $body=@{query=$sql;read_only=$false}|ConvertTo-Json -Depth 3
+          $result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $e=$result[0].evidence;$e|ConvertTo-Json -Depth 5
+          if([long]$e.rows -ne 50 -or [long]$e.images -ne 50 -or [long]$e.source_price_signals -ne 50 -or $e.has_more -ne $true){throw 'Ordered Zenith customer RPC smoke failed'}
+      - name: Audit exact release cohort and enable only after gates pass
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @"
+          WITH checkpoint AS (
+            SELECT status,error_rows,input_rows,staged_rows,deferred_rows
+            FROM staging.mariadb_normalization_import_checkpoints
+            WHERE run_key='$env:RUN_KEY'
+          ), brand_rows AS MATERIALIZED (
+            SELECT l.*
+            FROM staging.listings l
+            WHERE l.normalization_run_key='$env:RUN_KEY'
+              AND l.brand_normalized='Zenith'
+              AND upper(COALESCE(l.category,''))='WATCH'
+              AND l.parent_id IS NULL
+              AND COALESCE(l.is_bundle,false)=false
+              AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
+              AND lower(COALESCE(l.trading_floor_status,'')) NOT IN (
+                'bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate',
+                'withdrawn','rejected','hidden','deleted','archived')
+              AND upper(COALESCE(l.verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+          ), candidates AS MATERIALIZED (
+            SELECT l.*
+            FROM brand_rows l
+            JOIN public.raw_message_versions rv
+              ON rv.id=l.raw_message_version_id
+             AND rv.source_record_id=l.source_record_id
+             AND rv.source_hash=l.source_hash
+            WHERE l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
+              AND l.provenance_metadata->>'identity_reconciliation_status'='RELEASE_SAFE_EXACT_SOURCE_REFERENCE'
+              AND l.raw_message_version_id IS NOT NULL
+              AND COALESCE(l.source_record_id,'')<>''
+              AND l.source_hash ~ '^[0-9a-f]{64}$'
+              AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
+          )
+          SELECT jsonb_build_object(
+            'checkpoint_status',(SELECT status FROM checkpoint),
+            'checkpoint_errors',(SELECT error_rows FROM checkpoint),
+            'checkpoint_reconciles',(SELECT input_rows=staged_rows+deferred_rows AND error_rows=0 FROM checkpoint),
+            'brand_rows',(SELECT count(*) FROM brand_rows),
+            'candidates',(SELECT count(*) FROM candidates),
+            'wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS'),
+            'wtb',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTB'),
+            'priced_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND price_usd>0),
+            'source_priced_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND price_normalized>0),
+            'genuine_no_price_wts',(SELECT count(*) FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND COALESCE(price_normalized,0)<=0),
+            'source_currency_counts',(SELECT COALESCE(jsonb_object_agg(currency,row_count),'{}'::jsonb) FROM (
+              SELECT upper(COALESCE(currency_normalized,'UNSPECIFIED')) currency,count(*) row_count
+              FROM candidates WHERE upper(COALESCE(listing_type,intent,''))='WTS' AND price_normalized>0
+              GROUP BY 1 ORDER BY 1) currency_counts),
+            'references',(SELECT count(DISTINCT reference_normalized) FROM candidates WHERE NULLIF(btrim(reference_normalized),'') IS NOT NULL),
+            'models',(SELECT count(DISTINCT model_normalized) FROM candidates WHERE NULLIF(btrim(model_normalized),'') IS NOT NULL),
+            'images',(SELECT count(*) FROM candidates WHERE btrim(COALESCE(image_url,source_media_url_candidate,'')) ~* '^https?://'),
+            'contacts',(SELECT count(*) FROM candidates WHERE NULLIF(btrim(COALESCE(contact_number,from_number,'')),'') IS NOT NULL),
+            'candidate_gate_failures',(SELECT count(*) FROM brand_rows)-(SELECT count(*) FROM candidates),
+            'identity_audit_safe',(SELECT count(*) FROM staging.qnsa_zenith_identity_reconciliation_audit
+              WHERE reconciliation_run_key='zenith-identity-20260814-v1' AND decision='RELEASE_SAFE'),
+            'identity_audit_quarantine',(SELECT count(*) FROM staging.qnsa_zenith_identity_reconciliation_audit
+              WHERE reconciliation_run_key='zenith-identity-20260814-v1' AND decision='QUARANTINE'),
+            'missing_bundle_provenance',(SELECT count(*) FROM brand_rows WHERE provenance_metadata->>'bundle_status' IS NULL),
+            'lineage_failures',(SELECT count(*) FROM brand_rows l LEFT JOIN public.raw_message_versions rv
+              ON rv.id=l.raw_message_version_id AND rv.source_record_id=l.source_record_id AND rv.source_hash=l.source_hash
+              WHERE rv.id IS NULL OR COALESCE(l.source_record_id,'')='' OR l.source_hash !~ '^[0-9a-f]{64}$'),
+            'high_confidence_multi_risk',(SELECT count(*) FROM candidates
+              WHERE regexp_count(COALESCE(raw_message_text,''), '\m[0-9]{2}\.[0-9]{4}\.[0-9]{3,4}/[0-9A-Za-z]+(\.[0-9A-Za-z]+)*\M', 1, 'i') >= 2
+                AND regexp_count(COALESCE(raw_message_text,''), '(USD|USDT|HKD|EUR|GBP|CHF|SGD|AED|CNY|JPY)[[:space:]]*[0-9]|[0-9][0-9.,]*[[:space:]]*(USD|USDT|HKD|EUR|GBP|CHF|SGD|AED|CNY|JPY)', 1, 'i') >= 2)
+          ) evidence;
+          "@
+          $body=@{query=$sql;read_only=$true}|ConvertTo-Json -Depth 3
+          $result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $e=$result[0].evidence
+          $e | ConvertTo-Json -Depth 5 | Set-Content zenith-release-evidence.json
+          $e | ConvertTo-Json -Depth 5
+          if($e.checkpoint_status -ne 'NORMALIZATION_STAGED' -or [long]$e.checkpoint_errors -ne 0 -or $e.checkpoint_reconciles -ne $true){throw 'Run is not reconciled'}
+          if([long]$e.candidates -lt 1 -or [long]$e.wts -lt 1 -or [long]$e.references -lt 1){throw 'Zenith candidate gate failed'}
+          if([long]$e.identity_audit_safe -ne 453 -or [long]$e.identity_audit_quarantine -ne 11){throw 'Zenith identity audit does not reconcile 453 safe plus 11 quarantined rows'}
+          if([long]$e.candidates -ne 453 -or [long]$e.candidate_gate_failures -ne 11){throw 'Zenith release must contain exactly 453 safe identities and withhold 11 quarantined rows'}
+          if([long]$e.missing_bundle_provenance -ne 0){throw 'Zenith rows lack explicit bundle provenance'}
+          if([long]$e.lineage_failures -ne 0){throw 'Zenith immutable lineage failure'}
+          if([long]$e.high_confidence_multi_risk -ne 0){throw 'Zenith multi-listing candidates require quarantine before release'}
+          if ('${{ inputs.mode }}' -eq 'enable' -and [long]$e.priced_wts -lt 1){throw 'Zenith has no verified USD analytics rows'}
+          if ('${{ inputs.mode }}' -eq 'enable') {
+            $enableSql = "UPDATE public.qnsa_two_brand_release_control SET enabled_run_key='$env:RUN_KEY', trading_floor_enabled=true, price_research_enabled=true, updated_at=now(), change_reason='Zenith enabled after reconciled immutable-lineage single-item audit' WHERE canonical_brand='Zenith' RETURNING canonical_brand;"
+            $enableBody=@{query=$enableSql;read_only=$false}|ConvertTo-Json -Depth 3
+            $enabled=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $enableBody
+            if($enabled.Count -ne 1){throw 'Zenith release control was not enabled'}
+          } else {
+            $disableSql = "UPDATE public.qnsa_two_brand_release_control SET enabled_run_key='$env:RUN_KEY', trading_floor_enabled=false, price_research_enabled=false, updated_at=now(), change_reason='Zenith audit passed; release remains disabled' WHERE canonical_brand='Zenith';"
+            $disableBody=@{query=$disableSql;read_only=$false}|ConvertTo-Json -Depth 3
+            Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $disableBody | Out-Null
+          }
+      - name: Verify customer views match requested mode
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $expectEnabled = '${{ inputs.mode }}' -eq 'enable'
+          $sql = @"
+          WITH customer_rows AS MATERIALIZED (
+            SELECT l.*
+            FROM staging.listings l
+            JOIN public.qnsa_two_brand_release_control control
+              ON control.canonical_brand='Zenith'
+             AND control.enabled_run_key=l.normalization_run_key
+             AND control.trading_floor_enabled=true
+             AND control.price_research_enabled=true
+            JOIN public.raw_message_versions rv
+              ON rv.id=l.raw_message_version_id
+             AND rv.source_record_id=l.source_record_id
+             AND rv.source_hash=l.source_hash
+            WHERE l.normalization_run_key='$env:RUN_KEY'
+              AND l.brand_normalized='Zenith'
+              AND upper(COALESCE(l.category,''))='WATCH'
+              AND l.parent_id IS NULL AND COALESCE(l.is_bundle,false)=false
+              AND l.provenance_metadata->>'bundle_status'='SINGLE_CANDIDATE'
+              AND l.provenance_metadata->>'identity_reconciliation_status'='RELEASE_SAFE_EXACT_SOURCE_REFERENCE'
+              AND upper(COALESCE(l.listing_type,l.intent,'')) IN ('WTS','WTB')
+              AND NULLIF(btrim(l.reference_normalized),'') IS NOT NULL
+              AND l.source_hash ~ '^[0-9a-f]{64}$'
+              AND l.source_candidate_hash ~ '^[0-9a-f]{64}$'
+              AND lower(COALESCE(l.trading_floor_status,'')) NOT IN (
+                'bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate',
+                'withdrawn','rejected','hidden','deleted','archived')
+              AND upper(COALESCE(l.verdict,'')) NOT IN ('WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED')
+              AND upper(COALESCE(l.publication_review_status,'PENDING_REVIEW')) IN (
+                'PENDING_REVIEW','APPROVED','READY_FOR_PUBLICATION_REVIEW')
+          )
+          SELECT jsonb_build_object(
+            'control_enabled',(SELECT trading_floor_enabled AND price_research_enabled FROM public.qnsa_two_brand_release_control WHERE canonical_brand='Zenith'),
+            'trading_rows',(SELECT count(*) FROM customer_rows),
+            'priced_wts_rows',(SELECT count(*) FROM customer_rows
+              WHERE upper(COALESCE(listing_type,intent,''))='WTS'
+                AND price_usd>0 AND price_normalized>0
+                AND (currency_normalized IN ('USD','USDT')
+                  OR (conversion_rate>0 AND conversion_timestamp IS NOT NULL))),
+            'bundle_leaks',(SELECT count(*) FROM customer_rows WHERE parent_id IS NOT NULL OR COALESCE(is_bundle,false))
+          ) evidence;
+          "@
+          $body=@{query=$sql;read_only=$true}|ConvertTo-Json -Depth 3
+          $result=Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $e=$result[0].evidence; $e | ConvertTo-Json -Depth 5
+          if($e.control_enabled -ne $expectEnabled){throw 'Zenith control state mismatch'}
+          if([long]$e.bundle_leaks -ne 0){throw 'Zenith customer bundle leakage detected'}
+          if($expectEnabled -and ([long]$e.trading_rows -lt 1 -or [long]$e.priced_wts_rows -lt 1)){throw 'Zenith customer views are empty after enable'}
+          if(-not $expectEnabled -and ([long]$e.trading_rows -ne 0 -or [long]$e.priced_wts_rows -ne 0)){throw 'Zenith customer views exposed rows while disabled'}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-zenith-release-evidence
+          path: zenith-release-evidence.json
+          if-no-files-found: error

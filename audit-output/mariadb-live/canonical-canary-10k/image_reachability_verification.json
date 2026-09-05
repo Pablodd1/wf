@@ -1,0 +1,4249 @@
+{
+  "contract": "wf-image-verification-100-v2",
+  "timestamp": "2026-08-31T00:07:46.773Z",
+  "total_keys_tested": 100,
+  "configured_production_base": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/",
+  "pattern_independent_counts": {
+    "listings_full": {
+      "pattern_id": "listings_full",
+      "prefix": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/",
+      "reachable_count": 100,
+      "total_tested": 100
+    },
+    "listings_root": {
+      "pattern_id": "listings_root",
+      "prefix": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/",
+      "reachable_count": 0,
+      "total_tested": 100
+    },
+    "listings_images": {
+      "pattern_id": "listings_images",
+      "prefix": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/",
+      "reachable_count": 0,
+      "total_tested": 100
+    },
+    "full_root": {
+      "pattern_id": "full_root",
+      "prefix": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/",
+      "reachable_count": 0,
+      "total_tested": 100
+    },
+    "bucket_root": {
+      "pattern_id": "bucket_root",
+      "prefix": "https://thecollective-prod.nyc3.digitaloceanspaces.com/",
+      "reachable_count": 0,
+      "total_tested": 100
+    }
+  },
+  "pattern_summary": {
+    "listings/full/": "100/100",
+    "listings/": "0/100",
+    "listings/images/": "0/100",
+    "full/": "0/100",
+    "bucket root": "0/100"
+  },
+  "results_sample": [
+    {
+      "image_key": "67be7262617e0_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67be7262617e0_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67be7262617e0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67be7262617e0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67be7262617e0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67be7262617e0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679a34695a391_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679a34695a391_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679a34695a391_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679a34695a391_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679a34695a391_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679a34695a391_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679f887762817_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679f887762817_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679f887762817_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679f887762817_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679f887762817_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679f887762817_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c1fe1144750_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c1fe1144750_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c1fe1144750_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c1fe1144750_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c1fe1144750_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c1fe1144750_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c20227783ff_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c20227783ff_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c20227783ff_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c20227783ff_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c20227783ff_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c20227783ff_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    }
+  ],
+  "full_results": [
+    {
+      "image_key": "67be7262617e0_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67be7262617e0_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67be7262617e0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67be7262617e0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67be7262617e0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67be7262617e0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679a34695a391_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679a34695a391_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679a34695a391_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679a34695a391_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679a34695a391_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679a34695a391_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679f887762817_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679f887762817_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679f887762817_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679f887762817_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679f887762817_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679f887762817_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c1fe1144750_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c1fe1144750_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c1fe1144750_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c1fe1144750_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c1fe1144750_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c1fe1144750_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c20227783ff_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c20227783ff_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c20227783ff_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c20227783ff_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c20227783ff_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c20227783ff_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bd1a11ce88e_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bd1a11ce88e_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bd1a11ce88e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bd1a11ce88e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bd1a11ce88e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bd1a11ce88e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67baa6328817f_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67baa6328817f_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67baa6328817f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67baa6328817f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67baa6328817f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67baa6328817f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679b7b5a00970_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679b7b5a00970_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679b7b5a00970_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679b7b5a00970_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679b7b5a00970_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679b7b5a00970_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67ae59d2e984a_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67ae59d2e984a_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67ae59d2e984a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67ae59d2e984a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67ae59d2e984a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67ae59d2e984a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bea53c12e53_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bea53c12e53_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bea53c12e53_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bea53c12e53_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bea53c12e53_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bea53c12e53_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679e79c1170e4_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679e79c1170e4_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679e79c1170e4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679e79c1170e4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679e79c1170e4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679e79c1170e4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b38eb70e323_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b38eb70e323_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b38eb70e323_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b38eb70e323_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b38eb70e323_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b38eb70e323_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67abac4f43cca_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67abac4f43cca_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67abac4f43cca_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67abac4f43cca_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67abac4f43cca_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67abac4f43cca_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a05eeb7af0b_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a05eeb7af0b_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a05eeb7af0b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a05eeb7af0b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a05eeb7af0b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a05eeb7af0b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679c128fb2f9d_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679c128fb2f9d_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679c128fb2f9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679c128fb2f9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679c128fb2f9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679c128fb2f9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bd96883c0b3_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bd96883c0b3_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bd96883c0b3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bd96883c0b3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bd96883c0b3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bd96883c0b3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b80498c3c74_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b80498c3c74_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b80498c3c74_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b80498c3c74_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b80498c3c74_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b80498c3c74_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c20035489b4_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c20035489b4_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c20035489b4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c20035489b4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c20035489b4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c20035489b4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bdb236cd8df_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bdb236cd8df_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bdb236cd8df_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bdb236cd8df_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bdb236cd8df_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bdb236cd8df_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bc5e55f31f4_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bc5e55f31f4_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bc5e55f31f4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bc5e55f31f4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bc5e55f31f4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bc5e55f31f4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bcaa4d5ce48_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bcaa4d5ce48_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bcaa4d5ce48_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bcaa4d5ce48_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bcaa4d5ce48_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bcaa4d5ce48_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c1fe7974d29_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c1fe7974d29_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c1fe7974d29_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c1fe7974d29_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c1fe7974d29_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c1fe7974d29_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b7f30303ce3_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b7f30303ce3_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b7f30303ce3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b7f30303ce3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b7f30303ce3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b7f30303ce3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c1fb3f7a535_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c1fb3f7a535_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c1fb3f7a535_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c1fb3f7a535_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c1fb3f7a535_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c1fb3f7a535_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b7bc8d1f388_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b7bc8d1f388_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b7bc8d1f388_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b7bc8d1f388_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b7bc8d1f388_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b7bc8d1f388_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b395c190d15_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b395c190d15_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b395c190d15_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b395c190d15_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b395c190d15_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b395c190d15_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67adaa0c3fc00_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67adaa0c3fc00_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67adaa0c3fc00_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67adaa0c3fc00_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67adaa0c3fc00_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67adaa0c3fc00_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a50a3998aee_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a50a3998aee_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a50a3998aee_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a50a3998aee_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a50a3998aee_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a50a3998aee_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67be0bf32aeaf_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67be0bf32aeaf_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67be0bf32aeaf_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67be0bf32aeaf_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67be0bf32aeaf_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67be0bf32aeaf_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b3c4db866bc_front_image.png",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b3c4db866bc_front_image.png",
+          "status": 200,
+          "content_type": "image/png",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b3c4db866bc_front_image.png",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b3c4db866bc_front_image.png",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b3c4db866bc_front_image.png",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b3c4db866bc_front_image.png",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bfc3df88d9e_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bfc3df88d9e_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bfc3df88d9e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bfc3df88d9e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bfc3df88d9e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bfc3df88d9e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679a6caa9a6ef_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679a6caa9a6ef_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679a6caa9a6ef_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679a6caa9a6ef_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679a6caa9a6ef_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679a6caa9a6ef_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a62a8405f37_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a62a8405f37_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a62a8405f37_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a62a8405f37_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a62a8405f37_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a62a8405f37_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67af688ca06ce_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67af688ca06ce_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67af688ca06ce_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67af688ca06ce_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67af688ca06ce_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67af688ca06ce_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679bb01b18652_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679bb01b18652_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679bb01b18652_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679bb01b18652_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679bb01b18652_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679bb01b18652_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a00385413b7_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a00385413b7_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a00385413b7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a00385413b7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a00385413b7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a00385413b7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67ae33297e49f_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67ae33297e49f_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67ae33297e49f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67ae33297e49f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67ae33297e49f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67ae33297e49f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b8e91e053a2_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b8e91e053a2_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b8e91e053a2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b8e91e053a2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b8e91e053a2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b8e91e053a2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bd5e4828a64_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bd5e4828a64_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bd5e4828a64_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bd5e4828a64_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bd5e4828a64_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bd5e4828a64_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b396751249d_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b396751249d_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b396751249d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b396751249d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b396751249d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b396751249d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c20043e0d11_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c20043e0d11_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c20043e0d11_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c20043e0d11_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c20043e0d11_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c20043e0d11_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67aa422f157f3_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67aa422f157f3_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67aa422f157f3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67aa422f157f3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67aa422f157f3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67aa422f157f3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a4f524e55f0_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a4f524e55f0_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a4f524e55f0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a4f524e55f0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a4f524e55f0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a4f524e55f0_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c1fd50109a2_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c1fd50109a2_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c1fd50109a2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c1fd50109a2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c1fd50109a2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c1fd50109a2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a6a213eae9d_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a6a213eae9d_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a6a213eae9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a6a213eae9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a6a213eae9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a6a213eae9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67ba205b57820_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67ba205b57820_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67ba205b57820_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67ba205b57820_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67ba205b57820_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67ba205b57820_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a25228b5671_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a25228b5671_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a25228b5671_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a25228b5671_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a25228b5671_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a25228b5671_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b8bab884363_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b8bab884363_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b8bab884363_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b8bab884363_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b8bab884363_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b8bab884363_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c1ff46d9115_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c1ff46d9115_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c1ff46d9115_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c1ff46d9115_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c1ff46d9115_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c1ff46d9115_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c2000aeeec2_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c2000aeeec2_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c2000aeeec2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c2000aeeec2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c2000aeeec2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c2000aeeec2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a77f890fb83_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a77f890fb83_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a77f890fb83_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a77f890fb83_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a77f890fb83_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a77f890fb83_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b7b1e5e5c5b_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b7b1e5e5c5b_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b7b1e5e5c5b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b7b1e5e5c5b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b7b1e5e5c5b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b7b1e5e5c5b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c1fc89f2a6b_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c1fc89f2a6b_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c1fc89f2a6b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c1fc89f2a6b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c1fc89f2a6b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c1fc89f2a6b_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67be0e0fd2eb4_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67be0e0fd2eb4_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67be0e0fd2eb4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67be0e0fd2eb4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67be0e0fd2eb4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67be0e0fd2eb4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bf876b030c1_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bf876b030c1_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bf876b030c1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bf876b030c1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bf876b030c1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bf876b030c1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67afb2637f0b7_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67afb2637f0b7_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67afb2637f0b7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67afb2637f0b7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67afb2637f0b7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67afb2637f0b7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679c0f165ffc4_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679c0f165ffc4_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679c0f165ffc4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679c0f165ffc4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679c0f165ffc4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679c0f165ffc4_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "6780392c7570c_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/6780392c7570c_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/6780392c7570c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/6780392c7570c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/6780392c7570c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/6780392c7570c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b9fcba28c14_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b9fcba28c14_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b9fcba28c14_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b9fcba28c14_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b9fcba28c14_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b9fcba28c14_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a1042b00f8f_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a1042b00f8f_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a1042b00f8f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a1042b00f8f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a1042b00f8f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a1042b00f8f_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bbc09b11772_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bbc09b11772_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bbc09b11772_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bbc09b11772_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bbc09b11772_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bbc09b11772_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a5498421e9d_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a5498421e9d_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a5498421e9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a5498421e9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a5498421e9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a5498421e9d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bc90f644f23_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bc90f644f23_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bc90f644f23_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bc90f644f23_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bc90f644f23_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bc90f644f23_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b8c36128f90_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b8c36128f90_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b8c36128f90_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b8c36128f90_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b8c36128f90_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b8c36128f90_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a662c7c54ef_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a662c7c54ef_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a662c7c54ef_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a662c7c54ef_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a662c7c54ef_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a662c7c54ef_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679e36f8d2c2a_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679e36f8d2c2a_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679e36f8d2c2a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679e36f8d2c2a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679e36f8d2c2a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679e36f8d2c2a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b7aad5338cd_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b7aad5338cd_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b7aad5338cd_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b7aad5338cd_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b7aad5338cd_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b7aad5338cd_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bf8200a4e39_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bf8200a4e39_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bf8200a4e39_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bf8200a4e39_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bf8200a4e39_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bf8200a4e39_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a643214b156_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a643214b156_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a643214b156_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a643214b156_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a643214b156_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a643214b156_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67be0ac52e1d1_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67be0ac52e1d1_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67be0ac52e1d1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67be0ac52e1d1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67be0ac52e1d1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67be0ac52e1d1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b389d059519_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b389d059519_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b389d059519_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b389d059519_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b389d059519_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b389d059519_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bc3eeeaff7e_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bc3eeeaff7e_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bc3eeeaff7e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bc3eeeaff7e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bc3eeeaff7e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bc3eeeaff7e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bc8ded54e9a_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bc8ded54e9a_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bc8ded54e9a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bc8ded54e9a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bc8ded54e9a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bc8ded54e9a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bc8fcad9f14_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bc8fcad9f14_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bc8fcad9f14_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bc8fcad9f14_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bc8fcad9f14_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bc8fcad9f14_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67abcbecbd1a3_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67abcbecbd1a3_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67abcbecbd1a3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67abcbecbd1a3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67abcbecbd1a3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67abcbecbd1a3_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bcde4eea216_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bcde4eea216_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bcde4eea216_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bcde4eea216_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bcde4eea216_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bcde4eea216_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bf5910652d2_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bf5910652d2_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bf5910652d2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bf5910652d2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bf5910652d2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bf5910652d2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a0f99dd4ca7_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a0f99dd4ca7_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a0f99dd4ca7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a0f99dd4ca7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a0f99dd4ca7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a0f99dd4ca7_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bcaf2fa0b0d_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bcaf2fa0b0d_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bcaf2fa0b0d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bcaf2fa0b0d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bcaf2fa0b0d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bcaf2fa0b0d_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c1ff35ce24a_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c1ff35ce24a_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c1ff35ce24a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c1ff35ce24a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c1ff35ce24a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c1ff35ce24a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b99b75612d1_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b99b75612d1_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b99b75612d1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b99b75612d1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b99b75612d1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b99b75612d1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bf83e54f674_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bf83e54f674_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bf83e54f674_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bf83e54f674_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bf83e54f674_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bf83e54f674_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67ad67420b4b5_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67ad67420b4b5_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67ad67420b4b5_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67ad67420b4b5_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67ad67420b4b5_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67ad67420b4b5_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b3e5e96d6e2_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b3e5e96d6e2_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b3e5e96d6e2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b3e5e96d6e2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b3e5e96d6e2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b3e5e96d6e2_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a3ff1527f45_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a3ff1527f45_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a3ff1527f45_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a3ff1527f45_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a3ff1527f45_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a3ff1527f45_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67aa503bec374_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67aa503bec374_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67aa503bec374_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67aa503bec374_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67aa503bec374_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67aa503bec374_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679aba0451e6a_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679aba0451e6a_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679aba0451e6a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679aba0451e6a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679aba0451e6a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679aba0451e6a_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c20191c2c4e_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c20191c2c4e_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c20191c2c4e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c20191c2c4e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c20191c2c4e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c20191c2c4e_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bf5105a99de_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bf5105a99de_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bf5105a99de_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bf5105a99de_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bf5105a99de_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bf5105a99de_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b3bbb916554_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b3bbb916554_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b3bbb916554_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b3bbb916554_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b3bbb916554_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b3bbb916554_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679d36543b940_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679d36543b940_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679d36543b940_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679d36543b940_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679d36543b940_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679d36543b940_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "679d019fdb719_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/679d019fdb719_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/679d019fdb719_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/679d019fdb719_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/679d019fdb719_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/679d019fdb719_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67a12adbb0aa8_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67a12adbb0aa8_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67a12adbb0aa8_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67a12adbb0aa8_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67a12adbb0aa8_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67a12adbb0aa8_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "678151ca6fb1c_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/678151ca6fb1c_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/678151ca6fb1c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/678151ca6fb1c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/678151ca6fb1c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/678151ca6fb1c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67c1fbd206cd1_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67c1fbd206cd1_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67c1fbd206cd1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67c1fbd206cd1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67c1fbd206cd1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67c1fbd206cd1_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67b8c3dcc340c_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67b8c3dcc340c_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67b8c3dcc340c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67b8c3dcc340c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67b8c3dcc340c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67b8c3dcc340c_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bf8981e54ad_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bf8981e54ad_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bf8981e54ad_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bf8981e54ad_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bf8981e54ad_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bf8981e54ad_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67adad8f67a92_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67adad8f67a92_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67adad8f67a92_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67adad8f67a92_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67adad8f67a92_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67adad8f67a92_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67aa61d25eb40_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67aa61d25eb40_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67aa61d25eb40_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67aa61d25eb40_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67aa61d25eb40_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67aa61d25eb40_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    },
+    {
+      "image_key": "67bf5bcef2414_front_image.jpg",
+      "pattern_checks": {
+        "listings_full": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/67bf5bcef2414_front_image.jpg",
+          "status": 200,
+          "content_type": "image/jpeg",
+          "reachable": true,
+          "error": null
+        },
+        "listings_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/67bf5bcef2414_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "listings_images": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/images/67bf5bcef2414_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "full_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/full/67bf5bcef2414_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        },
+        "bucket_root": {
+          "url": "https://thecollective-prod.nyc3.digitaloceanspaces.com/67bf5bcef2414_front_image.jpg",
+          "status": 404,
+          "content_type": "application/xml",
+          "reachable": false,
+          "error": "HTTP 404"
+        }
+      }
+    }
+  ]
+}

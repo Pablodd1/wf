@@ -1,0 +1,113 @@
+{
+  "total_images_in_cohort": 10000,
+  "sample_size_tested": 15,
+  "reachable_count": 0,
+  "reachability_pct": "0.0%",
+  "sample_results": [
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:8e3b28354cdc0368bbf492903de32d6f0fb8091df528facc98c49e3eaca08e00]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:871d47e250939d8d8cb0e022e1d9b2c98272de958618624e1f61f1839af0df34]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:430e8c27d4cd0430a5789270dc8b2c3b992a469a0d637d908caf31bc5c7a57ec]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:810d7ad385b59739d32258add96037b45cf4c1c93a7d5f2122ad0a7d3610f7ce]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:661039314cd4b644899fade7052653634cb55d2d5be13fdb03c3669681170b00]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:623d96bdfdfb8d55424d538f2727de200020a90cec287b5d43cf34d08dd00bcb]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:cd0bca7d0929c1519198203d379635b6acca93a91631a32842da2cbf8547a6c5]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:3a1e6a46b9c6757df5bf9c3285944d5bf01d04ecce78fd20094e6e0432cbefa4]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:aad40b5b2bb0a6b4e86718906338eb13a89f1c0dac5c79757c2560f97a5a2b88]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:ac252660595098119c73ace0682e78fcad8e27ffc7aa0d5d50f8737f3d45a5b2]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:42da5a81a2cbaf529953a40b678571b9e34c5da779efc3a56b6039f4b9f83536]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:87c240cb0bf62386c1675240a8446f2b208f6ec6a513e51762573f11e06e9deb]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:4cc5a3da168892b8c948e21d6b4b96a4df1784a9347828a7af0e4d0a04ab007c]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:f011cd8b5930f958c8b933ee8fc5a5e01de9f80c518f848132c2fd525f3776f1]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    },
+    {
+      "image_key": "[REDACTED_IMAGE_KEY:578ffe203daabcad04e685f3401a1a40ab5fe74d9295a229966a2c89f1d19283]",
+      "http_status": 404,
+      "content_type": "application/xml",
+      "content_length": "252",
+      "reachable": false
+    }
+  ]
+}

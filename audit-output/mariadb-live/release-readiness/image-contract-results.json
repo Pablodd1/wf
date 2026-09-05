@@ -1,0 +1,29 @@
+{
+  "contract": "wf-image-contract-results-v2",
+  "timestamp": "2026-09-04T13:30:00Z",
+  "resolver_endpoint": "https://thecollective-prod.nyc3.digitaloceanspaces.com/listings/full/<encoded-key>",
+  "census_metrics": {
+    "total_authoritative_rows": 1487325,
+    "single_offer_listings": 1000310,
+    "source_linked_image_keys_present": 1487278,
+    "source_linked_image_presence_pct": "100.00%",
+    "resolver_reachability_sample_pass_rate": "100/100 (100.0%)",
+    "bundle_parent_attachment_evidence_type": "PARENT_ATTACHMENT_UNASSIGNED_TO_CHILD",
+    "assigned_child_evidence_type": "ASSIGNED_CHILD_IMAGE",
+    "unassigned_child_evidence_type": "CHILD_UNASSIGNED_IMAGE",
+    "missing_image_evidence_type": "NO_IMAGE"
+  },
+  "image_reachability_separation": {
+    "key_presence_property": "image_key",
+    "reachability_property": "image_reachable: boolean | null",
+    "reachability_separated_from_presence": true
+  },
+  "security_and_validation": {
+    "path_traversal_rejection": "PASSED",
+    "query_string_fragment_rejection": "PASSED",
+    "null_byte_rejection": "PASSED",
+    "unicode_url_encoding": "PASSED",
+    "head_and_get_probing": "PASSED",
+    "unit_test_verification": "13/13 PASSED (tests/image-contract.test.cjs)"
+  }
+}

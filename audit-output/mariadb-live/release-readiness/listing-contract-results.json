@@ -1,0 +1,20 @@
+{
+  "contract": "wf-listing-contract-results-v1",
+  "timestamp": "2026-09-04T09:48:46Z",
+  "contract_version": "v2.0",
+  "total_fields": 52,
+  "defaults_sanitized": {
+    "anonymous_seller_removed": true,
+    "watch_listing_title_removed": true,
+    "invented_profile_urls_removed": true,
+    "invented_badges_removed": true,
+    "invented_wts_intent_removed": true,
+    "inferred_usd_removed": true
+  },
+  "provenance_coverage": {
+    "populated_fields_tested_count": 42,
+    "intentionally_null_fields_tested_count": 10,
+    "fields_not_exercised_count": 0,
+    "mismatches_count": 0
+  }
+}

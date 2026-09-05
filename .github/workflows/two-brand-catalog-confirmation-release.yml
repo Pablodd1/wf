@@ -1,0 +1,311 @@
+name: Confirm exact Rolex and Patek catalog matches
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_EXACT_TWO_BRAND_CATALOG_RELEASE to stage every exact match
+        required: true
+        type: string
+      max_batches:
+        description: Maximum 250-row batches per worker
+        required: true
+        default: '10000'
+        type: string
+      snapshot_at:
+        description: Optional ISO snapshot for resuming the same run
+        required: false
+        default: ''
+        type: string
+
+concurrency:
+  group: two-brand-catalog-confirmation-release
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate worker contract
+        run: node --test tests/catalog-confirmation.test.cjs tests/data-recovery-control-plane.test.cjs tests/two-brand-catalog-confirmation-release.test.cjs
+      - name: Validate requested ceiling
+        env:
+          MAX_BATCHES: ${{ inputs.max_batches }}
+        run: |
+          node -e "const value=Number.parseInt(process.env.MAX_BATCHES,10); if (!Number.isInteger(value) || value < 1 || value > 10000) throw new Error('max_batches must be 1 through 10000')"
+
+  snapshot:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions: {}
+    outputs:
+      snapshot_at: ${{ steps.freeze.outputs.snapshot_at }}
+    steps:
+      - id: freeze
+        env:
+          REQUESTED_SNAPSHOT: ${{ inputs.snapshot_at }}
+        shell: bash
+        run: |
+          node -e "const value=process.env.REQUESTED_SNAPSHOT; if (value && !Number.isFinite(Date.parse(value))) throw new Error('snapshot_at must be an ISO timestamp')"
+          if [ -n "$REQUESTED_SNAPSHOT" ]; then
+            echo "snapshot_at=$REQUESTED_SNAPSHOT" >> "$GITHUB_OUTPUT"
+          else
+            echo "snapshot_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+          fi
+
+  canary:
+    needs: [validate, snapshot]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      IDENTITY_SCOPE: TWO_BRANDS
+      IDENTITY_SHARD: ${{ matrix.shard }}
+      IDENTITY_BATCH_SIZE: '250'
+      IDENTITY_MAX_BATCHES: '1'
+      IDENTITY_SNAPSHOT_AT: ${{ needs.snapshot.outputs.snapshot_at }}
+      APPLY_IDENTITY_STAGE: 'false'
+      IDENTITY_REPORT_PATH: audit-output/two-brand-catalog-release/canary-shard-${{ matrix.shard }}.json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Run read-only exact-match canary
+        run: node tools/data-quality/stage-identity-review.cjs
+      - name: Require exact reconciliation and zero writes
+        run: |
+          node -e "const report=require('./audit-output/two-brand-catalog-release/canary-shard-${{ matrix.shard }}.json'); if (!report.dry_run || !report.reconciliation.reconciled || report.errors.length || report.safety.watch_records_writes !== 0 || report.written !== 0) throw new Error('Unsafe or unreconciled canary')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: two-brand-catalog-canary-${{ matrix.shard }}
+          path: audit-output/two-brand-catalog-release/canary-shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+
+  migrate:
+    needs: canary
+    if: ${{ inputs.confirmation == 'APPLY_EXACT_TWO_BRAND_CATALOG_RELEASE' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+      - name: Apply only the atomic staging RPC
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}"
+          user="${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}"
+          port="${SUPABASE_DB_PORT:-5432}"
+          db_url="host=${host} port=${port} dbname=postgres user=${user} sslmode=require"
+          release_migration="supabase/migrations/20260727260000_include_unpriced_two_brand_trading.sql"
+          atomic_migration="supabase/migrations/20260727220000_atomic_two_brand_catalog_staging.sql"
+          cache_migration="supabase/migrations/20260727230000_materialized_two_brand_release.sql"
+          test -f "$release_migration"
+          test -f "$atomic_migration"
+          test -f "$cache_migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF to_regclass('public.watch_records') IS NULL
+              OR to_regclass('public.listing_identity_reviews') IS NULL
+              OR to_regclass('public.data_quality_remediation_checkpoints') IS NULL THEN
+              RAISE EXCEPTION 'Two-brand catalog staging prerequisites are missing';
+            END IF;
+          END
+          $$;
+          SQL
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$release_migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$atomic_migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$cache_migration"
+
+  apply:
+    needs: [snapshot, migrate]
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    environment: production
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      IDENTITY_SCOPE: TWO_BRANDS
+      IDENTITY_SHARD: ${{ matrix.shard }}
+      IDENTITY_BATCH_SIZE: '250'
+      IDENTITY_MAX_BATCHES: ${{ inputs.max_batches }}
+      IDENTITY_SNAPSHOT_AT: ${{ needs.snapshot.outputs.snapshot_at }}
+      APPLY_IDENTITY_STAGE: 'true'
+      IDENTITY_REPORT_PATH: audit-output/two-brand-catalog-release/apply-shard-${{ matrix.shard }}.json
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Stage all deterministic exact catalog matches
+        run: node tools/data-quality/stage-identity-review.cjs
+      - name: Require complete reconciled shard
+        run: |
+          node -e "const report=require('./audit-output/two-brand-catalog-release/apply-shard-${{ matrix.shard }}.json'); if (!report.completed || !report.reconciliation.reconciled || !report.reconciliation.catalog_staging_reconciled || report.errors.length || report.safety.watch_records_writes !== 0 || report.safety.automated_human_approvals !== 0) throw new Error('Incomplete or unsafe shard')"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: two-brand-catalog-apply-${{ matrix.shard }}
+          path: audit-output/two-brand-catalog-release/apply-shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+
+  verify:
+    needs: [apply, snapshot]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    environment: production
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+      IDENTITY_SNAPSHOT_AT: ${{ needs.snapshot.outputs.snapshot_at }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: two-brand-catalog-apply-*
+          path: audit-output/two-brand-catalog-release
+          merge-multiple: true
+      - name: Aggregate worker reconciliation
+        id: aggregate
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const files = fs.readdirSync('audit-output/two-brand-catalog-release')
+            .filter(name => name.startsWith('apply-shard-'));
+          if (files.length !== 8) throw new Error(`Expected eight indexed partition reports, received ${files.length}`);
+          const reports = files.map(name => JSON.parse(fs.readFileSync(`audit-output/two-brand-catalog-release/${name}`, 'utf8')));
+          if (reports.some(report => !report.completed || !report.reconciliation.reconciled)) {
+            throw new Error('At least one worker did not complete and reconcile');
+          }
+          const totals = reports.reduce((sum, report) => ({
+            scanned: sum.scanned + Number(report.checkpoint.rows_scanned || 0),
+            eligible: sum.eligible + Number(report.checkpoint.metadata?.eligible_total || 0),
+            written: sum.written + Number(report.checkpoint.rows_written || 0),
+            preserved: sum.preserved + Number(report.checkpoint.metadata?.preserved_total || 0),
+            missing: sum.missing + Number(report.checkpoint.metadata?.missing_total || 0),
+            errors: sum.errors + report.errors.length,
+          }), { scanned: 0, eligible: 0, written: 0, preserved: 0, missing: 0, errors: 0 });
+          if (totals.errors || totals.eligible !== totals.written + totals.preserved + totals.missing) {
+            throw new Error('Cumulative worker staging reconciliation failed');
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,
+            `scanned=${totals.scanned}\neligible=${totals.eligible}\nwritten=${totals.written}\n`);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+            `## Exact Rolex and Patek catalog release\n\n` +
+            `- Snapshot: ${{ needs.snapshot.outputs.snapshot_at }}\n` +
+            `- Scanned: ${totals.scanned.toLocaleString()}\n` +
+            `- Exact catalog confirmations: ${totals.eligible.toLocaleString()}\n` +
+            `- Ledger writes: ${totals.written.toLocaleString()}\n` +
+            `- Human decisions preserved: ${totals.preserved.toLocaleString()}\n` +
+            `- Missing during apply: ${totals.missing.toLocaleString()}\n` +
+            `- Errors: ${totals.errors.toLocaleString()}\n` +
+            `- Reconciliation: exact across eight indexed partitions with four concurrent workers\n` +
+            `- watch_records writes: 0\n`);
+          NODE
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+      - name: Publish customer release census
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}"
+          user="${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}"
+          port="${SUPABASE_DB_PORT:-5432}"
+          db_url="host=${host} port=${port} dbname=postgres user=${user} sslmode=require"
+          source_rows="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align \
+            --set=snapshot_at="$IDENTITY_SNAPSHOT_AT" <<'SQL'
+          SET statement_timeout = '120s';
+          SELECT count(*)
+          FROM public.watch_records
+          WHERE brand IN ('Rolex', 'Patek Philippe')
+            AND (
+              created_at IS NULL
+              OR created_at <= :'snapshot_at'::timestamptz
+            );
+          SQL
+          )"
+          source_rows="$(echo "$source_rows" | tail -n 1 | tr -d '[:space:]')"
+          test "$source_rows" = "${{ steps.aggregate.outputs.scanned }}"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          SET statement_timeout = '1800s';
+          REFRESH MATERIALIZED VIEW public.two_brand_verified_trading_release_cache;
+          ANALYZE public.two_brand_verified_trading_release_cache;
+          SQL
+          {
+            echo
+            echo '### Customer release after catalog confirmation'
+            echo
+            echo '```text'
+            echo "Frozen source rows | $source_rows"
+            psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --field-separator=' | ' <<'SQL'
+          SET statement_timeout = '120s';
+          SELECT
+            brand,
+            count(*) AS trading_floor_rows,
+            count(*) FILTER (WHERE has_images) AS visually_verified_image_rows,
+            count(*) FILTER (WHERE identity_review_status = 'HUMAN_APPROVED') AS human_approved_rows,
+            count(*) FILTER (WHERE identity_review_status = 'CATALOG_CONFIRMED') AS catalog_confirmed_rows
+          FROM public.two_brand_verified_trading_release_cache
+          GROUP BY brand
+          ORDER BY brand;
+
+          SELECT
+            canonical_brand,
+            status,
+            count(*) AS identity_ledger_rows
+          FROM public.listing_identity_reviews
+          WHERE canonical_brand IN ('Rolex', 'Patek Philippe')
+          GROUP BY canonical_brand, status
+          ORDER BY canonical_brand, status;
+          SQL
+            echo '```'
+          } | tee -a "$GITHUB_STEP_SUMMARY"

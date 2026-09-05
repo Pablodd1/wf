@@ -1,0 +1,163 @@
+{
+  "benchmark_contract": "wf-mariadb-private-raw-staging-v1",
+  "benchmark_cohort_size": 100000,
+  "p95_safety_threshold_ms": 4000,
+  "profiles_tested": [
+    {
+      "profile": "w1_b250",
+      "concurrency": 1,
+      "batch_size": 250,
+      "total_records": 100000,
+      "batches_count": 400,
+      "newly_staged_rows": 99500,
+      "already_staged_identical_rows": 500,
+      "error_rows": 0,
+      "exact_reconciliation": true,
+      "duration_seconds": 322.03,
+      "throughput_rows_per_sec": 310.53,
+      "latency_ms": {
+        "min": 482,
+        "max": 3853,
+        "mean": 805.03,
+        "p50": 731,
+        "p95": 1410,
+        "p99": 1870
+      },
+      "lock_or_throttle_events": 0,
+      "p95_safe": true,
+      "peak_rss_mb": 448.57,
+      "heap_used_mb": 360.09
+    },
+    {
+      "profile": "w4_b250",
+      "concurrency": 4,
+      "batch_size": 250,
+      "total_records": 100000,
+      "batches_count": 400,
+      "newly_staged_rows": 100000,
+      "already_staged_identical_rows": 0,
+      "error_rows": 0,
+      "exact_reconciliation": true,
+      "duration_seconds": 138.68,
+      "throughput_rows_per_sec": 721.11,
+      "latency_ms": {
+        "min": 541,
+        "max": 3110,
+        "mean": 1167.47,
+        "p50": 980,
+        "p95": 2126,
+        "p99": 2806
+      },
+      "lock_or_throttle_events": 0,
+      "p95_safe": true,
+      "peak_rss_mb": 523.52,
+      "heap_used_mb": 375.53
+    },
+    {
+      "profile": "w8_b250",
+      "concurrency": 8,
+      "batch_size": 250,
+      "total_records": 100000,
+      "batches_count": 400,
+      "newly_staged_rows": 100000,
+      "already_staged_identical_rows": 0,
+      "error_rows": 0,
+      "exact_reconciliation": true,
+      "duration_seconds": 90.67,
+      "throughput_rows_per_sec": 1102.94,
+      "latency_ms": {
+        "min": 542,
+        "max": 7727,
+        "mean": 1658.74,
+        "p50": 1449,
+        "p95": 3132,
+        "p99": 4826
+      },
+      "lock_or_throttle_events": 0,
+      "p95_safe": true,
+      "peak_rss_mb": 529.34,
+      "heap_used_mb": 365.54
+    },
+    {
+      "profile": "w16_b250",
+      "concurrency": 16,
+      "batch_size": 250,
+      "total_records": 100000,
+      "batches_count": 400,
+      "newly_staged_rows": 100000,
+      "already_staged_identical_rows": 0,
+      "error_rows": 0,
+      "exact_reconciliation": true,
+      "duration_seconds": 89.2,
+      "throughput_rows_per_sec": 1121.03,
+      "latency_ms": {
+        "min": 553,
+        "max": 25531,
+        "mean": 2847.68,
+        "p50": 1998,
+        "p95": 6514,
+        "p99": 17360
+      },
+      "lock_or_throttle_events": 0,
+      "p95_safe": false,
+      "peak_rss_mb": 574.39,
+      "heap_used_mb": 379.32
+    }
+  ],
+  "recommendation": {
+    "selection_rule": "Highest throughput satisfying P95 latency <= 4000ms with 0 errors and 0 lock events",
+    "safest_worker_count": 8,
+    "safest_batch_size": 250,
+    "recommended_profile": "w8_b250",
+    "measured_throughput_rps": 1102.94,
+    "measured_p50_latency_ms": 1449,
+    "measured_p95_latency_ms": 3132,
+    "p95_safety_threshold_ms": 4000,
+    "estimated_1_495m_full_capture_minutes": 22.6,
+    "objective_elimination_summary": [
+      {
+        "profile": "w1_b250",
+        "throughput_rps": 310.53,
+        "p95_ms": 1410,
+        "compliant_with_p95_threshold": true,
+        "status": "SUBOPTIMAL_LOWER_THROUGHPUT"
+      },
+      {
+        "profile": "w4_b250",
+        "throughput_rps": 721.11,
+        "p95_ms": 2126,
+        "compliant_with_p95_threshold": true,
+        "status": "SUBOPTIMAL_LOWER_THROUGHPUT"
+      },
+      {
+        "profile": "w8_b250",
+        "throughput_rps": 1102.94,
+        "p95_ms": 3132,
+        "compliant_with_p95_threshold": true,
+        "status": "SELECTED_OPTIMAL"
+      },
+      {
+        "profile": "w16_b250",
+        "throughput_rps": 1121.03,
+        "p95_ms": 6514,
+        "compliant_with_p95_threshold": false,
+        "status": "ELIMINATED_EXCEEDS_TAIL_LATENCY"
+      }
+    ]
+  },
+  "public_impact_audit": {
+    "source_identities_verified": 100000,
+    "public_matches_before": {
+      "raw_messages_count": 9999,
+      "raw_message_versions_count": 9999,
+      "watch_records_count": 0
+    },
+    "public_matches_after": {
+      "raw_messages_count": 9999,
+      "raw_message_versions_count": 9999,
+      "watch_records_count": 0
+    },
+    "zero_public_delta_verified": true
+  },
+  "timestamp": "2026-08-29T17:33:23.216Z"
+}

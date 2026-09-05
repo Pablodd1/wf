@@ -1,0 +1,42 @@
+{
+  "overrides": [
+    {
+      "brand": "Rolex",
+      "reference": "116500LN",
+      "dial_colors": ["Black", "White"],
+      "reason": "The imported Rolex catalog mislabeled the white Panda variant as Silver; its source variant URL identifies it as the white Panda dial."
+    },
+    {
+      "brand": "Patek Philippe",
+      "reference": "5712/1A-001",
+      "dial_colors": ["Blue"],
+      "reason": "The source importer split a single black-blue dial description into Black and Blue variants. Curated market evidence treats this steel reference as Blue."
+    },
+    {
+      "brand": "Patek Philippe",
+      "reference": "5712/1R-001",
+      "dial_colors": ["Brown"],
+      "reason": "Patek Philippe describes this configuration as a brown sunburst dial with a black-gradient rim."
+    },
+    {
+      "brand": "Patek Philippe",
+      "reference": "5711/1A-010",
+      "dial_colors": ["Blue"],
+      "reason": "Patek Philippe describes this configuration as a blue dial with black gradation."
+    }
+  ],
+  "aliases": [
+    {
+      "brand": "Patek Philippe",
+      "alias": "5712/1A",
+      "canonical_reference": "5712/1A-001",
+      "reason": "Dealer-market shorthand for the steel Nautilus 5712/1A-001 configuration."
+    },
+    {
+      "brand": "Patek Philippe",
+      "alias": "5712/1R",
+      "canonical_reference": "5712/1R-001",
+      "reason": "Dealer-market shorthand for the rose-gold Nautilus 5712/1R-001 configuration."
+    }
+  ]
+}

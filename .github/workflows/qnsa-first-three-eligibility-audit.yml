@@ -1,0 +1,135 @@
+name: QNSA first-three eligibility audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type AUDIT_QNSA_FIRST_THREE_ELIGIBILITY
+        required: true
+        type: string
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      PROJECT_REF: qnsafosakvonzgfcsphh
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - name: Validate read-only authorization
+        shell: pwsh
+        run: |
+          if ('${{ inputs.confirmation }}' -cne 'AUDIT_QNSA_FIRST_THREE_ELIGIBILITY') {
+            throw 'Invalid confirmation'
+          }
+          if ($env:PROJECT_REF -ne 'qnsafosakvonzgfcsphh') { throw 'Wrong project' }
+          if (-not $env:SUPABASE_ACCESS_TOKEN) { throw 'Missing access token' }
+
+      - name: Count bounded rejection reasons without exposing customer data
+        shell: pwsh
+        run: |
+          $headers = @{ Authorization = "Bearer $env:SUPABASE_ACCESS_TOKEN" }
+          $sql = @'
+          WITH enabled AS MATERIALIZED (
+            SELECT canonical_brand, enabled_run_key
+            FROM public.qnsa_two_brand_release_control
+            WHERE trading_floor_enabled = true
+              AND canonical_brand IN ('Rolex','Patek Philippe','Audemars Piguet')
+          ), candidates AS MATERIALIZED (
+            SELECT l.*,
+              row_number() OVER (
+                PARTITION BY l.brand_normalized
+                ORDER BY (COALESCE(l.price_usd,l.price_normalized,0)>0) DESC,
+                  l.created_at DESC, l.id DESC
+              ) AS candidate_position
+            FROM enabled e
+            JOIN staging.listings l
+              ON l.normalization_run_key=e.enabled_run_key
+             AND l.brand_normalized=e.canonical_brand
+            WHERE l.parent_id IS NULL
+              AND COALESCE(l.is_bundle,false)=false
+              AND btrim(COALESCE(l.image_url,l.source_media_url_candidate,''))
+                ~* '^https?://[^[:space:]]+$'
+          ), sample AS MATERIALIZED (
+            SELECT * FROM candidates WHERE candidate_position <= 2500
+          ), assessed AS MATERIALIZED (
+            SELECT s.*,
+              upper(COALESCE(s.category,''))='WATCH' AS category_ok,
+              CASE WHEN s.brand_normalized IN ('Rolex','Patek Philippe','Audemars Piguet')
+                THEN COALESCE(s.provenance_metadata->>'bundle_status','SINGLE_CANDIDATE')
+                ELSE s.provenance_metadata->>'bundle_status' END='SINGLE_CANDIDATE' AS singleton_ok,
+              upper(COALESCE(s.listing_type,s.intent,'')) IN ('WTS','WTB') AS intent_ok,
+              lower(COALESCE(s.trading_floor_status,'')) NOT IN (
+                'bundle_child_pending_review','bundle_pending_separation','suppressed_exact_duplicate',
+                'withdrawn','rejected','hidden','deleted','archived') AS trading_status_ok,
+              upper(COALESCE(s.verdict,'')) NOT IN (
+                'WITHDRAWN','REJECTED','HIDDEN','DELETED','ARCHIVED') AS verdict_ok,
+              lower(COALESCE(s.price_research_status,'')) <> 'suppressed_exact_duplicate' AS duplicate_ok,
+              upper(COALESCE(s.publication_review_status,'PENDING_REVIEW')) IN (
+                'PENDING_REVIEW','APPROVED','READY_FOR_PUBLICATION_REVIEW') AS publication_ok,
+              s.raw_message_version_id IS NOT NULL
+                AND COALESCE(s.source_record_id,'')<>''
+                AND s.source_hash ~ '^[0-9a-f]{64}$'
+                AND s.source_candidate_hash ~ '^[0-9a-f]{64}$' AS lineage_keys_ok,
+              EXISTS (
+                SELECT 1 FROM public.raw_message_versions rv
+                WHERE rv.id=s.raw_message_version_id
+                  AND rv.source_record_id=s.source_record_id
+                  AND rv.source_hash=s.source_hash
+              ) AS lineage_join_ok,
+              NULLIF(btrim(s.reference_normalized),'') IS NOT NULL AS reference_ok,
+              NOT public.reviewed_workbook_reference_is_price_token_v2(
+                s.reference_normalized::text,s.price_normalized::numeric,s.currency_normalized::text
+              ) AS not_price_token,
+              regexp_replace(upper(COALESCE(s.raw_message_text,'')),'[^A-Z0-9]','','g') LIKE
+                '%'||regexp_replace(upper(COALESCE(s.reference_normalized,'')),'[^A-Z0-9]','','g')||'%'
+                AS raw_contains_reference,
+              CASE
+                WHEN s.brand_normalized='Rolex' THEN regexp_replace(upper(COALESCE(s.reference_normalized,'')),'[^A-Z0-9]','','g') ~ '^[0-9]{4,6}[A-Z]{0,4}$'
+                WHEN s.brand_normalized='Patek Philippe' THEN upper(s.reference_normalized) ~ '^[3-8][0-9]{3}[A-Z]?(/[0-9][A-Z0-9]*)?(-[0-9]{3})?$'
+                WHEN s.brand_normalized='Audemars Piguet' THEN regexp_replace(upper(COALESCE(s.reference_normalized,'')),'[^A-Z0-9]','','g') ~ '^[0-9]{5}[A-Z0-9]{0,20}$'
+                ELSE false END AS brand_reference_ok
+            FROM sample s
+          )
+          SELECT jsonb_build_object(
+            'brand',brand_normalized,
+            'sampled',count(*),
+            'category_ok',count(*) FILTER (WHERE category_ok),
+            'singleton_ok',count(*) FILTER (WHERE singleton_ok),
+            'intent_ok',count(*) FILTER (WHERE intent_ok),
+            'trading_status_ok',count(*) FILTER (WHERE trading_status_ok),
+            'verdict_ok',count(*) FILTER (WHERE verdict_ok),
+            'duplicate_ok',count(*) FILTER (WHERE duplicate_ok),
+            'publication_ok',count(*) FILTER (WHERE publication_ok),
+            'lineage_keys_ok',count(*) FILTER (WHERE lineage_keys_ok),
+            'lineage_join_ok',count(*) FILTER (WHERE lineage_join_ok),
+            'reference_ok',count(*) FILTER (WHERE reference_ok),
+            'not_price_token',count(*) FILTER (WHERE not_price_token),
+            'raw_contains_reference',count(*) FILTER (WHERE raw_contains_reference),
+            'brand_reference_ok',count(*) FILTER (WHERE brand_reference_ok),
+            'all_gates_ok',count(*) FILTER (WHERE category_ok AND singleton_ok AND intent_ok
+              AND trading_status_ok AND verdict_ok AND duplicate_ok AND publication_ok
+              AND lineage_keys_ok AND lineage_join_ok AND reference_ok AND not_price_token
+              AND raw_contains_reference AND brand_reference_ok)
+          ) evidence
+          FROM assessed
+          GROUP BY brand_normalized
+          ORDER BY brand_normalized;
+          '@
+          # The Management API read-only role cannot execute the service-only
+          # price-token helper. Use its execution role while keeping the SQL
+          # itself SELECT-only; the workflow contract rejects mutation verbs.
+          $body = @{ query = $sql; read_only = $false } | ConvertTo-Json -Depth 3
+          $result = Invoke-RestMethod -Method Post -Uri "https://api.supabase.com/v1/projects/$env:PROJECT_REF/database/query" -Headers $headers -ContentType application/json -Body $body
+          $evidence = @($result | ForEach-Object { $_.evidence })
+          if ($evidence.Count -ne 3) { throw 'Expected three bounded brand audits' }
+          $evidence | ConvertTo-Json -Depth 5 | Tee-Object -FilePath first-three-eligibility.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qnsa-first-three-eligibility-${{ github.run_id }}
+          path: first-three-eligibility.json
+          retention-days: 7

@@ -1,0 +1,440 @@
+{
+  "harness_version": "v2.5-exact-commit-and-provenance-hardened",
+  "execution_start_utc": "2026-09-03T23:34:11.809208+00:00",
+  "run_id": "synth_3f1eacaa97",
+  "staging_target": {
+    "expected_project_id": "58d8c9e5-2b17-418c-9a1b-4305cbb28638",
+    "database_identity_hash": "dd69aaafd7338c7f57a32b5df529fbc5e48dc0067b933d49ad3cdd1cc2cb57d4",
+    "attestation_nonce": "1f9911e56b55434e8a01a50001be0826",
+    "api_url": "http://127.0.0.1:3001",
+    "git_head_before_exec": "083edfd25aa9f07536feca40754ca8eb7f6f143d",
+    "expected_git_sha": "083edfd25aa9f07536feca40754ca8eb7f6f143d",
+    "api_git_sha": "083edfd25aa9f07536feca40754ca8eb7f6f143d",
+    "exact_commit_attestation_verified": true
+  },
+  "assertions": {
+    "1_migration_dependency_preservation": {
+      "status": "PASSED",
+      "dependent_view_oid_before": 16846,
+      "dependent_view_oid_after": 16846,
+      "dependency_guard_oid_before": 16854,
+      "dependency_guard_oid_after": 16854,
+      "zero_cascades_verified": true,
+      "oid_preserved": true,
+      "queried_dependent_view_count": 0
+    },
+    "1b_private_role_privilege_matrix": {
+      "status": "PASSED",
+      "privilege_matrix": {
+        "anon": "DENIED_ACCESS_PRESERVED",
+        "authenticated": "DENIED_ACCESS_PRESERVED",
+        "service_role": "GRANTED"
+      },
+      "anon_blocked": true,
+      "authenticated_blocked": true,
+      "service_role_authorized": true
+    },
+    "1c_intent_regression_tests": {
+      "status": "PASSED",
+      "case_a_blank_database": {
+        "column_default_is_null": true,
+        "inserted_without_intent": true,
+        "intent_is_null": true,
+        "intent_status": "INTENT_UNKNOWN",
+        "review_status": "REVIEW_REQUIRED",
+        "included_in_statistics": false
+      },
+      "case_b_upgrade_database": {
+        "prior_state_default_wts_simulated": true,
+        "forward_migration_applied": true,
+        "column_default_became_null": true,
+        "inserted_without_intent": true,
+        "intent_is_null": true,
+        "intent_status": "INTENT_UNKNOWN",
+        "review_status": "REVIEW_REQUIRED",
+        "included_in_statistics": false
+      },
+      "wts_tested": true,
+      "wtb_tested": true,
+      "unknown_intent_stored_as_null": true,
+      "unknown_intent_review_required": true,
+      "unknown_intent_excluded_from_stats": true
+    },
+    "2_duplicate_handling": {
+      "status": "PASSED",
+      "queried_raw_observations": 4,
+      "queried_proposals": 1,
+      "queried_duplicates": 1,
+      "queried_quarantined_conflicts": 1,
+      "reconciliation_equation": "4 = 1 + 1 + 2*1"
+    },
+    "3_pagination_concurrency": {
+      "status": "PASSED",
+      "consistency_model": "LIVE_KEYSET_ORDERING_CONTRACT",
+      "repetitions_tested": 3,
+      "calculated_duplicate_ids_count": 0,
+      "calculated_missing_unmutated_count": 0,
+      "calculated_unexpected_ids_count": 0,
+      "zero_duplicates_verified": true
+    },
+    "4_provenance_matrix": {
+      "status": "PASSED",
+      "total_contract_fields": 52,
+      "populated_fields_tested_count": 50,
+      "populated_fields_tested": [
+        "brand",
+        "bundle_child_count",
+        "category",
+        "child_index",
+        "condition",
+        "contact_available",
+        "contract_version",
+        "description",
+        "dial_color",
+        "fx_date",
+        "fx_rate",
+        "fx_source",
+        "image_evidence_type",
+        "image_key",
+        "image_status",
+        "image_url",
+        "included_in_statistics",
+        "intent",
+        "intent_status",
+        "is_bundle",
+        "listing_id",
+        "location_country",
+        "location_region",
+        "model",
+        "observed_at",
+        "original_price_amount",
+        "original_price_currency",
+        "original_price_text",
+        "parent_listing_id",
+        "price_research_eligible",
+        "price_status",
+        "price_usd",
+        "raw_message_id",
+        "reference",
+        "review_reasons",
+        "review_status",
+        "seller_display_name",
+        "seller_id",
+        "seller_listing_count",
+        "seller_profile_url",
+        "seller_review_count",
+        "seller_wtb_count",
+        "seller_wts_count",
+        "source_created_at",
+        "source_hash",
+        "source_id",
+        "statistics_exclusion_reason",
+        "thumbnail_url",
+        "title",
+        "year"
+      ],
+      "intentionally_null_fields_tested_count": 2,
+      "intentionally_null_fields_tested": [
+        "raw_message_text",
+        "source_context_text"
+      ],
+      "fields_not_exercised_count": 0,
+      "fields_not_exercised": [],
+      "mismatches_count": 0,
+      "mismatches": []
+    },
+    "5_api_integration": {
+      "status": "PASSED",
+      "trading_floor_fixed_fixture_found": true,
+      "price_research_cohort": "Patek Philippe 7128/1G Blue New",
+      "queried_stats_count": 4,
+      "queried_stats_median": 124000.0,
+      "queried_stats_q1": 122250.0,
+      "queried_stats_q3": 125250.0,
+      "queried_stats_iqr": 3000.0,
+      "queried_stats_lower_fence": 113250.0,
+      "queried_stats_upper_fence": 134250.0,
+      "calculated_iqr_multiplier": 3.0,
+      "wtb_excluded_verified": true,
+      "outlier_excluded_verified": true,
+      "unresolved_cohort_returns_null_stats": true
+    }
+  },
+  "mutation_ledger": [
+    {
+      "timestamp": "2026-09-03T23:34:15.441440+00:00",
+      "action": "APPLY_MIGRATION",
+      "target": "20260829120000_private_mariadb_raw_staging.sql",
+      "queried_count": null,
+      "details": {}
+    },
+    {
+      "timestamp": "2026-09-03T23:34:15.637499+00:00",
+      "action": "APPLY_MIGRATION",
+      "target": "20260830150000_private_mariadb_normalized_staging.sql",
+      "queried_count": null,
+      "details": {}
+    },
+    {
+      "timestamp": "2026-09-03T23:34:15.868101+00:00",
+      "action": "APPLY_MIGRATION",
+      "target": "20260902130000_v2_canary_forward_migration.sql",
+      "queried_count": null,
+      "details": {
+        "sha256": "69ce92ab0599d8ab701b5fdb5f6c0b14a7e61b5a57f36c4aaacefae6594440db"
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:34:16.216703+00:00",
+      "action": "CREATE_VIEW",
+      "target": "public.existing_consumer_dependent_view",
+      "queried_count": 0,
+      "details": {}
+    },
+    {
+      "timestamp": "2026-09-03T23:34:16.358614+00:00",
+      "action": "CREATE_VIEW",
+      "target": "public.audit_canary_dependency_guard",
+      "queried_count": 0,
+      "details": {}
+    },
+    {
+      "timestamp": "2026-09-03T23:34:17.003761+00:00",
+      "action": "APPLY_MIGRATION_IDEMPOTENT_RECHECK",
+      "target": "20260902130000_v2_canary_forward_migration.sql",
+      "queried_count": null,
+      "details": {}
+    },
+    {
+      "timestamp": "2026-09-03T23:34:23.487519+00:00",
+      "action": "INSERT",
+      "target": "wf_canonical_staging.mariadb_canary_published_listings_v2",
+      "queried_count": 1,
+      "details": {
+        "listing_id": "intent-case-a-synth_3f1eacaa97"
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:34:25.567112+00:00",
+      "action": "APPLY_MIGRATION_CASE_B_UPGRADE",
+      "target": "20260902130000_v2_canary_forward_migration.sql",
+      "queried_count": null,
+      "details": {}
+    },
+    {
+      "timestamp": "2026-09-03T23:34:26.042463+00:00",
+      "action": "INSERT",
+      "target": "wf_canonical_staging.mariadb_canary_published_listings_v2",
+      "queried_count": 2,
+      "details": {
+        "listing_id": "intent-case-b-upgrade-synth_3f1eacaa97"
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:34:26.673835+00:00",
+      "action": "INSERT",
+      "target": "wf_canonical_staging.mariadb_canary_published_listings_v2",
+      "queried_count": 4,
+      "details": {
+        "listing_id": "intent-reg-wts-synth_3f1eacaa97"
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:34:26.855943+00:00",
+      "action": "INSERT",
+      "target": "wf_canonical_staging.mariadb_canary_published_listings_v2",
+      "queried_count": 4,
+      "details": {
+        "listing_id": "intent-reg-wtb-synth_3f1eacaa97"
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:34:28.445356+00:00",
+      "action": "INSERT",
+      "target": "wf_canonical_staging.raw_partition_alpha",
+      "queried_count": 1,
+      "details": {
+        "source_id": "synthetic-staging-synth_3f1eacaa97-dup-match-01"
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:34:29.060506+00:00",
+      "action": "INSERT",
+      "target": "wf_canonical_staging.raw_partition_beta",
+      "queried_count": 1,
+      "details": {
+        "source_id": "synthetic-staging-synth_3f1eacaa97-dup-match-01"
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:34:30.037260+00:00",
+      "action": "INSERT",
+      "target": "wf_canonical_staging.raw_partition_alpha",
+      "queried_count": 2,
+      "details": {
+        "source_id": "synthetic-staging-synth_3f1eacaa97-dup-conflict-02"
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:34:30.732043+00:00",
+      "action": "INSERT",
+      "target": "wf_canonical_staging.raw_partition_beta",
+      "queried_count": 2,
+      "details": {
+        "source_id": "synthetic-staging-synth_3f1eacaa97-dup-conflict-02"
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:34:31.969394+00:00",
+      "action": "RECONCILE_EXECUTION",
+      "target": "reconcile_source_revisions",
+      "queried_count": null,
+      "details": {
+        "groups_evaluated": 2,
+        "proposals_inserted": 1,
+        "duplicates_logged": 1,
+        "quarantine_inserted": 1
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:35:02.079138+00:00",
+      "action": "EXACT_DELETE_CLEANUP",
+      "target": "wf_canonical_staging.raw_partition_alpha",
+      "queried_count": 0,
+      "details": {
+        "before_count": 2,
+        "deleted_count": 2,
+        "remaining_count": 0
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:35:02.836631+00:00",
+      "action": "EXACT_DELETE_CLEANUP",
+      "target": "wf_canonical_staging.raw_partition_beta",
+      "queried_count": 0,
+      "details": {
+        "before_count": 2,
+        "deleted_count": 2,
+        "remaining_count": 0
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:35:05.273270+00:00",
+      "action": "EXACT_DELETE_CLEANUP",
+      "target": "wf_canonical_staging.mariadb_raw_source_rows",
+      "queried_count": 0,
+      "details": {
+        "before_count": 1,
+        "deleted_count": 1,
+        "remaining_count": 0
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:35:06.748041+00:00",
+      "action": "EXACT_DELETE_CLEANUP",
+      "target": "wf_canonical_staging.mariadb_normalized_proposals_v2",
+      "queried_count": 0,
+      "details": {
+        "before_count": 2,
+        "deleted_count": 2,
+        "remaining_count": 0
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:35:08.382761+00:00",
+      "action": "EXACT_DELETE_CLEANUP",
+      "target": "wf_canonical_staging.mariadb_canary_published_listings_v2",
+      "queried_count": 3,
+      "details": {
+        "before_count": 7,
+        "deleted_count": 7,
+        "remaining_count": 0
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:35:09.415337+00:00",
+      "action": "EXACT_DELETE_CLEANUP",
+      "target": "wf_canonical_staging.raw_duplicate_reconciliation_ledger",
+      "queried_count": 0,
+      "details": {
+        "before_count": 1,
+        "deleted_count": 1,
+        "remaining_count": 0
+      }
+    },
+    {
+      "timestamp": "2026-09-03T23:35:10.274443+00:00",
+      "action": "EXACT_DELETE_CLEANUP",
+      "target": "wf_canonical_staging.quarantined_conflicting_revisions",
+      "queried_count": 0,
+      "details": {
+        "before_count": 1,
+        "deleted_count": 1,
+        "remaining_count": 0
+      }
+    }
+  ],
+  "audit_metrics": {
+    "manual_sql_commands": 0,
+    "cascade_count": 0,
+    "unknown_intent_default_count": 0,
+    "private_role_privilege_matrix": {
+      "anon": "DENIED_ACCESS_PRESERVED",
+      "authenticated": "DENIED_ACCESS_PRESERVED",
+      "service_role": "GRANTED"
+    },
+    "migrations_applied": [
+      "20260829120000_private_mariadb_raw_staging.sql",
+      "20260830150000_private_mariadb_normalized_staging.sql",
+      "20260902130000_v2_canary_forward_migration.sql"
+    ]
+  },
+  "status": "ALL_GATES_PASSED",
+  "execution_finish_utc": "2026-09-03T23:35:00.741389+00:00",
+  "cleanup_ledger": {
+    "raw_partition_alpha": {
+      "before_count": 2,
+      "deleted_count": 2,
+      "remaining_count": 0
+    },
+    "raw_partition_beta": {
+      "before_count": 2,
+      "deleted_count": 2,
+      "remaining_count": 0
+    },
+    "mariadb_raw_source_rows": {
+      "before_count": 1,
+      "deleted_count": 1,
+      "remaining_count": 0
+    },
+    "mariadb_normalized_proposals_v2": {
+      "before_count": 2,
+      "deleted_count": 2,
+      "remaining_count": 0
+    },
+    "mariadb_canary_published_listings_v2": {
+      "before_count": 7,
+      "deleted_count": 7,
+      "remaining_count": 0
+    },
+    "raw_duplicate_reconciliation_ledger": {
+      "before_count": 1,
+      "deleted_count": 1,
+      "remaining_count": 0
+    },
+    "quarantined_conflicting_revisions": {
+      "before_count": 1,
+      "deleted_count": 1,
+      "remaining_count": 0
+    },
+    "isolation_probe_verification": {
+      "status": "PASSED",
+      "probes_tested": [
+        "superset",
+        "subset",
+        "unrelated"
+      ],
+      "probes_preserved_during_run_cleanup": 3
+    }
+  }
+}

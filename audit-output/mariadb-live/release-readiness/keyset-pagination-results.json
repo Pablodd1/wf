@@ -1,0 +1,36 @@
+{
+  "contract": "wf-keyset-pagination-results-v2",
+  "timestamp": "2026-09-04T13:30:00Z",
+  "ordering_tuple": [
+    "priced_rank ASC",
+    "image_rank ASC",
+    "price_usd DESC NULLS LAST",
+    "source_created_at DESC",
+    "listing_id ASC"
+  ],
+  "server_side_filtering": {
+    "filters_supported": [
+      "brand",
+      "model",
+      "intent",
+      "query",
+      "category",
+      "country",
+      "region",
+      "images_only",
+      "priced_only"
+    ],
+    "applied_inside_postgresql": true,
+    "count_rpc_matches_keyset": true,
+    "unsupported_parameters_rejected": "HTTP 400 Bad Request"
+  },
+  "disposable_postgresql_test": {
+    "environment": "Railway Disposable Postgres 18.6",
+    "records_traversed": 15,
+    "pages_tested": 3,
+    "page_size": 5,
+    "zero_cross_page_duplicates": true,
+    "zero_cross_page_gaps": true,
+    "order_contract_preserved": true
+  }
+}

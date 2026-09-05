@@ -1,0 +1,1608 @@
+{
+  "command": "npm run lint",
+  "exit_code": 1,
+  "errors": 196,
+  "warnings": 4,
+  "issues": [
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\.agents\\challenger_m4_r2_2\\stress_harness.ts",
+      "line": 18,
+      "column": 30,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\.agents\\challenger_m4_r2_2\\stress_harness.ts",
+      "line": 18,
+      "column": 45,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\apply_fix.cjs",
+      "line": 5,
+      "column": 9,
+      "severity": 2,
+      "rule": null,
+      "message": "Parsing error: Unexpected token const"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\fix_all_v2.cjs",
+      "line": 6,
+      "column": 22,
+      "severity": 2,
+      "rule": null,
+      "message": "Parsing error: Expecting Unicode escape sequence \\uXXXX"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\App.tsx",
+      "line": 46,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'LegacyDealerDirectoryRedirect' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\App.tsx",
+      "line": 51,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'LegacyDealerProfileRedirect' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\AIAnomalies.tsx",
+      "line": 50,
+      "column": 28,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'_b' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\DetailModal.tsx",
+      "line": 91,
+      "column": 7,
+      "severity": 2,
+      "rule": "react-hooks/set-state-in-effect",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\DetailModal.tsx:91:7\n  89 |   useEffect(() => {\n  90 |     if (record && open) {\n> 91 |       setEditForm({\n     |       ^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  92 |         brand: record.brand,\n  93 |         reference: record.reference,\n  94 |         dialColor: record.dialColor,"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\EditModal.tsx",
+      "line": 55,
+      "column": 7,
+      "severity": 2,
+      "rule": "react-hooks/set-state-in-effect",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\EditModal.tsx:55:7\n  53 |   useEffect(() => {\n  54 |     if (record) {\n> 55 |       setForm({ ...record });\n     |       ^^^^^^^ Avoid calling setState() directly within an effect\n  56 |       setSellerRating(record.sellerRating);\n  57 |     }\n  58 |   }, [record]);"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\LiveStream.tsx",
+      "line": 70,
+      "column": 17,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\MarketActivityTicker.tsx",
+      "line": 63,
+      "column": 27,
+      "severity": 2,
+      "rule": "react-hooks/use-memo",
+      "message": "Error: Expected the first argument to be an inline function expression\n\nExpected the first argument to be an inline function expression.\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\MarketActivityTicker.tsx:63:27\n  61 | export function MarketActivityTicker() {\n  62 |   const { t } = useLanguage();\n> 63 |   const sources = useMemo(activitySources, []);\n     |                           ^^^^^^^^^^^^^^^ Expected the first argument to be an inline function expression\n  64 |   const [records, setRecords] = useState<ActivityRecord[]>([]);\n  65 |\n  66 |   useEffect(() => {"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\MarketActivityTicker.tsx",
+      "line": 137,
+      "column": 10,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\MarketActivityTicker.tsx",
+      "line": 137,
+      "column": 24,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 13,
+      "column": 10,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 13,
+      "column": 48,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 29,
+      "column": 11,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 31,
+      "column": 40,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 46,
+      "column": 23,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 48,
+      "column": 40,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 63,
+      "column": 17,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 115,
+      "column": 11,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 119,
+      "column": 18,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 123,
+      "column": 42,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 128,
+      "column": 20,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 302,
+      "column": 52,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\TestModePanel.tsx",
+      "line": 323,
+      "column": 48,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\WatchCard.tsx",
+      "line": 3,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'Star' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\WatchCard.tsx",
+      "line": 3,
+      "column": 16,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'Package' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\WatchCard.tsx",
+      "line": 3,
+      "column": 25,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'Paperclip' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\WatchCard.tsx",
+      "line": 13,
+      "column": 11,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\WatchCard.tsx",
+      "line": 15,
+      "column": 22,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\WatchCard.tsx",
+      "line": 20,
+      "column": 72,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\ui\\badge.tsx",
+      "line": 46,
+      "column": 17,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\ui\\button-group.tsx",
+      "line": 82,
+      "column": 3,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\ui\\button.tsx",
+      "line": 62,
+      "column": 18,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\ui\\form.tsx",
+      "line": 159,
+      "column": 3,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\ui\\navigation-menu.tsx",
+      "line": 167,
+      "column": 3,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\ui\\sidebar.tsx",
+      "line": 611,
+      "column": 26,
+      "severity": 2,
+      "rule": "react-hooks/purity",
+      "message": "Error: Cannot call impure function during render\n\n`Math.random` is an impure function. Calling an impure function can produce unstable results that update unpredictably when the component happens to re-render. (https://react.dev/reference/rules/components-and-hooks-must-be-pure#components-and-hooks-must-be-idempotent).\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\ui\\sidebar.tsx:611:26\n  609 |   // Random width between 50 to 90%.\n  610 |   const width = React.useMemo(() => {\n> 611 |     return `${Math.floor(Math.random() * 40) + 50}%`\n      |                          ^^^^^^^^^^^^^ Cannot call impure function\n  612 |   }, [])\n  613 |\n  614 |   return ("
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\ui\\sidebar.tsx",
+      "line": 725,
+      "column": 3,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\components\\ui\\toggle.tsx",
+      "line": 45,
+      "column": 18,
+      "severity": 2,
+      "rule": "react-refresh/only-export-components",
+      "message": "Fast refresh only works when a file only exports components. Use a new file to share constants or functions between components."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\hooks\\useWatchData.ts",
+      "line": 202,
+      "column": 38,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\hooks\\useWatchData.ts",
+      "line": 205,
+      "column": 31,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\hooks\\useWatchData.ts",
+      "line": 226,
+      "column": 68,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\hooks\\useWatchData.ts",
+      "line": 243,
+      "column": 19,
+      "severity": 2,
+      "rule": "react-hooks/set-state-in-effect",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\hooks\\useWatchData.ts:243:19\n  241 |\n  242 |   useEffect(() => {\n> 243 |     if (_cache) { setRecords(_cache); setLoading(false); return; }\n      |                   ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  244 |     let alive = true;\n  245 |     loadWatchData()\n  246 |       .then((data) => { if (alive) { setRecords(data); setLoading(false); } })"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\catalog.ts",
+      "line": 124,
+      "column": 42,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'_maxDistance' is assigned a value but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanAnalyze.ts",
+      "line": 15,
+      "column": 25,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanAnalyze.ts",
+      "line": 71,
+      "column": 15,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 33,
+      "column": 18,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 33,
+      "column": 31,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 51,
+      "column": 22,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 51,
+      "column": 32,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 65,
+      "column": 41,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 80,
+      "column": 34,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 106,
+      "column": 66,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 107,
+      "column": 27,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 115,
+      "column": 18,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 204,
+      "column": 18,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 254,
+      "column": 18,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 323,
+      "column": 25,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 332,
+      "column": 55,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'_summary' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\cleanExport.ts",
+      "line": 332,
+      "column": 65,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\currency.ts",
+      "line": 29,
+      "column": 108,
+      "severity": 2,
+      "rule": "no-useless-escape",
+      "message": "Unnecessary escape character: \\.."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\currency.ts",
+      "line": 42,
+      "column": 26,
+      "severity": 2,
+      "rule": "no-useless-escape",
+      "message": "Unnecessary escape character: \\.."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\datasetExport.ts",
+      "line": 40,
+      "column": 28,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\datasetExport.ts",
+      "line": 74,
+      "column": 19,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\datasetExport.ts",
+      "line": 74,
+      "column": 28,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\datasetExport.ts",
+      "line": 110,
+      "column": 14,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\datasetExport.ts",
+      "line": 159,
+      "column": 14,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\datasetExport.ts",
+      "line": 168,
+      "column": 32,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\datasetExport.ts",
+      "line": 193,
+      "column": 14,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\datasetExport.ts",
+      "line": 231,
+      "column": 19,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\enrich.ts",
+      "line": 58,
+      "column": 15,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\imageAnalysis.ts",
+      "line": 25,
+      "column": 15,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\imageAnalysis.ts",
+      "line": 44,
+      "column": 17,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\masterCatalog.ts",
+      "line": 119,
+      "column": 42,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\masterCatalog.ts",
+      "line": 205,
+      "column": 18,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\normalize.ts",
+      "line": 116,
+      "column": 60,
+      "severity": 2,
+      "rule": "no-useless-escape",
+      "message": "Unnecessary escape character: \\/."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\normalize.ts",
+      "line": 333,
+      "column": 24,
+      "severity": 2,
+      "rule": "no-useless-escape",
+      "message": "Unnecessary escape character: \\$."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\normalize.ts",
+      "line": 443,
+      "column": 38,
+      "severity": 2,
+      "rule": "no-useless-escape",
+      "message": "Unnecessary escape character: \\/."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\normalize.ts",
+      "line": 443,
+      "column": 40,
+      "severity": 2,
+      "rule": "no-useless-escape",
+      "message": "Unnecessary escape character: \\-."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\normalize.ts",
+      "line": 526,
+      "column": 45,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\normalize.ts",
+      "line": 526,
+      "column": 82,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\pipeline.ts",
+      "line": 172,
+      "column": 46,
+      "severity": 2,
+      "rule": "no-useless-escape",
+      "message": "Unnecessary escape character: \\/."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\pipeline.ts",
+      "line": 355,
+      "column": 7,
+      "severity": 2,
+      "rule": "prefer-const",
+      "message": "'dialColor' is never reassigned. Use 'const' instead."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\pipeline.ts",
+      "line": 356,
+      "column": 7,
+      "severity": 2,
+      "rule": "prefer-const",
+      "message": "'condition' is never reassigned. Use 'const' instead."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\pipelineClient.ts",
+      "line": 182,
+      "column": 15,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reportGenerator.ts",
+      "line": 61,
+      "column": 31,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reportGenerator.ts",
+      "line": 83,
+      "column": 19,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reportGenerator.ts",
+      "line": 83,
+      "column": 28,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reportGenerator.ts",
+      "line": 83,
+      "column": 51,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reportGenerator.ts",
+      "line": 104,
+      "column": 31,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reportGenerator.ts",
+      "line": 110,
+      "column": 31,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reportGenerator.ts",
+      "line": 123,
+      "column": 14,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reportGenerator.ts",
+      "line": 188,
+      "column": 14,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reportGenerator.ts",
+      "line": 199,
+      "column": 39,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 3,
+      "column": 50,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 16,
+      "column": 13,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 18,
+      "column": 14,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 44,
+      "column": 42,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 102,
+      "column": 36,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 119,
+      "column": 12,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 166,
+      "column": 18,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 167,
+      "column": 18,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 168,
+      "column": 15,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 169,
+      "column": 13,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\reports.ts",
+      "line": 170,
+      "column": 13,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\studyLog.ts",
+      "line": 30,
+      "column": 69,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\lib\\studyLog.ts",
+      "line": 51,
+      "column": 12,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'e' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\AnalyticsDashboard.tsx",
+      "line": 6,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'Clock' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\AnalyticsDashboard.tsx",
+      "line": 7,
+      "column": 13,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'LineChart' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\AnalyticsDashboard.tsx",
+      "line": 61,
+      "column": 5,
+      "severity": 2,
+      "rule": "react-hooks/set-state-in-effect",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\AnalyticsDashboard.tsx:61:5\n  59 |     }\n  60 |     \n> 61 |     setData(generated);\n     |     ^^^^^^^ Avoid calling setState() directly within an effect\n  62 |   }, [timeRange]);\n  63 |\n  64 |   const latest = data[data.length - 1] || {} as AnalyticsData;"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\CleanPage.tsx",
+      "line": 23,
+      "column": 86,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\CleanPage.tsx",
+      "line": 29,
+      "column": 33,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DealerAccount.tsx",
+      "line": 45,
+      "column": 26,
+      "severity": 2,
+      "rule": "react-hooks/set-state-in-effect",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DealerAccount.tsx:45:26\n  43 |     .then(setData).catch(caught => setError(caught.message));\n  44 |   };\n> 45 |   useEffect(() => { void reload(); }, [demoUser]);\n     |                          ^^^^^^ Avoid calling setState() directly within an effect\n  46 |\n  47 |   async function update(sectionName: string, payload: Record<string, unknown>) {\n  48 |     setError(''); setNotice('');"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DealerAccount.tsx",
+      "line": 45,
+      "column": 39,
+      "severity": 1,
+      "rule": "react-hooks/exhaustive-deps",
+      "message": "React Hook useEffect has a missing dependency: 'reload'. Either include it or remove the dependency array."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DealerDirectory.tsx",
+      "line": 64,
+      "column": 5,
+      "severity": 2,
+      "rule": "react-hooks/set-state-in-effect",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DealerDirectory.tsx:64:5\n  62 |   useEffect(() => {\n  63 |     const controller = new AbortController();\n> 64 |     setLoading(true);\n     |     ^^^^^^^^^^ Avoid calling setState() directly within an effect\n  65 |     const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });\n  66 |     params.set('mode', view);\n  67 |     if (search) params.set('q', search);"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DealerDirectory.tsx",
+      "line": 80,
+      "column": 15,
+      "severity": 2,
+      "rule": "no-empty",
+      "message": "Empty block statement."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DealerDirectory.tsx",
+      "line": 102,
+      "column": 21,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DealerSubmitListing.tsx",
+      "line": 132,
+      "column": 6,
+      "severity": 1,
+      "rule": "react-hooks/exhaustive-deps",
+      "message": "React Hook useEffect has a missing dependency: 'demoPoster'. Either include it or remove the dependency array."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DealerSubmitListing.tsx",
+      "line": 138,
+      "column": 12,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'changeMode' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemandSignals.tsx",
+      "line": 1,
+      "column": 20,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'useEffect' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemandSignals.tsx",
+      "line": 5,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'Search' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemandSignals.tsx",
+      "line": 5,
+      "column": 18,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'ArrowRight' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemandSignals.tsx",
+      "line": 5,
+      "column": 30,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'BarChart3' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemandSignals.tsx",
+      "line": 5,
+      "column": 41,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'Activity' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemandSignals.tsx",
+      "line": 6,
+      "column": 13,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'FileSpreadsheet' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemandSignals.tsx",
+      "line": 155,
+      "column": 73,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'idx' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemandSignals.tsx",
+      "line": 202,
+      "column": 64,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemandSignals.tsx",
+      "line": 215,
+      "column": 9,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'totalDemand' is assigned a value but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoMode.tsx",
+      "line": 7,
+      "column": 3,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'BarChart3' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoMode.tsx",
+      "line": 59,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'showDetails' is assigned a value but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoMode.tsx",
+      "line": 59,
+      "column": 23,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'setShowDetails' is assigned a value but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 11,
+      "column": 7,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'PROVIDERS' is assigned a value but only used as a type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 19,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 41,
+      "column": 18,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 43,
+      "column": 19,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 84,
+      "column": 19,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 84,
+      "column": 28,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 114,
+      "column": 56,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 133,
+      "column": 69,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 198,
+      "column": 30,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 215,
+      "column": 39,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 216,
+      "column": 36,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 235,
+      "column": 17,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 241,
+      "column": 6,
+      "severity": 1,
+      "rule": "react-hooks/exhaustive-deps",
+      "message": "React Hook useCallback has a missing dependency: 'persistApproved'. Either include it or remove the dependency array."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 384,
+      "column": 17,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 506,
+      "column": 17,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 542,
+      "column": 16,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 584,
+      "column": 16,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 588,
+      "column": 53,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\DemoPage.tsx",
+      "line": 607,
+      "column": 52,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\FlashSaleDetail.tsx",
+      "line": 10,
+      "column": 50,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'ArrowLeft' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\FlashSaleDetail.tsx",
+      "line": 26,
+      "column": 42,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\FlashSaleDetail.tsx",
+      "line": 41,
+      "column": 21,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\Home.tsx",
+      "line": 123,
+      "column": 6,
+      "severity": 1,
+      "rule": "react-hooks/exhaustive-deps",
+      "message": "React Hook useCallback has an unnecessary dependency: 'records'. Either exclude it or remove the dependency array."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\InsightDetails.tsx",
+      "line": 3,
+      "column": 24,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'Download' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\InsightDetails.tsx",
+      "line": 55,
+      "column": 58,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\LuxuryResearch.tsx",
+      "line": 87,
+      "column": 5,
+      "severity": 2,
+      "rule": "react-hooks/set-state-in-effect",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\LuxuryResearch.tsx:87:5\n  85 |     if (query) params.set('q', query);\n  86 |     if (cursor) params.set('cursor', cursor);\n> 87 |     setLoadingObservations(true);\n     |     ^^^^^^^^^^^^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  88 |     setObservationsError('');\n  89 |     fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal: controller.signal })\n  90 |       .then(async response => {"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\PriceResearch.tsx",
+      "line": 497,
+      "column": 7,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'WTB_LISTING_PAGE_SIZE' is assigned a value but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\PriceResearch.tsx",
+      "line": 2163,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'ReviewedEvidenceCard' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\ReprocessPage.tsx",
+      "line": 94,
+      "column": 56,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\ReprocessPage.tsx",
+      "line": 151,
+      "column": 21,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\ReviewPage.tsx",
+      "line": 90,
+      "column": 31,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\ReviewPage.tsx",
+      "line": 110,
+      "column": 17,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\ReviewPage.tsx",
+      "line": 117,
+      "column": 70,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\ReviewPage.tsx",
+      "line": 631,
+      "column": 37,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\StudyPage.tsx",
+      "line": 27,
+      "column": 42,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\StudyPage.tsx",
+      "line": 34,
+      "column": 44,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\StudyPage.tsx",
+      "line": 106,
+      "column": 58,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\StudyPage.tsx",
+      "line": 107,
+      "column": 25,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'_k' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\StudyPage.tsx",
+      "line": 134,
+      "column": 119,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\StudyPage.tsx",
+      "line": 285,
+      "column": 17,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TelegramTest.tsx",
+      "line": 4,
+      "column": 50,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'AlertCircle' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TelegramTest.tsx",
+      "line": 4,
+      "column": 63,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'Eye' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TelegramTest.tsx",
+      "line": 4,
+      "column": 68,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'Edit3' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TelegramTest.tsx",
+      "line": 416,
+      "column": 28,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 4,
+      "column": 3,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'ArrowLeft' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 96,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'MarketTickerBanner' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 424,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'hasListingImage' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 494,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'totalIsEstimate' is assigned a value but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 827,
+      "column": 24,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 1803,
+      "column": 12,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 1804,
+      "column": 13,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 1861,
+      "column": 9,
+      "severity": 2,
+      "rule": "react-hooks/set-state-in-effect",
+      "message": "Error: Calling setState synchronously within an effect can trigger cascading renders\n\nEffects are intended to synchronize state between React and external systems such as manually updating the DOM, state management libraries, or other platform APIs. In general, the body of an effect should do one or both of the following:\n* Update external systems with the latest state from React.\n* Subscribe for updates from some external system, calling setState in a callback function when external state changes.\n\nCalling setState synchronously within an effect body causes cascading renders that can hurt performance, and is not recommended. (https://react.dev/learn/you-might-not-need-an-effect).\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx:1861:9\n  1859 |     if (canLoadBenchmark) {\n  1860 |       if (!initialBenchmark?.stats) {\n> 1861 |         setBenchmark({\n       |         ^^^^^^^^^^^^ Avoid calling setState() directly within an effect\n  1862 |           loading: true,\n  1863 |           count: 0,\n  1864 |           stats: null,"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 2104,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'MarketStat' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 2131,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'ListingImage' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 2155,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'ActionButton' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 2175,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'RegionLabel' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 2184,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'isPricePlausible' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 2307,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'reviewedWorkbookUsdPrice' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 2369,
+      "column": 11,
+      "severity": 2,
+      "rule": "no-empty",
+      "message": "Empty block statement."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\pages\\TradingFloor.tsx",
+      "line": 2420,
+      "column": 10,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-unused-vars",
+      "message": "'isBuyerIntent' is defined but never used."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx",
+      "line": 212,
+      "column": 98,
+      "severity": 2,
+      "rule": "react-hooks/static-components",
+      "message": "Error: Cannot create components during render\n\nComponents created during render will reset their state each time they are created. Declare components outside of render.\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx:212:98\n  210 |         <div className=\"mobile-table-scroll\">\n  211 |           <div className=\"grid grid-cols-[60px_100px_80px_100px_80px_100px_180px] gap-2 px-4 py-2 bg-bg-elevated border-b border-border-default text-[10px] font-bold uppercase tracking-wider text-text-muted min-w-[700px]\">\n> 212 |             <button onClick={() => handleSort('id')} className=\"text-left flex items-center\">ID <SortIcon col=\"id\" /></button>\n      |                                                                                                  ^^^^^^^^ This component is created during render\n  213 |             <button onClick={() => handleSort('reference')} className=\"text-left flex items-center\">Ref <SortIcon col=\"reference\" /></button>\n  214 |             <button onClick={() => handleSort('price')} className=\"text-right flex items-center justify-end\">Price <SortIcon col=\"price\" /></button>\n  215 |             <span className=\"text-left\">Why Flagged</span>\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx:120:20\n  118 |   };\n  119 |\n> 120 |   const SortIcon = ({ col }: { col: SortKey }) => {\n      |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 121 |     if (sortKey !== col) return <span className=\"text-text-muted/30 ml-1\">↕</span>;\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 122 |     return sortDir === 'asc' ? <ChevronUp size={10} className=\"ml-1 text-gold-primary\" /> : <ChevronDown size={10} className=\"ml-1 text-gold-primary\" />;\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 123 |   };\n      | ^^^^ The component is created during render here\n  124 |\n  125 |   return (\n  126 |     <motion.section"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx",
+      "line": 213,
+      "column": 106,
+      "severity": 2,
+      "rule": "react-hooks/static-components",
+      "message": "Error: Cannot create components during render\n\nComponents created during render will reset their state each time they are created. Declare components outside of render.\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx:213:106\n  211 |           <div className=\"grid grid-cols-[60px_100px_80px_100px_80px_100px_180px] gap-2 px-4 py-2 bg-bg-elevated border-b border-border-default text-[10px] font-bold uppercase tracking-wider text-text-muted min-w-[700px]\">\n  212 |             <button onClick={() => handleSort('id')} className=\"text-left flex items-center\">ID <SortIcon col=\"id\" /></button>\n> 213 |             <button onClick={() => handleSort('reference')} className=\"text-left flex items-center\">Ref <SortIcon col=\"reference\" /></button>\n      |                                                                                                          ^^^^^^^^ This component is created during render\n  214 |             <button onClick={() => handleSort('price')} className=\"text-right flex items-center justify-end\">Price <SortIcon col=\"price\" /></button>\n  215 |             <span className=\"text-left\">Why Flagged</span>\n  216 |             <button onClick={() => handleSort('severity')} className=\"text-left flex items-center\">Sev <SortIcon col=\"severity\" /></button>\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx:120:20\n  118 |   };\n  119 |\n> 120 |   const SortIcon = ({ col }: { col: SortKey }) => {\n      |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 121 |     if (sortKey !== col) return <span className=\"text-text-muted/30 ml-1\">↕</span>;\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 122 |     return sortDir === 'asc' ? <ChevronUp size={10} className=\"ml-1 text-gold-primary\" /> : <ChevronDown size={10} className=\"ml-1 text-gold-primary\" />;\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 123 |   };\n      | ^^^^ The component is created during render here\n  124 |\n  125 |   return (\n  126 |     <motion.section"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx",
+      "line": 214,
+      "column": 117,
+      "severity": 2,
+      "rule": "react-hooks/static-components",
+      "message": "Error: Cannot create components during render\n\nComponents created during render will reset their state each time they are created. Declare components outside of render.\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx:214:117\n  212 |             <button onClick={() => handleSort('id')} className=\"text-left flex items-center\">ID <SortIcon col=\"id\" /></button>\n  213 |             <button onClick={() => handleSort('reference')} className=\"text-left flex items-center\">Ref <SortIcon col=\"reference\" /></button>\n> 214 |             <button onClick={() => handleSort('price')} className=\"text-right flex items-center justify-end\">Price <SortIcon col=\"price\" /></button>\n      |                                                                                                                     ^^^^^^^^ This component is created during render\n  215 |             <span className=\"text-left\">Why Flagged</span>\n  216 |             <button onClick={() => handleSort('severity')} className=\"text-left flex items-center\">Sev <SortIcon col=\"severity\" /></button>\n  217 |             <button onClick={() => handleSort('confidence')} className=\"text-right flex items-center justify-end\">Conf <SortIcon col=\"confidence\" /></button>\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx:120:20\n  118 |   };\n  119 |\n> 120 |   const SortIcon = ({ col }: { col: SortKey }) => {\n      |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 121 |     if (sortKey !== col) return <span className=\"text-text-muted/30 ml-1\">↕</span>;\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 122 |     return sortDir === 'asc' ? <ChevronUp size={10} className=\"ml-1 text-gold-primary\" /> : <ChevronDown size={10} className=\"ml-1 text-gold-primary\" />;\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 123 |   };\n      | ^^^^ The component is created during render here\n  124 |\n  125 |   return (\n  126 |     <motion.section"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx",
+      "line": 216,
+      "column": 105,
+      "severity": 2,
+      "rule": "react-hooks/static-components",
+      "message": "Error: Cannot create components during render\n\nComponents created during render will reset their state each time they are created. Declare components outside of render.\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx:216:105\n  214 |             <button onClick={() => handleSort('price')} className=\"text-right flex items-center justify-end\">Price <SortIcon col=\"price\" /></button>\n  215 |             <span className=\"text-left\">Why Flagged</span>\n> 216 |             <button onClick={() => handleSort('severity')} className=\"text-left flex items-center\">Sev <SortIcon col=\"severity\" /></button>\n      |                                                                                                         ^^^^^^^^ This component is created during render\n  217 |             <button onClick={() => handleSort('confidence')} className=\"text-right flex items-center justify-end\">Conf <SortIcon col=\"confidence\" /></button>\n  218 |             <span className=\"text-right\">Actions</span>\n  219 |           </div>\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx:120:20\n  118 |   };\n  119 |\n> 120 |   const SortIcon = ({ col }: { col: SortKey }) => {\n      |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 121 |     if (sortKey !== col) return <span className=\"text-text-muted/30 ml-1\">↕</span>;\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 122 |     return sortDir === 'asc' ? <ChevronUp size={10} className=\"ml-1 text-gold-primary\" /> : <ChevronDown size={10} className=\"ml-1 text-gold-primary\" />;\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 123 |   };\n      | ^^^^ The component is created during render here\n  124 |\n  125 |   return (\n  126 |     <motion.section"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx",
+      "line": 217,
+      "column": 121,
+      "severity": 2,
+      "rule": "react-hooks/static-components",
+      "message": "Error: Cannot create components during render\n\nComponents created during render will reset their state each time they are created. Declare components outside of render.\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx:217:121\n  215 |             <span className=\"text-left\">Why Flagged</span>\n  216 |             <button onClick={() => handleSort('severity')} className=\"text-left flex items-center\">Sev <SortIcon col=\"severity\" /></button>\n> 217 |             <button onClick={() => handleSort('confidence')} className=\"text-right flex items-center justify-end\">Conf <SortIcon col=\"confidence\" /></button>\n      |                                                                                                                         ^^^^^^^^ This component is created during render\n  218 |             <span className=\"text-right\">Actions</span>\n  219 |           </div>\n  220 |         </div>\n\nC:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\EnhancedResidue.tsx:120:20\n  118 |   };\n  119 |\n> 120 |   const SortIcon = ({ col }: { col: SortKey }) => {\n      |                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 121 |     if (sortKey !== col) return <span className=\"text-text-muted/30 ml-1\">↕</span>;\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 122 |     return sortDir === 'asc' ? <ChevronUp size={10} className=\"ml-1 text-gold-primary\" /> : <ChevronDown size={10} className=\"ml-1 text-gold-primary\" />;\n      | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n> 123 |   };\n      | ^^^^ The component is created during render here\n  124 |\n  125 |   return (\n  126 |     <motion.section"
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\sections\\LiquidityTaxonomy.tsx",
+      "line": 94,
+      "column": 58,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\src\\types\\catalog.ts",
+      "line": 69,
+      "column": 46,
+      "severity": 2,
+      "rule": "@typescript-eslint/no-explicit-any",
+      "message": "Unexpected any. Specify a different type."
+    },
+    {
+      "file": "C:\\Users\\jasme\\Documents\\Codex\\2026-08-28\\wf-census-review-readonly\\tools\\mariadb-live\\test-image-reachability.cjs",
+      "line": 12,
+      "column": 18,
+      "severity": 2,
+      "rule": null,
+      "message": "Parsing error: Unexpected token {"
+    }
+  ]
+}

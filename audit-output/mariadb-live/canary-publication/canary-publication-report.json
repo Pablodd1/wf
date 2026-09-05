@@ -1,0 +1,51 @@
+{
+  "contract": "wf-publication-canary-audit-v2",
+  "timestamp": "2026-09-02T11:43:00.000Z",
+  "canary_published_count": 500,
+  "bundle_child_isolation_status": "BLOCKED/UNPROVEN",
+  "bundle_child_normalization": {
+    "total_bundle_parents_sampled": 5000,
+    "split_success_count": 0,
+    "individual_children_produced": 0,
+    "unresolved_bundle_count": 5000
+  },
+  "v2_consumer_views_summary": {
+    "trading_floor_ready_view_v2": 500,
+    "price_research_ready_view_v2": 210,
+    "seller_listing_analytics_view_v2": 240
+  },
+  "database_mutation_scope": {
+    "schema": "wf_canonical_staging",
+    "target_table": "mariadb_canary_published_listings_v2",
+    "before_count": 0,
+    "after_count": 500,
+    "views_recreated": [
+      "public.trading_floor_ready_view_v2",
+      "public.price_research_ready_view_v2",
+      "public.listing_display_detail_view_v2",
+      "public.seller_listing_analytics_view_v2"
+    ],
+    "rpcs_created": [
+      "public.get_trading_floor_canary_keyset",
+      "public.get_price_research_scoped_stats"
+    ],
+    "security_lockdown": {
+      "anon_select": false,
+      "authenticated_select": false,
+      "service_role_select": true
+    }
+  },
+  "strata_representation": {
+    "priced_wts_count": 100,
+    "priced_wtb_count": 50,
+    "foreign_currency_count": 50,
+    "bare_dollar_count": 50,
+    "missing_price_count": 50,
+    "text_only_cards_count": 28,
+    "image_backed_cards_count": 50,
+    "split_bundle_children_count": 0,
+    "unresolved_bundles_count": 20,
+    "unknown_intent_count": 30,
+    "price_outliers_count": 20
+  }
+}

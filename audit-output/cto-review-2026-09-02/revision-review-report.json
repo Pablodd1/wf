@@ -1,0 +1,84 @@
+{
+  "contract": "wf-v2-canary-revision-review-v1",
+  "executed_at": "2026-09-02T18:54:49.2206895Z",
+  "reviewed_base_sha": "5efa42c4b3a30157864334db013013971562049b",
+  "supersedes_needs_revision_sha": "1a70bb870eda7afc5f1244fe6c49c44bed26c6d4",
+  "database_execution": {
+    "connected": false,
+    "mutation_count": 0,
+    "migration_applied": false,
+    "materializer_ran": false,
+    "capture_ran": false,
+    "normalization_ran": false,
+    "publication_ran": false,
+    "grants_modified": false,
+    "before_counts": null,
+    "after_counts": null,
+    "reason_counts_are_null": "No database connection was made during this revision. Reporting invented or stale live counts would be misleading."
+  },
+  "historical_canary_state_not_changed_by_this_review": {
+    "published_rows_recorded_by_prior_artifact": 500,
+    "price_research_rows_recorded_by_prior_artifact": 210,
+    "seller_analytics_rows_recorded_by_prior_artifact": 240,
+    "prior_database_mutation_was_zero": false,
+    "prior_recorded_target_before_count": 0,
+    "prior_recorded_target_after_count": 500
+  },
+  "bundle_children": {
+    "bundle_child_isolation_status": "BLOCKED/UNPROVEN",
+    "individual_children_produced": 0
+  },
+  "forward_migration": {
+    "path": "supabase/migrations/20260902130000_v2_canary_forward_migration.sql",
+    "sha256": "9975f83c18f4227e4e011ff8ce0083f9658b62569f84949a06ea7a3d9ee98bee",
+    "applied": false,
+    "destructive_drop_or_cascade": false,
+    "dependency_strategy": "CREATE OR REPLACE security-invoker views plus reviewed RPC and least-privilege definitions"
+  },
+  "verification": {
+    "focused_revision_tests": { "total": 16, "passed": 16, "failed": 0 },
+    "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0 },
+    "production_build": { "command": "npm run build", "exit_code": 0 },
+    "complete_repository_tests": {
+      "command": "node --test \"tests/**/*.test.cjs\"",
+      "total": 2014,
+      "passed": 1904,
+      "failed": 107,
+      "skipped": 3,
+      "details": "complete-test-summary.json"
+    },
+    "lint": {
+      "command": "npm run lint",
+      "exit_code": 1,
+      "errors": 196,
+      "warnings": 4,
+      "details": "lint-summary.json"
+    },
+    "postgres_integration": {
+      "executed": false,
+      "status": "BLOCKED",
+      "reason": "No disposable PostgreSQL instance or EPHEMERAL_DATABASE_URL was provisioned. Production was deliberately excluded."
+    },
+    "fixed_id_provenance": {
+      "query_implemented": true,
+      "executed": false,
+      "status": "BLOCKED",
+      "reason": "No read-only database/API credentials were present. The test skips rather than fabricating assertions or contacting production."
+    },
+    "browser_smoke": {
+      "base_url": "http://127.0.0.1:4174",
+      "trading_floor": "PASS_RENDER_ONLY",
+      "price_research": "PASS_RENDER_WITH_EXPECTED_LOCAL_API_ERROR",
+      "database_records_tested": 0,
+      "note": "Vite preview does not host Vercel serverless functions; Price Research received index.html from an /api request and correctly logged a JSON parse error. No production browser or database was used."
+    }
+  },
+  "release_status": "NEEDS_CTO_REVIEW_NOT_READY_TO_APPLY",
+  "remaining_release_gates": [
+    "Resolve the 107 complete-suite failures or approve a documented baseline.",
+    "Resolve the 196 lint errors and 4 warnings or approve a documented baseline.",
+    "Run the forward migration integration test on a disposable PostgreSQL database with an attached dependent view and duplicate source IDs across partitions.",
+    "Run fixed-ID provenance assertions with explicitly provisioned read-only credentials.",
+    "Run Trading Floor and Price Research smoke tests against a non-production environment that serves both UI and API functions."
+  ]
+}

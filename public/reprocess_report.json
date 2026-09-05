@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-06-18T23:45:00Z",
+  "records": 117744,
+  "phase": "openrouter_active",
+  "verdict_distribution": {
+    "APPROVED": 93137,
+    "HUMAN": 22876,
+    "RECYCLE": 1731
+  },
+  "accuracy": 9.0,
+  "accuracy_pct": 79.1,
+  "api_status": {
+    "openai": "ACTIVE \u2014 gpt-4o, gpt-4o-mini, o1 (premium tier, 5K req/min)",
+    "anthropic": "ACTIVE \u2014 Claude Opus 4.8, Sonnet 4.6, Haiku 4.5 (premium tier)",
+    "deepseek": "ACTIVE \u2014 V4 Flash, V4 Pro (paid)",
+    "openrouter": "ACTIVE \u2014 NEW KEY. Free models: Gemma 4, Nemotron, Cohere North, etc.",
+    "kimi": "BALANCE 49.75 RMB AVAILABLE but API returns 429 'account suspended' \u2014 likely a platform-level issue (different org on file)",
+    "gemini": "Configured in Vercel \u2014 gemini-2.5-flash for image verify"
+  },
+  "openrouter_models": [
+    "google/gemma-4-26b-a4b-it:free",
+    "google/gemma-4-31b-it:free",
+    "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
+    "poolside/laguna-xs.2:free",
+    "poolside/laguna-m.1:free",
+    "cohere/north-mini-code:free",
+    "nex-agi/nex-n2-pro:free",
+    "nvidia/nemotron-3.5-content-safety:free",
+    "nvidia/nemotron-3-ultra-550b-a55b:free",
+    "openrouter/owl-alpha"
+  ],
+  "key_features": [
+    "Cross-validation: 5 signals (catalog, image, web, price, multi-signal)",
+    "Online search: GPT-4o-mini structured watch lookup",
+    "Image verification: Gemini 2.5 Flash (when image URL present)",
+    "Catalog CSV ingest: paste your CSV \u2192 merge into enriched_refs.json",
+    "Test mode: per-feature confidence 1-10 with 3-catalog comparison",
+    "Closed-loop edit: click fields \u2192 edit \u2192 re-launch pipeline"
+  ],
+  "remaining_gaps": [
+    "Kimi API returns 429 even though balance shows 49.75 RMB \u2014 needs Kimi support ticket",
+    "OpenRouter free models can be added as cost-saving fallback",
+    "Real Gemini Vision test with valid watch photo URL needed"
+  ]
+}

@@ -1,0 +1,137 @@
+name: Apply exact image and seller review schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_EXACT_REVIEW_SCHEMA to continue
+        required: true
+        type: string
+
+concurrency:
+  group: supabase-targeted-exact-review-migration
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ inputs.confirmation == 'APPLY_EXACT_REVIEW_SCHEMA' }}
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PGPASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+          psql --version
+
+      - name: Resolve IPv4 pooler target
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
+      - name: Verify prerequisites and snapshot record counts
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF to_regclass('public.watch_records') IS NULL
+              OR to_regclass('public.dealers') IS NULL
+              OR to_regclass('public.dealer_source_identities') IS NULL
+              OR to_regclass('public.seller_listing_lineage_staging') IS NULL
+              OR to_regprocedure('public.apply_listing_image_review(text,text,text,text,text,jsonb,jsonb)') IS NULL
+              OR to_regprocedure('extensions.digest(bytea,text)') IS NULL THEN
+              RAISE EXCEPTION 'Exact-review schema prerequisites are missing';
+            END IF;
+          END
+          $$;
+          SQL
+          echo "WATCH_DEALERS_BEFORE=$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM public.watch_records WHERE dealer_id IS NOT NULL;")" >> "$GITHUB_ENV"
+          echo "SELLER_APPLIED_BEFORE=$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM public.seller_listing_lineage_staging WHERE match_status = 'APPLIED';")" >> "$GITHUB_ENV"
+          echo "IMAGE_VERIFIED_BEFORE=$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM public.listing_image_reviews WHERE status = 'VISUALLY_VERIFIED';")" >> "$GITHUB_ENV"
+
+      - name: Apply the single allowlisted migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          migration="supabase/migrations/20260726181000_exact_seller_lineage_review.sql"
+          test -f "$migration"
+          psql "$db_url" --set=ON_ERROR_STOP=1 --file="$migration"
+
+      - name: Verify schema, privacy, and zero record changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          DO $$
+          BEGIN
+            IF to_regclass('public.seller_lineage_review_events') IS NULL
+              OR to_regclass('public.seller_lineage_review_queue') IS NULL
+              OR to_regprocedure('public.apply_seller_lineage_review_decision(bigint,text,uuid,text,text,text)') IS NULL THEN
+              RAISE EXCEPTION 'Exact seller review control plane is incomplete';
+            END IF;
+            IF NOT COALESCE((
+              SELECT relrowsecurity
+              FROM pg_class
+              WHERE oid = to_regclass('public.seller_lineage_review_events')
+            ), false) THEN
+              RAISE EXCEPTION 'Seller review events RLS is not enabled';
+            END IF;
+            IF has_table_privilege('anon', 'public.seller_lineage_review_events', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.seller_lineage_review_events', 'SELECT')
+              OR has_table_privilege('anon', 'public.seller_lineage_review_queue', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.seller_lineage_review_queue', 'SELECT') THEN
+              RAISE EXCEPTION 'Exact seller review evidence is publicly readable';
+            END IF;
+            IF NOT has_table_privilege('service_role', 'public.seller_lineage_review_events', 'SELECT')
+              OR NOT has_table_privilege('service_role', 'public.seller_lineage_review_queue', 'SELECT')
+              OR NOT has_function_privilege(
+                'service_role',
+                'public.apply_seller_lineage_review_decision(bigint,text,uuid,text,text,text)',
+                'EXECUTE'
+              ) THEN
+              RAISE EXCEPTION 'Service role lacks exact-review privileges';
+            END IF;
+          END
+          $$;
+          SQL
+
+          watch_dealers_after="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM public.watch_records WHERE dealer_id IS NOT NULL;")"
+          seller_applied_after="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM public.seller_listing_lineage_staging WHERE match_status = 'APPLIED';")"
+          image_verified_after="$(psql "$db_url" --set=ON_ERROR_STOP=1 --tuples-only --no-align --command="SELECT count(*) FROM public.listing_image_reviews WHERE status = 'VISUALLY_VERIFIED';")"
+          test "$watch_dealers_after" = "$WATCH_DEALERS_BEFORE"
+          test "$seller_applied_after" = "$SELLER_APPLIED_BEFORE"
+          test "$image_verified_after" = "$IMAGE_VERIFIED_BEFORE"
+
+          psql "$db_url" \
+            --set=ON_ERROR_STOP=1 \
+            --command="SELECT lineage_id, record_id, proposed_dealer_id FROM public.seller_lineage_review_queue ORDER BY lineage_id LIMIT 5;"

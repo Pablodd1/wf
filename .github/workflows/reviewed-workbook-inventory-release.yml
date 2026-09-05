@@ -1,0 +1,203 @@
+name: Apply reviewed workbook source-review inventory
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type APPLY_REVIEWED_WORKBOOK_INVENTORY to continue
+        required: true
+        type: string
+
+concurrency:
+  group: reviewed-workbook-inventory-release
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    if: ${{ inputs.confirmation == 'APPLY_REVIEWED_WORKBOOK_INVENTORY' }}
+    runs-on: ubuntu-latest
+    environment: production
+    # The evidence gate reuses completed v1 indexes; only lightweight view,
+    # function, privilege, and abandoned-v2 cleanup work remains.
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_HOST: ${{ secrets.SUPABASE_DB_HOST }}
+      SUPABASE_DB_USER: ${{ secrets.SUPABASE_DB_USER }}
+      SUPABASE_DB_PORT: ${{ secrets.SUPABASE_DB_PORT }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Validate database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$PGPASSWORD"
+          test -n "$SUPABASE_PROJECT_REF"
+          echo "SUPABASE_DB_HOST=${SUPABASE_DB_HOST:-aws-1-us-west-2.pooler.supabase.com}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_USER=${SUPABASE_DB_USER:-postgres.${SUPABASE_PROJECT_REF}}" >> "$GITHUB_ENV"
+          echo "SUPABASE_DB_PORT=${SUPABASE_DB_PORT:-5432}" >> "$GITHUB_ENV"
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes postgresql-client
+          fi
+
+      - name: Apply allowlisted source-review migration
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          SET lock_timeout = '30s';
+          SELECT format('DROP INDEX IF EXISTS public.%I;', index_class.relname)
+          FROM pg_index index_state
+          JOIN pg_class index_class ON index_class.oid = index_state.indexrelid
+          JOIN pg_namespace index_schema ON index_schema.oid = index_class.relnamespace
+          WHERE index_schema.nspname = 'public'
+            AND index_class.relname IN (
+              'idx_reviewed_workbook_inventory_approved_phone_activity',
+              'idx_reviewed_workbook_inventory_type_order',
+              'idx_reviewed_workbook_inventory_brand_type_order',
+              'idx_reviewed_workbook_inventory_reference_order',
+              'idx_reviewed_workbook_inventory_price_first',
+              'idx_reviewed_workbook_inventory_type_price_first',
+              'idx_reviewed_workbook_inventory_brand_price_first',
+              'idx_reviewed_workbook_inventory_brand_type_price_first',
+              'idx_reviewed_workbook_market_price_evidence_order',
+              'idx_reviewed_workbook_market_type_price_evidence_order',
+              'idx_reviewed_workbook_market_price_evidence_order_v2',
+              'idx_reviewed_workbook_market_type_price_evidence_order_v2'
+            )
+            AND NOT (index_state.indisvalid AND index_state.indisready)
+          \gexec
+          SQL
+          readonly allowlisted_migrations=(
+            "supabase/migrations/20260731150000_reviewed_workbook_source_file_index.sql"
+            "supabase/migrations/20260731160000_reviewed_workbook_market_indexes.sql"
+            "supabase/migrations/20260731170000_reviewed_workbook_seller_activity.sql"
+            "supabase/migrations/20260731180000_reviewed_workbook_evidence_order.sql"
+            "supabase/migrations/20260802170000_reviewed_workbook_price_first_indexes.sql"
+            "supabase/migrations/20260802173000_reviewed_workbook_price_evidence_order.sql"
+            "supabase/migrations/20260802180000_reviewed_workbook_price_evidence_index_match.sql"
+          )
+          for migration in "${allowlisted_migrations[@]}"; do
+            test -f "$migration"
+            psql "$db_url" --set=ON_ERROR_STOP=1 --file="$migration"
+          done
+
+      - name: Verify isolation, reconciliation, and indexes
+        shell: bash
+        run: |
+          set -euo pipefail
+          db_url="host=${SUPABASE_DB_HOST} port=${SUPABASE_DB_PORT} dbname=postgres user=${SUPABASE_DB_USER} sslmode=require"
+          psql "$db_url" --set=ON_ERROR_STOP=1 <<'SQL'
+          SET statement_timeout = '60s';
+          DO $$
+          BEGIN
+            IF to_regclass('public.reviewed_workbook_inventory') IS NULL
+              OR to_regclass('public.reviewed_workbook_import_checkpoints') IS NULL
+              OR to_regclass('public.reviewed_workbook_market_source') IS NULL THEN
+              RAISE EXCEPTION 'Reviewed workbook source-review schema is incomplete';
+            END IF;
+            IF has_table_privilege('anon', 'public.reviewed_workbook_inventory', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.reviewed_workbook_inventory', 'SELECT')
+              OR has_table_privilege('anon', 'public.reviewed_workbook_import_checkpoints', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.reviewed_workbook_import_checkpoints', 'SELECT') THEN
+              RAISE EXCEPTION 'Private workbook evidence is directly readable';
+            END IF;
+            IF NOT has_table_privilege('service_role', 'public.reviewed_workbook_inventory', 'SELECT')
+              OR NOT has_table_privilege('service_role', 'public.reviewed_workbook_inventory', 'INSERT')
+              OR NOT has_table_privilege('service_role', 'public.reviewed_workbook_import_checkpoints', 'UPDATE') THEN
+              RAISE EXCEPTION 'Service role lacks required source-review privileges';
+            END IF;
+            IF (
+              SELECT count(*)
+              FROM pg_index index_state
+              JOIN pg_class index_class ON index_class.oid = index_state.indexrelid
+              JOIN pg_namespace index_schema ON index_schema.oid = index_class.relnamespace
+              WHERE index_schema.nspname = 'public'
+                AND index_state.indisvalid
+                AND index_state.indisready
+                AND index_class.relname IN (
+                  'idx_reviewed_workbook_inventory_brand_image_price',
+                  'idx_reviewed_workbook_inventory_global_image_price',
+                  'idx_reviewed_workbook_inventory_reference',
+                  'idx_reviewed_workbook_inventory_source',
+                  'idx_reviewed_workbook_inventory_source_file_order',
+                  'idx_reviewed_workbook_inventory_approved_phone_activity',
+                  'idx_reviewed_workbook_inventory_type_order',
+                  'idx_reviewed_workbook_inventory_brand_type_order',
+                  'idx_reviewed_workbook_inventory_reference_order',
+                  'idx_reviewed_workbook_market_evidence_order',
+                  'idx_reviewed_workbook_market_brand_evidence_order',
+                  'idx_reviewed_workbook_market_type_evidence_order',
+                  'idx_reviewed_workbook_market_brand_type_evidence_order',
+                  'idx_reviewed_workbook_market_reference_evidence_order',
+                  'idx_reviewed_workbook_market_price_evidence_order_v2',
+                  'idx_reviewed_workbook_market_type_price_evidence_order_v2',
+                  'idx_reviewed_workbook_checkpoints_brand_status'
+                )
+            ) <> 17 THEN
+              RAISE EXCEPTION 'Reviewed workbook indexes are incomplete';
+            END IF;
+            IF has_table_privilege('anon', 'public.reviewed_workbook_market_source', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.reviewed_workbook_market_source', 'SELECT') THEN
+              RAISE EXCEPTION 'Customer market source view is directly readable';
+            END IF;
+            IF to_regclass('public.reviewed_workbook_market_source_v2') IS NULL
+              OR has_table_privilege('anon', 'public.reviewed_workbook_market_source_v2', 'SELECT')
+              OR has_table_privilege('authenticated', 'public.reviewed_workbook_market_source_v2', 'SELECT')
+              OR NOT has_table_privilege('service_role', 'public.reviewed_workbook_market_source_v2', 'SELECT') THEN
+              RAISE EXCEPTION 'Evidence-aware customer market source view is unsafe';
+            END IF;
+            IF NOT has_table_privilege('service_role', 'public.reviewed_workbook_market_source', 'SELECT') THEN
+              RAISE EXCEPTION 'Service role cannot read customer market source view';
+            END IF;
+            IF to_regprocedure('public.reviewed_workbook_reference_key_v2(text)') IS NULL
+              OR to_regprocedure('public.reviewed_workbook_reference_is_price_token_v2(text,numeric,text)') IS NULL
+              OR to_regprocedure('public.reviewed_workbook_identity_complete_v2(text,text,text,text,numeric,text)') IS NULL THEN
+              RAISE EXCEPTION 'Reviewed workbook identity evidence functions are incomplete';
+            END IF;
+            IF has_function_privilege('anon', 'public.reviewed_workbook_identity_complete_v2(text,text,text,text,numeric,text)', 'EXECUTE')
+              OR has_function_privilege('authenticated', 'public.reviewed_workbook_identity_complete_v2(text,text,text,text,numeric,text)', 'EXECUTE')
+              OR NOT has_function_privilege('service_role', 'public.reviewed_workbook_identity_complete_v2(text,text,text,text,numeric,text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'Reviewed workbook identity evidence function privileges are unsafe';
+            END IF;
+            IF to_regprocedure('public.reviewed_workbook_seller_activity(text)') IS NULL THEN
+              RAISE EXCEPTION 'Reviewed seller activity function is missing';
+            END IF;
+            IF has_function_privilege('anon', 'public.reviewed_workbook_seller_activity(text)', 'EXECUTE')
+              OR has_function_privilege('authenticated', 'public.reviewed_workbook_seller_activity(text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'Reviewed seller activity function is publicly executable';
+            END IF;
+            IF NOT has_function_privilege('service_role', 'public.reviewed_workbook_seller_activity(text)', 'EXECUTE') THEN
+              RAISE EXCEPTION 'Service role cannot execute reviewed seller activity function';
+            END IF;
+          END
+          $$;
+          SQL
+
+          {
+            echo "## Reviewed workbook source-review inventory"
+            echo
+            echo "- Service-only evidence tables created."
+            echo "- Direct anon/authenticated access: denied."
+            echo "- watch_records writes: 0."
+            echo "- Global Source Review order index: ready."
+            echo "- Exact source-workbook review index: ready."
+            echo "- Exact approved-contact activity index: ready."
+            echo "- Exact approved seller activity aggregate: service-only and ready."
+            echo "- Existing customer evidence ordering v1 indexes: preserved and ready."
+            echo "- Evidence-aware Trading Floor indexes: supplied prices first, confirmed USD ranked safely, no-price rows last."
+            echo "- Identity and Price Research eligibility: fail closed through the service-only view and API."
+            echo "- Listing-type and exact-reference publication indexes: ready."
+            echo "- Ready for the checkpointed local importer."
+          } >> "$GITHUB_STEP_SUMMARY"

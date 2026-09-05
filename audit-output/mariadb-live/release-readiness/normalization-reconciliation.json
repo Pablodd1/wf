@@ -1,0 +1,82 @@
+{
+  "contract": "wf-normalization-reconciliation-v1",
+  "timestamp": "2026-09-04T09:48:46Z",
+  "authoritative_source_table": "mariadb_authoritative_raw_source_rows",
+  "total_proposal_rows": 1487325,
+  "automatically_normalized_count": 136453,
+  "review_required_count": 1350872,
+  "normalization_errors_count": 0,
+  "trading_floor_eligible": 149154,
+  "trading_floor_eligibility_breakdown": {
+    "ELIGIBLE_WTB": 135595,
+    "ELIGIBLE_WTS": 13559,
+    "HELD_INTENT_UNKNOWN": 720835,
+    "HELD_BUNDLE_UNSPLIT": 487015,
+    "HELD_IDENTITY_INCOMPLETE": 129518,
+    "HELD_MISSING_SOURCE_TEXT": 803
+  },
+  "price_research_eligible": 858,
+  "price_research_eligibility_breakdown": {
+    "ELIGIBLE_VERIFIED_USD": 858,
+    "INELIGIBLE_TRADING_FLOOR_HOLD": 1338171,
+    "INELIGIBLE_NOT_WTS": 135595,
+    "INELIGIBLE_AMBIGUOUS_CURRENCY": 7898,
+    "INELIGIBLE_FX_UNRESOLVED": 2913,
+    "INELIGIBLE_MISSING_PRICE": 1612,
+    "INELIGIBLE_USDT_HELD_FOR_FX": 234,
+    "INELIGIBLE_OUTLIER_EXCLUDED": 44
+  },
+  "review_reasons_breakdown": {
+    "UNKNOWN_INTENT": 720835,
+    "HELD_BUNDLE_REVIEW": 487015,
+    "INCOMPLETE_IDENTITY": 129518,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 7898,
+    "FX_UNRESOLVED_HELD": 2913,
+    "MISSING_PRICE_OR_CURRENCY": 1612,
+    "MISSING_SOURCE_TEXT": 803,
+    "USDT_HELD_FOR_FX_PROOF": 234,
+    "PRICE_OUTLIER_HELD": 44
+  },
+  "intent_vs_raw_type_matrix": {
+    "WTS": {
+      "sale": 50330,
+      "search": 2732,
+      "<NULL>": 0,
+      "total": 53062
+    },
+    "WTB": {
+      "sale": 734,
+      "search": 177226,
+      "<NULL>": 0,
+      "total": 177960
+    },
+    "UNKNOWN_INTENT": {
+      "sale": 1187713,
+      "search": 68590,
+      "<NULL>": 0,
+      "total": 1256303
+    }
+  },
+  "currency_status_breakdown": {
+    "MISSING_PRICE": 697413,
+    "AMBIGUOUS_BARE_DOLLAR_HELD": 452551,
+    "VERIFIED_EXPLICIT_HKD_HELD_FOR_FX": 114508,
+    "VERIFIED_EXPLICIT_USD": 82580,
+    "VERIFIED_EXPLICIT_USDT_HELD_FOR_FX": 78857,
+    "VERIFIED_EXPLICIT_EUR": 46852,
+    "VERIFIED_EXPLICIT_AED": 10362,
+    "VERIFIED_EXPLICIT_GBP": 3529,
+    "VERIFIED_EXPLICIT_SAR": 291,
+    "VERIFIED_EXPLICIT_AUD": 146,
+    "VERIFIED_EXPLICIT_CNY": 92,
+    "VERIFIED_EXPLICIT_CHF": 75,
+    "VERIFIED_EXPLICIT_MYR": 28,
+    "VERIFIED_EXPLICIT_CAD": 11,
+    "VERIFIED_EXPLICIT_IDR": 9,
+    "VERIFIED_EXPLICIT_BRL": 8,
+    "VERIFIED_EXPLICIT_SGD": 8,
+    "VERIFIED_EXPLICIT_THB": 2,
+    "VERIFIED_EXPLICIT_MXN": 2,
+    "VERIFIED_EXPLICIT_JPY": 1
+  }
+}

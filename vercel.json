@@ -1,0 +1,41 @@
+{
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "functions": {
+    "api/bulk-disambiguate.js": {
+      "maxDuration": 300
+    },
+    "api/clean-analyze.js": {
+      "maxDuration": 120
+    },
+    "api/shadow-normalize.js": {
+      "maxDuration": 120
+    },
+    "api/*.js": {
+      "maxDuration": 60,
+      "includeFiles": "public/**"
+    },
+    "api/**/*.js": {
+      "maxDuration": 60,
+      "includeFiles": "public/**"
+    }
+  },
+  "headers": [
+    {
+      "source": "/(parsedWatches|enriched_refs).json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=86400, stale-while-revalidate=604800"
+        }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/extract", "destination": "/extract.html" },
+    { "source": "/extract.html", "destination": "/extract.html" },
+    { "source": "/marketplace/(.*)", "destination": "/marketplace/$1" },
+    { "source": "/((?!api/|marketplace/).*)", "destination": "/index.html" }
+  ]
+}

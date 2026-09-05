@@ -1,0 +1,7 @@
+audit-output/
+scratch/
+node_modules/
+.git/
+dist/
+*.db
+*.jsonl

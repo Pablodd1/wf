@@ -1,0 +1,550 @@
+{
+  "source_folder": "C:\\Users\\jasme\\Downloads\\Catalog",
+  "source_files": [
+    "A.Lange Final Catalog.xlsx",
+    "Audemars Piguet- Final Catalog.csv",
+    "Audemars Piguet- Final Catalog.xlsx",
+    "Bell Ross Final Catalog.xlsx",
+    "Blancpain Final Catalog  (1).xlsx",
+    "Breguet Final Catalog.xlsx",
+    "Breitling Final Catalog.xlsx",
+    "Bvlgari Final Catalog.xlsx",
+    "Cartier Final Catalog - Catalog.csv",
+    "Cartier Final Catalog.xlsx",
+    "F.P. Journe Final Catalog.xlsx",
+    "Grand Seiko Final Catalog.xlsx",
+    "H. Moser & Cie Final Catalog.xlsx",
+    "IWC Final Catalog.xlsx",
+    "MB&F Catalog Final.xlsx",
+    "Omega Final Catalog.xlsx",
+    "Panerai Final Catalog.xlsx",
+    "Patek Philippe Final Catalog - Catalog (1).csv",
+    "Piaget Final Catalog.xlsx",
+    "Richard Millie Final Catalog - Catalog.csv",
+    "Rolex Final Catalog.xlsx",
+    "Tag Heuer Final Catalog.xlsx",
+    "Tudor Final Catalog.xlsx",
+    "Vacheron Final Catalog.xlsx",
+    "Zenith Final Catalog.xlsx"
+  ],
+  "source_rows": 10095,
+  "skipped_rows": 0,
+  "canonical_brand_reference_entries": 7326,
+  "unique_references": 7319,
+  "variant_rows": 8943,
+  "entries_with_images": 5316,
+  "ambiguous_references_across_brands": 7,
+  "model_conflicts": 107,
+  "ambiguous_examples": [
+    {
+      "normalized_reference": "103035",
+      "candidates": [
+        {
+          "brand": "A. Lange & Söhne",
+          "reference": "103.035",
+          "model": "Lange 1"
+        },
+        {
+          "brand": "Bvlgari",
+          "reference": "103035",
+          "model": "Octo"
+        }
+      ]
+    },
+    {
+      "normalized_reference": "49101200A011",
+      "candidates": [
+        {
+          "brand": "Patek Philippe",
+          "reference": "4910/1200A-011",
+          "model": "Twenty~4"
+        },
+        {
+          "brand": "Vacheron Constantin",
+          "reference": "4910/1200A-011",
+          "model": "Vacheron Constantin Classic / Vintage"
+        }
+      ]
+    },
+    {
+      "normalized_reference": "50525",
+      "candidates": [
+        {
+          "brand": "Piaget",
+          "reference": "50525",
+          "model": "Piaget Classic / Vintage"
+        },
+        {
+          "brand": "Rolex",
+          "reference": "50525",
+          "model": "Cellini"
+        }
+      ]
+    },
+    {
+      "normalized_reference": "52508",
+      "candidates": [
+        {
+          "brand": "Piaget",
+          "reference": "52508",
+          "model": "Piaget Classic / Vintage"
+        },
+        {
+          "brand": "Rolex",
+          "reference": "52508",
+          "model": "1908"
+        }
+      ]
+    },
+    {
+      "normalized_reference": "7042100G010",
+      "candidates": [
+        {
+          "brand": "Patek Philippe",
+          "reference": "7042/100G-010",
+          "model": "Gondolo"
+        },
+        {
+          "brand": "Vacheron Constantin",
+          "reference": "7042/100G-010",
+          "model": "Vacheron Constantin Classic / Vintage"
+        }
+      ]
+    },
+    {
+      "normalized_reference": "7042100R010",
+      "candidates": [
+        {
+          "brand": "Patek Philippe",
+          "reference": "7042/100R-010",
+          "model": "Gondolo"
+        },
+        {
+          "brand": "Vacheron Constantin",
+          "reference": "7042/100R-010",
+          "model": "Vacheron Constantin Classic / Vintage"
+        }
+      ]
+    },
+    {
+      "normalized_reference": "71181450R001",
+      "candidates": [
+        {
+          "brand": "Patek Philippe",
+          "reference": "7118/1450R-001",
+          "model": "Nautilus"
+        },
+        {
+          "brand": "Vacheron Constantin",
+          "reference": "7118/1450R-001",
+          "model": "Vacheron Constantin Classic / Vintage"
+        }
+      ]
+    }
+  ],
+  "model_conflict_examples": [
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "107.021",
+      "model_claims": [
+        "Cabaret",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "130.025",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "136.029",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "139.032",
+      "model_claims": [
+        "Grand Lange 1",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "140.029",
+      "model_claims": [
+        "Datograph",
+        "Lange 1",
+        "Saxonia",
+        "Zeitwerk"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "140.032",
+      "model_claims": [
+        "Lange 1",
+        "Zeitwerk"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "142.055",
+      "model_claims": [
+        "Lange 1",
+        "Zeitwerk"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "143.050",
+      "model_claims": [
+        "Lange 1",
+        "Zeitwerk"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "145.029",
+      "model_claims": [
+        "Lange 1",
+        "Zeitwerk"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "145.032",
+      "model_claims": [
+        "Lange 1",
+        "Zeitwerk"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "147.025",
+      "model_claims": [
+        "Lange 1",
+        "Zeitwerk"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "147.025F",
+      "model_claims": [
+        "Lange 1",
+        "Zeitwerk"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "148.038",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Zeitwerk"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "180.032",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "182.030",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "182.886",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "201.033",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "211.032",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "211.087",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "215.029",
+      "model_claims": [
+        "Lange 1",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "219.032",
+      "model_claims": [
+        "Lange 1",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "221.021",
+      "model_claims": [
+        "1815",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "223.032",
+      "model_claims": [
+        "1815",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "232.032",
+      "model_claims": [
+        "Lange 1",
+        "Richard Lange"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "233.032",
+      "model_claims": [
+        "1815",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "234.026",
+      "model_claims": [
+        "1815",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "234.032",
+      "model_claims": [
+        "1815",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "235.021",
+      "model_claims": [
+        "1815",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "235.032",
+      "model_claims": [
+        "1815",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "235.049",
+      "model_claims": [
+        "1815",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "236.049",
+      "model_claims": [
+        "1815",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "236.050",
+      "model_claims": [
+        "1815",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "238.026",
+      "model_claims": [
+        "1815",
+        "A. Lange & Söhne Classic / Vintage"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "238.032",
+      "model_claims": [
+        "1815",
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "239.050",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "260.032",
+      "model_claims": [
+        "Lange 1",
+        "Richard Lange"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "297.026",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "307.032",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "308.031",
+      "model_claims": [
+        "Langematik",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "308.047",
+      "model_claims": [
+        "Langematik",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "309.031",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "310.021",
+      "model_claims": [
+        "Langematik",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "310.028",
+      "model_claims": [
+        "Datograph",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "310.032",
+      "model_claims": [
+        "Lange 1",
+        "Langematik"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "320.032",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "345.036",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Lange 1"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "363.068",
+      "model_claims": [
+        "Lange 1",
+        "Odysseus"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "381.029",
+      "model_claims": [
+        "Lange 1",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "381.031",
+      "model_claims": [
+        "A. Lange & Söhne Classic / Vintage",
+        "Saxonia"
+      ]
+    },
+    {
+      "brand": "A. Lange & Söhne",
+      "reference": "384.032",
+      "model_claims": [
+        "Lange 1",
+        "Saxonia"
+      ]
+    }
+  ]
+}
