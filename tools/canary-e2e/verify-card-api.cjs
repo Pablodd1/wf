@@ -22,6 +22,7 @@ async function main() {
     assert.equal(expected.length, 50);
     const byId = new Map(expected.map(row => [row.listing_id, row]));
     const handlers = { '/api/canary/trading-floor': require('../../api/canary/trading-floor'),
+      '/api/dealer-profile': require('../../api/dealer-profile'),
       '/api/canary/price-research': require('../../api/canary/price-research') };
     server = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://127.0.0.1');
@@ -96,6 +97,26 @@ async function main() {
     assert.equal(cohort.outlier_rows.filter(row => row.outlier_reason === 'ABOVE_IQR_FENCE').length, 1);
     assert.equal(cohort.stats.max, Math.max(...cohort.rows.map(row => row.price_usd)));
     report.checks.push({ name: 'Frozen dial facets cover unloaded evidence; exact cohort excludes labeled outliers and statistics do not change with page size', status: 'PASS', dial_options: dialOracle, included: cohort.stats.count, outliers: cohort.outlier_rows.length });
+    const profileFixtures = (await db.query("select count(*)::int n from public.dealers where display_name like 'RC50-BROWSER-SYNTHETIC %'")).rows[0].n;
+    if (profileFixtures === 4) {
+      const alpha = await get('/api/dealer-profile?id=rc50-browser-synthetic-alpha');
+      const beta = await get('/api/dealer-profile?id=rc50-browser-synthetic-beta');
+      const gamma = await get('/api/dealer-profile?id=rc50-browser-synthetic-gamma');
+      assert.equal(alpha.dealer.rating, 4.5);
+      assert.equal(alpha.stats.verified_contact_info.phone, '+15555550123');
+      assert.equal(beta.dealer.rating, null);
+      assert.equal(beta.dealer.review_count, 2);
+      assert.equal(beta.stats.verified_contact_info, null);
+      assert.equal(gamma.dealer.rating, null);
+      for (const profile of [alpha,beta,gamma]) {
+        assert.equal(profile.listing_linkage_status, 'PENDING_EXACT_LISTING_LINKAGE');
+        assert.equal(profile.stats.wts_count, null);
+        assert.equal(profile.stats.wtb_count, null);
+        assert.doesNotMatch(JSON.stringify(profile), /private@example|wa\.me|source_identity|raw_payload/);
+      }
+      assert.equal((await fetch(origin + '/api/dealer-profile?id=rc50-browser-synthetic-hidden')).status, 404);
+      report.checks.push({name:'Approved profile API publishes only verified consent contact and genuine feedback evidence; pending activity is null and hidden profile is 404',status:'PASS'});
+    }
     report.status = 'PASS';
   } catch (error) { report.status = 'FAIL'; report.error = { code: error.code || error.name, message: error.message.split('\n')[0] }; process.exitCode = 1; }
   finally {

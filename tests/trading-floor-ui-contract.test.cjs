@@ -43,7 +43,9 @@ test('card contract exposes only evidence-backed USD as verified display price',
     price_usd: 12500,
     price_evidence_status: 'AMBIGUOUS_CURRENCY',
   });
-  assert.equal(converted.price_display_verified, true);
+  // A status label alone is not currency/FX evidence, including on the legacy adapter.
+  assert.equal(converted.price_display_verified, false);
+  assert.equal(converted.price_status, 'UNRESOLVED_CURRENCY');
   assert.equal(ambiguous.price_display_verified, false);
   assert.equal(converted.contract_version, 'watchfacts-listing-display-v1');
   assert.equal(converted.listing_display_contract_version, 'watchfacts-listing-display-v1');

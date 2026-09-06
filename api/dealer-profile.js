@@ -128,6 +128,23 @@ module.exports = async function handler(req, res) {
 
   try {
     const client = getClient();
+    if (process.env.VITE_USE_CANARY_V2 === 'true') {
+      const { data: profile, error: profileError } = await client.rpc('get_approved_dealer_profile', { p_identity: identity });
+      if (profileError) throw profileError;
+      if (!profile?.dealer) return res.status(404).json({ error: 'Verified dealer profile not found' });
+      // Reuse the directory's public field allowlist; never publish internal payloads.
+      const { publicDealer } = require('./dealers');
+      const safe = sanitizeDealerProfile({ ...profile, dealer: publicDealer(profile.dealer) });
+      for (const review of safe.reviews || []) {
+        if (typeof review.reviewer === 'string') review.reviewer = redactPublicContactEvidence(review.reviewer);
+        if (typeof review.sentiment === 'string') review.sentiment = redactPublicContactEvidence(review.sentiment);
+      }
+      for (const group of safe.groups || []) {
+        if (typeof group.name === 'string') group.name = redactPublicContactEvidence(group.name);
+      }
+      return res.status(200).json({ success: true, ...safe, raw_message_access: true,
+        source_provenance: { source_system: 'WATCHFACTS_VERIFIED_DEALERS', current_counts_are_dynamic: false } });
+    }
     const { data: canonicalProfile, error: canonicalError } = await client.rpc('qnsa_dealer_profile', {
       p_identity: identity,
       p_limit: 50,
