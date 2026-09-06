@@ -21,8 +21,15 @@ async function main() {
     const expected = (await db.query('select * from public.trading_floor_ready_view_v2')).rows;
     assert.equal(expected.length, 50);
     const byId = new Map(expected.map(row => [row.listing_id, row]));
+    const originalSources = new Map((await db.query('select listing_id,source_id,source_hash,seller_id,seller_display_name,raw_message_text from wf_canonical_staging.mariadb_canary_published_listings_v2')).rows.map(row => [row.listing_id, row]));
+    for (const row of expected) {
+      for (const field of ['source_id','source_hash','seller_id','seller_display_name','raw_message_text']) {
+        assert.equal(row[field], originalSources.get(row.listing_id)[field], `Dealer joins must preserve ${field}`);
+      }
+    }
     const handlers = { '/api/canary/trading-floor': require('../../api/canary/trading-floor'),
       '/api/dealer-profile': require('../../api/dealer-profile'),
+      '/api/listing-contact': require('../../api/listing-contact'),
       '/api/canary/price-research': require('../../api/canary/price-research') };
     server = http.createServer((req, res) => {
       const url = new URL(req.url, 'http://127.0.0.1');
@@ -52,6 +59,10 @@ async function main() {
       assert.equal(row.has_images, Boolean(row.image_url && row.image_status === 'SOURCE_IMAGE_PRESENT'));
       assert.equal(row.is_unbundled_child, false);
       assert.equal(row.multi_listing, false);
+      assert.equal(row.dealer_profile_path, source.seller_profile_url);
+      assert.equal(row.seller_rating, source.seller_rating === null ? null : Number(source.seller_rating));
+      assert.equal(row.seller_rating_evidence_status, source.seller_rating_evidence_status);
+      assert.doesNotMatch(JSON.stringify(row), /15555550123|15555550456|source_identity|raw_payload|raw_row_id/);
     };
     const seen = new Set();
     let cursor = null, pages = 0, snapshot;
@@ -117,9 +128,67 @@ async function main() {
       assert.equal((await fetch(origin + '/api/dealer-profile?id=rc50-browser-synthetic-hidden')).status, 404);
       report.checks.push({name:'Approved profile API publishes only verified consent contact and genuine feedback evidence; pending activity is null and hidden profile is 404',status:'PASS'});
     }
+    const linked = (await db.query("select count(*)::int n from public.seller_listing_lineage_staging where source_system='WF_V2_SOURCE_BOUND' and match_status='APPLIED'")).rows[0].n;
+    assert.equal(linked, 2, 'Positive and unconsented source-bound fixtures are required');
+    const consented = await get('/api/listing-contact?id=RC50-A01');
+    const unconsented = await get('/api/listing-contact?id=RC50-A02');
+    assert.equal(consented.contact_available, true);
+    assert.equal(unconsented.contact_available, false);
+    assert.equal(unconsented.reason, 'CONTACT_CONSENT_NOT_GRANTED');
+    assert.doesNotMatch(JSON.stringify([consented, unconsented]), /15555550|wa\.me|source_identity|raw_payload|raw_row_id/);
+    assert.ok(consented.contact_channels.whatsapp.startsWith('/api/listing-contact?'));
+    const redirect = await fetch(origin + consented.contact_channels.whatsapp, { redirect: 'manual' });
+    assert.equal(redirect.status, 302);
+    const destination = new URL(redirect.headers.get('location'));
+    assert.equal(destination.origin, 'https://wa.me');
+    assert.equal(destination.pathname, '/15555550123');
+    assert.ok(destination.searchParams.get('text').includes(byId.get('RC50-A01').reference));
+    assert.doesNotMatch(destination.searchParams.get('text'), /SYNTHETIC FIXTURE|source_hash|raw_payload/);
+    assert.equal((await fetch(origin + '/api/listing-contact?id=RC50-A02&channel=whatsapp', { redirect: 'manual' })).status, 404);
+    report.checks.push({name:'Real Supabase V2 contact proof returns opaque actions, resolves the exact consented destination on demand, and refuses unconsented redirects without sending a message',status:'PASS'});
+    await db.query('begin');
+    const alphaId = (await db.query("select id from public.dealers where slug='rc50-browser-synthetic-alpha'")).rows[0].id;
+    const betaId = (await db.query("select id from public.dealers where slug='rc50-browser-synthetic-beta'")).rows[0].id;
+    await db.query("update public.seller_listing_lineage_staging set matched_dealer_id=$1 where source_system='WF_V2_SOURCE_BOUND' and source_record_id='RC50-A01'", [betaId]);
+    assert.equal((await db.query("select public.get_v2_listing_contact('RC50-A01') result")).rows[0].result.contact_available, false);
+    await db.query("update public.seller_listing_lineage_staging set matched_dealer_id=$1 where source_system='WF_V2_SOURCE_BOUND' and source_record_id='RC50-A01'", [alphaId]);
+    await db.query("update public.dealers set contact_consent=false where id=$1", [alphaId]);
+    assert.equal((await db.query("select public.get_v2_listing_contact('RC50-A01') result")).rows[0].result.contact_available, false);
+    await db.query('rollback');
+    report.checks.push({name:'A mismatched dealer pointer and revoked consent fail closed; all adversarial changes rolled back',status:'PASS'});
+    await db.query('begin');
+    const versionsBefore = (await db.query('select count(*)::int n from wf_canonical_staging.v2_dealer_link_versions')).rows[0].n;
+    await db.query('savepoint source_intent');
+    await db.query("update wf_canonical_staging.mariadb_canary_published_listings_v2 set intent='WTB' where listing_id='RC50-A01'");
+    assert.equal((await db.query("select public.get_v2_listing_contact('RC50-A01') result")).rows[0].result.intent, 'WTB');
+    await db.query('rollback to savepoint source_intent');
+    await db.query('savepoint source_content');
+    await db.query(`update wf_canonical_staging.mariadb_raw_source_rows set raw_payload=jsonb_set(raw_payload,'{from_number}','"15555550456"')
+      where source_id=(select source_id from wf_canonical_staging.mariadb_canary_published_listings_v2 where listing_id='RC50-A01')`);
+    assert.equal((await db.query("select public.get_v2_listing_contact('RC50-A01') result")).rows[0].result.contact_available, false);
+    const review = (await db.query("select public.reconcile_v2_listing_dealers(array['RC50-A01']) result")).rows[0].result;
+    assert.equal(review.review, 1); assert.equal(review.changed, 1);
+    const held = (await db.query("select match_status,match_evidence->>'reason' reason,matched_dealer_id from public.seller_listing_lineage_staging where source_system='WF_V2_SOURCE_BOUND' and source_record_id='RC50-A01'")).rows[0];
+    assert.equal(held.match_status, 'REVIEW_REQUIRED'); assert.equal(held.reason, 'SOURCE_CONTENT_UNVERIFIED'); assert.equal(held.matched_dealer_id, null);
+    assert.equal((await db.query('select count(*)::int n from wf_canonical_staging.v2_dealer_link_versions')).rows[0].n, versionsBefore + 1);
+    assert.equal((await db.query("select public.reconcile_v2_listing_dealers(array['RC50-A01']) result")).rows[0].result.changed, 0);
+    await db.query('rollback to savepoint source_content');
+    const missing = (await db.query("select public.reconcile_v2_listing_dealers(array['RC50-A03']) result")).rows[0].result;
+    assert.equal(missing.review, 1); assert.equal(missing.applied, 0);
+    for (const role of ['anon', 'authenticated', 'service_role']) {
+      const permissions = (await db.query(`select
+        has_function_privilege($1,'public.get_v2_listing_contact(text,text)','EXECUTE') contact,
+        has_function_privilege($1,'public.reconcile_v2_listing_dealers(text[])','EXECUTE') reconcile,
+        has_function_privilege($1,'wf_canonical_staging.resolve_v2_source_dealer(text)','EXECUTE') private_resolver,
+        has_table_privilege($1,'wf_canonical_staging.v2_dealer_link_versions','SELECT') private_versions`, [role])).rows[0];
+      assert.deepEqual(permissions, { contact: role === 'service_role', reconcile: role === 'service_role', private_resolver: false, private_versions: false });
+    }
+    await db.query('rollback');
+    report.checks.push({name:'Altered full source content refuses contact and produces an idempotent review outcome with preserved prior linkage; absent source is held, role grants are exact, and all adversarial changes rolled back',status:'PASS'});
     report.status = 'PASS';
   } catch (error) { report.status = 'FAIL'; report.error = { code: error.code || error.name, message: error.message.split('\n')[0] }; process.exitCode = 1; }
   finally {
+    await db.query('rollback');
     if (server) await new Promise(resolve => server.close(resolve));
     await db.end();
     fs.writeFileSync(process.env.DISPOSABLE_REPORT_PATH, JSON.stringify(report, null, 2));

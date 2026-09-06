@@ -147,3 +147,36 @@ were rolled back. The scale database is isolated from the externally served
 Production discovery, durable listing-to-dealer linkage, historical population,
 real RC50, complete outcome reconciliation, final deployment, and worker shutdown
 remain pending. The scale result and draft PR are not a production release claim.
+
+### Source-bound dealer validation, 2026-09-06 18:20 UTC
+
+Four further forward migrations now pass in both disposable replay databases
+(238 ledger entries, with the same documented historical overlays). The private
+dealer linkage ledger binds the complete canonical source payload hash, original
+message, verified phone identity and dealer ID. It performs no name matching,
+automatic dealer verification or consent inference. Changed matches retain their
+previous private state; missing or contradictory evidence receives an idempotent
+review outcome. Original poster IDs and names remain unchanged, preserving the
+existing duplicate/cohort grouping. Contact actions retain WTS versus WTB intent.
+
+Two explicitly synthetic raw rows were added for existing A01/A02 fixtures, with
+the original canonical rows backed up privately. Their source hashes now bind
+the complete synthetic payload. Messages, poster identity, prices, image keys,
+listing order and the 50-row total remain unchanged. Their exact dealer matches
+prove a consenting 4.5/8 reviewed dealer and an unconsented dealer with two
+feedback records and no numeric rating. These are test fixtures, not real watches.
+
+Actual local HTTP through Supabase Kong/PostgREST passes all card, pagination,
+cohort and contact checks. Bulk responses contain no private phone or source
+payload. On-demand contact returns an opaque action and resolves the consented
+synthetic destination with a manual redirect; no message is sent. Unconsented,
+revoked, mismatched and content-tampered cases fail closed. Transactional tests
+verify prior-state retention, idempotent review and exact role grants, then roll
+back their adversarial mutations. Targeted security/contracts: 76 passing tests;
+additional UI/privacy checks: 9 passing tests; TypeScript build passes.
+
+Historical normalization and population, real production canary, final live
+deployment and whole-boundary reconciliation remain unexecuted. The complete
+test suite still has failures requiring explicit baseline/contract classification.
+No production database discovery or mutation has occurred. The existing UI
+layout and unrelated checkout changes remain preserved.

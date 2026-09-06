@@ -40,7 +40,7 @@ export function DealerRatingBadge({
   if (!evidence) return showUnrated ? <span className="text-xs font-medium text-[#6B7280]">Not rated</span> : null;
   const accessibleLabel = evidence.kind === 'score'
     ? `Dealer rating ${evidence.rating.toFixed(1)} from ${evidence.reviewCount} reviews`
-    : `Rated dealer with ${evidence.reviewCount} positive feedback records`;
+    : `Rated dealer with ${evidence.reviewCount} source-backed feedback records`;
   return (
     <span className="text-xs font-semibold text-[#7B5719]" aria-label={accessibleLabel}>
       ★ {evidence.kind === 'score' ? evidence.rating.toFixed(1) : 'Rated'} ({evidence.reviewCount.toLocaleString()})

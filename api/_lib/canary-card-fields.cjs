@@ -19,6 +19,7 @@ function withExistingCardFields(canonical) {
     created_at: canonical.source_created_at,
     location: canonical.location_country,
     seller_country: canonical.location_country,
+    dealer_profile_path: canonical.seller_profile_url,
     region: canonical.location_region,
     imageUrl: canonical.image_url,
     has_images: Boolean(canonical.image_url && canonical.image_status === 'SOURCE_IMAGE_PRESENT'

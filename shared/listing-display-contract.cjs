@@ -692,7 +692,8 @@ function buildListingDisplayRecord(input, mode) {
   // Seller identity (zero fabrication: null when unverified)
   const sellerId = staged.seller_id ? String(staged.seller_id).trim() : null;
   const sellerDisplayName = staged.seller_display_name ? String(staged.seller_display_name).trim() : null;
-  const sellerProfileUrl = staged.seller_profile_url ? String(staged.seller_profile_url).trim() : null;
+  const profileCandidate = staged.seller_profile_url ? String(staged.seller_profile_url).trim() : '';
+  const sellerProfileUrl = /^\/reference-check\/[A-Za-z0-9-]{1,160}$/.test(profileCandidate) ? profileCandidate : null;
 
   // Unknown counts must be null, never zero
   const sellerReviewCount = staged.seller_review_count !== undefined && staged.seller_review_count !== null && Number.isFinite(Number(staged.seller_review_count))
@@ -874,6 +875,13 @@ function buildListingDisplayRecord(input, mode) {
   record.price_evidence_status = priceEvidenceStatus;
   record.image_reachable = isReachable;
   record.duplicate_group_id = staged.duplicate_group_id ? String(staged.duplicate_group_id).trim() : null;
+  const dealerRating = staged.seller_rating == null ? null : Number(staged.seller_rating);
+  const hasDealerReviews = Number.isSafeInteger(sellerReviewCount) && sellerReviewCount > 0;
+  const hasDealerScore = hasDealerReviews && staged.seller_rating_evidence_status === 'SOURCE_SUPPLIED'
+    && dealerRating !== null && Number.isFinite(dealerRating) && dealerRating > 0 && dealerRating <= 5;
+  record.seller_rating = hasDealerScore ? dealerRating : null;
+  record.seller_rating_evidence_status = hasDealerScore ? 'SOURCE_SUPPLIED'
+    : hasDealerReviews && staged.seller_rating_evidence_status === 'SOURCE_FEEDBACK_COUNT' ? 'SOURCE_FEEDBACK_COUNT' : 'UNAVAILABLE';
   record.listing_display_contract_version = isStrict ? LISTING_DISPLAY_CONTRACT_VERSION : LEGACY_LISTING_DISPLAY_CONTRACT_VERSION;
 
   return record;

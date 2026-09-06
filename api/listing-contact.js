@@ -1,6 +1,7 @@
 const { getClient } = require('./_lib/supabase');
 const { isIP } = require('node:net');
 const { createHmac } = require('node:crypto');
+const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
 const {
   MIN_RELEASE_CONFIDENCE,
@@ -326,6 +327,19 @@ module.exports = async function handler(req, res) {
       emitContactAudit('CONTACT_RATE_LIMITED', { result: 'RATE_LIMITED' });
       res.setHeader('Retry-After', '600');
       return res.status(429).json({ error: 'Too many contact requests. Try again later.' });
+    }
+    if (process.env.VITE_USE_CANARY_V2 === 'true') {
+      const { data, error } = await client.rpc('get_v2_listing_contact', { p_listing_id: id, p_surface: surface });
+      if (error) throw error;
+      if (!data) return res.status(404).json({ error: 'Listing not found' });
+      const phone = data.contact_available === true ? normalizePhone(data.contact_phone) : null;
+      const safe = allowlistContactPayload(data);
+      if (typeof safe.dealer_name === 'string') safe.dealer_name = redactPublicSource(safe.dealer_name);
+      return sendContactResult(res, {
+        payload: { ...safe, success: true, contact_available: Boolean(phone) },
+        externalChannels: phone ? { whatsapp: whatsappUrl(phone, { brand: data.brand, reference: data.reference, listing_type: data.intent }) } : {},
+        id, surface, requestedChannel, brand: data.brand, reference: data.reference,
+      });
     }
     const publicTable = surface === 'price-research'
       ? 'price_research_verified_source'
