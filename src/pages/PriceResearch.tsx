@@ -2081,7 +2081,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               )}
               {listings.length > 0 && (
                 <div style={{ padding: '10px 24px', borderBottom: `1px solid ${BORDER}`, color: MUTED, fontSize: 12 }}>
-                  Qualified priced WTS evidence is accessible page by page, with exact source images when present. Excluded prices remain in retained review evidence and never alter the averages. Unpriced WTS stays on the Trading Floor, and WTB requests follow in their own section.
+                  Priced WTS evidence is accessible page by page, with exact source images when present. Qualified observations power the chart and statistics and appear in the listings below. Excluded prices remain in retained review evidence and never alter the averages. Unpriced WTS stays on the Trading Floor, and WTB requests follow in their own section.
                 </div>
               )}
               {listings.map(row => (
