@@ -91,7 +91,8 @@ async function main() {
     assert.equal(unresolved.stats, null);
     const dialOracle = (await db.query(`select dial_color, count(*)::int as count
       from public.price_research_ready_view_v2 where brand = 'Patek Philippe'
-      and reference = '7128/1G' and condition = 'New' group by dial_color
+      and reference = '7128/1G' and condition = 'New'
+      and listing_id not in ('RC50-A01','RC50-A06') group by dial_color
       order by count(*) desc, dial_color asc nulls last`)).rows;
     assert.deepEqual(unresolved.dial_options, dialOracle);
     assert.ok(dialOracle.some(row => row.count > unresolved.rows.length));
@@ -100,12 +101,17 @@ async function main() {
     assert.deepEqual(smallPage.stats, cohort.stats);
     assert.deepEqual(smallPage.methodology, cohort.methodology);
     assert.ok(cohort.stats && cohort.stats.count >= 2);
-    assert.ok(cohort.outlier_rows.length > 0);
-    assert.ok(cohort.outlier_rows.every(row => row.is_outlier === true && row.analytics_included === false));
+    assert.deepEqual(cohort.outlier_rows, []);
+    assert.deepEqual(cohort.rows.map(row => row.listing_id).sort(), ['RC50-A02','RC50-A03','RC50-A04','RC50-A05']);
     assert.ok(cohort.rows.every(row => row.analytics_included === true && row.is_outlier === false));
     assert.equal(cohort.rows.length, cohort.stats.count);
-    assert.equal(cohort.outlier_rows.filter(row => row.outlier_reason === 'REPOST_DUPLICATE').length, 1);
-    assert.equal(cohort.outlier_rows.filter(row => row.outlier_reason === 'ABOVE_IQR_FENCE').length, 1);
+    // Full candidate evidence is reconciled privately and through aggregate
+    // exclusion counts; excluded records are no longer customer browse cards.
+    const excluded = (await db.query(`select exclusion_reason,count(*)::int n
+      from wf_canonical_staging.research_snapshot_admission_v2
+      where snapshot_id=wf_canonical_staging.snapshot_data_id($1) and exclusion_reason is not null
+      group by exclusion_reason order by exclusion_reason`, [cohort.snapshot])).rows;
+    assert.deepEqual(excluded,[{exclusion_reason:'ABOVE_IQR_FENCE',n:1},{exclusion_reason:'REPOST_DUPLICATE',n:1}]);
     assert.equal(cohort.stats.max, Math.max(...cohort.rows.map(row => row.price_usd)));
     report.checks.push({ name: 'Frozen dial facets cover unloaded evidence; exact cohort excludes labeled outliers and statistics do not change with page size', status: 'PASS', dial_options: dialOracle, included: cohort.stats.count, outliers: cohort.outlier_rows.length });
     const profileFixtures = (await db.query("select count(*)::int n from public.dealers where display_name like 'RC50-BROWSER-SYNTHETIC %'")).rows[0].n;

@@ -1,5 +1,19 @@
 # WatchFacts finalization execution checkpoint
 
+Latest checkpoint: 2026-09-06 20:58 UTC. PostgreSQL 15/18 now replay 253
+migrations with the historical qualifications below. Source dates remain null
+when unknown and pass the real cursor codec. Frozen Price Research admission
+displays 22 of 24 synthetic WTS candidates, retaining one repost and one outlier
+as private evidence; Trading Floor remains 50 and WTB demand remains 10.
+Five real PostgREST page sizes, exact-cohort/broad counts, facets, rejected
+excluded-member cursors, durable outcome retention and actual source/dealer/card
+APIs pass. Atomic cohort finalization and rollback were retested successfully
+with this admission path and restored the original 50 public fixtures exactly.
+See `docs/frozen-price-research-admission-v2.md`. The external preview still runs
+`f111ed99` application code; the newer disposable database changes are not a new
+production release. Remaining full-scale admission performance, browser/test
+acceptance, historical orchestration and gated production execution are pending.
+
 This is an integration review candidate, not a production release. The owner
 limited the rollout to singles; bundles and multi-listings remain held. The
 existing card layout and styling are preserved. No production data mutation,
