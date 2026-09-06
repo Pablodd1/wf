@@ -1,5 +1,17 @@
 # WatchFacts finalization execution checkpoint
 
+Latest continuation: 2026-09-06 21:27 UTC. Both disposable PostgreSQL versions
+replay 256 migrations with the existing historical qualifications. The new
+materialization workflow passes actual Supabase restart, competing completion,
+image-probe enforcement, replay and complete nine-input outcome accounting.
+No production reads or mutations occurred. The external disposable `f111ed99`
+preview was reverified against the newer database: 50 Trading Floor, 22 unique
+research WTS, 10 separate WTB, 19 HTTPS images and consented contact checks pass.
+The first 1.5-million-row admission benchmark was stopped after its query plan
+showed underestimated cardinality and repeated nested-loop scans. The failed
+run and query plans are retained. A scoped planner correction passes PG15/18
+and small actual snapshot tests; its full-volume retest remains running.
+
 Latest checkpoint: 2026-09-06 20:58 UTC. PostgreSQL 15/18 now replay 253
 migrations with the historical qualifications below. Source dates remain null
 when unknown and pass the real cursor codec. Frozen Price Research admission
