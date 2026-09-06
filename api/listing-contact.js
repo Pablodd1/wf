@@ -1,5 +1,5 @@
 const { getClient } = require('./_lib/supabase');
-const { isIP } = require('node:net');
+const { trustedClientAddress: contactRequestKey } = require('./_lib/trusted-client-address.cjs');
 const { createHmac } = require('node:crypto');
 const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const { isPublicationBrandAllowed } = require('./_lib/publication-brands.cjs');
@@ -40,26 +40,6 @@ const CONTACT_RATE_WINDOW_MS = 10 * 60 * 1000;
 const CONTACT_RATE_LIMIT = 30;
 const CONTACT_MAX_CLIENTS = 10000;
 const contactAttempts = new Map();
-
-function contactRequestKey(req) {
-  // Only an actual Vercel runtime may trust its edge-overwritten header.
-  // Local/direct HTTP callers cannot establish trust using request headers.
-  // https://vercel.com/docs/headers/request-headers#x-forwarded-for
-  const onVercel = process.env.VERCEL === '1'
-    && ['preview', 'production'].includes(process.env.VERCEL_ENV);
-  const forwarded = req.headers?.['x-forwarded-for'];
-  const address = onVercel && typeof forwarded === 'string' && isIP(forwarded.trim())
-    ? forwarded.trim() : req.socket?.remoteAddress;
-  if (typeof address !== 'string' || !isIP(address)) return 'unknown';
-  // Collapse alternate IPv6 spellings, including IPv4-mapped IPv6 addresses.
-  if (isIP(address) === 4) return address;
-  const canonical = new URL(`http://[${address.split('%')[0]}]/`).hostname.slice(1, -1);
-  const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/.exec(canonical);
-  return mapped
-    ? [parseInt(mapped[1], 16) >> 8, parseInt(mapped[1], 16) & 255,
-      parseInt(mapped[2], 16) >> 8, parseInt(mapped[2], 16) & 255].join('.')
-    : canonical;
-}
 
 function contactRateLimited(req, now = Date.now()) {
   const key = contactRequestKey(req);

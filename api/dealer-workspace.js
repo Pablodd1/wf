@@ -10,7 +10,7 @@ function clean(value, max = 200) {
 function sameOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return true;
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const host = req.headers.host;
   try { return new URL(origin).host === host; } catch { return false; }
 }
 
@@ -31,12 +31,17 @@ module.exports = async function handler(req, res) {
   try {
     const dealer = await linkedDealer(authorization.client, authorization.user.id);
     if (req.method === 'GET') {
+      const useV2 = process.env.VITE_USE_CANARY_V2 === 'true';
+      const activity = useV2 && dealer?.status === 'VERIFIED'
+        ? await authorization.client.rpc('get_approved_dealer_profile_v2', {p_identity:dealer.id,p_limit:100,p_after_id:null,p_publication_revision:null})
+        : {data:null,error:null};
+      if (activity.error) throw activity.error;
       const [preferencesResult, ticketsResult, submissionsResult, listingsResult, statsResult, phoneResult] = await Promise.all([
         authorization.client.from('dealer_account_preferences').select('*').eq('auth_user_id', authorization.user.id).maybeSingle(),
         authorization.client.from('dealer_support_tickets').select('id,subject,status,created_at').eq('auth_user_id', authorization.user.id).order('created_at', { ascending: false }).limit(20),
         authorization.client.from('dealer_listing_submissions').select('id,intent,category,claimed_fields,review_status,publication_status,bulk_submission_id,created_at').eq('auth_user_id', authorization.user.id).order('created_at', { ascending: false }).limit(100),
-        dealer ? authorization.client.from('watch_records').select('id,brand,reference,dial_color,condition,price_usd,currency,listing_type,listing_date,listing_status').eq('dealer_id', dealer.id).order('listing_date', { ascending: false, nullsFirst: false }).limit(100) : Promise.resolve({ data: [], error: null }),
-        dealer ? authorization.client.from('dealer_profile_stats').select('*').eq('dealer_id', dealer.id).maybeSingle() : Promise.resolve({ data: null, error: null }),
+        useV2 ? Promise.resolve({data:(activity.data?.listings || []).slice(0,100),error:null}) : dealer ? authorization.client.from('watch_records').select('id,brand,reference,dial_color,condition,price_usd,currency,listing_type,listing_date,listing_status').eq('dealer_id', dealer.id).order('listing_date', { ascending: false, nullsFirst: false }).limit(100) : Promise.resolve({ data: [], error: null }),
+        useV2 ? Promise.resolve({data:activity.data ? {active_listings:activity.data.listing_total,wts_posts:activity.data.stats.wts_count,wtb_posts:activity.data.stats.wtb_count,posting_years:null,current_counts_scope:'CURRENT_PUBLISHED_SINGLES'} : null,error:null}) : dealer ? authorization.client.from('dealer_profile_stats').select('*').eq('dealer_id', dealer.id).maybeSingle() : Promise.resolve({ data: null, error: null }),
         dealer ? authorization.client.from('dealer_source_identities').select('source_identity,identity_type,verification_status').eq('dealer_id', dealer.id).eq('verification_status', 'VERIFIED').in('identity_type', ['PHONE', 'WHATSAPP', 'phone', 'whatsapp']).limit(1) : Promise.resolve({ data: [], error: null }),
       ]);
       const error = [preferencesResult, ticketsResult, submissionsResult, listingsResult, statsResult, phoneResult].find(result => result.error)?.error;
@@ -106,7 +111,7 @@ module.exports = async function handler(req, res) {
     }
     return res.status(400).json({ error: 'Unknown workspace section.' });
   } catch (error) {
-    console.error('[dealer-workspace]', error.message);
+    console.error('[dealer-workspace]', error.code || 'WORKSPACE_REQUEST_FAILED');
     return res.status(500).json({ error: 'Unable to update dealer workspace.' });
   }
 };

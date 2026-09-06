@@ -5,19 +5,20 @@ const {
   recordAuthEvent, resolveSession, setSessionCookies, userRole,
 } = require('./_lib/dealer-auth.cjs');
 const attempts = new Map();
-
-function requestKey(req) {
-  return String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown').split(',')[0].trim();
-}
+const {trustedClientAddress:requestKey}=require('./_lib/trusted-client-address.cjs');
 function rateLimited(req) {
   const now = Date.now(); const key = requestKey(req);
+  if(!attempts.has(key) && attempts.size>=10000){
+    for(const [address,attempt] of attempts)if(attempt.resetAt<=now)attempts.delete(address);
+    if(attempts.size>=10000)return true;
+  }
   const current = attempts.get(key) || { count: 0, resetAt: now + 10 * 60 * 1000 };
   if (current.resetAt <= now) { attempts.set(key, { count: 1, resetAt: now + 10 * 60 * 1000 }); return false; }
   current.count += 1; attempts.set(key, current); return current.count > 10;
 }
 function sameOrigin(req) {
   const origin = req.headers.origin; if (!origin) return true;
-  const host = req.headers['x-forwarded-host'] || req.headers.host;
+  const host = req.headers.host;
   try { return new URL(origin).host === host; } catch { return false; }
 }
 
@@ -34,6 +35,10 @@ module.exports = async function handler(req, res) {
   if (!sameOrigin(req)) return res.status(403).json({ error: 'Invalid request origin.' });
   if (req.method === 'DELETE') {
     const user = await resolveSession(client, req, res); clearSessionCookies(res);
+    if (user && req.dealerAccessToken) {
+      const { error } = await client.auth.admin.signOut(req.dealerAccessToken, 'local');
+      if (error) return res.status(503).json({ error: 'Session revocation temporarily unavailable.' });
+    }
     if (user) await recordAuthEvent(client, { userId: user.id, email: user.email, type: 'LOGOUT', result: 'SUCCESS', ipHint: requestKey(req), userAgent: req.headers['user-agent'] });
     return res.status(200).json({ authenticated: false });
   }

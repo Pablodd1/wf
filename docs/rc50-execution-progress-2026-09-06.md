@@ -1,5 +1,28 @@
 # WatchFacts finalization execution checkpoint
 
+Latest continuation: 2026-09-06 22:56 UTC. Complete runs eight and nine on
+`541a7081` each executed 2,208 tests: 2,102 pass, 102 fail, four skip. Their
+failure identities are identical and every failure also occurs on the exact
+deployed baseline; two baseline failures were resolved. The candidate was built
+and deployed only to the disposable preview, with exact commit/tree readback.
+
+Subsequent account acceptance found and corrected legacy-table activity reads
+and the authentication helper's default production URL. V2 accounts now use
+the same exact published dealer activity; unavailable years remain null.
+Login/registration share the tested platform-aware client-address resolver,
+their local counters have bounded storage, and forwarded host headers cannot
+authorize cross-origin mutations. These local counters complement Supabase
+Auth; only contact resolution currently has an application-level shared budget.
+Malformed cookies remain unauthenticated. Logout clears both cookies and
+revokes the real Supabase refresh session.
+
+An actual synthetic Supabase account passed login, authorized V2 activity,
+preference persistence/reload, forged-user-ID isolation, cross-origin denial
+and refresh-session revocation. The account and its private credentials remain
+only for the pending browser workflow check. Production remains untouched;
+these latest account changes still require their final exact preview and full
+suite verification.
+
 Latest continuation: 2026-09-06 22:37 UTC. Qualified PG15/18 replay is now
 258 migrations. Approved dealer profiles expose current exact published-single
 activity through a service-only bounded RPC. Pages bind the dealer identity and

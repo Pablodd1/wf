@@ -10,7 +10,7 @@ interface WorkspacePayload {
   dealer: null | { display_name: string | null; company_name: string | null; city: string | null; country_code: string | null; profile_summary: string | null; avatar_url: string | null; contact_consent: boolean; rating: number | null; review_count: number; whatsapp_group_count: number; metadata?: { account_type?: string; website_url?: string; preferred_language?: string; timezone?: string; telegram_username?: string } };
   profile_stamp: null | { name: string | null; company: string | null; phone: string | null; location: string | null; avatar_url: string | null; rating: number | null; review_count: number; group_count: number };
   preferences: { display_currency: string; email_notifications: boolean };
-  stats: null | { active_listings: number; wts_posts: number; wtb_posts: number; posting_years: number };
+  stats: null | { active_listings: number; wts_posts: number; wtb_posts: number; posting_years: number | null };
   listings: Array<{ id: string; brand: string | null; reference: string | null; dial_color: string | null; listing_type: string; listing_date: string | null; price_usd: number | null }>;
   submissions: Array<{ id: string; intent: string; category: string; review_status: string; publication_status?: string; bulk_submission_id?: string | null; created_at: string; claimed_fields: Record<string, string> }>;
   tickets: Array<{ id: string; subject: string; status: string; created_at: string }>;
@@ -117,8 +117,8 @@ function Profile({ data, update, demoUser }: { data: WorkspacePayload; update: A
     <section className="mb-7" aria-labelledby="account-analytics-heading">
       <div className="mb-3"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#c9a96e]">Account analytics</p><h2 id="account-analytics-heading" className="mt-2 text-xl font-semibold">Market participation and reputation</h2><p className="mt-2 text-sm leading-6 text-white/45">Activity is calculated from linked normalized listings. These values follow the verified posting identity and are not editable profile fields.</p></div>
       <div className="grid gap-px bg-white/10 sm:grid-cols-2 lg:grid-cols-4">
-        <Metric label="For sale posts" value={data.stats?.wts_posts || 0} />
-        <Metric label="Want to buy posts" value={data.stats?.wtb_posts || 0} />
+        <Metric label="For sale posts" value={data.stats?.wts_posts} />
+        <Metric label="Want to buy posts" value={data.stats?.wtb_posts} />
         <Metric label="Common groups" value={data.profile_stamp?.group_count || dealer.whatsapp_group_count || 0} />
         <Metric label="Reviews" value={data.profile_stamp?.review_count || dealer.review_count || 0} />
       </div>
@@ -149,7 +149,7 @@ function Listings({ data, demoUser }: { data: WorkspacePayload; demoUser: string
     return groups;
   }, {}));
   return <><Heading title="My listings" copy="Verified historical activity and new moderated submissions remain separate until review is complete." />
-    <div className="grid gap-px bg-white/10 sm:grid-cols-4"><Metric label="Active" value={data.stats?.active_listings || 0} /><Metric label="For sale" value={data.stats?.wts_posts || 0} /><Metric label="Looking for" value={data.stats?.wtb_posts || 0} /><Metric label="Years active" value={data.stats?.posting_years || 0} /></div>
+    <div className="grid gap-px bg-white/10 sm:grid-cols-4"><Metric label="Published" value={data.stats?.active_listings} /><Metric label="For sale" value={data.stats?.wts_posts} /><Metric label="Looking for" value={data.stats?.wtb_posts} /><Metric label="Years active" value={data.stats?.posting_years} /></div>
     <div className="mt-8 flex items-center justify-between"><h2 className="text-lg font-semibold">Moderated submissions</h2><Link to={`/dealer/post${demoUser ? `?demoUser=${encodeURIComponent(demoUser)}` : ''}`} className="text-xs font-semibold text-[#c9a96e]">Post new</Link></div>
     <div className="mt-3 divide-y divide-white/10 border-y border-white/10">{batches.length ? batches.map(([batchId, items]) => <section key={batchId} className="py-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="font-mono text-[10px] uppercase tracking-wider text-[#c9a96e]">Batch {batchId.startsWith('legacy-') ? 'legacy' : batchId.slice(0, 8)}</p><p className="mt-1 text-sm font-semibold">{items.length} {items.length === 1 ? 'item' : 'items'}</p></div><span className="text-xs text-white/45">{items.every(item => item.publication_status === 'PUBLISHED') ? 'Published' : items.some(item => ['QUEUE_FAILED', 'PUBLICATION_FAILED'].includes(item.publication_status || '')) ? 'Needs attention' : items.every(item => item.publication_status === 'REJECTED') ? 'Rejected' : 'In review'}</span></div><div className="mt-3 flex flex-wrap gap-2">{items.map(item => <span key={item.id} className="border border-white/10 px-2 py-1 text-[11px] text-white/55">{item.intent} / {item.category} · {item.review_status.replaceAll('_', ' ')}</span>)}</div></section>) : <p className="py-5 text-sm text-white/40">No submissions yet.</p>}</div>
   </>;
@@ -175,7 +175,7 @@ function Help({ data, update }: { data: WorkspacePayload; update: AccountProps['
 
 function Heading({ title, copy }: { title: string; copy: string }) { return <div className="mb-7 border-b border-white/10 pb-5"><h1 className="font-serif text-3xl sm:text-4xl">{title}</h1><p className="mt-3 max-w-2xl text-sm leading-6 text-white/50">{copy}</p></div>; }
 function Input({ name, label, defaultValue, required = false, maxLength = 200 }: { name: string; label: string; defaultValue?: string | null; required?: boolean; maxLength?: number }) { return <label className="block text-xs text-white/60">{label}<input name={name} defaultValue={defaultValue || ''} required={required} maxLength={maxLength} className="mt-2 h-11 w-full border border-white/15 bg-[#111118] px-3 text-sm" /></label>; }
-function Metric({ label, value }: { label: string; value: number }) { return <div className="bg-[#111118] p-4"><strong className="font-mono text-2xl">{Number(value).toLocaleString()}</strong><p className="mt-1 text-[10px] uppercase tracking-wider text-white/35">{label}</p></div>; }
+function Metric({ label, value }: { label: string; value: number | null | undefined }) { return <div className="bg-[#111118] p-4"><strong className="font-mono text-2xl">{value == null ? 'Not available' : Number(value).toLocaleString()}</strong><p className="mt-1 text-[10px] uppercase tracking-wider text-white/35">{label}</p></div>; }
 function ProfileFact({ label, value }: { label: string; value?: string | null }) { return <div className="bg-[#111118] p-4"><div className="break-words text-sm text-white">{value || 'Not provided'}</div><p className="mt-2 text-[10px] uppercase tracking-wider text-white/35">{label}</p></div>; }
 function Empty({ title, copy }: { title: string; copy: string }) { return <div className="border-l-2 border-[#c9a96e] bg-[#111118] px-5 py-4"><h2 className="font-semibold">{title}</h2><p className="mt-2 text-sm leading-6 text-white/50">{copy}</p></div>; }
 
