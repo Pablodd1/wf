@@ -4,6 +4,8 @@
 const crypto = require('node:crypto');
 const { verifySourceContent } = require('./content-provenance.cjs');
 const { stableJson } = require('./lossless-payload-sanitizer.cjs');
+const { classify: classifyCategory } = require('./audit-non-watch.cjs');
+const { classifyNonWatch } = require('../../api/_lib/reference-quality.cjs');
 const {
   splitMessageLines,
   segmentDealerMessage,
@@ -308,6 +310,11 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
 
   let tradingFloorStatus = 'HELD_UNKNOWN';
   let tradingFloorEligible = false;
+  // The legacy normalized_reference column is not independent watch evidence.
+  // A luxury brand/reference alone must not turn a bag or accessory into a watch.
+  const categoryEvidence = classifyCategory({ raw_data: { ...raw, normalized_reference: null } });
+  const accessoryEvidence = classifyNonWatch(String(listingTextEvidence || '').replace(/^\s*(?:WTS|WTB)\s*[:\-]?\s*/i, ''));
+  const categoryHeld = accessoryEvidence || categoryEvidence.category !== 'WATCH';
 
   if (!hasTextEvidence) {
     tradingFloorStatus = 'HELD_MISSING_SOURCE_TEXT';
@@ -317,6 +324,10 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     tradingFloorStatus = 'HELD_BUNDLE_UNSPLIT';
     reviewFlags.push('HELD_BUNDLE_REVIEW');
     exclusionReasons.push('BUNDLE_PARENT_UNSPLIT');
+  } else if (categoryHeld) {
+    tradingFloorStatus = 'HELD_IDENTITY_INCOMPLETE';
+    reviewFlags.push('WATCH_CATEGORY_REQUIRES_REVIEW');
+    exclusionReasons.push(accessoryEvidence || 'CATEGORY_' + categoryEvidence.category);
   } else if (!brand || !reference) {
     tradingFloorStatus = 'HELD_IDENTITY_INCOMPLETE';
     reviewFlags.push('INCOMPLETE_IDENTITY');
@@ -378,7 +389,7 @@ function normalizeAuthoritativeRow(stagedRow, options = {}) {
     reconciliationCategory = 'REVIEW_REQUIRED';
   }
 
-  const parserVersion = 'authoritative-normalizer-v10-content-bound';
+  const parserVersion = 'authoritative-normalizer-v11-category-bound';
 
   const contractObj = {
     source_id: sourceId,

@@ -668,7 +668,9 @@ function buildListingDisplayRecord(input, mode) {
   // Image resolution & evidence type
   const imageKey = staged.image_key ? String(staged.image_key).trim() : null;
   const candidateUrl = constructCandidateImageUrl(imageKey);
-  const isReachable = staged.image_reachable !== undefined ? staged.image_reachable : null;
+  const isReachable = staged.image_reachable !== undefined ? staged.image_reachable
+    : ['SOURCE_IMAGE_UNAVAILABLE', 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED'].includes(staged.image_status)
+      || staged.image_evidence_type === 'IMAGE_KEY_PRESERVED_URL_UNVERIFIED' ? false : null;
   const childAssigned = Boolean(isChild && imageKey && staged.child_image_assigned);
   const parentHasAttachment = Boolean(isChild && staged.parent_has_attachment);
 
