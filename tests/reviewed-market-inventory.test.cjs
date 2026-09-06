@@ -203,7 +203,7 @@ test('authenticated form submissions map into the Trading Floor contract', () =>
   assert.equal(record.location, 'Miami');
 });
 
-test('reviewed inventory cards inherit exact public Rated Dealer feedback evidence', () => {
+test('reviewed inventory does not inherit static directory ratings before approved database linkage', () => {
   const record = api.mapReviewedRecord({
     id: 'rated-source-listing', supplied_brand: 'Rolex', model: 'Daytona',
     normalized_reference: '116500LN', raw_reference: '116500LN', dial_color: 'Black',
@@ -213,10 +213,10 @@ test('reviewed inventory cards inherit exact public Rated Dealer feedback eviden
     has_exact_source_image: false,
   });
   assert.equal(record.seller_rating, null);
-  assert.equal(record.seller_review_count, 22);
-  assert.equal(record.seller_rating_evidence_status, 'SOURCE_FEEDBACK_COUNT');
-  assert.equal(record.seller_trust_status, 'Trusted User');
-  assert.equal(api.isSourceBackedRatedDealer(record), true);
+  assert.equal(record.seller_review_count, 0);
+  assert.equal(record.seller_rating_evidence_status, 'UNAVAILABLE');
+  assert.equal(record.seller_trust_status, null);
+  assert.equal(api.isSourceBackedRatedDealer(record), false);
 });
 
 test('exact listing links enrich cards with the canonical dealer profile without exposing private phone evidence', async () => {
@@ -449,7 +449,8 @@ test('reviewed QNSA release rows and source-backed ratings reach the card contra
   assert.match(source, /\['APPROVED', 'PENDING_VERIFICATION'\]\.includes\(row\?\.publication_state\)/);
   assert.match(source, /reviewedQnsaRelease \|\|/);
   assert.match(source, /seller_rating: ratingEvidenceStatus === 'SOURCE_SUPPLIED' \? directRating : null/);
-  assert.match(source, /ratedDealerEvidence/);
+  assert.doesNotMatch(source, /ratedDealerEvidence/);
+  assert.match(source, /enrichRecordsWithDealerDirectory/);
   assert.match(source, /raw_lineage_verified,dealer_rating,review_count/);
   assert.equal(api.isTradingFloorSourceRow({
     item_category: 'WATCH', listing_type: 'WTS', canonical_brand: 'Richard Mille',

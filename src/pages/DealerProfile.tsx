@@ -16,6 +16,7 @@ interface ProfilePayload {
   reviews?: Array<{ date: string | null; reviewer: string | null; sentiment: string | null }>;
   groups?: Array<{ name: string | null; platform: string | null; membership_status: string | null }>;
   listing_total?: number;
+  next_cursor?: string | null;
   source_provenance?: { source_system: string; crawled_at: string | null; captured_listing_count?: number; captured_review_count?: number };
   dynamic_activity_status?: string;
   listing_linkage_status?: string;
@@ -31,6 +32,21 @@ export default function DealerProfile() {
 function DealerProfileContent({ dealerId }: { dealerId: string }) {
   const [payload, setPayload] = useState<ProfilePayload | null>(null);
   const [error, setError] = useState('');
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [pageError, setPageError] = useState('');
+
+  async function loadMore() {
+    if (!payload?.next_cursor || loadingMore) return;
+    setLoadingMore(true);
+    setPageError('');
+    try {
+      const response = await fetch(`/api/dealer-profile?id=${encodeURIComponent(dealerId)}&cursor=${encodeURIComponent(payload.next_cursor)}`, { credentials: 'include' });
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || 'Unable to load more activity');
+      setPayload(current => current ? { ...body, listings: [...current.listings, ...body.listings] } : body);
+    } catch (caught) { setPageError(caught instanceof Error ? caught.message : 'Unable to load more activity'); }
+    finally { setLoadingMore(false); }
+  }
 
   useEffect(() => {
     const controller = new AbortController();
@@ -97,7 +113,7 @@ function DealerProfileContent({ dealerId }: { dealerId: string }) {
 
       <section className="mx-auto max-w-6xl px-5 py-8 sm:px-8 lg:px-12">
         <div className="grid gap-px bg-white/10 sm:grid-cols-3">
-          <ProfileMetric label="Total listings posted ever" value={linkagePending ? 'Pending linkage' : count(payload.listing_total ?? ((stats?.wts_count != null || stats?.wtb_count != null) ? (stats?.wts_count || 0) + (stats?.wtb_count || 0) : null))} />
+          <ProfileMetric label="Published linked listings" value={linkagePending ? 'Pending linkage' : count(payload.listing_total ?? ((stats?.wts_count != null || stats?.wtb_count != null) ? (stats?.wts_count || 0) + (stats?.wtb_count || 0) : null))} />
           <ProfileMetric label="For sale posts" value={linkagePending ? 'Pending linkage' : count(stats?.wts_count)} />
           <ProfileMetric label="Want to buy posts" value={linkagePending ? 'Pending linkage' : count(stats?.wtb_count)} />
         </div>
@@ -140,6 +156,8 @@ function DealerProfileContent({ dealerId }: { dealerId: string }) {
             </article>
           ))}
         </div>
+        {payload.next_cursor && <button type="button" disabled={loadingMore} onClick={loadMore} className="mt-5 border border-white/15 px-4 py-2 text-xs disabled:opacity-35">{loadingMore ? 'Loading activity...' : 'Load more activity'}</button>}
+        {pageError && <p role="alert" className="mt-3 text-sm text-amber-200">{pageError}</p>}
         {payload.reviews && payload.reviews.length > 0 && <section className="mt-12">
           <div className="flex items-center justify-between border-b border-white/10 pb-4"><h2 className="text-xl font-semibold">Dealer feedback</h2><span className="text-xs text-white/35">{payload.reviews.length} captured entries</span></div>
           <div className="grid gap-px bg-white/10 md:grid-cols-2">

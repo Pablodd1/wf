@@ -321,6 +321,7 @@ async function loadRandomAllInventory({
     if (intent) params.set('type', intent);
     if (imagesOnly) params.set('images', 'true');
     if (pricedOnly) params.set('priced', 'true');
+    if (countries.length > 0) params.set('region', countries.join(','));
     const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
     if (!canaryEnabled) {
       params.set('sourceShape', listingLane);

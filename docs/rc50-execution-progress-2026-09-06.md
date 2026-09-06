@@ -1,5 +1,32 @@
 # WatchFacts finalization execution checkpoint
 
+Latest continuation: 2026-09-06 22:37 UTC. Qualified PG15/18 replay is now
+258 migrations. Approved dealer profiles expose current exact published-single
+activity through a service-only bounded RPC. Pages bind the dealer identity and
+publication revision; stale/foreign cursors refuse, revoked identities remove
+activity, and unknown dates remain null. Actual Supabase handlers and a rolled-
+back three-row pagination transaction pass. UI styling remains unchanged; a
+load-more control exposes the complete activity and the total is labeled as
+published linked listings, never lifetime activity.
+
+The previously missing 500-row report was produced by execution. A frozen job
+retained 450 additional private synthetic raw rows, normalized and materialized
+all 450, published them alongside the original 50, traversed all 500 API IDs in
+database order and checked every required contract field. The consumer views
+measured 500 Trading Floor rows, 474 research candidates and 499 poster groups.
+The first test attempt incorrectly expected five requests instead of five full
+pages plus the terminal empty read. Both attempts rolled back to the exact 50;
+the successful retry reused the committed workflow instead of recapturing rows.
+The report is local disposable evidence, not a production publication claim.
+
+Dealer tests now exercise the approved RPC rather than removed static-directory
+fallbacks; private historical evidence checks remain. Source phone/name matches
+alone cannot supply public ratings. A legacy-adapter test now checks its actual
+canonical source/text fields and explicitly denies V2/research eligibility;
+its original 1,000-proposal requirement and 100-record sample remain. A missing
+country filter in the legacy combined-feed branch was restored. Full-suite
+reconciliation and exact preview deployment of these changes are next.
+
 Latest continuation: 2026-09-06 22:12 UTC. PostgreSQL 15/18 replay 257
 migrations with the historical qualifications below. The 1.5-million-row
 admission retest completed correctly, but exposed a 390.444-second broad

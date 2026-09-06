@@ -129,12 +129,34 @@ module.exports = async function handler(req, res) {
   try {
     const client = getClient();
     if (process.env.VITE_USE_CANARY_V2 === 'true') {
-      const { data: profile, error: profileError } = await client.rpc('get_approved_dealer_profile', { p_identity: identity });
+      const limit = req.query?.pageSize === undefined ? 50 : Number(req.query.pageSize);
+      let cursor = null;
+      try {
+        if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100) throw new Error();
+        if (req.query?.cursor !== undefined) {
+          if (typeof req.query.cursor !== 'string' || req.query.cursor.length > 1000) throw new Error();
+          cursor = JSON.parse(Buffer.from(req.query.cursor, 'base64url').toString('utf8'));
+          if (cursor.identity !== identity || !Number.isSafeInteger(cursor.revision) || cursor.revision < 0
+            || typeof cursor.after !== 'string' || !cursor.after || cursor.after.length > 250) throw new Error();
+        }
+      } catch { return res.status(400).json({ error: 'Invalid dealer activity page' }); }
+      const { data: profile, error: profileError } = await client.rpc('get_approved_dealer_profile_v2', {
+        p_identity: identity,p_limit:limit,p_after_id:cursor?.after || null,p_publication_revision:cursor?.revision ?? null,
+      });
+      if (profileError?.code === '22023') return res.status(409).json({ error: 'Dealer activity changed. Reload the profile.' });
       if (profileError) throw profileError;
       if (!profile?.dealer) return res.status(404).json({ error: 'Verified dealer profile not found' });
       // Reuse the directory's public field allowlist; never publish internal payloads.
       const { publicDealer } = require('./dealers');
       const safe = sanitizeDealerProfile({ ...profile, dealer: publicDealer(profile.dealer) });
+      const hasMore = safe.listings.length > limit;
+      safe.listings = safe.listings.slice(0, limit);
+      for (const listing of safe.listings) {
+        if (typeof listing.seller_name === 'string') listing.seller_name = redactPublicContactEvidence(listing.seller_name);
+        listing.display_price = Number(listing.price_raw) > 0 && listing.currency
+          ? `${listing.currency} ${Number(listing.price_raw).toLocaleString('en-US')}` : null;
+      }
+      safe.next_cursor = hasMore ? Buffer.from(JSON.stringify({identity,revision:profile.publication_revision,after:safe.listings.at(-1).id})).toString('base64url') : null;
       for (const review of safe.reviews || []) {
         if (typeof review.reviewer === 'string') review.reviewer = redactPublicContactEvidence(review.reviewer);
         if (typeof review.sentiment === 'string') review.sentiment = redactPublicContactEvidence(review.sentiment);
@@ -143,7 +165,7 @@ module.exports = async function handler(req, res) {
         if (typeof group.name === 'string') group.name = redactPublicContactEvidence(group.name);
       }
       return res.status(200).json({ success: true, ...safe, raw_message_access: true,
-        source_provenance: { source_system: 'WATCHFACTS_VERIFIED_DEALERS', current_counts_are_dynamic: false } });
+        source_provenance: { source_system: 'WATCHFACTS_VERIFIED_DEALERS', current_counts_are_dynamic: true } });
     }
     const { data: canonicalProfile, error: canonicalError } = await client.rpc('qnsa_dealer_profile', {
       p_identity: identity,

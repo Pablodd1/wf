@@ -126,13 +126,20 @@ async function main() {
       assert.equal(beta.stats.verified_contact_info, null);
       assert.equal(gamma.dealer.rating, null);
       for (const profile of [alpha,beta,gamma]) {
-        assert.equal(profile.listing_linkage_status, 'PENDING_EXACT_LISTING_LINKAGE');
-        assert.equal(profile.stats.wts_count, null);
-        assert.equal(profile.stats.wtb_count, null);
+        const expectedIds = expected.filter(row => row.seller_profile_url === '/reference-check/'+profile.dealer.id).map(row => row.listing_id).sort();
+        assert.equal(profile.listing_linkage_status, 'EXACT_PUBLISHED_SOURCE_LINKAGE');
+        assert.equal(profile.listing_total, expectedIds.length);
+        assert.deepEqual(profile.listings.map(row => row.id), expectedIds);
+        assert.equal(profile.stats.current_counts_scope, 'CURRENT_PUBLISHED_SINGLES');
+        assert.equal(profile.stats.wts_count + profile.stats.wtb_count, expectedIds.length);
+        for (const row of profile.listings) {
+          assert.equal(row.price_usd, Number(byId.get(row.id).price_usd));
+          assert.equal(row.seller_name, byId.get(row.id).seller_display_name);
+        }
         assert.doesNotMatch(JSON.stringify(profile), /private@example|wa\.me|source_identity|raw_payload/);
       }
       assert.equal((await fetch(origin + '/api/dealer-profile?id=rc50-browser-synthetic-hidden')).status, 404);
-      report.checks.push({name:'Approved profile API publishes only verified consent contact and genuine feedback evidence; pending activity is null and hidden profile is 404',status:'PASS'});
+      report.checks.push({name:'Approved profile API publishes exact linked activity/counts, consented contact and genuine feedback; unlinked dealer counts are zero and hidden profile is 404',status:'PASS'});
     }
     const linked = (await db.query("select count(*)::int n from public.seller_listing_lineage_staging where source_system='WF_V2_SOURCE_BOUND' and match_status='APPLIED'")).rows[0].n;
     assert.equal(linked, 2, 'Positive and unconsented source-bound fixtures are required');

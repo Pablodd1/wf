@@ -4,6 +4,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const dependency=require.resolve('../api/_lib/supabase');
+require.cache[dependency]={id:dependency,filename:dependency,loaded:true,exports:{getClient:()=>({rpc:async()=>({data:null,error:null})})}};
+process.env.VITE_USE_CANARY_V2='true';
 
 const {
   legacyProfilePayload,
@@ -70,18 +73,14 @@ test('directory UI labels legacy evidence and unknown fields honestly', () => {
   assert.match(profile, /do not replace live totals/);
 });
 
-test('legacy directory and profile endpoints are public, searchable, and paginated', async () => {
+test('legacy directory mode and unapproved historical profile IDs cannot become public evidence', async () => {
   const directory = await invoke(dealersHandler, { mode: 'legacy', page: '1', pageSize: '10', q: 'Forest' });
-  assert.equal(directory.statusCode, 200);
-  assert.equal(directory.payload.total, 1);
-  assert.equal(directory.payload.dealers[0].legacy_profile_id, '9641');
+  assert.equal(directory.statusCode, 400);
+  assert.equal(directory.payload.dealers,undefined);
 
   const profile = await invoke(dealerProfileHandler, { id: 'watchfacts-legacy-9641' });
-  assert.equal(profile.statusCode, 200);
-  assert.equal(profile.payload.dealer.display_name, 'Forest');
-  assert.ok(profile.payload.listings.every(row => row.evidence_only === true));
-  assert.equal(profile.payload.source_provenance.counts_are_historical_snapshots, true);
-  assert.equal(profile.payload.stats.captured_inventory_count, 0);
+  assert.equal(profile.statusCode, 404);
+  assert.equal(profile.payload.dealer,undefined);
   assert.doesNotMatch(JSON.stringify(profile.payload), /https:\/\/watchfacts\.com\//i);
 });
 
