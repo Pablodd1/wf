@@ -260,7 +260,7 @@ test("Phase 1 & 2: API Contract and Parameter Validation Test Suite", async (t) 
       source_id: "src_001",
       source_hash: "a".repeat(64),
       raw_message_id: "msg_src_001",
-      raw_message_text: "FS: Rolex Daytona 116500LN $32000",
+      raw_message_text: "  [SYNTHETIC FIXTURE]\nFS: Rolex Daytona 116500LN USD 32000\n  Original spacing preserved.  ",
       source_context_text: null,
       source_created_at: new Date().toISOString(),
       observed_at: new Date().toISOString(),
@@ -343,6 +343,15 @@ test("Phase 1 & 2: API Contract and Parameter Validation Test Suite", async (t) 
     assert.equal(rec.price_evidence_status, "SOURCE_EXPLICIT_USD_MATCH");
     assert.equal(rec.contract_version, "v2.0");
     assert.equal(rec.listing_display_contract_version, "v2.0");
+    assert.equal(rec.raw_message, fixtureRow.raw_message_text);
+    assert.equal(rec.raw_message_scope, 'stored_source_message');
+    assert.equal(rec.raw_message_truncated, false);
+    assert.equal(rec.source_price_amount, 32000);
+    assert.equal(rec.source_currency, 'USD');
+    assert.equal(rec.listing_date, fixtureRow.source_created_at);
+    assert.equal(rec.has_images, true);
+    assert.equal(rec.location, 'US');
+    assert.equal(rec.region, 'NY');
 
     // Check missing facts serialize as null (never fabricated defaults)
     assert.equal(rec.category, null);
@@ -351,6 +360,18 @@ test("Phase 1 & 2: API Contract and Parameter Validation Test Suite", async (t) 
     assert.equal(rec.title, null);
     assert.equal(rec.description, null);
     assert.equal(rec.seller_profile_url, null);
+
+    // The UI alias is derived after public redaction, never from private input.
+    fixtureRow.raw_message_text = '[SYNTHETIC FIXTURE] WTS Rolex USD 32000\nContact +1 202 555 0123';
+    const privateOriginal = fixtureRow.raw_message_text;
+    const second = createMockReqRes({ pageSize: '10' });
+    await tradingFloorHandler(second.req, second.res);
+    assert.equal(second.res.getStatusCode(), 200);
+    const publicRow = second.res.getBody().records[0];
+    assert.equal(publicRow.raw_message, publicRow.raw_message_text);
+    assert.match(publicRow.raw_message, /\[phone redacted\]/);
+    assert.doesNotMatch(JSON.stringify(publicRow), /202 555 0123/);
+    assert.equal(fixtureRow.raw_message_text, privateOriginal);
   });
 
   await t.test("10. Missing genuine source_id and stored source_hash fails closed", async () => {

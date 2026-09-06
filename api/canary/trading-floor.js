@@ -11,6 +11,7 @@ const {
   mapSnapshotRpcError
 } = require("../_lib/canary-keyset.cjs");
 const { enforceListingDisplayContract } = require("../_lib/canary-display-contract.cjs");
+const { withExistingCardFields } = require("../_lib/canary-card-fields.cjs");
 
 const ALLOWED_QUERY_PARAMS = new Set([
   "pagination",
@@ -261,7 +262,7 @@ module.exports = async function handler(req, res) {
       // Note: price verification fields (price_display_verified, price_evidence_status)
       // are strictly preserved from enforceListingDisplayContract and NOT overwritten.
 
-      return canonical;
+      return withExistingCardFields(canonical);
     });
 
     // Phase 5.1: the next cursor is built ONLY from the frozen snapshot membership

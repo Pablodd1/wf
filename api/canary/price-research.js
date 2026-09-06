@@ -12,6 +12,7 @@ const {
   mapSnapshotRpcError
 } = require("../_lib/canary-keyset.cjs");
 const { enforceListingDisplayContract } = require("../_lib/canary-display-contract.cjs");
+const { withExistingCardFields } = require("../_lib/canary-card-fields.cjs");
 
 const ALLOWED_QUERY_PARAMS = new Set([
   "reference",
@@ -367,7 +368,7 @@ module.exports = async function handler(req, res) {
       if (canonical.raw_message_text) canonical.raw_message_text = redactPublicSource(canonical.raw_message_text);
       if (canonical.source_context_text) canonical.source_context_text = redactPublicSource(canonical.source_context_text);
       if (canonical.description) canonical.description = redactPublicSource(canonical.description);
-      return canonical;
+      return withExistingCardFields(canonical);
     });
 
     // Phase 5.1: the next cursor is built ONLY from the frozen snapshot membership
@@ -412,7 +413,7 @@ module.exports = async function handler(req, res) {
       if (canonical.raw_message_text) canonical.raw_message_text = redactPublicSource(canonical.raw_message_text);
       if (canonical.source_context_text) canonical.source_context_text = redactPublicSource(canonical.source_context_text);
       if (canonical.description) canonical.description = redactPublicSource(canonical.description);
-      return canonical;
+      return withExistingCardFields(canonical);
     });
 
     // Demand next cursor: built ONLY from the frozen k_* membership columns.

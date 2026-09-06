@@ -841,12 +841,24 @@ function buildListingDisplayRecord(input, mode) {
       isVerifiedUsd = false;
       priceEvidenceStatus = 'UNVERIFIED_BARE_DOLLAR';
     } else if (explicitStatus === 'SOURCE_EXPLICIT_USD_MATCH' || explicitStatus === 'DATED_VERIFIED_FX' || explicitStatus === 'EXPLICIT_SOURCE_FX_CONVERTED') {
-      isVerifiedUsd = hasPositivePrice;
-      priceEvidenceStatus = explicitStatus;
+      // A stored label cannot supply missing currency or FX evidence. It must
+      // agree with the independently evaluated currency path above.
+      const statusMatchesCurrency = explicitStatus === 'SOURCE_EXPLICIT_USD_MATCH'
+        ? currUpper === 'USD'
+        : currUpper !== 'USD' && hasDatedFx;
+      isVerifiedUsd = isVerifiedUsd && statusMatchesCurrency;
+      if (isVerifiedUsd) priceEvidenceStatus = explicitStatus;
+      else if (statusMatchesCurrency === false) priceEvidenceStatus = 'UNVERIFIED_CONTRADICTORY_PRICE_EVIDENCE';
     } else {
       priceEvidenceStatus = explicitStatus;
       isVerifiedUsd = false;
     }
+  }
+
+  if (!isVerifiedUsd) {
+    record.price_research_eligible = false;
+    record.included_in_statistics = false;
+    if (!record.statistics_exclusion_reason) record.statistics_exclusion_reason = 'UNVERIFIED_PRICE_EVIDENCE';
   }
 
   // Standard enumerable properties for React UI callers (enumerable, writable, no getter TypeError)

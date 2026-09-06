@@ -2414,8 +2414,8 @@ function listingMessageEvidence(listing: ListingRecord) {
   if (listing.raw_message_scope === 'normalized_summary') {
     return { label: 'SOURCE TEXT', text: 'Unverified workbook summary text is withheld from the customer view.' };
   }
-  const rawMessage = cleanValue(listing.raw_message);
-  if (rawMessage && scope !== 'unavailable') return { label: 'Original raw message', text: rawMessage };
+  const rawMessage = typeof listing.raw_message === 'string' ? listing.raw_message : '';
+  if (rawMessage.trim() && scope !== 'unavailable') return { label: 'Original raw message', text: rawMessage };
   const rawLine = cleanValue(listing.raw_line);
   if (rawLine) return { label: 'SOURCE LISTING LINE', text: rawLine };
   const description = cleanValue(listing.description);
