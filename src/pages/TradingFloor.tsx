@@ -876,9 +876,8 @@ export default function TradingFloor() {
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketNav />
-      {/* RC50: visible provenance banner whenever the fixture/preview (canary)
-          data lane is active. Never rendered against live market data. */}
-      {(import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') && (
+      {/* The V2 API is also used in production; only disposable data receives this label. */}
+      {import.meta.env.VITE_DISPOSABLE_PREVIEW === 'true' && (
         <div
           data-testid="preview-fixture-banner"
           role="status"

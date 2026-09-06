@@ -1790,9 +1790,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 10 }}>
                       Median price: <strong style={{ color: NAVY }}>${stats.median.toLocaleString()}</strong>
                     </div>
-                    {/* RC50: label synthetic fixture statistics whenever the
-                        preview (canary) data lane is active. */}
-                    {(import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') && (
+                    {/* Synthetic statistics require an explicit disposable environment. */}
+                    {import.meta.env.VITE_DISPOSABLE_PREVIEW === 'true' && (
                       <div data-testid="preview-fixture-stats-label" style={{ fontSize: 11, color: '#92400e', marginTop: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>
                         Preview fixture statistics — not live market analytics
                       </div>

@@ -54,7 +54,7 @@ export function MarketTickerBanner() {
           <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
           <span className="relative inline-flex rounded-full h-2 w-2 bg-white"></span>
         </span>
-        {canaryEnabled ? 'PREVIEW OBSERVATIONS' : 'MARKET OBSERVATIONS'}
+        {import.meta.env.VITE_DISPOSABLE_PREVIEW === 'true' ? 'PREVIEW OBSERVATIONS' : 'MARKET OBSERVATIONS'}
       </div>
       <div className="relative flex-1 overflow-hidden">
         <div className="ticker-marquee-track flex items-center gap-8 font-mono text-[11px] font-medium">
