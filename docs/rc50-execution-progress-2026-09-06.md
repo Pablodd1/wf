@@ -180,3 +180,36 @@ deployment and whole-boundary reconciliation remain unexecuted. The complete
 test suite still has failures requiring explicit baseline/contract classification.
 No production database discovery or mutation has occurred. The existing UI
 layout and unrelated checkout changes remain preserved.
+
+### Exact external candidate dff5c5cc, 2026-09-06 18:40 UTC
+
+The disposable Vercel version endpoint verifies commit
+`dff5c5cc50247b13229a584eeb496f41acb6e367` and tree
+`afe55b0b2dd4d2df0de3eab715a406362bbee91a`. All 50 synthetic identities,
+19 image HEAD/GET checks, 24 WTS and 10 separate WTB records pass over HTTPS.
+Opaque consented contact redirects resolve correctly without contacting the
+messaging service. Page sizes 1/7/12/49/50 return identical frozen payloads.
+Desktop has 50 cards without overflow; mobile pages 24/24/2 match the independent
+database order exactly. Original poster identity and actual 4.5/8 versus
+count-only dealer feedback render correctly on cards. English/Spanish navigation
+selection works. Redacted desktop and mobile source/dealer screenshots are retained.
+
+The fifth complete test run has 2,196 tests: 2,060 pass, 131 fail, 5 skip. The one
+new failure against the fourth run was an old exact WTB sentence assertion;
+the current separate-demand wording passes after updating that assertion.
+The remaining failures have not yet all been classified as release-blocking or
+superseded. This is not a green full-suite or final browser acceptance claim.
+
+Opening the Trading Floor detail exposed a legacy seller-summary request that
+rejects V2 IDs, misleading contact wording, and replacement of the source poster
+with the verified dealer's name. The current correction skips the legacy request
+for V2, preserves the original poster in both detail surfaces, and labels the
+approved dealer action accurately. Layout remains unchanged. TypeScript and 18
+focused card/security/UI tests pass; these corrections still need exact-preview
+browser retesting after this commit.
+
+An inspected older proposal-writer definition was superseded by a later migration:
+the composite writer already persists the full field set and supports no-op replay,
+as earlier actual Supabase tests established. No speculative replacement was made.
+The missing complete durable normalization/materialization/publication path and
+production rollout remain the substantive next work.

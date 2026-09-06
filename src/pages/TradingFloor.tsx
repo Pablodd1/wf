@@ -1802,7 +1802,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
   const visibleImageIndex = activeImage < availableImages.length ? activeImage : 0;
   const messageEvidence = listingMessageEvidence(listing);
   const normalizedIntent = String(listing.intent || listing.listing_type || '').toUpperCase();
-  const postingIdentity = strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name });
+  const postingIdentity = strongestPostingIdentity(listing);
 
   const exactPair = listingPricePair(listing);
   const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS'
@@ -1847,8 +1847,8 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
       })
       .catch(error => { if (error?.name !== 'AbortError') setContact(sourcePosterContact(listing)); });
     
-    // Fetch seller analytics
-    fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
+    // Legacy workbook analytics do not accept V2 source listing identities.
+    if (listing.contract_version !== 'v2.0') fetch(`/api/reviewed-seller-summary?id=${encodeURIComponent(listing.id)}`, { signal: controller.signal })
       .then(async response => response.ok ? response.json() as Promise<ReviewedSellerSummaryResponse> : null)
       .then(payload => {
         if (!payload || payload.status !== 'ok') return;
@@ -2047,7 +2047,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
           <div className="rounded-lg border border-[#EBE3D5] bg-white p-6 shadow-xs">
             <h3 className="text-base font-bold text-[#1C1917]">Posted by</h3>
             <div className="mt-4 border-t border-stone-100 pt-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source-supplied contact</div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-[#8B95A2]">Source poster</div>
               {listing.dealer_profile_path && postingIdentity ? (
                 <Link to={listing.dealer_profile_path} className="mt-2 block text-base font-bold text-[#1C1917] hover:text-[#8A5826]">
                   {postingIdentity || 'Posting identity requires review'}
@@ -2059,7 +2059,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
               )}
               <div className="mt-0.5">
                 <ListingDealerEvidence
-                  sellerName={contact?.dealer_name || listing.seller_name}
+                  sellerName={listing.seller_name}
                   sellerPhone={listing.seller_phone}
                   contactPublicationApproved={listing.contact_publication_approved === true}
                   rating={listing.seller_rating ?? sellerReputation?.rating}
@@ -2081,7 +2081,9 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
             </div>
 
             <p className="mt-5 text-xs leading-relaxed text-[#6B7280]">
-              Direct poster contact is not published. Please help connect me with the poster through a verified channel without displaying a private number.
+              {contact?.contact_available
+                ? 'Contact the verified dealer to confirm this listing and its availability.'
+                : 'A verified, consented contact channel is not available for this listing.'}
             </p>
 
             {contact?.contact_channels?.whatsapp ? <a
@@ -2091,7 +2093,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-lg bg-[#00D757] py-3 text-sm font-bold text-white shadow-xs transition hover:bg-[#00c34f]"
             >
               <MessageCircle size={18} />
-              Ask Curated Luxury on WhatsApp
+              Contact dealer on WhatsApp
             </a> : null}
             {contact?.contact_channels?.telegram ? <a
               href={contact.contact_channels.telegram}

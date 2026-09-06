@@ -2820,7 +2820,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                 {seller?.dealer_name || summaryPosterName || dealerEvidenceProfile ? (
                   <>
                     <ListingDealerEvidence
-                      sellerName={seller?.dealer_name || summaryPosterName || null}
+                      sellerName={summaryPosterName || seller?.dealer_name || null}
                       sellerPhone={null}
                       contactPublicationApproved={false}
                       rating={dealerEvidenceRating}
