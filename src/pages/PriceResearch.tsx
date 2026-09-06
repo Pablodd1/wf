@@ -77,7 +77,7 @@ interface RowData extends PriceResearchListingContract {
   seller_group_count?: number | null;
 }
 
-interface WtbListingData {
+interface WtbListingData extends PriceResearchListingContract {
   id: string;
   brand: string;
   model?: string | null;
@@ -1830,7 +1830,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   {displayedWtbWtsRatio == null ? 'Not available' : displayedWtbWtsRatio.toFixed(2)}
                 </div>
                 <div style={{ color: MUTED, fontSize: 12, marginTop: 4 }}>
-                  {wtbDemandCount.toLocaleString()} buyer signals versus {referenceQualifiedWtsCount.toLocaleString()} qualified sale offers for this exact reference.
+                  {wtbDemandCount.toLocaleString()} WTB observations versus {referenceQualifiedWtsCount.toLocaleString()} priced sale observations matching the selected filters.
                 </div>
               </div>
             </section>
@@ -2172,6 +2172,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           comparableCount={data?.count || 0}
           monthly={data?.monthly || []}
           cohortDial={data?.selected_cohort.dial_color || selectedRow.dial_color || ''}
+          cohortCondition={data?.selected_cohort.condition || ''}
         />
       )}
     </div>
@@ -2520,7 +2521,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
         </div>
         <div className="mt-1 flex items-center justify-between gap-2 sm:hidden">
           <span style={{ fontSize: 13, fontWeight: 700, color: excludedFromAverages ? '#8a6500' : GOLD }}>{priceLabel}</span>
-          <span style={{ color: MUTED, fontSize: 9 }}>{excludedFromAverages ? 'Not used in analytics' : 'Used in analytics'}</span>
+          <span style={{ color: MUTED, fontSize: 9 }}>{excludedFromAverages || row.analytics_included === false ? 'Not used in analytics' : 'Used in analytics'}</span>
         </div>
         <div
           style={{
@@ -2570,7 +2571,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
   );
 }
 
-function ListingDetailModal({ summary, detail, seller, loading, error, title, onClose, outlierLabel, benchmark, comparableCount, monthly, cohortDial }: {
+function ListingDetailModal({ summary, detail, seller, loading, error, title, onClose, outlierLabel, benchmark, comparableCount, monthly, cohortDial, cohortCondition }: {
   summary: RowData;
   detail: ListingDetailData | null;
   seller: ListingSellerData | null;
@@ -2583,6 +2584,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
   comparableCount: number;
   monthly: MonthlyPoint[];
   cohortDial: string;
+  cohortCondition: string;
 }) {
   const [activeImage, setActiveImage] = useState(0);
   const [failedImages, setFailedImages] = useState<Set<string>>(() => new Set());
@@ -2644,7 +2646,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
     comparisonData.sort((a, b) => a.month.localeCompare(b.month));
   }
   const cohortAverage = Number(benchmark?.avg || 0);
-  const cohortLabel = `${cohortDial || 'Unspecified'} dial · all listing conditions`;
+  const cohortLabel = `${cohortDial || 'Unspecified'} dial · ${cohortCondition || 'condition unresolved'}`;
   const cohortLineColor = dialChartColor(cohortDial || detail?.dial_color || summary.dial_color || '');
   const comparisonPrices = [
     ...monthly.map(point => Number(point.avg_price)),
@@ -2778,7 +2780,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
 
               <DetailCard title="Price when posted">
                 <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.5, marginBottom: 14 }}>
-                  Selected listing versus the exact {cohortLabel.toLowerCase()} comparable cohort. Monthly averages use qualified asking-price evidence only.
+                  Selected listing versus the {cohortLabel.toLowerCase()} cohort. {monthly.length ? 'Monthly averages use qualified asking-price evidence only.' : 'Monthly price history is unavailable; the dashed benchmark, when available, represents the full cohort rather than the posting month.'}
                 </div>
                 {comparisonData.length > 0 && observedMonth ? (
                   <>
@@ -2796,7 +2798,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                       </ResponsiveContainer>
                     </div>
                     <div className="flex flex-wrap gap-x-5 gap-y-2" style={{ color: MUTED, fontSize: 11, marginTop: 10 }}>
-                      <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `3px solid ${cohortLineColor}` }} /> Monthly cohort average</span>
+                      {monthly.length > 0 && <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `3px solid ${cohortLineColor}` }} /> Monthly cohort average</span>}
                       <span className="flex items-center gap-2"><span style={{ width: 9, height: 9, borderRadius: '50%', background: GOLD }} /> Selected listing{observedDate ? ` · ${observedDate}` : ''}</span>
                       {cohortAverage > 0 && <span className="flex items-center gap-2"><span style={{ width: 18, borderTop: `2px dashed ${MUTED}` }} /> Full cohort average ${Math.round(cohortAverage).toLocaleString()}</span>}
                     </div>
@@ -2915,8 +2917,8 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
   onOpenListing: (row: RowData) => void;
 }) {
   const displayRef = data.resolvedRef || data.reference || '';
-  const demandCount = data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? data.liquidity?.demand_count ?? 0;
-  const qualifiedWtsCount = data.reconciliation?.reference_qualified_wts_count
+  const demandCount = data.wtb_count ?? data.reconciliation?.wtb_demand_count ?? data.wtb_demand_count ?? data.liquidity?.demand_count ?? 0;
+  const qualifiedWtsCount = data.wts_count ?? data.reconciliation?.reference_qualified_wts_count
     ?? data.reference_qualified_wts_count
     ?? data.reconciliation?.wts_eligible_analytics_count
     ?? data.wts_eligible_analytics_count
@@ -2943,7 +2945,7 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
             </h3>
           </div>
           <p style={{ fontSize: 12, color: MUTED, margin: '4px 0 0' }}>
-            Want-To-Buy (WTB) listings representing active buyer interest for {displayRef} across all dial descriptions. Strictly separated from WTS asking-price averages.
+            Source-backed Want-To-Buy (WTB) observations for {displayRef} matching the selected filters. Requests remain separate from WTS asking-price averages; current interest must be confirmed with the poster.
           </p>
         </div>
 
@@ -2951,7 +2953,7 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
           <div>
             <div style={{ fontSize: 11, color: MUTED, fontWeight: 500 }}>Total WTB Volume</div>
             <div style={{ fontSize: 20, fontWeight: 800, color: BLUE }}>
-              {demandCount.toLocaleString()} <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>buyers</span>
+              {demandCount.toLocaleString()} <span style={{ fontSize: 12, color: MUTED, fontWeight: 400 }}>requests</span>
             </div>
           </div>
           {demandSupplyRatio != null && (
@@ -3136,19 +3138,24 @@ function WtbDemandCard({ row, onOpen }: { row: WtbListingData; onOpen: () => voi
 }
 
 function mapWtbToRowData(row: WtbListingData): RowData {
+  const imageEvidence = ['SOURCE_LINKED_IMAGE', 'SOURCE_LISTING_IMAGE', 'SELLER_LISTING_IMAGE', 'REFERENCE_IMAGE', 'NO_IMAGE'].includes(String(row.image_evidence_type))
+    ? row.image_evidence_type as RowData['image_evidence_type'] : undefined;
   return {
+    ...row,
     id: row.id,
     price_usd: row.price_usd || null,
-    created_at: row.created_at || new Date().toISOString(),
+    created_at: row.created_at || '',
     listing_date: row.listing_date || row.created_at || null,
     dial_color: row.dial_color || null,
     condition: row.condition || null,
     source: 'WTB_DEMAND',
     year: null,
     is_outlier: true,
+    analytics_included: false,
     outlier_reason: null,
-    source_price_amount: row.price_raw ? Number(row.price_raw) : null,
-    source_currency: row.currency || null,
+    source_price_amount: row.original_price_amount ?? (row.price_raw ? Number(row.price_raw) : null),
+    source_currency: row.original_price_currency || row.currency || null,
+    image_evidence_type: imageEvidence,
     posted_by: row.seller_name || null,
     phone_number: row.contact_publication_approved === true ? row.seller_phone || null : null,
     seller_name: row.seller_name || null,
