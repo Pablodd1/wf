@@ -99,3 +99,51 @@ scripts containing fixed old counts are not execution entry points.
 Evidence checksums and private local log paths are recorded in the task workspace
 `outputs/execution-progress-20260906.json`. This checkpoint never substitutes for
 the owner's requested final live results.
+
+Follow-up at 17:26 UTC: the sanitized review branch is preserved in draft PR
+https://github.com/Pablodd1/wf/pull/813 against the verified deployed source
+branch. No merge or production deployment was performed. The credential scan
+at `9eca06b7` found no unclassified credentials; five test-only findings were
+reviewed against the exact test-file checksum.
+
+Preview `ca99e8ef742cba9747a14cf3df950c3bcd056a76` separates the V2 API switch
+from `VITE_DISPOSABLE_PREVIEW`, which explicitly labels synthetic deployments.
+Its desktop browser renders all 50 synthetic singles at 1440px without overflow
+or false confirmed availability. Searching the source fixture matches the same
+two IDs as independent SQL across the documented search fields. The currency
+converter displays dated ECB rates (2026-09-04). WTB budget labels and pending
+dealer activity were verified on the preceding application candidate.
+
+Two additional forward migrations pass in both full-chain replay databases
+(234 ledger entries, retaining the documented historical compatibility overlays).
+The singles view now excludes bundle parents, children, and malformed child
+markers. Six transactional test cases prove only the singleton reaches either
+public view or a new snapshot; private source counts remain unchanged.
+
+The separate PostgreSQL 18 scale database contains 1,500,000 synthetic singles.
+This is a capacity fixture, not a claim about the current historical boundary.
+Initial full payload materialization took 93.51 seconds for Trading Floor and
+102.57 seconds for Price Research; total storage was approximately 7.49 GB before
+the new indexes. Publication must prewarm both surfaces transactionally before
+commit. Warm readers continue to use the preceding committed publication while
+that work runs, instead of waiting on the publisher's revision lock.
+
+Snapshot renewal now creates a new traversal identity over the same immutable
+publication payload. It never revives an expired cursor. At 1.5 million rows,
+renewal took 0.287 seconds with exactly 3,000,000 physical member rows before and
+after, compared with a full copy per surface previously. Unfiltered frozen totals
+fell from 21.336 to 0.301 seconds by using the stored count. Indexed exact-cohort
+statistics fell from 6.373 to 0.362 seconds, with identical statistics; 20 repeated
+cohort calls took 0.53 seconds. These timings include the local command overhead
+and do not predict hosted production latency or storage capacity.
+
+Real Supabase/API card, statistics, membership, and approved-profile checks pass
+after the migration. The new two-connection renewal test proves stale-cursor
+rejection, zero-copy renewal, safe pruning, and warm readers completing under two
+seconds while a publisher holds the next revision. All publication test mutations
+were rolled back. The scale database is isolated from the externally served
+50-row disposable database and is retained only for validation.
+
+Production discovery, durable listing-to-dealer linkage, historical population,
+real RC50, complete outcome reconciliation, final deployment, and worker shutdown
+remain pending. The scale result and draft PR are not a production release claim.
