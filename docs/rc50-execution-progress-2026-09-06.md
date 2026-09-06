@@ -238,3 +238,12 @@ is denied with HTTP 401; its existing page misleadingly kept displaying a loader
 A separate pending UI fix ends that loading state and supplies the sign-in link.
 Production remains untouched, and materialization/publication/FX/image completion
 and final release acceptance remain pending.
+# 19:35 UTC — source-bound FX and image receipts
+
+The disposable preview at commit `7dce8991cddfad7269d55f24213517d36ddb7322` passes the anonymous account guard: the profile editor stays hidden and the sign-in action opens the existing dealer login route. Production has not been read or changed.
+
+Both disposable PostgreSQL 15 and PostgreSQL 18 now pass 241 recorded migration applications, with the previously documented historical replay supplements and overlays. New private receipt migrations preserve the retained ECB CSV and source image probe evidence. The reviewed FX client recomputes all 23 supported currency rates using one common observation date; currencies without a matching dated quote cannot be mixed into that snapshot. The actual ECB observation is 2026-09-04, evidence SHA-256 `f359945b45a41ff048b41a70f00f6d03639dc3cb0fb3c2bd73ee415801bc6dbc`.
+
+Actual disposable Supabase tests prove exact FX receipt persistence, replay without insertion, changed-rate rejection, and independently computed PostgreSQL decimal conversion. Image testing performs real HTTPS HEAD and bounded GET requests against the explicitly synthetic image gateway. Receipt persistence rejects rehashed changes to image key, origin, and source hash; SQL and JavaScript path encoding agree, including Unicode and traversal rejection. No production image was probed. Five focused image tests also cover non-image bodies, network failure, bounded response consumption, and disposable-origin restrictions.
+
+These receipts attest the reviewed capture client's checks; SQL does not perform external network requests or independently parse the ECB CSV. The source-to-canonical materialization/publication path, remaining disposable release checks, production discovery, real canary, and historical rollout remain pending. The existing 50 public fixtures are unchanged and remain synthetic.

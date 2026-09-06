@@ -2,6 +2,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const {
   parseEcbRates,
   RECOGNIZED_WITHHELD_CURRENCIES,
@@ -20,7 +21,8 @@ async function fetchFxSnapshot(options = {}) {
   const url = `https://data-api.ecb.europa.eu/service/data/EXR/D.${currencies}.EUR.SP00.A?startPeriod=${start}&format=csvdata`;
   const response = await fetchImpl(url, { signal: AbortSignal.timeout(12_000) });
   if (!response.ok) throw new Error(`ECB returned ${response.status}`);
-  const parsed = await parseEcbRates(await response.text());
+  const rawCsv = await response.text();
+  const parsed = await parseEcbRates(rawCsv);
   const observed = Date.parse(parsed.observedAt);
   if (!Number.isFinite(observed)) throw new Error('ECB returned an invalid observation date');
   const ageDays = (now.getTime() - observed) / 86_400_000;
@@ -42,6 +44,11 @@ async function fetchFxSnapshot(options = {}) {
     base: 'USD',
     usd_per_unit: usdPerUnit,
     recognized_but_withheld: [...RECOGNIZED_WITHHELD_CURRENCIES],
+    source_evidence: {
+      request_url: url,
+      raw_csv: rawCsv,
+      raw_csv_sha256: crypto.createHash('sha256').update(rawCsv).digest('hex'),
+    },
   };
 }
 

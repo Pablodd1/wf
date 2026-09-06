@@ -26,3 +26,17 @@ test('converts through the shared USD base without changing stored values', () =
   assert.equal(convertCurrency(7800, 'HKD', 'USD', rates), 1000);
   assert.equal(convertCurrency('bad', 'USD', 'HKD', rates), null);
 });
+
+test('cross rates use the USD observation date and withhold currencies without a matching quote', async () => {
+  const result = await parseEcbRates([
+    'CURRENCY,TIME_PERIOD,OBS_VALUE',
+    'USD,2026-07-17,1.20',
+    'GBP,2026-07-17,0.84',
+    'GBP,2026-07-18,0.96',
+    'CHF,2026-07-16,0.90',
+  ].join('\n'));
+  assert.equal(result.observedAt, '2026-07-17');
+  assert.equal(result.rates.GBP, 0.7);
+  assert.equal(result.rates.CHF, undefined);
+  assert.equal(convertCurrency(1000, 'GBP', 'USD', result.rates), 1000 / 0.7);
+});
