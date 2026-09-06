@@ -72,6 +72,30 @@ async function main() {
     for (const row of research.rows) { assert.equal(row.intent, 'WTS'); assert.equal(row.price_display_verified, true); }
     for (const row of research.demand_rows) { assert.equal(row.intent, 'WTB'); assert.equal(row.price_research_eligible, false); }
     report.checks.push({ name: 'Price Research and separate WTB demand retain the same card contract', status: 'PASS', wts_rows: research.rows.length, wtb_rows: research.demand_rows.length });
+    assert.equal(research.stats, null);
+    assert.ok(research.rows.every(row => row.analytics_included === false));
+    const referencePath = '/api/canary/price-research?brand=Patek%20Philippe&reference=7128%2F1G&condition=New';
+    const unresolved = await get(referencePath + '&pageSize=1');
+    assert.equal(unresolved.stats, null);
+    const dialOracle = (await db.query(`select dial_color, count(*)::int as count
+      from public.price_research_ready_view_v2 where brand = 'Patek Philippe'
+      and reference = '7128/1G' and condition = 'New' group by dial_color
+      order by count(*) desc, dial_color asc nulls last`)).rows;
+    assert.deepEqual(unresolved.dial_options, dialOracle);
+    assert.ok(dialOracle.some(row => row.count > unresolved.rows.length));
+    const cohort = await get(referencePath + '&dial=Blue&pageSize=100');
+    const smallPage = await get(referencePath + '&dial=Blue&pageSize=1');
+    assert.deepEqual(smallPage.stats, cohort.stats);
+    assert.deepEqual(smallPage.methodology, cohort.methodology);
+    assert.ok(cohort.stats && cohort.stats.count >= 2);
+    assert.ok(cohort.outlier_rows.length > 0);
+    assert.ok(cohort.outlier_rows.every(row => row.is_outlier === true && row.analytics_included === false));
+    assert.ok(cohort.rows.every(row => row.analytics_included === true && row.is_outlier === false));
+    assert.equal(cohort.rows.length, cohort.stats.count);
+    assert.equal(cohort.outlier_rows.filter(row => row.outlier_reason === 'REPOST_DUPLICATE').length, 1);
+    assert.equal(cohort.outlier_rows.filter(row => row.outlier_reason === 'ABOVE_IQR_FENCE').length, 1);
+    assert.equal(cohort.stats.max, Math.max(...cohort.rows.map(row => row.price_usd)));
+    report.checks.push({ name: 'Frozen dial facets cover unloaded evidence; exact cohort excludes labeled outliers and statistics do not change with page size', status: 'PASS', dial_options: dialOracle, included: cohort.stats.count, outliers: cohort.outlier_rows.length });
     report.status = 'PASS';
   } catch (error) { report.status = 'FAIL'; report.error = { code: error.code || error.name, message: error.message.split('\n')[0] }; process.exitCode = 1; }
   finally {

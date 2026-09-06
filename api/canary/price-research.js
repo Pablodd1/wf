@@ -247,6 +247,23 @@ module.exports = async function handler(req, res) {
       }
       cohortBreakdown[key] = Number(raw);
     }
+
+    const { data: dialFacetRows, error: dialFacetError } = await supabase.rpc("get_price_research_snapshot_dial_facets", {
+      p_snapshot_id: snapshotId,
+      p_brand: brandQuery,
+      p_reference: referenceQuery,
+      p_model: modelQuery,
+      p_condition: conditionQuery.value,
+      p_filter_condition: conditionQuery.supplied
+    });
+    if (dialFacetError) throw dialFacetError;
+    if (!Array.isArray(dialFacetRows)) throw new Error('Snapshot dial facets unavailable');
+    const dialOptions = dialFacetRows.map(row => {
+      if (!row || (row.dial_color !== null && typeof row.dial_color !== 'string')
+        || !/^(0|[1-9][0-9]*)$/.test(String(row.listing_count))
+        || !Number.isSafeInteger(Number(row.listing_count))) throw new Error('Invalid snapshot dial facet');
+      return { dial_color: row.dial_color, count: Number(row.listing_count) };
+    });
     const excludedTotal = cohortBreakdown.excluded_duplicates + cohortBreakdown.excluded_ambiguous_currency
       + cohortBreakdown.excluded_unsupported_fx + cohortBreakdown.excluded_implausible
       + cohortBreakdown.excluded_iqr_outliers + cohortBreakdown.excluded_not_wts + cohortBreakdown.excluded_ineligible_flag;
@@ -427,11 +444,24 @@ module.exports = async function handler(req, res) {
     // WTB listings are NEVER classified as statistical outliers!
     let includedRows = [];
     let outlierRows = [];
-    if (scopedStats) {
-      outlierRows = items.filter(i => i.intent === 'WTS' && i.price_usd !== null && (i.price_usd < scopedStats.lower_fence || i.price_usd > scopedStats.upper_fence));
-      includedRows = items.filter(i => i.intent === 'WTS' && i.price_usd !== null && i.price_usd >= scopedStats.lower_fence && i.price_usd <= scopedStats.upper_fence);
+    if (scopedStats && items.length) {
+      const { data: membershipRows, error: membershipError } = await supabase.rpc('get_price_research_snapshot_membership', {
+        p_snapshot_id: snapshotId, p_brand: brandQuery, p_reference: referenceQuery, p_model: modelQuery,
+        p_dial_color: dialQuery.value, p_condition: conditionQuery.value, p_listing_ids: items.map(row => row.listing_id)
+      });
+      if (membershipError) throw membershipError;
+      if (!Array.isArray(membershipRows)) throw new Error('Comparable membership unavailable');
+      const membership = new Map(membershipRows.map(row => [row.listing_id, row.exclusion_reason]));
+      if (membership.size !== items.length || membershipRows.length !== items.length) throw new Error('Incomplete comparable membership');
+      for (const row of items) {
+        if (!membership.has(row.listing_id)) throw new Error('Missing comparable membership');
+        const reason = membership.get(row.listing_id);
+        if (reason !== null && !['REPOST_DUPLICATE','BELOW_MARKET_PLAUSIBILITY_FLOOR','INSUFFICIENT_COHORT','BELOW_IQR_FENCE','ABOVE_IQR_FENCE'].includes(reason)) throw new Error('Invalid comparable exclusion');
+        const labeled = { ...row, is_outlier: reason !== null, outlier_reason: reason, analytics_included: reason === null };
+        (reason === null ? includedRows : outlierRows).push(labeled);
+      }
     } else {
-      includedRows = items.filter(i => i.intent === 'WTS');
+      includedRows = items.filter(i => i.intent === 'WTS').map(row => ({ ...row, analytics_included: false }));
       outlierRows = [];
     }
 
@@ -461,6 +491,7 @@ module.exports = async function handler(req, res) {
         implausible: cohortBreakdown.excluded_implausible
       },
       condition_counts: conditionCounts,
+      dial_options: dialOptions,
       conditions: Object.keys(conditionCounts),
       reconciliation: {
         wts_loaded_count: items.length,
@@ -507,10 +538,10 @@ module.exports = async function handler(req, res) {
       stats_explanation: statsExplanation,
       methodology: {
         formula: 'Q1 - 3.0 * IQR <= price <= Q3 + 3.0 * IQR',
-        included_count: includedRows.length,
-        excluded_count: outlierRows.length,
-        statistical_outlier_count: outlierRows.length,
-        plausibility_floor_usd: scopedStats ? scopedStats.lower_fence : null
+        included_count: scopedStats ? scopedStats.count : 0,
+        excluded_count: excludedTotal,
+        statistical_outlier_count: cohortBreakdown.excluded_iqr_outliers,
+        plausibility_floor_usd: cohortBreakdown.plausibility_floor ?? null
       }
     });
   } catch (err) {

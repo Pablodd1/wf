@@ -31,7 +31,9 @@ require.cache[supabasePath] = {
   loaded: true,
   exports: {
     getClient: () => ({
-      rpc: (name, params) => mockRpcHandler(name, params),
+      rpc: (name, params) => name === 'get_price_research_snapshot_membership'
+        ? Promise.resolve({ data: params.p_listing_ids.map(listing_id => ({ listing_id, exclusion_reason: null })), error: null })
+        : mockRpcHandler(name, params),
     })
   }
 };

@@ -40,15 +40,29 @@ assets use a reviewed allowlist; originals remain private. A separate security
 commit removes tracked environment files and disables the legacy credential-bearing
 extraction tools. Previously exposed Moonshot credential revocation remains unverified.
 
-External preview is pending. Automatic approval review twice rejected placing
-the Supabase CLI demo anon/service-role keys in isolated Vercel project
-`wf-astra-disposable-20260906` (`prj_qBLBrF8XnDzs7FHQGRfesfmqAWtB`), including after
-verification of their public local-development signatures and synthetic-only
-data. No transfer was performed. Explicit user approval is required.
+The owner explicitly approved the disposable key transfer. The isolated Vercel
+project `wf-astra-disposable-20260906` (`prj_qBLBrF8XnDzs7FHQGRfesfmqAWtB`) now
+has preview-only test configuration, with service-role credentials server-only.
+External preview commit `fddb9e3b4e6741d229b15b67f9990fca9d592a60` passed real
+Vercel-to-Supabase API traversal: 50 synthetic singles, 19 reachable synthetic
+images, 24 priced WTS and 10 separate WTB records. The mobile browser displayed
+all 50 identities in the independent SQL order without horizontal overflow.
+These are synthetic checks, not the real production canary or a completed gate.
+
+Browser follow-up repairs the missing dial selector, legacy metadata/detail
+requests on the V2 lane, misleading unresolved-cohort and availability labels,
+page-sized methodology totals, and duplicate/outlier inclusion labels. Two
+additive migrations provide frozen dial options and bounded page membership
+computed against the full exact cohort. Both apply on PG15/18 with service-only
+grants; PG15 has 50 synthetic records and PG18 is empty. The real local Supabase
+HTTP test proves six dial observations yield four included comparables, one
+repost exclusion and one IQR exclusion, independent of page size. TypeScript,
+changed PriceResearch/helper lint, and 35 targeted tests pass. These latest
+repairs still require a new exact preview and browser verification.
 
 The temporary HTTPS test transport permits reviewed read/snapshot/contact-budget
 RPCs and synthetic images, and denies private ingestion/admin routes. It must be
-stopped while paused and recreated after authorization. This is a local genuine
+stopped when validation ends. It is currently running. This is a local genuine
 Supabase stack reached through HTTPS, not hosted Supabase and not an RPC shim.
 
 Remaining: external preview/browser verification; regression reconciliation;

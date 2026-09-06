@@ -19,7 +19,7 @@ import { CurrencyConverter } from '../components/CurrencyConverter';
 import { Footer } from '../components/Footer';
 import { DealerRatingBadge, ListingDealerEvidence } from '../components/ListingDealerEvidence';
 import { isHeldRolexPatekBrand, ROLEX_PATEK_PUBLICATION_HELD } from '../utils/rolexPatekPublication';
-import { ambiguousPriceDisplay, strongestPostingIdentity } from '../lib/customerEvidence';
+import { ambiguousPriceDisplay, strongestPostingIdentity, listingAvailabilityLabel } from '../lib/customerEvidence';
 import { useLanguage } from '../i18n/LanguageContext';
 import {
   loadPriceResearchBatchSummaries,
@@ -1768,9 +1768,7 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
       {/* 8. Direct WhatsApp Contact Action */}
       <div className="mt-auto pt-4 flex flex-col gap-2">
         <div className="text-center text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
-          {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
-            ? 'LATEST OBSERVED · CHECK AVAILABILITY'
-            : 'CONFIRMED CURRENT'}
+          {listingAvailabilityLabel(listing)}
         </div>
         <button
           type="button"
@@ -1946,7 +1944,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
     <section className="mb-8 flex flex-col gap-3.5" aria-label="Selected listing">
       {/* Top Banner Link */}
       <Link
-        to={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}`}
+        to={`/price-research?brand=${encodeURIComponent(listing.brand)}&reference=${encodeURIComponent(listing.reference || '')}&dial=${encodeURIComponent(listing.dial_color || '')}&condition=${encodeURIComponent(listing.condition || '')}`}
         className="w-full rounded border border-[#E8DECF] bg-[#F6EFE5] py-2 text-center text-xs font-semibold text-[#653E23] transition hover:bg-[#EFE5D8] block"
       >
         Open full price research
@@ -2009,9 +2007,7 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
             <div className="mt-3.5 text-2xl font-bold font-serif text-[#8A5826]">{meta.priceLabel}</div>
             {meta.foreignLabel && <div className="mt-1 text-xs font-medium text-[#7A8699]">{meta.foreignLabel}</div>}
             <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-[#6B7280]">
-              {listing.cohort_status === 'LATEST_OBSERVED' || listing.current_status === 'CURRENT_LATEST_STATE'
-                ? 'LATEST OBSERVED · CHECK AVAILABILITY'
-                : 'CONFIRMED CURRENT'}
+              {listingAvailabilityLabel(listing)}
             </div>
 
             {messageEvidence && (

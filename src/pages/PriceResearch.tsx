@@ -38,6 +38,7 @@ interface RowData extends PriceResearchListingContract {
   source: string;
   year: number | null;
   is_outlier: boolean;
+  analytics_included?: boolean;
   outlier_reason: 'BELOW_MARKET_PLAUSIBILITY_FLOOR' | 'BELOW_IQR_FENCE' | 'ABOVE_IQR_FENCE' | 'INVALID_PRICE' |
     'MISSING_BRAND' | 'MISSING_REFERENCE' | 'CATALOG_MODEL_UNCONFIRMED' | 'MISSING_PRICE' |
     'MISSING_DIAL' | 'CATALOG_DIAL_UNCONFIRMED' | 'CATALOG_DIAL_MISMATCH' |
@@ -366,6 +367,9 @@ interface PriceData {
   collection: string | null;
   dialColors: string[] | null;
   dial_analysis: DialPoint[];
+  dial_options?: Array<{ dial_color: string | null; count: number }>;
+  wts_count?: number;
+  wtb_count?: number;
   dial_trends?: DialTrendData[];
   dial_data_quality?: {
     known_count: number;
@@ -893,6 +897,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
 
   useEffect(() => {
     const controller = new AbortController();
+    // The V2 lane uses catalog names as search options, not legacy release counts.
+    if (import.meta.env.VITE_USE_CANARY_V2 === 'true') return () => controller.abort();
     Promise.all([
       fetch('/api/reviewed-market-inventory?page=1&pageSize=12', { signal: controller.signal }).then(response => response.json()),
       fetch('/api/live-release-summary', { signal: controller.signal }).then(response => response.ok ? response.json() : null).catch(() => null),
@@ -950,7 +956,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
   useEffect(() => {
     const deepLinkReference = initialReference.trim();
     const deepLinkBrand = initialBrand.trim();
-    const deepLinkKey = `${deepLinkBrand}\u0000${deepLinkReference}`;
+    const deepLinkKey = JSON.stringify([deepLinkBrand, deepLinkReference, initialDial.trim(), initialCondition.trim()]);
     if (!deepLinkReference || !deepLinkBrand || loadedDeepLinkRef.current === deepLinkKey) return;
     loadedDeepLinkRef.current = deepLinkKey;
     setSelectedCatalogReference(null);
@@ -959,9 +965,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     setPBrand(deepLinkBrand);
     setReferenceSuggestionsOpen(false);
     setReferenceSuggestions([]);
-    // Deep links carry the full exact cohort (dial + condition) so verified
-    // cohort statistics resolve immediately on the canary surface, which does
-    // not emit a legacy dial_analysis picker payload.
+    setSelectedCondition(initialCondition.trim());
     void fetchData(deepLinkReference, initialDial.trim(), deepLinkBrand, 1, 1, initialCondition.trim());
   }, [fetchData, initialBrand, initialReference, initialDial, initialCondition]);
 
@@ -980,7 +984,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
       const contactEndpoint = workbookListing
         ? `/api/reviewed-seller-summary?id=${encodeURIComponent(row.id)}`
         : `/api/listing-contact?id=${encodeURIComponent(row.id)}&surface=price-research&brand=${encodeURIComponent(String(row.brand || queryBrand || data?.brand || ''))}&reference=${encodeURIComponent(String(row.reference || data?.reference || query || ''))}`;
-      void fetch(contactEndpoint, { signal: controller.signal })
+      if (row.contract_version !== 'v2.0' || row.contact_available === true) void fetch(contactEndpoint, { signal: controller.signal })
         .then(async contactResponse => contactResponse.ok ? contactResponse.json().catch(() => null) : null)
         .then(contactPayload => {
           if (listingRequestRef.current.sequence !== sequence || !contactPayload) return;
@@ -1014,19 +1018,19 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           }
         })
         .catch(() => undefined);
-      if (String(row.source || '').toUpperCase() === 'MARIADB_IMMUTABLE_RAW') {
+      if (row.contract_version === 'v2.0' || String(row.source || '').toUpperCase() === 'MARIADB_IMMUTABLE_RAW') {
         const imageCandidate = row.thumbnail_url || row.display_image_url || row.image_url
           || row.image_urls?.find(Boolean) || '';
         const rawMessage = String(row.raw_message ?? row.raw_line ?? '');
         setListingDetail({
           id: row.id,
-          brand: queryBrand || data?.brand || 'Watch',
-          model: data?.model || null,
-          reference: data?.reference || query,
+          brand: row.brand || queryBrand || data?.brand || 'Watch',
+          model: row.model || data?.model || null,
+          reference: row.reference || data?.reference || query,
           price_raw: row.source_price_amount ?? row.price_usd,
           price_usd: row.price_usd,
-          price_evidence_status: Number(row.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED',
-          currency: row.source_currency || (Number(row.price_usd) > 0 ? 'USD' : null),
+          price_evidence_status: row.price_evidence_status || (row.contract_version === 'v2.0' ? 'PRICE_NOT_VERIFIED' : Number(row.price_usd) > 0 ? 'VERIFIED' : 'PRICE_NOT_VERIFIED'),
+          currency: row.source_currency || null,
           raw_message: rawMessage || null,
           raw_message_scope: rawMessage ? 'original_post' : 'unavailable',
           raw_message_truncated: false,
@@ -1044,7 +1048,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           image_evidence_label: imageCandidate ? 'Source-supplied listing image' : null,
           image_evidence_notice: imageCandidate ? 'Exact image retained with this immutable source listing.' : null,
           region: null,
-          source_type: 'qnsa_reviewed_release',
+          source_type: row.contract_version === 'v2.0' ? 'canonical_v2' : 'qnsa_reviewed_release',
           listing_status: row.listing_status || null,
           confidence: row.confidence == null ? null : Number(row.confidence),
         });
@@ -1119,10 +1123,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     ?? 0;
   const wtbDemandCount = data?.reconciliation?.wtb_demand_count
     ?? data?.wtb_demand_count
+    ?? data?.wtb_count
     ?? data?.liquidity?.demand_count
     ?? 0;
   const referenceQualifiedWtsCount = data?.reconciliation?.reference_qualified_wts_count
     ?? data?.reference_qualified_wts_count
+    ?? data?.wts_count
     ?? qualifiedWtsCount;
   const liveWtbWtsRatio = referenceQualifiedWtsCount > 0 ? wtbDemandCount / referenceQualifiedWtsCount : null;
   const displayedWtbWtsRatio = data?.liquidity?.wtb_fs_ratio ?? liveWtbWtsRatio;
@@ -1137,8 +1143,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
           max_price: data.stats.max,
         }]
       : [];
+  const displayDialOptions = data?.dial_options
+    ? data.dial_options.filter((group): group is { dial_color: string; count: number } => Boolean(group.dial_color && group.dial_color.toLowerCase() !== 'unspecified'))
+      .map(group => ({ ...group, avg_price: group.dial_color === activeDial ? data.stats?.avg ?? null : null }))
+    : displayDialAnalysis;
   const datedHistory = (data?.monthly || []).length > 0;
-  const priceHistoryTitle = `${activeDial || 'Selected'} Dial ${datedHistory ? 'Price History' : 'Current Comparable Range'} - All Conditions`;
+  const priceHistoryTitle = `${activeDial || 'Selected'} Dial ${datedHistory ? 'Price History' : 'Current Comparable Range'} - ${data?.selected_cohort.condition || 'Condition unresolved'}`;
   const chartData: Array<Record<string, number | string | null>> = (data?.monthly || []).map(m => ({
     month: m.month,
     min: m.min_price,
@@ -1672,14 +1682,14 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               The dial comparison table and graphic analytics are shown below for this reference. Solid dial-colored lines are observed WTS averages. Dotted points are estimates and are labeled indicative unless the trend passes validation.
             </aside>
 
-            {displayDialAnalysis.length > 0 && (
+            {displayDialOptions.length > 0 && (
               <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Dial colors and comparable prices</div>
                 <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
-                  Each dial appears once. New, Used, and Unspecified listings are combined for analytics; condition remains visible in each listing description.
+                  Select a dial and an exact condition to compare matching observations. Counts cover the frozen evidence; averages require a resolved cohort.
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {displayDialAnalysis.map(group => {
+                  {displayDialOptions.map(group => {
                     const selected = data.selected_cohort.dial_color === group.dial_color;
                     return (
                       <button
@@ -1700,10 +1710,10 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                         <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', flex: '0 0 auto', background: dialSwatch(group.dial_color), border: '1px solid rgba(0,0,0,0.18)', boxShadow: 'inset 0 0 0 2px rgba(255,255,255,0.35)' }} />
                         <span style={{ minWidth: 0, flex: 1 }}>
                           <span style={{ display: 'block', color: TEXT, fontSize: 13, fontWeight: 700 }}>{group.dial_color}</span>
-                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{group.count.toLocaleString()} listings · all conditions combined</span>
+                          <span style={{ display: 'block', color: MUTED, fontSize: 11 }}>{group.count.toLocaleString()} listings · {selectedCondition || 'all conditions'}</span>
                         </span>
                         <span style={{ color: GREEN, fontSize: 13, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                          {group.avg_price == null ? 'No price' : `$${group.avg_price.toLocaleString()}`}
+                          {group.avg_price == null ? 'Select cohort' : `$${group.avg_price.toLocaleString()}`}
                         </span>
                       </button>
                     );
@@ -1755,9 +1765,9 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
             <div className="grid grid-cols-1 gap-6 mb-8">
               <div data-testid="wts-supply-summary" style={{ backgroundColor: '#f7f3e8', border: '1px solid #dfca91', borderRadius: 8, padding: 20 }}>
                 <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>WTS listings for sale</div>
-                <div style={{ color: NAVY, fontSize: 28, fontWeight: 800, marginTop: 5 }}>{(data.reconciliation?.wts_loaded_count ?? data.reference_listing_count ?? data.totalListings ?? data.sampledListings ?? data.rawCount ?? data.count ?? 0).toLocaleString()}</div>
+                <div style={{ color: NAVY, fontSize: 28, fontWeight: 800, marginTop: 5 }}>{(data.wts_count ?? data.reference_listing_count ?? data.rawCount ?? data.count ?? 0).toLocaleString()}</div>
                 <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
-                  All source-backed sale offers for this reference remain available below. Only qualified priced WTS observations enter averages, graphics, and predictions.
+                  Source-backed priced sale offers matching the selected filters remain available below. Only qualified observations in an exact cohort enter averages and graphics.
                 </div>
               </div>
               {/* Pricing Summary */}
@@ -1979,8 +1989,8 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </>
             ) : (
               <section aria-label="Insufficient price history evidence" style={{ border: '1px solid #ead9a2', background: '#fffaf0', padding: 20, marginBottom: 24 }}>
-                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Price chart unavailable — no qualified price observations exist for this reference and dial.</h3>
-                <p style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>Choose another dial color to inspect its independent evidence. Listing condition is descriptive and does not split the analytics cohort.</p>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Price chart unavailable for the selected cohort.</h3>
+                <p style={{ fontSize: 13, color: MUTED, marginTop: 6 }}>{data.stats_explanation || 'Select an exact dial color and condition with at least two qualified observations.'}</p>
               </section>
             )}
 
@@ -2475,6 +2485,7 @@ function ListingRow({ row, title, exclusionLabel, onOpen }: {
     : '';
   const evidenceStatus = excludedFromAverages
     ? `Excluded from averages · ${exclusionLabel}`
+    : row.analytics_included === false ? 'Source-backed price · cohort statistics unavailable'
     : 'Included in qualified comparable average';
   return (
     <div style={{ borderBottom: `1px solid ${BORDER}`, backgroundColor: WHITE }}>
@@ -2734,7 +2745,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
             <section style={{ padding: 'clamp(22px, 4vw, 42px)' }}>
               <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 18 }}>
                 <span style={{ background: summary.is_outlier ? '#fff2cc' : '#eaf7ef', color: summary.is_outlier ? '#7a5900' : '#166534', padding: '6px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>
-                  {summary.is_outlier ? 'Excluded from market statistics' : 'Included in comparable set'}
+                  {summary.is_outlier ? 'Excluded from market statistics' : summary.analytics_included === false ? 'Cohort statistics unavailable' : 'Included in comparable set'}
                 </span>
                 {summary.is_outlier && <span style={{ color: '#7a5900', fontSize: 12 }}>{outlierLabel}</span>}
               </div>
