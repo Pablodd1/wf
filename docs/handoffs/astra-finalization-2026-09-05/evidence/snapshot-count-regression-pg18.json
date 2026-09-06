@@ -1,0 +1,72 @@
+{
+  "executed_at": "2026-09-06T10:53:13.738Z",
+  "disposable": true,
+  "production_contacted": false,
+  "migrations": [
+    {
+      "file": "20260902130000_v2_canary_forward_migration.sql",
+      "sha256": "3853132724400697be203a9415cd730251b9ec6d2d06d9629cb8ad3e20ee1fd7"
+    },
+    {
+      "file": "20260905120000_v2_canary_hardening_forward.sql",
+      "sha256": "2fa84b8092536a85ca3a796112c1ef05b578a20d663f54902b3fe5e7397ffdd2"
+    },
+    {
+      "file": "20260905130000_price_research_stats_hardening.sql",
+      "sha256": "ea6c53a5ba101d5d3044c4d3e4a83b5a07d0e800d1bf64ed73cafdcfe23343be"
+    },
+    {
+      "file": "20260905140000_snapshot_keyset_pagination_forward.sql",
+      "sha256": "0b3918c026090ad5e35b63921f4cba925bdfbe0243745d5a7cde2a29d3ce4aed"
+    },
+    {
+      "file": "20260905150000_phase4_1_stats_breakdown_fix.sql",
+      "sha256": "0760d1a984dc5feb93ac46fc87ea55a1f90292f047b7cd5cbe41a1fc0689059a"
+    },
+    {
+      "file": "20260905160000_phase5_1_snapshot_cursor_frozen_keys.sql",
+      "sha256": "80547cb358c0e4770ba63b4a7345a79079b4c04023c573b90a0b3406cad8dd0c"
+    },
+    {
+      "file": "20260905170000_demand_keyset_forward.sql",
+      "sha256": "5182bba637f80a47e384866fcd39d6e884f57bb63cbf935e367cab43ed683a27"
+    },
+    {
+      "file": "20260906120000_phase6_surface_separation_forward.sql",
+      "sha256": "7b1b83a2fc5189ee4e834c5cc94ce93fab010a65f84babe00c9822c39a8ada9d"
+    },
+    {
+      "file": "20260907120000_snapshot_payload_freeze_forward.sql",
+      "sha256": "0e72d639f525f452e75001ca7e126b047049fdb2d9cf8b9aa8b5302f73ee2673"
+    },
+    {
+      "file": "20260907130000_snapshot_counts_forward.sql",
+      "sha256": "3baa03d6ed8a50343fe97e29b13922eda3b3eb5c2f4a4611bd71dd1b1cd703d3"
+    }
+  ],
+  "assertions": [
+    {
+      "name": "filtered totals match page oracle and survive separate-session INSERT/UPDATE/DELETE",
+      "cases": 21,
+      "result": "PASS"
+    },
+    {
+      "name": "new snapshot observes changed source population",
+      "result": "PASS"
+    },
+    {
+      "name": "least privilege",
+      "result": "PASS",
+      "scope": "local SET ROLE simulation only"
+    },
+    {
+      "name": "wrong surface and expired snapshot fail closed",
+      "result": "PASS"
+    }
+  ],
+  "scope": "Canary migration chain, synthetic fixtures, PostgreSQL only. Not full-chain or Supabase E2E.",
+  "postgres_version": "PostgreSQL 18.4 on x86_64-pc-linux-gnu, compiled by gcc (Ubuntu 7.5.0-3ubuntu1~18.04) 7.5.0, 64-bit",
+  "before_source_count": 67,
+  "after_source_count": 67,
+  "result": "PASS"
+}

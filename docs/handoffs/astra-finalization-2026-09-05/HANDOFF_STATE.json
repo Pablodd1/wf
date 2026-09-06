@@ -1,0 +1,73 @@
+{
+  "handoff_version": "2026-09-06.2",
+  "status": "REVIEW_CANDIDATE_NOT_PRODUCTION_READY",
+  "repository": {
+    "remote": "https://github.com/Pablodd1/wf.git",
+    "transfer_branch": "codex/astra-finalization-package",
+    "sanitized_root": "442ea6e0431f768574e72d7a669f1c064881015d",
+    "rc50_already_applied": "IN_LOCAL_INTEGRATION_WORKTREE_NOT_THIS_PACKAGE",
+    "production_baseline": "b9c0145c2e153dd82c936b7b4e02361f1f3e5fd9",
+    "main": "f936270b1a2027c7e6a5e83cf3b2ff5f6fbb4649",
+    "release_baseline_decision": "VERIFY_AND_PRESERVE_CURRENTLY_DEPLOYED_LINEAGE",
+    "user_facing_alias_mapping": "UNVERIFIED",
+    "package_kind": "DOCUMENTATION_PATCHES_AND_CANDIDATE_REPLACEMENTS_ONLY",
+    "parent_count": 0
+  },
+  "verification": {
+    "original_rc50_manifest_files": 44,
+    "original_manifest_scope": "BEFORE_SUBSEQUENT_FIXES",
+    "archive_hashes": "MATCH",
+    "new_security_tests": {
+      "pass": 16,
+      "fail": 0
+    },
+    "new_api_tests": {
+      "pass": 53,
+      "fail": 0
+    },
+    "database_count_tests": {
+      "postgres": "18.4",
+      "filtered_cases": 21,
+      "result": "PASS",
+      "migration_scope": "TEN_CANARY_MIGRATIONS_ONLY",
+      "source_before": 67,
+      "source_after": 67,
+      "role_scope": "LOCAL_SIMULATION_ONLY"
+    },
+    "production_mutated": false
+  },
+  "unresolved": [
+    "LEGACY_MOONSHOT_KEY_REVOCATION_AND_EXPOSURE_REVIEW",
+    "CONTENT_BOUND_PROVENANCE",
+    "SNAPSHOT_SCALE",
+    "PRICE_STATS_TEMPORAL_CONSISTENCY",
+    "DISTRIBUTED_RATE_LIMIT",
+    "DEPLOYED_TREE_RECONCILIATION",
+    "HISTORICAL_MIGRATION_EDITS",
+    "FULL_TEST_BASELINE",
+    "PG15_AND_COMPLETE_CHAIN",
+    "GENUINE_SUPABASE_POSTGREST_JWT_RLS",
+    "VERCEL_DISPOSABLE_E2E",
+    "PRODUCTION_ALIAS_IDENTITY",
+    "REAL_50",
+    "FULL_SOURCE_NORMALIZATION_PUBLICATION",
+    "FULL_UI_ACCEPTANCE"
+  ],
+  "rollout": {
+    "first": "50_REAL_ELIGIBLE_LISTINGS",
+    "continue_through_full_boundary": true,
+    "singles_first": true,
+    "unresolved_bundles": "REVIEW"
+  },
+  "archives": {
+    "local_verified": true,
+    "committed": false,
+    "location": "See CURRENT_EXECUTION_STATE.md",
+    "checksum_file": "EXPECTED_SHA256SUMS.txt"
+  },
+  "security": {
+    "static_html_replacements_included": true,
+    "secret_values_in_package": false,
+    "revocation": "OWNER_ACTION_REQUIRED"
+  }
+}

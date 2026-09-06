@@ -1,0 +1,82 @@
+{
+  "executed_at": "2026-09-06T11:12:51.388Z",
+  "scope": "Documentation/patch transfer preparation; not a production release or complete QA certification",
+  "source_candidate_base": "442ea6e0431f768574e72d7a669f1c064881015d",
+  "candidate_changes": "RC50 aggregate + reviewed file replacements; local candidate worktree was uncommitted during these checks",
+  "archive_verification": {
+    "code": "5c5d7738e5bad3ce6f9160bfe7c46a9fbad347904485dd186d28e8e5f79aef00",
+    "evidence": "6ebece12a793bfa9fbf02fa62600e68d70b2d45cd652ec11a125b7482bd69113",
+    "result": "MATCH"
+  },
+  "original_manifest": {
+    "files": 44,
+    "result": "MATCH after CRLF-only normalization, before follow-up edits"
+  },
+  "install": {
+    "command": "npm ci --cache <isolated-local-cache> --no-audit --no-fund",
+    "exit_code": 0,
+    "packages": 621
+  },
+  "targeted_tests": {
+    "command": "node --test --test-reporter=dot tests/contact-trusted-proxy.test.cjs tests/dealer-contact-security.test.cjs tests/snapshot-count.test.cjs tests/canary-api-contracts.test.cjs tests/canary-keyset-snapshot.test.cjs tests/contract-surface-separation.test.cjs",
+    "exit_code": 0,
+    "tests": 69,
+    "complete_suite": false
+  },
+  "build": {
+    "command": "npm run build",
+    "exit_code": 0,
+    "includes": [
+      "API syntax and merge marker verification",
+      "62 frontend API routes",
+      "tsc -b",
+      "Vite production build"
+    ],
+    "notes": [
+      "Ran after static legacy HTML replaced",
+      "Browserslist data warning remains",
+      "Not a deployed build; metadata referenced base HEAD of uncommitted candidate"
+    ]
+  },
+  "database": {
+    "postgres": "18.4",
+    "report": "snapshot-count-regression-pg18.json",
+    "filtered_cases": 21,
+    "result": "PASS",
+    "migration_chain": "Ten canary migrations only"
+  },
+  "package_scan": {
+    "scope": "Source, documentation, static HTML and aggregate patch in this package",
+    "patterns": [
+      "JWT literal",
+      "private key",
+      "credential-bearing database URL",
+      "GitHub token",
+      "sk-prefixed provider token",
+      "non-example env filename"
+    ],
+    "findings": 0,
+    "limitations": "Pattern scan is not a guarantee against every secret/PII format. No assertion that original application history is sanitized."
+  },
+  "security": {
+    "legacy_provider_key_found": true,
+    "values_disclosed": false,
+    "static_replacements_included": true,
+    "owner_rotation_required": true
+  },
+  "not_run": [
+    "Complete test baseline/final twice",
+    "PostgreSQL 15",
+    "Full repository migration chain",
+    "Real Supabase/PostgREST/JWT/RLS",
+    "External Vercel E2E",
+    "Real 50 production canary",
+    "Full normalized live population"
+  ],
+  "production": {
+    "database_contacted": false,
+    "database_mutated": false,
+    "workers_started": false,
+    "deployed": false
+  }
+}
