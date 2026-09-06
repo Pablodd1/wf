@@ -71,9 +71,12 @@ async function main(){
   await db.query('delete from wf_canonical_staging.keyset_snapshot_registry where snapshot_id=$1',[alias]);
   await db.query('delete from wf_canonical_staging.keyset_snapshot_registry where snapshot_id=$1',[root]);
   assert.equal((await db.query('select count(*)::int n from wf_canonical_staging.publication_research_outcomes_v2 where publication_revision=$1',[revision])).rows[0].n,24);
+  const retainedSummary=(await db.query('select * from public.get_price_research_snapshot_breakdown($1,null)',[floorSnapshot])).rows[0];
+  assert.equal(Number(retainedSummary.source_observations),50);assert.equal(Number(retainedSummary.included_count),22);
   await db.query('rollback');
   const privileges=(await db.query("select role,has_table_privilege(role,'wf_canonical_staging.research_snapshot_admission_v2','SELECT') allowed from unnest(array['anon','authenticated','service_role']) role")).rows;
   assert.ok(privileges.every(r=>!r.allowed));
+  assert.ok((await db.query("select has_table_privilege(role,'wf_canonical_staging.publication_research_summaries_v2','SELECT') allowed from unnest(array['anon','authenticated','service_role']) role")).rows.every(r=>!r.allowed));
   assert.equal((await db.query('select count(*)::int n from public.trading_floor_ready_view_v2')).rows[0].n,50);
   report.status='PASS';report.candidate_count=24;report.display_count=22;report.exclusions={reposts:1,iqr_outliers:1};
   report.checks=['Five real PostgREST page sizes exhaust the same 22 unique IDs','24 private candidates retain original quartiles; exact cohort remains four offers averaging USD 97500',

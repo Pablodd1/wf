@@ -63,7 +63,7 @@ class CdpBrowserSession {
       '--disable-gpu',
       '--no-first-run',
       '--no-sandbox'
-    ]);
+    ], { windowsHide: true });
 
     const portFile = path.join(this.tmpUserDir, 'DevToolsActivePort');
     let port = null;
@@ -204,8 +204,13 @@ class CdpBrowserSession {
       try { this.proc.kill(); } catch {}
     }
     if (this.tmpUserDir) {
+      const temporaryProfile = path.resolve(this.tmpUserDir);
+      if (path.dirname(temporaryProfile) !== path.resolve(os.tmpdir())
+        || !path.basename(temporaryProfile).startsWith('cdp_session_')) {
+        throw new Error('Unexpected disposable browser profile');
+      }
       setTimeout(() => {
-        try { fs.rmSync(this.tmpUserDir, { recursive: true, force: true }); } catch {}
+        try { fs.rmSync(temporaryProfile, { recursive: true, force: true }); } catch {}
       }, 1000);
     }
   }

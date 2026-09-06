@@ -1,5 +1,25 @@
 # WatchFacts finalization execution checkpoint
 
+Latest continuation: 2026-09-06 22:12 UTC. PostgreSQL 15/18 replay 257
+migrations with the historical qualifications below. The 1.5-million-row
+admission retest completed correctly, but exposed a 390.444-second broad
+summary request. A forward migration prepares and retains that summary during
+owner publication: measured preparation 270.599 seconds, cached full-boundary
+read 0.191 seconds, filtered 150-offer read 1.253 seconds. The separate admission
+prewarm measured 479.487 seconds; these full-scale phases were measured
+separately, not as one final combined transaction. Actual small publication,
+rollback, privacy, admission and unknown-date cursor checks pass after the hook.
+
+The external disposable browser now waits for actual loaded content: all 50
+Trading Floor IDs match API order, and four exact-cohort research offers have
+the expected prices and admission labels. Screenshots were inspected. This is
+synthetic evidence on application commit `f111ed99`, not the final candidate.
+The exact deployed baseline was also completed with its tracked fixtures and
+rerun twice: 1,982 tests, 1,877 pass, 104 fail, one skip on each run. Those 104
+failure identities are stable. The older integration run has 27 additional
+failure identities, several corrected since; final reconciliation is pending.
+No production database reads, mutations or deployments have occurred.
+
 Latest continuation: 2026-09-06 21:27 UTC. Both disposable PostgreSQL versions
 replay 256 migrations with the existing historical qualifications. The new
 materialization workflow passes actual Supabase restart, competing completion,
