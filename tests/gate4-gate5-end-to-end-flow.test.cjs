@@ -5,7 +5,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { enforceListingDisplayContract } = require('../shared/listing-display-contract.cjs');
+const { adaptLegacyListingDisplayV1 } = require('../shared/listing-display-contract.cjs');
 
 test('Gate 4 & 5: API -> ListingDisplayContract -> Trading Floor Card -> Detail View -> Price Research', () => {
   const canaryProposalsPath = path.resolve('audit-output/mariadb-live/normalization-canary-10k/proposals.jsonl');
@@ -17,8 +17,11 @@ test('Gate 4 & 5: API -> ListingDisplayContract -> Trading Floor Card -> Detail 
   const sampleProposals = lines.slice(0, 100).map(l => JSON.parse(l));
 
   for (const proposal of sampleProposals) {
-    // 1. API contract validation
-    const displayRecord = enforceListingDisplayContract({
+    // 1. API contract validation.
+    // Phase 2 strict provenance: canary proposals lack V2 source_id/source_hash
+    // provenance, so they must be adapted through the explicit legacy V1 path
+    // (strict enforceListingDisplayContract now fails closed on these rows).
+    const displayRecord = adaptLegacyListingDisplayV1({
       id: proposal.source_id,
       brand: proposal.brand,
       model: proposal.model,

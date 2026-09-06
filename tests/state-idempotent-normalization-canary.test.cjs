@@ -6,11 +6,13 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const {
-  normalizeAuthoritativeRow,
+  normalizeAuthoritativeRow: productionNormalize,
   computeProposalHash,
   buildAuthorizedInquiryContract,
   sha256
 } = require('../tools/mariadb-live/authoritative-evidence-normalizer.cjs');
+const { capturedFixture } = require('./helpers/captured-fixture.cjs');
+const normalizeAuthoritativeRow = (row, options) => productionNormalize(capturedFixture(row), options);
 
 test('1. SQL migration syntax and RPC-only privilege matrix', () => {
   const migrationPath = path.resolve('supabase/migrations/20260830170000_private_mariadb_state_idempotent_normalization.sql');

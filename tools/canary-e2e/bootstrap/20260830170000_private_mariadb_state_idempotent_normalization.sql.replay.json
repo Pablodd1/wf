@@ -1,0 +1,15 @@
+{
+  "reason": "An earlier overload makes the historical unqualified grant ambiguous. Select the eight-argument function defined here; production forward migration grants this exact signature.",
+  "original_sha256": "3aa0ce0349312c1aa4e9a54e43c93a5c7168585747709eb5f8293881640d7b4a",
+  "replacements": [
+    {
+      "old": "REVOKE ALL ON FUNCTION public.get_mariadb_private_staged_auctions_batch FROM",
+      "new": "REVOKE ALL ON FUNCTION public.get_mariadb_private_staged_auctions_batch(integer,text,text,text,text,text,text,text) FROM"
+    },
+    {
+      "old": "GRANT EXECUTE ON FUNCTION public.get_mariadb_private_staged_auctions_batch TO",
+      "new": "GRANT EXECUTE ON FUNCTION public.get_mariadb_private_staged_auctions_batch(integer,text,text,text,text,text,text,text) TO"
+    }
+  ],
+  "canonical_lf_sha256": "7f31bbfe3f76df4c9eeb1ee709bf2c8b96a163f80bce70caeb7957636c9f5949"
+}

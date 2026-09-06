@@ -1,4 +1,4 @@
-import { BadgeCheck, Building2, CalendarDays, Search, Star, Trophy, Users } from 'lucide-react';
+import { BadgeCheck, Building2, CalendarDays, Search, Star, Users } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Footer } from '@/components/Footer';
@@ -41,7 +41,7 @@ interface DealerSummary {
   listing_linkage_status?: string | null;
 }
 
-type DirectoryView = 'all' | 'rated' | 'top-rated';
+type DirectoryView = 'all' | 'rated';
 
 export default function DealerDirectory() {
   const [dealers, setDealers] = useState<DealerSummary[]>([]);
@@ -51,8 +51,8 @@ export default function DealerDirectory() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [view, setView] = useState<DirectoryView>('rated');
-  const pageSize = view === 'top-rated' ? 25 : 24;
+  const [view, setView] = useState<DirectoryView>('all');
+  const pageSize = 24;
 
   useEffect(() => {
     const timer = window.setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 300);
@@ -68,41 +68,20 @@ export default function DealerDirectory() {
     const loadDealers = async () => {
       try {
         const response = await fetch(`/api/dealers?${params}`, { credentials: 'include', signal: controller.signal });
-        if (response.ok) {
-          const payload = await response.json();
-          if (payload && Array.isArray(payload.dealers)) {
-            setDealers(payload.dealers);
-            setTotal(Number(payload.total) || payload.dealers.length);
-            setError('');
-            return;
-          }
+        if (!response.ok) throw new Error('directory_unavailable');
+        const payload = await response.json();
+        if (!Array.isArray(payload?.dealers) || !Number.isSafeInteger(payload.total) || payload.total < 0) {
+          throw new Error('invalid_directory_response');
         }
-      } catch {}
-
-      // Fallback to /dealers.json
-      try {
-        const fallbackRes = await fetch('/dealers.json', { signal: controller.signal });
-        if (fallbackRes.ok) {
-          const raw = await fallbackRes.json();
-          let list: DealerSummary[] = view === 'top-rated' ? raw.topRated : view === 'rated' ? raw.rated : raw.all;
-          if (search) {
-            const qLower = search.toLowerCase();
-            list = list.filter(d => 
-              (d.display_name || '').toLowerCase().includes(qLower) || 
-              (d.company_name || '').toLowerCase().includes(qLower) ||
-              (d.city || '').toLowerCase().includes(qLower)
-            );
-          }
-          setTotal(list.length);
-          const from = (page - 1) * pageSize;
-          setDealers(list.slice(from, from + pageSize));
-          setError('');
-          return;
-        }
-      } catch (err: any) {
-        if (err?.name !== 'AbortError') {
-          setError('Unable to load dealers');
-        }
+        if (controller.signal.aborted) return;
+        setDealers(payload.dealers);
+        setTotal(payload.total);
+        setError('');
+      } catch {
+        if (controller.signal.aborted) return;
+        setDealers([]);
+        setTotal(0);
+        setError('Unable to load dealers. Please try again.');
       }
     };
 
@@ -120,11 +99,11 @@ export default function DealerDirectory() {
       <MarketNav />
       <section className="border-b border-white/10 px-5 py-10 sm:px-8 lg:px-12">
         <div className="mx-auto max-w-7xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{view === 'rated' ? 'Curated Luxury rated dealer evidence' : view === 'top-rated' ? 'Curated Luxury public-source leaderboard' : 'Curated Luxury live dealer network'}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#c9a96e]">{view === 'rated' ? 'Curated Luxury rated dealer evidence' : 'Curated Luxury live dealer network'}</p>
           <div className="mt-3 grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
             <div>
               <h1 className="font-serif text-4xl sm:text-5xl">Reference Check</h1>
-              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{view === 'rated' ? 'Rated Dealers filters the complete directory to profiles with source-backed feedback. Feedback counts remain evidence and are never converted into fictional five-point scores.' : view === 'top-rated' ? 'Top Rated Dealers is a deterministic ranking of the Rated Dealers set—not an invented star score.' : 'All Dealers reconciles canonical profiles and source dealer candidates, preserving business profile, listing activity, feedback and group evidence when available.'}</p>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-white/55">{view === 'rated' ? 'Rated Dealers filters the complete directory to profiles with source-backed feedback. Feedback counts remain evidence and are never converted into fictional five-point scores.' : 'All Dealers shows approved profiles, with listing activity, feedback and group information when verified and available.'}</p>
             </div>
             <label className="relative block">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" size={17} />
@@ -133,20 +112,19 @@ export default function DealerDirectory() {
             </label>
           </div>
           <div className="mt-7 flex flex-wrap gap-2" role="tablist" aria-label="Reference Check views">
-            <button type="button" role="tab" aria-selected={view === 'all'} onClick={() => setView('all')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'all' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Search size={15} /> All Dealers</button>
-            <button type="button" role="tab" aria-selected={view === 'rated'} onClick={() => setView('rated')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'rated' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Star size={15} /> Rated Dealers</button>
-            <button type="button" role="tab" aria-selected={view === 'top-rated'} onClick={() => setView('top-rated')} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'top-rated' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Trophy size={15} /> Top Rated Dealers</button>
+            <button type="button" role="tab" aria-selected={view === 'all'} onClick={() => { setView('all'); setPage(1); }} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'all' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Search size={15} /> All Dealers</button>
+            <button type="button" role="tab" aria-selected={view === 'rated'} onClick={() => { setView('rated'); setPage(1); }} className={`flex min-h-11 items-center gap-2 border px-4 text-xs font-semibold ${view === 'rated' ? 'border-[#c9a96e] bg-[#c9a96e] text-[#08080c]' : 'border-white/15 text-white/60'}`}><Star size={15} /> Rated Dealers</button>
           </div>
         </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-5 py-8 sm:px-8 lg:px-12">
         <div className="mb-5 flex items-center justify-between text-sm text-white/45">
-          <span>{loading ? (view === 'rated' ? 'Loading rated dealer profiles...' : view === 'top-rated' ? 'Loading ranked dealer profiles...' : 'Loading all dealer profiles...') : view === 'rated' ? `${total.toLocaleString()} rated dealer profiles` : view === 'top-rated' ? `Top ${Math.min(25, total)} source-ranked dealers` : `${total.toLocaleString()} dealer profiles`}</span>
+          <span>{loading ? (view === 'rated' ? 'Loading rated dealer profiles...' : 'Loading all dealer profiles...') : view === 'rated' ? `${total.toLocaleString()} rated dealer profiles` : `${total.toLocaleString()} dealer profiles`}</span>
           <span>Page {page} of {pages}</span>
         </div>
         {error && <div role="alert" className="border border-amber-300/25 bg-amber-300/[0.07] px-4 py-3 text-sm text-amber-100/75">{error}</div>}
-        {!error && !loading && dealers.length === 0 && <div className="border border-white/10 px-5 py-12 text-center text-sm text-white/45">{view === 'top-rated' ? 'No source-ranked profiles are available.' : 'No dealer profiles match this search.'}</div>}
+        {!error && !loading && dealers.length === 0 && <div className="border border-white/10 px-5 py-12 text-center text-sm text-white/45">No dealer profiles match this search.</div>}
         <div className="grid gap-px bg-white/10 md:grid-cols-2 xl:grid-cols-3">
           {dealers.map(dealer => {
             const stats = dealer.stats;
@@ -156,12 +134,12 @@ export default function DealerDirectory() {
             const name = dealer.display_name || dealer.company_name || 'Dealer profile';
             return (
               <article key={dealer.id} className="group relative min-h-72 bg-[#101016] p-6 transition-colors hover:bg-[#15151d]">
-                {(view === 'top-rated' || view === 'rated') && <span className="absolute right-6 top-6 font-mono text-xl text-[#c9a96e]">#{dealer.source_rank || ((page - 1) * pageSize + dealers.indexOf(dealer) + 1)}</span>}
+                {view === 'rated' && <span className="absolute right-6 top-6 font-mono text-xl text-[#c9a96e]">#{dealer.source_rank || ((page - 1) * pageSize + dealers.indexOf(dealer) + 1)}</span>}
                 <div className="flex items-start justify-between gap-4">
                   <div className="grid h-12 w-12 place-items-center border border-[#c9a96e]/35 bg-[#08080c] text-[#c9a96e]">
                     {dealer.avatar_url ? <img src={dealer.avatar_url} alt="" className="h-full w-full object-cover" /> : <Building2 size={21} />}
                   </div>
-                  {view !== 'top-rated' && <BadgeCheck size={19} className="text-[#c9a96e]" aria-label={canonicalVerified ? 'Verified dealer' : 'Source dealer candidate'} />}
+                  {<BadgeCheck size={19} className="text-[#c9a96e]" aria-label={canonicalVerified ? 'Verified dealer' : 'Source dealer candidate'} />}
                 </div>
                 <h2 className="mt-7 pr-12 text-xl font-semibold">
                   <Link to={`/reference-check/${dealer.slug || dealer.id}`} className="hover:text-[#d4b87a]">{name}</Link>
@@ -188,7 +166,7 @@ export default function DealerDirectory() {
             );
           })}
         </div>
-        {view !== 'top-rated' && <div className="mt-6 flex justify-end gap-2">
+        {<div className="mt-6 flex justify-end gap-2">
           <button type="button" disabled={page <= 1 || loading} onClick={() => { setLoading(true); setPage(value => Math.max(1, value - 1)); }} className="h-10 border border-white/15 px-4 text-xs disabled:opacity-35">Previous</button>
           <button type="button" disabled={page >= pages || loading} onClick={() => { setLoading(true); setPage(value => Math.min(pages, value + 1)); }} className="h-10 bg-[#c9a96e] px-4 text-xs font-semibold text-[#08080c] disabled:opacity-35">Next</button>
         </div>}

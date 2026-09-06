@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { normalizeAuthoritativeRow, sha256 } = require('./authoritative-evidence-normalizer.cjs');
+const { bindProposalEvidence } = require('./bind-proposal-evidence.cjs');
 
 const FROZEN_UPPER_CURSOR = {
   created_on: '2026-04-28T15:50:43.000Z',
@@ -108,7 +109,7 @@ async function runPersistedCanary(rowCount = 1000, env = process.env) {
       totalInputsProcessed++;
 
       try {
-        const contract = normalizeAuthoritativeRow(r);
+        const contract = bindProposalEvidence(r, normalizeAuthoritativeRow(r));
         proposalsBatch.push(contract);
         allProposals.push(contract);
 

@@ -29,7 +29,8 @@ export function useLiquidityData() {
       .then((r) => r.json())
       .then((data: EnrichedRef[]) => {
         // Sort by liquidity score descending, then by total mentions
-        const sorted = data.sort((a, b) => {
+        const sorted = data.filter(row => Number.isFinite(row.liquidity_score)
+          && Number.isFinite(row.total_mentions)).sort((a, b) => {
           if (b.liquidity_score !== a.liquidity_score) {
             return b.liquidity_score - a.liquidity_score;
           }

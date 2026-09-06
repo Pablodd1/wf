@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, ArrowLeft, CheckCircle2, ChevronLeft, Copy, Eye, Loader2, MessageCircle, Search, Store, X } from 'lucide-react';
 import { Area, Bar, CartesianGrid, Cell, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Scatter, Tooltip, XAxis, YAxis } from 'recharts';
@@ -66,7 +66,7 @@ interface RowData extends PriceResearchListingContract {
   confidence?: number | null;
   listing_status?: string | null;
   listing_type?: string | null;
-  intent?: string | null;
+  intent?: 'WTS' | 'WTB' | null;
   contact_publication_approved?: boolean;
   dealer_id?: string | null;
   dealer_profile_path?: string | null;
@@ -343,12 +343,16 @@ interface LiquidityData {
   demand_cohorts?: { dial_color: string; count: number }[];
   demand_rows?: WtbListingData[];
   demand_evidence?: {
-    returned: number;
+    returned?: number;
     total: number;
-    page: number;
+    page?: number;
     page_size: number;
-    pages: number;
-    sample_capped: boolean;
+    pages?: number;
+    sample_capped?: boolean;
+    snapshot?: string;
+    cursor?: string | null;
+    next_cursor?: string | null;
+    has_more?: boolean;
   };
   demand_sample_capped?: boolean;
 }
@@ -384,12 +388,16 @@ interface PriceData {
   demand_scope?: 'EXACT_REFERENCE_ALL_DIALS';
   demand_rows?: WtbListingData[];
   demand_evidence?: {
-    returned: number;
+    returned?: number;
     total: number;
-    page: number;
+    page?: number;
     page_size: number;
-    pages: number;
-    sample_capped: boolean;
+    pages?: number;
+    sample_capped?: boolean;
+    snapshot?: string;
+    cursor?: string | null;
+    next_cursor?: string | null;
+    has_more?: boolean;
   };
   excluded_count?: number;
   excluded_breakdown?: {
@@ -433,6 +441,7 @@ interface PriceData {
     q1: number; q3: number; iqr: number; lower_fence: number | null; upper_fence: number | null;
     iqr_multiplier?: number;
   } | null;
+  stats_explanation?: string | null;
   liquidity: LiquidityData | null;
   monthly: MonthlyPoint[];
   forecast?: ForecastData;
@@ -455,6 +464,9 @@ interface PriceData {
     sale_page?: number;
     sale_pages?: number;
     truncated: boolean;
+    next_cursor?: string | null;
+    cursor?: string | null;
+    has_more?: boolean;
   };
   methodology: {
     method: 'IQR_3_0' | 'PLAUSIBILITY_FLOOR_THEN_IQR_3_0'; minimum_sample: number; included_count: number; excluded_count: number;
@@ -494,6 +506,7 @@ const MUTED = '#6c757d';
 const GREEN = '#198754';
 const RED = '#dc3545';
 const BLUE = '#0d6efd';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const WTB_LISTING_PAGE_SIZE = 24;
 const REVIEWED_WORKBOOK_ID = /^workbook_[a-f0-9]{64}$/;
 const POPULAR_BRANDS = ['Rolex', 'Patek Philippe', 'Audemars Piguet', 'Richard Mille', 'Panerai', 'Zenith', 'Cartier', 'Omega', 'Tudor']
@@ -582,6 +595,8 @@ export default function PriceResearch() {
   const [searchParams] = useSearchParams();
   const initialReference = searchParams.get('ref') || searchParams.get('reference') || '';
   const initialBrand = searchParams.get('brand') || '';
+  const initialDial = searchParams.get('dial') || searchParams.get('dial_color') || '';
+  const initialCondition = searchParams.get('condition') || '';
   const [query, setQuery] = useState(initialReference);
   const [queryBrand, setQueryBrand] = useState(initialBrand);
   const [data, setData] = useState<PriceData | null>(null);
@@ -594,6 +609,40 @@ export default function PriceResearch() {
   const [detailError, setDetailError] = useState('');
   const [saleEvidencePage, setSaleEvidencePage] = useState(1);
   const [demandEvidencePage, setDemandEvidencePage] = useState(1);
+  // Phase 5.2 canary demand lane: cursor chain instead of numeric offsets.
+  const [demandCursorHistory, setDemandCursorHistory] = useState<(string | null)[]>([null]);
+  const [selectedCondition, setSelectedCondition] = useState<string>(initialCondition);
+  const availableConditions: string[] = useMemo(() => {
+    const condSet = new Set<string>();
+    const conditionCounts = (data as unknown as { condition_counts?: Record<string, number> })?.condition_counts;
+    if (conditionCounts) {
+      Object.keys(conditionCounts).forEach(c => {
+        if (c && c.trim() && c.toLowerCase() !== 'all conditions') condSet.add(c.trim());
+      });
+    }
+    const evidenceObj = data?.evidence as { rows?: Array<{ condition?: string | null }> } | undefined;
+    if (Array.isArray(evidenceObj?.rows)) {
+      evidenceObj.rows.forEach(r => {
+        if (r?.condition && typeof r.condition === 'string' && r.condition.trim()) {
+          condSet.add(r.condition.trim());
+        }
+      });
+    }
+    const rawData = data as unknown as { rows?: Array<{ condition?: string | null }> } | null;
+    if (Array.isArray(rawData?.rows)) {
+      rawData.rows.forEach(r => {
+        if (r?.condition && typeof r.condition === 'string' && r.condition.trim()) {
+          condSet.add(r.condition.trim());
+        }
+      });
+    }
+    if (selectedCondition && selectedCondition.trim()) {
+      condSet.add(selectedCondition.trim());
+    }
+    return ['All Conditions', ...Array.from(condSet).sort()];
+  }, [data, selectedCondition]);
+  const [cursorStack, setCursorStack] = useState<(string | null)[]>([null]);
+  const [cursorIndex, setCursorIndex] = useState(0);
   const listingRequestRef = useRef<{ sequence: number; controller: AbortController | null }>({
     sequence: 0,
     controller: null,
@@ -710,7 +759,17 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     finally { setPLoading(''); }
   }, []);
 
-  const fetchData = useCallback(async (ref: string, dial = '', brand = '', evidencePage = 1, demandPage = 1) => {
+  const fetchData = useCallback(async (
+    ref: string,
+    dial = '',
+    brand = '',
+    evidencePage = 1,
+    demandPage = 1,
+    condition = '',
+    cursor: string | null = null,
+    targetCursorIndex?: number,
+    demandCursor: string | null = null
+  ) => {
     const normalizedReference = ref.trim();
     if (!normalizedReference) {
       setError('Enter a reference to search');
@@ -726,17 +785,35 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     setSaleEvidencePage(evidencePage);
     setDemandEvidencePage(demandPage);
     try {
+      const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
       const params = new URLSearchParams({ reference: normalizedReference });
       if (brand) params.set('brand', brand);
       if (dial) params.set('dial', dial);
-      params.set('evidencePage', String(evidencePage));
-      params.set('evidencePageSize', '100');
-      params.set('demandPage', String(demandPage));
-      params.set('demandPageSize', String(WTB_LISTING_PAGE_SIZE));
-      const r = await fetch(`/api/price-research?${params.toString()}`, { credentials: 'include' });
+      if (condition) params.append('condition', condition);
+      if (cursor) {
+        params.set('cursor', cursor);
+      } else if (!canaryEnabled) {
+        params.set('evidencePage', String(evidencePage));
+      }
+      if (canaryEnabled) {
+        params.set('pageSize', '100');
+        // Phase 5.2: the canary demand lane is keyset-cursor paginated; the
+        // legacy offset param demandPage is hard-rejected (HTTP 400) by
+        // api/canary/price-research. Never send it on the canary path.
+        if (demandCursor) params.set('demandCursor', demandCursor);
+      } else {
+        params.set('evidencePageSize', '100');
+        params.set('demandPage', String(demandPage));
+      }
+      const r = canaryEnabled
+        ? await fetch(`/api/canary/price-research?${params.toString()}`, { credentials: 'include' })
+        : await fetch(`/api/price-research?${params.toString()}`, { credentials: 'include' });
       const d = await r.json();
       if (d.success) {
         setData(d);
+        if (targetCursorIndex !== undefined) {
+          setCursorIndex(targetCursorIndex);
+        }
         const resolvedReference = d.resolvedRef || d.reference || normalizedReference;
         setQuery(resolvedReference);
         if (d.brand) setQueryBrand(d.brand);
@@ -882,8 +959,11 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
     setPBrand(deepLinkBrand);
     setReferenceSuggestionsOpen(false);
     setReferenceSuggestions([]);
-    void fetchData(deepLinkReference, '', deepLinkBrand);
-  }, [fetchData, initialBrand, initialReference]);
+    // Deep links carry the full exact cohort (dial + condition) so verified
+    // cohort statistics resolve immediately on the canary surface, which does
+    // not emit a legacy dial_analysis picker payload.
+    void fetchData(deepLinkReference, initialDial.trim(), deepLinkBrand, 1, 1, initialCondition.trim());
+  }, [fetchData, initialBrand, initialReference, initialDial, initialCondition]);
 
   const openListing = useCallback(async (row: RowData) => {
     listingRequestRef.current.controller?.abort();
@@ -1022,6 +1102,12 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
         min: data.stats.min,
         max: data.stats.max,
         count: data.count,
+        q1: data.stats.q1,
+        q3: data.stats.q3,
+        iqr: data.stats.iqr,
+        lower_fence: data.stats.lower_fence,
+        upper_fence: data.stats.upper_fence,
+        iqr_multiplier: data.stats.iqr_multiplier ?? 3.0,
       }
     : null;
 
@@ -1600,7 +1686,11 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                         key={group.dial_color}
                         type="button"
                         aria-pressed={selected}
-                        onClick={() => void fetchData(data.reference, group.dial_color, data.brand)}
+                        onClick={() => {
+                          setCursorStack([null]);
+                          setCursorIndex(0);
+                          void fetchData(data.reference, group.dial_color, data.brand, 1, demandEvidencePage, selectedCondition, null, 0);
+                        }}
                         style={{
                           display: 'flex', alignItems: 'center', gap: 10, textAlign: 'left', padding: '11px 12px',
                           borderRadius: 8, cursor: 'pointer', backgroundColor: selected ? '#eef1f6' : WHITE,
@@ -1622,11 +1712,50 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
               </div>
             )}
 
+            {/* ── Condition Selector for Exact Cohort Resolution ── */}
+            <div style={{ borderBottom: `1px solid ${BORDER}`, paddingBottom: 20, marginBottom: 24 }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: NAVY }}>Condition cohort</div>
+              <div style={{ fontSize: 12, color: MUTED, marginTop: 3, marginBottom: 14 }}>
+                Select an exact condition to resolve qualified cohort pricing statistics (requires exact brand, reference, dial color, and condition). When &apos;All Conditions&apos; is selected, condition cohort is unresolved and market listings remain available below while verified cohort statistics require exact condition resolution.
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {availableConditions.map(cond => {
+                  const isSelected = (cond === 'All Conditions' && !selectedCondition) || selectedCondition.toLowerCase() === cond.toLowerCase();
+                  return (
+                    <button
+                      key={cond}
+                      type="button"
+                      aria-pressed={isSelected}
+                      onClick={() => {
+                        const nextCond = cond === 'All Conditions' ? '' : cond;
+                        setSelectedCondition(nextCond);
+                        setCursorStack([null]);
+                        setCursorIndex(0);
+                        void fetchData(data.reference, data.selected_cohort?.dial_color || '', data.brand, 1, demandEvidencePage, nextCond, null, 0);
+                      }}
+                      style={{
+                        padding: '8px 16px',
+                        borderRadius: 8,
+                        cursor: 'pointer',
+                        fontWeight: isSelected ? 700 : 500,
+                        fontSize: 13,
+                        backgroundColor: isSelected ? NAVY : WHITE,
+                        color: isSelected ? WHITE : TEXT,
+                        border: `1px solid ${isSelected ? NAVY : BORDER}`,
+                      }}
+                    >
+                      {cond}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             {/* ── Demand and pricing summary ───────────────────── */}
             <div className="grid grid-cols-1 gap-6 mb-8">
               <div data-testid="wts-supply-summary" style={{ backgroundColor: '#f7f3e8', border: '1px solid #dfca91', borderRadius: 8, padding: 20 }}>
                 <div style={{ color: MUTED, fontSize: 11, textTransform: 'uppercase', letterSpacing: '.06em' }}>WTS listings for sale</div>
-                <div style={{ color: NAVY, fontSize: 28, fontWeight: 800, marginTop: 5 }}>{(data.reconciliation?.wts_loaded_count ?? data.reference_listing_count ?? data.totalListings).toLocaleString()}</div>
+                <div style={{ color: NAVY, fontSize: 28, fontWeight: 800, marginTop: 5 }}>{(data.reconciliation?.wts_loaded_count ?? data.reference_listing_count ?? data.totalListings ?? data.sampledListings ?? data.rawCount ?? data.count ?? 0).toLocaleString()}</div>
                 <div style={{ color: MUTED, fontSize: 12, lineHeight: 1.55, marginTop: 4 }}>
                   All source-backed sale offers for this reference remain available below. Only qualified priced WTS observations enter averages, graphics, and predictions.
                 </div>
@@ -1651,13 +1780,28 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 10 }}>
                       Median price: <strong style={{ color: NAVY }}>${stats.median.toLocaleString()}</strong>
                     </div>
+                    {/* RC50: label synthetic fixture statistics whenever the
+                        preview (canary) data lane is active. */}
+                    {(import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') && (
+                      <div data-testid="preview-fixture-stats-label" style={{ fontSize: 11, color: '#92400e', marginTop: 6, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                        Preview fixture statistics — not live market analytics
+                      </div>
+                    )}
+                    {stats.q1 != null && stats.q3 != null && stats.iqr != null && (
+                      <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }} className="flex flex-wrap gap-4">
+                        <span>Q1 (25th): <strong style={{ color: NAVY }}>${stats.q1.toLocaleString()}</strong></span>
+                        <span>Q3 (75th): <strong style={{ color: NAVY }}>${stats.q3.toLocaleString()}</strong></span>
+                        <span>IQR: <strong style={{ color: NAVY }}>${stats.iqr.toLocaleString()}</strong></span>
+                        <span>Outlier fence: <strong style={{ color: NAVY }}>{stats.iqr_multiplier ?? 3.0}× IQR</strong></span>
+                      </div>
+                    )}
                     <div style={{ fontSize: 12, color: MUTED, marginTop: 6 }}>
                       {data.sample_quality === 'robust' ? 'Strong' : data.sample_quality === 'provisional' ? 'Developing' : 'Observed'} evidence · {stats.count} listings
                     </div>
                   </>
                 ) : (
-                  <div style={{ fontSize: 12, color: RED, lineHeight: 1.5 }}>
-                    Analytics are developing — fewer than two dial-qualified observations are confirmed for this reference. Results will appear as more verified listings are processed.
+                  <div style={{ fontSize: 13, color: '#92400e', backgroundColor: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 8, padding: '12px 16px', lineHeight: 1.5 }}>
+                    <strong>Cohort Notice:</strong> {data.stats_explanation || 'Analytics are developing — fewer than two qualified observations are confirmed for this exact cohort. Results will appear as more verified listings are processed.'}
                   </div>
                 )}
               </div>
@@ -1853,7 +1997,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Qualified market evidence</h3>
                   </div>
                   <p style={{ fontSize: 12, color: MUTED, marginBottom: 14 }}>
-                    Every included observation has a positive source-backed price, source-stated currency, usable model/reference and dial evidence, and passes bundle, duplicate, repost, plausibility, and outlier checks. WTB demand is calculated separately. The qualified WTS cohort then uses the market plausibility floor and the 3.0 x IQR formula.
+                    Every included observation has a positive source-backed price, source-stated currency, usable model/reference and dial evidence, exact condition cohort alignment, and passes bundle, duplicate, repost, plausibility, and outlier checks. WTB demand is calculated separately and never classified as outliers. The qualified WTS cohort then uses the market plausibility floor and the 3.0 × IQR formula.
                   </p>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                     {[
@@ -1893,7 +2037,7 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   </div>
                   {data.evidence?.truncated && (
                     <div style={{ fontSize: 11, color: MUTED, marginTop: 8 }}>
-                      Excluded evidence is paginated with the WTS listings below. It includes required-field failures, reposts, plausibility failures, and IQR outliers. Aggregate statistics use all {data.evidence.outliers_total.toLocaleString()} exclusions in the loaded cohort.
+                      Excluded evidence is paginated with the WTS listings below. It includes required-field failures, reposts, plausibility failures, and IQR outliers. Aggregate statistics use all {(data.evidence?.outliers_total ?? data.outliersRemoved ?? 0).toLocaleString()} exclusions in the loaded cohort.
                     </div>
                   )}
                 </div>
@@ -1907,10 +2051,10 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   <div>
                     <h3 style={{ fontSize: 16, fontWeight: 700, color: NAVY }}>Insufficient qualified market evidence</h3>
                     <p style={{ fontSize: 13, color: MUTED, lineHeight: 1.6, marginTop: 5 }}>
-                      Price statistics and charts require at least two qualified WTS observations with usable model/reference and dial evidence, a positive source-backed price, and source-stated currency in the same comparable cohort. WTB requests remain visible as separate demand signals.
+                      Price statistics, quartiles, and IQR fences require an exact resolved cohort (brand, reference/model, dial color, and condition) with at least two qualified WTS observations with source-backed price, verified currency/FX, and plausibility verification. When condition is unresolved (&apos;All Conditions&apos;), individual listings remain browsable below, but aggregate cohort statistics are withheld until an exact condition is selected. WTB requests remain visible as separate demand signals.
                     </p>
                     <div style={{ fontSize: 12, color: '#7a5900', marginTop: 8 }}>
-                      {data.sampledListings.toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved).toLocaleString()} retained as excluded evidence · {data.count.toLocaleString()} qualified comparable{data.count === 1 ? '' : 's'}
+                      {(data.sampledListings ?? data.rawCount ?? data.count ?? 0).toLocaleString()} observations checked · {(data.retained_evidence_count ?? data.excludedEvidenceCount ?? data.outliersRemoved ?? 0).toLocaleString()} retained as excluded evidence · {data.count.toLocaleString()} qualified comparable{data.count === 1 ? '' : 's'}
                     </div>
                   </div>
                 </div>
@@ -1940,35 +2084,61 @@ if (!r.ok || !d.success) throw new Error(d.error || 'References are temporarily 
                   onOpen={() => void openListing(row)}
                 />
               ))}
-              {saleEvidencePages > 1 && (
-                <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${BORDER}` }}>
-                  <button
-                    type="button"
-                    disabled={loading || saleEvidencePage <= 1}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage - 1, demandEvidencePage)}
-                    className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    <ChevronLeft size={15} /> Previous WTS
-                  </button>
-                  <div style={{ color: MUTED, fontSize: 12 }}>
-                    Page {saleEvidencePage.toLocaleString()} of {saleEvidencePages.toLocaleString()} · up to {(data.evidence?.comparable_page_size || 100).toLocaleString()} rows in each evidence category per page
-                  </div>
-                  <button
-                    type="button"
-                    disabled={loading || saleEvidencePage >= saleEvidencePages}
-                    onClick={() => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage + 1, demandEvidencePage)}
-                    className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    Next WTS <ChevronLeft size={15} style={{ transform: 'rotate(180deg)' }} />
-                  </button>
+              <div className="flex flex-wrap items-center justify-between gap-3" style={{ padding: '14px 24px', borderTop: `1px solid ${BORDER}` }}>
+                <button
+                  type="button"
+                  disabled={loading || cursorIndex <= 0}
+                  onClick={() => {
+                    if (cursorIndex <= 0) return;
+                    const prevIndex = cursorIndex - 1;
+                    const prevCursor = cursorStack[prevIndex] || null;
+                    void fetchData(data.reference, data.selected_cohort?.dial_color || '', data.brand, prevIndex + 1, demandEvidencePage, selectedCondition, prevCursor, prevIndex);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <ChevronLeft size={15} /> Previous WTS
+                </button>
+                <div style={{ color: MUTED, fontSize: 12 }}>
+                  Page {(cursorIndex + 1).toLocaleString()} · up to {(data.evidence?.comparable_page_size || 100).toLocaleString()} rows in each evidence category per page
                 </div>
-              )}
+                <button
+                  type="button"
+                  disabled={loading || !data?.evidence?.next_cursor}
+                  onClick={() => {
+                    const nextCursor = data?.evidence?.next_cursor;
+                    if (!nextCursor) return;
+                    const nextIndex = cursorIndex + 1;
+                    setCursorStack(prev => [...prev.slice(0, nextIndex), nextCursor]);
+                    void fetchData(data.reference, data.selected_cohort?.dial_color || '', data.brand, nextIndex + 1, demandEvidencePage, selectedCondition, nextCursor, nextIndex);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-md border px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next WTS <ChevronLeft size={15} style={{ transform: 'rotate(180deg)' }} />
+                </button>
+              </div>
             </div>
 
             <DemandSignalsSection
               data={data}
               page={demandEvidencePage}
-              onPageChange={nextPage => void fetchData(data.reference, data.selected_cohort.dial_color, data.brand, saleEvidencePage, nextPage)}
+              onPageChange={nextPage => {
+                const isCursorDemand = typeof data.demand_evidence?.has_more === 'boolean';
+                let demandCursor: string | null = null;
+                if (isCursorDemand) {
+                  // Keyset demand lane: next page follows next_cursor; previous
+                  // pages replay the recorded cursor chain.
+                  if (nextPage > demandCursorHistory.length) {
+                    demandCursor = data.demand_evidence?.next_cursor || null;
+                    if (!demandCursor) return;
+                    setDemandCursorHistory(history => [...history, demandCursor]);
+                  } else {
+                    const chain = demandCursorHistory.slice(0, Math.max(1, nextPage));
+                    demandCursor = chain[chain.length - 1] ?? null;
+                    setDemandCursorHistory(chain);
+                  }
+                }
+                void fetchData(data.reference, data.selected_cohort?.dial_color || '', data.brand, cursorIndex + 1, nextPage, selectedCondition, cursorStack[cursorIndex] || null, cursorIndex, demandCursor);
+              }}
               onOpenListing={row => void openListing(row)}
             />
           </>
@@ -2160,6 +2330,7 @@ function ReviewedPriceContext({ record, analytics }: { record: ReviewedMarketRec
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function ReviewedEvidenceCard({ record, analytics }: { record: ReviewedMarketRecord; analytics: PriceData | null }) {
   const [sellerOpen, setSellerOpen] = useState(false);
   const [sellerSummary, setSellerSummary] = useState<ReviewedSellerResponse | null>(null);
@@ -2588,9 +2759,9 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                   <div style={{ color: MUTED, fontSize: 13, lineHeight: 1.55 }}>{rating.reason}</div>
                 </div>
                 {benchmark && comparableCount >= 2 && <div className="grid grid-cols-3 gap-3" style={{ marginTop: 18 }}>
-                  <Metric label="Comparable low" value={`$${benchmark.min.toLocaleString()}`} />
-                  <Metric label="Comparable average" value={`$${benchmark.avg.toLocaleString()}`} />
-                  <Metric label="Comparable high" value={`$${benchmark.max.toLocaleString()}`} />
+                  <Metric label="Comparable low" value={`$${(benchmark.min ?? 0).toLocaleString()}`} />
+                  <Metric label="Comparable average" value={`$${(benchmark.avg ?? 0).toLocaleString()}`} />
+                  <Metric label="Comparable high" value={`$${(benchmark.max ?? 0).toLocaleString()}`} />
                 </div>}
               </DetailCard>
 
@@ -2743,7 +2914,10 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
   const demandSupplyRatio = data.liquidity?.wtb_fs_ratio ?? (qualifiedWtsCount > 0 ? demandCount / qualifiedWtsCount : null);
   const demandCohorts = data.liquidity?.demand_cohorts || [];
   const demandRows = data.demand_rows || data.liquidity?.demand_rows || [];
-  const demandPages = Math.max(1, data.demand_evidence?.pages || 1);
+  const isCursorDemand = typeof data.demand_evidence?.has_more === 'boolean';
+  const demandPages = isCursorDemand
+    ? Math.max(1, page + (data.demand_evidence?.has_more ? 1 : 0))
+    : Math.max(1, data.demand_evidence?.pages || 1);
 
   return (
     <div style={{ backgroundColor: '#f0f5ff', border: '1px solid #bfdbfe', borderRadius: 12, padding: 24, marginBottom: 24 }}>
@@ -2827,7 +3001,7 @@ function DemandSignalsSection({ data, page, onPageChange, onOpenListing }: {
               </div>
               <button
                 type="button"
-                disabled={page >= demandPages}
+                disabled={isCursorDemand ? !data.demand_evidence?.has_more : page >= demandPages}
                 onClick={() => onPageChange(page + 1)}
                 className="inline-flex items-center gap-1 rounded-md border bg-white px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
               >

@@ -24,7 +24,10 @@ const {
 } = require('./_lib/publication-references.cjs');
 const { loadVerifiedListingRows } = require('./_lib/verified-listing-media.cjs');
 const { publicImageProvenance } = require('./_lib/public-image-provenance.cjs');
-const { enforceListingDisplayContract } = require('../shared/listing-display-contract.cjs');
+const { adaptLegacyListingDisplayV1 } = require('../shared/listing-display-contract.cjs');
+// EXPLICIT LEGACY CHOICE: this endpoint serves unproven legacy reviewed/workbook/QNSA
+// rows without V2 source_id/source_hash provenance, so it adapts via the legacy V1
+// path (never stamped v2.0, never price-research eligible) instead of strict V2.
 const { loadReviewedWorkbookListing } = require('./_lib/reviewed-workbook-analytics.cjs');
 const { ROLEX_PATEK_MULTI_PARENT_ID } = require('./_lib/rolex-patek-reviewed-overlay.cjs');
 const { loadEffectiveDetail } = require('./_lib/four-brand-field-enrichment.cjs');
@@ -81,7 +84,7 @@ function qnsaListingResponse(listing) {
   const rawMessage = String(listing.raw_message || '').trim();
   return {
     success: true,
-    listing: enforceListingDisplayContract({
+    listing: adaptLegacyListingDisplayV1({
       id: String(listing.id),
       brand: listing.brand,
       model: listing.model || null,
@@ -303,7 +306,7 @@ module.exports = async function handler(req, res) {
         }
         return res.status(200).json({
           success: true,
-          listing: enforceListingDisplayContract({
+          listing: adaptLegacyListingDisplayV1({
             id: workbookListing.id,
             brand: workbookListing.brand,
             model: workbookListing.model,
@@ -453,7 +456,7 @@ module.exports = async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      listing: enforceListingDisplayContract({
+      listing: adaptLegacyListingDisplayV1({
         id: customerListing.id,
         brand: customerListing.brand,
         model: customerListing.model,

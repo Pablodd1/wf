@@ -1,5 +1,6 @@
 // tools/mariadb-live/run-state-idempotent-1k-canary-v2.cjs
 'use strict';
+const { bindProposalEvidence } = require('./bind-proposal-evidence.cjs');
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -148,7 +149,7 @@ async function runStateIdempotentCanaryV2(env = process.env) {
       rawSourceMap.set(r.source_id, r);
 
       try {
-        const contract = normalizeAuthoritativeRow(r);
+        const contract = bindProposalEvidence(r, normalizeAuthoritativeRow(r));
         v2Proposals.push(contract);
 
         if (contract.trading_floor_eligible) tradingFloorEligibleCount++;

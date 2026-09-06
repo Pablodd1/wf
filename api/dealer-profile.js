@@ -4,12 +4,7 @@ const { getClient } = require('./_lib/supabase');
 const { loadAnalyticsSuppressedIds } = require('./_lib/duplicate-suppression.cjs');
 const { deduplicateReposts } = require('./_lib/repost-deduplication.cjs');
 const { MIN_RELEASE_CONFIDENCE, isReleaseListingEligible } = require('./_lib/publication-references.cjs');
-const {
-  legacyProfilePayload,
-  mariadbProfilePayload,
-  ratedProfilePayload,
-  sourceProfilePayload,
-} = require('./_lib/dealer-directory-source.cjs');
+const { redactPublicSource } = require('./_lib/source-redaction.cjs');
 const { loadCompletedDealerIds, profileWithLinkageState } = require('./_lib/dealer-linkage-state.cjs');
 
 const PATEK_RAW_EVIDENCE = /\b(?:patek(?:\s+philippe)?|nautilus|aquanaut|calatrava)\b/i;
@@ -34,10 +29,7 @@ function hasCrossBrandReferenceContradiction(listing) {
 }
 
 function redactPublicContactEvidence(value) {
-  return String(value || '')
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[contact withheld]')
-    .replace(/\b(?:whats?app|wa|phone|tel|call|contact)\s*[:=-]?\s*\+?[\d ()-]{7,25}/gi, '[contact withheld]')
-    .replace(/\+\d[\d ()-]{7,24}/g, '[contact withheld]');
+  return redactPublicSource(value).replace(/\[(?:email|contact link|contact|handle|phone) redacted\]/g, '[contact withheld]');
 }
 
 function sanitizeDealerListing(listing) {
@@ -128,67 +120,11 @@ function mapLegacyLiveListing(row) {
   };
 }
 
-async function loadLegacyDynamicProfile(client, payload) {
-  const legacyId = payload?.dealer?.legacy_profile_id;
-  if (!legacyId) return payload;
-  const { data, error } = await client.rpc('qnsa_legacy_dealer_activity', {
-    p_legacy_profile_id: Number(legacyId), p_limit: 50,
-  });
-  if (error) throw error;
-  const liveListings = (data?.listings || []).map(row => ({ ...row, evidence_only: false }));
-  const liveCount = Number(data?.wts_count || 0) + Number(data?.wtb_count || 0);
-  if (liveCount === 0 && liveListings.length === 0) {
-    return {
-      ...payload,
-      dynamic_activity_status: 'UNLINKED_IDENTITY_NAMESPACE',
-      stats: {
-        ...payload.stats,
-        current_counts_are_dynamic: false,
-        current_counts_scope: 'LEGACY_SNAPSHOT_PENDING_EXACT_LINEAGE_LINK',
-      },
-    };
-  }
-  return {
-    ...payload,
-    stats: {
-      ...payload.stats,
-      wts_count: Number(data?.wts_count || 0),
-      wtb_count: Number(data?.wtb_count || 0),
-      first_post: data?.first_post || null,
-      latest_post: data?.latest_post || null,
-      current_counts_are_dynamic: true,
-      current_counts_scope: 'QNSA_RELEASED_ROLEX_PATEK',
-    },
-    listings: liveListings,
-    historical_posts: payload.listings,
-  };
-}
-
 module.exports = async function handler(req, res) {
-  res.setHeader('Cache-Control', 'public, max-age=30, s-maxage=60');
+  res.setHeader('Cache-Control', 'no-store');
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
   const identity = String(req.query?.id || '').trim().slice(0, 160);
   if (!identity) return res.status(400).json({ error: 'Dealer id or slug required' });
-
-  const sourceProfile = sourceProfilePayload(identity);
-  if (sourceProfile) return res.status(200).json(sanitizeDealerProfile(sourceProfile));
-  const ratedProfile = ratedProfilePayload(identity);
-  if (ratedProfile) return res.status(200).json(sanitizeDealerProfile(ratedProfile));
-  const mariadbProfile = mariadbProfilePayload(identity);
-  if (mariadbProfile) return res.status(200).json(sanitizeDealerProfile(mariadbProfile));
-  const legacyProfile = legacyProfilePayload(identity);
-  if (legacyProfile) {
-    try {
-      const dynamic = await loadLegacyDynamicProfile(getClient(), legacyProfile);
-      return res.status(200).json(sanitizeDealerProfile(dynamic));
-    } catch (error) {
-      console.error('[dealer-profile:legacy-dynamic]', error.message);
-      return res.status(200).json(sanitizeDealerProfile({
-        ...legacyProfile,
-        dynamic_activity_status: 'TEMPORARILY_UNAVAILABLE',
-      }));
-    }
-  }
 
   try {
     const client = getClient();
@@ -302,11 +238,7 @@ module.exports = async function handler(req, res) {
       raw_message_access: true,
     });
   } catch (error) {
-    console.error('[dealer-profile]', error.message);
-    const missingSchema = /relation .* does not exist|column .* does not exist|schema cache/i.test(error.message);
-    return res.status(missingSchema ? 503 : 500).json({
-      error: missingSchema ? 'Dealer profiles are awaiting the production migration.' : 'Unable to load dealer profile.',
-    });
+    return res.status(503).json({ error: 'Dealer profile temporarily unavailable' });
   }
 };
 

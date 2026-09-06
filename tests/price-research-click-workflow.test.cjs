@@ -48,5 +48,9 @@ test('an exact Trading Floor deep link automatically loads its Price Research ev
   const source = read('src/pages/PriceResearch.tsx');
   assert.match(source, /const loadedDeepLinkRef = useRef\(''\)/);
   assert.match(source, /if \(!deepLinkReference \|\| !deepLinkBrand \|\| loadedDeepLinkRef\.current === deepLinkKey\) return/);
-  assert.match(source, /void fetchData\(deepLinkReference, '', deepLinkBrand\)/);
+  // Deep links must carry the full exact cohort (dial + condition) so verified
+  // cohort statistics resolve immediately on the canary surface.
+  assert.match(source, /void fetchData\(deepLinkReference, initialDial\.trim\(\), deepLinkBrand, 1, 1, initialCondition\.trim\(\)\)/);
+  assert.doesNotMatch(source, /void fetchData\(deepLinkReference, '', deepLinkBrand\)/);
+  assert.match(source, /\[fetchData, initialBrand, initialReference, initialDial, initialCondition\]/);
 });

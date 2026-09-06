@@ -25,6 +25,10 @@ interface ProfilePayload {
 
 export default function DealerProfile() {
   const { dealerId = '' } = useParams();
+  return <DealerProfileContent key={dealerId} dealerId={dealerId} />;
+}
+
+function DealerProfileContent({ dealerId }: { dealerId: string }) {
   const [payload, setPayload] = useState<ProfilePayload | null>(null);
   const [error, setError] = useState('');
 
@@ -32,8 +36,8 @@ export default function DealerProfile() {
     const controller = new AbortController();
     fetch(`/api/dealer-profile?id=${encodeURIComponent(dealerId)}`, { credentials: 'include', signal: controller.signal })
       .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Unable to load profile'); return body; })
-      .then(setPayload)
-      .catch(caught => { if (caught?.name !== 'AbortError') setError(caught.message); });
+      .then(body => { if (!controller.signal.aborted) setPayload(body); })
+      .catch(caught => { if (!controller.signal.aborted) setError(caught.message); });
     return () => controller.abort();
   }, [dealerId]);
 

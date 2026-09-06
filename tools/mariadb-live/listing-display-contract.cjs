@@ -2,6 +2,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { verifySourceContent } = require('./content-provenance.cjs');
 const {
   splitMessageLines,
   segmentDealerMessage,
@@ -14,6 +15,10 @@ const {
 
 const { normalizeDialValue } = require('../../api/_lib/dial-normalization.cjs');
 const { normalizeWatchCondition, normalizeWatchDial } = require('../../api/_lib/watch-condition-normalization.cjs');
+const {
+  constructCandidateImageUrl,
+  assignImageEvidenceType
+} = require('../../api/_lib/image-contract.cjs');
 
 /**
  * Resolves intent strictly from source evidence:
@@ -61,6 +66,7 @@ function buildListingDisplayContract(stagedRow, options = {}) {
     throw new Error('Provenance assertion failed: staged row missing required source_id or source_hash');
   }
 
+  verifySourceContent(stagedRow);
   const sourceId = String(stagedRow.source_id);
   const sourceHash = String(stagedRow.source_hash);
   const sourceSystem = stagedRow.source_system || 'OceanDigital MariaDB';
@@ -196,9 +202,14 @@ function buildListingDisplayContract(stagedRow, options = {}) {
 
   // 4. DigitalOcean Spaces Key Resolution and Verified Image Evidence
   const imageKey = raw.front_image || raw.image || null;
-  const DO_SPACES_BASE = 'https://thecollective-prod.nyc3.digitaloceanspaces.com/listings';
-  const imageUrl = imageKey ? (DO_SPACES_BASE + '/' + imageKey) : null;
-  const imageEvidenceType = (imageKey && !isBundle) ? 'SOURCE_LISTING_IMAGE' : 'NO_IMAGE';
+  const imageUrl = constructCandidateImageUrl(imageKey);
+  const imageEvidenceType = assignImageEvidenceType({
+    imageKey,
+    candidateUrl: imageUrl,
+    hasSourceLineage: Boolean(imageKey && (stagedRow.source_id || stagedRow.raw_staging_id)),
+    isReachable: true,
+    isBundle
+  });
 
   // Bundle Parent-Child Lineage
   const bundleParentId = isBundle ? sourceId : null;

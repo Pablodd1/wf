@@ -94,7 +94,7 @@ const SORT_OPTIONS = [
 ] as const;
 
 import { MarketTickerBanner } from '../components/MarketTickerBanner';
-import type { ListingDisplayContract } from '../../shared/listing-display-contract.cjs';
+import type { ListingDisplayContract } from '../types/listing-display-contract';
 
 interface ListingRecord extends Partial<ListingDisplayContract> {
   id: string;
@@ -116,7 +116,7 @@ interface ListingRecord extends Partial<ListingDisplayContract> {
   dial_color: string | null;
   condition: string | null;
   year: number | null;
-  intent?: string | null;
+  intent?: 'WTS' | 'WTB' | null;
   listing_type: string;
   verdict: string | null;
   source: string;
@@ -321,11 +321,14 @@ async function loadRandomAllInventory({
     if (intent) params.set('type', intent);
     if (imagesOnly) params.set('images', 'true');
     if (pricedOnly) params.set('priced', 'true');
-    if (countries.length > 0) params.set('region', countries.join(','));
-    params.set('sourceShape', listingLane);
-    const brandCursor = decoded?.brandCursors?.[brand];
-    if (brandCursor) params.set('cursor', brandCursor);
-    const response = await fetch(`/api/reviewed-market-inventory?${params.toString()}`, { signal });
+    const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+    if (!canaryEnabled) {
+      params.set('sourceShape', listingLane);
+      const brandCursor = decoded?.brandCursors?.[brand];
+      if (brandCursor) params.set('cursor', brandCursor);
+    }
+    const inventoryEndpoint = canaryEnabled ? '/api/canary/trading-floor' : '/api/reviewed-market-inventory';
+    const response = await fetch(`${inventoryEndpoint}?${params.toString()}`, { signal });
     const payload = response.ok ? await response.json() as TradingFloorResponse : { status: 'error' };
     return { brand, payload };
   }));
@@ -530,6 +533,7 @@ export default function TradingFloor() {
   const dynamicDisplayTotal = total !== null && total >= 0 ? total : null;
 
   const visibleListings = useMemo(() => {
+    if (import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') return listings;
     if (sortMode === 'newest') return [...listings].sort(newestObservedOrder);
     if (combinedFeedActive) return listings;
     return discoveryOrderWithinSourceLanes(listings, 0x57fa2c1d, cursorHistory.length + 1);
@@ -785,8 +789,9 @@ export default function TradingFloor() {
           params.delete('model');
           params.delete('type');
         }
-        const endpoint = usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest';
-        const combinedAllInventory = combinedFeedActive;
+        const canaryEnabled = import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+        const endpoint = canaryEnabled ? '/api/canary/trading-floor' : (usesReviewedWatchInventory ? '/api/reviewed-market-inventory' : '/api/ingest');
+        const combinedAllInventory = !canaryEnabled && combinedFeedActive;
         let data: TradingFloorResponse;
         try {
           if (combinedAllInventory) {
@@ -871,6 +876,17 @@ export default function TradingFloor() {
   return (
     <main className="relative z-10 min-h-screen" style={{ background: PAGE, color: INK, fontFamily: "'Inter', system-ui, sans-serif" }}>
       <MarketNav />
+      {/* RC50: visible provenance banner whenever the fixture/preview (canary)
+          data lane is active. Never rendered against live market data. */}
+      {(import.meta.env.VITE_USE_CANARY_V2 === 'true' || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost') && (
+        <div
+          data-testid="preview-fixture-banner"
+          role="status"
+          style={{ background: '#7F1D1D', color: '#FEF3C7', textAlign: 'center', padding: '6px 12px', fontSize: 12, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+        >
+          Disposable preview data — not live market data
+        </div>
+      )}
       <div style={{ background: SURFACE, borderBottom: `1px solid ${BORDER}`, boxShadow: '0 10px 28px rgba(41,37,36,0.08)' }}>
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5">
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -1641,9 +1657,11 @@ function ListingCard({ listing, selected, onSelect, benchmark }: { listing: List
 
   return (
     <article
+      data-listing-id={listing.id}
       className="flex flex-col rounded-lg border border-[#EBE3D5] bg-[#FAF6F0] p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
       style={{ borderColor: selected ? GOLD : '#EBE3D5' }}
     >
+      <span className="sr-only" data-listing-id={listing.id}>{listing.id}</span>
       {/* 1. Watch Image — only rendered when a real source URL exists */}
       {cardHasImage && (
         <button type="button" onClick={onSelect} className="block w-full overflow-hidden rounded-md bg-stone-100 text-left">
