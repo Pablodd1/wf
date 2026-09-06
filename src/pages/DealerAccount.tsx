@@ -30,17 +30,26 @@ export default function DealerAccount() {
   const [data, setData] = useState<WorkspacePayload | null>(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [signInRequired, setSignInRequired] = useState(false);
 
   const reload = () => {
+    setLoading(true); setError(''); setSignInRequired(false);
     const demo = getDemoDealerWorkflow(demoUser);
     if (demo) {
       setData(demo);
       setError('');
+      setLoading(false);
       return Promise.resolve();
     }
     return fetch('/api/dealer-workspace', { credentials: 'include' })
-    .then(async response => { const body = await response.json(); if (!response.ok) throw new Error(body.error || 'Unable to load workspace'); return body; })
-    .then(setData).catch(caught => setError(caught.message));
+    .then(async response => {
+      if (response.status === 401) { setSignInRequired(true); throw new Error('Sign in to access your dealer account.'); }
+      const body = await response.json();
+      if (!response.ok) throw new Error('Unable to load your account. Please try again.');
+      return body;
+    })
+    .then(setData).catch(caught => { setData(null); setError(caught.message); }).finally(() => setLoading(false));
   };
   useEffect(() => { void reload(); }, [demoUser]);
 
@@ -76,7 +85,8 @@ export default function DealerAccount() {
           {demoUser && getDemoDealerWorkflow(demoUser) && <DemoWorkflowSwitcher active={demoUser} section={section} />}
           {error && <p role="alert" className="mb-5 border-l-2 border-red-500 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
           {notice && <p role="status" className="mb-5 border-l-2 border-emerald-400 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-100">{notice}</p>}
-          {!data ? <p className="text-sm text-white/40">Loading workspace...</p> : <AccountSection section={section} data={data} update={update} demoUser={demoUser} />}
+          {signInRequired && <Link to="/dealer" state={{ from: location.pathname }} className="text-sm font-semibold text-[#c9a96e] underline">Sign in</Link>}
+          {loading ? <p className="text-sm text-white/40">Loading workspace...</p> : data ? <AccountSection section={section} data={data} update={update} demoUser={demoUser} /> : !signInRequired && <button onClick={() => void reload()} className="text-sm font-semibold text-[#c9a96e] underline">Try again</button>}
         </section>
       </div>
       <Footer />
