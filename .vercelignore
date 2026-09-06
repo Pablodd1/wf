@@ -20,9 +20,9 @@ public/dealers.json
 public/parsedWatches.json
 data/dealer-directory/
 all_env.txt
-data/
-docs/
-tests/
+/data/
+/docs/
+/tests/
 *.xlsx
 *.csv
 *.tar.gz
