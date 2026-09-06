@@ -2618,6 +2618,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
     ? Number(summary.price_usd)
     : Number(detail?.price_usd || 0);
   const hasDisplayPrice = Number.isFinite(resolvedDisplayPrice) && resolvedDisplayPrice > 0;
+  const isDemand = String(summary.intent || summary.listing_type || '').toUpperCase() === 'WTB';
   const displayPrice = hasDisplayPrice ? resolvedDisplayPrice : null;
   const rating = rateMarketPrice(displayPrice || 0, benchmark || null, comparableCount);
   const observedDate = observedAt ? observedAt.split('T')[0] : null;
@@ -2747,9 +2748,9 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
             <section style={{ padding: 'clamp(22px, 4vw, 42px)' }}>
               <div className="flex flex-wrap items-center gap-2" style={{ marginBottom: 18 }}>
                 <span style={{ background: summary.is_outlier ? '#fff2cc' : '#eaf7ef', color: summary.is_outlier ? '#7a5900' : '#166534', padding: '6px 10px', borderRadius: 999, fontSize: 12, fontWeight: 700 }}>
-                  {summary.is_outlier ? 'Excluded from market statistics' : summary.analytics_included === false ? 'Cohort statistics unavailable' : 'Included in comparable set'}
+                  {isDemand ? 'WTB request · excluded from sale averages' : summary.is_outlier ? 'Excluded from market statistics' : summary.analytics_included === false ? 'Cohort statistics unavailable' : 'Included in comparable set'}
                 </span>
-                {summary.is_outlier && <span style={{ color: '#7a5900', fontSize: 12 }}>{outlierLabel}</span>}
+                {!isDemand && summary.is_outlier && <span style={{ color: '#7a5900', fontSize: 12 }}>{outlierLabel}</span>}
               </div>
 
               <h1 style={{ fontFamily: "'Playfair Display', serif", color: NAVY, fontSize: 'clamp(26px, 4vw, 40px)', lineHeight: 1.1, marginBottom: 8 }}>{[detail.brand, detail.model, detail.reference].filter((value, index, values) => value && values.indexOf(value) === index).join(' ')}</h1>
@@ -2760,11 +2761,11 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
                     ? `${detail.currency} ${Number(detail.price_raw).toLocaleString()}`
                     : 'Price not available for analytics'}
                 <span style={{ color: MUTED, fontSize: 13, fontWeight: 500 }}>
-                  {hasDisplayPrice ? ' USD asking price' : ' · excluded from averages'}
+                  {hasDisplayPrice ? isDemand ? ' USD stated budget' : ' USD asking price' : ' · excluded from averages'}
                 </span>
               </div>
 
-              {hasDisplayPrice ? (
+              {hasDisplayPrice && !isDemand ? (
                 <>
               <DetailCard title="Price rating">
                 <div className="flex items-start gap-4">
@@ -2811,7 +2812,7 @@ function ListingDetailModal({ summary, detail, seller, loading, error, title, on
               ) : (
                 <DetailCard title="Price evidence">
                   <div style={{ color: MUTED, fontSize: 13, lineHeight: 1.6 }}>
-                    This reviewed listing is displayed for its source post, image, seller, and watch identity. Its price is not used in averages because the raw message does not provide enough explicit currency evidence for a verified USD observation.
+                    {isDemand ? 'This is a buyer request. Any stated budget belongs to the original request and is excluded from sale-price averages and ratings.' : 'This reviewed listing is displayed for its source post, image, seller, and watch identity. Its price is not used in averages because the raw message does not provide enough explicit currency evidence for a verified USD observation.'}
                   </div>
                 </DetailCard>
               )}
@@ -3150,7 +3151,7 @@ function mapWtbToRowData(row: WtbListingData): RowData {
     condition: row.condition || null,
     source: 'WTB_DEMAND',
     year: null,
-    is_outlier: true,
+    is_outlier: false,
     analytics_included: false,
     outlier_reason: null,
     source_price_amount: row.original_price_amount ?? (row.price_raw ? Number(row.price_raw) : null),

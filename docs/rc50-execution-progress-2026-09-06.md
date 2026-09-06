@@ -57,8 +57,32 @@ computed against the full exact cohort. Both apply on PG15/18 with service-only
 grants; PG15 has 50 synthetic records and PG18 is empty. The real local Supabase
 HTTP test proves six dial observations yield four included comparables, one
 repost exclusion and one IQR exclusion, independent of page size. TypeScript,
-changed PriceResearch/helper lint, and 35 targeted tests pass. These latest
-repairs still require a new exact preview and browser verification.
+changed PriceResearch/helper lint, and 35 targeted tests pass. External preview
+`58bd6586fcb1505445e6d9973bb601956919a58c` verified the exact Blue/New picker flow,
+$97,500 average from four comparables, two correctly labeled exclusions, and a
+source detail dialog with no console errors.
+
+Preview `e3bac6c3b54ab173ddf2b1bf11f223df745d0b9c` repeats the 50-ID mobile traversal
+in exact SQL order, with page sizes 24/24/2, ten supported price ratings and no
+false confirmed-availability claims or overflow. Desktop renders all 50 cards;
+the image filter returns the exact 19 source-image records. The approved-profile
+RPC applies on PG15/18 and passes real Supabase/API checks for consent, rating
+nullability and hidden profiles. Three approved synthetic profiles appear in
+the directory; the fourth unverified fixture is hidden. The approved profile
+opens in Vercel without errors and exposes only its consented synthetic contact.
+Four synthetic dealer fixtures are retained temporarily with exact cleanup IDs
+in the task evidence. Listing linkage remains explicitly pending.
+
+WTB source dialogs preserve canonical identity, original text and currency,
+without inventing a posting date or falling back to legacy detail APIs. Final
+label corrections distinguish buyer budgets from asking prices and WTB requests
+from statistical outliers; the pending profile activity header also avoids a
+zero count. These last label changes require deployment and browser confirmation.
+
+The fourth full Node run records 2,195 tests, 2,058 passed, 132 failed, 5 skipped.
+Two newly failing stale assertions (availability helper extraction and FX label
+without currency evidence) have since been corrected and pass their focused run.
+Remaining legacy/static/data-artifact failures are not claimed as passing.
 
 The temporary HTTPS test transport permits reviewed read/snapshot/contact-budget
 RPCs and synthetic images, and denies private ingestion/admin routes. It must be

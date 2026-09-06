@@ -24,5 +24,6 @@ test('WTB detail retains canonical source identity, raw prose, currency and evid
   assert.equal(detail.created_at, '');
   assert.equal(detail.listing_date, null);
   assert.equal(detail.analytics_included, false);
+  assert.equal(detail.is_outlier, false);
   assert.equal(detail.seller_rating, null);
 });

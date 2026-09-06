@@ -114,7 +114,7 @@ function DealerProfileContent({ dealerId }: { dealerId: string }) {
         {dealer.profile_summary && <p className="mt-8 max-w-3xl text-sm leading-7 text-white/55">{dealer.profile_summary}</p>}
         <div className="mt-10 flex items-center justify-between border-b border-white/10 pb-4">
           <h2 className="text-xl font-semibold">Recent market activity</h2>
-          <span className="text-xs text-white/35">{Number(payload.listing_total ?? listings.length).toLocaleString()} {isPublicSourceProfile || isLegacyProfile ? 'captured activity records' : 'verified linked posts'}</span>
+          <span className="text-xs text-white/35">{linkagePending ? 'Linkage pending' : `${Number(payload.listing_total ?? listings.length).toLocaleString()} ${isPublicSourceProfile || isLegacyProfile ? 'captured activity records' : 'verified linked posts'}`}</span>
         </div>
         <div className="divide-y divide-white/10">
           {listings.map(listing => (
