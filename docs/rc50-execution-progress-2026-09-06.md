@@ -1,5 +1,60 @@
 # WatchFacts finalization execution checkpoint
 
+Latest continuation: 2026-09-06 23:33 UTC. Production writes are paused under
+master section 12.9 because read-only discovery confirmed an unrecorded change
+to the live deployment. Project `wf` now serves
+`a8245646d857ea20ce7f2963db3f53dd8620b2a3`, deployment
+`dpl_DMzZowwtMqnNgySNRL98DhXQ6kmu`, through `wf-ecru.vercel.app`.
+Vercel records a production redeploy at 2026-09-06 19:55:14 UTC from
+`codex/rc50-final-integration`; the public version endpoint independently
+confirms that commit and production environment, with tree reported unknown.
+The documented baseline was `b9c0145c2e153dd82c936b7b4e02361f1f3e5fd9`.
+The observed deployment is an ancestor nine commits behind the tested candidate.
+Its promotion actor and production database changes have not been established.
+No production database was queried or mutated by this continuation.
+`watchfacts-poc.vercel.app` is verified to belong to a different project,
+`prj_VV6SU5XtuhMnQwRRd14SjDXI4HxL`, not the authorized `wf` project.
+
+The last tested application candidate is
+`c07d52fa792efee40b3747027bfaa31d7bdcc074`, tree
+`960acf4f401e352c3a98f1e275cf194552e1a687`. Its exact disposable Vercel
+preview passes loaded 50-card browser/API checks and all 19 source-image
+HEAD/GET checks. Mobile pages 24/24/2 exactly equal the independently ordered
+database oracle, with no missing/duplicate identities or horizontal overflow.
+WTB filtering returns all ten demand records; exact reference search returns
+the expected single record. The dated ECB converter and navigation language
+switches work; some page copy remains English. Existing layout is preserved.
+Approved directory counts reconcile three all/two rated/one name-search result.
+Actual browser account login, settings persistence across full reload, logout,
+and source-bound dealer activity at desktop/mobile widths pass.
+
+Complete test runs ten and eleven each execute 2,212 tests: 2,106 pass,
+102 fail, four skip. All 102 failure identities reproduce on the exact
+deployed baseline; two baseline failures resolve. Full lint has 184 errors
+against 189 on the completed baseline, with no new diagnostic identities.
+The unchanged hidden agent harness omitted by the baseline export was restored
+from exact Git bytes and independently linted; its two existing diagnostics
+remain explicitly counted. TypeScript, API syntax, frontend routes and exact
+disposable build pass. The tracked candidate scan covers 2,250 files without
+unclassified secrets. These qualifications do not claim a green legacy suite.
+
+Qualified historical replay remains 258 migrations on PG15 and PG18, using
+six documented bootstrap supplements and four hash-bound historical overlays.
+Inventories now contain 676 relations and 284 functions in each instance.
+Actual 500-listing disposable publication and rollback restored the original
+50 synthetic rows exactly. Cached 1.5m research summary is 0.191 seconds;
+its owner preparation is 270.599 seconds. No real RC50 or full historical
+population has been published by this continuation. Resume requires resolving
+the changed production baseline, then current schema/checkpoint/worker/backup
+discovery, reviewed forward migrations, real 50, full singles population and
+exact final deployment. Bundles remain held under the latest owner scope.
+
+Local evidence: `outputs/disposable-release-gate.json`,
+`outputs/final-suite-reconciliation.json`, `outputs/final-lint-reconciliation.json`,
+`outputs/production-metadata-readonly.json`,
+`outputs/production-discrepancy-verification.json`, and the immutable raw test
+logs remain in the task workspace. They are not copied into Git.
+
 Latest continuation: 2026-09-06 22:56 UTC. Complete runs eight and nine on
 `541a7081` each executed 2,208 tests: 2,102 pass, 102 fail, four skip. Their
 failure identities are identical and every failure also occurs on the exact
