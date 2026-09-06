@@ -213,3 +213,28 @@ the composite writer already persists the full field set and supports no-op repl
 as earlier actual Supabase tests established. No speculative replacement was made.
 The missing complete durable normalization/materialization/publication path and
 production rollout remain the substantive next work.
+
+### Durable private normalization, 2026-09-06 18:54 UTC
+
+Migration `20260908070000_frozen_normalization_jobs.sql` passes on PostgreSQL
+15 and 18 (239 replay ledger entries, same historical overlays). The new worker
+freezes explicit checkpoint membership, uses bounded leases and retries, and
+commits proposals, durable outcomes and counters atomically. It never publishes
+or invokes capture. Usage and limits are in `docs/frozen-normalization-v2.md`.
+
+The deterministic real Supabase test accounts for all nine synthetic inputs:
+4 normalized, 2 review, 1 bundle held, 1 quarantine and 1 exhausted-retry error.
+Disjoint concurrent claims, repeated claim/completion, changed replay rejection,
+invalid proposal rollback, proposal hash readback and exact final counts pass.
+The public 50-row cohort remains unchanged. Three nine-row test runs are retained
+privately; the first test's readback assertion used PostgreSQL numeric strings
+instead of its JSON projection and failed after processing completed. The corrected
+JSON readback passes. No raw evidence was rewritten to make that assertion pass.
+
+The exact `04a7d5e1` disposable preview also passes the corrected detail flow:
+original poster preserved, opaque consented action, linked verified dealer
+profile, and no failing API requests during that flow. Anonymous account access
+is denied with HTTP 401; its existing page misleadingly kept displaying a loader.
+A separate pending UI fix ends that loading state and supplies the sign-in link.
+Production remains untouched, and materialization/publication/FX/image completion
+and final release acceptance remain pending.
