@@ -262,6 +262,8 @@ module.exports = async function handler(req, res) {
       && (referenceQuery || modelQuery)
       && dialQuery.supplied
       && conditionQuery.supplied
+      && dialQuery.value
+      && conditionQuery.value
     );
     if (exactCohortRequested) {
       const { data: statsRows, error: statsErr } = await supabase.rpc("get_price_research_snapshot_stats", {

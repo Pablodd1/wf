@@ -697,7 +697,7 @@ export default function TradingFloor() {
     const unique = new Map<string, PriceResearchBatchPair>();
     for (const listing of visibleListings) {
       if (!listing.brand || !listing.reference || String(listing.listing_type).toUpperCase() !== 'WTS') continue;
-      const pair = { brand: listing.brand, reference: listing.reference, dial: cleanValue(listing.dial_color) || null };
+      const pair = listingPricePair(listing);
       unique.set(priceResearchSummaryKey(pair), pair);
     }
     return [...unique.values()];
@@ -1064,11 +1064,7 @@ export default function TradingFloor() {
             key={selectedListing.id}
             listing={selectedListing}
             benchmark={
-              ratingsCache[priceResearchSummaryKey({
-                brand: selectedListing.brand,
-                reference: selectedListing.reference || '',
-                dial: cleanValue(selectedListing.dial_color) || null,
-              })]
+              ratingsCache[priceResearchSummaryKey(listingPricePair(selectedListing))]
             }
             onClose={closeListing}
           />
@@ -1110,11 +1106,7 @@ export default function TradingFloor() {
                 : 'grid grid-cols-1 gap-4 lg:grid-cols-2'}
               >
                 {visibleListings.map(listing => {
-                  const ratingKey = priceResearchSummaryKey({
-                    brand: listing.brand,
-                    reference: listing.reference || '',
-                    dial: cleanValue(listing.dial_color) || null,
-                  });
+                  const ratingKey = priceResearchSummaryKey(listingPricePair(listing));
                   const benchmark = ratingsCache[ratingKey];
                   return (
                     <ListingCard
@@ -1815,7 +1807,9 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
   const normalizedIntent = String(listing.intent || listing.listing_type || '').toUpperCase();
   const postingIdentity = strongestPostingIdentity({ ...listing, dealer_name: contact?.dealer_name });
 
-  const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS');
+  const exactPair = listingPricePair(listing);
+  const canLoadBenchmark = Boolean(listing.reference && listing.brand && normalizedIntent === 'WTS'
+    && (!Object.prototype.hasOwnProperty.call(exactPair, 'condition') || (exactPair.dial && exactPair.condition)));
   const [benchmark, setBenchmark] = useState<{
     loading: boolean;
     count: number;
@@ -1888,8 +1882,13 @@ function ListingDetails({ listing, onClose, benchmark: initialBenchmark }: { lis
       const reference = listing.reference as string;
       const params = new URLSearchParams({ reference, brand: listing.brand });
       if (listing.dial_color) params.set('dial', listing.dial_color);
-
-      fetch(`/api/price-research?${params.toString()}`, { signal: controller.signal })
+      const exactCanary = Object.prototype.hasOwnProperty.call(listingPricePair(listing), 'condition');
+      if (exactCanary) {
+        params.set('condition', listing.condition || '');
+        params.set('dial', listing.dial_color || '');
+        params.set('pageSize', '1');
+      }
+      fetch(`${exactCanary ? '/api/canary/price-research' : '/api/price-research'}?${params.toString()}`, { signal: controller.signal })
         .then(async response => response.ok ? response.json() : null)
         .then(payload => {
           if (!payload) {
@@ -2321,6 +2320,13 @@ function TradingFloorQuickScroll() {
 
 function ratingUsdPrice(listing: ListingRecord) {
   return verifiedUsdPrice(listing);
+}
+
+function listingPricePair(listing: ListingRecord): PriceResearchBatchPair {
+  const canary = import.meta.env.VITE_USE_CANARY_V2 === 'true'
+    || window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost';
+  return { brand: listing.brand, reference: listing.reference || '', dial: cleanValue(listing.dial_color) || null,
+    ...(canary ? { condition: cleanValue(listing.condition) || null } : {}) };
 }
 
 function reviewedWorkbookUsdPrice(listing: ListingRecord) {
