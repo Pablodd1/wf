@@ -317,7 +317,7 @@ module.exports = async function handler(req, res) {
       if (typeof safe.dealer_name === 'string') safe.dealer_name = redactPublicSource(safe.dealer_name);
       return sendContactResult(res, {
         payload: { ...safe, success: true, contact_available: Boolean(phone) },
-        externalChannels: phone ? { whatsapp: whatsappUrl(phone, { brand: data.brand, reference: data.reference, listing_type: data.intent }) } : {},
+        externalChannels: phone ? { whatsapp: whatsappUrl(phone, { id, brand: data.brand, reference: data.reference, listing_type: data.intent }) } : {},
         id, surface, requestedChannel, brand: data.brand, reference: data.reference,
       });
     }

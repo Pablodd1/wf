@@ -322,6 +322,33 @@ test('prefilled WhatsApp text contains only public listing facts', () => {
   assert.ok(!text.includes('Private Seller Name'), 'prefilled text must not contain seller identity');
 });
 
+test('V2 contact identifies the exact requested listing and preserves WTS versus WTB intent', async () => {
+  const previous = process.env.VITE_USE_CANARY_V2;
+  process.env.VITE_USE_CANARY_V2 = 'true';
+  try {
+    for (const intent of ['WTS', 'WTB']) {
+      const id = `synthetic-contact-${intent}`;
+      activeClient = mockClient({}, {
+        get_v2_listing_contact: ({ p_listing_id }) => {
+          assert.equal(p_listing_id, id);
+          return { data: { contact_available: true, contact_phone: SYNTHETIC_PHONE,
+            brand: 'Rolex', reference: '126610LN', intent }, error: null };
+        },
+      });
+      const response = await invoke({ id, surface: 'trading-floor', channel: 'whatsapp' });
+      assert.equal(response.statusCode, 302);
+      const message = new URL(response.headers.Location).searchParams.get('text');
+      assert.ok(message.includes(`(listing ${id})`));
+      assert.ok(message.includes('Rolex 126610LN'));
+      assert.ok(message.includes(intent === 'WTB' ? 'Are you still looking?' : 'Is it still available?'));
+      assert.ok(!message.includes(SYNTHETIC_PHONE_DIGITS));
+    }
+  } finally {
+    if (previous === undefined) delete process.env.VITE_USE_CANARY_V2;
+    else process.env.VITE_USE_CANARY_V2 = previous;
+  }
+});
+
 test('Phase 8.1: dealer directory responses strip private provenance and never expose phones', () => {
   const withConsent = dealersApi.publicDealer(
     { id: 'd1', display_name: 'Synthetic', contact_consent: true, verified_phone:SYNTHETIC_PHONE,
