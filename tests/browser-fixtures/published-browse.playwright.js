@@ -97,8 +97,33 @@ async page => {
   await page.locator('article[data-listing-id]').nth(23).waitFor();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1);
   if (overflow) throw new Error('Mobile overflow');
+  await page.getByRole('button', { name: 'Filter', exact: true }).click();
+  const sheet = page.getByRole('dialog', { name: 'Filter inventory' });
+  // Draft brand selection must load its models before applying the sheet. A
+  // delayed previous brand must never replace the currently selected options.
+  slowBrand = 'Rolex';
+  await sheet.getByRole('button', { name: 'Rolex', exact: true }).click();
+  await sheet.getByRole('button', { name: 'Patek Philippe', exact: true }).click();
+  const mobileModels = page.locator('#mobile-model-filter');
+  await page.waitForFunction(expected => JSON.stringify(Array.from(document.querySelectorAll('#mobile-model-filter option'), option => option.value).filter(Boolean).sort()) === JSON.stringify(expected), expectedModels.map(item => item.model).sort());
+  await page.waitForTimeout(800);
+  const finalMobileModels = await mobileModels.locator('option').evaluateAll(items => items.map(item => item.value).filter(Boolean).sort());
+  if (JSON.stringify(finalMobileModels) !== JSON.stringify(expectedModels.map(item => item.model).sort())) throw new Error('Stale mobile draft models');
+  const selectedModel = expectedModels[0].model;
+  await mobileModels.selectOption(selectedModel);
+  await sheet.getByRole('button', { name: 'View results', exact: true }).click();
+  await page.waitForFunction(expected => {
+    const params = new URLSearchParams(location.hash.split('?')[1]);
+    return params.get('brand') === 'Patek Philippe' && params.get('model') === expected;
+  }, selectedModel);
+  await page.waitForFunction(expected => document.querySelectorAll('article[data-listing-id]').length === expected, Math.min(24, rows.filter(item => item.brand === 'Patek Philippe' && (item.model || 'Reference-only listings') === selectedModel).length));
+  await page.getByRole('button', { name: /^Filter/ }).click();
+  await sheet.getByRole('button', { name: 'Clear all', exact: true }).click();
+  if (await mobileModels.inputValue() !== '') throw new Error('Clear all retained mobile model');
+  await sheet.getByRole('button', { name: 'View results', exact: true }).click();
+  await page.waitForFunction(() => !new URLSearchParams(location.hash.split('?')[1]).has('model'));
   const result = { status: 'PASS', kind: 'LOCAL_SOURCE_BACKED_BROWSER_FIXTURE', live_fixture_snapshot: live.snapshot_id, fixture_rows: rows.length, population_brands: brands.map(item => item.brand), menu_population_exact: true, server_discovery_order_preserved: true, pagination_next_previous: true, picker_stale_response_ignored: true, reference_only_search: !!exactReference, legacy_browse_requests: 0, desktop_cards: 50, mobile_cards: 24, horizontal_overflow: false, production_mutations: 0, source_regions: regions, region_multiselect: regions.length > 1 };
-  return { ...result, source_regions_visible_on_cards: true };
+  return { ...result, source_regions_visible_on_cards: true, mobile_draft_brand_model: true, mobile_stale_models_ignored: true, mobile_clear_all_model: true };
 }
 
 

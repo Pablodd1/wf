@@ -1054,6 +1054,7 @@ export default function TradingFloor() {
           releaseBrands={releaseBrands}
           model={modelFilter}
           models={modelOptions}
+          browseSnapshot={browseSnapshotRef.current}
           category={categoryFilter}
           intent={intentFilter}
           sort={sortMode}
@@ -1066,7 +1067,7 @@ export default function TradingFloor() {
             resetResults();
             updateViewParams({
               brand: next.brand || null,
-              model: next.brand === brandFilter ? next.model || null : null,
+              model: next.model || null,
               item: next.category === 'all' ? null : next.category,
               type: ['all', 'watches'].includes(next.category) ? next.intent || null : null,
               sort: next.sort === 'newest' ? null : next.sort,
@@ -1460,6 +1461,7 @@ function MobileFilterSheet({
   releaseBrands,
   model,
   models,
+  browseSnapshot,
   category,
   intent,
   sort,
@@ -1474,6 +1476,7 @@ function MobileFilterSheet({
   releaseBrands: string[];
   model: string;
   models: CatalogModelOption[];
+  browseSnapshot?: string;
   category: CategoryFilter;
   intent: IntentFilter;
   sort: SortMode;
@@ -1487,6 +1490,8 @@ function MobileFilterSheet({
   const { t } = useLanguage();
   const [draftBrand, setDraftBrand] = useState<BrandFilter>(brand);
   const [draftModel, setDraftModel] = useState(model);
+  const [draftModels, setDraftModels] = useState(models);
+  const draftBrowseSnapshotRef = useRef(browseSnapshot);
   const [draftCategory, setDraftCategory] = useState(category);
   const [draftIntent, setDraftIntent] = useState(intent);
   const [draftSort, setDraftSort] = useState(sort);
@@ -1494,6 +1499,33 @@ function MobileFilterSheet({
   const [draftPricedOnly, setDraftPricedOnly] = useState(pricedOnly);
   const [draftLocations, setDraftLocations] = useState<string[]>(selectedLocations);
   const [mobileLocationSearch, setMobileLocationSearch] = useState('');
+
+  useEffect(() => {
+    const controller = new AbortController();
+    if (draftBrand === brand) {
+      setDraftModels(models);
+      return () => controller.abort();
+    }
+    setDraftModels([]);
+    if (!draftBrand) return () => controller.abort();
+    if (canaryBrowseEnabled) {
+      void loadPublishedBrowse('trading_floor', draftBrand, '', controller.signal, draftBrowseSnapshotRef.current)
+        .then(payload => {
+          if (controller.signal.aborted) return;
+          draftBrowseSnapshotRef.current = payload.snapshot_id;
+          setDraftModels(payload.models);
+        })
+        .catch(error => { if (error?.name !== 'AbortError') setDraftModels([]); });
+    } else {
+      fetch(`/api/catalog-models?brand=${encodeURIComponent(draftBrand)}`, { signal: controller.signal })
+        .then(async response => response.ok ? response.json() : null)
+        .then(payload => {
+          if (!controller.signal.aborted) setDraftModels(Array.isArray(payload?.models) ? payload.models : []);
+        })
+        .catch(error => { if (error?.name !== 'AbortError') setDraftModels([]); });
+    }
+    return () => controller.abort();
+  }, [brand, draftBrand, models]);
 
   const filteredMobileLocations = useMemo(() => {
     const q = mobileLocationSearch.trim().toLowerCase();
@@ -1556,17 +1588,17 @@ function MobileFilterSheet({
               <FilterChoice key={value} active={draftBrand === value} label={value} onClick={() => { setDraftBrand(value); setDraftModel(''); }} />
             ))}
           </FilterGroup>
-          <FilterGroup label={`Models (${models.length})`}>
+          <FilterGroup label={`Models (${draftModels.length})`}>
             <select
               id="mobile-model-filter"
               value={draftModel}
-              disabled={!draftBrand || models.length === 0}
+              disabled={!draftBrand || draftModels.length === 0}
               onChange={event => setDraftModel(event.target.value)}
               className="h-11 w-full rounded border bg-white px-3 text-sm outline-none disabled:opacity-45"
               style={{ borderColor: BORDER, color: INK }}
             >
               <option value="">All models</option>
-              {models.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
+              {draftModels.map(value => <option key={value.model} value={value.model}>{value.model} ({value.reference_count})</option>)}
             </select>
           </FilterGroup>
           <FilterGroup label={`Locations (${draftLocations.length || 'All'})`}>
@@ -1626,6 +1658,7 @@ function MobileFilterSheet({
         <footer className="grid shrink-0 grid-cols-2 gap-3 border-t p-4" style={{ borderColor: BORDER, background: SURFACE }}>
           <button type="button" onClick={() => {
             setDraftBrand('');
+            setDraftModel('');
             setDraftCategory('all');
             setDraftIntent('');
             setDraftSort('newest');
