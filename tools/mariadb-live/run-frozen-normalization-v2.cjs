@@ -57,7 +57,9 @@ function createRpc(env) {
           headers: { 'Content-Type': 'application/json', apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: 'Bearer ' + env.SUPABASE_SERVICE_ROLE_KEY },
           body: JSON.stringify(body),
         });
-        if (response.ok) return response.json();
+        // A response body can time out after headers arrive. Await it inside
+        // the retry boundary so the same idempotent request is retried.
+        if (response.ok) return await response.json();
         if (response.status !== 429 && response.status < 500) throw Object.assign(new Error('NORMALIZATION_RPC_REJECTED_' + response.status), { permanent: true });
       } catch (error) {
         if (error.permanent) throw error;
