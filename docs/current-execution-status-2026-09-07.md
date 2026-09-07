@@ -1,5 +1,7 @@
 # WatchFacts saved execution status
 
+Superseded by `docs/NEXT_CHAT_WATCHFACTS_2026-09-07.md` at 21:55 UTC. PR #813 is merged, PR #811 history conflicts are resolved, and the full 66,591-row Trading Floor snapshot audit has passed. Read that continuation document first.
+
 Checkpoint: 2026-09-07T21:35:34.749162+00:00. Full project completion is not claimed.
 
 ## Live site and saved release
